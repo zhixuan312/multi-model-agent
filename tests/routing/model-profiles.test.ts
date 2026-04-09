@@ -17,8 +17,14 @@ describe('findProfile', () => {
 
   it('matches gpt-5 family by prefix', () => {
     const profile = findProfile('gpt-5-codex');
-    expect(profile.tier).toBe('standard');
+    expect(profile.tier).toBe('reasoning');
     expect(profile.defaultCost).toBe('medium');
+  });
+
+  it('includes optional notes on gpt-5 clarifying tool dependency', () => {
+    const profile = findProfile('gpt-5-codex');
+    expect(profile.notes).toBeDefined();
+    expect(profile.notes).toMatch(/web\/tool support/);
   });
 
   it('matches MiniMax-M2 exactly', () => {
@@ -58,8 +64,8 @@ describe('findProfile', () => {
     expect(findProfile('gpt-5-codex').supportsEffort).toBe(true);
   });
 
-  it('marks MiniMax-M2 as not supporting effort', () => {
-    expect(findProfile('MiniMax-M2').supportsEffort).toBe(false);
+  it('marks MiniMax-M2 as supporting effort', () => {
+    expect(findProfile('MiniMax-M2').supportsEffort).toBe(true);
   });
 
   it('marks unprofiled models as not supporting effort (conservative default)', () => {

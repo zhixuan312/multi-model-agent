@@ -221,19 +221,20 @@ Available providers:
 
 codex (gpt-5-codex)
   tools: file_read, file_write, grep, glob, shell, web_search
-  tier: standard | cost: medium | effort: supported
-  best for: code implementation + live data lookup
+  tier: reasoning | cost: medium | effort: supported
+  best for: coding, agentic workflows, and tool-using tasks
+  note: live data lookup requires web/tool support, not model alone
 
 claude (claude-opus-4-6)
   tools: file_read, file_write, grep, glob, shell, web_search, web_fetch
   tier: reasoning | cost: high | effort: supported
-  best for: complex, uncertain, open-ended tasks requiring judgment
+  best for: frontier coding, complex judgment, long-horizon agent tasks, high-stakes professional work
 
 minimax (MiniMax-M2)
   tools: file_read, file_write, grep, glob
-  tier: standard | cost: free (from config) | effort: not supported
-  best for: well-defined local code tasks with explicit requirements
-  avoid for: ambiguous or research-style tasks
+  tier: standard | cost: free (from config) | effort: supported
+  best for: cost-efficient coding and agent workflows with clear requirements
+  avoid for: highest-stakes ambiguous work when you need top-tier judgment
 
 How to route a task:
 1. Capability filter (HARD): exclude providers missing any required capability.
@@ -252,7 +253,7 @@ honor this. Use 'high' for reasoning-tier tasks, 'low'/'medium' for balance,
 |---|---|---|
 | `claude-opus`, `claude-sonnet` | ✅ | `queryOptions.thinking = { type: 'adaptive' }` + `queryOptions.effort` passed to the Claude Agent SDK |
 | `gpt-5` (including `gpt-5-codex`) | ✅ | `reasoning: { effort }` passed to the Codex / OpenAI Responses API |
-| `MiniMax-M2` | ❌ | silently ignored — MiniMax's API doesn't expose an effort parameter |
+| `MiniMax-M2` | ✅ | `reasoning: { effort }` via the OpenAI-compatible `modelSettings.reasoning` block |
 | Unprofiled models | ❌ (conservative default) | add a profile entry to opt in |
 
 **Model profiles** are matched by family prefix against the configured model id. Known families: `claude-opus`, `claude-sonnet`, `gpt-5`, `MiniMax-M2`. Unknown models fall back to a safe default profile (`standard` tier, `medium` cost).

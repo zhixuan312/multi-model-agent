@@ -80,14 +80,24 @@ describe('describeProviders', () => {
 
   it('stays within a reasonable token budget', () => {
     const out = describeProviders(makeConfig());
-    // Rough proxy: ~4 chars/token. Budget: 500 tokens ≈ 2000 chars.
-    expect(out.length).toBeLessThan(2000);
+    // Rough proxy: ~4 chars/token. Soft budget: ~600 tokens ≈ 2400 chars
+    // for a 3-provider config. If this trips, first check whether the new
+    // content is genuinely necessary; if yes, loosen the budget.
+    expect(out.length).toBeLessThan(2400);
   });
 
   it('renders the tier and bestFor for a known model', () => {
     const out = describeProviders(makeConfig());
     expect(out).toContain('tier: reasoning'); // claude-opus
-    expect(out).toContain('complex, uncertain'); // from claude-opus bestFor
+    expect(out).toContain('frontier coding'); // from claude-opus bestFor
+  });
+
+  it('renders the optional notes line when present', () => {
+    const out = describeProviders(makeConfig());
+    // gpt-5-codex has a notes field
+    const blocks = out.split('\n\n');
+    const codexBlock = blocks.find((b) => b.startsWith('codex (')) ?? '';
+    expect(codexBlock).toMatch(/note: .*web\/tool support/);
   });
 
   it('includes avoidFor when present', () => {
@@ -105,12 +115,20 @@ describe('describeProviders', () => {
     expect(claudeBlock).toContain('effort: supported');
   });
 
-  it('renders effort: not supported for providers without effort support', () => {
-    const out = describeProviders(makeConfig());
-    // minimax does not support effort
-    const blocks = out.split('\n\n');
-    const minimaxBlock = blocks.find((b) => b.startsWith('minimax (')) ?? '';
-    expect(minimaxBlock).toContain('effort: not supported');
+  it('renders effort: not supported for unprofiled providers (default profile)', () => {
+    // Unprofiled models fall back to DEFAULT_PROFILE which has supportsEffort: false
+    const config: MultiModelConfig = {
+      providers: {
+        unknown: {
+          type: 'openai-compatible',
+          model: 'some-brand-new-model',
+          baseUrl: 'https://api.example.com/v1',
+        },
+      },
+      defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
+    };
+    const out = describeProviders(config);
+    expect(out).toContain('effort: not supported');
   });
 
   it('includes the effort knob guidance in the routing recipe', () => {

@@ -39,6 +39,9 @@ function renderProviderBlock(
     `  tier: ${profile.tier} | cost: ${cost}${costSuffix} | effort: ${effortLabel}`,
     `  best for: ${profile.bestFor}`,
   ];
+  if (profile.notes) {
+    lines.push(`  note: ${profile.notes}`);
+  }
   if (profile.avoidFor) {
     lines.push(`  avoid for: ${profile.avoidFor}`);
   }

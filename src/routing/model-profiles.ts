@@ -6,6 +6,13 @@ export interface ModelProfile {
   bestFor: string;
   avoidFor?: string;
   /**
+   * Optional clarifying note rendered below bestFor. Use sparingly — only
+   * when the bestFor line alone would mislead the consumer LLM about what
+   * the model can actually do on its own (e.g., clarifying that a model's
+   * tool-using strength depends on tools actually being enabled).
+   */
+  notes?: string;
+  /**
    * Whether the model honors the `effort` knob. When false, the runner
    * silently ignores any effort value — the consumer LLM should not bother
    * setting it for this provider.
@@ -17,27 +24,28 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
   'claude-opus': {
     tier: 'reasoning',
     defaultCost: 'high',
-    bestFor: 'complex, uncertain, open-ended tasks requiring judgment',
+    bestFor: 'frontier coding, complex judgment, long-horizon agent tasks, high-stakes professional work',
     supportsEffort: true,
   },
   'claude-sonnet': {
     tier: 'standard',
     defaultCost: 'medium',
-    bestFor: 'well-scoped code and analysis',
+    bestFor: 'strong code generation, analysis, agent workflows, and general professional tasks',
     supportsEffort: true,
   },
   'gpt-5': {
-    tier: 'standard',
+    tier: 'reasoning',
     defaultCost: 'medium',
-    bestFor: 'code implementation + live data lookup',
+    bestFor: 'coding, agentic workflows, and tool-using tasks',
+    notes: 'live data lookup requires web/tool support, not model alone',
     supportsEffort: true,
   },
   'MiniMax-M2': {
     tier: 'standard',
     defaultCost: 'low',
-    bestFor: 'well-defined local code tasks with explicit requirements',
-    avoidFor: 'ambiguous or research-style tasks',
-    supportsEffort: false,
+    bestFor: 'cost-efficient coding and agent workflows with clear requirements',
+    avoidFor: 'highest-stakes ambiguous work when you need top-tier judgment',
+    supportsEffort: true,
   },
 };
 
