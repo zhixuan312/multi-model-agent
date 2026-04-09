@@ -1,0 +1,63 @@
+import type { Capability, MultiModelConfig, ProviderConfig } from '../types.js';
+import { getCapabilities } from './capabilities.js';
+import { effectiveCost, findProfile, type ModelProfile } from './model-profiles.js';
+
+const ROUTING_RECIPE = `How to route a task:
+1. Capability filter (HARD): exclude providers missing any required capability.
+2. Quality filter: exclude providers whose tier is below the task's tier.
+   Tier ordering: trivial < standard < reasoning.
+3. Cost preference (STRONG): among the remainder, prefer the cheapest tier.
+   If a 'free' provider qualifies, pick it. Only escalate to paid tiers when
+   the task tier or required capabilities demand it.
+
+Tier guidance for the consumer LLM:
+- 'trivial' — well-defined edits, lookups, formatting. One obvious answer.
+- 'standard' — most code work. Clear spec, multiple valid approaches.
+- 'reasoning' — ambiguous, architectural, research, or high-stakes.
+  Use when requirements are unclear or judgment is required.`;
+
+function renderProviderBlock(
+  name: string,
+  config: ProviderConfig,
+  capabilities: Capability[],
+  profile: ModelProfile,
+  costSource: 'config' | 'default',
+): string {
+  const cost = effectiveCost(config);
+  const costSuffix = costSource === 'config' ? ' (from config)' : '';
+  const lines = [
+    `${name} (${config.model})`,
+    `  tools: ${capabilities.join(', ')}`,
+    `  tier: ${profile.tier} | cost: ${cost}${costSuffix}`,
+    `  best for: ${profile.bestFor}`,
+  ];
+  if (profile.avoidFor) {
+    lines.push(`  avoid for: ${profile.avoidFor}`);
+  }
+  return lines.join('\n');
+}
+
+/**
+ * Renders the full routing matrix for the delegate_tasks tool description.
+ * Loaded once per MCP session when the server starts; the consumer LLM uses
+ * it to decide which provider to route each subtask to.
+ */
+export function describeProviders(config: MultiModelConfig): string {
+  const blocks = Object.entries(config.providers).map(([name, providerConfig]) => {
+    const capabilities = getCapabilities(providerConfig);
+    const profile = findProfile(providerConfig.model);
+    const costSource: 'config' | 'default' = providerConfig.costTier ? 'config' : 'default';
+    return renderProviderBlock(name, providerConfig, capabilities, profile, costSource);
+  });
+
+  return [
+    'Delegate tasks to sub-agents running on different LLM providers.',
+    'All tasks execute concurrently.',
+    '',
+    'Available providers:',
+    '',
+    blocks.join('\n\n'),
+    '',
+    ROUTING_RECIPE,
+  ].join('\n');
+}
