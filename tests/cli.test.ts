@@ -1,6 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { z } from 'zod';
-import { buildMcpServer, SERVER_NAME, SERVER_VERSION } from '../src/cli.js';
+import { buildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION } from '../src/cli.js';
 import type { MultiModelConfig } from '../src/types.js';
 
 const sampleConfig = (): MultiModelConfig => ({
@@ -58,24 +57,7 @@ describe('delegate_tasks tool description', () => {
 });
 
 describe('delegate_tasks schema', () => {
-  // Build the task schema standalone so we can parse test payloads.
-  // This mirrors the shape used inside buildMcpServer — if you change one,
-  // change the other.
-  const taskSchema = z.object({
-    prompt: z.string(),
-    provider: z.enum(['mock']),
-    tier: z.enum(['trivial', 'standard', 'reasoning']),
-    requiredCapabilities: z.array(z.enum([
-      'file_read', 'file_write', 'grep', 'glob',
-      'shell', 'web_search', 'web_fetch',
-    ])),
-    tools: z.enum(['none', 'full']).optional(),
-    maxTurns: z.number().int().positive().optional(),
-    timeoutMs: z.number().int().positive().optional(),
-    cwd: z.string().optional(),
-    effort: z.string().optional(),
-    sandboxPolicy: z.enum(['none', 'cwd-only']).optional(),
-  });
+  const taskSchema = buildTaskSchema(['mock']);
 
   it('accepts a task with tier and requiredCapabilities', () => {
     const result = taskSchema.safeParse({

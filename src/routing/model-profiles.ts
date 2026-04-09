@@ -47,10 +47,10 @@ export function findProfile(modelId: string): ModelProfile {
   const keys = Object.keys(MODEL_PROFILES).sort((a, b) => b.length - a.length);
   for (const key of keys) {
     if (normalized.startsWith(key.toLowerCase())) {
-      return MODEL_PROFILES[key];
+      return { ...MODEL_PROFILES[key] };
     }
   }
-  return DEFAULT_PROFILE;
+  return { ...DEFAULT_PROFILE };
 }
 
 /**

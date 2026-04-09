@@ -14,6 +14,25 @@ import { describeProviders } from './routing/describe.js';
 export const SERVER_NAME = 'multi-model-agent';
 export const SERVER_VERSION = '0.1.0';
 
+export function buildTaskSchema(availableProviders: [string, ...string[]]) {
+  return z.object({
+    prompt: z.string().describe('Task prompt for the sub-agent'),
+    provider: z.enum(availableProviders).describe('Provider name'),
+    tier: z.enum(['trivial', 'standard', 'reasoning'])
+      .describe('Required quality tier. See the routing recipe in this tool description — match the task to a provider that meets this tier.'),
+    requiredCapabilities: z.array(z.enum([
+      'file_read', 'file_write', 'grep', 'glob',
+      'shell', 'web_search', 'web_fetch',
+    ])).describe('Capabilities this task requires. Empty array if none. Consumer LLM MUST exclude providers missing any required capability.'),
+    tools: z.enum(['none', 'full']).optional().describe('Tool access mode. Default: full'),
+    maxTurns: z.number().int().positive().optional().describe('Max agent loop turns. Default: 200'),
+    timeoutMs: z.number().int().positive().optional().describe('Timeout in ms. Default: 600000'),
+    cwd: z.string().optional().describe('Working directory for file/shell tools'),
+    effort: z.string().optional().describe('Reasoning effort level'),
+    sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
+  });
+}
+
 export function buildMcpServer(config: MultiModelConfig) {
   const providerKeys = Object.keys(config.providers);
   if (providerKeys.length === 0) {
@@ -31,22 +50,7 @@ export function buildMcpServer(config: MultiModelConfig) {
     'delegate_tasks',
     describeProviders(config),
     {
-      tasks: z.array(z.object({
-        prompt: z.string().describe('Task prompt for the sub-agent'),
-        provider: z.enum(availableProviders).describe('Provider name'),
-        tier: z.enum(['trivial', 'standard', 'reasoning'])
-          .describe('Required quality tier. See the routing recipe in this tool description — match the task to a provider that meets this tier.'),
-        requiredCapabilities: z.array(z.enum([
-          'file_read', 'file_write', 'grep', 'glob',
-          'shell', 'web_search', 'web_fetch',
-        ])).describe('Capabilities this task requires. Empty array if none. Consumer LLM MUST exclude providers missing any required capability.'),
-        tools: z.enum(['none', 'full']).optional().describe('Tool access mode. Default: full'),
-        maxTurns: z.number().int().positive().optional().describe('Max agent loop turns. Default: 200'),
-        timeoutMs: z.number().int().positive().optional().describe('Timeout in ms. Default: 600000'),
-        cwd: z.string().optional().describe('Working directory for file/shell tools'),
-        effort: z.string().optional().describe('Reasoning effort level'),
-        sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
-      })).describe('Array of tasks to execute in parallel'),
+      tasks: z.array(buildTaskSchema(availableProviders)).describe('Array of tasks to execute in parallel'),
     },
     async ({ tasks }) => {
       const delegateTasks: DelegateTask[] = tasks.map(t => {
