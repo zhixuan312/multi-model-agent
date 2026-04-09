@@ -8,6 +8,18 @@ import { createOpenAITools } from '../tools/openai-adapter.js';
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
 
+/**
+ * Remove `<think>...</think>` reasoning blocks from model output.
+ *
+ * Several reasoning models (MiniMax, DeepSeek, Qwen variants) emit their
+ * chain-of-thought inline wrapped in `<think>...</think>` tags. These are
+ * scratch-pad content and should not surface to the caller. Stripping is
+ * non-greedy, multi-line, and handles multiple blocks.
+ */
+export function stripThinkingTags(text: string): string {
+  return text.replace(/<think>[\s\S]*?<\/think>\s*/gi, '').trimStart();
+}
+
 export interface OpenAIRunnerOptions {
   client: OpenAI;
   providerConfig: ProviderConfig;
@@ -58,7 +70,7 @@ export async function runOpenAI(
       const usage = result.state.usage;
 
       return {
-        output: result.finalOutput ?? '',
+        output: stripThinkingTags(result.finalOutput ?? ''),
         status: 'ok',
         usage: {
           inputTokens: usage.inputTokens,
