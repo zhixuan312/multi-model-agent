@@ -370,8 +370,10 @@ export async function runCodex(
       }
       if (capture.last) {
         pieces.push(`raw_status=${capture.last.status}`);
-        if (capture.last.bodyText) pieces.push(`raw_body=${capture.last.bodyText.slice(0, 500)}`);
-        if (capture.last.requestBodyPreview) pieces.push(`req_body=${capture.last.requestBodyPreview.slice(0, 500)}`);
+        // Only leak request/response body snippets when debug is explicitly enabled;
+        // they may contain sensitive content (prompt, tools, file contents).
+        if (process.env.CODEX_DEBUG === '1' && capture.last.bodyText) pieces.push(`raw_body=${capture.last.bodyText.slice(0, 500)}`);
+        if (process.env.CODEX_DEBUG === '1' && capture.last.requestBodyPreview) pieces.push(`req_body=${capture.last.requestBodyPreview.slice(0, 500)}`);
       }
       if (e?.requestID) pieces.push(`req_id=${e.requestID}`);
       if (lastResponseStatus) pieces.push(`last response status: ${lastResponseStatus}`);

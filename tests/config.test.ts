@@ -182,6 +182,16 @@ describe('loadConfig', () => {
     expect(() => loadConfig(configPath)).toThrow();
   });
 
+  it('rejects openai-compatible without baseUrl', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        bad: { type: 'openai-compatible', model: 'test' },
+      },
+    }));
+    expect(() => loadConfig(configPath)).toThrow(/baseUrl/);
+  });
+
   it('parses a valid effort enum value', () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({

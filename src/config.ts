@@ -4,7 +4,19 @@ import os from 'os';
 import { z } from 'zod';
 import type { MultiModelConfig } from './types.js';
 
-const providerConfigSchema = z.object({
+const providerConfigSchema: z.ZodType<{
+  type: 'codex' | 'claude' | 'openai-compatible';
+  model: string;
+  effort?: 'none' | 'low' | 'medium' | 'high';
+  maxTurns?: number;
+  timeoutMs?: number;
+  baseUrl?: string;
+  apiKey?: string;
+  apiKeyEnv?: string;
+  sandboxPolicy?: 'none' | 'cwd-only';
+  hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[];
+  costTier?: 'free' | 'low' | 'medium' | 'high';
+}> = z.object({
   type: z.enum(['codex', 'claude', 'openai-compatible']),
   model: z.string(),
   effort: z.enum(['none', 'low', 'medium', 'high']).optional(),
@@ -16,7 +28,10 @@ const providerConfigSchema = z.object({
   sandboxPolicy: z.enum(['none', 'cwd-only']).optional(),
   hostedTools: z.array(z.enum(['web_search', 'image_generation', 'code_interpreter'])).optional(),
   costTier: z.enum(['free', 'low', 'medium', 'high']).optional(),
-});
+}).refine(
+  (data) => data.type !== 'openai-compatible' || (data.baseUrl != null && data.baseUrl.length > 0),
+  { message: 'Provider type "openai-compatible" requires a baseUrl field.' }
+);
 
 const configSchema = z.object({
   providers: z.record(z.string(), providerConfigSchema).default({}),
