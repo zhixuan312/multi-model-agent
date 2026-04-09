@@ -256,7 +256,21 @@ honor this. Use 'high' for reasoning-tier tasks, 'low'/'medium' for balance,
 | `MiniMax-M2` | ✅ | `reasoning: { effort }` via the OpenAI-compatible `modelSettings.reasoning` block |
 | Unprofiled models | ❌ (conservative default) | add a profile entry to opt in |
 
-**Model profiles** are matched by family prefix against the configured model id. Known families: `claude-opus`, `claude-sonnet`, `gpt-5`, `MiniMax-M2`. Unknown models fall back to a safe default profile (`standard` tier, `medium` cost).
+**Model profiles** are matched by **family prefix** against the configured model id, case-insensitive. You do not need to update the profile map every time a provider releases a minor version — any model id that starts with a known family prefix automatically inherits that family's profile.
+
+| Family prefix | Example model ids that match | Profile applied |
+|---|---|---|
+| `claude-opus` | `claude-opus-4-5`, `claude-opus-4-6`, `claude-opus-5`, `claude-opus-3` | reasoning / high |
+| `claude-sonnet` | `claude-sonnet-3-5`, `claude-sonnet-4-5`, `claude-sonnet-5` | standard / medium |
+| `gpt-5` | `gpt-5`, `gpt-5-codex`, `gpt-5.1`, `gpt-5.2`, `gpt-5.3`, `gpt-5.4`, `gpt-5-turbo` | reasoning / medium |
+| `MiniMax-M2` | `MiniMax-M2`, `MiniMax-M2.1`, `MiniMax-M2.7`, `minimax-m2.5` | standard / low |
+| *(anything else)* | e.g. `llama-3`, `qwen-2.5`, `deepseek-r1` | DEFAULT: standard / medium, `supportsEffort: false` |
+
+Matching rules:
+- **Longest prefix wins** — if both `gpt-5` and `gpt-5-codex` were registered as families, a model id of `gpt-5-codex-mini` would match `gpt-5-codex` first.
+- **Case-insensitive** — `CLAUDE-OPUS-4-6` matches `claude-opus`.
+- **Non-canonical forms fall through** — an id like `opus-4-6` (missing the `claude-` prefix) or `gpt.5.3` (dot instead of hyphen) will not match any family and hits the default profile. Stick to the canonical hyphen-separated form in your config.
+- **To add a new family**, edit `MODEL_PROFILES` in `src/routing/model-profiles.ts`. One entry covers every present and future minor version of that family.
 
 **Cost tiers** drive the "prefer cheapest qualifying provider" rule in the routing recipe. The default cost for each family is hardcoded; override per provider via the `costTier` config field. Set to `"free"` for flat-rate or self-hosted deployments so the consumer LLM actively prefers them when capability matches.
 
