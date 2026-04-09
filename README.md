@@ -12,19 +12,23 @@ The `delegate_tasks` tool description is auto-populated with a capability matrix
 | `claude` | `@anthropic-ai/claude-agent-sdk` | Anthropic Claude models |
 | `codex` | Built-in | OpenAI Codex |
 
-## Quick Start
+## Setup
 
-### Install
+Five steps: install, create the app config, register with your MCP client, restart, verify.
+
+### Step 1 — Install
 
 ```bash
-npm install multi-model-agent
+npm install -g multi-model-agent
 ```
+
+Or skip the global install — `npx multi-model-agent serve` works on demand. No functional difference.
 
 `@openai/agents` and `openai` are optional peer dependencies — install them only if you use `openai-compatible` providers.
 
-### Configure
+### Step 2 — Create the app config
 
-Create `~/.multi-model/config.json`:
+Create `~/.multi-model/config.json`. This tells multi-model-agent which providers exist, which models to use, and how to route tasks.
 
 ```json
 {
@@ -61,22 +65,109 @@ Create `~/.multi-model/config.json`:
 }
 ```
 
-> Use `apiKeyEnv` instead of `apiKey` to avoid hardcoding secrets in the config file. Point `costTier` at `"free"` for any provider you consider effectively zero-cost (flat-rate plans, self-hosted models) — the routing recipe will then actively prefer it when capability matches.
+> **Two important conventions**
+> - Use `apiKeyEnv` (not `apiKey`) to avoid hardcoding secrets in the config file. The key goes in the MCP client's env block in Step 3.
+> - Point `costTier` at `"free"` for any provider you consider effectively zero-cost (flat-rate plans, self-hosted models). The routing recipe will then actively prefer it when capability matches.
 
 Config is loaded from (in order):
 1. `--config <path>` flag
 2. `MULTI_MODEL_CONFIG` environment variable
 3. `~/.multi-model/config.json`
 
-### Run the MCP Server
+### Step 3 — Register the server with your MCP client
+
+Pick the client you use:
+
+#### Option A — Claude Code (recommended, one command)
 
 ```bash
-npx multi-model-agent serve
-# or
-npx multi-model-agent serve --config ./my-config.json
+claude mcp add multi-model-agent -- npx multi-model-agent serve
 ```
 
-The server communicates over stdio using the [Model Context Protocol](https://modelcontextprotocol.io/).
+With provider API keys (one `-e` flag per key, matching the `apiKeyEnv` values in your config):
+
+```bash
+claude mcp add multi-model-agent \
+  -e MINIMAX_API_KEY=sk-cp-... \
+  -e OPENAI_API_KEY=sk-... \
+  -- npx multi-model-agent serve
+```
+
+Useful flags:
+- `--scope user` — register for all projects (default is current project only)
+- `--scope project` — writes to `.mcp.json` in the project root, shareable with teammates
+
+#### Option B — Claude Desktop (macOS)
+
+Open the config file:
+
+```bash
+open "$HOME/Library/Application Support/Claude/claude_desktop_config.json"
+```
+
+Add or extend the `mcpServers` block:
+
+```json
+{
+  "mcpServers": {
+    "multi-model-agent": {
+      "command": "npx",
+      "args": ["multi-model-agent", "serve"],
+      "env": {
+        "MINIMAX_API_KEY": "sk-cp-...",
+        "OPENAI_API_KEY": "sk-..."
+      }
+    }
+  }
+}
+```
+
+Env values must be strings. No nesting, no numbers, no booleans.
+
+#### Option C — Any other MCP client
+
+Have the client spawn `npx multi-model-agent serve` over stdio and pass the required env vars via whatever mechanism it supports. The server follows the standard [Model Context Protocol](https://modelcontextprotocol.io/) on stdio.
+
+### Step 4 — Restart the client
+
+MCP config is only read at startup — there's no hot reload.
+
+- **Claude Code**: `/exit` all sessions and relaunch.
+- **Claude Desktop**: `Cmd-Q` and relaunch from Applications or Dock.
+
+### Step 5 — Verify
+
+**Claude Code:**
+
+```bash
+claude mcp list
+```
+
+You should see `multi-model-agent` with status `connected`. If it shows `failed`:
+
+```bash
+claude mcp get multi-model-agent
+```
+
+prints the error.
+
+**Claude Desktop:** look for the MCP icon (plug/hammer) in the chat input area. It should show `multi-model-agent` in the dropdown.
+
+**Sanity check** — in any new Claude session:
+
+> Call `delegate_tasks` with a trivial "say hello" task on each configured provider and report the results.
+
+If the tool appears and all providers respond, you're done.
+
+### Troubleshooting
+
+| Symptom | Likely cause | Fix |
+|---|---|---|
+| `command not found: multi-model-agent` | Package not installed globally and `npx` couldn't resolve | `npm install -g multi-model-agent` or confirm `npx multi-model-agent serve` works from terminal |
+| Server `failed` in `claude mcp list` | Missing env var for a provider | Re-register with `-e KEY=VAL` or add an `env` block to the JSON config |
+| `No providers configured` error | Missing or unreadable `~/.multi-model/config.json` | Verify the file exists, is valid JSON, and the provider entries match the schema |
+| Server starts but task delegation fails silently | Wrong model id or bad API key | Check provider dashboard for error logs; verify `apiKeyEnv` matches the env var name you set in Step 3 |
+| Config changes not taking effect | Client wasn't fully restarted | Fully quit (not just close window) and relaunch |
 
 ## MCP Tool: `delegate_tasks`
 
