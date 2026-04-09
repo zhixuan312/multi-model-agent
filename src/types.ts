@@ -29,6 +29,19 @@ export interface RunOptions {
   sandboxPolicy?: SandboxPolicy;
 }
 
+export type Tier = 'trivial' | 'standard' | 'reasoning';
+
+export type CostTier = 'free' | 'low' | 'medium' | 'high';
+
+export type Capability =
+  | 'file_read'
+  | 'file_write'
+  | 'grep'
+  | 'glob'
+  | 'shell'
+  | 'web_search'
+  | 'web_fetch';
+
 export type ProviderType = 'codex' | 'claude' | 'openai-compatible';
 
 export interface ProviderConfig {
@@ -42,6 +55,7 @@ export interface ProviderConfig {
   apiKeyEnv?: string;
   sandboxPolicy?: SandboxPolicy;
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[];
+  costTier?: CostTier;
 }
 
 export interface MultiModelConfig {
@@ -62,6 +76,8 @@ export interface Provider {
 export interface DelegateTask {
   provider: Provider;
   prompt: string;
+  tier: Tier;
+  requiredCapabilities: Capability[];
   tools?: ToolMode;
   maxTurns?: number;
   timeoutMs?: number;
