@@ -15,6 +15,7 @@ const providerConfigSchema = z.object({
   apiKeyEnv: z.string().optional(),
   sandboxPolicy: z.enum(['none', 'cwd-only']).optional(),
   hostedTools: z.array(z.enum(['web_search', 'image_generation', 'code_interpreter'])).optional(),
+  costTier: z.enum(['free', 'low', 'medium', 'high']).optional(),
 });
 
 const configSchema = z.object({

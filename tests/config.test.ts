@@ -130,4 +130,55 @@ describe('loadConfig', () => {
     expect(config.defaults.timeoutMs).toBe(600000);
     expect(config.defaults.tools).toBe('full');
   });
+
+  it('parses costTier when present', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        minimax: {
+          type: 'openai-compatible',
+          model: 'MiniMax-M2',
+          baseUrl: 'https://api.example.com/v1',
+          costTier: 'free',
+        },
+      },
+    }));
+
+    const config = loadConfig(configPath);
+
+    expect(config.providers.minimax.costTier).toBe('free');
+  });
+
+  it('accepts config without costTier (optional field)', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        gpt: {
+          type: 'openai-compatible',
+          model: 'gpt-5',
+          baseUrl: 'https://api.example.com/v1',
+        },
+      },
+    }));
+
+    const config = loadConfig(configPath);
+
+    expect(config.providers.gpt.costTier).toBeUndefined();
+  });
+
+  it('rejects invalid costTier values', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        bad: {
+          type: 'openai-compatible',
+          model: 'x',
+          baseUrl: 'https://api.example.com/v1',
+          costTier: 'gigantic',
+        },
+      },
+    }));
+
+    expect(() => loadConfig(configPath)).toThrow();
+  });
 });
