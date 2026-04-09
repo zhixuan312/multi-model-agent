@@ -26,7 +26,8 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         case 'openai-compatible': {
           const { runOpenAI } = await import('./runners/openai-runner.js');
           const { default: OpenAI } = await import('openai');
-          const apiKey = providerConfig.apiKeyEnv ? process.env[providerConfig.apiKeyEnv] : undefined;
+          const apiKey = providerConfig.apiKey
+            ?? (providerConfig.apiKeyEnv ? process.env[providerConfig.apiKeyEnv] : undefined);
           const client = new OpenAI({
             apiKey: apiKey || 'not-needed',
             baseURL: providerConfig.baseUrl,

@@ -10,6 +10,9 @@ import { createProvider } from './provider.js';
 import { delegateAll } from './delegate.js';
 import type { MultiModelConfig, DelegateTask } from './types.js';
 
+export const SERVER_NAME = 'multi-model-agent';
+export const SERVER_VERSION = '0.1.0';
+
 export function buildMcpServer(config: MultiModelConfig) {
   const providerKeys = Object.keys(config.providers);
   if (providerKeys.length === 0) {
@@ -17,8 +20,8 @@ export function buildMcpServer(config: MultiModelConfig) {
   }
 
   const server = new McpServer({
-    name: 'multi-model-agent',
-    version: '0.1.0',
+    name: SERVER_NAME,
+    version: SERVER_VERSION,
   });
 
   const availableProviders = providerKeys as [string, ...string[]];

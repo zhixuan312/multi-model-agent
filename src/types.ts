@@ -38,6 +38,7 @@ export interface ProviderConfig {
   maxTurns?: number;
   timeoutMs?: number;
   baseUrl?: string;
+  apiKey?: string;
   apiKeyEnv?: string;
   sandboxPolicy?: SandboxPolicy;
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[];
@@ -69,10 +70,16 @@ export interface DelegateTask {
   sandboxPolicy?: SandboxPolicy;
 }
 
+export interface PartialProgress {
+  files: string[];
+  usage?: Partial<TokenUsage>;
+  turns?: number;
+}
+
 export async function withTimeout(
   promise: Promise<RunResult>,
   timeoutMs: number,
-  partialFiles: () => string[],
+  partialProgress: () => PartialProgress,
   abortController?: AbortController,
 ): Promise<RunResult> {
   let timer: ReturnType<typeof setTimeout>;
@@ -80,12 +87,18 @@ export async function withTimeout(
   const timeout = new Promise<RunResult>((resolve) => {
     timer = setTimeout(() => {
       abortController?.abort();
+      const progress = partialProgress();
       resolve({
         output: 'Agent timed out.',
         status: 'timeout',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-        turns: 0,
-        files: partialFiles(),
+        usage: {
+          inputTokens: progress.usage?.inputTokens ?? 0,
+          outputTokens: progress.usage?.outputTokens ?? 0,
+          totalTokens: progress.usage?.totalTokens ?? 0,
+          costUSD: progress.usage?.costUSD ?? null,
+        },
+        turns: progress.turns ?? 0,
+        files: progress.files,
       });
     }, timeoutMs);
   });

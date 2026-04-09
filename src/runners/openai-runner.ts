@@ -90,5 +90,5 @@ export async function runOpenAI(
     }
   };
 
-  return withTimeout(run(), timeoutMs, () => tracker.getFiles(), abortController);
+  return withTimeout(run(), timeoutMs, () => ({ files: tracker.getFiles() }), abortController);
 }

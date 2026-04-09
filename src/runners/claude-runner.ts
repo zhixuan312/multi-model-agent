@@ -51,12 +51,14 @@ export async function runClaude(
     queryOptions.effort = effort as Options['effort'];
   }
 
+  // Hoisted so the timeout callback can read partial progress
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let costUSD: number | null = null;
+  let turns = 0;
+
   const run = async (): Promise<RunResult> => {
     let output = '';
-    let inputTokens = 0;
-    let outputTokens = 0;
-    let costUSD: number | null = null;
-    let turns = 0;
     let hitMaxTurns = false;
 
     try {
@@ -116,5 +118,9 @@ export async function runClaude(
     };
   };
 
-  return withTimeout(run(), timeoutMs, () => tracker.getFiles(), abortController);
+  return withTimeout(run(), timeoutMs, () => ({
+    files: tracker.getFiles(),
+    usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+    turns,
+  }), abortController);
 }

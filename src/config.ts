@@ -11,6 +11,7 @@ const providerConfigSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
   baseUrl: z.string().optional(),
+  apiKey: z.string().optional(),
   apiKeyEnv: z.string().optional(),
   sandboxPolicy: z.enum(['none', 'cwd-only']).optional(),
   hostedTools: z.array(z.enum(['web_search', 'image_generation', 'code_interpreter'])).optional(),

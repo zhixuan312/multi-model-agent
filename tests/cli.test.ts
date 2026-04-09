@@ -1,5 +1,15 @@
 import { describe, it, expect } from 'vitest';
-import { buildMcpServer } from '../src/cli.js';
+import { buildMcpServer, SERVER_NAME, SERVER_VERSION } from '../src/cli.js';
+
+describe('server metadata', () => {
+  it('server name is multi-model-agent', () => {
+    expect(SERVER_NAME).toBe('multi-model-agent');
+  });
+
+  it('server version matches package version', () => {
+    expect(SERVER_VERSION).toBe('0.1.0');
+  });
+});
 
 describe('buildMcpServer', () => {
   it('creates an MCP server with delegate_tasks tool', async () => {
