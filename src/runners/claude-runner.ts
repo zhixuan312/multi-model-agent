@@ -37,8 +37,13 @@ export async function runClaude(
   if (toolMode === 'full') {
     const toolServer = createClaudeToolServer(toolImpls, sandboxPolicy);
     queryOptions.mcpServers = { 'code-tools': toolServer };
-    queryOptions.allowedTools = ['mcp__code-tools__*'];
-    queryOptions.tools = [];
+    // Enable Claude's built-in WebSearch and WebFetch alongside our MCP code
+    // tool server, so the capabilities matrix's claim that claude has
+    // web_search + web_fetch is actually true at runtime. Shell is NOT in
+    // this list — it stays behind the sandboxPolicy gate via our code-tools
+    // MCP server's runShell implementation.
+    queryOptions.tools = ['WebSearch', 'WebFetch'];
+    queryOptions.allowedTools = ['mcp__code-tools__*', 'WebSearch', 'WebFetch'];
   } else {
     queryOptions.tools = [];
   }

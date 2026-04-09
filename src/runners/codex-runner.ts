@@ -187,9 +187,14 @@ export async function runCodex(
     strict: false,
   }));
 
+  // Auto-enable web_search for codex unless the user explicitly set hostedTools
+  // (including an explicit empty array to opt out). This keeps the capability
+  // matrix's claim that codex has web_search true at default settings — the
+  // user's guiding principle is to minimize required config.
+  const configuredHostedTools = providerConfig.hostedTools ?? ['web_search'];
   const hostedTools = toolMode === 'full'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    ? (providerConfig.hostedTools ?? []).map(t => ({ type: t } as any))
+    ? configuredHostedTools.map(t => ({ type: t } as any))
     : [];
   const allTools = [...responsesTools, ...hostedTools];
 

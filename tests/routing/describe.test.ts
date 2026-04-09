@@ -34,10 +34,16 @@ describe('describeProviders', () => {
 
   it('renders the capability list per provider', () => {
     const out = describeProviders(makeConfig());
-    // codex has shell + web_search, minimax has only file tools
-    expect(out).toMatch(/codex[\s\S]*shell/);
+    // codex has web_search (auto-enabled), claude has web_search + web_fetch,
+    // minimax has only file tools. None have shell by default
+    // because sandboxPolicy defaults to cwd-only.
     expect(out).toMatch(/codex[\s\S]*web_search/);
+    expect(out).toMatch(/claude[\s\S]*web_fetch/);
     expect(out).toMatch(/minimax[\s\S]*file_read/);
+    // Shell is NOT in the default rendered matrix (sandbox gates it)
+    const blocks = out.split('\n\n');
+    const codexBlock = blocks.find((b) => b.startsWith('codex (')) ?? '';
+    expect(codexBlock).not.toContain('shell');
   });
 
   it('shows effective cost tier', () => {

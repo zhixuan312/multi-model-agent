@@ -3,70 +3,159 @@ import { getCapabilities } from '../../src/routing/capabilities.js';
 import type { ProviderConfig } from '../../src/types.js';
 
 describe('getCapabilities', () => {
-  it('returns base capabilities for codex', () => {
-    const config: ProviderConfig = { type: 'codex', model: 'gpt-5-codex' };
-    const caps = getCapabilities(config);
-    expect(caps).toEqual(expect.arrayContaining([
-      'file_read', 'file_write', 'grep', 'glob', 'shell', 'web_search',
-    ]));
-    expect(caps).not.toContain('web_fetch');
+  describe('file capabilities (every provider type)', () => {
+    it('returns file tools for codex', () => {
+      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      expect(caps).toEqual(expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob']));
+    });
+
+    it('returns file tools for claude', () => {
+      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      expect(caps).toEqual(expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob']));
+    });
+
+    it('returns file tools for openai-compatible', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'MiniMax-M2',
+        baseUrl: 'https://api.example.com/v1',
+      });
+      expect(caps).toEqual(expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob']));
+    });
   });
 
-  it('returns base capabilities for claude including web_fetch', () => {
-    const config: ProviderConfig = { type: 'claude', model: 'claude-opus-4-6' };
-    const caps = getCapabilities(config);
-    expect(caps).toEqual(expect.arrayContaining([
-      'file_read', 'file_write', 'grep', 'glob', 'shell', 'web_search', 'web_fetch',
-    ]));
+  describe('web capabilities', () => {
+    it('auto-enables web_search for codex when hostedTools is undefined', () => {
+      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      expect(caps).toContain('web_search');
+    });
+
+    it('respects explicit empty hostedTools for codex as an opt-out', () => {
+      const caps = getCapabilities({
+        type: 'codex',
+        model: 'gpt-5-codex',
+        hostedTools: [],
+      });
+      expect(caps).not.toContain('web_search');
+    });
+
+    it('respects explicit hostedTools list without web_search as an opt-out', () => {
+      const caps = getCapabilities({
+        type: 'codex',
+        model: 'gpt-5-codex',
+        hostedTools: ['image_generation'],
+      });
+      expect(caps).not.toContain('web_search');
+    });
+
+    it('includes web_search and web_fetch for claude unconditionally', () => {
+      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      expect(caps).toContain('web_search');
+      expect(caps).toContain('web_fetch');
+    });
+
+    it('does not include web_fetch for codex', () => {
+      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      expect(caps).not.toContain('web_fetch');
+    });
+
+    it('does not auto-enable web_search for openai-compatible', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'MiniMax-M2',
+        baseUrl: 'https://api.example.com/v1',
+      });
+      expect(caps).not.toContain('web_search');
+      expect(caps).not.toContain('web_fetch');
+    });
+
+    it('merges web_search from hostedTools for openai-compatible', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'gpt-5',
+        baseUrl: 'https://api.openai.com/v1',
+        hostedTools: ['web_search'],
+      });
+      expect(caps).toContain('web_search');
+    });
+
+    it('ignores image_generation and code_interpreter (not in routing vocabulary)', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'gpt-5',
+        baseUrl: 'https://api.openai.com/v1',
+        hostedTools: ['image_generation', 'code_interpreter'],
+      });
+      expect(caps).not.toContain('image_generation' as never);
+      expect(caps).not.toContain('code_interpreter' as never);
+    });
+
+    it('deduplicates when hostedTools duplicates a base capability', () => {
+      const caps = getCapabilities({
+        type: 'claude',
+        model: 'claude-opus-4-6',
+        hostedTools: ['web_search'],
+      });
+      const webSearchCount = caps.filter((c) => c === 'web_search').length;
+      expect(webSearchCount).toBe(1);
+    });
   });
 
-  it('returns only file tools for openai-compatible without hostedTools', () => {
-    const config: ProviderConfig = {
-      type: 'openai-compatible',
-      model: 'MiniMax-M2',
-      baseUrl: 'https://api.example.com/v1',
-    };
-    const caps = getCapabilities(config);
-    expect(caps).toEqual(
-      expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob'])
-    );
-    expect(caps).not.toContain('shell');
-    expect(caps).not.toContain('web_search');
-    expect(caps).not.toContain('web_fetch');
-  });
+  describe('shell capability (sandbox-gated)', () => {
+    it('does not include shell for codex by default (sandboxPolicy undefined)', () => {
+      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      expect(caps).not.toContain('shell');
+    });
 
-  it('merges web_search from hostedTools for openai-compatible', () => {
-    const config: ProviderConfig = {
-      type: 'openai-compatible',
-      model: 'gpt-5',
-      baseUrl: 'https://api.openai.com/v1',
-      hostedTools: ['web_search'],
-    };
-    const caps = getCapabilities(config);
-    expect(caps).toContain('web_search');
-  });
+    it('does not include shell for codex with explicit sandboxPolicy cwd-only', () => {
+      const caps = getCapabilities({
+        type: 'codex',
+        model: 'gpt-5-codex',
+        sandboxPolicy: 'cwd-only',
+      });
+      expect(caps).not.toContain('shell');
+    });
 
-  it('ignores image_generation and code_interpreter hostedTools (not in routing vocabulary)', () => {
-    const config: ProviderConfig = {
-      type: 'openai-compatible',
-      model: 'gpt-5',
-      baseUrl: 'https://api.openai.com/v1',
-      hostedTools: ['image_generation', 'code_interpreter'],
-    };
-    const caps = getCapabilities(config);
-    // These aren't in the Capability union, so they shouldn't appear
-    expect(caps).not.toContain('image_generation' as never);
-    expect(caps).not.toContain('code_interpreter' as never);
-  });
+    it('includes shell for codex when sandboxPolicy is explicitly none', () => {
+      const caps = getCapabilities({
+        type: 'codex',
+        model: 'gpt-5-codex',
+        sandboxPolicy: 'none',
+      });
+      expect(caps).toContain('shell');
+    });
 
-  it('deduplicates when hostedTools duplicates a base capability', () => {
-    const config: ProviderConfig = {
-      type: 'claude',
-      model: 'claude-opus-4-6',
-      hostedTools: ['web_search'], // claude already has web_search
-    };
-    const caps = getCapabilities(config);
-    const webSearchCount = caps.filter((c) => c === 'web_search').length;
-    expect(webSearchCount).toBe(1);
+    it('does not include shell for claude by default', () => {
+      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      expect(caps).not.toContain('shell');
+    });
+
+    it('includes shell for claude when sandboxPolicy is explicitly none', () => {
+      const caps = getCapabilities({
+        type: 'claude',
+        model: 'claude-opus-4-6',
+        sandboxPolicy: 'none',
+      });
+      expect(caps).toContain('shell');
+    });
+
+    it('does not include shell for openai-compatible by default', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'MiniMax-M2',
+        baseUrl: 'https://api.example.com/v1',
+      });
+      expect(caps).not.toContain('shell');
+    });
+
+    it('includes shell for openai-compatible when sandboxPolicy is explicitly none', () => {
+      const caps = getCapabilities({
+        type: 'openai-compatible',
+        model: 'MiniMax-M2',
+        baseUrl: 'https://api.example.com/v1',
+        sandboxPolicy: 'none',
+      });
+      expect(caps).toContain('shell');
+    });
   });
 });
