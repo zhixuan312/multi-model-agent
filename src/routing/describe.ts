@@ -14,7 +14,14 @@ Tier guidance for the consumer LLM:
 - 'trivial' — well-defined edits, lookups, formatting. One obvious answer.
 - 'standard' — most code work. Clear spec, multiple valid approaches.
 - 'reasoning' — ambiguous, architectural, research, or high-stakes.
-  Use when requirements are unclear or judgment is required.`;
+  Use when requirements are unclear or judgment is required.
+
+Optional 'effort' knob (per task):
+- Only providers marked 'effort: supported' in the matrix honor this field.
+- Use 'high' for reasoning-tier tasks when you want maximum depth,
+  'medium' for balanced, 'low' for fast-but-shallow, 'none' to disable
+  thinking entirely on providers that default it on. Omit the field on
+  providers that do not support it.`;
 
 function renderProviderBlock(
   name: string,
@@ -25,10 +32,11 @@ function renderProviderBlock(
 ): string {
   const cost = effectiveCost(config);
   const costSuffix = costSource === 'config' ? ' (from config)' : '';
+  const effortLabel = profile.supportsEffort ? 'supported' : 'not supported';
   const lines = [
     `${name} (${config.model})`,
     `  tools: ${capabilities.join(', ')}`,
-    `  tier: ${profile.tier} | cost: ${cost}${costSuffix}`,
+    `  tier: ${profile.tier} | cost: ${cost}${costSuffix} | effort: ${effortLabel}`,
     `  best for: ${profile.bestFor}`,
   ];
   if (profile.avoidFor) {

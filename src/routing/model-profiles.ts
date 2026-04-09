@@ -5,6 +5,12 @@ export interface ModelProfile {
   defaultCost: CostTier;
   bestFor: string;
   avoidFor?: string;
+  /**
+   * Whether the model honors the `effort` knob. When false, the runner
+   * silently ignores any effort value — the consumer LLM should not bother
+   * setting it for this provider.
+   */
+  supportsEffort: boolean;
 }
 
 const MODEL_PROFILES: Record<string, ModelProfile> = {
@@ -12,22 +18,26 @@ const MODEL_PROFILES: Record<string, ModelProfile> = {
     tier: 'reasoning',
     defaultCost: 'high',
     bestFor: 'complex, uncertain, open-ended tasks requiring judgment',
+    supportsEffort: true,
   },
   'claude-sonnet': {
     tier: 'standard',
     defaultCost: 'medium',
     bestFor: 'well-scoped code and analysis',
+    supportsEffort: true,
   },
   'gpt-5': {
     tier: 'standard',
     defaultCost: 'medium',
     bestFor: 'code implementation + live data lookup',
+    supportsEffort: true,
   },
   'MiniMax-M2': {
     tier: 'standard',
     defaultCost: 'low',
     bestFor: 'well-defined local code tasks with explicit requirements',
     avoidFor: 'ambiguous or research-style tasks',
+    supportsEffort: false,
   },
 };
 
@@ -35,6 +45,7 @@ const DEFAULT_PROFILE: ModelProfile = {
   tier: 'standard',
   defaultCost: 'medium',
   bestFor: 'general tasks (unprofiled model — defaults applied)',
+  supportsEffort: false,
 };
 
 /**

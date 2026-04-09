@@ -94,4 +94,28 @@ describe('describeProviders', () => {
     const out = describeProviders(makeConfig());
     expect(out).toContain('avoid for'); // minimax has avoidFor
   });
+
+  it('renders effort: supported for providers with effort support', () => {
+    const out = describeProviders(makeConfig());
+    // codex (gpt-5), claude (opus), should be supported
+    const blocks = out.split('\n\n');
+    const codexBlock = blocks.find((b) => b.startsWith('codex (')) ?? '';
+    const claudeBlock = blocks.find((b) => b.startsWith('claude (')) ?? '';
+    expect(codexBlock).toContain('effort: supported');
+    expect(claudeBlock).toContain('effort: supported');
+  });
+
+  it('renders effort: not supported for providers without effort support', () => {
+    const out = describeProviders(makeConfig());
+    // minimax does not support effort
+    const blocks = out.split('\n\n');
+    const minimaxBlock = blocks.find((b) => b.startsWith('minimax (')) ?? '';
+    expect(minimaxBlock).toContain('effort: not supported');
+  });
+
+  it('includes the effort knob guidance in the routing recipe', () => {
+    const out = describeProviders(makeConfig());
+    expect(out).toContain("Optional 'effort' knob");
+    expect(out).toContain("effort: supported");
+  });
 });

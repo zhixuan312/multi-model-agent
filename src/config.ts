@@ -7,7 +7,7 @@ import type { MultiModelConfig } from './types.js';
 const providerConfigSchema = z.object({
   type: z.enum(['codex', 'claude', 'openai-compatible']),
   model: z.string(),
-  effort: z.string().optional(),
+  effort: z.enum(['none', 'low', 'medium', 'high']).optional(),
   maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
   baseUrl: z.string().optional(),

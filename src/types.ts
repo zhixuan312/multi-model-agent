@@ -25,13 +25,25 @@ export interface RunOptions {
   maxTurns?: number;
   timeoutMs?: number;
   cwd?: string;
-  effort?: string;
+  effort?: Effort;
   sandboxPolicy?: SandboxPolicy;
 }
 
 export type Tier = 'trivial' | 'standard' | 'reasoning';
 
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
+
+/**
+ * Reasoning effort knob. Interpreted per-runner:
+ *  - 'none'   → disable extended thinking / reasoning entirely
+ *  - 'low'    → minimal reasoning (fastest)
+ *  - 'medium' → balanced reasoning
+ *  - 'high'   → deep reasoning (slowest, best for hard problems)
+ *
+ * Only providers whose model profile has supportsEffort=true honor this.
+ * Providers without effort support silently ignore the field.
+ */
+export type Effort = 'none' | 'low' | 'medium' | 'high';
 
 export type Capability =
   | 'file_read'
@@ -47,7 +59,7 @@ export type ProviderType = 'codex' | 'claude' | 'openai-compatible';
 export interface ProviderConfig {
   type: ProviderType;
   model: string;
-  effort?: string;
+  effort?: Effort;
   maxTurns?: number;
   timeoutMs?: number;
   baseUrl?: string;
@@ -82,7 +94,7 @@ export interface DelegateTask {
   maxTurns?: number;
   timeoutMs?: number;
   cwd?: string;
-  effort?: string;
+  effort?: Effort;
   sandboxPolicy?: SandboxPolicy;
 }
 

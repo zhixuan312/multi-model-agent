@@ -171,6 +171,7 @@ export async function runCodex(
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
   const sandboxPolicy = options.sandboxPolicy ?? providerConfig.sandboxPolicy ?? 'cwd-only';
+  const effort = options.effort ?? providerConfig.effort;
 
   const abortController = new AbortController();
   const tracker = new FileTracker();
@@ -224,6 +225,13 @@ export async function runCodex(
           store: false,
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
           tools: allTools.length > 0 ? (allTools as any) : undefined,
+          // Honor `effort` when set and not 'none'. Codex backend accepts
+          // reasoning.effort for reasoning-capable models (gpt-5-codex, o3, etc.).
+          // 'none' skips the reasoning block entirely.
+          ...(effort && effort !== 'none' && {
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            reasoning: { effort } as any,
+          }),
         }, { signal: abortController.signal });
 
         let textThisTurn = '';

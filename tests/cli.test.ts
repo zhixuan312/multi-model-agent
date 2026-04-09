@@ -116,4 +116,38 @@ describe('delegate_tasks schema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts valid effort enum values', () => {
+    for (const effort of ['none', 'low', 'medium', 'high'] as const) {
+      const result = taskSchema.safeParse({
+        prompt: 'do thing',
+        provider: 'mock',
+        tier: 'standard',
+        requiredCapabilities: [],
+        effort,
+      });
+      expect(result.success).toBe(true);
+    }
+  });
+
+  it('rejects invalid effort values', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+      effort: 'extreme',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts a task with no effort field (optional)', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+    });
+    expect(result.success).toBe(true);
+  });
 });

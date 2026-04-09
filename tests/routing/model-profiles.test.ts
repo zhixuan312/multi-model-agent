@@ -45,6 +45,26 @@ describe('findProfile', () => {
     const profile = findProfile('claude-opus-4-6');
     expect(profile.tier).toBe('reasoning'); // opus tier, not sonnet
   });
+
+  it('marks claude-opus as supporting effort', () => {
+    expect(findProfile('claude-opus-4-6').supportsEffort).toBe(true);
+  });
+
+  it('marks claude-sonnet as supporting effort', () => {
+    expect(findProfile('claude-sonnet-4-5').supportsEffort).toBe(true);
+  });
+
+  it('marks gpt-5 as supporting effort', () => {
+    expect(findProfile('gpt-5-codex').supportsEffort).toBe(true);
+  });
+
+  it('marks MiniMax-M2 as not supporting effort', () => {
+    expect(findProfile('MiniMax-M2').supportsEffort).toBe(false);
+  });
+
+  it('marks unprofiled models as not supporting effort (conservative default)', () => {
+    expect(findProfile('some-random-new-model').supportsEffort).toBe(false);
+  });
 });
 
 describe('effectiveCost', () => {

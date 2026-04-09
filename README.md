@@ -209,7 +209,7 @@ The server exposes a single tool, `delegate_tasks`, which accepts an array of ta
 | `maxTurns` | `number` | `200` | Max agent loop turns |
 | `timeoutMs` | `number` | `600000` | Timeout in milliseconds |
 | `cwd` | `string` | — | Working directory for file/shell tools |
-| `effort` | `string` | — | Reasoning effort level |
+| `effort` | `"none" \| "low" \| "medium" \| "high"` | — | Reasoning effort. `"none"` disables thinking; `"low"`/`"medium"`/`"high"` scale reasoning depth. Only providers marked `effort: supported` in the routing matrix honor this — others silently ignore it. Prefer `"high"` for `"reasoning"` tier tasks. |
 | `sandboxPolicy` | `"none" \| "cwd-only"` | `"cwd-only"` | File-system confinement policy |
 
 ### Routing Guidance
@@ -221,17 +221,17 @@ Available providers:
 
 codex (gpt-5-codex)
   tools: file_read, file_write, grep, glob, shell, web_search
-  tier: standard | cost: medium
+  tier: standard | cost: medium | effort: supported
   best for: code implementation + live data lookup
 
 claude (claude-opus-4-6)
   tools: file_read, file_write, grep, glob, shell, web_search, web_fetch
-  tier: reasoning | cost: high
+  tier: reasoning | cost: high | effort: supported
   best for: complex, uncertain, open-ended tasks requiring judgment
 
 minimax (MiniMax-M2)
   tools: file_read, file_write, grep, glob
-  tier: standard | cost: free (from config)
+  tier: standard | cost: free (from config) | effort: not supported
   best for: well-defined local code tasks with explicit requirements
   avoid for: ambiguous or research-style tasks
 
@@ -240,7 +240,20 @@ How to route a task:
 2. Quality filter: exclude providers whose tier is below the task's tier.
 3. Cost preference (STRONG): among the remainder, prefer the cheapest tier.
    If a 'free' provider qualifies, pick it.
+
+Optional 'effort' knob (per task): only providers marked 'effort: supported'
+honor this. Use 'high' for reasoning-tier tasks, 'low'/'medium' for balance,
+'none' to disable thinking on providers that default it on.
 ```
+
+**Effort support** is per-model-family:
+
+| Family | Supports effort? | How the runner wires it |
+|---|---|---|
+| `claude-opus`, `claude-sonnet` | ✅ | `queryOptions.thinking = { type: 'adaptive' }` + `queryOptions.effort` passed to the Claude Agent SDK |
+| `gpt-5` (including `gpt-5-codex`) | ✅ | `reasoning: { effort }` passed to the Codex / OpenAI Responses API |
+| `MiniMax-M2` | ❌ | silently ignored — MiniMax's API doesn't expose an effort parameter |
+| Unprofiled models | ❌ (conservative default) | add a profile entry to opt in |
 
 **Model profiles** are matched by family prefix against the configured model id. Known families: `claude-opus`, `claude-sonnet`, `gpt-5`, `MiniMax-M2`. Unknown models fall back to a safe default profile (`standard` tier, `medium` cost).
 

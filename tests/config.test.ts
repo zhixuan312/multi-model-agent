@@ -181,4 +181,53 @@ describe('loadConfig', () => {
 
     expect(() => loadConfig(configPath)).toThrow();
   });
+
+  it('parses a valid effort enum value', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        claude: {
+          type: 'claude',
+          model: 'claude-opus-4-6',
+          effort: 'high',
+        },
+      },
+    }));
+
+    const config = loadConfig(configPath);
+
+    expect(config.providers.claude.effort).toBe('high');
+  });
+
+  it('rejects invalid effort values', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        bad: {
+          type: 'claude',
+          model: 'claude-opus-4-6',
+          effort: 'ultra',
+        },
+      },
+    }));
+
+    expect(() => loadConfig(configPath)).toThrow();
+  });
+
+  it('accepts effort=none as a valid disable signal', () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      providers: {
+        claude: {
+          type: 'claude',
+          model: 'claude-opus-4-6',
+          effort: 'none',
+        },
+      },
+    }));
+
+    const config = loadConfig(configPath);
+
+    expect(config.providers.claude.effort).toBe('none');
+  });
 });

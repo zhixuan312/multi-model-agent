@@ -28,7 +28,8 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
     maxTurns: z.number().int().positive().optional().describe('Max agent loop turns. Default: 200'),
     timeoutMs: z.number().int().positive().optional().describe('Timeout in ms. Default: 600000'),
     cwd: z.string().optional().describe('Working directory for file/shell tools'),
-    effort: z.string().optional().describe('Reasoning effort level'),
+    effort: z.enum(['none', 'low', 'medium', 'high']).optional()
+      .describe("Reasoning effort. 'none' disables thinking; 'low'/'medium'/'high' scale reasoning depth. Only providers with effort support (see routing matrix) honor this — others silently ignore it. Prefer 'high' for 'reasoning' tier tasks."),
     sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
   });
 }
