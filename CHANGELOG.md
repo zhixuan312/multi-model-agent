@@ -7,6 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.2] - 2026-04-10
+
+Patch release: `@zhixuan92/multi-model-agent-mcp` to `0.1.2` and
+`@zhixuan92/multi-model-agent-core` to `0.1.1`.
+
+### Fixed
+
+- **core, mcp**: `@openai/agents` and `openai` were declared as
+  *optional* peer dependencies, so npm/npx never installed them
+  alongside the published packages. End users running
+  `npx @zhixuan92/multi-model-agent-mcp serve` saw the codex and
+  openai-compatible runners crash on first dispatch with
+  `Cannot find package 'openai'` / `Cannot find package
+  '@openai/agents'`. The local dev workspace masked the bug because
+  both libraries lived in the root `devDependencies` and were hoisted
+  into `node_modules`. Both libraries are now regular `dependencies`
+  of `@zhixuan92/multi-model-agent-core` (the only package whose
+  source code imports them); `@zhixuan92/multi-model-agent-mcp`
+  receives them transitively and no longer declares the peer block.
+
 ## [0.1.1] - 2026-04-10
 
 Patch release for `@zhixuan92/multi-model-agent-mcp` only.
@@ -73,6 +93,7 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.2...HEAD
+[0.1.2]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zhixuan312/multi-model-agent/releases/tag/v0.1.0
