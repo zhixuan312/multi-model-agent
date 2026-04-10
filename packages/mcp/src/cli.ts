@@ -52,17 +52,23 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
  * Batch cache for `retry_tasks`. Every `delegate_tasks` call stashes the
  * original `TaskSpec[]` under a UUID so the caller can later ask us to
  * re-dispatch specific indices without re-transmitting the briefs. Two
- * bounds, mirroring `InMemoryContextBlockStore`:
+ * bounds:
  *
- *   - TTL (30 min from last store): keeps stale batches from lingering
- *     through a long session
- *   - LRU cap (100 entries): prevents unbounded growth from a chatty
- *     caller that never retries
+ *   - TTL (30 min from creation): keeps stale batches from lingering
+ *     through a long session. TTL is from-creation (not from-last-access),
+ *     matching `InMemoryContextBlockStore` — a batch used at minute 29
+ *     still dies at minute 30. Access does NOT refresh the expiry.
+ *   - FIFO cap (100 entries): prevents unbounded growth from a chatty
+ *     caller that never retries. Eviction is by insertion order, not
+ *     access order — this is FIFO, NOT LRU. A chatty caller that keeps
+ *     retrying one old batch while creating new ones will still see the
+ *     old batch evicted once 100 newer batches exist. Acceptable because
+ *     retries are expected to be short-lived (same session, same task).
  *
  * Eviction on TTL is lazy (checked on `retry_tasks` lookup). Eviction on
- * the LRU cap is eager (runs after every `rememberBatch`). We use Map
- * insertion order for the LRU — `Map.keys()` iterates in insertion order,
- * so `keys().next().value` is the oldest entry.
+ * the FIFO cap is eager (runs after every `rememberBatch`). We use Map
+ * insertion order — `Map.keys()` iterates in insertion order, so
+ * `keys().next().value` is the oldest inserted entry.
  */
 const BATCH_TTL_MS = 30 * 60 * 1000;
 const BATCH_MAX = 100;
