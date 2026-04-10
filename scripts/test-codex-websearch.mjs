@@ -6,7 +6,7 @@
 // If the backend rejects the shape, the wrapped fetch captures the
 // raw 4xx body and the runner surfaces it in result.error.
 
-import { runCodex } from '../dist/runners/codex-runner.js';
+import { runCodex } from '../packages/core/dist/runners/codex-runner.js';
 
 const CANDIDATES = ['web_search', 'web_search_preview'];
 

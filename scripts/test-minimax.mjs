@@ -9,7 +9,7 @@
 import fs from 'fs';
 import os from 'os';
 import path from 'path';
-import { createProvider } from '../dist/provider.js';
+import { createProvider } from '../packages/core/dist/provider.js';
 
 const configPath = path.join(os.homedir(), '.multi-model', 'config.json');
 const raw = JSON.parse(fs.readFileSync(configPath, 'utf-8'));
