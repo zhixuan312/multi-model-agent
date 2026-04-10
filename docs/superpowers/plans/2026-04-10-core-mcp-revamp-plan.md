@@ -77,7 +77,50 @@
     ".": {
       "types": "./dist/index.d.ts",
       "import": "./dist/index.js"
+    },
+    "./config/load": {
+      "types": "./dist/config/load.d.ts",
+      "import": "./dist/config/load.js"
+    },
+    "./config/schema": {
+      "types": "./dist/config/schema.d.ts",
+      "import": "./dist/config/schema.js"
+    },
+    "./routing/capabilities": {
+      "types": "./dist/routing/capabilities.d.ts",
+      "import": "./dist/routing/capabilities.js"
+    },
+    "./routing/model-profiles": {
+      "types": "./dist/routing/model-profiles.d.ts",
+      "import": "./dist/routing/model-profiles.js"
+    },
+    "./routing/resolve-task-capabilities": {
+      "types": "./dist/routing/resolve-task-capabilities.d.ts",
+      "import": "./dist/routing/resolve-task-capabilities.js"
+    },
+    "./routing/select-provider-for-task": {
+      "types": "./dist/routing/select-provider-for-task.d.ts",
+      "import": "./dist/routing/select-provider-for-task.js"
+    },
+    "./routing/get-provider-eligibility": {
+      "types": "./dist/routing/get-provider-eligibility.d.ts",
+      "import": "./dist/routing/get-provider-eligibility.js"
+    },
+    "./run-tasks": {
+      "types": "./dist/run-tasks.d.ts",
+      "import": "./dist/run-tasks.js"
+    },
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "import": "./dist/provider.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
     }
+  },
+  "scripts": {
+    "build": "tsc"
   },
   "engines": { "node": ">=22.0.0" }
 }
@@ -92,6 +135,9 @@
   "type": "module",
   "main": "./dist/cli.js",
   "engines": { "node": ">=22.0.0" },
+  "scripts": {
+    "build": "tsc"
+  },
   "dependencies": {
     "@scope/multi-model-agent-core": "*",
     "@modelcontextprotocol/sdk": "^1.0.0",
@@ -830,14 +876,13 @@ Update `describe('effectiveCost'` → `describe('getEffectiveCostTier'`.
 Run: `npm test -- tests/routing/model-profiles.test.ts`
 Expected: FAIL — old names not found
 
-- [ ] **Step 3: Update `packages/core/src/routing/model-profiles.ts`**
+- [ ] **Step 3: Update `packages/core/src/routing/model-profiles.ts` — rename functions in-place**
 
-```typescript
-// Same content as existing file, but add re-exports with new names alongside old:
-export { findProfile as findModelProfile, effectiveCost as getEffectiveCostTier } from './model-profiles.js';
-```
+In the existing file, rename:
+- `findProfile` → `findModelProfile`
+- `effectiveCost` → `getEffectiveCostTier`
 
-Or just rename the actual functions internally if preferred. The key is the public exports are `findModelProfile` and `getEffectiveCostTier`.
+Do NOT add aliases or re-exports. The old names are deleted.
 
 - [ ] **Step 4: Run test to verify it passes**
 
@@ -1992,6 +2037,7 @@ git add -u && git commit -m "refactor: delete old delegate.ts, config.ts, routin
 - [ ] Home-dir discovery in MCP only — Task 13
 - [ ] Provider config discriminated union with `baseUrl` required on `openai-compatible` — Task 2
 - [ ] No `loadConfig` alias — Task 4
+- [ ] Core package exports map covers all subpath imports used in MCP — Phase 1
 
 **Placeholder scan:**
 - [ ] No "TBD", "TODO", "implement later" anywhere
