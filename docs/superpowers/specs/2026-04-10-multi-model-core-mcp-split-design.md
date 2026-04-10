@@ -9,8 +9,8 @@
 
 Split the current `multi-model-agent` into two public npm packages in a monorepo:
 
-- **`@scope/multi-model-core`** — sub-agent orchestration engine
-- **`@scope/multi-model-mcp`** — MCP transport adapter (depends on core)
+- **`@scope/multi-model-agent-core`** — sub-agent orchestration engine
+- **`@scope/multi-model-agent-mcp`** — MCP transport adapter (depends on core)
 
 Core owns all policy, routing, validation, and execution. MCP is thin glue that translates MCP input into core calls. All future enhancements to logic, tightening of rules, and behavioral changes happen in core, not MCP.
 
@@ -20,8 +20,8 @@ Core owns all policy, routing, validation, and execution. MCP is thin glue that 
 
 ```
 packages/
-  core/           → @scope/multi-model-core
-  mcp/            → @scope/multi-model-mcp (depends on core)
+  core/           → @scope/multi-model-agent-core
+  mcp/            → @scope/multi-model-agent-mcp (depends on core)
 ```
 
 **Dependency direction:** `mcp → core`. Core has zero knowledge of MCP.
@@ -87,20 +87,20 @@ function resolveTaskCapabilities(
 ): Capability[]
 
 // Returns routing metadata for a model.
-function findProfile(modelId: string): ModelProfile
+function findModelProfile(modelId: string): ModelProfile
 
 // Returns effective cost tier (config override or profile default).
-function effectiveCost(config: ProviderConfig): CostTier
+function getEffectiveCostTier(config: ProviderConfig): CostTier
 
 // Returns structured eligibility report for every configured provider.
 // Each entry states whether the provider is eligible and, if not, which
 // specific checks failed and why. Use this to debug routing decisions.
-function evaluateProviders(
+function getProviderEligibility(
   task: TaskSpec,
   config: MultiModelConfig,
-): ProviderEligibilityReport[]
+): ProviderEligibility[]
 
-interface ProviderEligibilityReport {
+interface ProviderEligibility {
   name: string
   config: ProviderConfig
   eligible: boolean
@@ -231,8 +231,8 @@ interface MultiModelConfig {
 Core internally separates provider selection from task execution. This keeps routing logic testable and reusable.
 
 ```typescript
-// Internal: resolve which provider to use for a task
-function resolveTaskProvider(task: TaskSpec, config: MultiModelConfig): ProviderConfig
+// Internal: select which provider to use for a task (advanced public API)
+function selectProviderForTask(task: TaskSpec, config: MultiModelConfig): ProviderConfig
 
 // Internal: run a single task against a resolved provider
 async function executeTask(
@@ -242,8 +242,8 @@ async function executeTask(
 ): Promise<RunResult>
 
 // Public runTasks() orchestrates:
-//  1. evaluateProviders() for each spec — to surface errors before spending tokens
-//  2. resolveTaskProvider() for each task
+//  1. getProviderEligibility() for each spec — to surface errors before spending tokens
+//  2. selectProviderForTask() for each task
 //  3. executeTask() in parallel
 //  4. return results in input order
 ```
@@ -253,11 +253,11 @@ async function executeTask(
 When a task does not specify a provider, core selects one using:
 
 1. **Capability filter (HARD):** Exclude any provider missing any `requiredCapability`.
-2. **Tier filter (HARD):** Exclude any provider whose `findProfile(model).tier` is below `task.tier`. Tier ordering: `trivial < standard < reasoning`.
+2. **Tier filter (HARD):** Exclude any provider whose `findModelProfile(model).tier` is below `task.tier`. Tier ordering: `trivial < standard < reasoning`.
 3. **Cost preference (STRONG):** Among remaining eligible providers, select the cheapest `costTier`.
 4. **Tiebreaker:** If multiple providers share the same cost tier, select by provider name sorted ascending (ASCII/lexicographic order).
 
-If no provider passes the filter, the task returns an error `RunResult`. Callers should call `evaluateProviders(task, config)` to diagnose which checks failed for each configured provider.
+If no provider passes the filter, the task returns an error `RunResult`. Callers should call `getProviderEligibility(task, config)` to diagnose which checks failed for each configured provider.
 
 ### `resolveTaskCapabilities()` Behavior
 
@@ -298,9 +298,9 @@ function buildTaskSchema(availableProviders: [string, ...string[]]): z.ZodSchema
 - Apply routing/selection logic
 - Modify execution behavior
 
-### `describeProviders()` Location
+### Routing Matrix Rendering
 
-`describeProviders()` lives in `mcp/src/routing/describe.ts`. It renders the routing matrix for the MCP tool description, helping the consuming LLM understand provider capabilities and routing rules. Core has no knowledge of this rendering.
+`renderProviderRoutingMatrix()` lives in `mcp/src/routing/render-provider-routing-matrix.ts`. It renders the routing matrix for the MCP tool description, helping the consuming LLM understand provider capabilities and routing rules. Core has no knowledge of this rendering.
 
 ---
 
@@ -312,15 +312,16 @@ packages/
     src/
       types.ts                    # TaskSpec, RunResult, Provider, config types
       provider.ts                 # createProvider factory
-      run-tasks.ts                # runTasks(), executeTask(), resolveTaskProvider()
+      run-tasks.ts                # runTasks(), executeTask()
       config/
         schema.ts                 # Zod schema + parseConfig()
         load.ts                   # loadConfigFromFile()
       routing/
-        capabilities.ts           # getCapabilities
-        model-profiles.ts          # findProfile, effectiveCost, ModelProfile
-        resolve.ts                 # resolveTaskProvider, evaluateProviders,
-                                    # resolveTaskCapabilities
+        capabilities.ts           # getBaseCapabilities
+        model-profiles.ts         # findModelProfile, getEffectiveCostTier, ModelProfile
+        resolve-task-capabilities.ts  # resolveTaskCapabilities
+        select-provider-for-task.ts    # selectProviderForTask (advanced public API)
+        get-provider-eligibility.ts   # getProviderEligibility
       runners/
         openai-runner.ts
         claude-runner.ts
@@ -338,13 +339,13 @@ packages/
 
   mcp/
     src/
-      cli.ts                      # buildMcpServer + CLI main()
+      cli.ts                      # buildMcpServer + CLI main() + TaskSpecSchema
       routing/
-        describe.ts               # describeProviders
+        render-provider-routing-matrix.ts  # renderProviderRoutingMatrix
     package.json
     tsconfig.json
 
-  package.json                    # workspace root
+  package.json                    # workspace root (private, not published)
   tsconfig.base.json              # shared base tsconfig
 ```
 
@@ -378,8 +379,14 @@ This is a v0.1.0 greenfield project. No backward compatibility is required. The 
 - `DelegateTask` from current `src/types.ts` is replaced by `TaskSpec`.
 - `delegateAll()` is replaced by `runTasks()` as the primary entry point.
 - `getEffectiveCapabilities` is renamed to `resolveTaskCapabilities` and its signature is updated to take `RunOptions` (not just `ProviderConfig`).
+- `evaluateProviders()` is renamed to `getProviderEligibility()` returning `ProviderEligibility[]`.
+- `findProfile()` is renamed to `findModelProfile()`.
+- `effectiveCost()` is renamed to `getEffectiveCostTier()`.
+- `getCapabilities()` is renamed to `getBaseCapabilities()`.
+- `resolveTaskProvider` (internal) is renamed to `selectProviderForTask`.
 - Home-directory config auto-discovery is removed from core and moves to `mcp/cli.ts`.
 - `tier` and `requiredCapabilities` become first-class core concepts (enforced by core, not just stored).
+- `ProviderConfig` is replaced by a discriminated union — `baseUrl` is required on `OpenAICompatibleProviderConfig`.
 
 ---
 
@@ -388,10 +395,7 @@ This is a v0.1.0 greenfield project. No backward compatibility is required. The 
 - All imports use `.js` extensions (ESM).
 - `runTasks()` in `core/src/run-tasks.ts` is the new top-level orchestration file.
 - `delegate.ts` is removed — replaced by `run-tasks.ts` with full policy enforcement.
-- `describe.ts` moves from `core/src/routing/` to `mcp/src/routing/`.
-- `getEffectiveCapabilities` in `delegate.ts` becomes `resolveTaskCapabilities` in `core/src/routing/resolve.ts`.
-- `delegate.ts` is removed — replaced by `run-tasks.ts`.
-- Routing helpers reorganized: `capabilities.ts`, `model-profiles.ts`, `resolve.ts` under `core/src/routing/`.
-- Config split: `schema.ts` (Zod + parse), `load.ts` (file loading helper).
+- `describe.ts` is deleted from `core/src/routing/` and replaced by `mcp/src/routing/render-provider-routing-matrix.ts`.
+- Routing helpers split into three files under `core/src/routing/`: `capabilities.ts` (`getBaseCapabilities`), `model-profiles.ts` (`findModelProfile`, `getEffectiveCostTier`), `resolve-task-capabilities.ts` (`resolveTaskCapabilities`), `select-provider-for-task.ts` (`selectProviderForTask`), `get-provider-eligibility.ts` (`getProviderEligibility`).
+- Config split: `schema.ts` (Zod + `parseConfig`), `load.ts` (`loadConfigFromFile`). No `loadConfig` alias exported.
 - `ProviderConfig` becomes a discriminated union — `CodexProviderConfig`, `ClaudeProviderConfig`, `OpenAICompatibleProviderConfig`. `baseUrl` is required on `OpenAICompatibleProviderConfig`.
-- `getEligibleProviders()` is renamed to `evaluateProviders()` with structured `ProviderEligibilityReport[]` return type covering all providers.
