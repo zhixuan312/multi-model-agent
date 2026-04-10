@@ -1,9 +1,25 @@
 {
-  "name": "@scope/multi-model-agent-core",
+  "name": "@zhixuan92/multi-model-agent-core",
   "version": "0.1.0",
   "type": "module",
-  "license": "ISC",
-  "repository": "github:zhixuan312/multi-model-agent",
+  "license": "MIT",
+  "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
+  "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
+  "keywords": [
+    "mcp",
+    "llm",
+    "claude",
+    "codex",
+    "openai",
+    "agent",
+    "routing",
+    "multi-model"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhixuan312/multi-model-agent.git",
+    "directory": "packages/core"
+  },
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
   "files": ["dist"],

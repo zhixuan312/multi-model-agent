@@ -1,62 +1,62 @@
 import { describe, it, expect } from 'vitest';
 
 describe('package exports contract', () => {
-  // ── @scope/multi-model-agent-core ──────────────────────────────────────────
+  // ── @zhixuan92/multi-model-agent-core ──────────────────────────────────────────
 
-  describe('@scope/multi-model-agent-core (main entry)', () => {
+  describe('@zhixuan92/multi-model-agent-core (main entry)', () => {
     it('exports loadConfigFromFile as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.loadConfigFromFile).toBe('function');
     });
 
     it('exports parseConfig as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.parseConfig).toBe('function');
     });
 
     it('exports multiModelConfigSchema (Zod schema)', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       // Zod schemas are runtime objects with a .safeParse method
       expect(typeof mod.multiModelConfigSchema.safeParse).toBe('function');
     });
 
     it('exports createProvider as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.createProvider).toBe('function');
     });
 
     it('exports runTasks as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.runTasks).toBe('function');
     });
 
     it('exports getBaseCapabilities as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.getBaseCapabilities).toBe('function');
     });
 
     it('exports resolveTaskCapabilities as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.resolveTaskCapabilities).toBe('function');
     });
 
     it('exports findModelProfile as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.findModelProfile).toBe('function');
     });
 
     it('exports getEffectiveCostTier as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.getEffectiveCostTier).toBe('function');
     });
 
     it('exports selectProviderForTask as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.selectProviderForTask).toBe('function');
     });
 
     it('exports getProviderEligibility as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-core');
+      const mod = await import('@zhixuan92/multi-model-agent-core');
       expect(typeof mod.getProviderEligibility).toBe('function');
     });
 
@@ -67,26 +67,26 @@ describe('package exports contract', () => {
     // checked with expect(mod.Tier).toBeDefined().
   });
 
-  // ── @scope/multi-model-agent-core subpath exports ───────────────────────────
+  // ── @zhixuan92/multi-model-agent-core subpath exports ───────────────────────────
 
-  describe('@scope/multi-model-agent-core subpath exports', () => {
+  describe('@zhixuan92/multi-model-agent-core subpath exports', () => {
     it('exports ./config/schema with parseConfig', async () => {
-      const mod = await import('@scope/multi-model-agent-core/config/schema');
+      const mod = await import('@zhixuan92/multi-model-agent-core/config/schema');
       expect(typeof mod.parseConfig).toBe('function');
     });
 
     it('exports ./config/load with loadConfigFromFile', async () => {
-      const mod = await import('@scope/multi-model-agent-core/config/load');
+      const mod = await import('@zhixuan92/multi-model-agent-core/config/load');
       expect(typeof mod.loadConfigFromFile).toBe('function');
     });
 
     it('exports ./routing/capabilities with getBaseCapabilities', async () => {
-      const mod = await import('@scope/multi-model-agent-core/routing/capabilities');
+      const mod = await import('@zhixuan92/multi-model-agent-core/routing/capabilities');
       expect(typeof mod.getBaseCapabilities).toBe('function');
     });
 
     it('exports ./routing/model-profiles with findModelProfile and getEffectiveCostTier', async () => {
-      const mod = await import('@scope/multi-model-agent-core/routing/model-profiles');
+      const mod = await import('@zhixuan92/multi-model-agent-core/routing/model-profiles');
       expect(typeof mod.findModelProfile).toBe('function');
       expect(typeof mod.getEffectiveCostTier).toBe('function');
     });
@@ -94,62 +94,62 @@ describe('package exports contract', () => {
     it(
       'exports ./routing/resolve-task-capabilities with resolveTaskCapabilities',
       async () => {
-        const mod = await import('@scope/multi-model-agent-core/routing/resolve-task-capabilities');
+        const mod = await import('@zhixuan92/multi-model-agent-core/routing/resolve-task-capabilities');
         expect(typeof mod.resolveTaskCapabilities).toBe('function');
       },
     );
 
     it('exports ./routing/select-provider-for-task with selectProviderForTask', async () => {
-      const mod = await import('@scope/multi-model-agent-core/routing/select-provider-for-task');
+      const mod = await import('@zhixuan92/multi-model-agent-core/routing/select-provider-for-task');
       expect(typeof mod.selectProviderForTask).toBe('function');
     });
 
     it('exports ./routing/get-provider-eligibility with getProviderEligibility', async () => {
-      const mod = await import('@scope/multi-model-agent-core/routing/get-provider-eligibility');
+      const mod = await import('@zhixuan92/multi-model-agent-core/routing/get-provider-eligibility');
       expect(typeof mod.getProviderEligibility).toBe('function');
     });
 
     it('exports ./provider with createProvider', async () => {
-      const mod = await import('@scope/multi-model-agent-core/provider');
+      const mod = await import('@zhixuan92/multi-model-agent-core/provider');
       expect(typeof mod.createProvider).toBe('function');
     });
 
     it('exports ./run-tasks with runTasks', async () => {
-      const mod = await import('@scope/multi-model-agent-core/run-tasks');
+      const mod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
       expect(typeof mod.runTasks).toBe('function');
     });
 
     it('exports ./types (type re-exports only — no runtime value assertions needed)', async () => {
       // ./types only re-exports type definitions; no runtime values to assert on.
       // This subpath is verified to exist by successful import resolution.
-      await expect(import('@scope/multi-model-agent-core/types')).resolves.toBeDefined();
+      await expect(import('@zhixuan92/multi-model-agent-core/types')).resolves.toBeDefined();
     });
 
     // NOTE: parseConfig subpath is not tested separately from main entry
     // (already covered above). loadConfigFromFile subpath added above.
   });
 
-  // ── @scope/multi-model-agent-mcp ────────────────────────────────────────────
+  // ── @zhixuan92/multi-model-agent-mcp ────────────────────────────────────────────
 
-  describe('@scope/multi-model-agent-mcp (main entry)', () => {
+  describe('@zhixuan92/multi-model-agent-mcp (main entry)', () => {
     it('exports buildMcpServer as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent-mcp');
       expect(typeof mod.buildMcpServer).toBe('function');
     });
 
     it('exports buildTaskSchema as a function', async () => {
-      const mod = await import('@scope/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent-mcp');
       expect(typeof mod.buildTaskSchema).toBe('function');
     });
 
     it('exports SERVER_NAME as a string', async () => {
-      const mod = await import('@scope/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent-mcp');
       expect(typeof mod.SERVER_NAME).toBe('string');
       expect(mod.SERVER_NAME).toBeTruthy();
     });
 
     it('exports SERVER_VERSION as a string', async () => {
-      const mod = await import('@scope/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent-mcp');
       expect(typeof mod.SERVER_VERSION).toBe('string');
       expect(mod.SERVER_VERSION).toBeTruthy();
     });
@@ -159,9 +159,9 @@ describe('package exports contract', () => {
     // and instead assert the values are truthy non-empty strings.
   });
 
-  describe('@scope/multi-model-agent-mcp subpath exports', () => {
+  describe('@zhixuan92/multi-model-agent-mcp subpath exports', () => {
     it('exports ./routing/render-provider-routing-matrix with renderProviderRoutingMatrix', async () => {
-      const mod = await import('@scope/multi-model-agent-mcp/routing/render-provider-routing-matrix');
+      const mod = await import('@zhixuan92/multi-model-agent-mcp/routing/render-provider-routing-matrix');
       expect(typeof mod.renderProviderRoutingMatrix).toBe('function');
     });
   });

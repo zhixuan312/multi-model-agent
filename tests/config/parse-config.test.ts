@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { parseConfig } from '@scope/multi-model-agent-core/config/schema';
+import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 
 describe('parseConfig', () => {
   it('parses valid minimal config and applies all defaults', () => {

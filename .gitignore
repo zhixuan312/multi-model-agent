@@ -3,7 +3,13 @@ dist/
 .env
 .env.*
 *.log
+**/.DS_Store
 .DS_Store
 .claude/
 .worktrees/
 docs/
+coverage/
+.vscode/
+.idea/
+*.swp
+*.swo

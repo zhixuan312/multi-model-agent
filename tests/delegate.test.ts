@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { runTasks } from '@scope/multi-model-agent-core/run-tasks';
-import { resolveTaskCapabilities } from '@scope/multi-model-agent-core/routing/resolve-task-capabilities';
-import type { MultiModelConfig, ProviderConfig, RunResult } from '@scope/multi-model-agent-core';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { resolveTaskCapabilities } from '@zhixuan92/multi-model-agent-core/routing/resolve-task-capabilities';
+import type { MultiModelConfig, ProviderConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 const defaultConfig: MultiModelConfig = {
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },

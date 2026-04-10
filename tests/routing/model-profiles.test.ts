@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findModelProfile, getEffectiveCostTier } from '@scope/multi-model-agent-core/routing/model-profiles';
-import type { ProviderConfig } from '@scope/multi-model-agent-core';
+import { findModelProfile, getEffectiveCostTier } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
+import type { ProviderConfig } from '@zhixuan92/multi-model-agent-core';
 
 describe('findModelProfile', () => {
   it('matches claude-opus family by prefix', () => {

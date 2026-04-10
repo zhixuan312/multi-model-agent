@@ -7,10 +7,10 @@ import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
 import { z } from 'zod';
-import { loadConfigFromFile } from '@scope/multi-model-agent-core/config/load';
-import { parseConfig } from '@scope/multi-model-agent-core/config/schema';
-import { runTasks } from '@scope/multi-model-agent-core/run-tasks';
-import type { MultiModelConfig, TaskSpec } from '@scope/multi-model-agent-core';
+import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
+import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';

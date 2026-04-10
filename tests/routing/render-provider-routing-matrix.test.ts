@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { renderProviderRoutingMatrix } from '@scope/multi-model-agent-mcp/routing/render-provider-routing-matrix';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { renderProviderRoutingMatrix } from '@zhixuan92/multi-model-agent-mcp/routing/render-provider-routing-matrix';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 describe('renderProviderRoutingMatrix', () => {
   it('renders single provider with model name, capabilities, tier, cost', () => {

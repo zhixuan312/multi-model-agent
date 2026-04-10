@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION } from '@scope/multi-model-agent-mcp';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { buildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION } from '@zhixuan92/multi-model-agent-mcp';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const sampleConfig = (): MultiModelConfig => ({
   providers: {

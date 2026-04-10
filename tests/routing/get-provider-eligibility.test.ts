@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getProviderEligibility } from '@scope/multi-model-agent-core/routing/get-provider-eligibility';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { getProviderEligibility } from '@zhixuan92/multi-model-agent-core/routing/get-provider-eligibility';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const makeConfig = (overrides: Partial<MultiModelConfig> = {}): MultiModelConfig => ({
   providers: {

@@ -1,7 +1,7 @@
-import type { Capability, MultiModelConfig, ProviderConfig } from '@scope/multi-model-agent-core';
-import { getBaseCapabilities } from '@scope/multi-model-agent-core/routing/capabilities';
-import { findModelProfile, getEffectiveCostTier } from '@scope/multi-model-agent-core/routing/model-profiles';
-import type { ModelProfile } from '@scope/multi-model-agent-core/routing/model-profiles';
+import type { Capability, MultiModelConfig, ProviderConfig } from '@zhixuan92/multi-model-agent-core';
+import { getBaseCapabilities } from '@zhixuan92/multi-model-agent-core/routing/capabilities';
+import { findModelProfile, getEffectiveCostTier } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
+import type { ModelProfile } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
 
 const ROUTING_RECIPE = `How to route a task:
 1. Capability filter (HARD): exclude providers missing any required capability.

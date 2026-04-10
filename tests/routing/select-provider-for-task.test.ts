@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { selectProviderForTask } from '@scope/multi-model-agent-core/routing/select-provider-for-task';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { selectProviderForTask } from '@zhixuan92/multi-model-agent-core/routing/select-provider-for-task';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 /**
  * Model tiers from model-profiles.json (prefix → tier, defaultCost):

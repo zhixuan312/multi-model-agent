@@ -24,8 +24,8 @@ This repo contains two workspace packages:
 
 | Package | Purpose |
 | --- | --- |
-| `@scope/multi-model-agent-core` | Routing, config loading, provider runners, task execution |
-| `@scope/multi-model-agent-mcp` | MCP stdio server exposing `delegate_tasks` |
+| `@zhixuan92/multi-model-agent-core` | Routing, config loading, provider runners, task execution |
+| `@zhixuan92/multi-model-agent-mcp` | MCP stdio server exposing `delegate_tasks` |
 
 ## Quick Start
 
@@ -46,20 +46,20 @@ Provider auth currently works like this:
 Use `npx`:
 
 ```bash
-npx @scope/multi-model-agent-mcp serve
+npx @zhixuan92/multi-model-agent-mcp serve
 ```
 
 Or install globally:
 
 ```bash
-npm install -g @scope/multi-model-agent-mcp
+npm install -g @zhixuan92/multi-model-agent-mcp
 multi-model-agent serve
 ```
 
 If you plan to use `openai-compatible` providers, install the optional peer dependencies too:
 
 ```bash
-npm install -g @scope/multi-model-agent-mcp @openai/agents openai
+npm install -g @zhixuan92/multi-model-agent-mcp @openai/agents openai
 ```
 
 ### 3. Create your config
@@ -113,7 +113,7 @@ Recommended practice:
 For Claude Code:
 
 ```bash
-claude mcp add multi-model-agent -- npx @scope/multi-model-agent-mcp serve
+claude mcp add multi-model-agent -- npx @zhixuan92/multi-model-agent-mcp serve
 ```
 
 If your providers need environment variables:
@@ -123,7 +123,7 @@ claude mcp add multi-model-agent \
   -e OPENAI_API_KEY=sk-... \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e MINIMAX_API_KEY=... \
-  -- npx @scope/multi-model-agent-mcp serve
+  -- npx @zhixuan92/multi-model-agent-mcp serve
 ```
 
 For Claude Desktop, add this to `claude_desktop_config.json`:
@@ -133,7 +133,7 @@ For Claude Desktop, add this to `claude_desktop_config.json`:
   "mcpServers": {
     "multi-model-agent": {
       "command": "npx",
-      "args": ["@scope/multi-model-agent-mcp", "serve"],
+      "args": ["@zhixuan92/multi-model-agent-mcp", "serve"],
       "env": {
         "OPENAI_API_KEY": "sk-...",
         "ANTHROPIC_API_KEY": "sk-ant-...",

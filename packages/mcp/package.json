@@ -1,9 +1,26 @@
 {
-  "name": "@scope/multi-model-agent-mcp",
+  "name": "@zhixuan92/multi-model-agent-mcp",
   "version": "0.1.0",
   "type": "module",
-  "license": "ISC",
-  "repository": "github:zhixuan312/multi-model-agent",
+  "license": "MIT",
+  "description": "MCP server for multi-model-agent. Exposes a delegate_tasks tool that routes work to Claude, Codex, or OpenAI-compatible sub-agents based on capability, quality tier, and cost.",
+  "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "claude",
+    "codex",
+    "openai",
+    "agent",
+    "multi-model",
+    "delegation"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhixuan312/multi-model-agent.git",
+    "directory": "packages/mcp"
+  },
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
   "files": ["dist"],
@@ -27,7 +44,7 @@
   },
   "engines": { "node": ">=22.0.0" },
   "dependencies": {
-    "@scope/multi-model-agent-core": "*",
+    "@zhixuan92/multi-model-agent-core": "*",
     "@modelcontextprotocol/sdk": "^1.0.0",
     "zod": "^4.0.0"
   },

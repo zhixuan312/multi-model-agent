@@ -1,11 +1,34 @@
 {
   "name": "multi-model-agent",
+  "version": "0.1.0",
   "private": true,
+  "license": "MIT",
+  "description": "MCP server that delegates tasks to sub-agents running on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
+  "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
+  "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhixuan312/multi-model-agent.git"
+  },
+  "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
+  "keywords": [
+    "mcp",
+    "model-context-protocol",
+    "llm",
+    "claude",
+    "codex",
+    "openai",
+    "agent",
+    "multi-model",
+    "routing",
+    "delegation"
+  ],
   "workspaces": ["packages/*"],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "serve": "node packages/mcp/dist/cli.js serve"
   },
   "engines": {
     "node": ">=22.0.0"

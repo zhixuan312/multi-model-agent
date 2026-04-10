@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadConfigFromFile } from '@scope/multi-model-agent-core/config/load';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { createProvider } from '@scope/multi-model-agent-core';
-import type { MultiModelConfig } from '@scope/multi-model-agent-core';
+import { createProvider } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const baseConfig: MultiModelConfig = {
   providers: {

@@ -5,7 +5,7 @@ import path from 'path';
 
 const mockLoadConfigFromFile = vi.fn();
 
-vi.mock('@scope/multi-model-agent-core/config/load', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/config/load', () => ({
   loadConfigFromFile: mockLoadConfigFromFile,
 }));
 
