@@ -92,16 +92,28 @@ function findProfile(modelId: string): ModelProfile
 // Returns effective cost tier (config override or profile default).
 function effectiveCost(config: ProviderConfig): CostTier
 
-// Returns all providers that satisfy a task's requirements.
-// Useful for debugging routing decisions without running execution.
+// Returns structured eligibility report for every configured provider.
+// Each entry states whether the provider is eligible and, if not, which
+// specific checks failed and why. Use this to debug routing decisions.
 function getEligibleProviders(
   task: TaskSpec,
   config: MultiModelConfig,
-): { name: string; config: ProviderConfig; reason: string }[]
+): ProviderEligibilityReport[]
 
-// Validates a task against config without executing.
-// Returns error messages for each validation failure, empty array if valid.
-function validateTask(task: TaskSpec, config: MultiModelConfig): string[]
+interface ProviderEligibilityReport {
+  name: string
+  config: ProviderConfig
+  eligible: boolean
+  /** Reason only present when eligible === false. */
+  reasons: EligibilityFailure[]
+}
+
+interface EligibilityFailure {
+  check: 'capability' | 'tier' | 'tool_mode'
+  detail: string
+  /** e.g. "shell not available under sandboxPolicy 'cwd-only'" */
+  message: string
+}
 ```
 
 ### Core Public Types
@@ -145,15 +157,44 @@ interface TokenUsage {
   costUSD: number | null
 }
 
-interface ProviderConfig {
-  type: ProviderType
+/** Discriminated union — each provider type has distinct required fields. */
+type ProviderConfig =
+  | CodexProviderConfig
+  | ClaudeProviderConfig
+  | OpenAICompatibleProviderConfig
+
+interface CodexProviderConfig {
+  type: 'codex'
   model: string
   effort?: Effort
   maxTurns?: number
   timeoutMs?: number
-  baseUrl?: string
+  sandboxPolicy?: SandboxPolicy
+  hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
+  costTier?: CostTier
+}
+
+interface ClaudeProviderConfig {
+  type: 'claude'
+  model: string
+  effort?: Effort
+  maxTurns?: number
+  timeoutMs?: number
+  sandboxPolicy?: SandboxPolicy
+  hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
+  costTier?: CostTier
+}
+
+interface OpenAICompatibleProviderConfig {
+  type: 'openai-compatible'
+  model: string
+  /** Required — must be specified. No default. Omitting this is a config error. */
+  baseUrl: string
   apiKey?: string
   apiKeyEnv?: string
+  effort?: Effort
+  maxTurns?: number
+  timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
@@ -168,6 +209,8 @@ interface MultiModelConfig {
   }
 }
 ```
+
+**Why a discriminated union?** `openai-compatible` has no meaningful defaults — callers who omit `baseUrl` silently hit OpenAI public API defaults instead of their intended endpoint. Making `baseUrl` required on the discriminated type forces config to be explicit, closing the misrouting risk.
 
 ---
 
@@ -189,7 +232,7 @@ async function executeTask(
 ): Promise<RunResult>
 
 // Public runTasks() orchestrates:
-//  1. validateTask() each spec
+//  1. getEligibleProviders() for each spec — to surface errors before spending tokens
 //  2. resolveTaskProvider() for each task
 //  3. executeTask() in parallel
 //  4. return results in input order
@@ -201,9 +244,10 @@ When a task does not specify a provider, core selects one using:
 
 1. **Capability filter (HARD):** Exclude any provider missing any `requiredCapability`.
 2. **Tier filter (HARD):** Exclude any provider whose `findProfile(model).tier` is below `task.tier`. Tier ordering: `trivial < standard < reasoning`.
-3. **Cost preference (STRONG):** Among remaining eligible providers, select the cheapest `costTier`. If multiple share the same cost tier, selection among them is deterministic by config key sort order.
+3. **Cost preference (STRONG):** Among remaining eligible providers, select the cheapest `costTier`.
+4. **Tiebreaker:** If multiple providers share the same cost tier, select by provider name sorted ascending (ASCII/lexicographic order).
 
-If no provider passes the filter, the task returns an error `RunResult` with a clear message listing which checks failed.
+If no provider passes the filter, the task returns an error `RunResult`. Callers should call `getEligibleProviders(task, config)` to diagnose which checks failed for each configured provider.
 
 ### `resolveTaskCapabilities()` Behavior
 
@@ -263,9 +307,10 @@ packages/
         schema.ts                 # Zod schema + parseConfig()
         load.ts                   # loadConfigFromFile()
       routing/
-        capabilities.ts           # getCapabilities, getEligibleProviders
-        validate.ts               # validateTask, resolveTaskCapabilities
-        model-profiles.ts         # findProfile, effectiveCost, ModelProfile
+        capabilities.ts           # getCapabilities
+        model-profiles.ts          # findProfile, effectiveCost, ModelProfile
+        resolve.ts                 # resolveTaskProvider, getEligibleProviders,
+                                    # resolveTaskCapabilities
       runners/
         openai-runner.ts
         claude-runner.ts
@@ -306,13 +351,13 @@ packages/
 
 ## Provider Selection Determinism
 
-Auto-routing is deterministic:
+Auto-routing is fully deterministic. The sort key at each step is explicit and reproducible:
 
-1. Capability and tier filters produce a set of eligible providers.
-2. Among eligible providers at the same cost tier, selection is sorted by provider name (ASCII/lexicographic order).
-3. No random or non-deterministic tie-breaking.
+- **Step 1–2** (capability + tier): produce an unordered eligible set by exclusion.
+- **Step 3** (cost): sort eligible providers ascending by `costTier` (`free < low < medium < high`).
+- **Step 4** (tiebreaker): among providers tied at the same cost tier, select by provider name ascending (ASCII/lexicographic).
 
-A caller who wants deterministic routing can rely on this. A caller who wants a different selection strategy can specify `provider` explicitly.
+No randomness or non-deterministic tie-breaking. A caller who wants a different selection strategy can specify `provider` explicitly.
 
 ---
 
@@ -334,5 +379,9 @@ This is a v0.1.0 greenfield project. No backward compatibility is required. The 
 - `runTasks()` in `core/src/run-tasks.ts` is the new top-level orchestration file.
 - `delegate.ts` is removed — replaced by `run-tasks.ts` with full policy enforcement.
 - `describe.ts` moves from `core/src/routing/` to `mcp/src/routing/`.
-- `getEffectiveCapabilities` in `delegate.ts` becomes `resolveTaskCapabilities` in `core/src/routing/validate.ts`.
+- `getEffectiveCapabilities` in `delegate.ts` becomes `resolveTaskCapabilities` in `core/src/routing/resolve.ts`.
+- `delegate.ts` is removed — replaced by `run-tasks.ts`.
+- Routing helpers reorganized: `capabilities.ts`, `model-profiles.ts`, `resolve.ts` under `core/src/routing/`.
 - Config split: `schema.ts` (Zod + parse), `load.ts` (file loading helper).
+- `ProviderConfig` becomes a discriminated union — `CodexProviderConfig`, `ClaudeProviderConfig`, `OpenAICompatibleProviderConfig`. `baseUrl` is required on `OpenAICompatibleProviderConfig`.
+- `getEligibleProviders()` returns `ProviderEligibilityReport[]` for all providers (not just eligible), with per-check failure reasons.
