@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "0.1.1",
+  "version": "0.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -22,7 +22,9 @@
   },
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
@@ -74,7 +76,9 @@
   "scripts": {
     "build": "tsc"
   },
-  "engines": { "node": ">=22.0.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.98",
     "@openai/agents": "^0.8.0",
