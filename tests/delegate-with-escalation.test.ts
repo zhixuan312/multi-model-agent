@@ -96,6 +96,75 @@ describe('delegateWithEscalation', () => {
     expect(expensiveFail.run).toHaveBeenCalledOnce();
   });
 
+  it('prefers a salvage-flavored attempt over a longer error-flavored attempt', async () => {
+    // Regression: previously the orchestrator picked by raw output length,
+    // which meant a later error-status attempt whose `output` was a long
+    // `Sub-agent error: …` diagnostic could beat an earlier `incomplete`
+    // with a shorter but genuine scratchpad partial. The tiered selection
+    // must prefer ANY salvage-flavored attempt (incomplete / max_turns /
+    // timeout) over error-flavored attempts, regardless of length.
+    const realPartial = 'genuine partial work from the scratchpad';
+    const longErrorDiagnostic =
+      'Sub-agent error: HTTP 500 — provider returned a very long ' +
+      'stack trace with lots of noise that makes this string longer ' +
+      'than the genuine scratchpad partial above, which would have ' +
+      'tricked the old longest-wins selection into discarding it.';
+
+    const cheapIncomplete: Provider = {
+      name: 'cheap',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', realPartial)),
+    };
+    const expensiveError: Provider = {
+      name: 'expensive',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue({
+        ...makeMockResult('api_error', longErrorDiagnostic),
+        error: 'HTTP 500: provider exploded',
+      }),
+    };
+
+    // Sanity: the error string really IS longer. If it's not, the test
+    // doesn't exercise the bug.
+    expect(longErrorDiagnostic.length).toBeGreaterThan(realPartial.length);
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const result = await delegateWithEscalation(task, [cheapIncomplete, expensiveError]);
+
+    expect(result.output).toBe(realPartial);
+    expect(result.status).toBe('incomplete');
+    expect(result.escalationLog).toHaveLength(2);
+    expect(result.escalationLog[0].status).toBe('incomplete');
+    expect(result.escalationLog[1].status).toBe('api_error');
+  });
+
+  it('falls back to the longest error-flavored attempt when no salvage-flavored attempts exist', async () => {
+    // When every attempt is error-flavored, the tiered preference has no
+    // salvage candidates to pick from, so it falls through to the legacy
+    // longest-output selection. Pin this so a future refactor that
+    // over-tightens the tier logic cannot silently drop the fallback.
+    const shortErr = 'short';
+    const longErr = 'a longer error diagnostic string from a crash';
+
+    const firstErr: Provider = {
+      name: 'first',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('error', shortErr)),
+    };
+    const secondErr: Provider = {
+      name: 'second',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr)),
+    };
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const result = await delegateWithEscalation(task, [firstErr, secondErr]);
+
+    expect(result.output).toBe(longErr);
+    expect(result.status).toBe('network_error');
+    expect(result.escalationLog).toHaveLength(2);
+  });
+
   it('emits escalation_start between attempts and threads onProgress into runners', async () => {
     const events: ProgressEvent[] = [];
     const onProgress = (e: ProgressEvent) => { events.push(e); };

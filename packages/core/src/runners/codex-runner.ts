@@ -287,15 +287,21 @@ export async function runCodex(
 
   // --- onInitialRequest (Task 12) ----------------------------------------
   //
-  // Fire once per attempt with the exact concatenation of the first request
-  // body the model will see. Matches openai-runner and claude-runner so the
-  // hash is cross-runner stable for an identical prompt.
+  // Fire once per attempt with the canonical orchestrator-side initial
+  // brief: `${systemPrompt}\n\n${promptWithBudgetHint}`. This is NOT the
+  // literal request body the OpenAI Responses API transmits — codex
+  // sends the systemPrompt via the Responses API `instructions` field
+  // and the user prompt as a structured `input` message array. We hash
+  // the canonical form instead so the hash is cross-runner stable:
+  // openai-runner and claude-runner compute the same hash from the same
+  // canonical string. See `AttemptRecord.initialPromptHash` in types.ts
+  // for the full wire-level caveat.
   if (options.onInitialRequest) {
-    const initialRequestBody = `${systemPrompt}\n\n${promptWithBudgetHint}`;
+    const canonicalInitialBrief = `${systemPrompt}\n\n${promptWithBudgetHint}`;
     try {
       options.onInitialRequest({
-        lengthChars: initialRequestBody.length,
-        sha256: createHash('sha256').update(initialRequestBody).digest('hex'),
+        lengthChars: canonicalInitialBrief.length,
+        sha256: createHash('sha256').update(canonicalInitialBrief).digest('hex'),
       });
     } catch {
       // Swallow — a broken callback must not affect dispatch.

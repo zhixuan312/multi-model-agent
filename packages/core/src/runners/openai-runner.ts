@@ -196,18 +196,25 @@ export async function runOpenAI(
 
   // --- onInitialRequest (Task 12) ----------------------------------------
   //
-  // Fire once per attempt with the exact concatenation of the first request
-  // body the model will see. The separator is chosen to match claude-runner
-  // and codex-runner so two dispatches of the same prompt produce the same
-  // hash regardless of which runner handled them. We guard with try/catch
-  // because the orchestrator owns the callback and a throw here would
-  // corrupt its closure — symmetry with safeSink around onProgress.
+  // Fire once per attempt with the canonical orchestrator-side initial
+  // brief: `${systemPrompt}\n\n${promptWithBudgetHint}`. This is NOT the
+  // literal request body the `@openai/agents` SDK transmits — the SDK
+  // wraps our systemPrompt in the Agent `instructions` field and our
+  // user prompt in a messages array. We hash the canonical form instead
+  // so the hash is cross-runner stable: the same canonical brief on any
+  // of the three runners produces the same hash, even though each SDK's
+  // wire format differs. This answers "did the orchestrator send the
+  // same brief across retries?" — not "were the literal wire bytes
+  // identical?". See `AttemptRecord.initialPromptHash` in types.ts for
+  // the full caveat. We guard with try/catch because the orchestrator
+  // owns the callback and a throw would corrupt its closure (symmetry
+  // with safeSink around onProgress).
   if (options.onInitialRequest) {
-    const initialRequestBody = `${systemPrompt}\n\n${promptWithBudgetHint}`;
+    const canonicalInitialBrief = `${systemPrompt}\n\n${promptWithBudgetHint}`;
     try {
       options.onInitialRequest({
-        lengthChars: initialRequestBody.length,
-        sha256: createHash('sha256').update(initialRequestBody).digest('hex'),
+        lengthChars: canonicalInitialBrief.length,
+        sha256: createHash('sha256').update(canonicalInitialBrief).digest('hex'),
       });
     } catch {
       // Swallow — a broken callback must not affect dispatch.

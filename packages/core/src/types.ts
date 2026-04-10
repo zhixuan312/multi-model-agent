@@ -158,14 +158,28 @@ export interface AttemptRecord {
   inputTokens: number
   outputTokens: number
   costUSD: number | null
-  /** Character count of the very first request body sent to the provider on
-   *  this attempt (`${systemPrompt}\n\n${promptWithBudgetHint}`). Populated
-   *  by the escalation orchestrator via the `RunOptions.onInitialRequest`
-   *  callback the runner invokes exactly once per attempt. Defaults to 0
-   *  if the runner never invoked the callback. */
+  /** Character count of the canonical orchestrator-side initial brief for
+   *  this attempt — the exact string
+   *  `${buildSystemPrompt()}\n\n${buildBudgetHint(...)}\n\n${prompt}`
+   *  (as assembled before any runner-specific wrapping). Populated by the
+   *  escalation orchestrator via the `RunOptions.onInitialRequest` callback
+   *  the runner invokes exactly once per attempt.
+   *
+   *  NOTE: This is a canonical identifier, NOT a wire-level checksum. The
+   *  provider's SDK may wrap or transform this string before sending (e.g.
+   *  the Anthropic SDK prepends its `claude_code` preset to the system
+   *  prompt via `{ type: 'preset', preset: 'claude_code', append: ... }`;
+   *  the OpenAI SDKs wrap it in a `messages` array). All three runners use
+   *  the same canonical form so the hash is cross-runner stable: identical
+   *  briefs produce identical hashes regardless of which runner executed
+   *  them. Use this to verify "did the orchestrator send the same brief
+   *  across retries?", not "were the literal bytes on the wire identical?".
+   *
+   *  Defaults to 0 if the runner never invoked the callback. */
   initialPromptLengthChars: number
-  /** sha256 hex of the same first request body. Populated via the same
-   *  `onInitialRequest` callback. Defaults to the empty string if the
+  /** sha256 hex of the canonical orchestrator-side initial brief. See the
+   *  comment on `initialPromptLengthChars` above for the exact hashed
+   *  string and the wire-level caveat. Defaults to the empty string if the
    *  runner never invoked the callback. */
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
@@ -194,15 +208,24 @@ export interface RunOptions {
    *  and should return quickly. Wired in Task 8 (interface + plumbing);
    *  runners emit events in Tasks 9-11. */
   onProgress?: (event: ProgressEvent) => void
-  /** Called exactly once per attempt, when the runner has constructed the
-   *  very first request body it will send to the provider (after prevention
-   *  scaffolding — system prompt + budget hint — has been assembled, but
-   *  before any tool cycles, re-grounding, supervision, or watchdog
-   *  injections happen). The escalation orchestrator passes a closure here
-   *  to capture the metadata into the `AttemptRecord` it builds. If a
-   *  runner is re-invoked by escalation, the callback fires again for the
-   *  new attempt because the orchestrator resets its per-attempt closure.
-   *  Passing nothing keeps existing behaviour (the callback is a no-op). */
+  /** Called exactly once per attempt, when the runner has assembled the
+   *  canonical orchestrator-side initial brief — the string
+   *  `${buildSystemPrompt()}\n\n${buildBudgetHint(...)}\n\n${prompt}`,
+   *  after prevention scaffolding has been produced but before any tool
+   *  cycles, re-grounding, supervision, or watchdog injections happen.
+   *  The escalation orchestrator passes a closure here to capture the
+   *  metadata into the `AttemptRecord` it builds.
+   *
+   *  This is a canonical identifier, NOT a wire-level checksum: each
+   *  runner computes it from the same canonical string so the hash is
+   *  cross-runner stable, even though the SDK underneath may wrap the
+   *  inputs before sending (Claude prepends its `claude_code` preset to
+   *  the system prompt; OpenAI/Codex wrap inputs in structured message
+   *  arrays). See `AttemptRecord.initialPromptHash` for the full caveat.
+   *
+   *  If a runner is re-invoked by escalation, the callback fires again
+   *  for the new attempt because the orchestrator resets its per-attempt
+   *  closure. Passing nothing keeps existing behaviour (no-op). */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
 }
 

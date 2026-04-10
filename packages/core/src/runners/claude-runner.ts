@@ -169,15 +169,27 @@ export async function runClaude(
 
   // --- onInitialRequest (Task 12) ----------------------------------------
   //
-  // Fire once per attempt with the exact concatenation of the first request
-  // body the model will see. Matches openai-runner and codex-runner so the
-  // hash is cross-runner stable for an identical prompt.
+  // Fire once per attempt with the canonical orchestrator-side initial
+  // brief: `${systemPrompt}\n\n${promptWithBudgetHint}`. This is NOT the
+  // literal bytes the Anthropic SDK will send — the SDK wraps our
+  // systemPrompt in `{ type: 'preset', preset: 'claude_code', append: ... }`
+  // (see queryOptions.systemPrompt below), so the wire-level system prompt
+  // includes the claude_code preset bytes that precede ours. We hash the
+  // canonical form anyway for two reasons:
+  //   1. It matches openai-runner and codex-runner, which also don't hash
+  //      literal wire bytes (they hash the same canonical form before the
+  //      SDK wraps it in its own `messages` / Responses API structures).
+  //      Cross-runner stability is the Task 12 design requirement.
+  //   2. It answers the "did the orchestrator send the same brief across
+  //      retries?" question, which is the actual debugging use case — NOT
+  //      "were the literal wire bytes identical?".
+  // See `AttemptRecord.initialPromptHash` in types.ts for the full caveat.
   if (options.onInitialRequest) {
-    const initialRequestBody = `${systemPrompt}\n\n${promptWithBudgetHint}`;
+    const canonicalInitialBrief = `${systemPrompt}\n\n${promptWithBudgetHint}`;
     try {
       options.onInitialRequest({
-        lengthChars: initialRequestBody.length,
-        sha256: createHash('sha256').update(initialRequestBody).digest('hex'),
+        lengthChars: canonicalInitialBrief.length,
+        sha256: createHash('sha256').update(canonicalInitialBrief).digest('hex'),
       });
     } catch {
       // Swallow — a broken callback must not affect dispatch.
