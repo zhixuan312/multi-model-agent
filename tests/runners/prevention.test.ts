@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import {
   buildSystemPrompt,
   buildBudgetHint,
@@ -8,28 +7,28 @@ import {
 
 describe('buildSystemPrompt', () => {
   it('produces a non-empty prompt', () => {
-    const prompt = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
+    const prompt = buildSystemPrompt();
     expect(prompt.length).toBeGreaterThan(500);
   });
 
   it('mentions the "final assistant message" rule', () => {
-    const prompt = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
+    const prompt = buildSystemPrompt();
     expect(prompt).toContain('final assistant message');
   });
 
   it('mentions the anti-pattern about "let me check X next"', () => {
-    const prompt = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
+    const prompt = buildSystemPrompt();
     expect(prompt.toLowerCase()).toContain('let me check');
   });
 
   it('mentions the anti-pattern about <think> content', () => {
-    const prompt = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
+    const prompt = buildSystemPrompt();
     expect(prompt).toContain('<think>');
   });
 
-  it('is deterministic — two calls with the same input produce byte-identical output', () => {
-    const a = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
-    const b = buildSystemPrompt({ providerLabel: 'openai-compatible', maxTurns: 200 });
+  it('is deterministic — two calls produce byte-identical output', () => {
+    const a = buildSystemPrompt();
+    const b = buildSystemPrompt();
     expect(a).toBe(b);
   });
 });

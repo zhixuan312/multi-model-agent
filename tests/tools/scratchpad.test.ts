@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import { TextScratchpad } from '../../packages/core/src/tools/scratchpad.js';
 
 describe('TextScratchpad', () => {

@@ -1,4 +1,3 @@
-import { describe, it, expect } from 'vitest';
 import {
   validateCompletion,
   buildRePrompt,
@@ -123,7 +122,15 @@ describe('sameDegenerateOutput', () => {
     expect(sameDegenerateOutput('foo', 'bar')).toBe(false);
   });
 
-  it('returns false when one is empty', () => {
+  it('returns false when only one is empty', () => {
     expect(sameDegenerateOutput('foo', '')).toBe(false);
+  });
+
+  it('returns true for two empty strings (identical garbage twice)', () => {
+    expect(sameDegenerateOutput('', '')).toBe(true);
+  });
+
+  it('returns true for two whitespace-only strings (same after trim)', () => {
+    expect(sameDegenerateOutput('   ', '\t')).toBe(true);
   });
 });

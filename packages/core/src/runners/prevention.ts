@@ -12,12 +12,7 @@
  * See spec Part A.1 for the design rationale.
  */
 
-export interface BuildSystemPromptOptions {
-  providerLabel: string;
-  maxTurns: number;
-}
-
-export function buildSystemPrompt(_opts: BuildSystemPromptOptions): string {
+export function buildSystemPrompt(): string {
   return [
     'You are a sub-agent completing a single task end-to-end. Read these rules before you begin any tool calls.',
     '',

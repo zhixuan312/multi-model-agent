@@ -47,6 +47,13 @@ export interface ValidateCompletionOptions {
 
 const DEFAULT_MIN_LENGTH = 200;
 
+/** Tail window (chars) inspected by `endsWithContinuation` for continuation phrases. */
+const CONTINUATION_TAIL_WINDOW = 80;
+
+/** Tail length (chars) quoted back to the model in the re-prompt via `result.tail`. */
+const REPROMPT_TAIL_QUOTE = 60;
+
+// NOTE: duplicate of openai-runner.ts:28 — DRY'd in Task 3
 const THINKING_DIAGNOSTIC_MARKER = '[model final message contained only <think>...</think> reasoning, no plain-text answer]';
 
 const CONTINUATION_PHRASES = [
@@ -89,6 +96,11 @@ function endsWithTerminalPunctuation(text: string): boolean {
   return TERMINAL_PUNCTUATION.includes(last);
 }
 
+// Detector order is most-specific-first: empty → thinking_only → long-enough →
+// markdown → fragment → no_terminator. Markdown precedes fragment so that
+// `Here:\n\`\`\`...\`\`\`` passes as a valid short response; fragment precedes
+// no_terminator because the fragment re-prompt (which quotes the continuation
+// phrase back at the model) is more actionable than the generic no-terminator one.
 export function validateCompletion(
   text: string,
   opts: ValidateCompletionOptions = {},
@@ -107,7 +119,7 @@ export function validateCompletion(
   }
 
   const trimmed = text.trim();
-  const tail = trimmed.slice(-80);
+  const tail = trimmed.slice(-CONTINUATION_TAIL_WINDOW);
 
   // Long enough → trust the response.
   if (trimmed.length >= minLength) {
@@ -127,7 +139,7 @@ export function validateCompletion(
       valid: false,
       kind: 'fragment',
       reason: 'response is short and ends like an exploration fragment',
-      tail: trimmed.slice(-60),
+      tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
     };
   }
 
@@ -136,7 +148,7 @@ export function validateCompletion(
       valid: false,
       kind: 'no_terminator',
       reason: 'response is short and has no terminal punctuation or markdown structure',
-      tail: trimmed.slice(-60),
+      tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
     };
   }
 
@@ -202,6 +214,5 @@ export function buildRePrompt(result: ValidationResult): string {
  * burning the third retry.
  */
 export function sameDegenerateOutput(a: string, b: string): boolean {
-  if (a.length === 0 || b.length === 0) return false;
-  return a === b;
+  return a.trim() === b.trim();
 }
