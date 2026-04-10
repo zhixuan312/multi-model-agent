@@ -106,20 +106,35 @@ Recommended practice:
 
 ### 4. Register the MCP server
 
-For Claude Code:
+For Claude Code, register at **user scope** (`-s user`) so the server is available in every directory, not just the one you ran the command in:
 
 ```bash
-claude mcp add multi-model-agent -- npx -y @zhixuan92/multi-model-agent-mcp serve
+claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 If your providers need environment variables:
 
 ```bash
-claude mcp add multi-model-agent \
+claude mcp add multi-model-agent -s user \
   -e OPENAI_API_KEY=sk-... \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e MINIMAX_API_KEY=... \
   -- npx -y @zhixuan92/multi-model-agent-mcp serve
+```
+
+Claude Code supports three MCP scopes:
+
+| Scope | Availability |
+| --- | --- |
+| `local` (default) | Only the project where you ran `claude mcp add` |
+| `project` | Shared with collaborators via a committed `.mcp.json` |
+| `user` | All projects on your machine — recommended for this server |
+
+If you already added it at local scope and want it everywhere, remove and re-add:
+
+```bash
+claude mcp remove multi-model-agent -s local
+claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 For Claude Desktop, add this to `claude_desktop_config.json`:
