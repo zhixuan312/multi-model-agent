@@ -104,6 +104,20 @@ Recommended practice:
 - **Do not enable `CODEX_DEBUG=1` in environments that ship logs anywhere.** Debug mode dumps raw request/response bodies (prompts, file contents, tool arguments) to stderr. The server prints a warning at startup when the flag is set.
 - **File-tool size caps** — `readFile` rejects targets larger than 50 MiB and `writeFile` rejects content larger than 100 MiB. These caps stop a runaway sub-agent from OOMing the host or filling the disk.
 
+### Sandbox enforcement
+
+The default `sandboxPolicy: "cwd-only"` confines every delegated sub-agent to the task's working directory. Enforcement lives in the core `assertWithinCwd` helper and runs per-call inside every file tool. Errors are surfaced to the model as tool errors, so the model can retry with a corrected path rather than silently failing.
+
+1. **File reads** are allowed only inside `cwd` and its descendants. Path traversal (`../`, absolute paths outside `cwd`) is rejected.
+2. **File writes** are subject to the same restriction.
+3. **Symlink resolution uses `fs.realpath`.** A symlink inside `cwd` that points outside `cwd` is treated as outside and rejected — the check runs on the resolved real path, not the literal path.
+4. **Nonexistent target paths** resolve by walking back to the nearest existing ancestor and re-applying the check, so symlinks in ancestor directories are still caught.
+5. **`runShell` is hard-disabled** under `cwd-only`. The tool returns an error telling the model to use `readFile` / `writeFile` / `grep` / `glob` / `listFiles` instead.
+6. **The check is per-call**, not per-session. Every tool invocation re-validates.
+7. **Errors are surfaced to the model**, not silently swallowed. The model observes the rejection in its tool result and can adjust.
+
+Set `sandboxPolicy: "none"` per-provider or per-task only when you intentionally want shell access or cross-repo writes. The `shell` capability only appears in a provider's capability set when its effective sandbox policy is `"none"`, so auto-routing will not accidentally route shell work into a sandboxed worker.
+
 ### 4. Register the MCP server
 
 For Claude Code, register at **user scope** (`-s user`) so the server is available in every directory, not just the one you ran the command in:

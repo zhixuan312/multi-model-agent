@@ -224,26 +224,53 @@ When a worker returns `status: "ok"`, apply tiered verification:
 
 Tests passing is **necessary but not sufficient** for trust. Don't outsource *"is this the right code"* to the test suite.
 
+### Sandbox Enforcement
+
+When you dispatch with `sandboxPolicy: "cwd-only"` (the recommended default), the MCP applies the following rules inside every delegated task. These are enforced per-call in the core `assertWithinCwd` helper — the model can see the rejection message and retry with a corrected path.
+
+1. **File reads** are confined to `cwd` and its descendants. Paths outside (absolute paths elsewhere, `../` traversal) are rejected with an error surfaced to the model.
+2. **File writes** are subject to the same restriction.
+3. **Symlink resolution uses `fs.realpath`.** A symlink inside `cwd` that points outside `cwd` is treated as outside and rejected — the check runs on the resolved real path, not the literal path the model passed.
+4. **Nonexistent target paths** resolve by walking back to the nearest existing ancestor and reapplying the same check, so symlinks in ancestor directories are still caught.
+5. **`runShell` is hard-disabled** under `cwd-only`. Calling it returns an error telling the model to use `readFile` / `writeFile` / `grep` / `glob` / `listFiles` instead. Only tasks (or providers) with `sandboxPolicy: "none"` get shell access at all.
+6. **The check is per-call**, not per-session. Every tool invocation re-validates — there is no "trusted" state the model can earn inside a run.
+7. **Errors are surfaced to the model** as normal tool errors, not silently swallowed. The model observes the rejection in its tool result and can adjust (e.g. re-root a path, ask for the right `cwd`).
+
+The default is `cwd-only`. Only set `sandboxPolicy: "none"` per-provider or per-task when you intentionally want shell access or cross-repo file writes — and remember that `shell` only appears in a provider's capability set when its effective sandbox policy is `"none"`, so auto-routing will not accidentally route shell work into a sandboxed worker.
+
 ### Status Handling
 
-`delegate_tasks` returns one object per task with fields `provider`, `status`, `output`, `turns`, `filesRead`, `filesWritten`, `usage`, and optionally `error`. The `status` field is one of exactly five protocol values:
+`delegate_tasks` returns one object per task with fields `provider`, `status`, `output`, `turns`, `filesRead`, `filesWritten`, `toolCalls`, `escalationLog`, `usage`, and optionally `error`. The `status` field is one of exactly eight protocol values:
 
-| `status` | Meaning | Action |
-|---|---|---|
-| `ok` | Worker finished normally with usable output | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. |
-| `incomplete` | Agent loop terminated but produced no usable final answer | Read the diagnostic in `output` (it includes turn count, token usage, and which files the worker actually read). Re-dispatch with a tighter brief or escalate provider tier — do not retry the same provider with the same prompt. |
-| `error` | Provider call failed | Read `error`. Usually a capability mismatch, missing API key, or unavailable model. Fix the call; don't blindly retry. |
-| `timeout` | Hit `timeoutMs` | Task is too large or the worker is stuck. Break into smaller pieces; don't just raise the timeout. |
-| `max_turns` | Hit `maxTurns` | Worker looped. Re-dispatch on a higher-tier provider with a tighter brief, or break the task down. |
+| `status` | Meaning | What caller should do | How it happens |
+|---|---|---|---|
+| `ok` | Worker finished normally with usable output | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. | Runner's agent loop returned a non-empty final message that passed the supervision completeness check. |
+| `incomplete` | Agent loop terminated but the runner had to salvage partial work from the scratchpad instead of accepting a final message | Read `output` — it contains the best text the scratchpad captured plus a diagnostic line (turn count, input tokens, which files were read). Re-dispatch with a tighter brief or escalate provider tier — do **not** retry the same provider with the same prompt. | Runner hit a degenerate completion (empty final message, thinking-only, fragment) and had to fall back to the scratchpad recovery path. |
+| `max_turns` | Hit `maxTurns` before completing | Worker looped. Re-dispatch on a higher-tier provider with a tighter brief, or break the task down. The scratchpad is still salvaged into `output`. | The agent loop ran `maxTurns` iterations without emitting a final answer. |
+| `timeout` | Hit `timeoutMs` before completing | Task is too large or the worker is stuck. Break into smaller pieces; don't just raise the timeout. Scratchpad is salvaged into `output`. | The runner's per-attempt deadline fired. |
+| `api_aborted` | Provider-side abort — either a signal cancellation or a transport drop that the SDK reported as an abort | Inspect `error`. If transient, escalation has already walked the chain for auto-routed tasks — if none recovered, re-dispatch with a different provider or retry later. | Codex/Claude/OpenAI SDKs raise an abort error (e.g. `"Request was aborted"`, `AbortError`, signal cancellation). |
+| `api_error` | HTTP error from the provider (the thrown error had a numeric `.status`) | Read `error` for the status code and provider message. 4xx → fix the request; 5xx → retry/escalate. Scratchpad is still salvaged. | Provider returned a non-2xx HTTP response. |
+| `network_error` | Transport-level failure before the request reached the provider | Read `error`. Usually transient — escalation has already tried the chain; if everything failed, retry later. | `ECONNREFUSED`, `ENOTFOUND`, `ETIMEDOUT`, or a message matching `/network/i`. |
+| `error` | Everything else — a runner-side exception that doesn't fit the buckets above | Read `error`. Usually a capability mismatch, missing API key, an unavailable model, or a bug in the runner. Fix the call; don't blindly retry. | Thrown exception with no matching classification (`assertWithinCwd` violations, validation errors, unexpected SDK shapes, etc.). |
 
-**Two layers — don't confuse them.** The four values above are the *protocol* status. Any `DONE` / `BLOCKED` / `NEEDS_CONTEXT` / `DONE_WITH_CONCERNS` conventions (from Superpowers prompt templates, for example) live *inside* the `output` text, not in `status`. A worker can return `status: "ok"` with `output` text saying *"BLOCKED: I need access to the prod config file."* Read both layers.
+**Two layers — don't confuse them.** The eight values above are the *protocol* status. Any `DONE` / `BLOCKED` / `NEEDS_CONTEXT` / `DONE_WITH_CONCERNS` conventions (from Superpowers prompt templates, for example) live *inside* the `output` text, not in `status`. A worker can return `status: "ok"` with `output` text saying *"BLOCKED: I need access to the prod config file."* Read both layers.
+
+**The `escalationLog` field** — an array of `AttemptRecord` entries, one per provider actually attempted within this dispatch. Length is 1 for tasks that succeeded on the first try; longer when auto-routing walked to a fallback. Each entry carries `provider`, `status`, `turns`, `inputTokens`, `outputTokens`, `costUSD`, `initialPromptLengthChars`, `initialPromptHash`, and an optional `reason`. The prompt-echo fields let you verify the brief your dispatcher sent is the one the provider actually received.
 
 ### Escalation Ladder
 
 **Never retry the same provider with the same prompt. Never escalate without changing something.**
 
-1. **First failure on the cheap provider** → re-dispatch on the *same* provider with an **enriched prompt** (more context, tighter acceptance criteria, explicit file paths).
-2. **Second failure on the cheap provider** → escalate to the reasoning tier.
+**The MCP handles provider-level escalation for you on auto-routed tasks.** When a task omits `provider`, the MCP walks the full escalation chain (capability + tier filter, cheapest-first) automatically on failure — you do not need to re-dispatch manually to get a task routed to the next-cheapest qualifying provider. The chain walk stops at the first `ok`. If every provider fails, the best salvaged result is returned and `escalationLog` shows every attempt. **Explicit pins (`provider:` set on the task) still run as a single attempt** — pinning opts out of the auto-walk, and one failure is the final answer.
+
+**Scratchpad salvage runs on every termination path.** `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, and `error` all still populate `output` from the best scratchpad content the runner captured. You never get a bare failure with no text — there is always *something* to read, even if it's just the diagnostic line.
+
+**Use `retry_tasks` to re-run a subset of a batch.** Every `delegate_tasks` response carries a `batchId`. If two of three tasks succeed and one fails, call `retry_tasks` with the `batchId` and the failing task's 0-based index to re-dispatch it — the original brief stays server-side, so the parent session does not re-transmit it. The batch cache is TTL-bounded (30 minutes) and LRU-bounded (100 batches); past that you re-dispatch with `delegate_tasks`.
+
+**When you still need to escalate by hand** (e.g. you pinned a provider, or the auto-walk exhausted all options):
+
+1. **First failure** → re-dispatch on the *same* provider with an **enriched prompt** (more context, tighter acceptance criteria, explicit file paths).
+2. **Second failure** → escalate to the reasoning tier.
 3. **Failure on the reasoning tier** → break the task into smaller pieces and restart, or claw back to parent inline.
 
 When the worker's text output reports it's blocked (`status: "ok"` but blocked in the text):
