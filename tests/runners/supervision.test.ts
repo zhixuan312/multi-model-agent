@@ -1,8 +1,15 @@
+import { vi, beforeEach, afterEach } from 'vitest';
 import {
   validateCompletion,
   buildRePrompt,
   sameDegenerateOutput,
+  resolveInputTokenSoftLimit,
+  checkWatchdogThreshold,
+  WATCHDOG_FALLBACK_LIMIT,
+  logWatchdogEvent,
 } from '../../packages/core/src/runners/supervision.js';
+import type { ProviderConfig } from '../../packages/core/src/types.js';
+import type { ModelProfile } from '../../packages/core/src/routing/model-profiles.js';
 
 describe('validateCompletion — empty detection', () => {
   it('detects an empty string', () => {
@@ -132,5 +139,94 @@ describe('sameDegenerateOutput', () => {
 
   it('returns true for two whitespace-only strings (same after trim)', () => {
     expect(sameDegenerateOutput('   ', '\t')).toBe(true);
+  });
+});
+
+describe('resolveInputTokenSoftLimit — precedence', () => {
+  const profile: ModelProfile = {
+    tier: 'standard',
+    bestFor: 'test',
+    supportsEffort: false,
+    inputTokenSoftLimit: 500_000,
+  } as ModelProfile;
+
+  it('uses provider config when set', () => {
+    const config: ProviderConfig = {
+      type: 'codex',
+      model: 'gpt-5-codex',
+      inputTokenSoftLimit: 200_000,
+    };
+    expect(resolveInputTokenSoftLimit(config, profile)).toBe(200_000);
+  });
+
+  it('falls back to model profile when provider config is unset', () => {
+    const config: ProviderConfig = { type: 'codex', model: 'gpt-5-codex' };
+    expect(resolveInputTokenSoftLimit(config, profile)).toBe(500_000);
+  });
+
+  it('falls back to the hardcoded constant when both are unset', () => {
+    const config: ProviderConfig = { type: 'codex', model: 'unknown-model' };
+    const noLimitProfile = { ...profile, inputTokenSoftLimit: undefined as unknown as number };
+    expect(resolveInputTokenSoftLimit(config, noLimitProfile)).toBe(WATCHDOG_FALLBACK_LIMIT);
+  });
+});
+
+describe('checkWatchdogThreshold', () => {
+  it('returns "ok" below 80% of the limit', () => {
+    expect(checkWatchdogThreshold(700_000, 1_000_000)).toBe('ok');
+  });
+
+  it('returns "warning" at exactly 80% of the limit', () => {
+    expect(checkWatchdogThreshold(800_000, 1_000_000)).toBe('warning');
+  });
+
+  it('returns "warning" between 80% and 95%', () => {
+    expect(checkWatchdogThreshold(900_000, 1_000_000)).toBe('warning');
+  });
+
+  it('returns "force_salvage" at exactly 95% of the limit', () => {
+    expect(checkWatchdogThreshold(950_000, 1_000_000)).toBe('force_salvage');
+  });
+
+  it('returns "force_salvage" above 95%', () => {
+    expect(checkWatchdogThreshold(1_100_000, 1_000_000)).toBe('force_salvage');
+  });
+});
+
+describe('logWatchdogEvent — MULTI_MODEL_DEBUG output', () => {
+  let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  beforeEach(() => {
+    stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    stderrSpy.mockRestore();
+    delete process.env.MULTI_MODEL_DEBUG;
+  });
+
+  it('emits nothing when MULTI_MODEL_DEBUG is unset', () => {
+    logWatchdogEvent('warning', { provider: 'codex', model: 'gpt-5-codex', turn: 5, inputTokens: 800_000, softLimit: 1_000_000, scratchpadChars: 0 });
+    expect(stderrSpy).not.toHaveBeenCalled();
+  });
+
+  it('emits a warning line when MULTI_MODEL_DEBUG=1 and status is warning', () => {
+    process.env.MULTI_MODEL_DEBUG = '1';
+    logWatchdogEvent('warning', { provider: 'codex', model: 'gpt-5-codex', turn: 5, inputTokens: 800_000, softLimit: 1_000_000, scratchpadChars: 0 });
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    const line = stderrSpy.mock.calls[0][0];
+    expect(line).toContain('WATCHDOG warning');
+    expect(line).toContain('provider=codex');
+    expect(line).toContain('inputTokens=800000');
+    expect(line).toContain('percentOfLimit=80');
+  });
+
+  it('emits a force_salvage line when status is force_salvage', () => {
+    process.env.MULTI_MODEL_DEBUG = '1';
+    logWatchdogEvent('force_salvage', { provider: 'codex', model: 'gpt-5-codex', turn: 18, inputTokens: 950_000, softLimit: 1_000_000, scratchpadChars: 30000 });
+    expect(stderrSpy).toHaveBeenCalledTimes(1);
+    const line = stderrSpy.mock.calls[0][0];
+    expect(line).toContain('WATCHDOG force_salvage');
+    expect(line).toContain('scratchpadChars=30000');
   });
 });

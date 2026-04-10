@@ -39,6 +39,10 @@ export interface CodexProviderConfig {
   inputCostPerMTok?: number
   /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
   outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 export interface ClaudeProviderConfig {
@@ -53,6 +57,10 @@ export interface ClaudeProviderConfig {
   /** Optional pricing override; if set, recomputes costUSD from token usage instead of trusting the SDK. */
   inputCostPerMTok?: number
   outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 export interface OpenAICompatibleProviderConfig {
@@ -72,6 +80,10 @@ export interface OpenAICompatibleProviderConfig {
   inputCostPerMTok?: number
   /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
   outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 /** Discriminated union — each provider type has distinct required fields. */

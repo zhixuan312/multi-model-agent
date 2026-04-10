@@ -29,6 +29,7 @@ export const codexProviderConfigSchema = z.object({
   costTier: costTierSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
+  inputTokenSoftLimit: z.number().int().positive().optional(),
 });
 
 export const claudeProviderConfigSchema = z.object({
@@ -42,6 +43,7 @@ export const claudeProviderConfigSchema = z.object({
   costTier: costTierSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
+  inputTokenSoftLimit: z.number().int().positive().optional(),
 });
 
 export const openAICompatibleProviderConfigSchema = z.object({
@@ -58,6 +60,7 @@ export const openAICompatibleProviderConfigSchema = z.object({
   costTier: costTierSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
+  inputTokenSoftLimit: z.number().int().positive().optional(),
 });
 
 export const providerConfigSchema = z.discriminatedUnion('type', [

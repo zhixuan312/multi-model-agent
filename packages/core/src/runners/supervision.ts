@@ -1,3 +1,6 @@
+import type { ProviderConfig } from '../types.js';
+import type { ModelProfile } from '../routing/model-profiles.js';
+
 /**
  * Sub-agent completion supervision.
  *
@@ -215,4 +218,78 @@ export function buildRePrompt(result: ValidationResult): string {
  */
 export function sameDegenerateOutput(a: string, b: string): boolean {
   return a.trim() === b.trim();
+}
+
+/**
+ * The hardcoded fallback used when neither the provider config nor the
+ * model profile provides an inputTokenSoftLimit. Conservative — most
+ * real models have larger working contexts. See spec Part A.1.4.
+ */
+export const WATCHDOG_FALLBACK_LIMIT = 100_000;
+
+export function resolveInputTokenSoftLimit(
+  config: ProviderConfig,
+  profile: ModelProfile,
+): number {
+  if (typeof config.inputTokenSoftLimit === 'number' && config.inputTokenSoftLimit > 0) {
+    return config.inputTokenSoftLimit;
+  }
+  if (typeof profile.inputTokenSoftLimit === 'number' && profile.inputTokenSoftLimit > 0) {
+    return profile.inputTokenSoftLimit;
+  }
+  return WATCHDOG_FALLBACK_LIMIT;
+}
+
+export type WatchdogStatus = 'ok' | 'warning' | 'force_salvage';
+
+/**
+ * Given the cumulative input token usage and the resolved soft limit,
+ * returns the watchdog status:
+ *   - 'ok'             below 80%
+ *   - 'warning'        at or above 80%, below 95% (model is nudged)
+ *   - 'force_salvage'  at or above 95% (loop is forcibly terminated)
+ */
+export function checkWatchdogThreshold(
+  cumulativeInputTokens: number,
+  softLimit: number,
+): WatchdogStatus {
+  const ratio = cumulativeInputTokens / softLimit;
+  if (ratio >= 0.95) return 'force_salvage';
+  if (ratio >= 0.80) return 'warning';
+  return 'ok';
+}
+
+export interface WatchdogEventDetails {
+  provider: string;
+  model: string;
+  turn: number;
+  inputTokens: number;
+  softLimit: number;
+  scratchpadChars: number;
+}
+
+/**
+ * Emits a structured log line at watchdog threshold crossings, gated on
+ * MULTI_MODEL_DEBUG=1. Used for empirical calibration of the 80% / 95%
+ * thresholds. See spec Part A.1.4 calibration logging.
+ */
+export function logWatchdogEvent(
+  status: 'warning' | 'force_salvage',
+  details: WatchdogEventDetails,
+): void {
+  if (process.env.MULTI_MODEL_DEBUG !== '1') return;
+  const percent = Math.round((details.inputTokens / details.softLimit) * 100);
+  const parts = [
+    `[multi-model-agent] WATCHDOG ${status}:`,
+    `provider=${details.provider}`,
+    `model=${details.model}`,
+    `turn=${details.turn}`,
+    `inputTokens=${details.inputTokens}`,
+    `softLimit=${details.softLimit}`,
+    `percentOfLimit=${percent}`,
+  ];
+  if (status === 'force_salvage') {
+    parts.push(`scratchpadChars=${details.scratchpadChars}`);
+  }
+  console.error(parts.join(' '));
 }
