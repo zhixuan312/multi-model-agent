@@ -28,6 +28,29 @@ describe('runTasks', () => {
     expect(results[1].status).toBeDefined();
   });
 
+  it('one task error does not prevent other task from returning its result', async () => {
+    // Task 1 names a nonexistent provider → runTasks returns an error result for it.
+    // Task 2 names a configured provider that is ineligible (requires shell which
+    // openai-compatible does not provide) → also an error result.
+    // Both must be present — runTasks must NOT halt on the first error.
+    const results = await runTasks([
+      { provider: 'nonexistent', prompt: 'will error', tier: 'trivial', requiredCapabilities: [] },
+      { provider: 'auto', prompt: 'will also error', tier: 'trivial', requiredCapabilities: ['shell'] },
+    ], {
+      providers: {
+        auto: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+      },
+      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+    });
+
+    expect(results).toHaveLength(2);
+    // Both results must be defined — failure of one must not swallow the other.
+    expect(results[0].status).toBe('error');
+    expect(results[0].error).toContain('nonexistent');
+    expect(results[1].status).toBe('error');
+    expect(results[1].error).toContain('ineligible');
+  });
+
   it('returns empty array for empty input', async () => {
     const config: MultiModelConfig = {
       providers: {},
