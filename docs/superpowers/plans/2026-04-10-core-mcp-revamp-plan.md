@@ -1202,7 +1202,7 @@ import { selectProviderForTask } from '../../../packages/core/src/routing/select
 import { parseConfig } from '../../../packages/core/src/config/schema.js';
 
 describe('selectProviderForTask', () => {
-  it('returns explicitly specified provider config', () => {
+  it('returns explicitly specified provider with name and config', () => {
     const config = parseConfig({
       providers: {
         codex: { type: 'codex', model: 'gpt-5-codex' },
@@ -1210,7 +1210,8 @@ describe('selectProviderForTask', () => {
     });
     const task = { prompt: 'x', tier: 'standard' as const, requiredCapabilities: [], provider: 'codex' };
     const selected = selectProviderForTask(task, config);
-    expect(selected.type).toBe('codex');
+    expect(selected.name).toBe('codex');
+    expect(selected.config.type).toBe('codex');
   });
 
   it('throws when explicitly specified provider does not exist', () => {
@@ -1230,7 +1231,8 @@ describe('selectProviderForTask', () => {
     });
     const task = { prompt: 'x', tier: 'reasoning' as const, requiredCapabilities: [] };
     const selected = selectProviderForTask(task, config);
-    expect(selected.type).toBe('codex'); // cheaper
+    expect(selected.name).toBe('cheap');
+    expect(selected.config.type).toBe('codex'); // cheaper
   });
 
   it('excludes ineligible providers from auto-selection', () => {
@@ -1243,7 +1245,8 @@ describe('selectProviderForTask', () => {
     // Task needs reasoning tier; standard provider should be excluded
     const task = { prompt: 'x', tier: 'reasoning' as const, requiredCapabilities: [] };
     const selected = selectProviderForTask(task, config);
-    expect(selected.type).toBe('claude');
+    expect(selected.name).toBe('reasoning');
+    expect(selected.config.type).toBe('claude');
   });
 
   it('uses provider name as tiebreaker (ascending ASCII)', () => {
@@ -1255,7 +1258,7 @@ describe('selectProviderForTask', () => {
     });
     const task = { prompt: 'x', tier: 'standard' as const, requiredCapabilities: [] };
     const selected = selectProviderForTask(task, config);
-    expect(selected.type).toBe('claude'); // 'a' sorts before 'b'
+    expect(selected.name).toBe('a'); // 'a' sorts before 'b'
   });
 
   it('throws when no eligible provider exists', () => {
@@ -1287,14 +1290,14 @@ const COST_ORDER: Record<string, number> = { free: 0, low: 1, medium: 2, high: 3
 export function selectProviderForTask(
   task: TaskSpec,
   config: MultiModelConfig,
-): ProviderConfig {
+): { name: string; config: ProviderConfig } {
   // If provider is explicitly specified, validate and return it
   if (task.provider) {
     const provider = config.providers[task.provider];
     if (!provider) {
       throw new Error(`Provider "${task.provider}" not found in config. Available: ${Object.keys(config.providers).sort().join(', ')}`);
     }
-    return provider;
+    return { name: task.provider, config: provider };
   }
 
   // Auto-select: filter to eligible, sort by cost, then name
@@ -1316,7 +1319,7 @@ export function selectProviderForTask(
     return a.name.localeCompare(b.name);
   });
 
-  return eligible[0].config;
+  return { name: eligible[0].name, config: eligible[0].config };
 }
 ```
 
@@ -1435,24 +1438,37 @@ git commit -m "feat(core): rewrite provider.ts with new types"
 - [ ] **Step 1: Write failing test**
 
 ```typescript
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { runTasks } from '../../../packages/core/src/run-tasks.js';
 import { parseConfig } from '../../../packages/core/src/config/schema.js';
 import type { TaskSpec, Provider } from '../../../packages/core/src/types.js';
 
-function mockProvider(name: string, output = 'ok') {
+// Mock createProvider so we can spy on provider.run without real SDK calls
+vi.mock('../../../packages/core/src/provider.js', () => ({
+  createProvider: vi.fn(),
+}));
+
+function mockProvider(name: string, output = 'ok', runError?: string): Provider {
   return {
     name,
     config: { type: 'codex' as const, model: 'gpt-5-codex' },
-    run: vi.fn().mockResolvedValue({
-      output,
-      status: 'ok' as const,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-      turns: 1,
-      files: [],
-    }),
+    run: runError
+      ? vi.fn().mockRejectedValue(new Error(runError))
+      : vi.fn().mockResolvedValue({
+          output,
+          status: 'ok' as const,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          turns: 1,
+          files: [],
+        }),
   };
 }
+
+let createProvider: ReturnType<typeof vi.fn>;
+
+beforeEach(() => {
+  createProvider = vi.mocked(await import('../../../packages/core/src/provider.js').then((m) => m.createProvider));
+});
 
 describe('runTasks', () => {
   it('runs all tasks in parallel and returns results in input order', async () => {
@@ -1464,12 +1480,14 @@ describe('runTasks', () => {
     });
     const pA = mockProvider('a', 'result-a');
     const pB = mockProvider('b', 'result-b');
+    createProvider.mockImplementation((name: string) => (name === 'a' ? pA : pB));
+
     const tasks: TaskSpec[] = [
       { prompt: 'task a', tier: 'standard', requiredCapabilities: [], provider: 'a' },
       { prompt: 'task b', tier: 'reasoning', requiredCapabilities: [], provider: 'b' },
     ];
 
-    const results = await runTasks(tasks, config, { a: pA, b: pB });
+    const results = await runTasks(tasks, config);
 
     expect(results).toHaveLength(2);
     expect(results[0].output).toBe('result-a');
@@ -1484,38 +1502,19 @@ describe('runTasks', () => {
       },
     });
     const pGood = mockProvider('good');
-    const pBad = {
-      name: 'bad',
-      config: { type: 'claude', model: 'claude-opus-4-6' },
-      run: vi.fn().mockRejectedValue(new Error('auth failure')),
-    };
+    const pBad = mockProvider('bad', 'ignored', 'auth failure');
+    createProvider.mockImplementation((name: string) => (name === 'good' ? pGood : pBad));
+
     const tasks: TaskSpec[] = [
       { prompt: 't1', tier: 'standard', requiredCapabilities: [], provider: 'good' },
       { prompt: 't2', tier: 'reasoning', requiredCapabilities: [], provider: 'bad' },
     ];
 
-    const results = await runTasks(tasks, config, { good: pGood, bad: pBad });
+    const results = await runTasks(tasks, config);
 
     expect(results[0].status).toBe('ok');
     expect(results[1].status).toBe('error');
     expect(results[1].error).toBe('auth failure');
-  });
-
-  it('auto-selects provider when task.provider is omitted', async () => {
-    const config = parseConfig({
-      providers: {
-        codex: { type: 'codex', model: 'gpt-5-codex' },
-      },
-    });
-    const pCodex = mockProvider('codex', 'auto-selected');
-    const tasks: TaskSpec[] = [
-      { prompt: 't', tier: 'standard', requiredCapabilities: [] },
-    ];
-
-    const results = await runTasks(tasks, config, { codex: pCodex });
-
-    expect(pCodex.run).toHaveBeenCalled();
-    expect(results[0].output).toBe('auto-selected');
   });
 
   it('returns error result when no eligible provider', async () => {
@@ -1524,14 +1523,16 @@ describe('runTasks', () => {
         minimax: { type: 'openai-compatible', model: 'MiniMax-M2', baseUrl: 'https://api.example.com/v1' },
       },
     });
+
     const tasks: TaskSpec[] = [
       { prompt: 't', tier: 'reasoning', requiredCapabilities: ['web_search'] },
     ];
 
-    const results = await runTasks(tasks, config, {});
+    const results = await runTasks(tasks, config);
 
     expect(results[0].status).toBe('error');
     expect(results[0].error).toMatch(/no eligible provider/i);
+    expect(createProvider).not.toHaveBeenCalled(); // never reached createProvider
   });
 
   it('passes all options through to provider.run', async () => {
@@ -1541,11 +1542,13 @@ describe('runTasks', () => {
       },
     });
     const p = mockProvider('codex');
+    createProvider.mockReturnValue(p);
+
     const tasks: TaskSpec[] = [
       { prompt: 't', tier: 'standard', requiredCapabilities: [], tools: 'full', maxTurns: 50, cwd: '/tmp' },
     ];
 
-    await runTasks(tasks, config, { codex: p });
+    await runTasks(tasks, config);
 
     expect(p.run).toHaveBeenCalledWith(
       't',
@@ -1567,11 +1570,6 @@ import { selectProviderForTask } from './routing/select-provider-for-task.js';
 import { createProvider } from './provider.js';
 import type { TaskSpec, MultiModelConfig, RunResult, Provider } from './types.js';
 
-export interface RunTasksOptions {
-  /** Override provider creation. Key is provider name. Used for testing injection. */
-  providers?: Record<string, Provider>;
-}
-
 async function executeTask(
   task: TaskSpec,
   provider: Provider,
@@ -1589,20 +1587,15 @@ async function executeTask(
 export async function runTasks(
   tasks: TaskSpec[],
   config: MultiModelConfig,
-  options: RunTasksOptions = {},
 ): Promise<RunResult[]> {
   if (tasks.length === 0) return [];
 
   // Resolve + execute each task
   const promises = tasks.map(async (task): Promise<RunResult> => {
     try {
-      // Select provider (validates eligibility or auto-routes)
-      const providerConfig = selectProviderForTask(task, config);
-
-      // Get or create the provider instance
-      const provider = options.providers?.[task.provider ?? providerConfig.type]
-        ?? createProvider(task.provider ?? Object.keys(config.providers).find((k) => config.providers[k] === providerConfig)!, config);
-
+      // selectProviderForTask returns { name, config }
+      const { name: providerName, config: providerConfig } = selectProviderForTask(task, config);
+      const provider = createProvider(providerName, config);
       return await executeTask(task, provider);
     } catch (err) {
       return {
@@ -1738,7 +1731,6 @@ import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js'
 import { z } from 'zod';
 import { loadConfigFromFile } from '@scope/multi-model-agent-core/config/load.js';
 import { runTasks } from '@scope/multi-model-agent-core/run-tasks.js';
-import { parseConfig } from '@scope/multi-model-agent-core/config/schema.js';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import type { TaskSpec, MultiModelConfig } from '@scope/multi-model-agent-core/types.js';
 
@@ -1945,6 +1937,10 @@ function renderProviderBlock(
 }
 
 export function renderProviderRoutingMatrix(config: MultiModelConfig): string {
+  // Renders base/static capabilities — what the provider type offers under default settings.
+  // Per-task overrides (tools: 'none', sandboxPolicy) are applied at execution time;
+  // they do not appear in the routing matrix. resolveTaskCapabilities() is used
+  // at execution time for actual runtime enforcement.
   const blocks = Object.entries(config.providers).map(([name, providerConfig]) => {
     const capabilities = getBaseCapabilities(providerConfig);
     const profile = findModelProfile(providerConfig.model);
