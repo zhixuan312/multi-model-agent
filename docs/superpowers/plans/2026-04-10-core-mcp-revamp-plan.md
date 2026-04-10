@@ -1830,12 +1830,19 @@ async function main() {
   let config: MultiModelConfig;
   if (configPath) {
     config = await loadConfigFromFile(configPath);
+  } else if (process.env.MULTI_MODEL_CONFIG) {
+    try {
+      config = await loadConfigFromFile(process.env.MULTI_MODEL_CONFIG);
+    } catch {
+      console.error(`MULTI_MODEL_CONFIG points to non-existent file: ${process.env.MULTI_MODEL_CONFIG}`);
+      process.exit(1);
+    }
   } else {
     const homeConfigPath = `${process.env.HOME ?? '/'}/.multi-model/config.json`;
     try {
       config = await loadConfigFromFile(homeConfigPath);
     } catch {
-      console.error('No config file found. Create ~/.multi-model/config.json or pass --config <path>.');
+      console.error('No config file found. Set MULTI_MODEL_CONFIG or pass --config <path>.');
       process.exit(1);
     }
   }

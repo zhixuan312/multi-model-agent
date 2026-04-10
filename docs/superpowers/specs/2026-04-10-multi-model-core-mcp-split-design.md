@@ -74,7 +74,10 @@ function parseConfig(raw: unknown): MultiModelConfig
 function loadConfigFromFile(path: string): Promise<MultiModelConfig>
 ```
 
-Home-directory config discovery (`~/.multi-model/config.json`, `MULTI_MODEL_CONFIG`) lives in `mcp/cli.ts`, not in core.
+Home-directory config discovery lives in `mcp/cli.ts`, not in core. The precedence is:
+1. `--config <path>` argument (explicit)
+2. `MULTI_MODEL_CONFIG` environment variable
+3. `~/.multi-model/config.json` (default home-directory location)
 
 ### Routing Metadata Helpers
 
@@ -236,7 +239,9 @@ Core internally separates provider selection from task execution. This keeps rou
 
 ```typescript
 // Internal: select which provider to use for a task (advanced public API)
-function selectProviderForTask(task: TaskSpec, config: MultiModelConfig): ProviderConfig
+// Returns both the provider name and config so callers (including runTasks)
+// can correctly resolve the selected provider.
+function selectProviderForTask(task: TaskSpec, config: MultiModelConfig): { name: string; config: ProviderConfig }
 
 // Internal: run a single task against a resolved provider
 async function executeTask(
@@ -247,8 +252,9 @@ async function executeTask(
 
 // Public runTasks() orchestrates:
 //  1. getProviderEligibility() for each spec — to surface errors before spending tokens
-//  2. selectProviderForTask() for each task
-//  3. executeTask() in parallel
+//  2. selectProviderForTask() for each task — returns { name, config }
+//  3. createProvider(providerName, config) for each task
+//  4. executeTask() in parallel
 //  4. return results in input order
 ```
 
