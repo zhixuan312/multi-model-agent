@@ -36,6 +36,67 @@ describe('runTasks', () => {
     const results = await runTasks([], config);
     expect(results).toEqual([]);
   });
+
+  it('returns error result when explicitly named provider is not in config', async () => {
+    const config: MultiModelConfig = {
+      providers: {
+        claude: { type: 'claude', model: 'claude-sonnet-4-6' },
+      },
+      defaults: defaultConfig.defaults,
+    };
+    const results = await runTasks([
+      { provider: 'nonexistent', prompt: 'task', tier: 'trivial', requiredCapabilities: [] },
+    ], config);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('error');
+    expect(results[0].error).toContain('nonexistent');
+    expect(results[0].error).toContain('not found in config');
+  });
+
+  it('returns error result when explicitly named provider is ineligible', async () => {
+    const config: MultiModelConfig = {
+      providers: {
+        claude: { type: 'claude', model: 'claude-sonnet-4-6' },
+      },
+      defaults: defaultConfig.defaults,
+    };
+    const results = await runTasks([
+      { provider: 'claude', prompt: 'task', tier: 'trivial', requiredCapabilities: ['shell'] },
+    ], config);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('error');
+    expect(results[0].error).toContain('claude');
+    expect(results[0].error).toContain('ineligible');
+  });
+
+  it('returns error result when auto-routing finds no eligible provider', async () => {
+    const config: MultiModelConfig = {
+      providers: {
+        claude: { type: 'claude', model: 'claude-sonnet-4-6' },
+      },
+      defaults: defaultConfig.defaults,
+    };
+    const results = await runTasks([
+      { prompt: 'task', tier: 'reasoning', requiredCapabilities: ['shell'] },
+    ], config);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('error');
+    expect(results[0].error).toContain('No eligible provider found');
+    expect(results[0].error).toContain('required tier');
+  });
+
+  it('returns error result when auto-routing and config has no providers', async () => {
+    const config: MultiModelConfig = {
+      providers: {},
+      defaults: defaultConfig.defaults,
+    };
+    const results = await runTasks([
+      { prompt: 'task', tier: 'trivial', requiredCapabilities: [] },
+    ], config);
+    expect(results).toHaveLength(1);
+    expect(results[0].status).toBe('error');
+    expect(results[0].error).toContain('No eligible provider found');
+  });
 });
 
 describe('resolveTaskCapabilities', () => {

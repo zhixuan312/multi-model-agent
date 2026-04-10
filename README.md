@@ -1,6 +1,15 @@
 # multi-model-agent
 
-MCP server that delegates tasks to sub-agents running on different LLM providers. Send a list of tasks, each targeting a specific provider, and they execute concurrently with built-in tool use, timeout handling, and file-system sandboxing.
+MCP server that delegates tasks to sub-agents running on different LLM providers. Send a list of tasks, each targeting a specific provider, they execute concurrently with built-in tool use, timeout handling, and file-system sandboxing.
+
+## Packages
+
+This repo is a npm workspace with two packages:
+
+| Package | Description |
+|--------|-------------|
+| `@scope/multi-model-agent-core` | Execution engine: routing, config, provider abstraction |
+| `@scope/multi-model-agent-mcp` | MCP transport adapter (stdio server) |
 
 The `delegate_tasks` tool description is auto-populated with a capability matrix covering every configured provider (tools, quality tier, cost tier, strengths) plus a routing recipe, so the consuming LLM can make informed routing decisions. Tasks must declare `tier` and `requiredCapabilities` as a forcing function against lazy routing.
 
@@ -19,10 +28,10 @@ Five steps: install, create the app config, register with your MCP client, resta
 ### Step 1 — Install
 
 ```bash
-npm install -g multi-model-agent
+npm install -g @scope/multi-model-agent-mcp
 ```
 
-Or skip the global install — `npx multi-model-agent serve` works on demand. No functional difference.
+Or skip the global install — `npx @scope/multi-model-agent-mcp serve` works on demand. No functional difference.
 
 `@openai/agents` and `openai` are optional peer dependencies — install them only if you use `openai-compatible` providers.
 
@@ -81,7 +90,7 @@ Pick the client you use:
 #### Option A — Claude Code (recommended, one command)
 
 ```bash
-claude mcp add multi-model-agent -- npx multi-model-agent serve
+claude mcp add multi-model-agent -- npx @scope/multi-model-agent-mcp serve
 ```
 
 With provider API keys (one `-e` flag per key, matching the `apiKeyEnv` values in your config):
@@ -90,7 +99,7 @@ With provider API keys (one `-e` flag per key, matching the `apiKeyEnv` values i
 claude mcp add multi-model-agent \
   -e MINIMAX_API_KEY=sk-cp-... \
   -e OPENAI_API_KEY=sk-... \
-  -- npx multi-model-agent serve
+  -- npx @scope/multi-model-agent-mcp serve
 ```
 
 Useful flags:
@@ -112,7 +121,7 @@ Add or extend the `mcpServers` block:
   "mcpServers": {
     "multi-model-agent": {
       "command": "npx",
-      "args": ["multi-model-agent", "serve"],
+      "args": ["@scope/multi-model-agent-mcp", "serve"],
       "env": {
         "MINIMAX_API_KEY": "sk-cp-...",
         "OPENAI_API_KEY": "sk-..."
@@ -126,7 +135,7 @@ Env values must be strings. No nesting, no numbers, no booleans.
 
 #### Option C — Any other MCP client
 
-Have the client spawn `npx multi-model-agent serve` over stdio and pass the required env vars via whatever mechanism it supports. The server follows the standard [Model Context Protocol](https://modelcontextprotocol.io/) on stdio.
+Have the client spawn `npx @scope/multi-model-agent-mcp serve` over stdio and pass the required env vars via whatever mechanism it supports. The server follows the standard [Model Context Protocol](https://modelcontextprotocol.io/) on stdio.
 
 ### Step 4 — Restart the client
 
@@ -163,7 +172,7 @@ If the tool appears and all providers respond, you're done.
 
 | Symptom | Likely cause | Fix |
 |---|---|---|
-| `command not found: multi-model-agent` | Package not installed globally and `npx` couldn't resolve | `npm install -g multi-model-agent` or confirm `npx multi-model-agent serve` works from terminal |
+| `command not found` | Package not installed globally and `npx` couldn't resolve | `npm install -g @scope/multi-model-agent-mcp` or confirm `npx @scope/multi-model-agent-mcp serve` works from terminal |
 | Server `failed` in `claude mcp list` | Missing env var for a provider | Re-register with `-e KEY=VAL` or add an `env` block to the JSON config |
 | `No providers configured` error | Missing or unreadable `~/.multi-model/config.json` | Verify the file exists, is valid JSON, and the provider entries match the schema |
 | Server starts but task delegation fails silently | Wrong model id or bad API key | Check provider dashboard for error logs; verify `apiKeyEnv` matches the env var name you set in Step 3 |
@@ -202,14 +211,14 @@ The server exposes a single tool, `delegate_tasks`, which accepts an array of ta
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `prompt` | `string` | required | Task prompt for the sub-agent |
-| `provider` | `string` | required | Provider name from config |
+| `provider` | `string` | auto | Provider name from config. If omitted, core auto-selects the cheapest eligible provider. |
 | `tier` | `"trivial" \| "standard" \| "reasoning"` | required | Quality tier the task needs. Forces the consumer LLM to commit to a judgment before routing. |
-| `requiredCapabilities` | `Capability[]` | required | Capabilities the task needs (empty array if none). Values: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`. The consumer LLM must exclude providers missing any required capability. |
+| `requiredCapabilities` | `Capability[]` | required | Capabilities the task needs (empty array if none). Values: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`. |
 | `tools` | `"none" \| "full"` | `"full"` | Tool access mode |
 | `maxTurns` | `number` | `200` | Max agent loop turns |
 | `timeoutMs` | `number` | `600000` | Timeout in milliseconds |
 | `cwd` | `string` | — | Working directory for file/shell tools |
-| `effort` | `"none" \| "low" \| "medium" \| "high"` | — | Reasoning effort. `"none"` disables thinking; `"low"`/`"medium"`/`"high"` scale reasoning depth. Only providers marked `effort: supported` in the routing matrix honor this — others silently ignore it. Prefer `"high"` for `"reasoning"` tier tasks. |
+| `effort` | `"none" \| "low" \| "medium" \| "high"` | — | Reasoning effort. `"none"` disables thinking; `"low"`/`"medium"`/`"high"` scale reasoning depth. Only providers marked `effort: supported` in the routing matrix honor this. |
 | `sandboxPolicy` | `"none" \| "cwd-only"` | `"cwd-only"` | File-system confinement policy |
 
 ### Routing Guidance
@@ -241,10 +250,6 @@ How to route a task:
 2. Quality filter: exclude providers whose tier is below the task's tier.
 3. Cost preference (STRONG): among the remainder, prefer the cheapest tier.
    If a 'free' provider qualifies, pick it.
-
-Optional 'effort' knob (per task): only providers marked 'effort: supported'
-honor this. Use 'high' for reasoning-tier tasks, 'low'/'medium' for balance,
-'none' to disable thinking on providers that default it on.
 ```
 
 **Effort support** is per-model-family:
@@ -270,7 +275,7 @@ Matching rules:
 - **Longest prefix wins** — if both `gpt-5` and `gpt-5-codex` were registered as families, a model id of `gpt-5-codex-mini` would match `gpt-5-codex` first.
 - **Case-insensitive** — `CLAUDE-OPUS-4-6` matches `claude-opus`.
 - **Non-canonical forms fall through** — an id like `opus-4-6` (missing the `claude-` prefix) or `gpt.5.3` (dot instead of hyphen) will not match any family and hits the default profile. Stick to the canonical hyphen-separated form in your config.
-- **To add a new family**, edit `MODEL_PROFILES` in `src/routing/model-profiles.ts`. One entry covers every present and future minor version of that family.
+- **To add a new family**, edit `MODEL_PROFILES` in `@scope/multi-model-agent-core/routing/model-profiles`. One entry covers every present and future minor version of that family.
 
 **Cost tiers** drive the "prefer cheapest qualifying provider" rule in the routing recipe. The default cost for each family is hardcoded; override per provider via the `costTier` config field. Set to `"free"` for flat-rate or self-hosted deployments so the consumer LLM actively prefers them when capability matches.
 
@@ -296,7 +301,7 @@ The `cwd-only` sandbox policy confines all file operations to the working direct
 | `effort` | `string` | Default reasoning effort |
 | `maxTurns` | `number` | Default max turns |
 | `timeoutMs` | `number` | Default timeout |
-| `baseUrl` | `string` | API base URL (for `openai-compatible`) |
+| `baseUrl` | `string` | API base URL (required for `openai-compatible`) |
 | `apiKey` | `string` | API key literal. Prefer `apiKeyEnv` to avoid hardcoding secrets. |
 | `apiKeyEnv` | `string` | Environment variable name for API key |
 | `sandboxPolicy` | `"none" \| "cwd-only"` | Default sandbox policy |
@@ -306,12 +311,52 @@ The `cwd-only` sandbox policy confines all file operations to the working direct
 ## Development
 
 ```bash
-npm run build        # TypeScript compile
+npm run build        # TypeScript compile (both packages)
 npm test             # Run all tests
 npm run test:watch   # Watch mode
 ```
 
 Requires Node >= 22.
+
+### Project Structure
+
+```
+packages/
+  core/               # @scope/multi-model-agent-core
+    src/
+      config/         # Zod schema and file loader (no auto-discovery)
+      routing/        # Capabilities, model profiles, auto-selection
+      runners/        # Provider runner implementations (internal)
+      tools/          # Tool adapters and definitions (internal)
+      auth/           # OAuth helpers (internal)
+      types.ts        # Public types — TaskSpec, ProviderConfig, etc.
+      provider.ts      # Provider factory
+      run-tasks.ts     # Task orchestrator
+      index.ts        # Public API re-exports
+  mcp/                # @scope/multi-model-agent-mcp
+    src/
+      cli.ts          # MCP CLI with config discovery
+      routing/        # Provider matrix rendering
+      index.ts        # Public API: buildMcpServer, buildTaskSchema
+tests/                # Mirror of src/, uses Vitest
+```
+
+### Core Public API
+
+```typescript
+import {
+  loadConfigFromFile,   // async, path-only (no auto-discovery)
+  parseConfig,          // sync, validates raw object
+  createProvider,       // factory for a named provider
+  runTasks,             // parallel task execution orchestrator
+  getBaseCapabilities,  // static capability snapshot
+  resolveTaskCapabilities, // runtime capabilities with task overrides
+  findModelProfile,     // model family profile lookup
+  getEffectiveCostTier, // cost tier with config override
+  selectProviderForTask, // auto-routing algorithm
+  getProviderEligibility, // per-provider eligibility report
+} from '@scope/multi-model-agent-core';
+```
 
 ## License
 
