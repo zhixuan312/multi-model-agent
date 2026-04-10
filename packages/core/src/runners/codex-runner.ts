@@ -5,6 +5,23 @@ import { getCodexAuth } from '../auth/codex-oauth.js';
 import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
+import { TextScratchpad } from '../tools/scratchpad.js';
+import {
+  buildSystemPrompt,
+  buildBudgetHint,
+  buildReGroundingMessage,
+  buildBudgetPressureNudge,
+  RE_GROUNDING_INTERVAL_TURNS,
+} from './prevention.js';
+import {
+  validateCompletion,
+  buildRePrompt,
+  sameDegenerateOutput,
+  resolveInputTokenSoftLimit,
+  checkWatchdogThreshold,
+  logWatchdogEvent,
+} from './supervision.js';
+import { findModelProfile } from '../routing/model-profiles.js';
 import type { SandboxPolicy } from '../types.js';
 
 // CODEX_DEBUG=1 causes the runner to log raw HTTP request/response bodies to
@@ -21,6 +38,12 @@ if (process.env.CODEX_DEBUG === '1') {
       'Disable in any environment where logs may be retained or shared.',
   );
 }
+
+/**
+ * Hard cap on supervision re-prompts before we give up and salvage. Three is
+ * the value chosen in the spec (A.2.2); mirrors openai-runner and claude-runner.
+ */
+const MAX_SUPERVISION_RETRIES = 3;
 
 /**
  * Holds the raw body text of the last HTTP response that returned a 4xx/5xx.
@@ -213,6 +236,27 @@ export async function runCodex(
     : [];
   const allTools = [...responsesTools, ...hostedTools];
 
+  // --- Prevention layer: system prompt + budget hint ---
+  //
+  // buildSystemPrompt() is deliberately static and parameter-free (same
+  // decision as openai-runner and claude-runner: Task 1 review rejected
+  // provider/maxTurns options). The budget hint is prepended to the user
+  // prompt so the model sees it as part of its task brief, while the system
+  // prompt is threaded through the Responses API `instructions` field.
+  const systemPrompt = buildSystemPrompt();
+  const budgetHint = buildBudgetHint({ maxTurns });
+  const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
+
+  // --- Scratchpad: buffers every text emission the codex backend streams
+  // through our loop. Every termination path (ok / incomplete / max_turns /
+  // error / timeout / force_salvage) salvages `scratchpad.latest()` when
+  // the final message is empty or degenerate. ---
+  const scratchpad = new TextScratchpad();
+
+  // --- Watchdog: resolve the input-token soft limit once per run ---
+  const profile = findModelProfile(providerConfig.model);
+  const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
+
   // Accumulated state (hoisted so the timeout callback can read partial progress)
   let inputTokens = 0;
   let outputTokens = 0;
@@ -223,11 +267,50 @@ export async function runCodex(
     const client = createCodexClient(capture);
     const input: ResponseInputItem[] = [
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      { role: 'user', content: prompt } as any,
+      { role: 'user', content: promptWithBudgetHint } as any,
     ];
 
     let output = '';
+
+    // --- Abort-path investigation (plan Step 2) ---------------------------
+    //
+    // The 2026-04-10 Fate dispatch captured an error "Request was aborted |
+    // last response status: completed". The "completed" suffix was
+    // misleading: it was captured from a PREVIOUS successful turn, not the
+    // failed one. Mechanism:
+    //
+    //   1. Turn N's stream emits `response.completed` with status
+    //      `'completed'`. We update `lastResponseStatus = 'completed'`.
+    //   2. Turn N+1 starts; `client.responses.create(...)` opens a new
+    //      stream, but the abort signal fires before any
+    //      `response.completed` event is received.
+    //   3. The thrown error is caught below. The catch branch reads
+    //      `lastResponseStatus` — which is STILL `'completed'` from turn N
+    //      — and appends it as "last response status: completed", making
+    //      the error look like it originated from a successful response.
+    //
+    // Fix: track which turn the status was captured on. If the status was
+    // NOT captured on the current (failed) turn, drop the suffix. That way
+    // we never emit a status that belongs to a different, already-
+    // concluded request. Users saw the misleading suffix and wasted time
+    // debugging a phantom "the request completed but was aborted" condition
+    // that doesn't exist.
     let lastResponseStatus: string | null = null;
+    let lastResponseStatusTurn: number | null = null;
+
+    // --- Supervision / watchdog bookkeeping ---
+    let supervisionRetries = 0;
+    // Initialised to `null` (NOT ''): on the first turn there is no
+    // previous degenerate output to compare against, so the same-output
+    // early-out must be skipped. Initialising to '' would cause
+    // sameDegenerateOutput('', '') to fire on a first-turn empty output
+    // and break the loop before any retries run. See openai-runner
+    // regression #5.
+    let lastDegenerateOutput: string | null = null;
+    // High-watermark guard for the watchdog warning nudge — fire at most
+    // once per distinct input-token level. Mirrors openai-runner and
+    // claude-runner.
+    let lastWarnedInputTokens = -1;
 
     try {
       while (turns < maxTurns) {
@@ -236,10 +319,11 @@ export async function runCodex(
         // Codex backend requires streaming. The Codex backend's
         // `response.completed` event does NOT populate `response.output` —
         // we must accumulate content from individual stream events.
-        // `instructions` is required (mirrors gumi-agent's proven shape).
+        // `instructions` carries the prevention-layer system prompt; the
+        // per-run budget hint is already prepended to the first user input.
         const stream = await client.responses.create({
           model: providerConfig.model,
-          instructions: prompt,
+          instructions: systemPrompt,
           input,
           stream: true,
           store: false,
@@ -289,7 +373,10 @@ export async function runCodex(
               inputTokens += r.usage.input_tokens ?? 0;
               outputTokens += r.usage.output_tokens ?? 0;
             }
-            if (r?.status) lastResponseStatus = r.status;
+            if (r?.status) {
+              lastResponseStatus = r.status;
+              lastResponseStatusTurn = turns;
+            }
           }
         }
 
@@ -304,6 +391,15 @@ export async function runCodex(
 
         if (!sawCompleted) {
           throw new Error('Codex stream ended without a response.completed event');
+        }
+
+        // Buffer this turn's text into the scratchpad BEFORE any exit so
+        // every termination path (including supervision exhaustion and
+        // force_salvage) can salvage it. Codex does not emit <think> tags
+        // by default, so there is no stripping step here.
+        if (textThisTurn) {
+          scratchpad.append(turns, textThisTurn);
+          output = textThisTurn;
         }
 
         // Replay only function_call items into the next turn's input.
@@ -338,44 +434,113 @@ export async function runCodex(
           }
         }
 
-        // If the model made no tool calls, the run is over. Distinguish
-        // "model produced text" (ok) from "model produced nothing usable"
-        // (incomplete) so the caller can tell a degraded run from a real one.
-        if (toolCalls.length === 0) {
-          const hasText = textThisTurn.length > 0;
-          if (hasText) {
-            output = textThisTurn;
-          }
-          const filesRead = tracker.getReads();
-          const filesWritten = tracker.getWrites();
-          const toolCallsTrace = tracker.getToolCalls();
-          return {
-            output: hasText
-              ? output
-              : `[codex sub-agent terminated without producing a final answer]\n\n` +
-                `The model emitted no tool calls and no text. Items streamed this turn: ${itemTypesSeen.join(', ') || '(none)'}.\n\n` +
-                `Turns used:    ${turns}\n` +
-                `Input tokens:  ${inputTokens}\n` +
-                `Output tokens: ${outputTokens}\n` +
-                `Files read:    ${filesRead.length}\n` +
-                `Files written: ${filesWritten.length}\n\n` +
-                `Recommended action: re-dispatch with a tighter brief, or escalate provider tier.`,
-            status: hasText ? 'ok' : 'incomplete',
-            usage: {
-              inputTokens,
-              outputTokens,
-              totalTokens: inputTokens + outputTokens,
-              costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
-            },
+        // --- Watchdog checks after tokens are updated -------------------
+        const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
+        if (watchdogStatus !== 'ok') {
+          logWatchdogEvent(watchdogStatus, {
+            provider: 'codex',
+            model: providerConfig.model,
+            turn: turns,
+            inputTokens,
+            softLimit,
+            scratchpadChars: scratchpad.toString().length,
+          });
+        }
+        if (watchdogStatus === 'force_salvage') {
+          return buildCodexForceSalvageResult({
+            tracker,
+            scratchpad,
+            providerConfig,
+            inputTokens,
+            outputTokens,
             turns,
-            filesRead,
-            filesWritten,
-            toolCalls: toolCallsTrace,
-          };
+            softLimit,
+          });
+        }
+        // Warning-band nudge: fire at most once per distinct input-token
+        // high-watermark. Pushed as a user message so the next turn of
+        // the codex loop addresses the budget-pressure prompt. We use
+        // the shared prevention helper (NOT an inline string) so every
+        // runner emits byte-identical wording.
+        if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
+          lastWarnedInputTokens = inputTokens;
+          input.push({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            role: 'user',
+            content: buildBudgetPressureNudge({ inputTokens, softLimit }),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
         }
 
-        if (textThisTurn) {
-          output = textThisTurn;
+        // --- Periodic re-grounding inside the loop ---------------------
+        if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+          const reground = buildReGroundingMessage({
+            originalPromptExcerpt: prompt,
+            currentTurn: turns,
+            maxTurns,
+            toolCallsSoFar: tracker.getToolCalls().length,
+            filesReadSoFar: tracker.getReads().length,
+          });
+          input.push({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            role: 'user',
+            content: reground,
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+        }
+
+        // If the model made no tool calls, the turn ended with either a
+        // final answer or a degenerate emission. Wrap in the supervision
+        // state machine: valid text is an immediate ok-exit; degenerate
+        // either re-prompts (and continues the loop) or — if the retry
+        // budget is spent / same-output early-out fires — exits as
+        // incomplete with scratchpad salvage.
+        if (toolCalls.length === 0) {
+          const stripped = textThisTurn; // codex does not emit <think> tags
+          const validation = validateCompletion(stripped);
+
+          if (validation.valid) {
+            return buildCodexOkResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              inputTokens,
+              outputTokens,
+              turns,
+              output: stripped,
+            });
+          }
+
+          // Same-output early-out: only compare when we have a previous
+          // degenerate output. First-turn degeneracy must still get
+          // retries — see openai-runner regression #5.
+          if (
+            (lastDegenerateOutput !== null &&
+              sameDegenerateOutput(stripped, lastDegenerateOutput)) ||
+            supervisionRetries >= MAX_SUPERVISION_RETRIES
+          ) {
+            return buildCodexIncompleteResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              inputTokens,
+              outputTokens,
+              turns,
+            });
+          }
+
+          // Inject the re-prompt as the next user input and continue
+          // the loop. The next turn of the codex backend will respond
+          // to the re-prompt directly.
+          lastDegenerateOutput = stripped;
+          supervisionRetries++;
+          input.push({
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            role: 'user',
+            content: buildRePrompt(validation),
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+          } as any);
+          continue;
         }
 
         // Execute tool calls and feed outputs back
@@ -401,21 +566,17 @@ export async function runCodex(
         }
       }
 
-      // Max turns exhausted
-      return {
-        output: output || `Agent exceeded max turns (${maxTurns}).`,
-        status: 'max_turns',
-        usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
-        },
+      // Max turns exhausted — salvage any buffered text.
+      return buildCodexMaxTurnsResult({
+        tracker,
+        scratchpad,
+        providerConfig,
+        inputTokens,
+        outputTokens,
         turns,
-        filesRead: tracker.getReads(),
-        filesWritten: tracker.getWrites(),
-        toolCalls: tracker.getToolCalls(),
-      };
+        maxTurns,
+        lastOutput: output,
+      });
     } catch (err) {
       // OpenAI SDK's APIError carries status/body/headers — surface them
       // since the Codex backend returns 400 with no body on shape mismatches.
@@ -437,11 +598,25 @@ export async function runCodex(
         if (process.env.CODEX_DEBUG === '1' && capture.last.requestBodyPreview) pieces.push(`req_body=${capture.last.requestBodyPreview.slice(0, 500)}`);
       }
       if (e?.requestID) pieces.push(`req_id=${e.requestID}`);
-      if (lastResponseStatus) pieces.push(`last response status: ${lastResponseStatus}`);
+      // Only include `last response status` when it was captured on the
+      // CURRENT (failing) turn — otherwise it belongs to a previous,
+      // separate request and appending it is actively misleading. See the
+      // abort-path investigation comment at the top of `run()`.
+      if (lastResponseStatus && lastResponseStatusTurn === turns) {
+        pieces.push(`last response status: ${lastResponseStatus}`);
+      } else if (lastResponseStatus && lastResponseStatusTurn !== turns) {
+        pieces.push(
+          `note: a previous request (turn ${lastResponseStatusTurn}) completed with status ` +
+          `"${lastResponseStatus}" — it is unrelated to this failure`,
+        );
+      }
       const detailed = pieces.join(' | ') || String(err);
 
+      // Salvage: if the scratchpad has buffered text from earlier turns,
+      // return it as the output. Pre-Task-5 behavior returned only the
+      // error string, losing 30k+ tokens of work on abort.
       return {
-        output: `Sub-agent error: ${detailed}`,
+        output: scratchpad.isEmpty() ? `Sub-agent error: ${detailed}` : scratchpad.latest(),
         status: 'error',
         usage: {
           inputTokens,
@@ -459,7 +634,10 @@ export async function runCodex(
   };
 
   return withTimeout(run(), timeoutMs, () => ({
-    output: `Agent timed out after ${timeoutMs}ms.`,
+    // Preserve any text the scratchpad buffered before the timeout fired.
+    // Partial usage is read from the running accumulators hoisted above —
+    // hardcoded zeros would discard every token counted on partial turns.
+    output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
     status: 'timeout',
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
@@ -472,4 +650,142 @@ export async function runCodex(
     },
     turns,
   }), abortController);
+}
+
+// --- Helpers: canonical return-shape builders -------------------------------
+//
+// Mirror claude-runner's buildClaudeOkResult / buildClaudeIncompleteResult /
+// buildClaudeForceSalvageResult / buildClaudeMaxTurnsResult so every exit
+// from the supervision state machine is a one-line call. Each helper folds
+// the shared filesRead/filesWritten/toolCalls/usage preamble so the call
+// sites in `run()` stay short and symmetric across runners.
+
+interface CodexResultCommonArgs {
+  tracker: FileTracker;
+  scratchpad: TextScratchpad;
+  providerConfig: ProviderConfig;
+  inputTokens: number;
+  outputTokens: number;
+  turns: number;
+}
+
+function buildCodexOkResult(
+  args: CodexResultCommonArgs & { output: string },
+): RunResult {
+  const { tracker, providerConfig, inputTokens, outputTokens, turns, output } = args;
+  return {
+    output,
+    status: 'ok',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+/**
+ * Supervision-exhausted path: retry cap hit or same-output early-out. Prefer
+ * scratchpad salvage; fall back to the incomplete diagnostic.
+ */
+function buildCodexIncompleteResult(
+  args: CodexResultCommonArgs,
+): RunResult {
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns } = args;
+  const filesRead = tracker.getReads();
+  const filesWritten = tracker.getWrites();
+  return {
+    output: scratchpad.isEmpty()
+      ? buildCodexIncompleteDiagnostic({
+          turns,
+          inputTokens,
+          outputTokens,
+          filesRead,
+          filesWritten,
+        })
+      : scratchpad.latest(),
+    status: 'incomplete',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+    },
+    turns,
+    filesRead,
+    filesWritten,
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+function buildCodexForceSalvageResult(
+  args: CodexResultCommonArgs & { softLimit: number },
+): RunResult {
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit } = args;
+  return {
+    output: scratchpad.isEmpty()
+      ? `[codex sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
+      : scratchpad.latest(),
+    status: 'incomplete',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+function buildCodexMaxTurnsResult(
+  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string },
+): RunResult {
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  return {
+    output: scratchpad.isEmpty()
+      ? (lastOutput || `Agent exceeded max turns (${maxTurns}).`)
+      : scratchpad.latest(),
+    status: 'max_turns',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+function buildCodexIncompleteDiagnostic(opts: {
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  filesRead: string[];
+  filesWritten: string[];
+}): string {
+  return [
+    '[codex sub-agent terminated without producing a final answer]',
+    '',
+    'The model emitted no tool calls and no usable text on its final turn, and',
+    'supervision re-prompts did not recover a valid response.',
+    '',
+    `Turns used:    ${opts.turns}`,
+    `Input tokens:  ${opts.inputTokens}`,
+    `Output tokens: ${opts.outputTokens}`,
+    `Files read:    ${opts.filesRead.length}`,
+    `Files written: ${opts.filesWritten.length}`,
+    '',
+    'Recommended action: re-dispatch with a tighter brief, or escalate provider tier.',
+  ].join('\n');
 }
