@@ -10,12 +10,6 @@ This is the building-block library. If you just want to run the MCP server, inst
 npm install @zhixuan92/multi-model-agent-core
 ```
 
-If you plan to use `openai-compatible` providers, also install the optional peer dependencies:
-
-```bash
-npm install @openai/agents openai
-```
-
 Requires Node `>= 22`. ESM only.
 
 ## What's exported

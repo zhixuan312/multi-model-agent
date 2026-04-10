@@ -13,12 +13,6 @@ npm install -g @zhixuan92/multi-model-agent-mcp
 multi-model-agent serve
 ```
 
-If you plan to use `openai-compatible` providers, also install the optional peer dependencies:
-
-```bash
-npm install -g @zhixuan92/multi-model-agent-mcp @openai/agents openai
-```
-
 Requires Node `>= 22`.
 
 ## Configure

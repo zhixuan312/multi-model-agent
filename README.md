@@ -56,12 +56,6 @@ npm install -g @zhixuan92/multi-model-agent-mcp
 multi-model-agent serve
 ```
 
-If you plan to use `openai-compatible` providers, install the optional peer dependencies too:
-
-```bash
-npm install -g @zhixuan92/multi-model-agent-mcp @openai/agents openai
-```
-
 ### 3. Create your config
 
 Create `~/.multi-model/config.json`:
@@ -303,7 +297,7 @@ See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contributor workflow, co
 | `No providers configured` | Config file missing or empty | Create `~/.multi-model/config.json` or pass `--config` |
 | Provider is never selected | Missing capability or insufficient tier | Check `requiredCapabilities`, `tier`, and your provider config |
 | `shell` tasks fail | Sandbox is still `cwd-only` | Set provider or task `sandboxPolicy` to `none` |
-| `openai-compatible` provider fails to start | `baseUrl` missing or peer deps missing | Add `baseUrl` and install `@openai/agents` plus `openai` |
+| `openai-compatible` provider fails to start | `baseUrl` missing in provider config | Add `baseUrl` (and `apiKey` or `apiKeyEnv`) to the provider entry |
 | Codex auth fails | No local Codex login and no `OPENAI_API_KEY` | Run `codex login` or set `OPENAI_API_KEY` |
 | MCP client does not see changes | Client not restarted | Fully quit and reopen the client |
 
