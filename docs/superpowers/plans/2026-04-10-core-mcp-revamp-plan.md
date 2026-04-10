@@ -1466,7 +1466,7 @@ function mockProvider(name: string, output = 'ok', runError?: string): Provider 
 
 let createProvider: ReturnType<typeof vi.fn>;
 
-beforeEach(() => {
+beforeEach(async () => {
   createProvider = vi.mocked(await import('../../../packages/core/src/provider.js').then((m) => m.createProvider));
 });
 
@@ -1702,15 +1702,17 @@ describe('buildMcpServer', () => {
   it('buildTaskSchema returns a Zod schema', () => {
     const schema = buildTaskSchema(['codex', 'claude']);
     expect(typeof schema.parse).toBe('function');
-    // Valid input should parse without throw
-    const valid = [
-      {
-        prompt: 'do the thing',
-        provider: 'codex',
-        tier: 'standard',
-        requiredCapabilities: [],
-      },
-    ];
+    // Valid input should parse without throw — schema is { tasks: [...] }
+    const valid = {
+      tasks: [
+        {
+          prompt: 'do the thing',
+          provider: 'codex',
+          tier: 'standard',
+          requiredCapabilities: [],
+        },
+      ],
+    };
     expect(() => schema.parse(valid)).not.toThrow();
   });
 });
@@ -1769,7 +1771,7 @@ export function buildMcpServer(config: MultiModelConfig) {
   server.tool(
     'delegate_tasks',
     renderProviderRoutingMatrix(config),
-    { tasks: buildTaskSchema(providerKeys) },
+    buildTaskSchema(providerKeys),
     async ({ tasks }) => {
       const taskSpecs: TaskSpec[] = tasks.map((t) => ({
         prompt: t.prompt,
