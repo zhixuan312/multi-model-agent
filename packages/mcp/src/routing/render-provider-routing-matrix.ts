@@ -24,6 +24,17 @@ Optional 'effort' knob (per task):
   thinking entirely on providers that default it on. Omit the field on
   providers that do not support it.`;
 
+const TOOL_NOTES = `Sub-agent tool notes (apply to every provider):
+- 'grep' accepts a file OR a directory. When given a directory it searches
+  recursively (output is prefixed file:line). Prefer one recursive grep over
+  many readFile calls when the worker needs to find usages or patterns.
+- Worker output is captured ONLY from the final assistant message. The
+  worker should produce its complete answer there; intermediate tool
+  results and earlier turns are discarded.
+- Tasks that need shell ('pnpm', 'pytest', 'tsc', 'git') only work on
+  providers configured with sandboxPolicy: 'none'. Otherwise keep shell
+  work on the parent session, not in a delegated sub-agent.`;
+
 function renderProviderBlock(
   name: string,
   config: ProviderConfig,
@@ -70,5 +81,7 @@ export function renderProviderRoutingMatrix(config: MultiModelConfig): string {
     blocks.join('\n\n'),
     '',
     ROUTING_RECIPE,
+    '',
+    TOOL_NOTES,
   ].join('\n');
 }

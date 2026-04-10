@@ -52,10 +52,14 @@ export function createOpenAITools(impl: ToolImplementations, sandboxPolicy: Sand
 
   const grepTool = tool({
     name: 'grep',
-    description: 'Search for a pattern in a file. Returns matching lines with line numbers.',
+    description:
+      'Search for a regex pattern in a file or directory. When given a directory, ' +
+      'recursively searches all files (output is prefixed with file:line). When given ' +
+      'a single file, returns matching lines with line numbers. Use this — not multiple ' +
+      'readFile calls — to find usages, imports, or patterns across a codebase.',
     parameters: z.object({
-      pattern: z.string().describe('Search pattern (regex)'),
-      path: z.string().describe('File path to search in'),
+      pattern: z.string().describe('Regex pattern to search for'),
+      path: z.string().describe('File OR directory path. Directories are searched recursively.'),
     }),
     execute: async ({ pattern, path }) => {
       const result = await impl.grep(pattern, path);
