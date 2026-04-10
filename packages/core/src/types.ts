@@ -159,11 +159,14 @@ export interface AttemptRecord {
   outputTokens: number
   costUSD: number | null
   /** Character count of the very first request body sent to the provider on
-   *  this attempt. Populated by Task 12 via `RunOptions.onInitialRequest`; for
-   *  now this is always 0. */
+   *  this attempt (`${systemPrompt}\n\n${promptWithBudgetHint}`). Populated
+   *  by the escalation orchestrator via the `RunOptions.onInitialRequest`
+   *  callback the runner invokes exactly once per attempt. Defaults to 0
+   *  if the runner never invoked the callback. */
   initialPromptLengthChars: number
-  /** sha256 hex of the same first request body. Populated by Task 12; for now
-   *  this is always the empty string. */
+  /** sha256 hex of the same first request body. Populated via the same
+   *  `onInitialRequest` callback. Defaults to the empty string if the
+   *  runner never invoked the callback. */
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
   reason?: string
