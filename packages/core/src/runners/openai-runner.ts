@@ -15,9 +15,19 @@ setTracingDisabled(true);
  * chain-of-thought inline wrapped in `<think>...</think>` tags. These are
  * scratch-pad content and should not surface to the caller. Stripping is
  * non-greedy, multi-line, and handles multiple blocks.
+ *
+ * If the entire input was reasoning (stripping leaves nothing), return an
+ * explicit marker instead of an empty string. Silently swallowing
+ * "all thinking, no answer" responses leaves the caller with `output: ""`
+ * and no idea what happened — see the openai-runner empty-output diagnostic.
  */
 export function stripThinkingTags(text: string): string {
-  return text.replace(/<think>[\s\S]*?<\/think>\s*/gi, '').trimStart();
+  if (!text) return '';
+  const stripped = text.replace(/<think>[\s\S]*?<\/think>\s*/gi, '').trimStart();
+  if (!stripped && /<think>[\s\S]*?<\/think>/i.test(text)) {
+    return '[model final message contained only <think>...</think> reasoning, no plain-text answer]';
+  }
+  return stripped;
 }
 
 export interface OpenAIRunnerOptions {
@@ -56,7 +66,12 @@ export async function runOpenAI(
   const agent = new Agent({
     name: 'sub-agent',
     model,
-    instructions: 'You are a helpful assistant. Complete the task given to you. Use the provided tools when needed.',
+    instructions:
+      'You are a sub-agent completing a single task. When you believe the task is complete, ' +
+      'respond with your complete answer as plain text — this final message IS the deliverable, ' +
+      'and only your last assistant message is captured. Intermediate tool outputs are discarded. ' +
+      'Prefer grep and glob over reading whole files, and batch your investigation when possible. ' +
+      'Your final answer must be plain text outside any <think> reasoning tags.',
     tools,
     ...(effort && effort !== 'none' && {
       // eslint-disable-next-line @typescript-eslint/no-explicit-any

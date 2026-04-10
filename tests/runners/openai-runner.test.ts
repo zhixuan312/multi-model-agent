@@ -45,7 +45,17 @@ describe('stripThinkingTags', () => {
     expect(stripThinkingTags('')).toBe('');
   });
 
-  it('handles a think block that is the entire output', () => {
-    expect(stripThinkingTags('<think>only thoughts</think>')).toBe('');
+  it('returns a diagnostic marker when the entire output is a single think block', () => {
+    const result = stripThinkingTags('<think>only thoughts</think>');
+    expect(result).toBe(
+      '[model final message contained only <think>...</think> reasoning, no plain-text answer]',
+    );
+  });
+
+  it('returns a diagnostic marker when multiple think blocks fill the entire output', () => {
+    const result = stripThinkingTags('<think>first</think>\n<think>second</think>');
+    expect(result).toBe(
+      '[model final message contained only <think>...</think> reasoning, no plain-text answer]',
+    );
   });
 });
