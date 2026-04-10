@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { stripThinkingTags } from '../../src/runners/openai-runner.js';
+import { stripThinkingTags } from '../../packages/core/src/runners/openai-runner.js';
 
 describe('stripThinkingTags', () => {
   it('returns plain text unchanged', () => {

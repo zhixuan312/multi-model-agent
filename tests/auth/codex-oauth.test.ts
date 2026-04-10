@@ -17,7 +17,7 @@ describe('codex-oauth', () => {
   });
 
   it('reads valid Codex OAuth token', async () => {
-    const { getCodexAuth } = await import('../../src/auth/codex-oauth.js');
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     const codexDir = path.join(tmpDir, '.codex');
     fs.mkdirSync(codexDir, { recursive: true });
     fs.writeFileSync(path.join(codexDir, 'auth.json'), JSON.stringify({
@@ -35,13 +35,13 @@ describe('codex-oauth', () => {
   });
 
   it('returns null when no auth file exists', async () => {
-    const { getCodexAuth } = await import('../../src/auth/codex-oauth.js');
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     const auth = getCodexAuth();
     expect(auth).toBeNull();
   });
 
   it('returns null when tokens are missing', async () => {
-    const { getCodexAuth } = await import('../../src/auth/codex-oauth.js');
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     const codexDir = path.join(tmpDir, '.codex');
     fs.mkdirSync(codexDir, { recursive: true });
     fs.writeFileSync(path.join(codexDir, 'auth.json'), JSON.stringify({}));

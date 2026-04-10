@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { getBaseCapabilities } from '../../src/routing/capabilities.js';
-import type { ProviderConfig } from '../../src/types.js';
+import { getBaseCapabilities } from '@scope/multi-model-agent-core/routing/capabilities';
+import type { ProviderConfig } from '@scope/multi-model-agent-core';
 
 describe('getBaseCapabilities', () => {
   describe('file capabilities (every provider type)', () => {

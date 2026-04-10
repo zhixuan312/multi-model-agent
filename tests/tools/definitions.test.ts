@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { createToolImplementations } from '../../src/tools/definitions.js';
-import { FileTracker } from '../../src/tools/tracker.js';
+import { createToolImplementations } from '../../packages/core/src/tools/definitions.js';
+import { FileTracker } from '../../packages/core/src/tools/tracker.js';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';

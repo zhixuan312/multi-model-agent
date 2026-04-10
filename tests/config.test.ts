@@ -1,10 +1,11 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import { loadConfig } from '../src/config.js';
+import { loadConfigFromFile } from '@scope/multi-model-agent-core/config/load';
+import type { MultiModelConfig } from '@scope/multi-model-agent-core';
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
-describe('loadConfig', () => {
+describe('loadConfigFromFile', () => {
   let tmpDir: string;
 
   beforeEach(() => {
@@ -15,7 +16,7 @@ describe('loadConfig', () => {
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('loads a valid config file', () => {
+  it('loads a valid config file', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -28,7 +29,7 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.deepseek.type).toBe('openai-compatible');
     expect(config.providers.deepseek.model).toBe('deepseek-r1');
@@ -37,7 +38,7 @@ describe('loadConfig', () => {
     expect(config.defaults.tools).toBe('full');
   });
 
-  it('applies defaults when only providers given', () => {
+  it('applies defaults when only providers given', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -45,20 +46,20 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.defaults.maxTurns).toBe(200);
     expect(config.defaults.tools).toBe('full');
     expect(config.providers.codex.type).toBe('codex');
   });
 
-  it('throws when explicit config path does not exist', () => {
-    expect(() => loadConfig(path.join(tmpDir, 'nonexistent.json'))).toThrow(
+  it('throws when explicit config path does not exist', async () => {
+    await expect(loadConfigFromFile(path.join(tmpDir, 'nonexistent.json'))).rejects.toThrow(
       /Config file not found/,
     );
   });
 
-  it('validates provider type enum', () => {
+  it('validates provider type enum', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -66,72 +67,61 @@ describe('loadConfig', () => {
       },
     }));
 
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('throws when MULTI_MODEL_CONFIG env var points to nonexistent file', () => {
-    const prev = process.env.MULTI_MODEL_CONFIG;
-    try {
-      process.env.MULTI_MODEL_CONFIG = path.join(tmpDir, 'ghost.json');
-      expect(() => loadConfig()).toThrow(/Config file not found \(MULTI_MODEL_CONFIG\)/);
-    } finally {
-      if (prev === undefined) delete process.env.MULTI_MODEL_CONFIG;
-      else process.env.MULTI_MODEL_CONFIG = prev;
-    }
-  });
-
-  it('rejects maxTurns <= 0', () => {
+  it('rejects maxTurns <= 0', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {},
       defaults: { maxTurns: 0 },
     }));
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects negative timeoutMs', () => {
+  it('rejects negative timeoutMs', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {},
       defaults: { timeoutMs: -1 },
     }));
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects non-integer maxTurns', () => {
+  it('rejects non-integer maxTurns', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {},
       defaults: { maxTurns: 1.5 },
     }));
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects provider-level maxTurns <= 0', () => {
+  it('rejects provider-level maxTurns <= 0', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
         bad: { type: 'openai-compatible', model: 'test', maxTurns: -5 },
       },
     }));
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('merges user defaults with system defaults', () => {
+  it('merges user defaults with system defaults', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {},
       defaults: { maxTurns: 50 },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.defaults.maxTurns).toBe(50);
     expect(config.defaults.timeoutMs).toBe(600000);
     expect(config.defaults.tools).toBe('full');
   });
 
-  it('parses costTier when present', () => {
+  it('parses costTier when present', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -144,12 +134,12 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.minimax.costTier).toBe('free');
   });
 
-  it('accepts config without costTier (optional field)', () => {
+  it('accepts config without costTier (optional field)', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -161,12 +151,12 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.gpt.costTier).toBeUndefined();
   });
 
-  it('rejects invalid costTier values', () => {
+  it('rejects invalid costTier values', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -179,20 +169,20 @@ describe('loadConfig', () => {
       },
     }));
 
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects openai-compatible without baseUrl', () => {
+  it('rejects openai-compatible without baseUrl', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
         bad: { type: 'openai-compatible', model: 'test' },
       },
     }));
-    expect(() => loadConfig(configPath)).toThrow(/baseUrl/);
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow(/baseUrl/);
   });
 
-  it('parses a valid effort enum value', () => {
+  it('parses a valid effort enum value', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -204,12 +194,12 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.claude.effort).toBe('high');
   });
 
-  it('rejects invalid effort values', () => {
+  it('rejects invalid effort values', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -221,10 +211,10 @@ describe('loadConfig', () => {
       },
     }));
 
-    expect(() => loadConfig(configPath)).toThrow();
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('accepts effort=none as a valid disable signal', () => {
+  it('accepts effort=none as a valid disable signal', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       providers: {
@@ -236,7 +226,7 @@ describe('loadConfig', () => {
       },
     }));
 
-    const config = loadConfig(configPath);
+    const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.claude.effort).toBe('none');
   });

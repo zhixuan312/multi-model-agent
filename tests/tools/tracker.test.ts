@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { FileTracker } from '../../src/tools/tracker.js';
+import { FileTracker } from '../../packages/core/src/tools/tracker.js';
 
 describe('FileTracker', () => {
   it('tracks written files', () => {

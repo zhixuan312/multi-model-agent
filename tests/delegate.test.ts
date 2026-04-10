@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { delegateAll, getEffectiveCapabilities } from '../src/delegate.js';
-import type { Provider, ProviderConfig, RunResult, DelegateTask } from '../src/types.js';
+import { runTasks } from '@scope/multi-model-agent-core/run-tasks';
+import { resolveTaskCapabilities } from '@scope/multi-model-agent-core/routing/resolve-task-capabilities';
+import type { Provider, ProviderConfig, RunResult, TaskSpec } from '@scope/multi-model-agent-core';
 
 function mockProvider(name: string, result: Partial<RunResult>, configOverride?: Partial<ProviderConfig>): Provider {
   const full: RunResult = {
@@ -32,7 +33,7 @@ function failProvider(name: string, error: string): Provider {
 }
 
 // Helper: build a minimal valid task. Required fields get sensible defaults.
-function task(overrides: Partial<DelegateTask> & { provider: Provider; prompt: string }): DelegateTask {
+function task(overrides: Partial<TaskSpec> & { provider: Provider; prompt: string }): TaskSpec {
   return {
     tier: 'standard',
     requiredCapabilities: [],
@@ -40,12 +41,12 @@ function task(overrides: Partial<DelegateTask> & { provider: Provider; prompt: s
   };
 }
 
-describe('delegateAll', () => {
+describe('runTasks', () => {
   it('runs tasks in parallel and returns all results', async () => {
     const p1 = mockProvider('a', { output: 'result-a' });
     const p2 = mockProvider('b', { output: 'result-b' });
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider: p1, prompt: 'task a' }),
       task({ provider: p2, prompt: 'task b' }),
     ]);
@@ -59,7 +60,7 @@ describe('delegateAll', () => {
     const good = mockProvider('good', { output: 'ok' });
     const bad = failProvider('bad', 'auth failure');
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider: good, prompt: 't' }),
       task({ provider: bad, prompt: 't' }),
     ]);
@@ -70,7 +71,7 @@ describe('delegateAll', () => {
   });
 
   it('returns empty array for empty input', async () => {
-    const results = await delegateAll([]);
+    const results = await runTasks([]);
     expect(results).toEqual([]);
   });
 
@@ -89,7 +90,7 @@ describe('delegateAll', () => {
       },
     };
 
-    await delegateAll([
+    await runTasks([
       task({ provider: spy, prompt: 't', tools: 'full', maxTurns: 10 }),
     ]);
 
@@ -112,7 +113,7 @@ describe('delegateAll', () => {
       },
     };
 
-    await delegateAll([
+    await runTasks([
       task({ provider: spy, prompt: 't', sandboxPolicy: 'none' }),
     ]);
 
@@ -120,7 +121,7 @@ describe('delegateAll', () => {
   });
 });
 
-describe('delegateAll capability enforcement', () => {
+describe('runTasks capability enforcement', () => {
   it('fails fast when a required capability is missing, without calling provider.run', async () => {
     let runCalled = false;
     const provider: Provider = {
@@ -136,7 +137,7 @@ describe('delegateAll capability enforcement', () => {
       },
     };
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 'fetch weather', requiredCapabilities: ['web_search'] }),
     ]);
 
@@ -162,7 +163,7 @@ describe('delegateAll capability enforcement', () => {
     };
 
     // codex auto-enables web_search, so this should pass enforcement
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 'fetch weather', requiredCapabilities: ['web_search', 'file_read'] }),
     ]);
 
@@ -178,7 +179,7 @@ describe('delegateAll capability enforcement', () => {
       run: async () => { throw new Error('should not run'); },
     };
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 't', requiredCapabilities: ['web_search', 'shell'] }),
     ]);
 
@@ -194,7 +195,7 @@ describe('delegateAll capability enforcement', () => {
       run: async () => { throw new Error('should not run'); },
     };
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 't', requiredCapabilities: ['shell'] }),
     ]);
 
@@ -217,7 +218,7 @@ describe('delegateAll capability enforcement', () => {
       },
     };
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 't', sandboxPolicy: 'none', requiredCapabilities: ['shell'] }),
     ]);
 
@@ -232,7 +233,7 @@ describe('delegateAll capability enforcement', () => {
       run: async () => { throw new Error('should not run'); },
     };
 
-    const results = await delegateAll([
+    const results = await runTasks([
       task({ provider, prompt: 't', tools: 'none', requiredCapabilities: ['file_read'] }),
     ]);
 
@@ -241,16 +242,16 @@ describe('delegateAll capability enforcement', () => {
   });
 });
 
-describe('getEffectiveCapabilities', () => {
+describe('resolveTaskCapabilities', () => {
   it('returns empty array when tools are disabled', () => {
     const config: ProviderConfig = { type: 'codex', model: 'gpt-5-codex' };
-    const caps = getEffectiveCapabilities(config, { tools: 'none' });
+    const caps = resolveTaskCapabilities(config, { tools: 'none' });
     expect(caps).toEqual([]);
   });
 
   it('includes shell when per-task sandboxPolicy is none', () => {
     const config: ProviderConfig = { type: 'codex', model: 'gpt-5-codex' };
-    const caps = getEffectiveCapabilities(config, { sandboxPolicy: 'none' });
+    const caps = resolveTaskCapabilities(config, { sandboxPolicy: 'none' });
     expect(caps).toContain('shell');
   });
 
@@ -260,7 +261,7 @@ describe('getEffectiveCapabilities', () => {
       model: 'gpt-5-codex',
       sandboxPolicy: 'none',
     };
-    const caps = getEffectiveCapabilities(config, { sandboxPolicy: 'cwd-only' });
+    const caps = resolveTaskCapabilities(config, { sandboxPolicy: 'cwd-only' });
     expect(caps).not.toContain('shell');
   });
 
@@ -270,7 +271,7 @@ describe('getEffectiveCapabilities', () => {
       model: 'gpt-5-codex',
       sandboxPolicy: 'none',
     };
-    const caps = getEffectiveCapabilities(config, {});
+    const caps = resolveTaskCapabilities(config, {});
     expect(caps).toContain('shell');
   });
 });
