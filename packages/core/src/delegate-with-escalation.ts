@@ -106,6 +106,14 @@ export async function delegateWithEscalation(
       });
     }
 
+    // Per-attempt metadata captured via the runner's `onInitialRequest`
+    // callback. Reset inside the loop so a subsequent escalation hop
+    // starts fresh. The runner invokes this exactly once per attempt
+    // (Task 12). We wrap assignment in try/catch at the runner site, but
+    // assigning to these locals cannot itself throw.
+    let initialPromptLengthChars = 0;
+    let initialPromptHash = '';
+
     const result = await provider.run(task.prompt, {
       tools: task.tools,
       maxTurns: task.maxTurns,
@@ -114,6 +122,10 @@ export async function delegateWithEscalation(
       effort: task.effort,
       sandboxPolicy: task.sandboxPolicy,
       onProgress: safeSink,
+      onInitialRequest: (meta) => {
+        initialPromptLengthChars = meta.lengthChars;
+        initialPromptHash = meta.sha256;
+      },
     });
 
     const record: AttemptRecord = {
@@ -123,11 +135,8 @@ export async function delegateWithEscalation(
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
       costUSD: result.usage.costUSD,
-      // TODO(Task 12): populate these via RunOptions.onInitialRequest so the
-      // orchestrator can record the length/hash of the first request body
-      // actually sent on each attempt. For Task 6, stub with zero/empty.
-      initialPromptLengthChars: 0,
-      initialPromptHash: '',
+      initialPromptLengthChars,
+      initialPromptHash,
       // Use `||` (not `??`) so an empty-string error falls through to the
       // status sentinel — an empty `reason` would be indistinguishable from
       // an `ok` row in the escalation log.

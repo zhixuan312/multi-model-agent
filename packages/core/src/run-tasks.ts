@@ -4,11 +4,13 @@ import type {
   TaskSpec,
   MultiModelConfig,
   ProgressEvent,
+  RunTasksRuntime,
 } from './types.js';
 import { createProvider } from './provider.js';
 import { getProviderEligibility } from './routing/get-provider-eligibility.js';
 import { selectProviderForTask } from './routing/select-provider-for-task.js';
 import { buildEscalationChain, delegateWithEscalation } from './delegate-with-escalation.js';
+import { expandContextBlocks } from './context/expand-context-blocks.js';
 
 /**
  * Per-task progress sink. `runTasks` invokes this for every
@@ -28,6 +30,11 @@ export interface RunTasksOptions {
    *  no progress events are produced — backward-compatible with callers
    *  that predate Task 8. */
   onProgress?: RunTasksProgressCallback;
+  /** Runtime dependencies the orchestrator needs at dispatch time. Today
+   *  this is just the context-block store used to expand
+   *  `TaskSpec.contextBlockIds`. Kept as a nested field so existing callers
+   *  that only pass `onProgress` don't break. */
+  runtime?: RunTasksRuntime;
 }
 
 function errorResult(error: string): RunResult {
@@ -92,7 +99,26 @@ export async function runTasks(
 ): Promise<RunResult[]> {
   if (tasks.length === 0) return [];
 
-  const resolved: ResolvedTask[] = tasks.map((task): ResolvedTask => {
+  // Expand context blocks up-front so the rest of the pipeline sees a
+  // self-contained prompt. `expandContextBlocks` is a no-op for tasks
+  // without `contextBlockIds` and for calls that omit `runtime`, so
+  // existing callers are unaffected. A missing block id throws
+  // `ContextBlockNotFoundError` synchronously — we convert it to an
+  // error-result for the specific task so the rest of the batch still
+  // runs.
+  const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
+    try {
+      return expandContextBlocks(task, options.runtime?.contextBlockStore);
+    } catch (err) {
+      return { error: err instanceof Error ? err.message : String(err) };
+    }
+  });
+
+  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
+    if ('error' in entry) {
+      return { task: tasks[idx], error: entry.error };
+    }
+    const task = entry;
     // If provider specified, validate and use it
     if (task.provider) {
       const eligibility = getProviderEligibility(task, config);

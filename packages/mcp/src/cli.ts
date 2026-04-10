@@ -3,6 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { randomUUID } from 'node:crypto';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -10,6 +11,7 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { InMemoryContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import type {
   MultiModelConfig,
   TaskSpec,
@@ -37,8 +39,33 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
     effort: z.enum(['none', 'low', 'medium', 'high']).optional()
       .describe("Reasoning effort."),
     sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
+    contextBlockIds: z.array(z.string()).optional().describe(
+      'Optional context block ids previously stored via register_context_block. ' +
+      'The server resolves each id to its stored content and prepends the blocks ' +
+      '(in order, separated by "\\n\\n---\\n\\n") to `prompt` before dispatch. ' +
+      'Use this to avoid re-transmitting long briefs across multiple calls.',
+    ),
   });
 }
+
+/**
+ * Batch cache for `retry_tasks`. Every `delegate_tasks` call stashes the
+ * original `TaskSpec[]` under a UUID so the caller can later ask us to
+ * re-dispatch specific indices without re-transmitting the briefs. Two
+ * bounds, mirroring `InMemoryContextBlockStore`:
+ *
+ *   - TTL (30 min from last store): keeps stale batches from lingering
+ *     through a long session
+ *   - LRU cap (100 entries): prevents unbounded growth from a chatty
+ *     caller that never retries
+ *
+ * Eviction on TTL is lazy (checked on `retry_tasks` lookup). Eviction on
+ * the LRU cap is eager (runs after every `rememberBatch`). We use Map
+ * insertion order for the LRU — `Map.keys()` iterates in insertion order,
+ * so `keys().next().value` is the oldest entry.
+ */
+const BATCH_TTL_MS = 30 * 60 * 1000;
+const BATCH_MAX = 100;
 
 export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
   const providerKeys = Object.keys(config.providers);
@@ -50,6 +77,25 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
     name: SERVER_NAME,
     version: SERVER_VERSION,
   });
+
+  // One context-block store per server instance. Persists across calls
+  // within a single `buildMcpServer(...)` lifetime so `register_context_block`
+  // followed by multiple `delegate_tasks` with `contextBlockIds` works.
+  const contextBlockStore = new InMemoryContextBlockStore();
+
+  // Per-server batch cache for `retry_tasks`.
+  const batchCache = new Map<string, { tasks: TaskSpec[]; expiresAt: number }>();
+
+  const rememberBatch = (tasks: TaskSpec[]): string => {
+    const id = randomUUID();
+    batchCache.set(id, { tasks, expiresAt: Date.now() + BATCH_TTL_MS });
+    while (batchCache.size > BATCH_MAX) {
+      const oldest = batchCache.keys().next().value;
+      if (oldest) batchCache.delete(oldest);
+      else break;
+    }
+    return id;
+  };
 
   const availableProviders = providerKeys as [string, ...string[]];
 
@@ -131,13 +177,102 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
           }
         : undefined;
 
+      // Stash the original task specs in the batch cache BEFORE dispatch
+      // so the returned batchId is valid even if the dispatch itself
+      // throws (so callers can still retry the specific tasks that
+      // produced errors). The cache stores the raw TaskSpec[] — NOT the
+      // expanded forms — because `retry_tasks` will push the same specs
+      // through `runTasks` again, which re-expands against the current
+      // (possibly updated) context-block store.
+      const batchId = rememberBatch(tasks as TaskSpec[]);
+
       const results = await runTasks(tasks as TaskSpec[], config, {
         onProgress: sendProgress,
+        runtime: { contextBlockStore },
       });
 
       const response = {
+        batchId,
         results: results.map((r, i) => ({
           provider: tasks[i].provider ?? '(auto)',
+          status: r.status,
+          output: r.output,
+          turns: r.turns,
+          filesRead: r.filesRead,
+          filesWritten: r.filesWritten,
+          toolCalls: r.toolCalls,
+          escalationLog: r.escalationLog,
+          usage: r.usage,
+          ...(r.error && { error: r.error }),
+        })),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'register_context_block',
+    'Store a content block under an id (or auto-generated UUID) for reuse in later delegate_tasks calls. ' +
+      'Use this to avoid re-transmitting long briefs on every dispatch. Blocks are referenced from a ' +
+      'task via its `contextBlockIds` array — the server resolves each id to its stored content and ' +
+      'prepends the blocks to the task `prompt` at dispatch time. Blocks live in an in-memory store ' +
+      'with a 30-minute TTL and a 100-entry LRU cap.',
+    {
+      id: z.string().optional().describe('Optional id; auto-generated UUID if omitted'),
+      content: z.string().describe('The content to store'),
+    },
+    async ({ id, content }) => {
+      const result = contextBlockStore.register(content, { id });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'retry_tasks',
+    'Re-run specific tasks from a previous delegate_tasks batch by their indices, without ' +
+      're-transmitting the original briefs. Pass the `batchId` returned by delegate_tasks ' +
+      'and an array of task indices (0-based) to re-dispatch. Batches live in an in-memory ' +
+      'cache with a 30-minute TTL; if the batch has expired, re-dispatch the tasks explicitly ' +
+      'via delegate_tasks.',
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+      taskIndices: z
+        .array(z.number().int().nonnegative())
+        .describe('Zero-based indices (into the original batch) of the tasks to re-run'),
+    },
+    async ({ batchId, taskIndices }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        // Proactively drop the expired entry so subsequent lookups see
+        // the same "unknown" result and the cache doesn't slowly fill
+        // with stale rows that are never touched again.
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+      for (const i of taskIndices) {
+        if (i < 0 || i >= batch.tasks.length) {
+          throw new Error(
+            `index ${i} is out of range for batch ${batchId} (size ${batch.tasks.length})`,
+          );
+        }
+      }
+      const subset = taskIndices.map((i) => batch.tasks[i]);
+      const results = await runTasks(subset, config, {
+        runtime: { contextBlockStore },
+      });
+
+      const response = {
+        batchId,
+        results: results.map((r, i) => ({
+          originalIndex: taskIndices[i],
+          provider: subset[i].provider ?? '(auto)',
           status: r.status,
           output: r.output,
           turns: r.turns,

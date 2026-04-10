@@ -1,5 +1,6 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
+import { createHash } from 'node:crypto';
 import type { Response, ResponseInputItem } from 'openai/resources/responses/responses';
 import { getCodexAuth } from '../auth/codex-oauth.js';
 import {
@@ -283,6 +284,23 @@ export async function runCodex(
   const systemPrompt = buildSystemPrompt();
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
+
+  // --- onInitialRequest (Task 12) ----------------------------------------
+  //
+  // Fire once per attempt with the exact concatenation of the first request
+  // body the model will see. Matches openai-runner and claude-runner so the
+  // hash is cross-runner stable for an identical prompt.
+  if (options.onInitialRequest) {
+    const initialRequestBody = `${systemPrompt}\n\n${promptWithBudgetHint}`;
+    try {
+      options.onInitialRequest({
+        lengthChars: initialRequestBody.length,
+        sha256: createHash('sha256').update(initialRequestBody).digest('hex'),
+      });
+    } catch {
+      // Swallow — a broken callback must not affect dispatch.
+    }
+  }
 
   // --- Scratchpad: buffers every text emission the codex backend streams
   // through our loop. Every termination path (ok / incomplete / max_turns /

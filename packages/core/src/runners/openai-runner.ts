@@ -7,6 +7,7 @@ import {
 } from '@openai/agents';
 import type { RunItem, AgentInputItem } from '@openai/agents';
 import OpenAI from 'openai';
+import { createHash } from 'node:crypto';
 import {
   withTimeout,
   computeCostUSD,
@@ -192,6 +193,26 @@ export async function runOpenAI(
   const systemPrompt = buildSystemPrompt();
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
+
+  // --- onInitialRequest (Task 12) ----------------------------------------
+  //
+  // Fire once per attempt with the exact concatenation of the first request
+  // body the model will see. The separator is chosen to match claude-runner
+  // and codex-runner so two dispatches of the same prompt produce the same
+  // hash regardless of which runner handled them. We guard with try/catch
+  // because the orchestrator owns the callback and a throw here would
+  // corrupt its closure — symmetry with safeSink around onProgress.
+  if (options.onInitialRequest) {
+    const initialRequestBody = `${systemPrompt}\n\n${promptWithBudgetHint}`;
+    try {
+      options.onInitialRequest({
+        lengthChars: initialRequestBody.length,
+        sha256: createHash('sha256').update(initialRequestBody).digest('hex'),
+      });
+    } catch {
+      // Swallow — a broken callback must not affect dispatch.
+    }
+  }
 
   const agent = new Agent({
     name: 'sub-agent',

@@ -56,6 +56,72 @@ describe('delegate_tasks tool description', () => {
   });
 });
 
+describe('context-block + retry_tasks tools', () => {
+  it('registers register_context_block and retry_tasks alongside delegate_tasks', () => {
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    expect(tools['delegate_tasks']).toBeDefined();
+    expect(tools['register_context_block']).toBeDefined();
+    expect(tools['retry_tasks']).toBeDefined();
+  });
+
+  it('register_context_block handler stores content and returns metadata', async () => {
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const regTool = tools['register_context_block'];
+    // The registered tool's handler is the callback passed to server.tool.
+    // Second arg (RequestHandlerExtra) is an empty object — the
+    // register_context_block handler does not read it.
+    const result = await regTool.handler({ content: 'hello', id: 'greeting' }, {});
+    // Tool result envelope: { content: [{ type: 'text', text: JSON }] }
+    expect(result.content).toBeDefined();
+    expect(result.content[0].type).toBe('text');
+    const payload = JSON.parse(result.content[0].text);
+    expect(payload.id).toBe('greeting');
+    expect(payload.lengthChars).toBe(5);
+    expect(payload.sha256).toBe(
+      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
+    );
+  });
+
+  it('retry_tasks throws on an unknown batch id', async () => {
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const retryTool = tools['retry_tasks'];
+    await expect(
+      retryTool.handler({ batchId: 'does-not-exist', taskIndices: [0] }, {}),
+    ).rejects.toThrow(/unknown or expired/);
+  });
+});
+
+describe('delegate_tasks schema — contextBlockIds', () => {
+  const taskSchema = buildTaskSchema(['mock']);
+
+  it('accepts a task with contextBlockIds', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+      contextBlockIds: ['a', 'b'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts a task with no contextBlockIds (optional)', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+    });
+    expect(result.success).toBe(true);
+  });
+});
+
 describe('delegate_tasks schema', () => {
   const taskSchema = buildTaskSchema(['mock']);
 

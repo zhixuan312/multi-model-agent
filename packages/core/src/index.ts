@@ -21,11 +21,24 @@ export type {
   RunResult,
   Provider,
   RunOptions,
+  RunTasksRuntime,
   ProgressEvent,
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
 } from './types.js';
+
+// Context blocks
+export {
+  InMemoryContextBlockStore,
+  ContextBlockNotFoundError,
+} from './context/context-block-store.js';
+export type {
+  ContextBlockStore,
+  RegisteredBlock,
+  InMemoryContextBlockStoreOptions,
+} from './context/context-block-store.js';
+export { expandContextBlocks } from './context/expand-context-blocks.js';
 
 // Provider
 export { createProvider } from './provider.js';

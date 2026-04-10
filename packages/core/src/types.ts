@@ -1,3 +1,5 @@
+import type { ContextBlockStore } from './context/context-block-store.js';
+
 // === Tier & Capability ===
 
 export type Tier = 'trivial' | 'standard' | 'reasoning';
@@ -30,6 +32,12 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional context block ids to expand into the prompt before dispatch.
+   *  Each id is resolved against `RunTasksRuntime.contextBlockStore` in
+   *  order and its content is prepended to `prompt` separated by
+   *  '\n\n---\n\n'. The field is stripped from the task that reaches the
+   *  provider so runners never see it. See `expandContextBlocks`. */
+  contextBlockIds?: string[]
 }
 
 // === Provider Config (discriminated union) ===
@@ -183,6 +191,28 @@ export interface RunOptions {
    *  and should return quickly. Wired in Task 8 (interface + plumbing);
    *  runners emit events in Tasks 9-11. */
   onProgress?: (event: ProgressEvent) => void
+  /** Called exactly once per attempt, when the runner has constructed the
+   *  very first request body it will send to the provider (after prevention
+   *  scaffolding — system prompt + budget hint — has been assembled, but
+   *  before any tool cycles, re-grounding, supervision, or watchdog
+   *  injections happen). The escalation orchestrator passes a closure here
+   *  to capture the metadata into the `AttemptRecord` it builds. If a
+   *  runner is re-invoked by escalation, the callback fires again for the
+   *  new attempt because the orchestrator resets its per-attempt closure.
+   *  Passing nothing keeps existing behaviour (the callback is a no-op). */
+  onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
+}
+
+/**
+ * Runtime dependencies for `runTasks`. Kept separate from static `MultiModelConfig`
+ * because these are per-session objects (today: the context-block store) the
+ * caller owns and passes in explicitly, not config loaded from disk.
+ */
+export interface RunTasksRuntime {
+  /** Optional store of registered context blocks. When provided, each task's
+   *  `contextBlockIds` are resolved against this store before dispatch; when
+   *  omitted, tasks with `contextBlockIds` are passed through unchanged. */
+  contextBlockStore?: ContextBlockStore
 }
 
 /**

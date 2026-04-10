@@ -154,6 +154,58 @@ describe('delegateWithEscalation', () => {
     expect(events.filter((e) => e.kind === 'escalation_start')).toHaveLength(0);
   });
 
+  it('captures onInitialRequest metadata from each attempt into AttemptRecord', async () => {
+    // Mock provider that invokes `onInitialRequest` with per-attempt
+    // metadata before returning — exactly what a real runner would do
+    // after assembling its first request body.
+    const makeMockRunner = (
+      lengthChars: number,
+      sha256: string,
+      status: RunResult['status'],
+      output = '',
+    ) =>
+      vi.fn(async (_prompt: string, opts: { onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void }) => {
+        opts.onInitialRequest?.({ lengthChars, sha256 });
+        return makeMockResult(status, output);
+      });
+
+    const cheap: Provider = {
+      name: 'cheap',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: makeMockRunner(1234, 'deadbeef', 'incomplete', 'partial'),
+    };
+    const expensive: Provider = {
+      name: 'expensive',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: makeMockRunner(1300, 'cafebabe', 'ok', 'done'),
+    };
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const result = await delegateWithEscalation(task, [cheap, expensive]);
+
+    expect(result.escalationLog).toHaveLength(2);
+    expect(result.escalationLog[0].initialPromptLengthChars).toBe(1234);
+    expect(result.escalationLog[0].initialPromptHash).toBe('deadbeef');
+    expect(result.escalationLog[1].initialPromptLengthChars).toBe(1300);
+    expect(result.escalationLog[1].initialPromptHash).toBe('cafebabe');
+  });
+
+  it('defaults AttemptRecord initial-prompt fields to zero/empty when the runner does not call onInitialRequest', async () => {
+    // Providers that do not invoke onInitialRequest (pre-Task-12 behavior).
+    // The orchestrator must fall through to the zero/empty defaults.
+    const silent: Provider = {
+      name: 'silent',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('ok', 'done')),
+    };
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const result = await delegateWithEscalation(task, [silent]);
+
+    expect(result.escalationLog[0].initialPromptLengthChars).toBe(0);
+    expect(result.escalationLog[0].initialPromptHash).toBe('');
+  });
+
   it('honors explicit pin: does not escalate when task.provider is set', async () => {
     const failingProvider: Provider = {
       name: 'pinned',
