@@ -1,5 +1,9 @@
-import { describe, it, expect } from 'vitest';
+import { vi, beforeEach, afterEach } from 'vitest';
 import { stripThinkingTags } from '../../packages/core/src/runners/openai-runner.js';
+
+// -----------------------------------------------------------------------------
+// stripThinkingTags — unit-level regression tests (preserved from pre-Task 3)
+// -----------------------------------------------------------------------------
 
 describe('stripThinkingTags', () => {
   it('returns plain text unchanged', () => {
@@ -57,5 +61,277 @@ describe('stripThinkingTags', () => {
     expect(result).toBe(
       '[model final message contained only <think>...</think> reasoning, no plain-text answer]',
     );
+  });
+});
+
+// -----------------------------------------------------------------------------
+// runOpenAI — integration of prevention + recovery + watchdog
+//
+// These tests mock @openai/agents so we can observe what instructions the
+// Agent is constructed with, what prompt is passed to run(), and how the
+// supervision / watchdog loop dispatches follow-up calls. One test per
+// integration point (self-review checklist).
+// -----------------------------------------------------------------------------
+
+// Partial mock: keep the real `tool()` helper and the real
+// `MaxTurnsExceededError` class (the runner uses `instanceof` on it), but
+// replace `Agent`, `run`, `OpenAIChatCompletionsModel`, and
+// `setTracingDisabled` with test spies we can control and inspect.
+vi.mock('@openai/agents', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@openai/agents')>();
+  return {
+    ...actual,
+    Agent: vi.fn().mockImplementation((opts: Record<string, unknown>) => ({
+      __mockAgent: true,
+      name: opts.name,
+      instructions: opts.instructions,
+      tools: opts.tools,
+      modelSettings: opts.modelSettings,
+    })),
+    run: vi.fn(),
+    setTracingDisabled: vi.fn(),
+    OpenAIChatCompletionsModel: vi.fn().mockImplementation(() => ({ __mockModel: true })),
+  };
+});
+
+const { Agent: MockAgent, run: mockRun } = vi.mocked(
+  await import('@openai/agents'),
+);
+
+/** Long enough that validateCompletion considers it valid (>= 200 chars). */
+const VALID_FINAL_OUTPUT =
+  'This is a complete sub-agent answer that is long enough to pass the validateCompletion minimum-length heuristic without any additional structural hints because it carries more than 200 characters of plain text content.';
+
+/**
+ * Build a minimal mocked @openai/agents RunResult that the runner can
+ * consume. We only populate the fields the runner touches.
+ */
+function makeMockRunResult(overrides: {
+  finalOutput?: string;
+  newItems?: Array<{ type: string; rawItem: { role: string; content: Array<{ type: string; text: string }> } }>;
+  inputTokens?: number;
+  outputTokens?: number;
+  requests?: number;
+  history?: unknown[];
+}) {
+  const assistantText = overrides.finalOutput ?? VALID_FINAL_OUTPUT;
+  return {
+    finalOutput: assistantText,
+    newItems: overrides.newItems ?? [
+      {
+        type: 'message_output_item',
+        rawItem: {
+          role: 'assistant',
+          content: [{ type: 'output_text', text: assistantText }],
+        },
+      },
+    ],
+    history: overrides.history ?? [],
+    state: {
+      usage: {
+        inputTokens: overrides.inputTokens ?? 1000,
+        outputTokens: overrides.outputTokens ?? 200,
+        totalTokens: (overrides.inputTokens ?? 1000) + (overrides.outputTokens ?? 200),
+        requests: overrides.requests ?? 3,
+      },
+    },
+  };
+}
+
+const providerConfig = {
+  type: 'openai-compatible' as const,
+  model: 'test-model',
+  baseUrl: 'http://localhost:9999',
+  apiKey: 'test-key',
+};
+const defaults = { maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const };
+
+// Minimal OpenAI client stub — the runner just passes it through to the
+// OpenAIChatCompletionsModel, which is itself mocked.
+const clientStub = {} as unknown as import('openai').default;
+
+describe('runOpenAI — prevention scaffolding integration', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('uses buildSystemPrompt() output as the Agent instructions and prepends the budget hint to the user prompt', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({}));
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    await runOpenAI('original user task', {}, { client: clientStub, providerConfig, defaults });
+
+    // Agent constructor received the prevention-layer system prompt.
+    // It must contain the "final assistant message" discipline line.
+    const agentCall = MockAgent.mock.calls[0][0] as { instructions: string };
+    expect(agentCall.instructions).toContain('final assistant message');
+    expect(agentCall.instructions).toContain('Anti-pattern');
+
+    // The user prompt passed to run() is the original prompt with the
+    // buildBudgetHint preamble prepended.
+    const runCall = mockRun.mock.calls[0];
+    const inputArg = runCall[1] as string;
+    expect(typeof inputArg).toBe('string');
+    expect(inputArg).toContain('Budget reminder');
+    expect(inputArg).toContain('original user task');
+    expect(inputArg.indexOf('Budget reminder')).toBeLessThan(inputArg.indexOf('original user task'));
+  });
+
+  it('populates the scratchpad from result.newItems (multi-part output_text concatenation)', async () => {
+    // Force the first finalOutput to be an exploration fragment so the
+    // runner re-prompts and we get TWO run() calls. On the second call we
+    // inspect what is returned and verify the scratchpad latest() ends up
+    // as the SECOND turn's concatenated newItems text (proving the
+    // extractor walked newItems, not finalOutput).
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [
+                  { type: 'output_text', text: 'part A ' },
+                  { type: 'output_text', text: 'part B' },
+                ],
+              },
+            },
+          ],
+        }),
+      )
+      // Supervision retry also returns a degenerate output (short fragment)
+      // so the loop exhausts retries and salvages from the scratchpad.
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'still short',
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'concatenated turn two' }],
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'also short',
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'turn three text' }],
+              },
+            },
+          ],
+        }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    // Status should be incomplete (supervision exhausted) and output should
+    // be the scratchpad's latest — i.e., the extractor-populated text from
+    // the last agentRun result, NOT the finalOutput field.
+    expect(result.status).toBe('incomplete');
+    expect(result.output).toBe('turn three text');
+  });
+
+  it('invokes the supervision re-prompt path when validateCompletion returns invalid', async () => {
+    // First call: exploration fragment → degenerate.
+    // Second call: valid long answer → clean ok return.
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check' }))
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT }));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe(VALID_FINAL_OUTPUT);
+
+    // The second run() call must have been a supervision re-prompt: the
+    // input should be an AgentInputItem[] (conversation continuation) whose
+    // LAST item is a user message containing the re-prompt wording.
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    const secondInput = mockRun.mock.calls[1][1] as Array<{ role: string; content: string }>;
+    expect(Array.isArray(secondInput)).toBe(true);
+    const lastMessage = secondInput[secondInput.length - 1];
+    expect(lastMessage.role).toBe('user');
+    // buildRePrompt for a 'fragment' kind quotes the wording "exploration fragment".
+    expect(lastMessage.content).toContain('exploration fragment');
+  });
+
+  it('triggers the force_salvage path when input tokens cross the 95% watchdog threshold', async () => {
+    // Soft limit override so 95% is easy to hit: 1000 -> force_salvage at 950.
+    const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
+
+    // First and only run() returns a degenerate output AND has inputTokens=960
+    // (>= 95% of 1000). The runner should force-salvage immediately.
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: 'Let me check',
+        inputTokens: 960,
+        newItems: [
+          {
+            type: 'message_output_item',
+            rawItem: {
+              role: 'assistant',
+              content: [{ type: 'output_text', text: 'salvageable scratchpad text' }],
+            },
+          },
+        ],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, {
+      client: clientStub,
+      providerConfig: pc,
+      defaults,
+    });
+
+    expect(result.status).toBe('incomplete');
+    // Only one run() call — the watchdog forcibly terminates before any
+    // supervision re-prompt or warning nudge fires.
+    expect(mockRun).toHaveBeenCalledTimes(1);
+    expect(result.output).toBe('salvageable scratchpad text');
+  });
+
+  it('salvages scratchpad.latest() on an SDK error instead of returning "Sub-agent error: ..."', async () => {
+    // First call succeeds with a degenerate fragment (populates scratchpad).
+    // Second call (the re-prompt) throws — the runner should salvage the
+    // scratchpad's latest() emission, not the bare error string.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'some buffered findings here' }],
+              },
+            },
+          ],
+        }),
+      )
+      .mockRejectedValueOnce(new Error('upstream API exploded'));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('error');
+    expect(result.output).toBe('some buffered findings here');
+    expect(result.error).toBe('upstream API exploded');
   });
 });

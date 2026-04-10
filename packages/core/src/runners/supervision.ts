@@ -56,8 +56,16 @@ const CONTINUATION_TAIL_WINDOW = 80;
 /** Tail length (chars) quoted back to the model in the re-prompt via `result.tail`. */
 const REPROMPT_TAIL_QUOTE = 60;
 
-// NOTE: duplicate of openai-runner.ts:28 — DRY'd in Task 3
-const THINKING_DIAGNOSTIC_MARKER = '[model final message contained only <think>...</think> reasoning, no plain-text answer]';
+/**
+ * Marker returned by `stripThinkingTags` when the entire final message was
+ * `<think>...</think>` reasoning and stripping left nothing. Exported here
+ * (rather than from openai-runner.ts) so that `validateCompletion` can detect
+ * the marker without importing the runner, and so other runners can reuse it
+ * when they implement their own thinking-only salvage. There is exactly one
+ * canonical constant.
+ */
+export const THINKING_DIAGNOSTIC_MARKER =
+  '[model final message contained only <think>...</think> reasoning, no plain-text answer]';
 
 const CONTINUATION_PHRASES = [
   'let me',
