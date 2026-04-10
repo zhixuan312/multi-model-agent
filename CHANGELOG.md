@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [0.1.1] - 2026-04-10
+
+Patch release for `@zhixuan92/multi-model-agent-mcp` only.
+`@zhixuan92/multi-model-agent-core` remains at `0.1.0`.
+
+### Fixed
+
+- **mcp**: `dist/cli.js` is now executable (`chmod +x` after `tsc`),
+  and a `prepublishOnly` hook runs the build before every publish.
+  In `0.1.0` the file was emitted with mode `0644`, which caused
+  `npm publish` to silently strip the `bin` entry from the published
+  manifest with the warning `"bin[multi-model-agent]" script name
+  dist/cli.js was invalid and removed`. The result was a published
+  package with no `multi-model-agent` command, breaking
+  `npx @zhixuan92/multi-model-agent-mcp serve` and the global install
+  path. `0.1.0` has been deprecated; please use `0.1.1` or later.
+
 ## [0.1.0] - 2026-04-10
 
 Initial public release.
@@ -56,5 +73,6 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.1...HEAD
+[0.1.1]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.0...v0.1.1
 [0.1.0]: https://github.com/zhixuan312/multi-model-agent/releases/tag/v0.1.0
