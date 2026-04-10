@@ -85,7 +85,7 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
  * 2. MULTI_MODEL_CONFIG environment variable
  * 3. ~/.multi-model/config.json (default home-directory location)
  */
-async function discoverConfig(): Promise<MultiModelConfig> {
+export async function discoverConfig(): Promise<MultiModelConfig> {
   const args = process.argv.slice(2);
 
   // 1. Explicit --config
