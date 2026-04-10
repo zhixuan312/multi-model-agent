@@ -81,6 +81,7 @@ export function createToolImplementations(
 
   return {
     async readFile(filePath: string): Promise<string> {
+      tracker.trackToolCall(`readFile(${filePath})`);
       const resolved = path.resolve(cwd, filePath);
       if (confine) await assertWithinCwd(cwd, resolved);
       // Reject oversized files BEFORE reading them into memory. stat is
@@ -97,6 +98,7 @@ export function createToolImplementations(
     },
 
     async writeFile(filePath: string, content: string): Promise<void> {
+      tracker.trackToolCall(`writeFile(${filePath}, ${content.length}B)`);
       const resolved = path.resolve(cwd, filePath);
       if (confine) await assertWithinCwd(cwd, resolved);
       // Reject oversized writes BEFORE touching the disk. content.length is
@@ -113,6 +115,7 @@ export function createToolImplementations(
     },
 
     async runShell(command: string): Promise<ShellResult> {
+      tracker.trackToolCall(`runShell(${command.length > 80 ? command.slice(0, 77) + '…' : command})`);
       if (confine) {
         throw new Error('runShell is disabled under sandboxPolicy "cwd-only". Use readFile, writeFile, grep, glob, or listFiles instead.');
       }
@@ -137,6 +140,7 @@ export function createToolImplementations(
     },
 
     async glob(pattern: string): Promise<string[]> {
+      tracker.trackToolCall(`glob(${pattern})`);
       try {
         const results: string[] = [];
         const realCwd = confine ? await fs.realpath(cwd) : null;
@@ -160,6 +164,7 @@ export function createToolImplementations(
     },
 
     async grep(pattern: string, target: string): Promise<string> {
+      tracker.trackToolCall(`grep(${target}, "${pattern.length > 60 ? pattern.slice(0, 57) + '…' : pattern}")`);
       const resolved = path.resolve(cwd, target);
       if (confine) await assertWithinCwd(cwd, resolved);
 
@@ -215,6 +220,7 @@ export function createToolImplementations(
     },
 
     async listFiles(dirPath: string): Promise<string[]> {
+      tracker.trackToolCall(`listFiles(${dirPath})`);
       const resolved = path.resolve(cwd, dirPath);
       if (confine) await assertWithinCwd(cwd, resolved);
       const entries = await fs.readdir(resolved, { withFileTypes: true });

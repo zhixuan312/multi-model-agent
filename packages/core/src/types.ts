@@ -35,6 +35,10 @@ export interface CodexProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
+  inputCostPerMTok?: number
+  /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
+  outputCostPerMTok?: number
 }
 
 export interface ClaudeProviderConfig {
@@ -46,6 +50,9 @@ export interface ClaudeProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing override; if set, recomputes costUSD from token usage instead of trusting the SDK. */
+  inputCostPerMTok?: number
+  outputCostPerMTok?: number
 }
 
 export interface OpenAICompatibleProviderConfig {
@@ -61,6 +68,10 @@ export interface OpenAICompatibleProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
+  inputCostPerMTok?: number
+  /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
+  outputCostPerMTok?: number
 }
 
 /** Discriminated union — each provider type has distinct required fields. */
@@ -98,6 +109,8 @@ export interface RunResult {
   filesRead: string[]
   /** Files the worker wrote (via writeFile). */
   filesWritten: string[]
+  /** Compact one-line summaries of every tool the worker invoked, in order. */
+  toolCalls: string[]
   error?: string
 }
 
@@ -144,6 +157,30 @@ export interface ProviderEligibility {
 }
 
 // === Utilities ===
+
+/**
+ * Compute USD cost from token usage and the provider config's optional
+ * per-million-token rates. Returns null when either rate is missing — that
+ * way the caller can distinguish "we know the cost is zero" (free provider
+ * with both rates set to 0) from "we don't know the cost" (rates not
+ * configured). Negative or non-finite rates are treated as missing.
+ */
+export function computeCostUSD(
+  inputTokens: number,
+  outputTokens: number,
+  config: ProviderConfig,
+): number | null {
+  const inRate = config.inputCostPerMTok;
+  const outRate = config.outputCostPerMTok;
+  if (
+    inRate === undefined || outRate === undefined ||
+    !Number.isFinite(inRate) || !Number.isFinite(outRate) ||
+    inRate < 0 || outRate < 0
+  ) {
+    return null;
+  }
+  return (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
+}
 
 export function withTimeout<T>(
   promise: Promise<T>,

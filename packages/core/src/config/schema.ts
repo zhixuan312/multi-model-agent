@@ -13,6 +13,10 @@ const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
 const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
 const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
+// Per-million-token pricing for cost computation. Must be non-negative; zero
+// is allowed (free providers can set both rates to 0 to get a deterministic
+// costUSD: 0 instead of null).
+const tokenCostSchema = z.number().nonnegative().finite().optional();
 
 export const codexProviderConfigSchema = z.object({
   type: z.literal('codex'),
@@ -23,6 +27,8 @@ export const codexProviderConfigSchema = z.object({
   sandboxPolicy: sandboxPolicySchema,
   hostedTools: hostedToolsSchema.optional(),
   costTier: costTierSchema.optional(),
+  inputCostPerMTok: tokenCostSchema,
+  outputCostPerMTok: tokenCostSchema,
 });
 
 export const claudeProviderConfigSchema = z.object({
@@ -34,6 +40,8 @@ export const claudeProviderConfigSchema = z.object({
   sandboxPolicy: sandboxPolicySchema,
   hostedTools: hostedToolsSchema.optional(),
   costTier: costTierSchema.optional(),
+  inputCostPerMTok: tokenCostSchema,
+  outputCostPerMTok: tokenCostSchema,
 });
 
 export const openAICompatibleProviderConfigSchema = z.object({
@@ -48,6 +56,8 @@ export const openAICompatibleProviderConfigSchema = z.object({
   sandboxPolicy: sandboxPolicySchema,
   hostedTools: hostedToolsSchema.optional(),
   costTier: costTierSchema.optional(),
+  inputCostPerMTok: tokenCostSchema,
+  outputCostPerMTok: tokenCostSchema,
 });
 
 export const providerConfigSchema = z.discriminatedUnion('type', [

@@ -1,5 +1,5 @@
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createClaudeToolServer } from '../tools/claude-adapter.js';
@@ -102,25 +102,28 @@ export async function runClaude(
       return {
         output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
         status: 'error',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
         turns,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
         error: err instanceof Error ? err.message : String(err),
       };
     }
 
     const filesRead = tracker.getReads();
     const filesWritten = tracker.getWrites();
+    const toolCalls = tracker.getToolCalls();
 
     if (hitMaxTurns) {
       return {
         output: output || `Agent exceeded max turns (${maxTurns}).`,
         status: 'max_turns',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
         turns,
         filesRead,
         filesWritten,
+        toolCalls,
       };
     }
 
@@ -138,10 +141,11 @@ export async function runClaude(
           filesWritten,
         }),
         status: 'incomplete',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
         turns,
         filesRead,
         filesWritten,
+        toolCalls,
       };
     }
 
@@ -152,20 +156,31 @@ export async function runClaude(
         inputTokens,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
-        costUSD,
+        costUSD: effectiveCost(costUSD),
       },
       turns,
       filesRead,
       filesWritten,
+      toolCalls,
     };
   };
+
+  // The Claude Agent SDK reports its own costUSD via total_cost_usd. If the
+  // user set inputCostPerMTok / outputCostPerMTok in their config (e.g. for
+  // a custom-priced gateway), prefer that calculation over the SDK's number;
+  // otherwise fall back to whatever the SDK gave us.
+  function effectiveCost(sdkCost: number | null): number | null {
+    const computed = computeCostUSD(inputTokens, outputTokens, providerConfig);
+    return computed ?? sdkCost;
+  }
 
   return withTimeout(run(), timeoutMs, () => ({
     output: `Agent timed out after ${timeoutMs}ms.`,
     status: 'timeout',
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
-    usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+    toolCalls: tracker.getToolCalls(),
+    usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
     turns,
   }), abortController);
 }

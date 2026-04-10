@@ -2,7 +2,7 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import type { Response, ResponseInputItem } from 'openai/resources/responses/responses';
 import { getCodexAuth } from '../auth/codex-oauth.js';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import type { SandboxPolicy } from '../types.js';
@@ -348,6 +348,7 @@ export async function runCodex(
           }
           const filesRead = tracker.getReads();
           const filesWritten = tracker.getWrites();
+          const toolCallsTrace = tracker.getToolCalls();
           return {
             output: hasText
               ? output
@@ -364,11 +365,12 @@ export async function runCodex(
               inputTokens,
               outputTokens,
               totalTokens: inputTokens + outputTokens,
-              costUSD: null,
+              costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
             },
             turns,
             filesRead,
             filesWritten,
+            toolCalls: toolCallsTrace,
           };
         }
 
@@ -407,11 +409,12 @@ export async function runCodex(
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
-          costUSD: null,
+          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
         },
         turns,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
       };
     } catch (err) {
       // OpenAI SDK's APIError carries status/body/headers — surface them
@@ -444,11 +447,12 @@ export async function runCodex(
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
-          costUSD: null,
+          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
         },
         turns,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
         error: detailed,
       };
     }
@@ -459,7 +463,13 @@ export async function runCodex(
     status: 'timeout',
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
-    usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: null },
+    toolCalls: tracker.getToolCalls(),
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+    },
     turns,
   }), abortController);
 }

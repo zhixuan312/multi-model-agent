@@ -11,6 +11,7 @@ function errorResult(error: string): RunResult {
     turns: 0,
     filesRead: [],
     filesWritten: [],
+    toolCalls: [],
     error,
   };
 }

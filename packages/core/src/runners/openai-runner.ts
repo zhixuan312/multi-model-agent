@@ -1,6 +1,6 @@
 import { Agent, run as agentRun, setTracingDisabled, OpenAIChatCompletionsModel, MaxTurnsExceededError } from '@openai/agents';
 import OpenAI from 'openai';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createOpenAITools } from '../tools/openai-adapter.js';
@@ -85,6 +85,8 @@ export async function runOpenAI(
       const usage = result.state.usage;
       const filesRead = tracker.getReads();
       const filesWritten = tracker.getWrites();
+      const toolCalls = tracker.getToolCalls();
+      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, runner.providerConfig);
 
       // The @openai/agents SDK terminates the loop the moment the model
       // emits an assistant message with no tool calls. The runner used to
@@ -111,11 +113,12 @@ export async function runOpenAI(
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
             totalTokens: usage.totalTokens,
-            costUSD: null,
+            costUSD,
           },
           turns: usage.requests,
           filesRead,
           filesWritten,
+          toolCalls,
         };
       }
 
@@ -126,11 +129,12 @@ export async function runOpenAI(
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
           totalTokens: usage.totalTokens,
-          costUSD: null,
+          costUSD,
         },
         turns: usage.requests,
         filesRead,
         filesWritten,
+        toolCalls,
       };
     } catch (err) {
       if (err instanceof MaxTurnsExceededError) {
@@ -141,6 +145,7 @@ export async function runOpenAI(
           turns: maxTurns,
           filesRead: tracker.getReads(),
           filesWritten: tracker.getWrites(),
+          toolCalls: tracker.getToolCalls(),
         };
       }
       return {
@@ -150,6 +155,7 @@ export async function runOpenAI(
         turns: 0,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
         error: err instanceof Error ? err.message : String(err),
       };
     }
@@ -160,6 +166,7 @@ export async function runOpenAI(
     status: 'timeout',
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
     turns: maxTurns,
   }), abortController);

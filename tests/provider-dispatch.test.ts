@@ -29,6 +29,7 @@ const mockOkResult = {
   turns: 1,
   filesRead: [],
   filesWritten: [],
+  toolCalls: [],
 };
 
 describe('createProvider dispatch', () => {

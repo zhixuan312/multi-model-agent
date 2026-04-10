@@ -49,6 +49,7 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         turns: 0,
         filesRead: [],
         filesWritten: [],
+        toolCalls: [],
         error: err instanceof Error ? err.message : String(err),
       };
     }
