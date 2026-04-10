@@ -5,6 +5,7 @@ import type {
   AttemptRecord,
   MultiModelConfig,
   CostTier,
+  ProgressEvent,
 } from './types.js';
 import { createProvider } from './provider.js';
 import { getProviderEligibility } from './routing/get-provider-eligibility.js';
@@ -14,6 +15,12 @@ export interface DelegateOptions {
   /** When true, the orchestrator does not walk the chain on failure —
    *  the first (and only) provider's result is returned as-is. */
   explicitlyPinned?: boolean;
+  /** Optional in-flight progress sink. When provided, it is threaded into
+   *  every `provider.run(...)` call so runners can emit turn/tool/injection
+   *  events, and the orchestrator itself emits one `escalation_start` event
+   *  between attempts whenever it hops to the next provider in the chain.
+   *  The callback MUST NOT throw. See `ProgressEvent` for variants. */
+  onProgress?: (event: ProgressEvent) => void;
 }
 
 // NOTE: must stay byte-identical to the ordering in
@@ -69,7 +76,21 @@ export async function delegateWithEscalation(
 
   const attempts: { result: RunResult; record: AttemptRecord }[] = [];
 
-  for (const provider of chain) {
+  for (let i = 0; i < chain.length; i++) {
+    const provider = chain[i];
+
+    // Emit one `escalation_start` between attempts (never before the first).
+    // The previous attempt's record is guaranteed to exist here because i>0.
+    if (i > 0 && options.onProgress) {
+      const prev = attempts[attempts.length - 1].record;
+      options.onProgress({
+        kind: 'escalation_start',
+        previousProvider: prev.provider,
+        previousReason: prev.reason ?? `status=${prev.status}`,
+        nextProvider: provider.name,
+      });
+    }
+
     const result = await provider.run(task.prompt, {
       tools: task.tools,
       maxTurns: task.maxTurns,
@@ -77,6 +98,7 @@ export async function delegateWithEscalation(
       cwd: task.cwd,
       effort: task.effort,
       sandboxPolicy: task.sandboxPolicy,
+      onProgress: options.onProgress,
     });
 
     const record: AttemptRecord = {

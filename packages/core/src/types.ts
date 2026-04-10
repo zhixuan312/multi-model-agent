@@ -176,7 +176,54 @@ export interface RunOptions {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional callback invoked by runners and the escalation orchestrator to
+   *  stream in-flight progress events. See `ProgressEvent` for the full set
+   *  of variants. Runners receive this via `provider.run(..., { onProgress })`
+   *  and call it synchronously from their loop; the callback MUST NOT throw
+   *  and should return quickly. Wired in Task 8 (interface + plumbing);
+   *  runners emit events in Tasks 9-11. */
+  onProgress?: (event: ProgressEvent) => void
 }
+
+/**
+ * In-flight progress signal emitted by runners and the escalation
+ * orchestrator. Consumers (today: the MCP cli bridge) translate these into
+ * transport-level notifications so callers can observe a sub-agent's work
+ * without polling. One `ProgressEvent` per meaningful state transition.
+ *
+ * Variants mirror spec Part B.1. Runner emission lives in Tasks 9-11; the
+ * escalation `escalation_start` hop is emitted by `delegateWithEscalation`
+ * itself in Task 8.
+ */
+export type ProgressEvent =
+  | { kind: 'turn_start'; turn: number; provider: string }
+  | { kind: 'tool_call'; turn: number; toolSummary: string }
+  | { kind: 'text_emission'; turn: number; chars: number; preview: string }
+  | {
+      kind: 'turn_complete'
+      turn: number
+      cumulativeInputTokens: number
+      cumulativeOutputTokens: number
+    }
+  | {
+      kind: 'injection'
+      injectionType:
+        | 'reground'
+        | 'supervise_empty'
+        | 'supervise_thinking'
+        | 'supervise_fragment'
+        | 'watchdog_warning'
+        | 'watchdog_force_salvage'
+      turn: number
+      contentLengthChars: number
+    }
+  | {
+      kind: 'escalation_start'
+      previousProvider: string
+      previousReason: string
+      nextProvider: string
+    }
+  | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===
 

@@ -21,6 +21,7 @@ export type {
   RunResult,
   Provider,
   RunOptions,
+  ProgressEvent,
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,

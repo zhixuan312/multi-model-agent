@@ -1,8 +1,34 @@
-import type { Provider, RunResult, TaskSpec, MultiModelConfig } from './types.js';
+import type {
+  Provider,
+  RunResult,
+  TaskSpec,
+  MultiModelConfig,
+  ProgressEvent,
+} from './types.js';
 import { createProvider } from './provider.js';
 import { getProviderEligibility } from './routing/get-provider-eligibility.js';
 import { selectProviderForTask } from './routing/select-provider-for-task.js';
 import { buildEscalationChain, delegateWithEscalation } from './delegate-with-escalation.js';
+
+/**
+ * Per-task progress sink. `runTasks` invokes this for every
+ * `ProgressEvent` emitted while working on task at `taskIndex`. The caller
+ * (today: the MCP cli bridge) is responsible for disambiguating which task
+ * emitted which event — this is the cheapest contract: the orchestrator
+ * already knows each task's position in the input array, so the caller
+ * doesn't have to wrap N closures.
+ */
+export type RunTasksProgressCallback = (
+  taskIndex: number,
+  event: ProgressEvent,
+) => void;
+
+export interface RunTasksOptions {
+  /** Optional progress sink. See `RunTasksProgressCallback`. When omitted,
+   *  no progress events are produced — backward-compatible with callers
+   *  that predate Task 8. */
+  onProgress?: RunTasksProgressCallback;
+}
 
 function errorResult(error: string): RunResult {
   return {
@@ -26,6 +52,7 @@ type ResolvedTask =
 async function executeTask(
   resolved: Exclude<ResolvedTask, { error: string }>,
   config: MultiModelConfig,
+  onProgress?: (event: ProgressEvent) => void,
 ): Promise<RunResult> {
   try {
     if (resolved.pinned) {
@@ -33,7 +60,7 @@ async function executeTask(
       return await delegateWithEscalation(
         resolved.task,
         [resolved.provider],
-        { explicitlyPinned: true },
+        { explicitlyPinned: true, onProgress },
       );
     }
     // Auto-routed: walk all eligible providers cheapest-first.
@@ -44,7 +71,7 @@ async function executeTask(
       // surface a structured error rather than throwing.
       return errorResult('No eligible provider found for task at dispatch time.');
     }
-    return await delegateWithEscalation(resolved.task, chain);
+    return await delegateWithEscalation(resolved.task, chain, { onProgress });
   } catch (err) {
     return errorResult(err instanceof Error ? err.message : String(err));
   }
@@ -53,10 +80,15 @@ async function executeTask(
 /**
  * Run tasks concurrently. Each RunResult corresponds to the matching TaskSpec
  * at the same index. One task failing does not affect others.
+ *
+ * When `options.onProgress` is supplied, it is called with `(taskIndex, event)`
+ * for every progress event emitted by that task's provider run or the
+ * escalation orchestrator. See `ProgressEvent` for variants.
  */
 export async function runTasks(
   tasks: TaskSpec[],
   config: MultiModelConfig,
+  options: RunTasksOptions = {},
 ): Promise<RunResult[]> {
   if (tasks.length === 0) return [];
 
@@ -101,11 +133,17 @@ export async function runTasks(
   });
 
   return Promise.all(
-    resolved.map((r): Promise<RunResult> => {
+    resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {
         return Promise.resolve(errorResult(r.error));
       }
-      return executeTask(r, config);
+      // Bind the task index into a per-task sink so the caller can
+      // disambiguate which task an event belongs to without threading
+      // extra fields through the orchestrator.
+      const taskProgress = options.onProgress
+        ? (event: ProgressEvent) => options.onProgress!(index, event)
+        : undefined;
+      return executeTask(r, config, taskProgress);
     }),
   );
 }

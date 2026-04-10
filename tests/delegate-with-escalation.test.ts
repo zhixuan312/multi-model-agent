@@ -1,6 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
 import { delegateWithEscalation } from '../packages/core/src/delegate-with-escalation.js';
-import type { TaskSpec, RunResult, Provider } from '../packages/core/src/types.js';
+import type {
+  TaskSpec,
+  RunResult,
+  Provider,
+  ProgressEvent,
+} from '../packages/core/src/types.js';
 
 function makeMockResult(status: RunResult['status'], output = ''): RunResult {
   return {
@@ -89,6 +94,61 @@ describe('delegateWithEscalation', () => {
     expect(result.escalationLog).toHaveLength(2);
     expect(cheapFail.run).toHaveBeenCalledOnce();
     expect(expensiveFail.run).toHaveBeenCalledOnce();
+  });
+
+  it('emits escalation_start between attempts and threads onProgress into runners', async () => {
+    const events: ProgressEvent[] = [];
+    const onProgress = (e: ProgressEvent) => { events.push(e); };
+
+    const failingProvider: Provider = {
+      name: 'cheap',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', 'partial')),
+    };
+    const okProvider: Provider = {
+      name: 'expensive',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('ok', 'complete')),
+    };
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    await delegateWithEscalation(task, [failingProvider, okProvider], { onProgress });
+
+    // Exactly one escalation_start event between the two attempts.
+    const escalations = events.filter((e) => e.kind === 'escalation_start');
+    expect(escalations).toHaveLength(1);
+    const escalation = escalations[0];
+    if (escalation.kind !== 'escalation_start') throw new Error('type narrow');
+    expect(escalation.previousProvider).toBe('cheap');
+    expect(escalation.nextProvider).toBe('expensive');
+    expect(escalation.previousReason).toBe('status=incomplete');
+
+    // Callback is also threaded into both provider.run options — Tasks 9-11
+    // will emit turn/tool events through it.
+    expect(failingProvider.run).toHaveBeenCalledWith(
+      'test',
+      expect.objectContaining({ onProgress }),
+    );
+    expect(okProvider.run).toHaveBeenCalledWith(
+      'test',
+      expect.objectContaining({ onProgress }),
+    );
+  });
+
+  it('does not emit escalation_start when the first attempt succeeds', async () => {
+    const events: ProgressEvent[] = [];
+    const onProgress = (e: ProgressEvent) => { events.push(e); };
+
+    const okProvider: Provider = {
+      name: 'cheap',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('ok', 'success')),
+    };
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    await delegateWithEscalation(task, [okProvider], { onProgress });
+
+    expect(events.filter((e) => e.kind === 'escalation_start')).toHaveLength(0);
   });
 
   it('honors explicit pin: does not escalate when task.provider is set', async () => {

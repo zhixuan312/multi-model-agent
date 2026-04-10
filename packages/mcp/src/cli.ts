@@ -10,7 +10,11 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import type {
+  MultiModelConfig,
+  TaskSpec,
+  ProgressEvent,
+} from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';
@@ -55,8 +59,77 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
     {
       tasks: z.array(buildTaskSchema(availableProviders)).describe('Array of tasks to execute in parallel'),
     },
-    async ({ tasks }) => {
-      const results = await runTasks(tasks as TaskSpec[], config);
+    async ({ tasks }, extra) => {
+      // --- OQ#6 resolution: MCP SDK progress notification API ---
+      //
+      // The @modelcontextprotocol/sdk >= 1.x exposes progress notifications
+      // on the tool-handler `extra` argument: the second parameter of the
+      // tool callback is `RequestHandlerExtra<ServerRequest, ServerNotification>`
+      // (see node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.d.ts
+      // line 173, and server/mcp.d.ts line 250 for `BaseToolCallback`).
+      //
+      // That type carries two things we need:
+      //   1. `extra._meta.progressToken?: string | number` — present iff the
+      //      client opted in by sending `_meta.progressToken` with its
+      //      `tools/call` request (MCP spec: notifications/progress).
+      //   2. `extra.sendNotification(notification)` — a request-scoped sender
+      //      that emits `ServerNotification`s correlated with this call.
+      //      `ServerNotification` is a union that includes
+      //      `ProgressNotificationSchema` with method `"notifications/progress"`
+      //      and params `{ progressToken, progress, total?, message? }`
+      //      (types.d.ts line 954).
+      //
+      // So the bridge is: for each `ProgressEvent` we receive from core, if
+      // the client supplied a `progressToken`, emit one `notifications/progress`
+      // message whose `message` field is a JSON-encoded envelope. This is an
+      // opt-in channel — clients that don't send `progressToken` get zero
+      // notifications, preserving behavior for pre-streaming callers.
+      //
+      // Envelope schema (stable, documented here so clients can parse it):
+      //
+      //     params: {
+      //       progressToken,                // echoed from the request _meta
+      //       progress: <monotonic counter>,// ordinal of this event (1-based)
+      //       message: JSON.stringify({
+      //         taskIndex: <number>,        // index in the original `tasks` array
+      //         event: <ProgressEvent>,     // full ProgressEvent union member
+      //       }),
+      //     }
+      //
+      // `total` is intentionally omitted: we don't know the final event count
+      // in advance. Runners emit events in Tasks 9-11; this commit is plumbing
+      // only and `escalation_start` (emitted by delegateWithEscalation itself)
+      // is the sole observable event in practice.
+      const progressToken = extra._meta?.progressToken as
+        | string
+        | number
+        | undefined;
+
+      let progressCounter = 0;
+      const sendProgress = progressToken !== undefined
+        ? (taskIndex: number, event: ProgressEvent) => {
+            progressCounter += 1;
+            // Fire-and-forget. We swallow rejections so a broken transport
+            // never corrupts the in-flight tool run — worst case the client
+            // misses a progress tick but still gets the final tool result.
+            extra
+              .sendNotification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken,
+                  progress: progressCounter,
+                  message: JSON.stringify({ taskIndex, event }),
+                },
+              })
+              .catch(() => {
+                /* ignore — progress is best-effort */
+              });
+          }
+        : undefined;
+
+      const results = await runTasks(tasks as TaskSpec[], config, {
+        onProgress: sendProgress,
+      });
 
       const response = {
         results: results.map((r, i) => ({
