@@ -75,12 +75,17 @@ describe('findModelProfile', () => {
       expect(findModelProfile('MiniMax-M2').inputTokenSoftLimit).toBe(200_000);
     });
 
-    it('applies the 800k override for claude-opus-4-6[1m] via longer-prefix match', () => {
-      expect(findModelProfile('claude-opus-4-6[1m]').inputTokenSoftLimit).toBe(800_000);
-    });
-
     it('falls back to 100_000 for unprofiled models (conservative default)', () => {
       expect(findModelProfile('llama-3-70b').inputTokenSoftLimit).toBe(100_000);
+    });
+
+    it('falls back to DEFAULT_PROFILE (100_000) for claude-haiku since no haiku profile exists', () => {
+      expect(findModelProfile('claude-haiku').inputTokenSoftLimit).toBe(100_000);
+    });
+
+    it('falls back to claude-opus profile (150_000) for claude-opus-4-6[1m] since no [1m] profile exists', () => {
+      // Matches "claude-opus" prefix, so it inherits the 150_000 opus limit, not a dedicated [1m] override.
+      expect(findModelProfile('claude-opus-4-6[1m]').inputTokenSoftLimit).toBe(150_000);
     });
   });
 

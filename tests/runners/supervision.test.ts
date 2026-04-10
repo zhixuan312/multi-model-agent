@@ -5,8 +5,10 @@ import {
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
-  WATCHDOG_FALLBACK_LIMIT,
+  WATCHDOG_WARNING_RATIO,
+  WATCHDOG_FORCE_SALVAGE_RATIO,
   logWatchdogEvent,
+  type WatchdogEventDetails,
 } from '../../packages/core/src/runners/supervision.js';
 import type { ProviderConfig } from '../../packages/core/src/types.js';
 import type { ModelProfile } from '../../packages/core/src/routing/model-profiles.js';
@@ -163,15 +165,14 @@ describe('resolveInputTokenSoftLimit — precedence', () => {
     const config: ProviderConfig = { type: 'codex', model: 'gpt-5-codex' };
     expect(resolveInputTokenSoftLimit(config, profile)).toBe(500_000);
   });
-
-  it('falls back to the hardcoded constant when both are unset', () => {
-    const config: ProviderConfig = { type: 'codex', model: 'unknown-model' };
-    const noLimitProfile = { ...profile, inputTokenSoftLimit: undefined as unknown as number };
-    expect(resolveInputTokenSoftLimit(config, noLimitProfile)).toBe(WATCHDOG_FALLBACK_LIMIT);
-  });
 });
 
 describe('checkWatchdogThreshold', () => {
+  it('exposes the documented 80% / 95% ratios as exports', () => {
+    expect(WATCHDOG_WARNING_RATIO).toBe(0.80);
+    expect(WATCHDOG_FORCE_SALVAGE_RATIO).toBe(0.95);
+  });
+
   it('returns "ok" below 80% of the limit', () => {
     expect(checkWatchdogThreshold(700_000, 1_000_000)).toBe('ok');
   });
@@ -191,10 +192,39 @@ describe('checkWatchdogThreshold', () => {
   it('returns "force_salvage" above 95%', () => {
     expect(checkWatchdogThreshold(1_100_000, 1_000_000)).toBe('force_salvage');
   });
+
+  // Regression for Task 2 review fix #1: a silent 'ok' on an invalid
+  // softLimit would mask upstream bugs in runners that call this directly.
+  it('throws on softLimit === 0', () => {
+    expect(() => checkWatchdogThreshold(100, 0)).toThrow(/positive finite number/);
+  });
+
+  it('throws on negative softLimit', () => {
+    expect(() => checkWatchdogThreshold(100, -1)).toThrow(/positive finite number/);
+  });
+
+  it('throws on NaN softLimit', () => {
+    expect(() => checkWatchdogThreshold(100, Number.NaN)).toThrow(/positive finite number/);
+  });
+
+  it('throws on Infinity softLimit', () => {
+    expect(() => checkWatchdogThreshold(100, Number.POSITIVE_INFINITY)).toThrow(
+      /positive finite number/,
+    );
+  });
 });
 
 describe('logWatchdogEvent — MULTI_MODEL_DEBUG output', () => {
   let stderrSpy: ReturnType<typeof vi.spyOn>;
+
+  const baseDetails: WatchdogEventDetails = {
+    provider: 'codex',
+    model: 'gpt-5-codex',
+    turn: 5,
+    inputTokens: 800_000,
+    softLimit: 1_000_000,
+    scratchpadChars: 0,
+  };
 
   beforeEach(() => {
     stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
@@ -202,31 +232,34 @@ describe('logWatchdogEvent — MULTI_MODEL_DEBUG output', () => {
 
   afterEach(() => {
     stderrSpy.mockRestore();
-    delete process.env.MULTI_MODEL_DEBUG;
+    vi.unstubAllEnvs();
   });
 
   it('emits nothing when MULTI_MODEL_DEBUG is unset', () => {
-    logWatchdogEvent('warning', { provider: 'codex', model: 'gpt-5-codex', turn: 5, inputTokens: 800_000, softLimit: 1_000_000, scratchpadChars: 0 });
+    logWatchdogEvent('warning', { ...baseDetails });
     expect(stderrSpy).not.toHaveBeenCalled();
   });
 
   it('emits a warning line when MULTI_MODEL_DEBUG=1 and status is warning', () => {
-    process.env.MULTI_MODEL_DEBUG = '1';
-    logWatchdogEvent('warning', { provider: 'codex', model: 'gpt-5-codex', turn: 5, inputTokens: 800_000, softLimit: 1_000_000, scratchpadChars: 0 });
+    vi.stubEnv('MULTI_MODEL_DEBUG', '1');
+    logWatchdogEvent('warning', { ...baseDetails });
     expect(stderrSpy).toHaveBeenCalledTimes(1);
-    const line = stderrSpy.mock.calls[0][0];
-    expect(line).toContain('WATCHDOG warning');
-    expect(line).toContain('provider=codex');
-    expect(line).toContain('inputTokens=800000');
-    expect(line).toContain('percentOfLimit=80');
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('WATCHDOG warning'));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('provider=codex'));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('inputTokens=800000'));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('percentOfLimit=80'));
   });
 
   it('emits a force_salvage line when status is force_salvage', () => {
-    process.env.MULTI_MODEL_DEBUG = '1';
-    logWatchdogEvent('force_salvage', { provider: 'codex', model: 'gpt-5-codex', turn: 18, inputTokens: 950_000, softLimit: 1_000_000, scratchpadChars: 30000 });
+    vi.stubEnv('MULTI_MODEL_DEBUG', '1');
+    logWatchdogEvent('force_salvage', {
+      ...baseDetails,
+      turn: 18,
+      inputTokens: 950_000,
+      scratchpadChars: 30000,
+    });
     expect(stderrSpy).toHaveBeenCalledTimes(1);
-    const line = stderrSpy.mock.calls[0][0];
-    expect(line).toContain('WATCHDOG force_salvage');
-    expect(line).toContain('scratchpadChars=30000');
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('WATCHDOG force_salvage'));
+    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('scratchpadChars=30000'));
   });
 });

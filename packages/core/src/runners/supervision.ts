@@ -221,26 +221,41 @@ export function sameDegenerateOutput(a: string, b: string): boolean {
 }
 
 /**
- * The hardcoded fallback used when neither the provider config nor the
- * model profile provides an inputTokenSoftLimit. Conservative — most
- * real models have larger working contexts. See spec Part A.1.4.
+ * Resolves the effective inputTokenSoftLimit for a (provider, profile) pair.
+ *
+ * Precedence: `config.inputTokenSoftLimit` (user override) wins over
+ * `profile.inputTokenSoftLimit` (family default).
+ *
+ * Both fields are Zod-validated upstream:
+ *   - `ProviderConfig.inputTokenSoftLimit` — `z.number().int().positive().optional()`
+ *     (see packages/core/src/config/schema.ts)
+ *   - `ModelProfile.inputTokenSoftLimit` — `z.number().int().positive()` (required)
+ *
+ * Because profile is guaranteed to carry a positive integer (DEFAULT_PROFILE
+ * supplies `100_000` when no prefix matches), there is no hardcoded
+ * constant fallback — the DEFAULT_PROFILE value is the de-facto fallback
+ * for unprofiled model IDs.
  */
-export const WATCHDOG_FALLBACK_LIMIT = 100_000;
-
 export function resolveInputTokenSoftLimit(
   config: ProviderConfig,
   profile: ModelProfile,
 ): number {
-  if (typeof config.inputTokenSoftLimit === 'number' && config.inputTokenSoftLimit > 0) {
-    return config.inputTokenSoftLimit;
-  }
-  if (typeof profile.inputTokenSoftLimit === 'number' && profile.inputTokenSoftLimit > 0) {
-    return profile.inputTokenSoftLimit;
-  }
-  return WATCHDOG_FALLBACK_LIMIT;
+  return config.inputTokenSoftLimit ?? profile.inputTokenSoftLimit;
 }
 
 export type WatchdogStatus = 'ok' | 'warning' | 'force_salvage';
+
+/**
+ * Watchdog threshold ratios (fraction of the resolved `softLimit`).
+ * Exported so tests can reference the exact boundary values.
+ *
+ * - At/above `WATCHDOG_WARNING_RATIO` (80%) the supervision loop nudges
+ *   the model toward salvage.
+ * - At/above `WATCHDOG_FORCE_SALVAGE_RATIO` (95%) the loop is forcibly
+ *   terminated and the scratchpad is salvaged.
+ */
+export const WATCHDOG_WARNING_RATIO = 0.80;
+export const WATCHDOG_FORCE_SALVAGE_RATIO = 0.95;
 
 /**
  * Given the cumulative input token usage and the resolved soft limit,
@@ -248,14 +263,23 @@ export type WatchdogStatus = 'ok' | 'warning' | 'force_salvage';
  *   - 'ok'             below 80%
  *   - 'warning'        at or above 80%, below 95% (model is nudged)
  *   - 'force_salvage'  at or above 95% (loop is forcibly terminated)
+ *
+ * Throws if `softLimit` is not a positive finite number. Runners call
+ * this independently, so a silent `'ok'` on a bad limit would mask
+ * upstream config bugs.
  */
 export function checkWatchdogThreshold(
   cumulativeInputTokens: number,
   softLimit: number,
 ): WatchdogStatus {
+  if (!Number.isFinite(softLimit) || !(softLimit > 0)) {
+    throw new Error(
+      `checkWatchdogThreshold: softLimit must be a positive finite number, got ${softLimit}`,
+    );
+  }
   const ratio = cumulativeInputTokens / softLimit;
-  if (ratio >= 0.95) return 'force_salvage';
-  if (ratio >= 0.80) return 'warning';
+  if (ratio >= WATCHDOG_FORCE_SALVAGE_RATIO) return 'force_salvage';
+  if (ratio >= WATCHDOG_WARNING_RATIO) return 'warning';
   return 'ok';
 }
 
@@ -269,8 +293,19 @@ export interface WatchdogEventDetails {
 }
 
 /**
- * Emits a structured log line at watchdog threshold crossings, gated on
- * MULTI_MODEL_DEBUG=1. Used for empirical calibration of the 80% / 95%
+ * Emits a structured log line at watchdog threshold crossings.
+ *
+ * Gated on the `MULTI_MODEL_DEBUG` environment variable: the function is
+ * a no-op unless `process.env.MULTI_MODEL_DEBUG === '1'`. Any other value
+ * (including `'true'`, `'yes'`, or unset) suppresses the log.
+ *
+ * When enabled, a single line is written to `stderr` via `console.error`
+ * of the form:
+ *   `[multi-model-agent] WATCHDOG <status>: provider=… model=… turn=… inputTokens=… softLimit=… percentOfLimit=… [scratchpadChars=…]`
+ *
+ * `scratchpadChars` is only appended when `status === 'force_salvage'`,
+ * since that is the transition where salvage content size matters for
+ * calibration. Used for empirical calibration of the 80% / 95%
  * thresholds. See spec Part A.1.4 calibration logging.
  */
 export function logWatchdogEvent(
