@@ -148,13 +148,22 @@ export function withTimeout<T>(
   onTimeout: () => T,
   abort?: AbortController,
 ): Promise<T> {
-  return Promise.race([
-    promise,
-    new Promise<T>((resolve) => {
-      setTimeout(() => {
-        abort?.abort();
-        resolve(onTimeout());
-      }, timeoutMs);
-    }),
-  ]);
+  let timeoutId: ReturnType<typeof setTimeout> | undefined;
+
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => {
+      abort?.abort();
+      resolve(onTimeout());
+    }, timeoutMs);
+  });
+
+  return promise
+    .then((result) => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      return result;
+    })
+    .catch((error) => {
+      if (timeoutId !== undefined) clearTimeout(timeoutId);
+      throw error;
+    });
 }

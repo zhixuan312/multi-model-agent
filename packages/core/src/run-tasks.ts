@@ -1,8 +1,7 @@
-import type { Provider, RunResult, RunOptions, TaskSpec, MultiModelConfig } from './types.js';
+import type { Provider, RunResult, TaskSpec, MultiModelConfig } from './types.js';
 import { createProvider } from './provider.js';
 import { getProviderEligibility } from './routing/get-provider-eligibility.js';
 import { selectProviderForTask } from './routing/select-provider-for-task.js';
-import { resolveTaskCapabilities } from './routing/resolve-task-capabilities.js';
 
 function errorResult(error: string): RunResult {
   return {
@@ -14,6 +13,10 @@ function errorResult(error: string): RunResult {
     error,
   };
 }
+
+type ResolvedTask =
+  | { task: TaskSpec; provider: Provider }
+  | { task: TaskSpec; error: string } // routing/eligibility failure
 
 async function executeTask(
   task: TaskSpec,
@@ -44,24 +47,23 @@ export async function runTasks(
 ): Promise<RunResult[]> {
   if (tasks.length === 0) return [];
 
-  const resolved = tasks.map((task): { task: TaskSpec; provider: Provider } => {
+  const resolved: ResolvedTask[] = tasks.map((task): ResolvedTask => {
     // If provider specified, validate and use it
     if (task.provider) {
       const eligibility = getProviderEligibility(task, config);
       const report = eligibility.find((e) => e.name === task.provider);
       if (!report) {
-        // Provider not found in config
-        const notFoundProvider = createProvider(task.provider, {
-          providers: {},
-          defaults: config.defaults,
-        });
-        return { task, provider: notFoundProvider };
+        // Provider explicitly named but not in config — fail fast with error result
+        return {
+          task,
+          error: `Provider "${task.provider}" not found in config.`,
+        };
       }
       if (!report.eligible) {
         const reasons = report.reasons.map((r) => r.message).join('; ');
         return {
           task,
-          provider: createProvider(report.name, config),
+          error: `Provider "${task.provider}" is ineligible: ${reasons}`,
         };
       }
       return {
@@ -73,9 +75,10 @@ export async function runTasks(
     // Auto-routing
     const selected = selectProviderForTask(task, config);
     if (!selected) {
+      const available = Object.keys(config.providers);
       return {
         task,
-        provider: createProvider(Object.keys(config.providers)[0], config),
+        error: `No eligible provider found for task (required tier: ${task.tier}, capabilities: ${task.requiredCapabilities.join(', ') || 'none'}). Available providers: ${available.join(', ') || 'none'}.`,
       };
     }
     return {
@@ -85,6 +88,11 @@ export async function runTasks(
   });
 
   return Promise.all(
-    resolved.map(({ task, provider }) => executeTask(task, provider, config)),
+    resolved.map((r): Promise<RunResult> => {
+      if ('error' in r) {
+        return Promise.resolve(errorResult(r.error));
+      }
+      return executeTask(r.task, r.provider, config);
+    }),
   );
 }
