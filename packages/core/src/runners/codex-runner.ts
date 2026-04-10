@@ -7,6 +7,21 @@ import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import type { SandboxPolicy } from '../types.js';
 
+// CODEX_DEBUG=1 causes the runner to log raw HTTP request/response bodies to
+// stderr. Those bodies routinely include the user's prompt, file contents,
+// tool arguments, and other sensitive data — fine for local debugging,
+// dangerous in any deployment that ships logs anywhere. Surface a one-time
+// warning at module load so an operator who flipped the env var without
+// thinking sees it immediately.
+if (process.env.CODEX_DEBUG === '1') {
+  // eslint-disable-next-line no-console
+  console.warn(
+    '[multi-model-agent] WARNING: CODEX_DEBUG=1 is set. Raw request/response ' +
+      'bodies (including prompts and file contents) will be logged to stderr. ' +
+      'Disable in any environment where logs may be retained or shared.',
+  );
+}
+
 /**
  * Holds the raw body text of the last HTTP response that returned a 4xx/5xx.
  * The OpenAI SDK wraps errors into APIError but strips the body text when it

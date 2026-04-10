@@ -8,6 +8,18 @@ import type { SandboxPolicy } from '../types.js';
 
 const execAsync = promisify(exec);
 
+// Hard caps to keep an LLM sub-agent from exhausting host memory or disk by
+// asking the file tools to read or write absurdly large blobs. The values are
+// generous for normal coding work and intentionally well below the memory
+// budget of a typical Node process (~1.5 GB default heap). They can be tuned
+// per-deployment by editing the constants.
+//
+// readFile: 50 MB. Larger than any sensible source file.
+// writeFile: 100 MB. Generous enough for build artefacts but caps disk-fill
+//            attacks where the model is told to write a multi-gigabyte file.
+export const MAX_READ_FILE_BYTES = 50 * 1024 * 1024;
+export const MAX_WRITE_FILE_BYTES = 100 * 1024 * 1024;
+
 function isWithin(parent: string, child: string): boolean {
   return child === parent || child.startsWith(parent + path.sep);
 }
@@ -62,12 +74,28 @@ export function createToolImplementations(
     async readFile(filePath: string): Promise<string> {
       const resolved = path.resolve(cwd, filePath);
       if (confine) await assertWithinCwd(cwd, resolved);
+      // Reject oversized files BEFORE reading them into memory. stat is
+      // cheap; reading a 10 GB file would OOM the host.
+      const stats = await fs.stat(resolved);
+      if (stats.size > MAX_READ_FILE_BYTES) {
+        throw new Error(
+          `File too large: ${filePath} is ${stats.size} bytes (max ${MAX_READ_FILE_BYTES})`,
+        );
+      }
       return fs.readFile(resolved, 'utf-8');
     },
 
     async writeFile(filePath: string, content: string): Promise<void> {
       const resolved = path.resolve(cwd, filePath);
       if (confine) await assertWithinCwd(cwd, resolved);
+      // Reject oversized writes BEFORE touching the disk. content.length is
+      // a UTF-16 code-unit count, but it's a reasonable upper bound on the
+      // byte size after UTF-8 encoding for the purpose of capping abuse.
+      if (content.length > MAX_WRITE_FILE_BYTES) {
+        throw new Error(
+          `Content too large: ${content.length} bytes (max ${MAX_WRITE_FILE_BYTES})`,
+        );
+      }
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, content, 'utf-8');
       tracker.trackWrite(resolved);
