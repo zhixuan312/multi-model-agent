@@ -1,21 +1,21 @@
 import { describe, it, expect } from 'vitest';
-import { getCapabilities } from '../../src/routing/capabilities.js';
+import { getBaseCapabilities } from '../../src/routing/capabilities.js';
 import type { ProviderConfig } from '../../src/types.js';
 
-describe('getCapabilities', () => {
+describe('getBaseCapabilities', () => {
   describe('file capabilities (every provider type)', () => {
     it('returns file tools for codex', () => {
-      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      const caps = getBaseCapabilities({ type: 'codex', model: 'gpt-5-codex' });
       expect(caps).toEqual(expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob']));
     });
 
     it('returns file tools for claude', () => {
-      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      const caps = getBaseCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
       expect(caps).toEqual(expect.arrayContaining(['file_read', 'file_write', 'grep', 'glob']));
     });
 
     it('returns file tools for openai-compatible', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'MiniMax-M2',
         baseUrl: 'https://api.example.com/v1',
@@ -26,12 +26,12 @@ describe('getCapabilities', () => {
 
   describe('web capabilities', () => {
     it('auto-enables web_search for codex when hostedTools is undefined', () => {
-      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      const caps = getBaseCapabilities({ type: 'codex', model: 'gpt-5-codex' });
       expect(caps).toContain('web_search');
     });
 
     it('respects explicit empty hostedTools for codex as an opt-out', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'codex',
         model: 'gpt-5-codex',
         hostedTools: [],
@@ -40,7 +40,7 @@ describe('getCapabilities', () => {
     });
 
     it('respects explicit hostedTools list without web_search as an opt-out', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'codex',
         model: 'gpt-5-codex',
         hostedTools: ['image_generation'],
@@ -49,18 +49,18 @@ describe('getCapabilities', () => {
     });
 
     it('includes web_search and web_fetch for claude unconditionally', () => {
-      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      const caps = getBaseCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
       expect(caps).toContain('web_search');
       expect(caps).toContain('web_fetch');
     });
 
     it('does not include web_fetch for codex', () => {
-      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      const caps = getBaseCapabilities({ type: 'codex', model: 'gpt-5-codex' });
       expect(caps).not.toContain('web_fetch');
     });
 
     it('does not auto-enable web_search for openai-compatible', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'MiniMax-M2',
         baseUrl: 'https://api.example.com/v1',
@@ -70,7 +70,7 @@ describe('getCapabilities', () => {
     });
 
     it('merges web_search from hostedTools for openai-compatible', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'gpt-5',
         baseUrl: 'https://api.openai.com/v1',
@@ -80,7 +80,7 @@ describe('getCapabilities', () => {
     });
 
     it('ignores image_generation and code_interpreter (not in routing vocabulary)', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'gpt-5',
         baseUrl: 'https://api.openai.com/v1',
@@ -91,7 +91,7 @@ describe('getCapabilities', () => {
     });
 
     it('deduplicates when hostedTools duplicates a base capability', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'claude',
         model: 'claude-opus-4-6',
         hostedTools: ['web_search'],
@@ -103,12 +103,12 @@ describe('getCapabilities', () => {
 
   describe('shell capability (sandbox-gated)', () => {
     it('does not include shell for codex by default (sandboxPolicy undefined)', () => {
-      const caps = getCapabilities({ type: 'codex', model: 'gpt-5-codex' });
+      const caps = getBaseCapabilities({ type: 'codex', model: 'gpt-5-codex' });
       expect(caps).not.toContain('shell');
     });
 
     it('does not include shell for codex with explicit sandboxPolicy cwd-only', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'codex',
         model: 'gpt-5-codex',
         sandboxPolicy: 'cwd-only',
@@ -117,7 +117,7 @@ describe('getCapabilities', () => {
     });
 
     it('includes shell for codex when sandboxPolicy is explicitly none', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'codex',
         model: 'gpt-5-codex',
         sandboxPolicy: 'none',
@@ -126,12 +126,12 @@ describe('getCapabilities', () => {
     });
 
     it('does not include shell for claude by default', () => {
-      const caps = getCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
+      const caps = getBaseCapabilities({ type: 'claude', model: 'claude-opus-4-6' });
       expect(caps).not.toContain('shell');
     });
 
     it('includes shell for claude when sandboxPolicy is explicitly none', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'claude',
         model: 'claude-opus-4-6',
         sandboxPolicy: 'none',
@@ -140,7 +140,7 @@ describe('getCapabilities', () => {
     });
 
     it('does not include shell for openai-compatible by default', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'MiniMax-M2',
         baseUrl: 'https://api.example.com/v1',
@@ -149,7 +149,7 @@ describe('getCapabilities', () => {
     });
 
     it('includes shell for openai-compatible when sandboxPolicy is explicitly none', () => {
-      const caps = getCapabilities({
+      const caps = getBaseCapabilities({
         type: 'openai-compatible',
         model: 'MiniMax-M2',
         baseUrl: 'https://api.example.com/v1',
