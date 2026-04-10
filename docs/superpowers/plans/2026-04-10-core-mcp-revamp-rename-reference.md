@@ -25,7 +25,7 @@
 | `delegateAll` | `runTasks` | core | `src/run-tasks.ts` |
 | `DelegateTask` | `TaskSpec` | core | `src/types.ts` |
 | `getEffectiveCapabilities` | `resolveTaskCapabilities` | core | `src/routing/resolve-task-capabilities.ts` |
-| `evaluateProviders` | `getProviderEligibility` | core | `src/routing/get-provider-eligibility.ts` |
+| `getEligibleProviders` | `getProviderEligibility` | core | `src/routing/get-provider-eligibility.ts` |
 | `findProfile` | `findModelProfile` | core | `src/routing/model-profiles.ts` |
 | `effectiveCost` | `getEffectiveCostTier` | core | `src/routing/model-profiles.ts` |
 | `loadConfig` | `parseConfig` + `loadConfigFromFile` | core | `src/config/schema.ts` + `src/config/load.ts` |
@@ -119,7 +119,7 @@ No `apiKey`/`apiKeyEnv` on `CodexProviderConfig` or `ClaudeProviderConfig` — a
 delegateAll                 → runTasks
 DelegateTask                → TaskSpec
 getEffectiveCapabilities    → resolveTaskCapabilities
-evaluateProviders           → getProviderEligibility
+getEligibleProviders       → getProviderEligibility
 findProfile                 → findModelProfile
 effectiveCost               → getEffectiveCostTier
 loadConfig                  → parseConfig + loadConfigFromFile

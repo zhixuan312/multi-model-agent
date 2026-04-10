@@ -79,6 +79,10 @@ Home-directory config discovery (`~/.multi-model/config.json`, `MULTI_MODEL_CONF
 ### Routing Metadata Helpers
 
 ```typescript
+// Returns the static base capabilities for a provider type (before per-task overrides).
+// Use resolveTaskCapabilities() for actual runtime capability set.
+function getBaseCapabilities(config: ProviderConfig): Capability[]
+
 // Returns the capabilities a task will have at runtime, accounting for
 // tools, sandboxPolicy, and hosted tools overrides.
 function resolveTaskCapabilities(
