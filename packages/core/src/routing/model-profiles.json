@@ -1,0 +1,32 @@
+[
+  {
+    "prefix": "claude-opus",
+    "tier": "reasoning",
+    "defaultCost": "high",
+    "bestFor": "frontier coding, complex judgment, long-horizon agent tasks, high-stakes professional work",
+    "supportsEffort": true
+  },
+  {
+    "prefix": "claude-sonnet",
+    "tier": "standard",
+    "defaultCost": "medium",
+    "bestFor": "strong code generation, analysis, agent workflows, and general professional tasks",
+    "supportsEffort": true
+  },
+  {
+    "prefix": "gpt-5",
+    "tier": "reasoning",
+    "defaultCost": "medium",
+    "bestFor": "coding, agentic workflows, and tool-using tasks",
+    "notes": "live data lookup requires web/tool support, not model alone",
+    "supportsEffort": true
+  },
+  {
+    "prefix": "MiniMax-M2",
+    "tier": "standard",
+    "defaultCost": "low",
+    "bestFor": "cost-efficient coding and agent workflows with clear requirements",
+    "avoidFor": "highest-stakes ambiguous work when you need top-tier judgment",
+    "supportsEffort": true
+  }
+]

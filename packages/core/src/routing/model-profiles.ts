@@ -1,56 +1,44 @@
+import { z } from 'zod';
 import type { CostTier, ProviderConfig, Tier } from '../types.js';
+import profileData from './model-profiles.json' with { type: 'json' };
 
-export interface ModelProfile {
-  tier: Tier;
-  defaultCost: CostTier;
-  bestFor: string;
-  avoidFor?: string;
-  notes?: string;
-  supportsEffort: boolean;
-}
+const tierSchema = z.enum(['trivial', 'standard', 'reasoning']);
+const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 
-const MODEL_PROFILES: Record<string, ModelProfile> = {
-  'claude-opus': {
-    tier: 'reasoning',
-    defaultCost: 'high',
-    bestFor: 'frontier coding, complex judgment, long-horizon agent tasks, high-stakes professional work',
-    supportsEffort: true,
-  },
-  'claude-sonnet': {
-    tier: 'standard',
-    defaultCost: 'medium',
-    bestFor: 'strong code generation, analysis, agent workflows, and general professional tasks',
-    supportsEffort: true,
-  },
-  'gpt-5': {
-    tier: 'reasoning',
-    defaultCost: 'medium',
-    bestFor: 'coding, agentic workflows, and tool-using tasks',
-    notes: 'live data lookup requires web/tool support, not model alone',
-    supportsEffort: true,
-  },
-  'MiniMax-M2': {
-    tier: 'standard',
-    defaultCost: 'low',
-    bestFor: 'cost-efficient coding and agent workflows with clear requirements',
-    avoidFor: 'highest-stakes ambiguous work when you need top-tier judgment',
-    supportsEffort: true,
-  },
-};
+export const modelProfileSchema = z.object({
+  prefix: z.string().min(1),
+  tier: tierSchema,
+  defaultCost: costTierSchema,
+  bestFor: z.string().min(1),
+  avoidFor: z.string().optional(),
+  notes: z.string().optional(),
+  supportsEffort: z.boolean(),
+});
+
+export type ModelProfile = z.infer<typeof modelProfileSchema>;
 
 const DEFAULT_PROFILE: ModelProfile = {
+  prefix: '',
   tier: 'standard',
   defaultCost: 'medium',
   bestFor: 'general tasks (unprofiled model — defaults applied)',
   supportsEffort: false,
 };
 
+// Validate and sort once at module load — longest prefix wins
+const PROFILE_ENTRIES: ModelProfile[] = (() => {
+  const parsed = z.array(modelProfileSchema).safeParse(profileData);
+  if (!parsed.success) {
+    throw new Error(`model-profiles.json is invalid: ${parsed.error.message}`);
+  }
+  return parsed.data.sort((a, b) => b.prefix.length - a.prefix.length);
+})();
+
 export function findModelProfile(modelId: string): ModelProfile {
   const normalized = modelId.toLowerCase();
-  const keys = Object.keys(MODEL_PROFILES).sort((a, b) => b.length - a.length);
-  for (const key of keys) {
-    if (normalized.startsWith(key.toLowerCase())) {
-      return { ...MODEL_PROFILES[key] };
+  for (const entry of PROFILE_ENTRIES) {
+    if (normalized.startsWith(entry.prefix.toLowerCase())) {
+      return { ...entry };
     }
   }
   return { ...DEFAULT_PROFILE };
