@@ -54,21 +54,23 @@ Provider auth:
 
 ### Claude Code
 
-One command — the client will spawn the server on demand:
+One command — the client will spawn the server on demand. Use `-s user` so the server is available in **every** project on your machine, not just the directory where you ran the command:
 
 ```bash
-claude mcp add multi-model-agent -- npx -y @zhixuan92/multi-model-agent-mcp serve
+claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 If your providers need environment variables:
 
 ```bash
-claude mcp add multi-model-agent \
+claude mcp add multi-model-agent -s user \
   -e OPENAI_API_KEY=sk-... \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e MINIMAX_API_KEY=... \
   -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
+
+Without `-s user`, `claude mcp add` defaults to local scope and only registers the server in the current project.
 
 ### Claude Desktop
 
@@ -91,6 +93,20 @@ Add to `claude_desktop_config.json`:
 ```
 
 Restart your MCP client after changing config.
+
+## Recommended: delegation rule for Claude Code
+
+Claude Code's native `Task` / `Agent` subagents inherit your parent session's expensive model and eat its context window. We ship a drop-in rule file that teaches Claude Code **when** to delegate work through `delegate_tasks` instead — mechanical edits go to free providers, reasoning-tier work escalates only when needed, and independent tasks run in parallel.
+
+Install globally:
+
+```bash
+mkdir -p ~/.claude/rules
+curl -o ~/.claude/rules/multi-model-delegation.md \
+  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/docs/claude-code-delegation-rule.md
+```
+
+Restart Claude Code after installing. The full rule — judgment-vs-labor principle, decision procedure, provider routing table, dispatch shape, verification, escalation ladder — lives at [`docs/claude-code-delegation-rule.md`](https://github.com/zhixuan312/multi-model-agent/blob/HEAD/docs/claude-code-delegation-rule.md). Read that file before adapting it to your own provider names.
 
 ## The `delegate_tasks` tool
 
