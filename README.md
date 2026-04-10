@@ -108,6 +108,19 @@ Recommended practice:
 - Set `costTier` for flat-rate or effectively free providers
 - Only set `sandboxPolicy` to `none` if you want delegated tasks to run shell commands
 
+### Security best practices
+
+- **Never commit API keys.** Always use `apiKeyEnv` and set the value via your shell or MCP client config. The server logs a warning at config-load time if it sees an inline `apiKey`.
+- **Restrict file permissions** on anything holding a token:
+  ```bash
+  chmod 600 ~/.multi-model/config.json
+  chmod 600 ~/.codex/auth.json
+  ```
+  The Codex runner emits a warning the first time it reads `~/.codex/auth.json` if the file is group- or world-readable.
+- **Keep `sandboxPolicy: cwd-only`** unless a task genuinely needs to run shell commands or touch files outside the working directory. `cwd-only` confines file tools to the task's `cwd` and disables `runShell` entirely.
+- **Do not enable `CODEX_DEBUG=1` in environments that ship logs anywhere.** Debug mode dumps raw request/response bodies (prompts, file contents, tool arguments) to stderr. The server prints a warning at startup when the flag is set.
+- **File-tool size caps** — `readFile` rejects targets larger than 50 MiB and `writeFile` rejects content larger than 100 MiB. These caps stop a runaway sub-agent from OOMing the host or filling the disk.
+
 ### 4. Register the MCP server
 
 For Claude Code:
@@ -278,8 +291,10 @@ Repo layout:
 npm install
 npm run build
 npm test
+npm run serve   # run the MCP server locally on stdio
 ```
-- [Development Guide](docs/development.md)
+
+See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contributor workflow, coding conventions, and how to add a new provider.
 
 ## Troubleshooting
 
@@ -294,4 +309,4 @@ npm test
 
 ## License
 
-ISC
+MIT — see [`LICENSE`](./LICENSE).
