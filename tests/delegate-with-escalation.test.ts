@@ -123,15 +123,18 @@ describe('delegateWithEscalation', () => {
     expect(escalation.nextProvider).toBe('expensive');
     expect(escalation.previousReason).toBe('status=incomplete');
 
-    // Callback is also threaded into both provider.run options — Tasks 9-11
-    // will emit turn/tool events through it.
+    // Callback is threaded into both provider.run options — Tasks 9-11 will
+    // emit turn/tool events through it. The orchestrator wraps `onProgress`
+    // in a safeSink (try/catch) so runner throws can't corrupt dispatch, so
+    // the function reference at the runner site is a wrapper, not the exact
+    // callback identity — match any function.
     expect(failingProvider.run).toHaveBeenCalledWith(
       'test',
-      expect.objectContaining({ onProgress }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     );
     expect(okProvider.run).toHaveBeenCalledWith(
       'test',
-      expect.objectContaining({ onProgress }),
+      expect.objectContaining({ onProgress: expect.any(Function) }),
     );
   });
 

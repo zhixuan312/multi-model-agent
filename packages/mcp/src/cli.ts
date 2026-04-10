@@ -100,10 +100,14 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
       // in advance. Runners emit events in Tasks 9-11; this commit is plumbing
       // only and `escalation_start` (emitted by delegateWithEscalation itself)
       // is the sole observable event in practice.
-      const progressToken = extra._meta?.progressToken as
-        | string
-        | number
-        | undefined;
+      // Runtime guard instead of a raw cast: _meta is typed broadly at the
+      // SDK layer, and a bad client could in principle send a progressToken
+      // of any JSON type. Only `string` / `number` are valid per MCP spec.
+      const rawToken = extra._meta?.progressToken;
+      const progressToken: string | number | undefined =
+        typeof rawToken === 'string' || typeof rawToken === 'number'
+          ? rawToken
+          : undefined;
 
       let progressCounter = 0;
       const sendProgress = progressToken !== undefined

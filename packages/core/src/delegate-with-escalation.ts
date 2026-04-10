@@ -74,6 +74,21 @@ export async function delegateWithEscalation(
     throw new Error('delegateWithEscalation called with empty chain');
   }
 
+  // Wrap the user-supplied sink with try/catch so a throwing callback can
+  // never corrupt a task. The contract says callbacks MUST NOT throw, but
+  // Tasks 9-11 will call this from hot runner loops — defense in depth.
+  // This wrapper is also the callback handed to `provider.run`, so runner
+  // emissions are covered by the same guard.
+  const safeSink: ((event: ProgressEvent) => void) | undefined = options.onProgress
+    ? (event) => {
+        try {
+          options.onProgress!(event);
+        } catch {
+          // Swallow — a broken sink must not affect dispatch.
+        }
+      }
+    : undefined;
+
   const attempts: { result: RunResult; record: AttemptRecord }[] = [];
 
   for (let i = 0; i < chain.length; i++) {
@@ -81,9 +96,9 @@ export async function delegateWithEscalation(
 
     // Emit one `escalation_start` between attempts (never before the first).
     // The previous attempt's record is guaranteed to exist here because i>0.
-    if (i > 0 && options.onProgress) {
+    if (i > 0 && safeSink) {
       const prev = attempts[attempts.length - 1].record;
-      options.onProgress({
+      safeSink({
         kind: 'escalation_start',
         previousProvider: prev.provider,
         previousReason: prev.reason ?? `status=${prev.status}`,
@@ -98,7 +113,7 @@ export async function delegateWithEscalation(
       cwd: task.cwd,
       effort: task.effort,
       sandboxPolicy: task.sandboxPolicy,
-      onProgress: options.onProgress,
+      onProgress: safeSink,
     });
 
     const record: AttemptRecord = {
