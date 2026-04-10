@@ -1,7 +1,7 @@
 # Multi-Model Agent: Core + MCP Split Design
 
 **Date:** 2026-04-10
-**Status:** Draft
+**Status:** Approved
 
 ---
 
@@ -372,30 +372,12 @@ No randomness or non-deterministic tie-breaking. A caller who wants a different 
 
 ---
 
-## Backward Compatibility Notes
-
-This is a v0.1.0 greenfield project. No backward compatibility is required. The following are breaking changes by design:
-
-- `DelegateTask` from current `src/types.ts` is replaced by `TaskSpec`.
-- `delegateAll()` is replaced by `runTasks()` as the primary entry point.
-- `getEffectiveCapabilities` is renamed to `resolveTaskCapabilities` and its signature is updated to take `RunOptions` (not just `ProviderConfig`).
-- `evaluateProviders()` is renamed to `getProviderEligibility()` returning `ProviderEligibility[]`.
-- `findProfile()` is renamed to `findModelProfile()`.
-- `effectiveCost()` is renamed to `getEffectiveCostTier()`.
-- `getCapabilities()` is renamed to `getBaseCapabilities()`.
-- `resolveTaskProvider` (internal) is renamed to `selectProviderForTask`.
-- Home-directory config auto-discovery is removed from core and moves to `mcp/cli.ts`.
-- `tier` and `requiredCapabilities` become first-class core concepts (enforced by core, not just stored).
-- `ProviderConfig` is replaced by a discriminated union — `baseUrl` is required on `OpenAICompatibleProviderConfig`.
-
----
-
 ## Implementation Notes
 
 - All imports use `.js` extensions (ESM).
 - `runTasks()` in `core/src/run-tasks.ts` is the new top-level orchestration file.
 - `delegate.ts` is removed — replaced by `run-tasks.ts` with full policy enforcement.
 - `describe.ts` is deleted from `core/src/routing/` and replaced by `mcp/src/routing/render-provider-routing-matrix.ts`.
-- Routing helpers split into three files under `core/src/routing/`: `capabilities.ts` (`getBaseCapabilities`), `model-profiles.ts` (`findModelProfile`, `getEffectiveCostTier`), `resolve-task-capabilities.ts` (`resolveTaskCapabilities`), `select-provider-for-task.ts` (`selectProviderForTask`), `get-provider-eligibility.ts` (`getProviderEligibility`).
-- Config split: `schema.ts` (Zod + `parseConfig`), `load.ts` (`loadConfigFromFile`). No `loadConfig` alias exported.
-- `ProviderConfig` becomes a discriminated union — `CodexProviderConfig`, `ClaudeProviderConfig`, `OpenAICompatibleProviderConfig`. `baseUrl` is required on `OpenAICompatibleProviderConfig`.
+- Routing helpers split into three focused files under `core/src/routing/`: `capabilities.ts` (`getBaseCapabilities`), `model-profiles.ts` (`findModelProfile`, `getEffectiveCostTier`), `resolve-task-capabilities.ts` (`resolveTaskCapabilities`), `select-provider-for-task.ts` (`selectProviderForTask`), `get-provider-eligibility.ts` (`getProviderEligibility`).
+- Config split: `schema.ts` (Zod + `parseConfig`), `load.ts` (`loadConfigFromFile`). No `loadConfig` alias.
+- `ProviderConfig` is a discriminated union — `CodexProviderConfig`, `ClaudeProviderConfig`, `OpenAICompatibleProviderConfig`. `baseUrl` is required on `OpenAICompatibleProviderConfig`.
