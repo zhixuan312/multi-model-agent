@@ -1,5 +1,12 @@
 import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
-import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import {
+  withTimeout,
+  computeCostUSD,
+  type RunResult,
+  type RunOptions,
+  type ProviderConfig,
+  type ProgressEvent,
+} from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createClaudeToolServer } from '../tools/claude-adapter.js';
@@ -18,9 +25,35 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
+  type DegenerateKind,
 } from './supervision.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
+
+/**
+ * Map supervision validation.kind → the correct injection_type label for
+ * the `ProgressEvent` emitted on a re-prompt. Mirrors the openai-runner
+ * helper one-for-one: `fragment` and `no_terminator` both share the
+ * `supervise_fragment` label because they share a re-prompt style.
+ *
+ * Duplicated here (rather than extracted to a shared module) because it
+ * is tiny, runner-local, and extracting for one extra call site would be
+ * premature abstraction. If a third runner needs this, promote it then.
+ */
+function injectionTypeFor(
+  kind: DegenerateKind | undefined,
+): 'supervise_empty' | 'supervise_thinking' | 'supervise_fragment' {
+  switch (kind) {
+    case 'empty':
+      return 'supervise_empty';
+    case 'thinking_only':
+      return 'supervise_thinking';
+    case 'fragment':
+    case 'no_terminator':
+    default:
+      return 'supervise_fragment';
+  }
+}
 
 /**
  * Hard cap on supervision re-prompts before we give up and salvage. Same as
@@ -114,7 +147,34 @@ export async function runClaude(
   const sandboxPolicy = options.sandboxPolicy ?? providerConfig.sandboxPolicy ?? 'cwd-only';
   const abortController = new AbortController();
 
-  const tracker = new FileTracker();
+  // --- Progress event emission (Task 10) ----------------------------------
+  //
+  // `onProgress` is already wrapped in `safeSink` by the orchestrator
+  // (Task 8), so any throw from the consumer callback is swallowed
+  // upstream and cannot corrupt this loop. We do not need to wrap it
+  // again here.
+  const onProgress = options.onProgress;
+  const emit = (event: ProgressEvent): void => {
+    if (onProgress) onProgress(event);
+  };
+
+  // Hoisted so the FileTracker callback (closed over below) can read the
+  // running turn count at callback firing time. Unlike openai-runner — where
+  // the turn counter comes from `currentResult?.state.usage.requests + 1`
+  // because the SDK only bumps the counter after the call completes — the
+  // claude-runner increments `turns` at the top of every `msg.type ===
+  // 'assistant'` branch, which is PROCESSED BEFORE the SDK fires any tool
+  // calls for that turn. That means `turns` already holds the current
+  // turn number when the tracker callback fires mid-tool-loop, so we
+  // attribute tool calls to `turns` directly (no +1 offset).
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let costUSD: number | null = null;
+  let turns = 0;
+
+  const tracker = new FileTracker((summary) => {
+    emit({ kind: 'tool_call', turn: turns, toolSummary: summary });
+  });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
   // --- Prevention layer: system prompt + budget hint ---
@@ -170,12 +230,6 @@ export async function runClaude(
     queryOptions.effort = effort as Options['effort'];
   }
 
-  // Hoisted so the timeout callback can read partial progress
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let costUSD: number | null = null;
-  let turns = 0;
-
   // --- Scratchpad: buffers every assistant text block we see streaming
   // through the iterator. On any termination path (ok/incomplete/max_turns/
   // error/timeout/force_salvage) we salvage `scratchpad.latest()` when the
@@ -219,6 +273,7 @@ export async function runClaude(
       for await (const msg of query({ prompt: messageQueue, options: queryOptions })) {
         if (msg.type === 'assistant') {
           turns++;
+          emit({ kind: 'turn_start', turn: turns, provider: 'claude' });
 
           // Capture every assistant text block as scratchpad fodder. The
           // claude-agent-sdk's BetaMessage.content is an array of blocks:
@@ -227,9 +282,23 @@ export async function runClaude(
           // tool_use blocks have no salvage value (they're side-effects)
           // and thinking blocks are stripped before the caller sees them.
           if ('message' in msg && msg.message && 'content' in msg.message) {
-            const content = msg.message.content;
+            // The claude-agent-sdk's BetaMessage.content is typed as an
+            // array of content blocks — but historically the API sometimes
+            // delivers a bare string, so we defensively handle both. The
+            // string branch is narrow-typed to `never` by the SDK, so we
+            // cast through `unknown` to keep runtime safety without fighting
+            // the compiler.
+            const content = msg.message.content as unknown;
             if (typeof content === 'string') {
               scratchpad.append(turns, content);
+              if (content.length > 0) {
+                emit({
+                  kind: 'text_emission',
+                  turn: turns,
+                  chars: content.length,
+                  preview: content.slice(0, 200),
+                });
+              }
             } else if (Array.isArray(content)) {
               const texts = content
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -237,7 +306,16 @@ export async function runClaude(
                 // eslint-disable-next-line @typescript-eslint/no-explicit-any
                 .map((c: any) => c.text);
               if (texts.length > 0) {
-                scratchpad.append(turns, texts.join('\n'));
+                const joined = texts.join('\n');
+                scratchpad.append(turns, joined);
+                if (joined.length > 0) {
+                  emit({
+                    kind: 'text_emission',
+                    turn: turns,
+                    chars: joined.length,
+                    preview: joined.slice(0, 200),
+                  });
+                }
               }
             }
           }
@@ -261,6 +339,17 @@ export async function runClaude(
             });
           }
           if (watchdogStatus === 'force_salvage') {
+            // `watchdog_force_salvage` is not an injected message — no
+            // re-prompt is sent — but observers still want to see why the
+            // run is being killed. We emit the event with
+            // `contentLengthChars: 0` to reflect the "nothing was injected,
+            // we just terminated" semantics (mirrors openai-runner).
+            emit({
+              kind: 'injection',
+              injectionType: 'watchdog_force_salvage',
+              turn: turns,
+              contentLengthChars: 0,
+            });
             completedResult = buildClaudeForceSalvageResult({
               tracker,
               scratchpad,
@@ -284,9 +373,14 @@ export async function runClaude(
           // stays the same across two assistant messages.
           if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
             lastWarnedInputTokens = inputTokens;
-            messageQueue.push(
-              userMessage(buildBudgetPressureNudge({ inputTokens, softLimit })),
-            );
+            const warning = buildBudgetPressureNudge({ inputTokens, softLimit });
+            emit({
+              kind: 'injection',
+              injectionType: 'watchdog_warning',
+              turn: turns,
+              contentLengthChars: warning.length,
+            });
+            messageQueue.push(userMessage(warning));
           }
 
           // --- Periodic re-grounding (best-effort in streaming-input
@@ -295,17 +389,20 @@ export async function runClaude(
           // the CLI subprocess decides to emit a final result after it
           // processes the new user message. ---
           if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
-            messageQueue.push(
-              userMessage(
-                buildReGroundingMessage({
-                  originalPromptExcerpt: prompt,
-                  currentTurn: turns,
-                  maxTurns,
-                  toolCallsSoFar: tracker.getToolCalls().length,
-                  filesReadSoFar: tracker.getReads().length,
-                }),
-              ),
-            );
+            const reground = buildReGroundingMessage({
+              originalPromptExcerpt: prompt,
+              currentTurn: turns,
+              maxTurns,
+              toolCallsSoFar: tracker.getToolCalls().length,
+              filesReadSoFar: tracker.getReads().length,
+            });
+            emit({
+              kind: 'injection',
+              injectionType: 'reground',
+              turn: turns,
+              contentLengthChars: reground.length,
+            });
+            messageQueue.push(userMessage(reground));
           }
         }
 
@@ -343,6 +440,17 @@ export async function runClaude(
             costUSD = msg.total_cost_usd;
           }
 
+          // --- turn_complete: one event per result message (which
+          // corresponds to one top-level assistant turn from the SDK's
+          // perspective). Fires after usage aggregation so the cumulative
+          // counters are up-to-date.
+          emit({
+            kind: 'turn_complete',
+            turn: turns,
+            cumulativeInputTokens: inputTokens,
+            cumulativeOutputTokens: outputTokens,
+          });
+
           // --- Watchdog check on the result message as well: input tokens
           // have just jumped and we may now be in force_salvage territory.
           // The post-result site ONLY handles force_salvage. `warning` is
@@ -359,6 +467,12 @@ export async function runClaude(
               inputTokens,
               softLimit,
               scratchpadChars: scratchpad.toString().length,
+            });
+            emit({
+              kind: 'injection',
+              injectionType: 'watchdog_force_salvage',
+              turn: turns,
+              contentLengthChars: 0,
             });
             completedResult = buildClaudeForceSalvageResult({
               tracker,
@@ -448,7 +562,14 @@ export async function runClaude(
           }
 
           // Push the re-prompt and continue reading the iterator.
-          messageQueue.push(userMessage(buildRePrompt(validation)));
+          const rePrompt = buildRePrompt(validation);
+          emit({
+            kind: 'injection',
+            injectionType: injectionTypeFor(validation.kind),
+            turn: turns,
+            contentLengthChars: rePrompt.length,
+          });
+          messageQueue.push(userMessage(rePrompt));
         }
       }
     } catch (err) {
@@ -458,6 +579,7 @@ export async function runClaude(
       // distinguish abort / network / HTTP-error / generic failure modes.
       const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
+      emit({ kind: 'done', status });
       return {
         output: scratchpad.isEmpty()
           ? `Sub-agent error: ${msg}`
@@ -483,8 +605,11 @@ export async function runClaude(
     // SDK closed the stream cleanly without ever emitting a final
     // `result`), synthesize an incomplete result so the caller always
     // gets a meaningful diagnostic instead of undefined.
-    if (completedResult) return completedResult;
-    return buildClaudeIncompleteResult({
+    if (completedResult) {
+      emit({ kind: 'done', status: completedResult.status });
+      return completedResult;
+    }
+    const drained = buildClaudeIncompleteResult({
       tracker,
       scratchpad,
       providerConfig,
@@ -493,12 +618,16 @@ export async function runClaude(
       outputTokens,
       turns,
     });
+    emit({ kind: 'done', status: drained.status });
+    return drained;
   };
 
   return withTimeout(
     run(),
     timeoutMs,
-    () => ({
+    () => {
+      emit({ kind: 'done', status: 'timeout' });
+      return {
       output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
       status: 'timeout',
       filesRead: tracker.getReads(),
@@ -512,7 +641,8 @@ export async function runClaude(
       },
       turns,
       escalationLog: [],
-    }),
+      };
+    },
     abortController,
   );
 }

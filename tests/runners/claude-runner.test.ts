@@ -1,4 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ProgressEvent } from '../../packages/core/src/types.js';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@anthropic-ai/claude-agent-sdk')>();
@@ -464,5 +465,67 @@ describe('runClaude', () => {
 
     expect(result.status).toBe('max_turns');
     expect(result.output).toBe('partial findings before budget exhaustion');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Task 10: progress event emission
+  // ---------------------------------------------------------------------------
+  describe('claude-runner — progress event emission', () => {
+    it('emits turn_start / text_emission / turn_complete / done in order for a one-turn run', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT, inputTokens: 12, outputTokens: 34 });
+        })(),
+      );
+
+      const events: ProgressEvent[] = [];
+      const onProgress = (e: ProgressEvent) => { events.push(e); };
+
+      const result = await runClaude(
+        'prompt',
+        { onProgress },
+        providerConfig,
+        defaults,
+      );
+
+      expect(result.status).toBe('ok');
+
+      // Ordering: turn_start fires first (at top of assistant branch),
+      // then text_emission (after scratchpad append), then turn_complete
+      // (after result-message usage aggregation), then done last.
+      const kinds = events.map((e) => e.kind);
+      expect(kinds[0]).toBe('turn_start');
+      expect(kinds).toContain('text_emission');
+      expect(kinds).toContain('turn_complete');
+      expect(kinds[kinds.length - 1]).toBe('done');
+
+      // text_emission must carry the assistant text and a preview.
+      const textEvent = events.find((e) => e.kind === 'text_emission');
+      expect(textEvent).toBeDefined();
+      if (textEvent && textEvent.kind === 'text_emission') {
+        expect(textEvent.turn).toBe(1);
+        expect(textEvent.chars).toBe(VALID_FINAL_OUTPUT.length);
+        expect(textEvent.preview.length).toBeGreaterThan(0);
+      }
+
+      // turn_complete must carry the accumulated usage counters.
+      const turnComplete = events.find((e) => e.kind === 'turn_complete');
+      expect(turnComplete).toBeDefined();
+      if (turnComplete && turnComplete.kind === 'turn_complete') {
+        expect(turnComplete.turn).toBe(1);
+        expect(turnComplete.cumulativeInputTokens).toBe(12);
+        expect(turnComplete.cumulativeOutputTokens).toBe(34);
+      }
+
+      // done event status must match the final RunResult status.
+      const doneEvent = events[events.length - 1];
+      expect(doneEvent.kind).toBe('done');
+      if (doneEvent.kind === 'done') {
+        expect(doneEvent.status).toBe('ok');
+      }
+    });
   });
 });
