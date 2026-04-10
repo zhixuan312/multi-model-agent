@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-mcp",
-  "version": "0.1.2",
+  "version": "0.1.3",
   "type": "module",
   "license": "MIT",
   "description": "MCP server for multi-model-agent. Exposes a delegate_tasks tool that routes work to Claude, Codex, or OpenAI-compatible sub-agents based on capability, quality tier, and cost.",
@@ -23,7 +23,9 @@
   },
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
-  "files": ["dist"],
+  "files": [
+    "dist"
+  ],
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
@@ -43,7 +45,9 @@
     "build": "tsc && chmod +x dist/cli.js",
     "prepublishOnly": "npm run build"
   },
-  "engines": { "node": ">=22.0.0" },
+  "engines": {
+    "node": ">=22.0.0"
+  },
   "dependencies": {
     "@zhixuan92/multi-model-agent-core": "^0.1.1",
     "@modelcontextprotocol/sdk": "^1.0.0",
