@@ -1,0 +1,76 @@
+{
+  "name": "@scope/multi-model-agent-core",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./config/schema": {
+      "types": "./dist/config/schema.d.ts",
+      "import": "./dist/config/schema.js"
+    },
+    "./config/load": {
+      "types": "./dist/config/load.d.ts",
+      "import": "./dist/config/load.js"
+    },
+    "./routing/capabilities": {
+      "types": "./dist/routing/capabilities.d.ts",
+      "import": "./dist/routing/capabilities.js"
+    },
+    "./routing/model-profiles": {
+      "types": "./dist/routing/model-profiles.d.ts",
+      "import": "./dist/routing/model-profiles.js"
+    },
+    "./routing/resolve-task-capabilities": {
+      "types": "./dist/routing/resolve-task-capabilities.d.ts",
+      "import": "./dist/routing/resolve-task-capabilities.js"
+    },
+    "./routing/select-provider-for-task": {
+      "types": "./dist/routing/select-provider-for-task.d.ts",
+      "import": "./dist/routing/select-provider-for-task.js"
+    },
+    "./routing/get-provider-eligibility": {
+      "types": "./dist/routing/get-provider-eligibility.d.ts",
+      "import": "./dist/routing/get-provider-eligibility.js"
+    },
+    "./provider": {
+      "types": "./dist/provider.d.ts",
+      "import": "./dist/provider.js"
+    },
+    "./run-tasks": {
+      "types": "./dist/run-tasks.d.ts",
+      "import": "./dist/run-tasks.js"
+    },
+    "./types": {
+      "types": "./dist/types.d.ts",
+      "import": "./dist/types.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "engines": { "node": ">=22.0.0" },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.98",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@openai/agents": "^0.8.0",
+    "openai": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@openai/agents": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "@anthropic-ai/sdk": "0.81.0"
+  }
+}
