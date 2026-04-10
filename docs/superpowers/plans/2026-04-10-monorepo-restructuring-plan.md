@@ -167,7 +167,26 @@ git commit -m "chore: convert root to workspace manifest with devDependencies"
   "scripts": {
     "build": "tsc"
   },
-  "engines": { "node": ">=22.0.0" }
+  "engines": { "node": ">=22.0.0" },
+  "dependencies": {
+    "@anthropic-ai/claude-agent-sdk": "^0.2.98",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@openai/agents": "^0.8.0",
+    "openai": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@openai/agents": {
+      "optional": true
+    },
+    "openai": {
+      "optional": true
+    }
+  },
+  "overrides": {
+    "@anthropic-ai/sdk": "0.81.0"
+  }
 }
 ```
 
@@ -1375,9 +1394,10 @@ git commit -m "feat(mcp): add cli.ts with buildMcpServer and MCP-owned config di
 **Files:**
 - Create: `packages/mcp/src/index.ts`
 
+Per the approved spec, MCP root only exports `buildMcpServer` and `buildTaskSchema`. `renderProviderRoutingMatrix` is on its dedicated subpath only.
+
 ```typescript
 export { buildMcpServer, buildTaskSchema } from './cli.js';
-export { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 ```
 
 - [ ] **Step 1: Write packages/mcp/src/index.ts**
@@ -1496,6 +1516,7 @@ git commit -m "chore: verify build and tests pass after monorepo restructure"
 - [ ] Core `config/load.ts` has no auto-discovery (no MULTI_MODEL_CONFIG, no search paths)
 - [ ] MCP `cli.ts` owns discovery order: `--config`, `MULTI_MODEL_CONFIG` env, `~/.multi-model/config.json`
 - [ ] `packages/core/package.json` exports no runners/tools/auth subpaths
+- [ ] `packages/mcp/src/index.ts` only exports `buildMcpServer`, `buildTaskSchema` (not `renderProviderRoutingMatrix` at root)
 - [ ] `packages/mcp/package.json` has `bin.multi-model-agent` wired up
 - [ ] Root `package.json` has `devDependencies` with `typescript` and `vitest`
 - [ ] Root `src/`, `dist/`, `tsconfig.json` deleted
