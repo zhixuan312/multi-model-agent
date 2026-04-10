@@ -13,7 +13,9 @@ import {
   type RunResult,
   type RunOptions,
   type ProviderConfig,
+  type ProgressEvent,
 } from '../types.js';
+import type { DegenerateKind } from './supervision.js';
 
 /**
  * Structural view of `RunResult` from @openai/agents. We intentionally do
@@ -98,6 +100,28 @@ export interface OpenAIRunnerOptions {
 const MAX_SUPERVISION_RETRIES = 3;
 
 /**
+ * Map supervision validation.kind → the correct injection_type label for
+ * the `ProgressEvent` emitted on a re-prompt. `fragment` and
+ * `no_terminator` both fall under `supervise_fragment` — they share a
+ * re-prompt style (we quote the tail back at the model) and an emission
+ * label for observers.
+ */
+function injectionTypeFor(
+  kind: DegenerateKind | undefined,
+): 'supervise_empty' | 'supervise_thinking' | 'supervise_fragment' {
+  switch (kind) {
+    case 'empty':
+      return 'supervise_empty';
+    case 'thinking_only':
+      return 'supervise_thinking';
+    case 'fragment':
+    case 'no_terminator':
+    default:
+      return 'supervise_fragment';
+  }
+}
+
+/**
  * Extract every assistant text emission from a single `agentRun(...)` result.
  * See the SDK introspection finding in supervision.ts: `result.newItems` is a
  * discriminated union and entries of type `"message_output_item"` wrap an
@@ -138,7 +162,34 @@ export async function runOpenAI(
   const sandboxPolicy = options.sandboxPolicy ?? runner.providerConfig.sandboxPolicy ?? 'cwd-only';
   const abortController = new AbortController();
 
-  const tracker = new FileTracker();
+  // --- Progress event emission (Task 9) -----------------------------------
+  //
+  // `onProgress` is already wrapped in `safeSink` by the orchestrator
+  // (Task 8), so any throw from the consumer callback is swallowed
+  // upstream and cannot corrupt this loop. We do not need to wrap it
+  // again here.
+  const onProgress = options.onProgress;
+  const emit = (event: ProgressEvent): void => {
+    if (onProgress) onProgress(event);
+  };
+
+  // Hoisted out of `run()` so the withTimeout callback (which runs in a
+  // different microtask chain) can still read partial usage from the last
+  // successful agentRun. `run()` updates this on every turn. Declared
+  // here (before the tracker) so the FileTracker callback closure can
+  // reference it without a TDZ issue at construction.
+  let currentResult: AgentRunOutput | undefined;
+
+  // The tracker fires `onToolCall` synchronously inside every
+  // `trackToolCall(...)` — which itself is called from inside a tool
+  // implementation during an `agentRun` turn. That means `currentResult`
+  // may still hold the PREVIOUS turn's request count when the callback
+  // fires. We read it with an optional chain + fallback and attribute
+  // the tool call to the in-flight turn (previous turn + 1).
+  const tracker = new FileTracker((summary) => {
+    const inflightTurn = (currentResult?.state.usage.requests ?? 0) + 1;
+    emit({ kind: 'tool_call', turn: inflightTurn, toolSummary: summary });
+  });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
   const fileTools = toolMode === 'full' ? createOpenAITools(toolImpls, sandboxPolicy) : [];
 
@@ -208,28 +259,50 @@ export async function runOpenAI(
     ];
   };
 
-  // Hoisted out of `run()` so the withTimeout callback (which runs in a
-  // different microtask chain) can still read partial usage from the last
-  // successful agentRun. `run()` updates this on every turn.
-  let currentResult: AgentRunOutput | undefined;
-
   /**
    * Local helper: run one agent turn and buffer its assistant text into
-   * the scratchpad. Closes over `agent`, `abortController`, and
-   * `scratchpad` so every call site in `run()` is just one line.
+   * the scratchpad. Closes over `agent`, `abortController`, `scratchpad`
+   * and `emit` so every call site in `run()` is just one line AND every
+   * turn automatically emits the correct `turn_start` / `text_emission`
+   * / `turn_complete` progress events.
+   *
+   * Event ordering:
+   *   1. `turn_start` — fires BEFORE agentRun. Turn number is the NEXT
+   *      request count (prev + 1) because the SDK won't bump
+   *      `state.usage.requests` until the call completes.
+   *   2. `text_emission` — fires AFTER scratchpad.append, only when the
+   *      stripped assistant text is non-empty. Skipping empty emissions
+   *      keeps the event stream useful (empty-text turns are observable
+   *      via `turn_complete` alone).
+   *   3. `turn_complete` — fires AFTER agentRun, with the post-call
+   *      cumulative usage from `result.state.usage`.
    */
   const runTurnAndBuffer = async (
     input: string | AgentInputItem[],
     turnBudget: number,
   ): Promise<AgentRunOutput> => {
+    const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;
+    emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible' });
     const result = (await agentRun(agent, input, {
       maxTurns: turnBudget,
       signal: abortController.signal,
     })) as AgentRunOutput;
-    scratchpad.append(
-      result.state.usage.requests,
-      stripThinkingTags(extractAssistantText(result.newItems)),
-    );
+    const text = stripThinkingTags(extractAssistantText(result.newItems));
+    scratchpad.append(result.state.usage.requests, text);
+    if (text.length > 0) {
+      emit({
+        kind: 'text_emission',
+        turn: result.state.usage.requests,
+        chars: text.length,
+        preview: text.slice(0, 200),
+      });
+    }
+    emit({
+      kind: 'turn_complete',
+      turn: result.state.usage.requests,
+      cumulativeInputTokens: result.state.usage.inputTokens,
+      cumulativeOutputTokens: result.state.usage.outputTokens,
+    });
     return result;
   };
 
@@ -276,13 +349,26 @@ export async function runOpenAI(
         }
 
         if (watchdogStatus === 'force_salvage') {
-          return buildForceSalvageResult(
+          // `watchdog_force_salvage` is not an injected message — no
+          // re-prompt is sent — but observers still want to see exactly
+          // why the run is being killed. We emit the event with a
+          // `contentLengthChars` of 0 to reflect the "nothing was
+          // injected, we just terminated" semantics.
+          emit({
+            kind: 'injection',
+            injectionType: 'watchdog_force_salvage',
+            turn: currentResult.state.usage.requests,
+            contentLengthChars: 0,
+          });
+          const salvaged = buildForceSalvageResult(
             currentResult,
             scratchpad,
             tracker,
             runner.providerConfig,
             softLimit,
           );
+          emit({ kind: 'done', status: salvaged.status });
+          return salvaged;
         }
 
         // Warning-band nudge: fire at most once per distinct input-token
@@ -298,6 +384,12 @@ export async function runOpenAI(
             inputTokens: currentInputTokens,
             softLimit,
           });
+          emit({
+            kind: 'injection',
+            injectionType: 'watchdog_warning',
+            turn: currentResult.state.usage.requests,
+            contentLengthChars: warning.length,
+          });
           lastWarnedInputTokens = currentInputTokens;
           currentResult = await runTurnAndBuffer(continueWith(currentResult, warning), 1);
         }
@@ -307,7 +399,9 @@ export async function runOpenAI(
         const validation = validateCompletion(stripped);
 
         if (validation.valid) {
-          return buildOkResult(stripped, currentResult, tracker, runner.providerConfig);
+          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig);
+          emit({ kind: 'done', status: ok.status });
+          return ok;
         }
 
         // Degenerate. Apply same-output early-out (only when we have a
@@ -319,6 +413,12 @@ export async function runOpenAI(
 
         // --- Re-prompt the model to recover ---
         const rePrompt = buildRePrompt(validation);
+        emit({
+          kind: 'injection',
+          injectionType: injectionTypeFor(validation.kind),
+          turn: currentResult.state.usage.requests,
+          contentLengthChars: rePrompt.length,
+        });
         // Give the model a small budget to recover. One extra turn per
         // retry is enough for the "emit your final answer" nudge.
         currentResult = await runTurnAndBuffer(continueWith(currentResult, rePrompt), 1);
@@ -333,6 +433,12 @@ export async function runOpenAI(
             toolCallsSoFar: tracker.getToolCalls().length,
             filesReadSoFar: tracker.getReads().length,
           });
+          emit({
+            kind: 'injection',
+            injectionType: 'reground',
+            turn: currentResult.state.usage.requests,
+            contentLengthChars: reground.length,
+          });
           currentResult = await runTurnAndBuffer(continueWith(currentResult, reground), 1);
         }
       }
@@ -340,12 +446,14 @@ export async function runOpenAI(
       // Supervision exhausted (either retry budget or same-output early-out).
       // Salvage from the scratchpad if we have anything; otherwise return the
       // existing incomplete diagnostic.
-      return buildSupervisionExhaustedResult(
+      const exhausted = buildSupervisionExhaustedResult(
         currentResult,
         scratchpad,
         tracker,
         runner.providerConfig,
       );
+      emit({ kind: 'done', status: exhausted.status });
+      return exhausted;
     } catch (err) {
       if (err instanceof MaxTurnsExceededError) {
         // max_turns path: prefer scratchpad salvage over the bare diagnostic.
@@ -354,6 +462,7 @@ export async function runOpenAI(
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
+        emit({ kind: 'done', status: 'max_turns' });
         return {
           output: scratchpad.isEmpty()
             ? `Agent exceeded max turns (${maxTurns}).`
@@ -375,6 +484,7 @@ export async function runOpenAI(
       // NOT the human-readable message.
       const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
+      emit({ kind: 'done', status });
       return {
         output: scratchpad.isEmpty() ? `Sub-agent error: ${msg}` : scratchpad.latest(),
         status,
@@ -392,20 +502,23 @@ export async function runOpenAI(
   return withTimeout(
     run(),
     timeoutMs,
-    () => ({
-      output: scratchpad.isEmpty()
-        ? `Agent timed out after ${timeoutMs}ms.`
-        : scratchpad.latest(),
-      status: 'timeout',
-      filesRead: tracker.getReads(),
-      filesWritten: tracker.getWrites(),
-      toolCalls: tracker.getToolCalls(),
-      // Preserve partial usage from the last successful agentRun so the
-      // caller sees real numbers, not zeros, on a timeout.
-      usage: partialUsage(currentResult, runner.providerConfig),
-      turns: currentResult?.state.usage.requests ?? maxTurns,
-      escalationLog: [],
-    }),
+    () => {
+      emit({ kind: 'done', status: 'timeout' });
+      return {
+        output: scratchpad.isEmpty()
+          ? `Agent timed out after ${timeoutMs}ms.`
+          : scratchpad.latest(),
+        status: 'timeout',
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
+        // Preserve partial usage from the last successful agentRun so the
+        // caller sees real numbers, not zeros, on a timeout.
+        usage: partialUsage(currentResult, runner.providerConfig),
+        turns: currentResult?.state.usage.requests ?? maxTurns,
+        escalationLog: [],
+      };
+    },
     abortController,
   );
 }

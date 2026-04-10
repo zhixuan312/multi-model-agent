@@ -73,4 +73,24 @@ describe('FileTracker', () => {
     snapshot.push('mutated');
     expect(tracker.getToolCalls()).toEqual(['a']);
   });
+
+  it('fires the optional onToolCall callback synchronously for every trackToolCall (Task 9)', () => {
+    const observed: string[] = [];
+    const tracker = new FileTracker((summary) => {
+      observed.push(summary);
+    });
+    tracker.trackToolCall('readFile(a.ts)');
+    tracker.trackToolCall('grep(src/, "foo")');
+
+    // Callback fires in call order, once per invocation, BEFORE returning.
+    expect(observed).toEqual(['readFile(a.ts)', 'grep(src/, "foo")']);
+    // And the internal list is still populated normally.
+    expect(tracker.getToolCalls()).toEqual(['readFile(a.ts)', 'grep(src/, "foo")']);
+  });
+
+  it('still works when no onToolCall callback is supplied (back-compat)', () => {
+    const tracker = new FileTracker();
+    expect(() => tracker.trackToolCall('readFile(a.ts)')).not.toThrow();
+    expect(tracker.getToolCalls()).toEqual(['readFile(a.ts)']);
+  });
 });

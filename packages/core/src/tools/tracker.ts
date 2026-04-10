@@ -18,6 +18,17 @@ export class FileTracker {
   private reads = new Set<string>();
   private writes = new Set<string>();
   private toolCalls: string[] = [];
+  private readonly onToolCall?: (summary: string) => void;
+
+  /**
+   * @param onToolCall Optional callback invoked synchronously after every
+   *   `trackToolCall(...)`. Used by runners (Task 9+) to stream tool
+   *   invocations out as `ProgressEvent`s in real time. The callback must
+   *   not throw; the runner wraps it in `safeSink` before passing it in.
+   */
+  constructor(onToolCall?: (summary: string) => void) {
+    this.onToolCall = onToolCall;
+  }
 
   trackRead(filePath: string): void {
     this.reads.add(filePath);
@@ -29,10 +40,13 @@ export class FileTracker {
 
   /**
    * Record a one-line summary of a tool invocation. Order is preserved so
-   * the caller can reconstruct what the worker actually did.
+   * the caller can reconstruct what the worker actually did. If an
+   * `onToolCall` callback was supplied at construction, it is fired
+   * synchronously after the summary is recorded.
    */
   trackToolCall(summary: string): void {
     this.toolCalls.push(summary);
+    this.onToolCall?.(summary);
   }
 
   getReads(): string[] {

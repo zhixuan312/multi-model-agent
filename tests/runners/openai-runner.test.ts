@@ -394,6 +394,136 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(mockRun).toHaveBeenCalledTimes(2);
   });
 
+  // ---------------------------------------------------------------------------
+  // Task 9: progress event emission contract
+  //
+  // These tests pin the sequence of `ProgressEvent`s that openai-runner emits
+  // across the supervision loop for the scenarios that matter in practice:
+  //   - happy path        → turn_start → text_emission → turn_complete → done(ok)
+  //   - supervise_fragment → injection event on the re-prompt
+  //   - tool_call          → tracker callback routes through onProgress
+  // ---------------------------------------------------------------------------
+
+  it('emits turn_start → text_emission → turn_complete → done(ok) on the happy path (Task 9)', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, requests: 1 }));
+    const events: Array<{ kind: string; [k: string]: unknown }> = [];
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    const result = await runOpenAI(
+      'task',
+      { onProgress: (e) => events.push(e) },
+      { client: clientStub, providerConfig, defaults },
+    );
+
+    expect(result.status).toBe('ok');
+
+    // Filter out tool_call / injection events (none expected here) so the
+    // sequence assertion is stable even if an unrelated event ever sneaks in.
+    const kinds = events.map((e) => e.kind);
+    expect(kinds).toEqual(['turn_start', 'text_emission', 'turn_complete', 'done']);
+
+    const turnStart = events[0] as { kind: 'turn_start'; turn: number; provider: string };
+    expect(turnStart.turn).toBe(1); // first turn = (undefined?.requests ?? 0) + 1
+    expect(turnStart.provider).toBe('openai-compatible');
+
+    const textEmission = events[1] as { kind: 'text_emission'; turn: number; chars: number; preview: string };
+    expect(textEmission.turn).toBe(1); // post-call requests count from mockRunResult
+    expect(textEmission.chars).toBe(VALID_FINAL_OUTPUT.length);
+    expect(textEmission.preview.length).toBeLessThanOrEqual(200);
+    expect(VALID_FINAL_OUTPUT.startsWith(textEmission.preview)).toBe(true);
+
+    const turnComplete = events[2] as {
+      kind: 'turn_complete';
+      turn: number;
+      cumulativeInputTokens: number;
+      cumulativeOutputTokens: number;
+    };
+    expect(turnComplete.turn).toBe(1);
+    expect(turnComplete.cumulativeInputTokens).toBe(1000);
+    expect(turnComplete.cumulativeOutputTokens).toBe(200);
+
+    const done = events[3] as { kind: 'done'; status: string };
+    expect(done.status).toBe('ok');
+  });
+
+  it('emits an injection event with supervise_fragment when validation fails on a short fragment (Task 9)', async () => {
+    // First call: an exploration fragment → supervision re-prompt.
+    // Second call: a valid answer → clean ok return.
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check', requests: 1 }))
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, requests: 2 }));
+
+    const events: Array<{ kind: string; [k: string]: unknown }> = [];
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    await runOpenAI(
+      'task',
+      { onProgress: (e) => events.push(e) },
+      { client: clientStub, providerConfig, defaults },
+    );
+
+    const injection = events.find((e) => e.kind === 'injection') as
+      | { kind: 'injection'; injectionType: string; turn: number; contentLengthChars: number }
+      | undefined;
+    expect(injection).toBeDefined();
+    expect(injection!.injectionType).toBe('supervise_fragment');
+    expect(injection!.turn).toBe(1); // pre-retry turn == first turn's requests
+    expect(injection!.contentLengthChars).toBeGreaterThan(0);
+
+    // The injection event precedes the next turn_start, establishing the
+    // "inject, then dispatch" ordering observers rely on.
+    const injectionIdx = events.indexOf(injection!);
+    const nextTurnStartIdx = events.findIndex(
+      (e, i) => i > injectionIdx && e.kind === 'turn_start',
+    );
+    expect(nextTurnStartIdx).toBeGreaterThan(injectionIdx);
+  });
+
+  it('emits a tool_call event when the tracker records a tool invocation (Task 9)', async () => {
+    // Have the mocked run() reach into the Agent's wired tools and invoke
+    // the `glob` tool directly — this routes through the real
+    // ToolImplementations.glob, which calls tracker.trackToolCall(), which
+    // (via the Task 9 tracker callback) emits a tool_call ProgressEvent.
+    const { RunContext } = await import('@openai/agents');
+    mockRun.mockImplementationOnce(async (agent, _input, _opts) => {
+      // `agent` here is the object our MockAgent constructor returns.
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      const agentAny = agent as any;
+      const tools = agentAny.tools as Array<{ name: string; invoke: Function }>;
+      const globTool = tools.find((t) => t.name === 'glob');
+      if (globTool) {
+        await globTool.invoke(new RunContext(), JSON.stringify({ pattern: '*.nope' }));
+      }
+      return makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, requests: 1 });
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    }) as any;
+
+    const events: Array<{ kind: string; [k: string]: unknown }> = [];
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI(
+      'task',
+      { onProgress: (e) => events.push(e) },
+      { client: clientStub, providerConfig, defaults },
+    );
+
+    expect(result.status).toBe('ok');
+    const toolCall = events.find((e) => e.kind === 'tool_call') as
+      | { kind: 'tool_call'; turn: number; toolSummary: string }
+      | undefined;
+    expect(toolCall).toBeDefined();
+    expect(toolCall!.toolSummary).toContain('glob(*.nope)');
+    // Tool call fired DURING the first turn, before agentRun returned, so
+    // it is attributed to turn 1 (the in-flight turn).
+    expect(toolCall!.turn).toBe(1);
+
+    // And it sits between turn_start and turn_complete of turn 1.
+    const kinds = events.map((e) => e.kind);
+    const ts = kinds.indexOf('turn_start');
+    const tc = kinds.indexOf('turn_complete');
+    const tk = kinds.indexOf('tool_call');
+    expect(ts).toBeLessThan(tk);
+    expect(tk).toBeLessThan(tc);
+  });
+
   it('salvages scratchpad.latest() on an SDK error instead of returning "Sub-agent error: ..."', async () => {
     // First call succeeds with a degenerate fragment (populates scratchpad).
     // Second call (the re-prompt) throws — the runner should salvage the
