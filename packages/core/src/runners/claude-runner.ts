@@ -1,8 +1,102 @@
-import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
+import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createClaudeToolServer } from '../tools/claude-adapter.js';
+import { TextScratchpad } from '../tools/scratchpad.js';
+import {
+  buildSystemPrompt,
+  buildBudgetHint,
+  buildReGroundingMessage,
+  buildBudgetPressureNudge,
+  RE_GROUNDING_INTERVAL_TURNS,
+} from './prevention.js';
+import {
+  validateCompletion,
+  buildRePrompt,
+  sameDegenerateOutput,
+  resolveInputTokenSoftLimit,
+  checkWatchdogThreshold,
+  logWatchdogEvent,
+} from './supervision.js';
+import { findModelProfile } from '../routing/model-profiles.js';
+
+/**
+ * Hard cap on supervision re-prompts before we give up and salvage. Same as
+ * openai-runner; see spec A.2.2.
+ */
+const MAX_SUPERVISION_RETRIES = 3;
+
+/**
+ * Minimal pushable async-iterable queue for feeding user messages to the
+ * claude-agent-sdk `query()` in streaming-input mode.
+ *
+ * The SDK's `query({ prompt: string | AsyncIterable<SDKUserMessage>, ... })`
+ * signature (see node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1879-1882)
+ * accepts an async iterable when we want multi-turn input — the intended
+ * pathway for "push a follow-up user message into the current query without
+ * restarting the CLI subprocess." The built-in `streamInput(...)` method on
+ * the returned `Query` object (sdk.d.ts L1862) is documented as "used
+ * internally for multi-turn conversations", and the only public way to
+ * drive multi-turn input is via this iterable.
+ *
+ * This class is deliberately small: `push(msg)` delivers a message to a
+ * waiting iterator (or buffers it if the iterator isn't waiting yet),
+ * `close()` signals end-of-stream, and `[Symbol.asyncIterator]()` returns
+ * a generator that yields buffered messages then awaits the next push.
+ */
+class PushableUserMessageQueue implements AsyncIterable<SDKUserMessage> {
+  private buffer: SDKUserMessage[] = [];
+  private resolvers: Array<(value: IteratorResult<SDKUserMessage>) => void> = [];
+  private closed = false;
+
+  push(msg: SDKUserMessage): void {
+    if (this.closed) return;
+    const resolver = this.resolvers.shift();
+    if (resolver) {
+      resolver({ value: msg, done: false });
+    } else {
+      this.buffer.push(msg);
+    }
+  }
+
+  close(): void {
+    if (this.closed) return;
+    this.closed = true;
+    while (this.resolvers.length > 0) {
+      const resolver = this.resolvers.shift()!;
+      resolver({ value: undefined as unknown as SDKUserMessage, done: true });
+    }
+  }
+
+  [Symbol.asyncIterator](): AsyncIterator<SDKUserMessage> {
+    return {
+      next: (): Promise<IteratorResult<SDKUserMessage>> => {
+        if (this.buffer.length > 0) {
+          return Promise.resolve({ value: this.buffer.shift()!, done: false });
+        }
+        if (this.closed) {
+          return Promise.resolve({ value: undefined as unknown as SDKUserMessage, done: true });
+        }
+        return new Promise((resolve) => {
+          this.resolvers.push(resolve);
+        });
+      },
+    };
+  }
+}
+
+/**
+ * Wrap a plain string in the SDKUserMessage envelope the SDK expects when
+ * using streaming input mode. Keeps the per-call sites tidy.
+ */
+function userMessage(text: string): SDKUserMessage {
+  return {
+    type: 'user',
+    message: { role: 'user', content: text },
+    parent_tool_use_id: null,
+  };
+}
 
 export async function runClaude(
   prompt: string,
@@ -22,6 +116,20 @@ export async function runClaude(
   const tracker = new FileTracker();
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
+  // --- Prevention layer: system prompt + budget hint ---
+  //
+  // buildSystemPrompt() is deliberately static and parameter-free (same
+  // decision as openai-runner: Task 1 review rejected provider/maxTurns
+  // options). We append our discipline rules onto the `claude_code` preset
+  // rather than REPLACING the default system prompt, because replacing it
+  // strips the SDK's tool-usage guidance. See
+  // node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1460-1465 for the
+  // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
+  // append: string }` is the intended "add to defaults" shape.
+  const systemPrompt = buildSystemPrompt();
+  const budgetHint = buildBudgetHint({ maxTurns });
+  const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
+
   // Permission bypass is intentional for sub-agent use. File-system confinement
   // is enforced by assertWithinCwd in tool definitions when sandboxPolicy is 'cwd-only'.
   const queryOptions: Options = {
@@ -32,6 +140,11 @@ export async function runClaude(
     allowDangerouslySkipPermissions: true,
     persistSession: false,
     abortController,
+    systemPrompt: {
+      type: 'preset',
+      preset: 'claude_code',
+      append: systemPrompt,
+    },
   };
 
   if (toolMode === 'full') {
@@ -62,14 +175,118 @@ export async function runClaude(
   let costUSD: number | null = null;
   let turns = 0;
 
+  // --- Scratchpad: buffers every assistant text block we see streaming
+  // through the iterator. On any termination path (ok/incomplete/max_turns/
+  // error/timeout/force_salvage) we salvage `scratchpad.latest()` when the
+  // final `result.result` is empty or degenerate. ---
+  const scratchpad = new TextScratchpad();
+
+  // --- Watchdog: resolve the input-token soft limit once per run ---
+  const profile = findModelProfile(providerConfig.model);
+  const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
+
   const run = async (): Promise<RunResult> => {
     let output = '';
     let hitMaxTurns = false;
+    let forceSalvaged = false;
+
+    // --- Supervision / watchdog bookkeeping ---
+    let supervisionRetries = 0;
+    // Initialised to `null` (NOT ''): on the first turn there is no
+    // previous degenerate output to compare against, so the same-output
+    // early-out must be skipped. See openai-runner regression #5.
+    let lastDegenerateOutput: string | null = null;
+    // High-watermark guard for the watchdog warning nudge — fire at most
+    // once per distinct input-token level. Mirrors openai-runner.
+    let lastWarnedInputTokens = -1;
+
+    // --- Streaming input queue. See PushableUserMessageQueue docstring:
+    // using an async iterable as the `prompt` enables mid-run user-message
+    // injection (supervision re-prompts, re-grounding, budget-pressure
+    // nudges) without restarting the CLI subprocess. ---
+    const messageQueue = new PushableUserMessageQueue();
+    messageQueue.push(userMessage(promptWithBudgetHint));
 
     try {
-      for await (const msg of query({ prompt, options: queryOptions })) {
+      for await (const msg of query({ prompt: messageQueue, options: queryOptions })) {
         if (msg.type === 'assistant') {
           turns++;
+
+          // Capture every assistant text block as scratchpad fodder. The
+          // claude-agent-sdk's BetaMessage.content is an array of blocks:
+          // `{ type: 'text', text } | { type: 'tool_use', ... } |
+          // { type: 'thinking', ... } | ...`. We only want plain text;
+          // tool_use blocks have no salvage value (they're side-effects)
+          // and thinking blocks are stripped before the caller sees them.
+          if ('message' in msg && msg.message && 'content' in msg.message) {
+            const content = msg.message.content;
+            if (typeof content === 'string') {
+              scratchpad.append(turns, content);
+            } else if (Array.isArray(content)) {
+              const texts = content
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .filter((c: any) => c && c.type === 'text' && typeof c.text === 'string')
+                // eslint-disable-next-line @typescript-eslint/no-explicit-any
+                .map((c: any) => c.text);
+              if (texts.length > 0) {
+                scratchpad.append(turns, texts.join('\n'));
+              }
+            }
+          }
+
+          // --- Watchdog check (assistant-message cadence). We check
+          // `inputTokens` as accumulated from prior `result` messages.
+          // On the very first assistant message inputTokens is 0 and no
+          // threshold can fire; that's correct. ---
+          const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
+          if (watchdogStatus !== 'ok') {
+            logWatchdogEvent(watchdogStatus, {
+              provider: 'claude',
+              model: providerConfig.model,
+              turn: turns,
+              inputTokens,
+              softLimit,
+              scratchpadChars: scratchpad.toString().length,
+            });
+          }
+          if (watchdogStatus === 'force_salvage') {
+            forceSalvaged = true;
+            messageQueue.close();
+            abortController.abort();
+            break;
+          }
+          // Fire the warning nudge at most once per distinct input-token
+          // high-watermark. We push a user message into the queue so the
+          // next turn of the conversation will address the budget-pressure
+          // prompt. If the nudge response is itself a valid final answer,
+          // the supervision loop on the NEXT `result` message will return
+          // `ok`. High-watermark guard prevents re-nudging if inputTokens
+          // stays the same across two assistant messages.
+          if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
+            lastWarnedInputTokens = inputTokens;
+            messageQueue.push(
+              userMessage(buildBudgetPressureNudge({ inputTokens, softLimit })),
+            );
+          }
+
+          // --- Periodic re-grounding (best-effort in streaming-input
+          // mode): inject a reminder every RE_GROUNDING_INTERVAL_TURNS
+          // turns via the same queue. The iterator keeps reading until
+          // the CLI subprocess decides to emit a final result after it
+          // processes the new user message. ---
+          if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+            messageQueue.push(
+              userMessage(
+                buildReGroundingMessage({
+                  originalPromptExcerpt: prompt,
+                  currentTurn: turns,
+                  maxTurns,
+                  toolCallsSoFar: tracker.getToolCalls().length,
+                  filesReadSoFar: tracker.getReads().length,
+                }),
+              ),
+            );
+          }
         }
 
         if (msg.type === 'result') {
@@ -81,28 +298,105 @@ export async function runClaude(
             hitMaxTurns = true;
           }
 
-          // Extract usage from modelUsage or usage
+          // Extract usage from modelUsage or usage, then ACCUMULATE into
+          // the running inputTokens/outputTokens. Supervision retries in
+          // streaming-input mode push a new user message into the queue
+          // and the SDK emits a fresh `result` message per top-level user
+          // turn — we want the cumulative usage across every result we
+          // see, not just the last one. Accumulation keeps the watchdog
+          // soft-limit check honest across retries and produces correct
+          // totals on any termination path.
+          let turnInputTokens = 0;
+          let turnOutputTokens = 0;
           if ('modelUsage' in msg && msg.modelUsage) {
             for (const model of Object.values(msg.modelUsage)) {
-              inputTokens += model.inputTokens ?? 0;
-              outputTokens += model.outputTokens ?? 0;
+              turnInputTokens += model.inputTokens ?? 0;
+              turnOutputTokens += model.outputTokens ?? 0;
             }
           } else if ('usage' in msg && msg.usage) {
             const u = msg.usage as unknown as Record<string, number>;
-            inputTokens = u['input_tokens'] ?? 0;
-            outputTokens = u['output_tokens'] ?? 0;
+            turnInputTokens = u['input_tokens'] ?? 0;
+            turnOutputTokens = u['output_tokens'] ?? 0;
           }
+          inputTokens += turnInputTokens;
+          outputTokens += turnOutputTokens;
 
           if ('total_cost_usd' in msg && typeof msg.total_cost_usd === 'number') {
             costUSD = msg.total_cost_usd;
           }
+
+          // --- Watchdog check on the result message as well: input tokens
+          // have just jumped and we may now be in force_salvage territory.
+          const postResultWatchdog = checkWatchdogThreshold(inputTokens, softLimit);
+          if (postResultWatchdog !== 'ok') {
+            logWatchdogEvent(postResultWatchdog, {
+              provider: 'claude',
+              model: providerConfig.model,
+              turn: turns,
+              inputTokens,
+              softLimit,
+              scratchpadChars: scratchpad.toString().length,
+            });
+          }
+          if (postResultWatchdog === 'force_salvage') {
+            forceSalvaged = true;
+            messageQueue.close();
+            abortController.abort();
+            break;
+          }
+
+          // --- Supervision: validate the captured output. If it's
+          // degenerate, push a re-prompt into the queue and keep reading
+          // the iterator (which will process the new user message and
+          // emit another result). If validation passes or we're out of
+          // retries, close the queue and break out of the iterator. ---
+          if (hitMaxTurns) {
+            // Fall through to the outer hitMaxTurns return; don't
+            // supervise a max-turns termination.
+            messageQueue.close();
+            break;
+          }
+
+          const validation = validateCompletion(output);
+          if (validation.valid) {
+            messageQueue.close();
+            break;
+          }
+
+          // Same-output early-out: don't burn another retry on identical
+          // garbage. Compare only when we have a previous degenerate.
+          if (
+            lastDegenerateOutput !== null &&
+            sameDegenerateOutput(output, lastDegenerateOutput)
+          ) {
+            messageQueue.close();
+            break;
+          }
+          lastDegenerateOutput = output;
+          supervisionRetries++;
+          if (supervisionRetries >= MAX_SUPERVISION_RETRIES) {
+            messageQueue.close();
+            break;
+          }
+
+          // Push the re-prompt and continue reading the iterator.
+          messageQueue.push(userMessage(buildRePrompt(validation)));
         }
       }
     } catch (err) {
+      // Preserve partial usage — the scratchpad may have buffered text
+      // from turns that ran before the throw.
       return {
-        output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
+        output: scratchpad.isEmpty()
+          ? `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`
+          : scratchpad.latest(),
         status: 'error',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUSD: effectiveCost(costUSD),
+        },
         turns,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
@@ -115,11 +409,18 @@ export async function runClaude(
     const filesWritten = tracker.getWrites();
     const toolCalls = tracker.getToolCalls();
 
-    if (hitMaxTurns) {
+    if (forceSalvaged) {
       return {
-        output: output || `Agent exceeded max turns (${maxTurns}).`,
-        status: 'max_turns',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
+        output: scratchpad.isEmpty()
+          ? `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
+          : scratchpad.latest(),
+        status: 'incomplete',
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUSD: effectiveCost(costUSD),
+        },
         turns,
         filesRead,
         filesWritten,
@@ -127,21 +428,48 @@ export async function runClaude(
       };
     }
 
-    // The Claude Agent SDK occasionally terminates without ever emitting a
-    // `result` message — leaving us with `output: ''` and `status: 'ok'`,
-    // which silently swallows the failure. Surface it as `incomplete` with
-    // a diagnostic the caller can act on, mirroring the openai-runner.
-    if (output.length === 0) {
+    if (hitMaxTurns) {
       return {
-        output: buildClaudeIncompleteDiagnostic({
-          turns,
+        output: scratchpad.isEmpty()
+          ? output || `Agent exceeded max turns (${maxTurns}).`
+          : scratchpad.latest(),
+        status: 'max_turns',
+        usage: {
           inputTokens,
           outputTokens,
-          filesRead,
-          filesWritten,
-        }),
+          totalTokens: inputTokens + outputTokens,
+          costUSD: effectiveCost(costUSD),
+        },
+        turns,
+        filesRead,
+        filesWritten,
+        toolCalls,
+      };
+    }
+
+    // --- Post-iterator validation: if we broke out of the iterator
+    // because supervision was exhausted or the same-output early-out
+    // fired, the final `output` is still degenerate. Salvage from the
+    // scratchpad when possible. ---
+    const finalValidation = validateCompletion(output);
+    if (!finalValidation.valid) {
+      return {
+        output: scratchpad.isEmpty()
+          ? buildClaudeIncompleteDiagnostic({
+              turns,
+              inputTokens,
+              outputTokens,
+              filesRead,
+              filesWritten,
+            })
+          : scratchpad.latest(),
         status: 'incomplete',
-        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUSD: effectiveCost(costUSD),
+        },
         turns,
         filesRead,
         filesWritten,
@@ -174,15 +502,25 @@ export async function runClaude(
     return computed ?? sdkCost;
   }
 
-  return withTimeout(run(), timeoutMs, () => ({
-    output: `Agent timed out after ${timeoutMs}ms.`,
-    status: 'timeout',
-    filesRead: tracker.getReads(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: effectiveCost(costUSD) },
-    turns,
-  }), abortController);
+  return withTimeout(
+    run(),
+    timeoutMs,
+    () => ({
+      output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
+      status: 'timeout',
+      filesRead: tracker.getReads(),
+      filesWritten: tracker.getWrites(),
+      toolCalls: tracker.getToolCalls(),
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUSD: effectiveCost(costUSD),
+      },
+      turns,
+    }),
+    abortController,
+  );
 }
 
 function buildClaudeIncompleteDiagnostic(opts: {
