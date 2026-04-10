@@ -41,20 +41,9 @@ Provider auth currently works like this:
 - `claude`: uses `ANTHROPIC_API_KEY` if set, otherwise Claude's existing auth flow on the machine
 - `openai-compatible`: uses `apiKey` or `apiKeyEnv` from your config
 
-### 2. Install the MCP server
+### 2. How the server runs
 
-Use `npx`:
-
-```bash
-npx @zhixuan92/multi-model-agent-mcp serve
-```
-
-Or install globally:
-
-```bash
-npm install -g @zhixuan92/multi-model-agent-mcp
-multi-model-agent serve
-```
+You don't start the server yourself. Your MCP client (Claude Code, Claude Desktop, Cursor, …) spawns it over stdio on demand using the `npx` command in step 4 below — no install step, no long-running process to manage. `npx` fetches the latest published version each time.
 
 ### 3. Create your config
 
@@ -120,7 +109,7 @@ Recommended practice:
 For Claude Code:
 
 ```bash
-claude mcp add multi-model-agent -- npx @zhixuan92/multi-model-agent-mcp serve
+claude mcp add multi-model-agent -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 If your providers need environment variables:
@@ -130,7 +119,7 @@ claude mcp add multi-model-agent \
   -e OPENAI_API_KEY=sk-... \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e MINIMAX_API_KEY=... \
-  -- npx @zhixuan92/multi-model-agent-mcp serve
+  -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 For Claude Desktop, add this to `claude_desktop_config.json`:
@@ -140,7 +129,7 @@ For Claude Desktop, add this to `claude_desktop_config.json`:
   "mcpServers": {
     "multi-model-agent": {
       "command": "npx",
-      "args": ["@zhixuan92/multi-model-agent-mcp", "serve"],
+      "args": ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"],
       "env": {
         "OPENAI_API_KEY": "sk-...",
         "ANTHROPIC_API_KEY": "sk-ant-...",

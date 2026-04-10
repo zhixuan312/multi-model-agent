@@ -2,16 +2,9 @@
 
 MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Exposes one tool — `delegate_tasks` — that runs work in parallel across multiple LLM providers (Claude, Codex, OpenAI-compatible) and auto-routes each task to the cheapest provider that can handle it.
 
-## Install
+## How it works
 
-```bash
-# Run without installing
-npx @zhixuan92/multi-model-agent-mcp serve
-
-# Or install globally
-npm install -g @zhixuan92/multi-model-agent-mcp
-multi-model-agent serve
-```
+You don't run this server yourself. Your MCP client (Claude Code, Claude Desktop, Cursor, …) spawns it over stdio whenever a session starts, using the config snippet below. No install step, no long-running process to manage — `npx` fetches the latest version on demand.
 
 Requires Node `>= 22`.
 
@@ -57,12 +50,14 @@ Provider auth:
 - **`claude`** uses `ANTHROPIC_API_KEY` if set, otherwise the local Claude auth flow
 - **`openai-compatible`** uses `apiKeyEnv` (preferred) or inline `apiKey`
 
-## Register with an MCP client
+## Setup
 
 ### Claude Code
 
+One command — the client will spawn the server on demand:
+
 ```bash
-claude mcp add multi-model-agent -- npx @zhixuan92/multi-model-agent-mcp serve
+claude mcp add multi-model-agent -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 If your providers need environment variables:
@@ -72,7 +67,7 @@ claude mcp add multi-model-agent \
   -e OPENAI_API_KEY=sk-... \
   -e ANTHROPIC_API_KEY=sk-ant-... \
   -e MINIMAX_API_KEY=... \
-  -- npx @zhixuan92/multi-model-agent-mcp serve
+  -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
 ### Claude Desktop
@@ -84,7 +79,7 @@ Add to `claude_desktop_config.json`:
   "mcpServers": {
     "multi-model-agent": {
       "command": "npx",
-      "args": ["@zhixuan92/multi-model-agent-mcp", "serve"],
+      "args": ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"],
       "env": {
         "OPENAI_API_KEY": "sk-...",
         "ANTHROPIC_API_KEY": "sk-ant-...",
