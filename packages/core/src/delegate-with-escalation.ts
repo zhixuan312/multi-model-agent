@@ -16,6 +16,10 @@ export interface DelegateOptions {
   explicitlyPinned?: boolean;
 }
 
+// NOTE: must stay byte-identical to the ordering in
+// routing/select-provider-for-task.ts so the head of the escalation chain is
+// the same provider auto-routing would have picked. If you change one, change
+// both.
 const COST_ORDER: Record<CostTier, number> = { free: 0, low: 1, medium: 2, high: 3 };
 
 /**
@@ -87,10 +91,13 @@ export async function delegateWithEscalation(
       // actually sent on each attempt. For Task 6, stub with zero/empty.
       initialPromptLengthChars: 0,
       initialPromptHash: '',
+      // Use `||` (not `??`) so an empty-string error falls through to the
+      // status sentinel — an empty `reason` would be indistinguishable from
+      // an `ok` row in the escalation log.
       reason:
         result.status === 'ok'
           ? undefined
-          : (result.error ?? `status=${result.status}`),
+          : (result.error || `status=${result.status}`),
     };
 
     attempts.push({ result, record });
