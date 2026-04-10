@@ -187,8 +187,6 @@ export async function runClaude(
 
   const run = async (): Promise<RunResult> => {
     let output = '';
-    let hitMaxTurns = false;
-    let forceSalvaged = false;
 
     // --- Supervision / watchdog bookkeeping ---
     let supervisionRetries = 0;
@@ -199,6 +197,15 @@ export async function runClaude(
     // High-watermark guard for the watchdog warning nudge — fire at most
     // once per distinct input-token level. Mirrors openai-runner.
     let lastWarnedInputTokens = -1;
+
+    // --- Completed-result sentinel. Every exit from the supervision
+    // state machine inside the `for await` iterator sets this to a fully-
+    // built RunResult and then `break`s. After the loop, the one explicit
+    // return on the happy path is `completedResult`. This gives every
+    // exit (ok / incomplete / force_salvage / max_turns) a single
+    // explicit owner, mirroring openai-runner's `while (true) + return`
+    // shape but compatible with the for-await iterator contract. ---
+    let completedResult: RunResult | null = null;
 
     // --- Streaming input queue. See PushableUserMessageQueue docstring:
     // using an async iterable as the `prompt` enables mid-run user-message
@@ -237,7 +244,10 @@ export async function runClaude(
           // --- Watchdog check (assistant-message cadence). We check
           // `inputTokens` as accumulated from prior `result` messages.
           // On the very first assistant message inputTokens is 0 and no
-          // threshold can fire; that's correct. ---
+          // threshold can fire; that's correct. This is also the ONLY
+          // site that handles `warning` — it logs AND pushes the nudge
+          // as one action. The post-result site only handles
+          // force_salvage. ---
           const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
           if (watchdogStatus !== 'ok') {
             logWatchdogEvent(watchdogStatus, {
@@ -250,7 +260,16 @@ export async function runClaude(
             });
           }
           if (watchdogStatus === 'force_salvage') {
-            forceSalvaged = true;
+            completedResult = buildClaudeForceSalvageResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+              softLimit,
+            });
             messageQueue.close();
             abortController.abort();
             break;
@@ -294,9 +313,7 @@ export async function runClaude(
             output = msg.result;
           }
 
-          if ('subtype' in msg && msg.subtype === 'error_max_turns') {
-            hitMaxTurns = true;
-          }
+          const hitMaxTurns = 'subtype' in msg && msg.subtype === 'error_max_turns';
 
           // Extract usage from modelUsage or usage, then ACCUMULATE into
           // the running inputTokens/outputTokens. Supervision retries in
@@ -327,8 +344,13 @@ export async function runClaude(
 
           // --- Watchdog check on the result message as well: input tokens
           // have just jumped and we may now be in force_salvage territory.
+          // The post-result site ONLY handles force_salvage. `warning` is
+          // intentionally ignored here — the assistant-message-cadence site
+          // above is the single place that logs warnings AND pushes the
+          // nudge into the queue. Logging `warning` here without pushing a
+          // nudge would be misleading (suggests action that didn't happen).
           const postResultWatchdog = checkWatchdogThreshold(inputTokens, softLimit);
-          if (postResultWatchdog !== 'ok') {
+          if (postResultWatchdog === 'force_salvage') {
             logWatchdogEvent(postResultWatchdog, {
               provider: 'claude',
               model: providerConfig.model,
@@ -337,28 +359,55 @@ export async function runClaude(
               softLimit,
               scratchpadChars: scratchpad.toString().length,
             });
-          }
-          if (postResultWatchdog === 'force_salvage') {
-            forceSalvaged = true;
+            completedResult = buildClaudeForceSalvageResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+              softLimit,
+            });
             messageQueue.close();
             abortController.abort();
             break;
           }
 
-          // --- Supervision: validate the captured output. If it's
-          // degenerate, push a re-prompt into the queue and keep reading
-          // the iterator (which will process the new user message and
-          // emit another result). If validation passes or we're out of
-          // retries, close the queue and break out of the iterator. ---
+          // --- Max-turns: don't supervise a max-turns termination,
+          // build the max_turns result directly and exit. ---
           if (hitMaxTurns) {
-            // Fall through to the outer hitMaxTurns return; don't
-            // supervise a max-turns termination.
+            completedResult = buildClaudeMaxTurnsResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+              maxTurns,
+              lastOutput: output,
+            });
             messageQueue.close();
             break;
           }
 
+          // --- Supervision: validate the captured output. Valid output
+          // is an immediate ok-exit. Degenerate output either re-prompts
+          // (and keeps reading the iterator) or — if the retry budget is
+          // spent / same-output early-out fires — exits as incomplete. ---
           const validation = validateCompletion(output);
           if (validation.valid) {
+            completedResult = buildClaudeOkResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+              output,
+            });
             messageQueue.close();
             break;
           }
@@ -369,12 +418,30 @@ export async function runClaude(
             lastDegenerateOutput !== null &&
             sameDegenerateOutput(output, lastDegenerateOutput)
           ) {
+            completedResult = buildClaudeIncompleteResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+            });
             messageQueue.close();
             break;
           }
           lastDegenerateOutput = output;
           supervisionRetries++;
           if (supervisionRetries >= MAX_SUPERVISION_RETRIES) {
+            completedResult = buildClaudeIncompleteResult({
+              tracker,
+              scratchpad,
+              providerConfig,
+              sdkCostUSD: costUSD,
+              inputTokens,
+              outputTokens,
+              turns,
+            });
             messageQueue.close();
             break;
           }
@@ -395,7 +462,7 @@ export async function runClaude(
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
-          costUSD: effectiveCost(costUSD),
+          costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD),
         },
         turns,
         filesRead: tracker.getReads(),
@@ -405,102 +472,22 @@ export async function runClaude(
       };
     }
 
-    const filesRead = tracker.getReads();
-    const filesWritten = tracker.getWrites();
-    const toolCalls = tracker.getToolCalls();
-
-    if (forceSalvaged) {
-      return {
-        output: scratchpad.isEmpty()
-          ? `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
-          : scratchpad.latest(),
-        status: 'incomplete',
-        usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUSD: effectiveCost(costUSD),
-        },
-        turns,
-        filesRead,
-        filesWritten,
-        toolCalls,
-      };
-    }
-
-    if (hitMaxTurns) {
-      return {
-        output: scratchpad.isEmpty()
-          ? output || `Agent exceeded max turns (${maxTurns}).`
-          : scratchpad.latest(),
-        status: 'max_turns',
-        usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUSD: effectiveCost(costUSD),
-        },
-        turns,
-        filesRead,
-        filesWritten,
-        toolCalls,
-      };
-    }
-
-    // --- Post-iterator validation: if we broke out of the iterator
-    // because supervision was exhausted or the same-output early-out
-    // fired, the final `output` is still degenerate. Salvage from the
-    // scratchpad when possible. ---
-    const finalValidation = validateCompletion(output);
-    if (!finalValidation.valid) {
-      return {
-        output: scratchpad.isEmpty()
-          ? buildClaudeIncompleteDiagnostic({
-              turns,
-              inputTokens,
-              outputTokens,
-              filesRead,
-              filesWritten,
-            })
-          : scratchpad.latest(),
-        status: 'incomplete',
-        usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
-          costUSD: effectiveCost(costUSD),
-        },
-        turns,
-        filesRead,
-        filesWritten,
-        toolCalls,
-      };
-    }
-
-    return {
-      output,
-      status: 'ok',
-      usage: {
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-        costUSD: effectiveCost(costUSD),
-      },
+    // Every `break` inside the iterator above assigned `completedResult`
+    // before exiting. If the iterator drained without any break (e.g. the
+    // SDK closed the stream cleanly without ever emitting a final
+    // `result`), synthesize an incomplete result so the caller always
+    // gets a meaningful diagnostic instead of undefined.
+    if (completedResult) return completedResult;
+    return buildClaudeIncompleteResult({
+      tracker,
+      scratchpad,
+      providerConfig,
+      sdkCostUSD: costUSD,
+      inputTokens,
+      outputTokens,
       turns,
-      filesRead,
-      filesWritten,
-      toolCalls,
-    };
+    });
   };
-
-  // The Claude Agent SDK reports its own costUSD via total_cost_usd. If the
-  // user set inputCostPerMTok / outputCostPerMTok in their config (e.g. for
-  // a custom-priced gateway), prefer that calculation over the SDK's number;
-  // otherwise fall back to whatever the SDK gave us.
-  function effectiveCost(sdkCost: number | null): number | null {
-    const computed = computeCostUSD(inputTokens, outputTokens, providerConfig);
-    return computed ?? sdkCost;
-  }
 
   return withTimeout(
     run(),
@@ -515,12 +502,138 @@ export async function runClaude(
         inputTokens,
         outputTokens,
         totalTokens: inputTokens + outputTokens,
-        costUSD: effectiveCost(costUSD),
+        costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD),
       },
       turns,
     }),
     abortController,
   );
+}
+
+// --- Helpers: canonical return-shape builders -------------------------------
+//
+// Mirror openai-runner's buildOkResult / buildSupervisionExhaustedResult /
+// buildForceSalvageResult so each exit from the supervision state machine is
+// a one-line call. Every helper folds the shared
+// filesRead/filesWritten/toolCalls/effectiveCost preamble so the call sites
+// in run() stay short and symmetric across runners.
+
+interface ClaudeResultCommonArgs {
+  tracker: FileTracker;
+  scratchpad: TextScratchpad;
+  providerConfig: ProviderConfig;
+  sdkCostUSD: number | null;
+  inputTokens: number;
+  outputTokens: number;
+  turns: number;
+}
+
+function effectiveClaudeCost(
+  providerConfig: ProviderConfig,
+  inputTokens: number,
+  outputTokens: number,
+  sdkCost: number | null,
+): number | null {
+  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  return computed ?? sdkCost;
+}
+
+function buildClaudeOkResult(
+  args: ClaudeResultCommonArgs & { output: string },
+): RunResult {
+  const { tracker, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, output } = args;
+  return {
+    output,
+    status: 'ok',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+/**
+ * Supervision-exhausted path: retry cap hit or same-output early-out. Prefer
+ * scratchpad salvage; fall back to the incomplete diagnostic.
+ */
+function buildClaudeIncompleteResult(
+  args: ClaudeResultCommonArgs,
+): RunResult {
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns } = args;
+  const filesRead = tracker.getReads();
+  const filesWritten = tracker.getWrites();
+  return {
+    output: scratchpad.isEmpty()
+      ? buildClaudeIncompleteDiagnostic({
+          turns,
+          inputTokens,
+          outputTokens,
+          filesRead,
+          filesWritten,
+        })
+      : scratchpad.latest(),
+    status: 'incomplete',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD),
+    },
+    turns,
+    filesRead,
+    filesWritten,
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+function buildClaudeForceSalvageResult(
+  args: ClaudeResultCommonArgs & { softLimit: number },
+): RunResult {
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, softLimit } = args;
+  return {
+    output: scratchpad.isEmpty()
+      ? `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
+      : scratchpad.latest(),
+    status: 'incomplete',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
+}
+
+function buildClaudeMaxTurnsResult(
+  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string },
+): RunResult {
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  return {
+    output: scratchpad.isEmpty()
+      ? lastOutput || `Agent exceeded max turns (${maxTurns}).`
+      : scratchpad.latest(),
+    status: 'max_turns',
+    usage: {
+      inputTokens,
+      outputTokens,
+      totalTokens: inputTokens + outputTokens,
+      costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD),
+    },
+    turns,
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+  };
 }
 
 function buildClaudeIncompleteDiagnostic(opts: {
