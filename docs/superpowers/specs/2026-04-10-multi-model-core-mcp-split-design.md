@@ -95,7 +95,7 @@ function effectiveCost(config: ProviderConfig): CostTier
 // Returns structured eligibility report for every configured provider.
 // Each entry states whether the provider is eligible and, if not, which
 // specific checks failed and why. Use this to debug routing decisions.
-function getEligibleProviders(
+function evaluateProviders(
   task: TaskSpec,
   config: MultiModelConfig,
 ): ProviderEligibilityReport[]
@@ -104,12 +104,22 @@ interface ProviderEligibilityReport {
   name: string
   config: ProviderConfig
   eligible: boolean
-  /** Reason only present when eligible === false. */
+  /** Reasons only present when eligible === false. */
   reasons: EligibilityFailure[]
 }
 
+/** Extensible — add new check types without a breaking change. */
+type EligibilityFailureCheck =
+  | 'capability'
+  | 'tier'
+  | 'tool_mode'
+  | 'provider_not_found'
+  | 'unsupported_provider_type'
+  | 'missing_required_field'
+  | string
+
 interface EligibilityFailure {
-  check: 'capability' | 'tier' | 'tool_mode'
+  check: EligibilityFailureCheck
   detail: string
   /** e.g. "shell not available under sandboxPolicy 'cwd-only'" */
   message: string
@@ -232,7 +242,7 @@ async function executeTask(
 ): Promise<RunResult>
 
 // Public runTasks() orchestrates:
-//  1. getEligibleProviders() for each spec — to surface errors before spending tokens
+//  1. evaluateProviders() for each spec — to surface errors before spending tokens
 //  2. resolveTaskProvider() for each task
 //  3. executeTask() in parallel
 //  4. return results in input order
@@ -247,7 +257,7 @@ When a task does not specify a provider, core selects one using:
 3. **Cost preference (STRONG):** Among remaining eligible providers, select the cheapest `costTier`.
 4. **Tiebreaker:** If multiple providers share the same cost tier, select by provider name sorted ascending (ASCII/lexicographic order).
 
-If no provider passes the filter, the task returns an error `RunResult`. Callers should call `getEligibleProviders(task, config)` to diagnose which checks failed for each configured provider.
+If no provider passes the filter, the task returns an error `RunResult`. Callers should call `evaluateProviders(task, config)` to diagnose which checks failed for each configured provider.
 
 ### `resolveTaskCapabilities()` Behavior
 
@@ -309,7 +319,7 @@ packages/
       routing/
         capabilities.ts           # getCapabilities
         model-profiles.ts          # findProfile, effectiveCost, ModelProfile
-        resolve.ts                 # resolveTaskProvider, getEligibleProviders,
+        resolve.ts                 # resolveTaskProvider, evaluateProviders,
                                     # resolveTaskCapabilities
       runners/
         openai-runner.ts
@@ -384,4 +394,4 @@ This is a v0.1.0 greenfield project. No backward compatibility is required. The 
 - Routing helpers reorganized: `capabilities.ts`, `model-profiles.ts`, `resolve.ts` under `core/src/routing/`.
 - Config split: `schema.ts` (Zod + parse), `load.ts` (file loading helper).
 - `ProviderConfig` becomes a discriminated union — `CodexProviderConfig`, `ClaudeProviderConfig`, `OpenAICompatibleProviderConfig`. `baseUrl` is required on `OpenAICompatibleProviderConfig`.
-- `getEligibleProviders()` returns `ProviderEligibilityReport[]` for all providers (not just eligible), with per-check failure reasons.
+- `getEligibleProviders()` is renamed to `evaluateProviders()` with structured `ProviderEligibilityReport[]` return type covering all providers.
