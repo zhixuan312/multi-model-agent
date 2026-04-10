@@ -179,6 +179,22 @@ Then ask your client to call `delegate_tasks` with a trivial task such as:
 }
 ```
 
+## Recommended: Delegation Rule for Claude Code
+
+Claude Code's native `Task` / `Agent` subagents inherit your parent session's expensive model and eat its context window. We ship a drop-in rule file that teaches Claude Code **when** to delegate work through `delegate_tasks` instead — mechanical edits go to free providers, reasoning-tier work goes to expensive providers only when needed, and independent tasks run in parallel.
+
+Install globally with:
+
+```bash
+mkdir -p ~/.claude/rules
+curl -o ~/.claude/rules/multi-model-delegation.md \
+  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/docs/claude-code-delegation-rule.md
+```
+
+Then restart Claude Code. The full rule — install options, scope (what to delegate vs. keep native), provider routing table, dispatch examples, and status handling — lives in [`docs/claude-code-delegation-rule.md`](./docs/claude-code-delegation-rule.md). Read that file for the complete version before adjusting it to your own provider names.
+
+**Superpowers users:** the rule pairs with `superpowers:writing-plans`. Specific per-task scope (file paths, mechanical vs. integration vs. architectural, capabilities needed) lets the rule auto-route each task to the cheapest qualifying provider. Vague plans force escalation and cost more. See the *"Writing plans that delegate well"* section of the rule file for examples.
+
 ## How Routing Works
 
 When you omit `provider`, the server auto-selects one by:
