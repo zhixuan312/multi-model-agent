@@ -226,11 +226,12 @@ Tests passing is **necessary but not sufficient** for trust. Don't outsource *"i
 
 ### Status Handling
 
-`delegate_tasks` returns one object per task with fields `provider`, `status`, `output`, `turns`, `files`, `usage`, and optionally `error`. The `status` field is one of exactly four protocol values:
+`delegate_tasks` returns one object per task with fields `provider`, `status`, `output`, `turns`, `filesRead`, `filesWritten`, `usage`, and optionally `error`. The `status` field is one of exactly five protocol values:
 
 | `status` | Meaning | Action |
 |---|---|---|
-| `ok` | Worker finished normally | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. |
+| `ok` | Worker finished normally with usable output | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. |
+| `incomplete` | Agent loop terminated but produced no usable final answer | Read the diagnostic in `output` (it includes turn count, token usage, and which files the worker actually read). Re-dispatch with a tighter brief or escalate provider tier — do not retry the same provider with the same prompt. |
 | `error` | Provider call failed | Read `error`. Usually a capability mismatch, missing API key, or unavailable model. Fix the call; don't blindly retry. |
 | `timeout` | Hit `timeoutMs` | Task is too large or the worker is stuck. Break into smaller pieces; don't just raise the timeout. |
 | `max_turns` | Hit `maxTurns` | Worker looped. Re-dispatch on a higher-tier provider with a tighter brief, or break the task down. |

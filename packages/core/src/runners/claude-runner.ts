@@ -104,14 +104,50 @@ export async function runClaude(
         status: 'error',
         usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
         turns,
-        files: tracker.getFiles(),
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
         error: err instanceof Error ? err.message : String(err),
       };
     }
 
+    const filesRead = tracker.getReads();
+    const filesWritten = tracker.getWrites();
+
+    if (hitMaxTurns) {
+      return {
+        output: output || `Agent exceeded max turns (${maxTurns}).`,
+        status: 'max_turns',
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+        turns,
+        filesRead,
+        filesWritten,
+      };
+    }
+
+    // The Claude Agent SDK occasionally terminates without ever emitting a
+    // `result` message — leaving us with `output: ''` and `status: 'ok'`,
+    // which silently swallows the failure. Surface it as `incomplete` with
+    // a diagnostic the caller can act on, mirroring the openai-runner.
+    if (output.length === 0) {
+      return {
+        output: buildClaudeIncompleteDiagnostic({
+          turns,
+          inputTokens,
+          outputTokens,
+          filesRead,
+          filesWritten,
+        }),
+        status: 'incomplete',
+        usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
+        turns,
+        filesRead,
+        filesWritten,
+      };
+    }
+
     return {
-      output: hitMaxTurns ? (output || `Agent exceeded max turns (${maxTurns}).`) : output,
-      status: hitMaxTurns ? 'max_turns' : 'ok',
+      output,
+      status: 'ok',
       usage: {
         inputTokens,
         outputTokens,
@@ -119,15 +155,46 @@ export async function runClaude(
         costUSD,
       },
       turns,
-      files: tracker.getFiles(),
+      filesRead,
+      filesWritten,
     };
   };
 
   return withTimeout(run(), timeoutMs, () => ({
     output: `Agent timed out after ${timeoutMs}ms.`,
     status: 'timeout',
-    files: tracker.getFiles(),
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
     usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
     turns,
   }), abortController);
+}
+
+function buildClaudeIncompleteDiagnostic(opts: {
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  filesRead: string[];
+  filesWritten: string[];
+}): string {
+  const formatList = (files: string[]) => {
+    const MAX_SHOWN = 10;
+    if (files.length === 0) return '';
+    if (files.length <= MAX_SHOWN) return ` (${files.join(', ')})`;
+    return ` (${files.slice(0, MAX_SHOWN).join(', ')}, … ${files.length - MAX_SHOWN} more)`;
+  };
+  return [
+    '[claude sub-agent terminated without producing a final answer]',
+    '',
+    'The query stream ended without ever emitting a result message. This usually means ' +
+      'the agent loop exited prematurely or the SDK lost the final message.',
+    '',
+    `Turns used:    ${opts.turns}`,
+    `Input tokens:  ${opts.inputTokens}`,
+    `Output tokens: ${opts.outputTokens}`,
+    `Files read:    ${opts.filesRead.length}${formatList(opts.filesRead)}`,
+    `Files written: ${opts.filesWritten.length}${formatList(opts.filesWritten)}`,
+    '',
+    'Recommended action: re-dispatch with a tighter brief, or check Claude Agent SDK logs.',
+  ].join('\n');
 }

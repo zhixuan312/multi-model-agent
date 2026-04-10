@@ -338,17 +338,28 @@ export async function runCodex(
           }
         }
 
-        if (textThisTurn) {
-          output = textThisTurn;
-        } else if (toolCalls.length === 0) {
-          output = `[codex returned no text — items streamed: ${itemTypesSeen.join(', ') || '(none)'}]`;
-        }
-
-        // If the model made no tool calls, it's done
+        // If the model made no tool calls, the run is over. Distinguish
+        // "model produced text" (ok) from "model produced nothing usable"
+        // (incomplete) so the caller can tell a degraded run from a real one.
         if (toolCalls.length === 0) {
+          const hasText = textThisTurn.length > 0;
+          if (hasText) {
+            output = textThisTurn;
+          }
+          const filesRead = tracker.getReads();
+          const filesWritten = tracker.getWrites();
           return {
-            output,
-            status: 'ok',
+            output: hasText
+              ? output
+              : `[codex sub-agent terminated without producing a final answer]\n\n` +
+                `The model emitted no tool calls and no text. Items streamed this turn: ${itemTypesSeen.join(', ') || '(none)'}.\n\n` +
+                `Turns used:    ${turns}\n` +
+                `Input tokens:  ${inputTokens}\n` +
+                `Output tokens: ${outputTokens}\n` +
+                `Files read:    ${filesRead.length}\n` +
+                `Files written: ${filesWritten.length}\n\n` +
+                `Recommended action: re-dispatch with a tighter brief, or escalate provider tier.`,
+            status: hasText ? 'ok' : 'incomplete',
             usage: {
               inputTokens,
               outputTokens,
@@ -356,8 +367,13 @@ export async function runCodex(
               costUSD: null,
             },
             turns,
-            files: tracker.getFiles(),
+            filesRead,
+            filesWritten,
           };
+        }
+
+        if (textThisTurn) {
+          output = textThisTurn;
         }
 
         // Execute tool calls and feed outputs back
@@ -394,7 +410,8 @@ export async function runCodex(
           costUSD: null,
         },
         turns,
-        files: tracker.getFiles(),
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
       };
     } catch (err) {
       // OpenAI SDK's APIError carries status/body/headers — surface them
@@ -430,7 +447,8 @@ export async function runCodex(
           costUSD: null,
         },
         turns,
-        files: tracker.getFiles(),
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
         error: detailed,
       };
     }
@@ -439,7 +457,8 @@ export async function runCodex(
   return withTimeout(run(), timeoutMs, () => ({
     output: `Agent timed out after ${timeoutMs}ms.`,
     status: 'timeout',
-    files: tracker.getFiles(),
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
     usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: null },
     turns,
   }), abortController);

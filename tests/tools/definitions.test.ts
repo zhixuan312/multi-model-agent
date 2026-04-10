@@ -35,7 +35,31 @@ describe('tool definitions', () => {
     await tools.writeFile(filePath, 'content');
 
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('content');
-    expect(tracker.getFiles()).toContain(filePath);
+    expect(tracker.getWrites()).toContain(filePath);
+  });
+
+  it('readFile records the file in tracker.reads', async () => {
+    const filePath = path.join(tmpDir, 'tracked.txt');
+    fs.writeFileSync(filePath, 'data');
+    await tools.readFile(filePath);
+
+    expect(tracker.getReads()).toContain(filePath);
+    expect(tracker.getWrites()).not.toContain(filePath);
+  });
+
+  it('grep records the target in tracker.reads', async () => {
+    const filePath = path.join(tmpDir, 'searched.txt');
+    fs.writeFileSync(filePath, 'foo\nbar\n');
+    await tools.grep('foo', filePath);
+
+    expect(tracker.getReads()).toContain(filePath);
+  });
+
+  it('listFiles records the directory in tracker.reads', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'a.txt'), '');
+    await tools.listFiles(tmpDir);
+
+    expect(tracker.getReads()).toContain(tmpDir);
   });
 
   it('writeFile creates parent directories', async () => {

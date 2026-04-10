@@ -91,7 +91,9 @@ export function createToolImplementations(
           `File too large: ${filePath} is ${stats.size} bytes (max ${MAX_READ_FILE_BYTES})`,
         );
       }
-      return fs.readFile(resolved, 'utf-8');
+      const content = await fs.readFile(resolved, 'utf-8');
+      tracker.trackRead(resolved);
+      return content;
     },
 
     async writeFile(filePath: string, content: string): Promise<void> {
@@ -174,6 +176,8 @@ export function createToolImplementations(
         throw err;
       }
 
+      tracker.trackRead(resolved);
+
       // Directory targets get recursive grep with file:line prefixes; file
       // targets keep the original line-only output for compactness.
       const flags = isDirectory ? '-rn' : '-n';
@@ -214,6 +218,7 @@ export function createToolImplementations(
       const resolved = path.resolve(cwd, dirPath);
       if (confine) await assertWithinCwd(cwd, resolved);
       const entries = await fs.readdir(resolved, { withFileTypes: true });
+      tracker.trackRead(resolved);
       return entries.map(e => e.isDirectory() ? `${e.name}/` : e.name).sort();
     },
   };

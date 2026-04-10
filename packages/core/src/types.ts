@@ -6,7 +6,7 @@ export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
-export type RunStatus = 'ok' | 'error' | 'timeout' | 'max_turns';
+export type RunStatus = 'ok' | 'error' | 'timeout' | 'max_turns' | 'incomplete';
 
 // === Task ===
 
@@ -94,7 +94,10 @@ export interface RunResult {
   status: RunStatus
   usage: TokenUsage
   turns: number
-  files: string[]
+  /** Files whose contents the worker read (via readFile/grep/listFiles). */
+  filesRead: string[]
+  /** Files the worker wrote (via writeFile). */
+  filesWritten: string[]
   error?: string
 }
 

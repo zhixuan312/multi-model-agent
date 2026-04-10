@@ -83,9 +83,44 @@ export async function runOpenAI(
     try {
       const result = await agentRun(agent, prompt, { maxTurns, signal: abortController.signal });
       const usage = result.state.usage;
+      const filesRead = tracker.getReads();
+      const filesWritten = tracker.getWrites();
+
+      // The @openai/agents SDK terminates the loop the moment the model
+      // emits an assistant message with no tool calls. The runner used to
+      // unconditionally return that message as `output: ok`, even when the
+      // message was empty (model produced nothing) or pure reasoning that
+      // stripThinkingTags reduced to nothing. The caller then saw an empty
+      // success and had to guess what happened.
+      //
+      // Detect that case and return an explicit `incomplete` status with a
+      // diagnostic the caller can read directly.
+      const stripped = stripThinkingTags(result.finalOutput ?? '');
+      if (stripped.length === 0) {
+        return {
+          output: buildIncompleteDiagnostic({
+            providerLabel: 'openai-compatible',
+            turns: usage.requests,
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            filesRead,
+            filesWritten,
+          }),
+          status: 'incomplete',
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+            costUSD: null,
+          },
+          turns: usage.requests,
+          filesRead,
+          filesWritten,
+        };
+      }
 
       return {
-        output: stripThinkingTags(result.finalOutput ?? ''),
+        output: stripped,
         status: 'ok',
         usage: {
           inputTokens: usage.inputTokens,
@@ -94,7 +129,8 @@ export async function runOpenAI(
           costUSD: null,
         },
         turns: usage.requests,
-        files: tracker.getFiles(),
+        filesRead,
+        filesWritten,
       };
     } catch (err) {
       if (err instanceof MaxTurnsExceededError) {
@@ -103,7 +139,8 @@ export async function runOpenAI(
           status: 'max_turns',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
           turns: maxTurns,
-          files: tracker.getFiles(),
+          filesRead: tracker.getReads(),
+          filesWritten: tracker.getWrites(),
         };
       }
       return {
@@ -111,7 +148,8 @@ export async function runOpenAI(
         status: 'error',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
         turns: 0,
-        files: tracker.getFiles(),
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
         error: err instanceof Error ? err.message : String(err),
       };
     }
@@ -120,8 +158,49 @@ export async function runOpenAI(
   return withTimeout(run(), timeoutMs, () => ({
     output: `Agent timed out after ${timeoutMs}ms.`,
     status: 'timeout',
-    files: tracker.getFiles(),
+    filesRead: tracker.getReads(),
+    filesWritten: tracker.getWrites(),
     usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
     turns: maxTurns,
   }), abortController);
+}
+
+/**
+ * Synthesise a diagnostic message for runs that completed without producing
+ * usable final output. Surfaces enough metadata for the caller to debug:
+ * how many turns were spent, what the model burnt token-wise, and what files
+ * the worker actually looked at before giving up.
+ */
+function buildIncompleteDiagnostic(opts: {
+  providerLabel: string;
+  turns: number;
+  inputTokens: number;
+  outputTokens: number;
+  filesRead: string[];
+  filesWritten: string[];
+}): string {
+  const lines = [
+    `[${opts.providerLabel} sub-agent terminated without producing a final answer]`,
+    '',
+    'The agent loop ended on a message with no tool calls and no plain-text content. ' +
+      'This usually means one of:',
+    '  • the model emitted only <think> reasoning, then stopped',
+    '  • the model produced a conversational fragment instead of a final answer',
+    '  • a tool call was malformed and the SDK treated the response as terminal',
+    '',
+    `Turns used:    ${opts.turns}`,
+    `Input tokens:  ${opts.inputTokens}`,
+    `Output tokens: ${opts.outputTokens}`,
+    `Files read:    ${opts.filesRead.length}${opts.filesRead.length > 0 ? ` (${formatFileList(opts.filesRead)})` : ''}`,
+    `Files written: ${opts.filesWritten.length}${opts.filesWritten.length > 0 ? ` (${formatFileList(opts.filesWritten)})` : ''}`,
+    '',
+    'Recommended action: re-dispatch with a tighter, more explicit brief, or escalate to a higher-tier provider.',
+  ];
+  return lines.join('\n');
+}
+
+function formatFileList(files: string[]): string {
+  const MAX_SHOWN = 10;
+  if (files.length <= MAX_SHOWN) return files.join(', ');
+  return `${files.slice(0, MAX_SHOWN).join(', ')}, … ${files.length - MAX_SHOWN} more`;
 }
