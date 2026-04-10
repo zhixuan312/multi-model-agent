@@ -1,7 +1,7 @@
 import { tool } from '@openai/agents';
 import { z } from 'zod';
 import type { ToolImplementations } from './definitions.js';
-import type { SandboxPolicy } from '../../types.js';
+import type { SandboxPolicy } from '../types.js';
 
 export function createOpenAITools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy = 'cwd-only') {
   const readFile = tool({

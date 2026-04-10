@@ -139,3 +139,22 @@ export interface ProviderEligibility {
   /** Reasons only present when eligible === false. */
   reasons: EligibilityFailure[]
 }
+
+// === Utilities ===
+
+export function withTimeout<T>(
+  promise: Promise<T>,
+  timeoutMs: number,
+  onTimeout: () => T,
+  abort?: AbortController,
+): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((resolve) => {
+      setTimeout(() => {
+        abort?.abort();
+        resolve(onTimeout());
+      }, timeoutMs);
+    }),
+  ]);
+}

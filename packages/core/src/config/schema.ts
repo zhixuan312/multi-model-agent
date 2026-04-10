@@ -1,4 +1,11 @@
 import { z } from 'zod';
+import type {
+  CodexProviderConfig,
+  ClaudeProviderConfig,
+  MultiModelConfig,
+  OpenAICompatibleProviderConfig,
+  ProviderConfig,
+} from '../types.js';
 
 // === Per-provider Zod schemas ===
 
@@ -7,7 +14,7 @@ const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
 const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 
-export const codexProviderConfigSchema: z.ZodType<CodexProviderConfig> = z.object({
+export const codexProviderConfigSchema = z.object({
   type: z.literal('codex'),
   model: z.string(),
   effort: effortSchema.optional(),
@@ -18,7 +25,7 @@ export const codexProviderConfigSchema: z.ZodType<CodexProviderConfig> = z.objec
   costTier: costTierSchema.optional(),
 });
 
-export const claudeProviderConfigSchema: z.ZodType<ClaudeProviderConfig> = z.object({
+export const claudeProviderConfigSchema = z.object({
   type: z.literal('claude'),
   model: z.string(),
   effort: effortSchema.optional(),
@@ -29,7 +36,7 @@ export const claudeProviderConfigSchema: z.ZodType<ClaudeProviderConfig> = z.obj
   costTier: costTierSchema.optional(),
 });
 
-export const openAICompatibleProviderConfigSchema: z.ZodType<OpenAICompatibleProviderConfig> = z.object({
+export const openAICompatibleProviderConfigSchema = z.object({
   type: z.literal('openai-compatible'),
   model: z.string(),
   baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible providers'),
@@ -43,7 +50,7 @@ export const openAICompatibleProviderConfigSchema: z.ZodType<OpenAICompatiblePro
   costTier: costTierSchema.optional(),
 });
 
-export const providerConfigSchema: z.ZodType<ProviderConfig> = z.discriminatedUnion('type', [
+export const providerConfigSchema = z.discriminatedUnion('type', [
   codexProviderConfigSchema,
   claudeProviderConfigSchema,
   openAICompatibleProviderConfigSchema,

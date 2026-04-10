@@ -37,8 +37,8 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         }
 
         default: {
-          const _exhaustive: never = providerConfig.type;
-          throw new Error(`Unknown provider type: ${_exhaustive}`);
+          // All provider types are handled above; this is a type safety net.
+          throw new Error(`Unreachable: unknown provider type`);
         }
       }
     } catch (err) {

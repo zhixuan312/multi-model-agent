@@ -4,7 +4,7 @@ import path from 'path';
 import { exec } from 'child_process';
 import { promisify } from 'util';
 import type { FileTracker } from './tracker.js';
-import type { SandboxPolicy } from '../../types.js';
+import type { SandboxPolicy } from '../types.js';
 
 const execAsync = promisify(exec);
 

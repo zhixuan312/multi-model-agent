@@ -1,8 +1,8 @@
 import { query, type Options } from '@anthropic-ai/claude-agent-sdk';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../../types.js';
-import { FileTracker } from '../../tools/tracker.js';
-import { createToolImplementations } from '../../tools/definitions.js';
-import { createClaudeToolServer } from '../../tools/claude-adapter.js';
+import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { FileTracker } from '../tools/tracker.js';
+import { createToolImplementations } from '../tools/definitions.js';
+import { createClaudeToolServer } from '../tools/claude-adapter.js';
 
 export async function runClaude(
   prompt: string,
@@ -124,6 +124,8 @@ export async function runClaude(
   };
 
   return withTimeout(run(), timeoutMs, () => ({
+    output: `Agent timed out after ${timeoutMs}ms.`,
+    status: 'timeout',
     files: tracker.getFiles(),
     usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD },
     turns,

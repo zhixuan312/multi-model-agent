@@ -10,7 +10,7 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@scope/multi-model-agent-core/config/load';
 import { parseConfig } from '@scope/multi-model-agent-core/config/schema';
 import { runTasks } from '@scope/multi-model-agent-core/run-tasks';
-import type { TaskSpec } from '@scope/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec } from '@scope/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';
@@ -85,7 +85,7 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
  * 2. MULTI_MODEL_CONFIG environment variable
  * 3. ~/.multi-model/config.json (default home-directory location)
  */
-async function discoverConfig(): Promise<ReturnType<typeof parseConfig> extends Promise<infer T> ? T : never> {
+async function discoverConfig(): Promise<MultiModelConfig> {
   const args = process.argv.slice(2);
 
   // 1. Explicit --config

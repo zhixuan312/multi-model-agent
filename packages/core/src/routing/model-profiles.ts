@@ -1,4 +1,4 @@
-import type { CostTier, ProviderConfig, Tier } from '../../types.js';
+import type { CostTier, ProviderConfig, Tier } from '../types.js';
 
 export interface ModelProfile {
   tier: Tier;

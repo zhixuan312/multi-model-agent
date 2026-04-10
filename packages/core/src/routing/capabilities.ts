@@ -1,4 +1,4 @@
-import type { Capability, ProviderConfig } from '../../types.js';
+import type { Capability, ProviderConfig } from '../types.js';
 
 const FILE_CAPABILITIES: Capability[] = ['file_read', 'file_write', 'grep', 'glob'];
 

@@ -1,7 +1,7 @@
 import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { ToolImplementations } from './definitions.js';
-import type { SandboxPolicy } from '../../types.js';
+import type { SandboxPolicy } from '../types.js';
 
 export function createClaudeToolServer(impl: ToolImplementations, sandboxPolicy: SandboxPolicy = 'cwd-only') {
   const readFile = tool(

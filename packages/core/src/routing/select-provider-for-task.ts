@@ -1,4 +1,4 @@
-import type { ProviderConfig, TaskSpec, MultiModelConfig } from '../../types.js';
+import type { ProviderConfig, TaskSpec, MultiModelConfig } from '../types.js';
 import { resolveTaskCapabilities } from './resolve-task-capabilities.js';
 import { findModelProfile, getEffectiveCostTier } from './model-profiles.js';
 

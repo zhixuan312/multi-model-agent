@@ -1,11 +1,11 @@
 import OpenAI from 'openai';
 import { z } from 'zod';
 import type { Response, ResponseInputItem } from 'openai/resources/responses/responses';
-import { getCodexAuth } from '../../auth/codex-oauth.js';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../../types.js';
-import { FileTracker } from '../../tools/tracker.js';
-import { createToolImplementations, type ToolImplementations } from '../../tools/definitions.js';
-import type { SandboxPolicy } from '../../types.js';
+import { getCodexAuth } from '../auth/codex-oauth.js';
+import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { FileTracker } from '../tools/tracker.js';
+import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
+import type { SandboxPolicy } from '../types.js';
 
 /**
  * Holds the raw body text of the last HTTP response that returned a 4xx/5xx.
@@ -396,6 +396,8 @@ export async function runCodex(
   };
 
   return withTimeout(run(), timeoutMs, () => ({
+    output: `Agent timed out after ${timeoutMs}ms.`,
+    status: 'timeout',
     files: tracker.getFiles(),
     usage: { inputTokens, outputTokens, totalTokens: inputTokens + outputTokens, costUSD: null },
     turns,

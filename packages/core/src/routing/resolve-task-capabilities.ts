@@ -1,4 +1,4 @@
-import type { Capability, ProviderConfig, RunOptions } from '../../types.js';
+import type { Capability, ProviderConfig, RunOptions } from '../types.js';
 import { getBaseCapabilities } from './capabilities.js';
 
 /**

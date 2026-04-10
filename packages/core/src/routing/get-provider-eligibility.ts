@@ -5,7 +5,7 @@ import type {
   ProviderEligibility,
   TaskSpec,
   Tier,
-} from '../../types.js';
+} from '../types.js';
 import { resolveTaskCapabilities } from './resolve-task-capabilities.js';
 import { findModelProfile, getEffectiveCostTier } from './model-profiles.js';
 

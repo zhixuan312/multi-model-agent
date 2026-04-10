@@ -1,9 +1,9 @@
 import { Agent, run as agentRun, setTracingDisabled, OpenAIChatCompletionsModel, MaxTurnsExceededError } from '@openai/agents';
 import OpenAI from 'openai';
-import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../../types.js';
-import { FileTracker } from '../../tools/tracker.js';
-import { createToolImplementations } from '../../tools/definitions.js';
-import { createOpenAITools } from '../../tools/openai-adapter.js';
+import { withTimeout, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import { FileTracker } from '../tools/tracker.js';
+import { createToolImplementations } from '../tools/definitions.js';
+import { createOpenAITools } from '../tools/openai-adapter.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
@@ -102,5 +102,11 @@ export async function runOpenAI(
     }
   };
 
-  return withTimeout(run(), timeoutMs, () => ({ files: tracker.getFiles() }), abortController);
+  return withTimeout(run(), timeoutMs, () => ({
+    output: `Agent timed out after ${timeoutMs}ms.`,
+    status: 'timeout',
+    files: tracker.getFiles(),
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+    turns: maxTurns,
+  }), abortController);
 }
