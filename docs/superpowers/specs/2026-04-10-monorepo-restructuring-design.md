@@ -53,6 +53,7 @@ Restructure the repo from a single-package layout into a workspace monorepo with
 │       ├── package.json
 │       ├── tsconfig.json
 │       └── src/
+│           ├── index.ts       # exports buildMcpServer, buildTaskSchema
 │           ├── cli.ts
 │           └── routing/
 │               └── render-provider-routing-matrix.ts
@@ -97,18 +98,19 @@ Restructure the repo from a single-package layout into a workspace monorepo with
 ### `packages/core/package.json`
 
 - Name: `@scope/multi-model-agent-core`
-- Public exports: `types`, `config/schema`, `config/load`, `routing/*`, `provider`, `run-tasks`
-- Runners and tools: **not exported** — internal implementation detail
-- Auth helpers: **not exported** — internal
+- Root `index.ts` re-exports public API: `types`, `config/schema`, `config/load`, `routing/*`, `provider`, `run-tasks`
+- Public exports map: `.` (root), `./config/schema`, `./config/load`, `./routing/*`, `./provider`, `./run-tasks`
+- Runners, tools, and auth helpers: **not exported** — internal implementation detail
 - No `@modelcontextprotocol/sdk` dependency
 
 ### `packages/mcp/package.json`
 
 - Name: `@scope/multi-model-agent-mcp`
 - `bin: { "multi-model-agent": "./dist/cli.js" }`
+- Root `index.ts` exports `buildMcpServer` and `buildTaskSchema`
+- Public exports: `.` (root with buildMcpServer, buildTaskSchema), `./routing/render-provider-routing-matrix`
 - Depends on `@scope/multi-model-agent-core`
 - Depends on `@modelcontextprotocol/sdk`
-- Public exports: `cli`, `routing/render-provider-routing-matrix`
 
 ## Key Contracts
 
@@ -136,7 +138,7 @@ The following must be updated or removed as part of migration:
 - `src/` — deleted (moved to `packages/core/src/`)
 - `dist/` — deleted (each package has its own `dist/`)
 - `package.json` — replaced with workspace-only manifest
-- `tsconfig.json` — replaced with `tsconfig.base.json` (shared base) + per-package tsconfigs
+- `tsconfig.json` — **deleted** (per-package tsconfigs each reference `tsconfig.base.json` instead)
 - `vitest.config.ts` — updated to reference per-package tsconfigs or removed if moved to packages
 
 ## Migration Rules
@@ -159,7 +161,7 @@ The following must be updated or removed as part of migration:
 10. Add `bin` entry to `packages/mcp/package.json`
 11. Replace root `package.json` with workspace manifest
 12. Delete root `src/`, `dist/`
-13. Update root `tsconfig.json` to reference `tsconfig.base.json`
+13. Delete root `tsconfig.json` (per-package tsconfigs reference `tsconfig.base.json`)
 14. Fix `MULTI_MODEL_CONFIG` parsing (file path, not inline JSON)
 15. Update `vitest.config.ts` for workspace structure
 16. Update tests to use package imports where appropriate
