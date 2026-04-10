@@ -291,10 +291,36 @@ export async function runCodex(
           throw new Error('Codex stream ended without a response.completed event');
         }
 
-        // Preserve completed items in conversation for the next turn
+        // Replay only function_call items into the next turn's input.
+        //
+        // We send `store: false` to the Responses API, which means the server
+        // does NOT persist any items it generates (reasoning items with `rs_`
+        // ids, message items with `msg_` ids, etc.). Replaying those items
+        // wholesale causes a 404 on the next turn:
+        //   "Item with id 'rs_...' not found. Items are not persisted when
+        //    `store` is set to false."
+        //
+        // function_call items are part of the tool-call protocol — the next
+        // turn needs them so each function_call_output we push can be paired
+        // with its originating call_id. We strip the server-generated `id`
+        // field and rebuild the item from its protocol fields only, so the
+        // server has nothing to look up against unpersisted state.
+        //
+        // Reasoning, message, and other server-generated items are dropped.
+        // The model still sees its previous tool calls + their outputs, which
+        // is enough to continue a multi-turn agent loop.
         for (const item of completedItems) {
           // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          input.push(item as any);
+          const it = item as any;
+          if (it?.type === 'function_call') {
+            input.push({
+              type: 'function_call',
+              call_id: it.call_id,
+              name: it.name,
+              arguments: it.arguments ?? '',
+              // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            } as any);
+          }
         }
 
         if (textThisTurn) {
