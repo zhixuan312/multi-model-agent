@@ -15,7 +15,7 @@ import {
   type ProviderConfig,
   type ProgressEvent,
 } from '../types.js';
-import type { DegenerateKind } from './supervision.js';
+import { injectionTypeFor } from './injection-type.js';
 
 /**
  * Structural view of `RunResult` from @openai/agents. We intentionally do
@@ -98,28 +98,6 @@ export interface OpenAIRunnerOptions {
  * budget via repeated re-prompts.
  */
 const MAX_SUPERVISION_RETRIES = 3;
-
-/**
- * Map supervision validation.kind → the correct injection_type label for
- * the `ProgressEvent` emitted on a re-prompt. `fragment` and
- * `no_terminator` both fall under `supervise_fragment` — they share a
- * re-prompt style (we quote the tail back at the model) and an emission
- * label for observers.
- */
-function injectionTypeFor(
-  kind: DegenerateKind | undefined,
-): 'supervise_empty' | 'supervise_thinking' | 'supervise_fragment' {
-  switch (kind) {
-    case 'empty':
-      return 'supervise_empty';
-    case 'thinking_only':
-      return 'supervise_thinking';
-    case 'fragment':
-    case 'no_terminator':
-    default:
-      return 'supervise_fragment';
-  }
-}
 
 /**
  * Extract every assistant text emission from a single `agentRun(...)` result.

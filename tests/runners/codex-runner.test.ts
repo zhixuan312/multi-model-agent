@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ProgressEvent } from '../../packages/core/src/types.js';
+
+/**
+ * Long enough (>= 200 chars) to pass validateCompletion's minimum-length
+ * heuristic. Used in every test that wants a clean `ok` return from the
+ * supervision loop. Mirrors the constant in claude-runner.test.ts so the
+ * parity test below can share the exact same text across runners.
+ */
+const VALID_FINAL_OUTPUT =
+  'This is a complete sub-agent answer that is long enough to pass the validateCompletion minimum-length heuristic without any additional structural hints because it carries more than 200 characters of plain text content.';
 
 const mockResponsesCreate = vi.fn();
 
@@ -670,5 +680,80 @@ describe('runCodex', () => {
     // the first-turn degeneracy gets a real retry.
     expect(result.status).toBe('ok');
     expect(result.output).toBe('Here is the answer.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Task 11: progress event emission
+  // ---------------------------------------------------------------------------
+  describe('codex-runner — progress event emission', () => {
+    it('emits turn_start / text_emission / turn_complete / done in order for a one-turn run', async () => {
+      const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+      vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+      mockResponsesCreate.mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 12, output_tokens: 34 } },
+          };
+        })();
+      });
+
+      const events: ProgressEvent[] = [];
+      const onProgress = (e: ProgressEvent): void => { events.push(e); };
+
+      const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+      const result = await runCodex(
+        'prompt',
+        { onProgress },
+        { type: 'codex', model: 'gpt-5-codex' },
+        defaults,
+      );
+
+      expect(result.status).toBe('ok');
+
+      // Ordering: turn_start fires first (after turns++ at top of while
+      // iteration), then text_emission (after scratchpad append), then
+      // turn_complete (after watchdog + reground checks), then done last.
+      const kinds = events.map((e) => e.kind);
+      expect(kinds[0]).toBe('turn_start');
+      expect(kinds).toContain('text_emission');
+      expect(kinds).toContain('turn_complete');
+      expect(kinds[kinds.length - 1]).toBe('done');
+
+      // text_emission must carry the assistant text and a preview.
+      const textEvent = events.find((e) => e.kind === 'text_emission');
+      expect(textEvent).toBeDefined();
+      if (textEvent && textEvent.kind === 'text_emission') {
+        expect(textEvent.turn).toBe(1);
+        expect(textEvent.chars).toBe(VALID_FINAL_OUTPUT.length);
+        expect(textEvent.preview.length).toBeGreaterThan(0);
+      }
+
+      // turn_complete must carry the accumulated usage counters.
+      const turnComplete = events.find((e) => e.kind === 'turn_complete');
+      expect(turnComplete).toBeDefined();
+      if (turnComplete && turnComplete.kind === 'turn_complete') {
+        expect(turnComplete.turn).toBe(1);
+        expect(turnComplete.cumulativeInputTokens).toBe(12);
+        expect(turnComplete.cumulativeOutputTokens).toBe(34);
+      }
+
+      // turn_start must name the provider as 'codex' for parity tests.
+      const turnStart = events.find((e) => e.kind === 'turn_start');
+      expect(turnStart).toBeDefined();
+      if (turnStart && turnStart.kind === 'turn_start') {
+        expect(turnStart.provider).toBe('codex');
+        expect(turnStart.turn).toBe(1);
+      }
+
+      // done event status must match the final RunResult status.
+      const doneEvent = events[events.length - 1];
+      expect(doneEvent.kind).toBe('done');
+      if (doneEvent.kind === 'done') {
+        expect(doneEvent.status).toBe('ok');
+      }
+    });
   });
 });

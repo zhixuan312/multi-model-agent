@@ -25,35 +25,10 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
-  type DegenerateKind,
 } from './supervision.js';
+import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
-
-/**
- * Map supervision validation.kind → the correct injection_type label for
- * the `ProgressEvent` emitted on a re-prompt. Mirrors the openai-runner
- * helper one-for-one: `fragment` and `no_terminator` both share the
- * `supervise_fragment` label because they share a re-prompt style.
- *
- * Duplicated here (rather than extracted to a shared module) because it
- * is tiny, runner-local, and extracting for one extra call site would be
- * premature abstraction. If a third runner needs this, promote it then.
- */
-function injectionTypeFor(
-  kind: DegenerateKind | undefined,
-): 'supervise_empty' | 'supervise_thinking' | 'supervise_fragment' {
-  switch (kind) {
-    case 'empty':
-      return 'supervise_empty';
-    case 'thinking_only':
-      return 'supervise_thinking';
-    case 'fragment':
-    case 'no_terminator':
-    default:
-      return 'supervise_fragment';
-  }
-}
 
 /**
  * Hard cap on supervision re-prompts before we give up and salvage. Same as

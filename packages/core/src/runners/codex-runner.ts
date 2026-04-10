@@ -2,7 +2,14 @@ import OpenAI from 'openai';
 import { z } from 'zod';
 import type { Response, ResponseInputItem } from 'openai/resources/responses/responses';
 import { getCodexAuth } from '../auth/codex-oauth.js';
-import { withTimeout, computeCostUSD, type RunResult, type RunOptions, type ProviderConfig } from '../types.js';
+import {
+  withTimeout,
+  computeCostUSD,
+  type RunResult,
+  type RunOptions,
+  type ProviderConfig,
+  type ProgressEvent,
+} from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
@@ -21,6 +28,7 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
 } from './supervision.js';
+import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 import type { SandboxPolicy } from '../types.js';
@@ -213,7 +221,35 @@ export async function runCodex(
   const effort = options.effort ?? providerConfig.effort;
 
   const abortController = new AbortController();
-  const tracker = new FileTracker();
+
+  // --- Progress event emission (Task 11) ----------------------------------
+  //
+  // `onProgress` is already wrapped in `safeSink` by the orchestrator
+  // (Task 8), so any throw from the consumer callback is swallowed
+  // upstream and cannot corrupt this loop. We do not need to wrap it
+  // again here.
+  const onProgress = options.onProgress;
+  const emit = (event: ProgressEvent): void => {
+    if (onProgress) onProgress(event);
+  };
+
+  // Accumulated state (hoisted so the timeout callback can read partial
+  // progress, AND so the FileTracker callback closure — constructed below
+  // — can read the running turn count at firing time).
+  //
+  // Turn attribution for tool calls: in codex-runner, tool calls fire in
+  // the tool-execution loop AFTER the model's stream for that turn has
+  // completed but BEFORE the next iteration of `while` starts. The `turns`
+  // variable already reflects the current turn at that point (it was
+  // incremented at the top of the iteration), so the callback can read it
+  // directly — no +1 offset.
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let turns = 0;
+
+  const tracker = new FileTracker((summary) => {
+    emit({ kind: 'tool_call', turn: turns, toolSummary: summary });
+  });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
   const codexTools = toolMode === 'full' ? buildCodexTools(toolImpls, sandboxPolicy) : [];
@@ -257,11 +293,6 @@ export async function runCodex(
   // --- Watchdog: resolve the input-token soft limit once per run ---
   const profile = findModelProfile(providerConfig.model);
   const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
-
-  // Accumulated state (hoisted so the timeout callback can read partial progress)
-  let inputTokens = 0;
-  let outputTokens = 0;
-  let turns = 0;
 
   const run = async (): Promise<RunResult> => {
     const capture: { last?: RawErrorCapture } = {};
@@ -316,6 +347,10 @@ export async function runCodex(
     try {
       while (turns < maxTurns) {
         turns++;
+        // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
+        // turn number we use everywhere else in this runner (the scratchpad
+        // append, watchdog logs, error diagnostics, result.turns).
+        emit({ kind: 'turn_start', turn: turns, provider: 'codex' });
 
         // Codex backend requires streaming. The Codex backend's
         // `response.completed` event does NOT populate `response.output` —
@@ -400,6 +435,12 @@ export async function runCodex(
         // by default, so there is no stripping step here.
         if (textThisTurn) {
           scratchpad.append(turns, textThisTurn);
+          emit({
+            kind: 'text_emission',
+            turn: turns,
+            chars: textThisTurn.length,
+            preview: textThisTurn.slice(0, 200),
+          });
           output = textThisTurn;
         }
 
@@ -448,7 +489,18 @@ export async function runCodex(
           });
         }
         if (watchdogStatus === 'force_salvage') {
-          return buildCodexForceSalvageResult({
+          // `watchdog_force_salvage` is not an injected message — no
+          // re-prompt is sent — but observers still want to see exactly
+          // why the run is being killed. Emit with contentLengthChars: 0
+          // to reflect the "nothing was injected, we just terminated"
+          // semantics (mirrors openai-runner and claude-runner).
+          emit({
+            kind: 'injection',
+            injectionType: 'watchdog_force_salvage',
+            turn: turns,
+            contentLengthChars: 0,
+          });
+          const salvaged = buildCodexForceSalvageResult({
             tracker,
             scratchpad,
             providerConfig,
@@ -457,6 +509,8 @@ export async function runCodex(
             turns,
             softLimit,
           });
+          emit({ kind: 'done', status: salvaged.status });
+          return salvaged;
         }
         // Warning-band nudge: fire at most once per distinct input-token
         // high-watermark. Pushed as a user message so the next turn of
@@ -465,12 +519,19 @@ export async function runCodex(
         // runner emits byte-identical wording.
         if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
           lastWarnedInputTokens = inputTokens;
+          const warning = buildBudgetPressureNudge({ inputTokens, softLimit });
           input.push({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             role: 'user',
-            content: buildBudgetPressureNudge({ inputTokens, softLimit }),
+            content: warning,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any);
+          emit({
+            kind: 'injection',
+            injectionType: 'watchdog_warning',
+            turn: turns,
+            contentLengthChars: warning.length,
+          });
         }
 
         // --- Periodic re-grounding inside the loop ---------------------
@@ -488,7 +549,27 @@ export async function runCodex(
             content: reground,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any);
+          emit({
+            kind: 'injection',
+            injectionType: 'reground',
+            turn: turns,
+            contentLengthChars: reground.length,
+          });
         }
+
+        // --- turn_complete: one event per while-iteration. Fires after the
+        // watchdog + re-grounding checks have run (so cumulative token
+        // counts and any injection events are already on the wire) and
+        // BEFORE the supervision branching / tool-execution loop. Every
+        // continue/return in the branches below happens AFTER this event,
+        // so the sequence "turn_start ... text_emission ... turn_complete"
+        // is guaranteed per iteration.
+        emit({
+          kind: 'turn_complete',
+          turn: turns,
+          cumulativeInputTokens: inputTokens,
+          cumulativeOutputTokens: outputTokens,
+        });
 
         // If the model made no tool calls, the turn ended with either a
         // final answer or a degenerate emission. Wrap in the supervision
@@ -501,7 +582,7 @@ export async function runCodex(
           const validation = validateCompletion(stripped);
 
           if (validation.valid) {
-            return buildCodexOkResult({
+            const ok = buildCodexOkResult({
               tracker,
               scratchpad,
               providerConfig,
@@ -510,6 +591,8 @@ export async function runCodex(
               turns,
               output: stripped,
             });
+            emit({ kind: 'done', status: ok.status });
+            return ok;
           }
 
           // Same-output early-out: only compare when we have a previous
@@ -520,7 +603,7 @@ export async function runCodex(
               sameDegenerateOutput(stripped, lastDegenerateOutput)) ||
             supervisionRetries >= MAX_SUPERVISION_RETRIES
           ) {
-            return buildCodexIncompleteResult({
+            const exhausted = buildCodexIncompleteResult({
               tracker,
               scratchpad,
               providerConfig,
@@ -528,6 +611,8 @@ export async function runCodex(
               outputTokens,
               turns,
             });
+            emit({ kind: 'done', status: exhausted.status });
+            return exhausted;
           }
 
           // Inject the re-prompt as the next user input and continue
@@ -535,12 +620,19 @@ export async function runCodex(
           // to the re-prompt directly.
           lastDegenerateOutput = stripped;
           supervisionRetries++;
+          const rePrompt = buildRePrompt(validation);
           input.push({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
             role: 'user',
-            content: buildRePrompt(validation),
+            content: rePrompt,
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
           } as any);
+          emit({
+            kind: 'injection',
+            injectionType: injectionTypeFor(validation.kind),
+            turn: turns,
+            contentLengthChars: rePrompt.length,
+          });
           continue;
         }
 
@@ -568,7 +660,7 @@ export async function runCodex(
       }
 
       // Max turns exhausted — salvage any buffered text.
-      return buildCodexMaxTurnsResult({
+      const maxTurnsResult = buildCodexMaxTurnsResult({
         tracker,
         scratchpad,
         providerConfig,
@@ -578,6 +670,8 @@ export async function runCodex(
         maxTurns,
         lastOutput: output,
       });
+      emit({ kind: 'done', status: maxTurnsResult.status });
+      return maxTurnsResult;
     } catch (err) {
       // OpenAI SDK's APIError carries status/body/headers — surface them
       // since the Codex backend returns 400 with no body on shape mismatches.
@@ -625,6 +719,7 @@ export async function runCodex(
       // Salvage: if the scratchpad has buffered text from earlier turns,
       // return it as the output. Pre-Task-5 behavior returned only the
       // error string, losing 30k+ tokens of work on abort.
+      emit({ kind: 'done', status });
       return {
         output: scratchpad.isEmpty() ? `Sub-agent error: ${detailed}` : scratchpad.latest(),
         status,
@@ -644,24 +739,32 @@ export async function runCodex(
     }
   };
 
-  return withTimeout(run(), timeoutMs, () => ({
-    // Preserve any text the scratchpad buffered before the timeout fired.
-    // Partial usage is read from the running accumulators hoisted above —
-    // hardcoded zeros would discard every token counted on partial turns.
-    output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
-    status: 'timeout',
-    filesRead: tracker.getReads(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+  return withTimeout(
+    run(),
+    timeoutMs,
+    () => {
+      emit({ kind: 'done', status: 'timeout' });
+      return {
+        // Preserve any text the scratchpad buffered before the timeout fired.
+        // Partial usage is read from the running accumulators hoisted above —
+        // hardcoded zeros would discard every token counted on partial turns.
+        output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
+        status: 'timeout',
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+        },
+        turns,
+        escalationLog: [],
+      };
     },
-    turns,
-    escalationLog: [],
-  }), abortController);
+    abortController,
+  );
 }
 
 // --- Helpers: canonical return-shape builders -------------------------------
