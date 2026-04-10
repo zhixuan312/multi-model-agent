@@ -50,6 +50,7 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         filesRead: [],
         filesWritten: [],
         toolCalls: [],
+        escalationLog: [],
         error: err instanceof Error ? err.message : String(err),
       };
     }

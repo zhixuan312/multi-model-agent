@@ -468,6 +468,7 @@ export async function runClaude(
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        escalationLog: [],
         error: err instanceof Error ? err.message : String(err),
       };
     }
@@ -505,6 +506,7 @@ export async function runClaude(
         costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD),
       },
       turns,
+      escalationLog: [],
     }),
     abortController,
   );
@@ -555,6 +557,7 @@ function buildClaudeOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -589,6 +592,7 @@ function buildClaudeIncompleteResult(
     filesRead,
     filesWritten,
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -611,6 +615,7 @@ function buildClaudeForceSalvageResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -633,6 +638,7 @@ function buildClaudeMaxTurnsResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 

@@ -67,6 +67,7 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
           filesRead: r.filesRead,
           filesWritten: r.filesWritten,
           toolCalls: r.toolCalls,
+          escalationLog: r.escalationLog,
           usage: r.usage,
           ...(r.error && { error: r.error }),
         })),

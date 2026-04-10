@@ -363,6 +363,7 @@ export async function runOpenAI(
           filesRead,
           filesWritten,
           toolCalls,
+          escalationLog: [],
         };
       }
       const msg = err instanceof Error ? err.message : String(err);
@@ -374,6 +375,7 @@ export async function runOpenAI(
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        escalationLog: [],
         error: msg,
       };
     }
@@ -394,6 +396,7 @@ export async function runOpenAI(
       // caller sees real numbers, not zeros, on a timeout.
       usage: partialUsage(currentResult, runner.providerConfig),
       turns: currentResult?.state.usage.requests ?? maxTurns,
+      escalationLog: [],
     }),
     abortController,
   );
@@ -422,6 +425,7 @@ function buildOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -458,6 +462,7 @@ function buildSupervisionExhaustedResult(
     filesRead,
     filesWritten,
     toolCalls,
+    escalationLog: [],
   };
 }
 
@@ -488,6 +493,7 @@ function buildForceSalvageResult(
     filesRead,
     filesWritten,
     toolCalls,
+    escalationLog: [],
   };
 }
 

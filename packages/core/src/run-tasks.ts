@@ -2,6 +2,7 @@ import type { Provider, RunResult, TaskSpec, MultiModelConfig } from './types.js
 import { createProvider } from './provider.js';
 import { getProviderEligibility } from './routing/get-provider-eligibility.js';
 import { selectProviderForTask } from './routing/select-provider-for-task.js';
+import { buildEscalationChain, delegateWithEscalation } from './delegate-with-escalation.js';
 
 function errorResult(error: string): RunResult {
   return {
@@ -12,28 +13,38 @@ function errorResult(error: string): RunResult {
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
+    escalationLog: [],
     error,
   };
 }
 
 type ResolvedTask =
-  | { task: TaskSpec; provider: Provider }
+  | { task: TaskSpec; pinned: true; provider: Provider }
+  | { task: TaskSpec; pinned: false }
   | { task: TaskSpec; error: string } // routing/eligibility failure
 
 async function executeTask(
-  task: TaskSpec,
-  provider: Provider,
+  resolved: Exclude<ResolvedTask, { error: string }>,
   config: MultiModelConfig,
 ): Promise<RunResult> {
   try {
-    return await provider.run(task.prompt, {
-      tools: task.tools,
-      maxTurns: task.maxTurns,
-      timeoutMs: task.timeoutMs,
-      cwd: task.cwd,
-      effort: task.effort,
-      sandboxPolicy: task.sandboxPolicy,
-    });
+    if (resolved.pinned) {
+      // Explicit pin: chain of length 1, no escalation.
+      return await delegateWithEscalation(
+        resolved.task,
+        [resolved.provider],
+        { explicitlyPinned: true },
+      );
+    }
+    // Auto-routed: walk all eligible providers cheapest-first.
+    const chain = buildEscalationChain(resolved.task, config);
+    if (chain.length === 0) {
+      // Defensive: selectProviderForTask succeeded earlier so eligibility
+      // existed at resolution time. If the chain is somehow empty now we
+      // surface a structured error rather than throwing.
+      return errorResult('No eligible provider found for task at dispatch time.');
+    }
+    return await delegateWithEscalation(resolved.task, chain);
   } catch (err) {
     return errorResult(err instanceof Error ? err.message : String(err));
   }
@@ -70,11 +81,14 @@ export async function runTasks(
       }
       return {
         task,
+        pinned: true,
         provider: createProvider(task.provider, config),
       };
     }
 
-    // Auto-routing
+    // Auto-routing — selectProviderForTask is still used here so the "no
+    // eligible provider" error path stays identical to pre-escalation
+    // behavior. The actual chain is constructed inside executeTask.
     const selected = selectProviderForTask(task, config);
     if (!selected) {
       const available = Object.keys(config.providers);
@@ -83,10 +97,7 @@ export async function runTasks(
         error: `No eligible provider found for task (required tier: ${task.tier}, capabilities: ${task.requiredCapabilities.join(', ') || 'none'}). Available providers: ${available.join(', ') || 'none'}.`,
       };
     }
-    return {
-      task,
-      provider: createProvider(selected.name, config),
-    };
+    return { task, pinned: false };
   });
 
   return Promise.all(
@@ -94,7 +105,7 @@ export async function runTasks(
       if ('error' in r) {
         return Promise.resolve(errorResult(r.error));
       }
-      return executeTask(r.task, r.provider, config);
+      return executeTask(r, config);
     }),
   );
 }

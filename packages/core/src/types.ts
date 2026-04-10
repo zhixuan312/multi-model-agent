@@ -123,7 +123,34 @@ export interface RunResult {
   filesWritten: string[]
   /** Compact one-line summaries of every tool the worker invoked, in order. */
   toolCalls: string[]
+  /** One entry per provider attempt within this dispatch. Length === 1
+   *  for tasks that succeeded on the first try; longer when escalation
+   *  occurred. Runners initialize this to `[]`; the escalation
+   *  orchestrator populates it on each return path. */
+  escalationLog: AttemptRecord[]
   error?: string
+}
+
+/**
+ * Single provider-attempt record inside an escalation chain. The orchestrator
+ * (`delegateWithEscalation`) pushes one entry per `provider.run(...)` call.
+ */
+export interface AttemptRecord {
+  provider: string
+  status: RunStatus
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  costUSD: number | null
+  /** Character count of the very first request body sent to the provider on
+   *  this attempt. Populated by Task 12 via `RunOptions.onInitialRequest`; for
+   *  now this is always 0. */
+  initialPromptLengthChars: number
+  /** sha256 hex of the same first request body. Populated by Task 12; for now
+   *  this is always the empty string. */
+  initialPromptHash: string
+  /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
+  reason?: string
 }
 
 // === Provider (created by createProvider) ===

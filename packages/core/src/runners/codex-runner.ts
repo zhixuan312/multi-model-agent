@@ -628,6 +628,7 @@ export async function runCodex(
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        escalationLog: [],
         error: detailed,
       };
     }
@@ -649,6 +650,7 @@ export async function runCodex(
       costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
     },
     turns,
+    escalationLog: [],
   }), abortController);
 }
 
@@ -686,6 +688,7 @@ function buildCodexOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -720,6 +723,7 @@ function buildCodexIncompleteResult(
     filesRead,
     filesWritten,
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -742,6 +746,7 @@ function buildCodexForceSalvageResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
@@ -764,6 +769,7 @@ function buildCodexMaxTurnsResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    escalationLog: [],
   };
 }
 
