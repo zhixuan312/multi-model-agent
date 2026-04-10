@@ -102,6 +102,12 @@ Config lookup order:
 2. `MULTI_MODEL_CONFIG`
 3. `~/.multi-model/config.json`
 
+Recommended practice:
+
+- Use `apiKeyEnv` instead of `apiKey`
+- Set `costTier` for flat-rate or effectively free providers
+- Only set `sandboxPolicy` to `none` if you want delegated tasks to run shell commands
+
 ### 4. Register the MCP server
 
 For Claude Code:
@@ -148,7 +154,19 @@ In Claude Code:
 claude mcp list
 ```
 
-Then ask your client to call `delegate_tasks` with a trivial task on one configured provider.
+Then ask your client to call `delegate_tasks` with a trivial task such as:
+
+```json
+{
+  "tasks": [
+    {
+      "prompt": "Say hello and report which provider handled this task.",
+      "tier": "trivial",
+      "requiredCapabilities": []
+    }
+  ]
+}
+```
 
 ## How Routing Works
 
@@ -249,15 +267,18 @@ Provider fields:
 
 ## Local Development
 
+Repo layout:
+
+- `packages/core`: routing, config loading, provider runners, task execution
+- `packages/mcp`: MCP stdio server and tool schema
+- `tests`: Vitest coverage
+- `scripts`: local helper scripts
+
 ```bash
 npm install
 npm run build
 npm test
 ```
-
-More detail:
-
-- [Getting Started](docs/getting-started.md)
 - [Development Guide](docs/development.md)
 
 ## Troubleshooting
