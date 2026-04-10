@@ -35,7 +35,31 @@ describe('tool definitions', () => {
     await tools.writeFile(filePath, 'content');
 
     expect(fs.readFileSync(filePath, 'utf-8')).toBe('content');
-    expect(tracker.getFiles()).toContain(filePath);
+    expect(tracker.getWrites()).toContain(filePath);
+  });
+
+  it('readFile records the file in tracker.reads', async () => {
+    const filePath = path.join(tmpDir, 'tracked.txt');
+    fs.writeFileSync(filePath, 'data');
+    await tools.readFile(filePath);
+
+    expect(tracker.getReads()).toContain(filePath);
+    expect(tracker.getWrites()).not.toContain(filePath);
+  });
+
+  it('grep records the target in tracker.reads', async () => {
+    const filePath = path.join(tmpDir, 'searched.txt');
+    fs.writeFileSync(filePath, 'foo\nbar\n');
+    await tools.grep('foo', filePath);
+
+    expect(tracker.getReads()).toContain(filePath);
+  });
+
+  it('listFiles records the directory in tracker.reads', async () => {
+    fs.writeFileSync(path.join(tmpDir, 'a.txt'), '');
+    await tools.listFiles(tmpDir);
+
+    expect(tracker.getReads()).toContain(tmpDir);
   });
 
   it('writeFile creates parent directories', async () => {
@@ -206,8 +230,47 @@ describe('tool definitions', () => {
       await expect(tools.grep('[', path.join(tmpDir, 'data.txt'))).rejects.toThrow();
     });
 
-    it('throws on nonexistent file', async () => {
-      await expect(tools.grep('hello', path.join(tmpDir, 'no-such-file.txt'))).rejects.toThrow();
+    it('throws on nonexistent target with a clear message', async () => {
+      await expect(
+        tools.grep('hello', path.join(tmpDir, 'no-such-file.txt')),
+      ).rejects.toThrow(/grep target does not exist/);
+    });
+
+    it('searches recursively when given a directory', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'src', 'sub'), { recursive: true });
+      fs.writeFileSync(path.join(tmpDir, 'src', 'a.ts'), 'export const FOO = 1\n');
+      fs.writeFileSync(path.join(tmpDir, 'src', 'sub', 'b.ts'), 'import { FOO } from "../a"\n');
+      fs.writeFileSync(path.join(tmpDir, 'src', 'sub', 'c.ts'), 'const bar = 2\n');
+
+      const result = await tools.grep('FOO', path.join(tmpDir, 'src'));
+      expect(result).toContain('a.ts');
+      expect(result).toContain('b.ts');
+      expect(result).not.toContain('c.ts');
+      // Recursive grep prefixes each match with file:line; both files should
+      // appear with line numbers in the output.
+      expect(result).toMatch(/a\.ts:1/);
+      expect(result).toMatch(/b\.ts:1/);
+    });
+
+    it('returns empty string when recursive grep finds no matches', async () => {
+      fs.mkdirSync(path.join(tmpDir, 'src'));
+      fs.writeFileSync(path.join(tmpDir, 'src', 'a.ts'), 'foo\n');
+      const result = await tools.grep('zzz_no_match', path.join(tmpDir, 'src'));
+      expect(result).toBe('');
+    });
+
+    it('truncates very large grep output with a marker', async () => {
+      // Generate a file whose grep output for "x" comfortably exceeds the
+      // 200 KB rendered cap. Each match line is about 8 bytes
+      // ("N:x\n" plus filename overhead is irrelevant for single-file grep);
+      // 50_000 lines is ~400 KB of output, well past the cap.
+      const lines = 'x\n'.repeat(50_000);
+      fs.writeFileSync(path.join(tmpDir, 'big.txt'), lines);
+      const result = await tools.grep('x', path.join(tmpDir, 'big.txt'));
+      expect(result).toMatch(/grep output truncated/);
+      expect(result).toMatch(/Refine your pattern/);
+      // Output should be capped near the limit, not multiple megabytes.
+      expect(result.length).toBeLessThan(220 * 1024);
     });
   });
 

@@ -27,7 +27,11 @@ const mockOkResult = {
   status: 'ok' as const,
   usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: null },
   turns: 1,
-  files: [],
+  filesRead: [],
+  filesWritten: [],
+  toolCalls: [],
+  outputIsDiagnostic: false,
+  escalationLog: [],
 };
 
 describe('createProvider dispatch', () => {

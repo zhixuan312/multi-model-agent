@@ -47,7 +47,13 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         status: 'error',
         usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
         turns: 0,
-        files: [],
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        // Fallback error wrapper around a thrown runner — no scratchpad
+        // involved, just the raw error message.
+        outputIsDiagnostic: true,
+        escalationLog: [],
         error: err instanceof Error ? err.message : String(err),
       };
     }

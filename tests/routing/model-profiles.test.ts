@@ -67,6 +67,28 @@ describe('findModelProfile', () => {
     expect(findModelProfile('some-random-new-model').supportsEffort).toBe(false);
   });
 
+  describe('inputTokenSoftLimit field', () => {
+    it('exposes the per-family soft limit on known profiles', () => {
+      expect(findModelProfile('gpt-5-codex').inputTokenSoftLimit).toBe(1_000_000);
+      expect(findModelProfile('claude-sonnet-4-5').inputTokenSoftLimit).toBe(150_000);
+      expect(findModelProfile('claude-opus-4-6').inputTokenSoftLimit).toBe(150_000);
+      expect(findModelProfile('MiniMax-M2').inputTokenSoftLimit).toBe(200_000);
+    });
+
+    it('falls back to 100_000 for unprofiled models (conservative default)', () => {
+      expect(findModelProfile('llama-3-70b').inputTokenSoftLimit).toBe(100_000);
+    });
+
+    it('falls back to DEFAULT_PROFILE (100_000) for claude-haiku since no haiku profile exists', () => {
+      expect(findModelProfile('claude-haiku').inputTokenSoftLimit).toBe(100_000);
+    });
+
+    it('falls back to claude-opus profile (150_000) for claude-opus-4-6[1m] since no [1m] profile exists', () => {
+      // Matches "claude-opus" prefix, so it inherits the 150_000 opus limit, not a dedicated [1m] override.
+      expect(findModelProfile('claude-opus-4-6[1m]').inputTokenSoftLimit).toBe(150_000);
+    });
+  });
+
   // Version-tolerance regression tests: users may configure any minor/patch
   // version of a known family. The matcher should map all of them to the
   // family profile so users do not have to maintain a manual map.

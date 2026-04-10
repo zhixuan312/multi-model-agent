@@ -1,3 +1,5 @@
+import type { ContextBlockStore } from './context/context-block-store.js';
+
 // === Tier & Capability ===
 
 export type Tier = 'trivial' | 'standard' | 'reasoning';
@@ -6,7 +8,15 @@ export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
-export type RunStatus = 'ok' | 'error' | 'timeout' | 'max_turns';
+export type RunStatus =
+  | 'ok'
+  | 'incomplete'
+  | 'max_turns'
+  | 'timeout'
+  | 'api_aborted'
+  | 'api_error'
+  | 'network_error'
+  | 'error';
 
 // === Task ===
 
@@ -22,6 +32,12 @@ export interface TaskSpec {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional context block ids to expand into the prompt before dispatch.
+   *  Each id is resolved against `RunTasksRuntime.contextBlockStore` in
+   *  order and its content is prepended to `prompt` separated by
+   *  '\n\n---\n\n'. The field is stripped from the task that reaches the
+   *  provider so runners never see it. See `expandContextBlocks`. */
+  contextBlockIds?: string[]
 }
 
 // === Provider Config (discriminated union) ===
@@ -35,6 +51,14 @@ export interface CodexProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
+  inputCostPerMTok?: number
+  /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
+  outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 export interface ClaudeProviderConfig {
@@ -46,6 +70,13 @@ export interface ClaudeProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing override; if set, recomputes costUSD from token usage instead of trusting the SDK. */
+  inputCostPerMTok?: number
+  outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 export interface OpenAICompatibleProviderConfig {
@@ -61,6 +92,14 @@ export interface OpenAICompatibleProviderConfig {
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
   costTier?: CostTier
+  /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
+  inputCostPerMTok?: number
+  /** Optional pricing in USD per million output tokens. Used to compute RunResult.usage.costUSD. */
+  outputCostPerMTok?: number
+  /** Optional override for the per-provider input token soft limit
+   *  used by the watchdog. When unset, falls back to the model profile
+   *  default, then to a hardcoded 100_000 fallback. See spec A.1.4. */
+  inputTokenSoftLimit?: number
 }
 
 /** Discriminated union — each provider type has distinct required fields. */
@@ -94,8 +133,71 @@ export interface RunResult {
   status: RunStatus
   usage: TokenUsage
   turns: number
-  files: string[]
+  /** Files whose contents the worker read (via readFile/grep/listFiles). */
+  filesRead: string[]
+  /** Files the worker wrote (via writeFile). */
+  filesWritten: string[]
+  /** Compact one-line summaries of every tool the worker invoked, in order. */
+  toolCalls: string[]
+  /** `true` when `output` is a runner-synthesized diagnostic template
+   *  (`"Sub-agent error: …"`, `"Agent timed out after …"`, the incomplete
+   *  template from `buildXxxIncompleteDiagnostic`, etc.) because the
+   *  scratchpad was empty at termination. `false` when `output` contains
+   *  real model-produced content — either a clean final answer on the
+   *  `ok` path, or `scratchpad.latest()` on any salvage path where the
+   *  scratchpad had buffered text.
+   *
+   *  Used by the escalation orchestrator's all-fail fallback to prefer
+   *  real content over diagnostic templates regardless of status or
+   *  length (otherwise a long `"Sub-agent error: <stack trace>"` string
+   *  could beat a shorter genuine partial answer from an earlier
+   *  attempt). */
+  outputIsDiagnostic: boolean
+  /** One entry per provider attempt within this dispatch. Length === 1
+   *  for tasks that succeeded on the first try; longer when escalation
+   *  occurred. Runners initialize this to `[]`; the escalation
+   *  orchestrator populates it on each return path. */
+  escalationLog: AttemptRecord[]
   error?: string
+}
+
+/**
+ * Single provider-attempt record inside an escalation chain. The orchestrator
+ * (`delegateWithEscalation`) pushes one entry per `provider.run(...)` call.
+ */
+export interface AttemptRecord {
+  provider: string
+  status: RunStatus
+  turns: number
+  inputTokens: number
+  outputTokens: number
+  costUSD: number | null
+  /** Character count of the canonical orchestrator-side initial brief for
+   *  this attempt — the exact string
+   *  `${buildSystemPrompt()}\n\n${buildBudgetHint(...)}\n\n${prompt}`
+   *  (as assembled before any runner-specific wrapping). Populated by the
+   *  escalation orchestrator via the `RunOptions.onInitialRequest` callback
+   *  the runner invokes exactly once per attempt.
+   *
+   *  NOTE: This is a canonical identifier, NOT a wire-level checksum. The
+   *  provider's SDK may wrap or transform this string before sending (e.g.
+   *  the Anthropic SDK prepends its `claude_code` preset to the system
+   *  prompt via `{ type: 'preset', preset: 'claude_code', append: ... }`;
+   *  the OpenAI SDKs wrap it in a `messages` array). All three runners use
+   *  the same canonical form so the hash is cross-runner stable: identical
+   *  briefs produce identical hashes regardless of which runner executed
+   *  them. Use this to verify "did the orchestrator send the same brief
+   *  across retries?", not "were the literal bytes on the wire identical?".
+   *
+   *  Defaults to 0 if the runner never invoked the callback. */
+  initialPromptLengthChars: number
+  /** sha256 hex of the canonical orchestrator-side initial brief. See the
+   *  comment on `initialPromptLengthChars` above for the exact hashed
+   *  string and the wire-level caveat. Defaults to the empty string if the
+   *  runner never invoked the callback. */
+  initialPromptHash: string
+  /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
+  reason?: string
 }
 
 // === Provider (created by createProvider) ===
@@ -113,7 +215,85 @@ export interface RunOptions {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional callback invoked by runners and the escalation orchestrator to
+   *  stream in-flight progress events. See `ProgressEvent` for the full set
+   *  of variants. Runners receive this via `provider.run(..., { onProgress })`
+   *  and call it synchronously from their loop; the callback MUST NOT throw
+   *  and should return quickly. Wired in Task 8 (interface + plumbing);
+   *  runners emit events in Tasks 9-11. */
+  onProgress?: (event: ProgressEvent) => void
+  /** Called exactly once per attempt, when the runner has assembled the
+   *  canonical orchestrator-side initial brief — the string
+   *  `${buildSystemPrompt()}\n\n${buildBudgetHint(...)}\n\n${prompt}`,
+   *  after prevention scaffolding has been produced but before any tool
+   *  cycles, re-grounding, supervision, or watchdog injections happen.
+   *  The escalation orchestrator passes a closure here to capture the
+   *  metadata into the `AttemptRecord` it builds.
+   *
+   *  This is a canonical identifier, NOT a wire-level checksum: each
+   *  runner computes it from the same canonical string so the hash is
+   *  cross-runner stable, even though the SDK underneath may wrap the
+   *  inputs before sending (Claude prepends its `claude_code` preset to
+   *  the system prompt; OpenAI/Codex wrap inputs in structured message
+   *  arrays). See `AttemptRecord.initialPromptHash` for the full caveat.
+   *
+   *  If a runner is re-invoked by escalation, the callback fires again
+   *  for the new attempt because the orchestrator resets its per-attempt
+   *  closure. Passing nothing keeps existing behaviour (no-op). */
+  onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
 }
+
+/**
+ * Runtime dependencies for `runTasks`. Kept separate from static `MultiModelConfig`
+ * because these are per-session objects (today: the context-block store) the
+ * caller owns and passes in explicitly, not config loaded from disk.
+ */
+export interface RunTasksRuntime {
+  /** Optional store of registered context blocks. When provided, each task's
+   *  `contextBlockIds` are resolved against this store before dispatch; when
+   *  omitted, tasks with `contextBlockIds` are passed through unchanged. */
+  contextBlockStore?: ContextBlockStore
+}
+
+/**
+ * In-flight progress signal emitted by runners and the escalation
+ * orchestrator. Consumers (today: the MCP cli bridge) translate these into
+ * transport-level notifications so callers can observe a sub-agent's work
+ * without polling. One `ProgressEvent` per meaningful state transition.
+ *
+ * Variants mirror spec Part B.1. Runner emission lives in Tasks 9-11; the
+ * escalation `escalation_start` hop is emitted by `delegateWithEscalation`
+ * itself in Task 8.
+ */
+export type ProgressEvent =
+  | { kind: 'turn_start'; turn: number; provider: string }
+  | { kind: 'tool_call'; turn: number; toolSummary: string }
+  | { kind: 'text_emission'; turn: number; chars: number; preview: string }
+  | {
+      kind: 'turn_complete'
+      turn: number
+      cumulativeInputTokens: number
+      cumulativeOutputTokens: number
+    }
+  | {
+      kind: 'injection'
+      injectionType:
+        | 'reground'
+        | 'supervise_empty'
+        | 'supervise_thinking'
+        | 'supervise_fragment'
+        | 'watchdog_warning'
+        | 'watchdog_force_salvage'
+      turn: number
+      contentLengthChars: number
+    }
+  | {
+      kind: 'escalation_start'
+      previousProvider: string
+      previousReason: string
+      nextProvider: string
+    }
+  | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===
 
@@ -141,6 +321,30 @@ export interface ProviderEligibility {
 }
 
 // === Utilities ===
+
+/**
+ * Compute USD cost from token usage and the provider config's optional
+ * per-million-token rates. Returns null when either rate is missing — that
+ * way the caller can distinguish "we know the cost is zero" (free provider
+ * with both rates set to 0) from "we don't know the cost" (rates not
+ * configured). Negative or non-finite rates are treated as missing.
+ */
+export function computeCostUSD(
+  inputTokens: number,
+  outputTokens: number,
+  config: ProviderConfig,
+): number | null {
+  const inRate = config.inputCostPerMTok;
+  const outRate = config.outputCostPerMTok;
+  if (
+    inRate === undefined || outRate === undefined ||
+    !Number.isFinite(inRate) || !Number.isFinite(outRate) ||
+    inRate < 0 || outRate < 0
+  ) {
+    return null;
+  }
+  return (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
+}
 
 export function withTimeout<T>(
   promise: Promise<T>,

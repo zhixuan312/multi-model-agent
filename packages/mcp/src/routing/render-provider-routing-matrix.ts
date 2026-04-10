@@ -24,6 +24,45 @@ Optional 'effort' knob (per task):
   thinking entirely on providers that default it on. Omit the field on
   providers that do not support it.`;
 
+const TOOL_NOTES = `Sub-agent tool notes (apply to every provider):
+- 'grep' accepts a file OR a directory. When given a directory it searches
+  recursively (output is prefixed file:line). Prefer one recursive grep over
+  many readFile calls when the worker needs to find usages or patterns.
+- Worker output is captured from the final assistant message when present,
+  otherwise salvaged from a running scratchpad. You ALWAYS get text back,
+  even on 'incomplete' / 'timeout' / 'api_error' / 'network_error' paths.
+- Tasks that need shell ('pnpm', 'pytest', 'tsc', 'git') only work on
+  providers configured with sandboxPolicy: 'none'. Otherwise keep shell
+  work on the parent session, not in a delegated sub-agent.
+
+Escalation, statuses, streaming, and batch helpers:
+- Auto-routed tasks (no 'provider' set) walk the full capability+tier
+  chain cheapest-first on failure. The chain stops at the first 'ok'.
+  If every provider fails, the best salvage is returned and the
+  per-task 'escalationLog' shows every attempt. Explicit pins
+  ('provider' set) run as a single attempt — pinning opts out.
+- Status values: 'ok', 'incomplete', 'max_turns', 'timeout',
+  'api_aborted', 'api_error', 'network_error', 'error'.
+  'incomplete' = scratchpad salvage after a degenerate completion;
+  'api_aborted' = provider-side abort; 'api_error' = HTTP error with
+  a numeric .status; 'network_error' = transport failure
+  (ECONNREFUSED / ENOTFOUND / /network/i).
+- Streaming: if your MCP client passes '_meta.progressToken' on the
+  tool call, delegate_tasks forwards per-task progress notifications
+  (turn_start, tool_call, text_emission, turn_complete, injection,
+  escalation_start, done) back over the MCP progress channel. No
+  opt-in needed beyond sending the token.
+- Batch helpers: every delegate_tasks response carries a 'batchId'.
+  Use 'retry_tasks' with that batchId + a list of 0-based task
+  indices to re-run just the failing subset without re-transmitting
+  the original briefs. Cache is 30-minute TTL, 100-batch LRU.
+- Long shared context: 'register_context_block' stores a blob of
+  text on the server and returns an id. Pass that id in
+  'contextBlockIds' on any task (alongside 'prompt') and the server
+  prepends the blob to the prompt before dispatch — so long briefs
+  shared across multiple tasks are sent to the parent session only
+  once.`;
+
 function renderProviderBlock(
   name: string,
   config: ProviderConfig,
@@ -70,5 +109,7 @@ export function renderProviderRoutingMatrix(config: MultiModelConfig): string {
     blocks.join('\n\n'),
     '',
     ROUTING_RECIPE,
+    '',
+    TOOL_NOTES,
   ].join('\n');
 }

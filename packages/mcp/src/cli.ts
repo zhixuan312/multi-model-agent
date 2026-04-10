@@ -3,6 +3,8 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
+import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -10,11 +12,26 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import { InMemoryContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type {
+  MultiModelConfig,
+  TaskSpec,
+  ProgressEvent,
+} from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';
-export const SERVER_VERSION = '0.1.0';
+// Read the version from package.json at module load so the MCP server
+// metadata (and tests that assert against it) stays in lockstep with the
+// published npm package version. `createRequire` keeps the JSON read
+// outside tsc's `rootDir: src` constraint and avoids the `with { type:
+// 'json' }` import attribute (which would force us to commit to a
+// specific TS/Node module-resolution combination). The relative path is
+// resolved from the compiled `dist/cli.js` — that sits one level below
+// `packages/mcp/package.json`.
+const packageRequire = createRequire(import.meta.url);
+const pkg = packageRequire('../package.json') as { version: string };
+export const SERVER_VERSION = pkg.version;
 
 export function buildTaskSchema(availableProviders: [string, ...string[]]) {
   return z.object({
@@ -33,8 +50,46 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
     effort: z.enum(['none', 'low', 'medium', 'high']).optional()
       .describe("Reasoning effort."),
     sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
+    contextBlockIds: z.array(z.string()).optional().describe(
+      'Optional context block ids previously stored via register_context_block. ' +
+      'The server resolves each id to its stored content and prepends the blocks ' +
+      '(in order, separated by "\\n\\n---\\n\\n") to `prompt` before dispatch. ' +
+      'Use this to avoid re-transmitting long briefs across multiple calls.',
+    ),
   });
 }
+
+/**
+ * Batch cache for `retry_tasks`. Every `delegate_tasks` call stashes the
+ * original `TaskSpec[]` under a UUID so the caller can later ask us to
+ * re-dispatch specific indices without re-transmitting the briefs. Two
+ * bounds:
+ *
+ *   - TTL (30 min from creation): keeps stale batches from lingering
+ *     through a long session. TTL is from-creation (not from-last-access),
+ *     matching `InMemoryContextBlockStore` — a batch used at minute 29
+ *     still dies at minute 30. Access does NOT refresh the expiry.
+ *   - LRU cap (100 entries): prevents unbounded growth from a chatty
+ *     caller that never retries. Eviction is true LRU (least-recently-
+ *     *used*, not least-recently-inserted): a batch that is still being
+ *     retried stays hot and a newer but unused batch will be evicted
+ *     first. This matters when a caller is iterating on one task while
+ *     dispatching unrelated batches in parallel.
+ *
+ * Eviction on TTL is lazy (checked on `retry_tasks` lookup). Eviction on
+ * the LRU cap is eager (runs after every `rememberBatch`).
+ *
+ * LRU implementation note: we use JavaScript's `Map` which preserves
+ * insertion order on iteration. To "touch" an entry on access, we
+ * `delete` it and re-`set` it, which moves it to the end of the
+ * iteration order. `Map.keys().next().value` is then the oldest-*accessed*
+ * entry (not the oldest-inserted entry), giving us O(1) LRU without a
+ * separate priority structure. The helpers `touchBatch` (on access) and
+ * the eviction loop in `rememberBatch` (on insert) are the only two
+ * places that mutate the Map.
+ */
+const BATCH_TTL_MS = 30 * 60 * 1000;
+const BATCH_MAX = 100;
 
 export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
   const providerKeys = Object.keys(config.providers);
@@ -47,6 +102,41 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
     version: SERVER_VERSION,
   });
 
+  // One context-block store per server instance. Persists across calls
+  // within a single `buildMcpServer(...)` lifetime so `register_context_block`
+  // followed by multiple `delegate_tasks` with `contextBlockIds` works.
+  const contextBlockStore = new InMemoryContextBlockStore();
+
+  // Per-server batch cache for `retry_tasks`. See the LRU comment block
+  // above for eviction semantics.
+  const batchCache = new Map<string, { tasks: TaskSpec[]; expiresAt: number }>();
+
+  const rememberBatch = (tasks: TaskSpec[]): string => {
+    const id = randomUUID();
+    batchCache.set(id, { tasks, expiresAt: Date.now() + BATCH_TTL_MS });
+    // Evict the least-recently-USED entry (not least-recently-inserted).
+    // `touchBatch` below moves accessed entries to the end of insertion
+    // order, so `keys().next().value` is the true LRU head.
+    while (batchCache.size > BATCH_MAX) {
+      const lru = batchCache.keys().next().value;
+      if (lru) batchCache.delete(lru);
+      else break;
+    }
+    return id;
+  };
+
+  /**
+   * Mark a batch as recently used by reinserting it at the tail of the
+   * Map's iteration order. `touchBatch` is called on every successful
+   * `retry_tasks` lookup so a frequently-retried batch does not get
+   * evicted by `rememberBatch`'s LRU loop. Does NOT refresh the TTL —
+   * expiry stays at the original creation time.
+   */
+  const touchBatch = (id: string, entry: { tasks: TaskSpec[]; expiresAt: number }): void => {
+    batchCache.delete(id);
+    batchCache.set(id, entry);
+  };
+
   const availableProviders = providerKeys as [string, ...string[]];
 
   server.tool(
@@ -55,16 +145,186 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
     {
       tasks: z.array(buildTaskSchema(availableProviders)).describe('Array of tasks to execute in parallel'),
     },
-    async ({ tasks }) => {
-      const results = await runTasks(tasks as TaskSpec[], config);
+    async ({ tasks }, extra) => {
+      // --- OQ#6 resolution: MCP SDK progress notification API ---
+      //
+      // The @modelcontextprotocol/sdk >= 1.x exposes progress notifications
+      // on the tool-handler `extra` argument: the second parameter of the
+      // tool callback is `RequestHandlerExtra<ServerRequest, ServerNotification>`
+      // (see node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.d.ts
+      // line 173, and server/mcp.d.ts line 250 for `BaseToolCallback`).
+      //
+      // That type carries two things we need:
+      //   1. `extra._meta.progressToken?: string | number` — present iff the
+      //      client opted in by sending `_meta.progressToken` with its
+      //      `tools/call` request (MCP spec: notifications/progress).
+      //   2. `extra.sendNotification(notification)` — a request-scoped sender
+      //      that emits `ServerNotification`s correlated with this call.
+      //      `ServerNotification` is a union that includes
+      //      `ProgressNotificationSchema` with method `"notifications/progress"`
+      //      and params `{ progressToken, progress, total?, message? }`
+      //      (types.d.ts line 954).
+      //
+      // So the bridge is: for each `ProgressEvent` we receive from core, if
+      // the client supplied a `progressToken`, emit one `notifications/progress`
+      // message whose `message` field is a JSON-encoded envelope. This is an
+      // opt-in channel — clients that don't send `progressToken` get zero
+      // notifications, preserving behavior for pre-streaming callers.
+      //
+      // Envelope schema (stable, documented here so clients can parse it):
+      //
+      //     params: {
+      //       progressToken,                // echoed from the request _meta
+      //       progress: <monotonic counter>,// ordinal of this event (1-based)
+      //       message: JSON.stringify({
+      //         taskIndex: <number>,        // index in the original `tasks` array
+      //         event: <ProgressEvent>,     // full ProgressEvent union member
+      //       }),
+      //     }
+      //
+      // `total` is intentionally omitted: we don't know the final event count
+      // in advance. Runners emit events in Tasks 9-11; this commit is plumbing
+      // only and `escalation_start` (emitted by delegateWithEscalation itself)
+      // is the sole observable event in practice.
+      // Runtime guard instead of a raw cast: _meta is typed broadly at the
+      // SDK layer, and a bad client could in principle send a progressToken
+      // of any JSON type. Only `string` / `number` are valid per MCP spec.
+      const rawToken = extra._meta?.progressToken;
+      const progressToken: string | number | undefined =
+        typeof rawToken === 'string' || typeof rawToken === 'number'
+          ? rawToken
+          : undefined;
+
+      let progressCounter = 0;
+      const sendProgress = progressToken !== undefined
+        ? (taskIndex: number, event: ProgressEvent) => {
+            progressCounter += 1;
+            // Fire-and-forget. We swallow rejections so a broken transport
+            // never corrupts the in-flight tool run — worst case the client
+            // misses a progress tick but still gets the final tool result.
+            extra
+              .sendNotification({
+                method: 'notifications/progress',
+                params: {
+                  progressToken,
+                  progress: progressCounter,
+                  message: JSON.stringify({ taskIndex, event }),
+                },
+              })
+              .catch(() => {
+                /* ignore — progress is best-effort */
+              });
+          }
+        : undefined;
+
+      // Stash the original task specs in the batch cache BEFORE dispatch
+      // so the returned batchId is valid even if the dispatch itself
+      // throws (so callers can still retry the specific tasks that
+      // produced errors). The cache stores the raw TaskSpec[] — NOT the
+      // expanded forms — because `retry_tasks` will push the same specs
+      // through `runTasks` again, which re-expands against the current
+      // (possibly updated) context-block store.
+      const batchId = rememberBatch(tasks as TaskSpec[]);
+
+      const results = await runTasks(tasks as TaskSpec[], config, {
+        onProgress: sendProgress,
+        runtime: { contextBlockStore },
+      });
 
       const response = {
+        batchId,
         results: results.map((r, i) => ({
           provider: tasks[i].provider ?? '(auto)',
           status: r.status,
           output: r.output,
           turns: r.turns,
-          files: r.files,
+          filesRead: r.filesRead,
+          filesWritten: r.filesWritten,
+          toolCalls: r.toolCalls,
+          escalationLog: r.escalationLog,
+          usage: r.usage,
+          ...(r.error && { error: r.error }),
+        })),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'register_context_block',
+    'Store a content block under an id (or auto-generated UUID) for reuse in later delegate_tasks calls. ' +
+      'Use this to avoid re-transmitting long briefs on every dispatch. Blocks are referenced from a ' +
+      'task via its `contextBlockIds` array — the server resolves each id to its stored content and ' +
+      'prepends the blocks to the task `prompt` at dispatch time. Blocks live in an in-memory store ' +
+      'with a 30-minute TTL and a 100-entry LRU cap.',
+    {
+      id: z.string().optional().describe('Optional id; auto-generated UUID if omitted'),
+      content: z.string().describe('The content to store'),
+    },
+    async ({ id, content }) => {
+      const result = contextBlockStore.register(content, { id });
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'retry_tasks',
+    'Re-run specific tasks from a previous delegate_tasks batch by their indices, without ' +
+      're-transmitting the original briefs. Pass the `batchId` returned by delegate_tasks ' +
+      'and an array of task indices (0-based) to re-dispatch. Batches live in an in-memory ' +
+      'cache with a 30-minute TTL; if the batch has expired, re-dispatch the tasks explicitly ' +
+      'via delegate_tasks.',
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+      taskIndices: z
+        .array(z.number().int().nonnegative())
+        .describe('Zero-based indices (into the original batch) of the tasks to re-run'),
+    },
+    async ({ batchId, taskIndices }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        // Proactively drop the expired entry so subsequent lookups see
+        // the same "unknown" result and the cache doesn't slowly fill
+        // with stale rows that are never touched again.
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+      // Mark this batch as recently used so the LRU eviction in
+      // `rememberBatch` doesn't drop a hot entry when newer batches
+      // arrive. Does NOT refresh TTL — a batch created 29 minutes ago
+      // still dies at minute 30 even if it's retried heavily.
+      touchBatch(batchId, batch);
+      for (const i of taskIndices) {
+        if (i < 0 || i >= batch.tasks.length) {
+          throw new Error(
+            `index ${i} is out of range for batch ${batchId} (size ${batch.tasks.length})`,
+          );
+        }
+      }
+      const subset = taskIndices.map((i) => batch.tasks[i]);
+      const results = await runTasks(subset, config, {
+        runtime: { contextBlockStore },
+      });
+
+      const response = {
+        batchId,
+        results: results.map((r, i) => ({
+          originalIndex: taskIndices[i],
+          provider: subset[i].provider ?? '(auto)',
+          status: r.status,
+          output: r.output,
+          turns: r.turns,
+          filesRead: r.filesRead,
+          filesWritten: r.filesWritten,
+          toolCalls: r.toolCalls,
+          escalationLog: r.escalationLog,
           usage: r.usage,
           ...(r.error && { error: r.error }),
         })),

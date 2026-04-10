@@ -140,8 +140,20 @@ Capabilities: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, 
 
 ## Security
 
-- File tools enforce a `cwd-only` sandbox by default — paths are resolved via `fs.realpath` and rejected if outside the task's `cwd`.
-- `runShell` is hard-disabled under `cwd-only`. Set `sandboxPolicy: 'none'` per-provider or per-task to opt in.
+### Sandbox enforcement
+
+The default `sandboxPolicy: "cwd-only"` confines delegated sub-agents to the task's working directory. The check runs inside every file-tool call in the core `assertWithinCwd` helper — violations are surfaced to the model as normal tool errors, so the model can retry with a valid path rather than silently failing.
+
+1. **File reads** are allowed only inside `cwd` and its descendants. Path traversal (`../`, absolute paths outside `cwd`) is rejected.
+2. **File writes** are subject to the same restriction.
+3. **Symlink resolution uses `fs.realpath`.** A symlink inside `cwd` that points outside `cwd` is treated as outside and rejected — the check runs on the resolved real path, not the literal path.
+4. **Nonexistent target paths** resolve by walking back to the nearest existing ancestor and re-applying the check, so symlinks in ancestor directories are still caught.
+5. **`runShell` is hard-disabled** under `cwd-only`. The tool returns an error telling the model to use `readFile` / `writeFile` / `grep` / `glob` / `listFiles` instead. Set `sandboxPolicy: "none"` per-provider or per-task to opt in to shell.
+6. **The check is per-call**, not per-session. Every tool invocation revalidates.
+7. **Errors are surfaced to the model**, not silently swallowed, so the model can observe the rejection and adjust.
+
+### Other hardening
+
 - `readFile` rejects targets larger than 50 MiB; `writeFile` rejects content larger than 100 MiB.
 - The server warns at config-load time if it sees an inline `apiKey` instead of `apiKeyEnv`.
 - The server warns once if `~/.codex/auth.json` is group- or world-readable.

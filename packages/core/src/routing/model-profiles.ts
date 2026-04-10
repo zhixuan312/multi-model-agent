@@ -13,6 +13,9 @@ export const modelProfileSchema = z.object({
   avoidFor: z.string().optional(),
   notes: z.string().optional(),
   supportsEffort: z.boolean(),
+  /** Per-model-family default for the watchdog input-token soft limit.
+   *  See spec A.1.4. */
+  inputTokenSoftLimit: z.number().int().positive(),
 });
 
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
@@ -23,6 +26,7 @@ const DEFAULT_PROFILE: ModelProfile = {
   defaultCost: 'medium',
   bestFor: 'general tasks (unprofiled model — defaults applied)',
   supportsEffort: false,
+  inputTokenSoftLimit: 100_000,
 };
 
 // Validate and sort once at module load — longest prefix wins

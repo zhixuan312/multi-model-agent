@@ -5,7 +5,8 @@
     "defaultCost": "high",
     "bestFor": "high-ambiguity tasks where the cost of error is high",
     "avoidFor": "routine implementation or batch transformations as the default choice",
-    "supportsEffort": true
+    "supportsEffort": true,
+    "inputTokenSoftLimit": 150000
   },
   {
     "prefix": "claude-sonnet",
@@ -13,7 +14,8 @@
     "defaultCost": "medium",
     "bestFor": "most professional coding and tool-using tasks",
     "avoidFor": "the hardest architectural decisions or highly ambiguous judgment calls",
-    "supportsEffort": true
+    "supportsEffort": true,
+    "inputTokenSoftLimit": 150000
   },
   {
     "prefix": "gpt-5",
@@ -21,7 +23,8 @@
     "defaultCost": "medium",
     "bestFor": "reasoning-tier coding, agentic workflows, and tool use",
     "avoidFor": "cases where you explicitly prefer premium escalation over cost or latency",
-    "supportsEffort": true
+    "supportsEffort": true,
+    "inputTokenSoftLimit": 1000000
   },
   {
     "prefix": "MiniMax-M2",
@@ -29,6 +32,7 @@
     "defaultCost": "low",
     "bestFor": "well-scoped coding and agent loops where cost matters",
     "avoidFor": "highest-stakes ambiguous work that needs top-tier judgment",
-    "supportsEffort": true
+    "supportsEffort": true,
+    "inputTokenSoftLimit": 200000
   }
 ]

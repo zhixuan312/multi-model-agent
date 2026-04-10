@@ -1,4 +1,14 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import type { ProgressEvent } from '../../packages/core/src/types.js';
+
+/**
+ * Long enough (>= 200 chars) to pass validateCompletion's minimum-length
+ * heuristic. Used in every test that wants a clean `ok` return from the
+ * supervision loop. Mirrors the constant in claude-runner.test.ts so the
+ * parity test below can share the exact same text across runners.
+ */
+const VALID_FINAL_OUTPUT =
+  'This is a complete sub-agent answer that is long enough to pass the validateCompletion minimum-length heuristic without any additional structural hints because it carries more than 200 characters of plain text content.';
 
 const mockResponsesCreate = vi.fn();
 
@@ -196,8 +206,11 @@ describe('runCodex', () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
+    // Text must end in terminal punctuation to pass validateCompletion's
+    // short-response branch (otherwise it would be classified as
+    // no_terminator and trigger a supervision re-prompt).
     const streamEvents = [
-      { type: 'response.output_text.delta', delta: 'hello' },
+      { type: 'response.output_text.delta', delta: 'hello.' },
       {
         type: 'response.completed',
         response: { status: 'completed', usage: { input_tokens: 5, output_tokens: 10 } },
@@ -217,7 +230,7 @@ describe('runCodex', () => {
       defaults,
     );
     expect(result.status).toBe('ok');
-    expect(result.output).toBe('hello');
+    expect(result.output).toBe('hello.');
     // usage extracted from response.usage using snake_case keys
     expect(result.usage.inputTokens).toBe(5);
     expect(result.usage.outputTokens).toBe(10);
@@ -296,8 +309,10 @@ describe('runCodex', () => {
     ];
 
     // Turn 2: server returns a final text response, no more tool calls.
+    // Trailing period ensures validateCompletion's short-response branch
+    // accepts it without a supervision re-prompt.
     const turn2Events = [
-      { type: 'response.output_text.delta', delta: 'final answer' },
+      { type: 'response.output_text.delta', delta: 'final answer.' },
       {
         type: 'response.completed',
         response: { status: 'completed', usage: { input_tokens: 2, output_tokens: 2 } },
@@ -327,7 +342,7 @@ describe('runCodex', () => {
     );
 
     expect(result.status).toBe('ok');
-    expect(result.output).toBe('final answer');
+    expect(result.output).toBe('final answer.');
     expect(capturedParams).toHaveLength(2);
 
     const turn2Input = (capturedParams[1] as { input: unknown[] }).input;
@@ -364,5 +379,381 @@ describe('runCodex', () => {
     );
     expect(functionOutputs).toHaveLength(1);
     expect((functionOutputs[0] as { call_id: string }).call_id).toBe('call_1');
+  });
+
+  // ─── 10. Task 5: system prompt uses buildSystemPrompt() output ──────────────
+  it('passes buildSystemPrompt() output as instructions (not the user prompt)', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+    const { buildSystemPrompt, buildBudgetHint } = await import(
+      '../../packages/core/src/runners/prevention.js'
+    );
+
+    let capturedParams: any;
+    mockResponsesCreate.mockImplementationOnce((params: any) => {
+      capturedParams = params;
+      return (async function* () {
+        yield { type: 'response.output_text.delta', delta: 'done.' };
+        yield {
+          type: 'response.completed',
+          response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+        };
+      })();
+    });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    await runCodex(
+      'what is the meaning of life',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    // instructions === system prompt (the pre-Task-5 bug was passing the user
+    // prompt as `instructions`)
+    expect(capturedParams.instructions).toBe(buildSystemPrompt());
+    // The user message is the budget hint + original prompt
+    const firstInput = capturedParams.input[0];
+    const budgetHint = buildBudgetHint({ maxTurns: defaults.maxTurns });
+    expect(firstInput.content).toBe(`${budgetHint}\n\nwhat is the meaning of life`);
+  });
+
+  // ─── 11. Task 5: degenerate → retry → valid → ok (supervision re-prompt) ────
+  it('supervision re-prompt recovers from a degenerate first turn', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    const capturedParams: any[] = [];
+    // Turn 1: fragment ending in continuation phrase -> supervision re-prompts
+    mockResponsesCreate
+      .mockImplementationOnce((params: any) => {
+        capturedParams.push(params);
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: 'let me check' };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      })
+      // Turn 2: model follows up with valid answer (ends with period)
+      .mockImplementationOnce((params: any) => {
+        capturedParams.push(params);
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: 'Here is the real answer.' };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 2, output_tokens: 2 } },
+          };
+        })();
+      });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe('Here is the real answer.');
+    expect(capturedParams).toHaveLength(2);
+
+    // Turn 2's input must contain the supervision re-prompt as a user message.
+    const turn2Input = capturedParams[1].input as any[];
+    const userMsgs = turn2Input.filter((i) => i.role === 'user');
+    expect(userMsgs.length).toBeGreaterThanOrEqual(2);
+    // The re-prompt message is the second (or later) user message.
+    const rePromptMsg = userMsgs[userMsgs.length - 1];
+    expect(typeof rePromptMsg.content).toBe('string');
+    expect(rePromptMsg.content).toMatch(/exploration fragment|let me check/);
+  });
+
+  // ─── 12. Task 5: supervision exhaustion salvages scratchpad ─────────────────
+  it('returns scratchpad salvage when supervision retries are exhausted', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    // Four identical-pattern degenerate turns: the first seeds
+    // lastDegenerateOutput, retries 1/2/3 exhaust the budget -> incomplete.
+    // Each turn emits a DIFFERENT fragment text so the same-output early-out
+    // doesn't fire; we want to hit MAX_SUPERVISION_RETRIES specifically.
+    const fragments = [
+      'exploring next',
+      'next i will',
+      'let me look',
+      'i should also',
+    ];
+    for (const frag of fragments) {
+      mockResponsesCreate.mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: frag };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      });
+    }
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    expect(result.status).toBe('incomplete');
+    // Scratchpad salvage returns the MOST RECENT buffered emission.
+    expect(result.output).toBe(fragments[fragments.length - 1]);
+  });
+
+  // ─── 13. Task 5: watchdog force_salvage at 95% ─────────────────────────────
+  it('returns incomplete with scratchpad salvage when watchdog fires force_salvage', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    // Soft limit 100, turn emits 96 input tokens -> ratio 0.96 >= 0.95 -> force_salvage.
+    mockResponsesCreate.mockImplementationOnce(() => {
+      return (async function* () {
+        yield { type: 'response.output_text.delta', delta: 'partial progress notes' };
+        yield {
+          type: 'response.completed',
+          response: { status: 'completed', usage: { input_tokens: 96, output_tokens: 1 } },
+        };
+      })();
+    });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex', inputTokenSoftLimit: 100 },
+      defaults,
+    );
+
+    expect(result.status).toBe('incomplete');
+    expect(result.output).toBe('partial progress notes');
+  });
+
+  // ─── 14. Task 5: error path salvages scratchpad ─────────────────────────────
+  it('salvages scratchpad on error after buffering earlier text', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    // Turn 1: emit text + tool_call so the loop continues to turn 2.
+    // Turn 2: throw to trip the error path.
+    mockResponsesCreate
+      .mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: 'useful partial findings' };
+          yield {
+            type: 'response.output_item.done',
+            item: {
+              type: 'function_call',
+              call_id: 'c1',
+              name: 'read_file',
+              arguments: '{"path":"a.ts"}',
+            },
+          };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      })
+      .mockRejectedValueOnce(new Error('Request was aborted'));
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    // Task 7: "Request was aborted" is classified as api_aborted (not the
+    // generic 'error') so the escalation orchestrator can recognise abort
+    // conditions specifically.
+    expect(result.status).toBe('api_aborted');
+    // Scratchpad salvage: the buffered turn-1 text is returned as the output,
+    // NOT swallowed as "Sub-agent error: ...".
+    expect(result.output).toBe('useful partial findings');
+    expect(result.error).toBeDefined();
+  });
+
+  // ─── 15. Task 5: abort-path error message is not misleading ────────────────
+  // Regression test for the 2026-04-10 Fate dispatch: the error formatter
+  // appended "last response status: completed" from a previous successful
+  // turn, making the abort look like it originated from a completed response.
+  // The fix: only include `last response status` if it was captured on the
+  // CURRENT (failing) turn.
+  it('abort-path error message does NOT append stale lastResponseStatus from a previous turn', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    mockResponsesCreate
+      // Turn 1: completes successfully with a tool call so the loop continues
+      .mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: 'intermediate notes' };
+          yield {
+            type: 'response.output_item.done',
+            item: {
+              type: 'function_call',
+              call_id: 'c1',
+              name: 'read_file',
+              arguments: '{"path":"a.ts"}',
+            },
+          };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      })
+      // Turn 2: throws an abort BEFORE any response.completed event.
+      .mockRejectedValueOnce(new Error('Request was aborted'));
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    // Task 7: "Request was aborted" is classified as api_aborted. The
+    // turn-scoped lastResponseStatus disambiguation (Task 5) is orthogonal
+    // to this status and still runs below.
+    expect(result.status).toBe('api_aborted');
+    // Pre-fix: error looked like "Request was aborted | last response status: completed"
+    // Post-fix: the `| last response status: completed` suffix must NOT appear,
+    // because that status belongs to turn 1, not to the failed turn 2.
+    expect(result.error).not.toMatch(/\| last response status:/);
+    // If we emit a disambiguating note instead, it must clearly describe it
+    // as a previous (separate) request.
+    if (result.error && /previous request/.test(result.error)) {
+      expect(result.error).toMatch(/unrelated to this failure/);
+    }
+  });
+
+  // ─── 16. Task 5: first-turn empty output still gets retries (sentinel fix) ──
+  it('first-turn empty output is retried, not short-circuited by same-output early-out', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    mockResponsesCreate
+      // Turn 1: completely empty final message (no tool calls, no text)
+      .mockImplementationOnce(() => {
+        return (async function* () {
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 0 } },
+          };
+        })();
+      })
+      // Turn 2: the re-prompt elicits a proper final answer
+      .mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: 'Here is the answer.' };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    // If lastDegenerateOutput had been initialised to '' instead of null, the
+    // same-output early-out would fire on turn 1's empty output (''==='') and
+    // break out as incomplete before the re-prompt ran. Sentinel `null` means
+    // the first-turn degeneracy gets a real retry.
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe('Here is the answer.');
+  });
+
+  // ---------------------------------------------------------------------------
+  // Task 11: progress event emission
+  // ---------------------------------------------------------------------------
+  describe('codex-runner — progress event emission', () => {
+    it('emits turn_start / text_emission / turn_complete / done in order for a one-turn run', async () => {
+      const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+      vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+      mockResponsesCreate.mockImplementationOnce(() => {
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 12, output_tokens: 34 } },
+          };
+        })();
+      });
+
+      const events: ProgressEvent[] = [];
+      const onProgress = (e: ProgressEvent): void => { events.push(e); };
+
+      const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+      const result = await runCodex(
+        'prompt',
+        { onProgress },
+        { type: 'codex', model: 'gpt-5-codex' },
+        defaults,
+      );
+
+      expect(result.status).toBe('ok');
+
+      // Ordering: turn_start fires first (after turns++ at top of while
+      // iteration), then text_emission (after scratchpad append), then
+      // turn_complete (after watchdog + reground checks), then done last.
+      const kinds = events.map((e) => e.kind);
+      expect(kinds[0]).toBe('turn_start');
+      expect(kinds).toContain('text_emission');
+      expect(kinds).toContain('turn_complete');
+      expect(kinds[kinds.length - 1]).toBe('done');
+
+      // text_emission must carry the assistant text and a preview.
+      const textEvent = events.find((e) => e.kind === 'text_emission');
+      expect(textEvent).toBeDefined();
+      if (textEvent && textEvent.kind === 'text_emission') {
+        expect(textEvent.turn).toBe(1);
+        expect(textEvent.chars).toBe(VALID_FINAL_OUTPUT.length);
+        expect(textEvent.preview.length).toBeGreaterThan(0);
+      }
+
+      // turn_complete must carry the accumulated usage counters.
+      const turnComplete = events.find((e) => e.kind === 'turn_complete');
+      expect(turnComplete).toBeDefined();
+      if (turnComplete && turnComplete.kind === 'turn_complete') {
+        expect(turnComplete.turn).toBe(1);
+        expect(turnComplete.cumulativeInputTokens).toBe(12);
+        expect(turnComplete.cumulativeOutputTokens).toBe(34);
+      }
+
+      // turn_start must name the provider as 'codex' for parity tests.
+      const turnStart = events.find((e) => e.kind === 'turn_start');
+      expect(turnStart).toBeDefined();
+      if (turnStart && turnStart.kind === 'turn_start') {
+        expect(turnStart.provider).toBe('codex');
+        expect(turnStart.turn).toBe(1);
+      }
+
+      // done event status must match the final RunResult status.
+      const doneEvent = events[events.length - 1];
+      expect(doneEvent.kind).toBe('done');
+      if (doneEvent.kind === 'done') {
+        expect(doneEvent.status).toBe('ok');
+      }
+    });
   });
 });
