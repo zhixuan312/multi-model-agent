@@ -1,0 +1,83 @@
+import { z } from 'zod';
+
+// === Per-provider Zod schemas ===
+
+const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
+const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
+const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
+const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
+
+export const codexProviderConfigSchema: z.ZodType<CodexProviderConfig> = z.object({
+  type: z.literal('codex'),
+  model: z.string(),
+  effort: effortSchema.optional(),
+  maxTurns: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  sandboxPolicy: sandboxPolicySchema,
+  hostedTools: hostedToolsSchema.optional(),
+  costTier: costTierSchema.optional(),
+});
+
+export const claudeProviderConfigSchema: z.ZodType<ClaudeProviderConfig> = z.object({
+  type: z.literal('claude'),
+  model: z.string(),
+  effort: effortSchema.optional(),
+  maxTurns: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  sandboxPolicy: sandboxPolicySchema,
+  hostedTools: hostedToolsSchema.optional(),
+  costTier: costTierSchema.optional(),
+});
+
+export const openAICompatibleProviderConfigSchema: z.ZodType<OpenAICompatibleProviderConfig> = z.object({
+  type: z.literal('openai-compatible'),
+  model: z.string(),
+  baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible providers'),
+  apiKey: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  effort: effortSchema.optional(),
+  maxTurns: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  sandboxPolicy: sandboxPolicySchema,
+  hostedTools: hostedToolsSchema.optional(),
+  costTier: costTierSchema.optional(),
+});
+
+export const providerConfigSchema: z.ZodType<ProviderConfig> = z.discriminatedUnion('type', [
+  codexProviderConfigSchema,
+  claudeProviderConfigSchema,
+  openAICompatibleProviderConfigSchema,
+]);
+
+// === MultiModelConfig schema ===
+
+const defaultsSchema = z.object({
+  maxTurns: z.number().int().positive().default(200),
+  timeoutMs: z.number().int().positive().default(600_000),
+  tools: z.enum(['none', 'full']).default('full'),
+}).default(() => ({ maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const }));
+
+export const multiModelConfigSchema = z.object({
+  providers: z.record(z.string(), providerConfigSchema).default({}),
+  defaults: defaultsSchema,
+});
+
+export interface ParsedConfigSuccess {
+  config: MultiModelConfig
+  success: true
+}
+
+export interface ParsedConfigFailure {
+  success: false
+  error: string
+}
+
+export type ParseConfigResult = ParsedConfigSuccess | ParsedConfigFailure
+
+/**
+ * Parse a raw config object — validates schema, no side effects.
+ * Does NOT load from disk.
+ */
+export function parseConfig(raw: unknown): MultiModelConfig {
+  return multiModelConfigSchema.parse(raw);
+}
