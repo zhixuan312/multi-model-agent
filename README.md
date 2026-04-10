@@ -1,6 +1,6 @@
 # multi-model-agent
 
-MCP server that delegates tasks to sub-agents running on different LLM providers. Send a list of tasks, each targeting a specific provider, they execute concurrently with built-in tool use, timeout handling, and file-system sandboxing.
+Monorepo with two packages: `@scope/multi-model-agent-core` (execution engine) and `@scope/multi-model-agent-mcp` (MCP transport). The core package routes tasks to sub-agents running on different LLM providers, executes them concurrently with built-in tool use, timeout handling, and file-system sandboxing.
 
 ## Packages
 

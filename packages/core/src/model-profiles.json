@@ -3,30 +3,32 @@
     "prefix": "claude-opus",
     "tier": "reasoning",
     "defaultCost": "high",
-    "bestFor": "frontier coding, complex judgment, long-horizon agent tasks, high-stakes professional work",
+    "bestFor": "high-ambiguity tasks where the cost of error is high",
+    "avoidFor": "routine implementation or batch transformations as the default choice",
     "supportsEffort": true
   },
   {
     "prefix": "claude-sonnet",
     "tier": "standard",
     "defaultCost": "medium",
-    "bestFor": "strong code generation, analysis, agent workflows, and general professional tasks",
+    "bestFor": "most professional coding and tool-using tasks",
+    "avoidFor": "the hardest architectural decisions or highly ambiguous judgment calls",
     "supportsEffort": true
   },
   {
     "prefix": "gpt-5",
     "tier": "reasoning",
     "defaultCost": "medium",
-    "bestFor": "coding, agentic workflows, and tool-using tasks",
-    "notes": "live data lookup requires web/tool support, not model alone",
+    "bestFor": "reasoning-tier coding, agentic workflows, and tool use",
+    "avoidFor": "cases where you explicitly prefer premium escalation over cost or latency",
     "supportsEffort": true
   },
   {
     "prefix": "MiniMax-M2",
     "tier": "standard",
     "defaultCost": "low",
-    "bestFor": "cost-efficient coding and agent workflows with clear requirements",
-    "avoidFor": "highest-stakes ambiguous work when you need top-tier judgment",
+    "bestFor": "well-scoped coding and agent loops where cost matters",
+    "avoidFor": "highest-stakes ambiguous work that needs top-tier judgment",
     "supportsEffort": true
   }
 ]

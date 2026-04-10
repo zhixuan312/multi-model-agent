@@ -34,5 +34,9 @@
   "peerDependencies": {
     "@openai/agents": "^0.8.0",
     "openai": "^6.0.0"
+  },
+  "peerDependenciesMeta": {
+    "@openai/agents": { "optional": true },
+    "openai": { "optional": true }
   }
 }

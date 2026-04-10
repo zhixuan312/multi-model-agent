@@ -21,11 +21,6 @@ describe('findModelProfile', () => {
     expect(profile.defaultCost).toBe('medium');
   });
 
-  it('includes optional notes on gpt-5 clarifying tool dependency', () => {
-    const profile = findModelProfile('gpt-5-codex');
-    expect(profile.notes).toBeDefined();
-    expect(profile.notes).toMatch(/web\/tool support/);
-  });
 
   it('matches MiniMax-M2 exactly', () => {
     const profile = findModelProfile('MiniMax-M2');
