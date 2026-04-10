@@ -4,6 +4,7 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 import { randomUUID } from 'node:crypto';
+import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import { StdioServerTransport } from '@modelcontextprotocol/sdk/server/stdio.js';
@@ -20,7 +21,17 @@ import type {
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';
-export const SERVER_VERSION = '0.1.0';
+// Read the version from package.json at module load so the MCP server
+// metadata (and tests that assert against it) stays in lockstep with the
+// published npm package version. `createRequire` keeps the JSON read
+// outside tsc's `rootDir: src` constraint and avoids the `with { type:
+// 'json' }` import attribute (which would force us to commit to a
+// specific TS/Node module-resolution combination). The relative path is
+// resolved from the compiled `dist/cli.js` — that sits one level below
+// `packages/mcp/package.json`.
+const packageRequire = createRequire(import.meta.url);
+const pkg = packageRequire('../package.json') as { version: string };
+export const SERVER_VERSION = pkg.version;
 
 export function buildTaskSchema(availableProviders: [string, ...string[]]) {
   return z.object({
@@ -58,17 +69,24 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
  *     through a long session. TTL is from-creation (not from-last-access),
  *     matching `InMemoryContextBlockStore` — a batch used at minute 29
  *     still dies at minute 30. Access does NOT refresh the expiry.
- *   - FIFO cap (100 entries): prevents unbounded growth from a chatty
- *     caller that never retries. Eviction is by insertion order, not
- *     access order — this is FIFO, NOT LRU. A chatty caller that keeps
- *     retrying one old batch while creating new ones will still see the
- *     old batch evicted once 100 newer batches exist. Acceptable because
- *     retries are expected to be short-lived (same session, same task).
+ *   - LRU cap (100 entries): prevents unbounded growth from a chatty
+ *     caller that never retries. Eviction is true LRU (least-recently-
+ *     *used*, not least-recently-inserted): a batch that is still being
+ *     retried stays hot and a newer but unused batch will be evicted
+ *     first. This matters when a caller is iterating on one task while
+ *     dispatching unrelated batches in parallel.
  *
  * Eviction on TTL is lazy (checked on `retry_tasks` lookup). Eviction on
- * the FIFO cap is eager (runs after every `rememberBatch`). We use Map
- * insertion order — `Map.keys()` iterates in insertion order, so
- * `keys().next().value` is the oldest inserted entry.
+ * the LRU cap is eager (runs after every `rememberBatch`).
+ *
+ * LRU implementation note: we use JavaScript's `Map` which preserves
+ * insertion order on iteration. To "touch" an entry on access, we
+ * `delete` it and re-`set` it, which moves it to the end of the
+ * iteration order. `Map.keys().next().value` is then the oldest-*accessed*
+ * entry (not the oldest-inserted entry), giving us O(1) LRU without a
+ * separate priority structure. The helpers `touchBatch` (on access) and
+ * the eviction loop in `rememberBatch` (on insert) are the only two
+ * places that mutate the Map.
  */
 const BATCH_TTL_MS = 30 * 60 * 1000;
 const BATCH_MAX = 100;
@@ -89,18 +107,34 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
   // followed by multiple `delegate_tasks` with `contextBlockIds` works.
   const contextBlockStore = new InMemoryContextBlockStore();
 
-  // Per-server batch cache for `retry_tasks`.
+  // Per-server batch cache for `retry_tasks`. See the LRU comment block
+  // above for eviction semantics.
   const batchCache = new Map<string, { tasks: TaskSpec[]; expiresAt: number }>();
 
   const rememberBatch = (tasks: TaskSpec[]): string => {
     const id = randomUUID();
     batchCache.set(id, { tasks, expiresAt: Date.now() + BATCH_TTL_MS });
+    // Evict the least-recently-USED entry (not least-recently-inserted).
+    // `touchBatch` below moves accessed entries to the end of insertion
+    // order, so `keys().next().value` is the true LRU head.
     while (batchCache.size > BATCH_MAX) {
-      const oldest = batchCache.keys().next().value;
-      if (oldest) batchCache.delete(oldest);
+      const lru = batchCache.keys().next().value;
+      if (lru) batchCache.delete(lru);
       else break;
     }
     return id;
+  };
+
+  /**
+   * Mark a batch as recently used by reinserting it at the tail of the
+   * Map's iteration order. `touchBatch` is called on every successful
+   * `retry_tasks` lookup so a frequently-retried batch does not get
+   * evicted by `rememberBatch`'s LRU loop. Does NOT refresh the TTL —
+   * expiry stays at the original creation time.
+   */
+  const touchBatch = (id: string, entry: { tasks: TaskSpec[]; expiresAt: number }): void => {
+    batchCache.delete(id);
+    batchCache.set(id, entry);
   };
 
   const availableProviders = providerKeys as [string, ...string[]];
@@ -262,6 +296,11 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
           `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
         );
       }
+      // Mark this batch as recently used so the LRU eviction in
+      // `rememberBatch` doesn't drop a hot entry when newer batches
+      // arrive. Does NOT refresh TTL — a batch created 29 minutes ago
+      // still dies at minute 30 even if it's retried heavily.
+      touchBatch(batchId, batch);
       for (const i of taskIndices) {
         if (i < 0 || i >= batch.tasks.length) {
           throw new Error(

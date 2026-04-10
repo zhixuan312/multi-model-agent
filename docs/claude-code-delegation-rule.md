@@ -265,7 +265,7 @@ The default is `cwd-only`. Only set `sandboxPolicy: "none"` per-provider or per-
 
 **Scratchpad salvage runs on every termination path.** `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, and `error` all still populate `output` from the best scratchpad content the runner captured. You never get a bare failure with no text — there is always *something* to read, even if it's just the diagnostic line.
 
-**Retry failed tasks via `retry_tasks`.** Every `delegate_tasks` response includes a top-level `batchId`. To re-run a subset, call `retry_tasks` with `{ batchId, taskIndices }` (0-based indices into the original batch) — the original briefs stay server-side, so the parent does not re-transmit them. Batches expire 30 minutes **after creation** (not last access); under memory pressure they are evicted in **insertion order (FIFO)**, not by recency, with a cap of 100 batches. If the batch is gone, fall back to `delegate_tasks` with full task specs.
+**Retry failed tasks via `retry_tasks`.** Every `delegate_tasks` response includes a top-level `batchId`. To re-run a subset, call `retry_tasks` with `{ batchId, taskIndices }` (0-based indices into the original batch) — the original briefs stay server-side, so the parent does not re-transmit them. Batches expire 30 minutes **after creation** (not last access — access does not refresh TTL); under memory pressure they are evicted **LRU** (least-recently-*used*: a hot batch you keep retrying stays alive, cold newer batches get evicted first) with a cap of 100 batches. If the batch is gone, fall back to `delegate_tasks` with full task specs.
 
 **When you still need to escalate by hand** (e.g. you pinned a provider, or the auto-walk exhausted all options):
 

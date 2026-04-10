@@ -29,24 +29,6 @@ export interface DelegateOptions {
 // both.
 const COST_ORDER: Record<CostTier, number> = { free: 0, low: 1, medium: 2, high: 3 };
 
-/**
- * Status values where `output` is produced by the normal salvage path
- * (scratchpad text captured by the runner before termination). These rank
- * above error-flavored statuses in the all-fail fallback: a genuinely short
- * piece of partial work beats a long `Sub-agent error: …` diagnostic.
- *
- * `error` / `api_aborted` / `api_error` / `network_error` deliberately do
- * NOT appear here. Runners still salvage scratchpad on those paths when
- * the scratchpad is non-empty, but we cannot tell at the orchestrator
- * layer whether their `output` is real salvaged content or the fallback
- * error-diagnostic string — so we prefer any salvage-flavored attempt
- * first, and only fall back to error-flavored attempts if none exist.
- */
-const SALVAGE_FLAVORED_STATUSES: ReadonlySet<RunResult['status']> = new Set([
-  'incomplete',
-  'max_turns',
-  'timeout',
-]);
 
 /**
  * Build the escalation chain for an auto-routed task. Returns all eligible
@@ -185,25 +167,36 @@ export async function delegateWithEscalation(
 
   // All providers failed. Return the best salvageable output.
   //
-  // Tiered selection: prefer any attempt whose status is salvage-flavored
-  // (`incomplete` / `max_turns` / `timeout`) over any error-flavored
-  // attempt (`error` / `api_aborted` / `api_error` / `network_error`),
-  // regardless of output length. Rationale: runners salvage scratchpad
-  // content into `output` on every termination path, but on error paths
-  // `output` may just be a `Sub-agent error: …` diagnostic string (when
-  // the scratchpad was empty). Without this tiering, a late error with
-  // a long error message beats an earlier incomplete with a genuine
-  // shorter partial answer — discarding useful work.
+  // Two-tier selection based on `RunResult.outputIsDiagnostic`:
   //
-  // Within the preferred tier we still pick the longest output, because
-  // a longer genuine salvage is usually more useful than a shorter one.
+  //   Tier 1 (preferred): attempts whose `output` contains real
+  //   model-produced content — a clean final answer (on `ok`, but
+  //   `ok` short-circuits above so we never see one here) or
+  //   `scratchpad.latest()` text that the runner actually buffered
+  //   before termination. These are flagged `outputIsDiagnostic: false`.
+  //
+  //   Tier 2 (fallback): attempts whose `output` is a runner-synthesized
+  //   diagnostic template (`"Sub-agent error: …"`, `"Agent timed out…"`,
+  //   `buildXxxIncompleteDiagnostic(...)`, etc.) because the scratchpad
+  //   was empty at termination. These are `outputIsDiagnostic: true`.
+  //
+  // Why: status alone is NOT enough. Two `incomplete` attempts can both
+  // exist where one has genuine scratchpad content and the other has
+  // just the diagnostic template — picking by raw output length would
+  // silently discard the real work in favor of a longer diagnostic.
+  // Likewise a late `api_error` attempt with a long
+  // `"Sub-agent error: <stack trace>"` would beat an earlier
+  // `incomplete` attempt with a shorter genuine partial.
+  //
+  // Within each tier we still pick the longest output, because a
+  // longer genuine salvage is usually more useful than a shorter one,
+  // and among pure-diagnostic attempts a longer diagnostic usually
+  // carries more debugging signal than a shorter one.
   //
   // Note: the `ok` short-circuit above means every entry here is non-ok,
   // so the status-remap below is defensive only.
-  const salvageAttempts = attempts.filter((a) =>
-    SALVAGE_FLAVORED_STATUSES.has(a.result.status),
-  );
-  const pool = salvageAttempts.length > 0 ? salvageAttempts : attempts;
+  const realContentAttempts = attempts.filter((a) => !a.result.outputIsDiagnostic);
+  const pool = realContentAttempts.length > 0 ? realContentAttempts : attempts;
 
   let best = pool[0].result;
   for (const a of pool) {

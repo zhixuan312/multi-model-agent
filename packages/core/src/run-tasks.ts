@@ -46,6 +46,9 @@ function errorResult(error: string): RunResult {
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
+    // Orchestrator-level error wrapper (e.g. "no eligible provider",
+    // contextBlockIds expansion failure) — pure diagnostic, no salvage.
+    outputIsDiagnostic: true,
     escalationLog: [],
     error,
   };

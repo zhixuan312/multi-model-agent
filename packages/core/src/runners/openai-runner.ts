@@ -469,16 +469,18 @@ export async function runOpenAI(
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
         emit({ kind: 'done', status: 'max_turns' });
+        const hasSalvage = !scratchpad.isEmpty();
         return {
-          output: scratchpad.isEmpty()
-            ? `Agent exceeded max turns (${maxTurns}).`
-            : scratchpad.latest(),
+          output: hasSalvage
+            ? scratchpad.latest()
+            : `Agent exceeded max turns (${maxTurns}).`,
           status: 'max_turns',
           usage: partialUsage(currentResult, runner.providerConfig),
           turns: currentResult?.state.usage.requests ?? maxTurns,
           filesRead,
           filesWritten,
           toolCalls,
+          outputIsDiagnostic: !hasSalvage,
           escalationLog: [],
         };
       }
@@ -491,14 +493,16 @@ export async function runOpenAI(
       const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
-        output: scratchpad.isEmpty() ? `Sub-agent error: ${msg}` : scratchpad.latest(),
+        output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
         usage: partialUsage(currentResult, runner.providerConfig),
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         error: msg || reason,
       };
@@ -510,10 +514,11 @@ export async function runOpenAI(
     timeoutMs,
     () => {
       emit({ kind: 'done', status: 'timeout' });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
-        output: scratchpad.isEmpty()
-          ? `Agent timed out after ${timeoutMs}ms.`
-          : scratchpad.latest(),
+        output: hasSalvage
+          ? scratchpad.latest()
+          : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
@@ -522,6 +527,7 @@ export async function runOpenAI(
         // caller sees real numbers, not zeros, on a timeout.
         usage: partialUsage(currentResult, runner.providerConfig),
         turns: currentResult?.state.usage.requests ?? maxTurns,
+        outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
       };
     },
@@ -552,6 +558,8 @@ function buildOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    // `ok` always carries a real model answer — never a diagnostic.
+    outputIsDiagnostic: false,
     escalationLog: [],
   };
 }
@@ -567,17 +575,18 @@ function buildSupervisionExhaustedResult(
   const filesWritten = tracker.getWrites();
   const toolCalls = tracker.getToolCalls();
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? buildIncompleteDiagnostic({
+    output: hasSalvage
+      ? scratchpad.latest()
+      : buildIncompleteDiagnostic({
           providerLabel: 'openai-compatible',
           turns: usage.requests,
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
           filesRead,
           filesWritten,
-        })
-      : scratchpad.latest(),
+        }),
     status: 'incomplete',
     usage: {
       inputTokens: usage.inputTokens,
@@ -589,6 +598,7 @@ function buildSupervisionExhaustedResult(
     filesRead,
     filesWritten,
     toolCalls,
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }
@@ -605,10 +615,11 @@ function buildForceSalvageResult(
   const filesWritten = tracker.getWrites();
   const toolCalls = tracker.getToolCalls();
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
-      : scratchpad.latest(),
+    output: hasSalvage
+      ? scratchpad.latest()
+      : `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
     status: 'incomplete',
     usage: {
       inputTokens: usage.inputTokens,
@@ -620,6 +631,7 @@ function buildForceSalvageResult(
     filesRead,
     filesWritten,
     toolCalls,
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }

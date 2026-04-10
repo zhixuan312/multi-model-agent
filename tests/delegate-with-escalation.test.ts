@@ -7,7 +7,11 @@ import type {
   ProgressEvent,
 } from '../packages/core/src/types.js';
 
-function makeMockResult(status: RunResult['status'], output = ''): RunResult {
+function makeMockResult(
+  status: RunResult['status'],
+  output = '',
+  outputIsDiagnostic = false,
+): RunResult {
   return {
     output,
     status,
@@ -16,6 +20,7 @@ function makeMockResult(status: RunResult['status'], output = ''): RunResult {
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
+    outputIsDiagnostic,
     escalationLog: [],
   };
 }
@@ -96,13 +101,13 @@ describe('delegateWithEscalation', () => {
     expect(expensiveFail.run).toHaveBeenCalledOnce();
   });
 
-  it('prefers a salvage-flavored attempt over a longer error-flavored attempt', async () => {
+  it('prefers a real-content attempt over a longer diagnostic-only attempt (cross-status)', async () => {
     // Regression: previously the orchestrator picked by raw output length,
     // which meant a later error-status attempt whose `output` was a long
     // `Sub-agent error: …` diagnostic could beat an earlier `incomplete`
-    // with a shorter but genuine scratchpad partial. The tiered selection
-    // must prefer ANY salvage-flavored attempt (incomplete / max_turns /
-    // timeout) over error-flavored attempts, regardless of length.
+    // with a shorter but genuine scratchpad partial. The two-tier selection
+    // must prefer ANY attempt with real content (`outputIsDiagnostic:
+    // false`) over any diagnostic-only attempt, regardless of length.
     const realPartial = 'genuine partial work from the scratchpad';
     const longErrorDiagnostic =
       'Sub-agent error: HTTP 500 — provider returned a very long ' +
@@ -113,13 +118,15 @@ describe('delegateWithEscalation', () => {
     const cheapIncomplete: Provider = {
       name: 'cheap',
       config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', realPartial)),
+      // incomplete with real scratchpad content — outputIsDiagnostic:false
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', realPartial, false)),
     };
     const expensiveError: Provider = {
       name: 'expensive',
       config: { type: 'codex', model: 'gpt-5-codex' },
+      // api_error with empty scratchpad, fell back to error-diagnostic — true
       run: vi.fn().mockResolvedValue({
-        ...makeMockResult('api_error', longErrorDiagnostic),
+        ...makeMockResult('api_error', longErrorDiagnostic, true),
         error: 'HTTP 500: provider exploded',
       }),
     };
@@ -138,23 +145,56 @@ describe('delegateWithEscalation', () => {
     expect(result.escalationLog[1].status).toBe('api_error');
   });
 
-  it('falls back to the longest error-flavored attempt when no salvage-flavored attempts exist', async () => {
-    // When every attempt is error-flavored, the tiered preference has no
-    // salvage candidates to pick from, so it falls through to the legacy
-    // longest-output selection. Pin this so a future refactor that
-    // over-tightens the tier logic cannot silently drop the fallback.
+  it('prefers a real-content incomplete over a longer diagnostic-only incomplete (same status)', async () => {
+    // This is the subtler case the first regression did not catch: two
+    // `incomplete` attempts where one has real scratchpad content and the
+    // other has just the buildXxxIncompleteDiagnostic template text. Old
+    // status-only tiering let the diagnostic win on length. The
+    // `outputIsDiagnostic` flag fixes this regardless of status match.
+    const realShort = 'short but real partial';
+    const longDiagnostic =
+      '[openai-compatible sub-agent terminated without producing a final ' +
+      'answer]\n\nTurns used: 42\nInput tokens: 850000\nOutput tokens: 120\n' +
+      'Files read (3): [src/a.ts, src/b.ts, src/c.ts]\nFiles written: []\n' +
+      'This template is intentionally long to out-length the real partial.';
+
+    const realProvider: Provider = {
+      name: 'real',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', realShort, false)),
+    };
+    const diagnosticProvider: Provider = {
+      name: 'diag',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', longDiagnostic, true)),
+    };
+
+    expect(longDiagnostic.length).toBeGreaterThan(realShort.length);
+
+    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const result = await delegateWithEscalation(task, [realProvider, diagnosticProvider]);
+
+    expect(result.output).toBe(realShort);
+    expect(result.status).toBe('incomplete');
+  });
+
+  it('falls back to the longest diagnostic-only attempt when no real-content attempts exist', async () => {
+    // When every attempt is diagnostic-only, the real-content pool is
+    // empty, so selection falls through to longest-output across all
+    // attempts. Pin this so a future refactor that over-tightens the
+    // filter cannot silently drop the fallback.
     const shortErr = 'short';
     const longErr = 'a longer error diagnostic string from a crash';
 
     const firstErr: Provider = {
       name: 'first',
       config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('error', shortErr)),
+      run: vi.fn().mockResolvedValue(makeMockResult('error', shortErr, true)),
     };
     const secondErr: Provider = {
       name: 'second',
       config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr)),
+      run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr, true)),
     };
 
     const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };

@@ -50,6 +50,9 @@ export function createProvider(name: string, config: MultiModelConfig): Provider
         filesRead: [],
         filesWritten: [],
         toolCalls: [],
+        // Fallback error wrapper around a thrown runner — no scratchpad
+        // involved, just the raw error message.
+        outputIsDiagnostic: true,
         escalationLog: [],
         error: err instanceof Error ? err.message : String(err),
       };

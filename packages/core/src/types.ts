@@ -139,6 +139,20 @@ export interface RunResult {
   filesWritten: string[]
   /** Compact one-line summaries of every tool the worker invoked, in order. */
   toolCalls: string[]
+  /** `true` when `output` is a runner-synthesized diagnostic template
+   *  (`"Sub-agent error: …"`, `"Agent timed out after …"`, the incomplete
+   *  template from `buildXxxIncompleteDiagnostic`, etc.) because the
+   *  scratchpad was empty at termination. `false` when `output` contains
+   *  real model-produced content — either a clean final answer on the
+   *  `ok` path, or `scratchpad.latest()` on any salvage path where the
+   *  scratchpad had buffered text.
+   *
+   *  Used by the escalation orchestrator's all-fail fallback to prefer
+   *  real content over diagnostic templates regardless of status or
+   *  length (otherwise a long `"Sub-agent error: <stack trace>"` string
+   *  could beat a shorter genuine partial answer from an earlier
+   *  attempt). */
+  outputIsDiagnostic: boolean
   /** One entry per provider attempt within this dispatch. Length === 1
    *  for tasks that succeeded on the first try; longer when escalation
    *  occurred. Runners initialize this to `[]`; the escalation

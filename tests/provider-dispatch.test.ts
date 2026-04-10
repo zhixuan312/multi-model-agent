@@ -30,6 +30,7 @@ const mockOkResult = {
   filesRead: [],
   filesWritten: [],
   toolCalls: [],
+  outputIsDiagnostic: false,
   escalationLog: [],
 };
 

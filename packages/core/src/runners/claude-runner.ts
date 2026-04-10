@@ -585,10 +585,9 @@ export async function runClaude(
       const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
-        output: scratchpad.isEmpty()
-          ? `Sub-agent error: ${msg}`
-          : scratchpad.latest(),
+        output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
         usage: {
           inputTokens,
@@ -600,6 +599,7 @@ export async function runClaude(
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         error: msg || reason,
       };
@@ -632,20 +632,22 @@ export async function runClaude(
     timeoutMs,
     () => {
       emit({ kind: 'done', status: 'timeout' });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
-      output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
-      status: 'timeout',
-      filesRead: tracker.getReads(),
-      filesWritten: tracker.getWrites(),
-      toolCalls: tracker.getToolCalls(),
-      usage: {
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
-        costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD),
-      },
-      turns,
-      escalationLog: [],
+        output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
+        status: 'timeout',
+        filesRead: tracker.getReads(),
+        filesWritten: tracker.getWrites(),
+        toolCalls: tracker.getToolCalls(),
+        usage: {
+          inputTokens,
+          outputTokens,
+          totalTokens: inputTokens + outputTokens,
+          costUSD: effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD),
+        },
+        turns,
+        outputIsDiagnostic: !hasSalvage,
+        escalationLog: [],
       };
     },
     abortController,
@@ -697,6 +699,8 @@ function buildClaudeOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    // `ok` always carries a real model answer — never a diagnostic.
+    outputIsDiagnostic: false,
     escalationLog: [],
   };
 }
@@ -711,16 +715,17 @@ function buildClaudeIncompleteResult(
   const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? buildClaudeIncompleteDiagnostic({
+    output: hasSalvage
+      ? scratchpad.latest()
+      : buildClaudeIncompleteDiagnostic({
           turns,
           inputTokens,
           outputTokens,
           filesRead,
           filesWritten,
-        })
-      : scratchpad.latest(),
+        }),
     status: 'incomplete',
     usage: {
       inputTokens,
@@ -732,6 +737,7 @@ function buildClaudeIncompleteResult(
     filesRead,
     filesWritten,
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }
@@ -740,10 +746,11 @@ function buildClaudeForceSalvageResult(
   args: ClaudeResultCommonArgs & { softLimit: number },
 ): RunResult {
   const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, softLimit } = args;
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
-      : scratchpad.latest(),
+    output: hasSalvage
+      ? scratchpad.latest()
+      : `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
     status: 'incomplete',
     usage: {
       inputTokens,
@@ -755,6 +762,7 @@ function buildClaudeForceSalvageResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }
@@ -763,10 +771,18 @@ function buildClaudeMaxTurnsResult(
   args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string },
 ): RunResult {
   const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  const hasSalvage = !scratchpad.isEmpty();
+  // Note: `lastOutput` here is the model's last streamed text before the
+  // max-turns boundary — NOT a diagnostic template. If the scratchpad has
+  // nothing but `lastOutput` is non-empty, that's still real model content,
+  // so outputIsDiagnostic is false. Only the `Agent exceeded max turns…`
+  // fallback (empty scratchpad AND empty lastOutput) is a diagnostic.
+  const output = hasSalvage
+    ? scratchpad.latest()
+    : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
+  const outputIsDiagnostic = !hasSalvage && !lastOutput;
   return {
-    output: scratchpad.isEmpty()
-      ? lastOutput || `Agent exceeded max turns (${maxTurns}).`
-      : scratchpad.latest(),
+    output,
     status: 'max_turns',
     usage: {
       inputTokens,
@@ -778,6 +794,7 @@ function buildClaudeMaxTurnsResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic,
     escalationLog: [],
   };
 }

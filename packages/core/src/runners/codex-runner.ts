@@ -744,8 +744,9 @@ export async function runCodex(
       // return it as the output. Pre-Task-5 behavior returned only the
       // error string, losing 30k+ tokens of work on abort.
       emit({ kind: 'done', status });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
-        output: scratchpad.isEmpty() ? `Sub-agent error: ${detailed}` : scratchpad.latest(),
+        output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
         usage: {
           inputTokens,
@@ -757,6 +758,7 @@ export async function runCodex(
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
+        outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         error: detailed,
       };
@@ -768,11 +770,12 @@ export async function runCodex(
     timeoutMs,
     () => {
       emit({ kind: 'done', status: 'timeout' });
+      const hasSalvage = !scratchpad.isEmpty();
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
         // hardcoded zeros would discard every token counted on partial turns.
-        output: scratchpad.isEmpty() ? `Agent timed out after ${timeoutMs}ms.` : scratchpad.latest(),
+        output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
@@ -784,6 +787,7 @@ export async function runCodex(
           costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
         },
         turns,
+        outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
       };
     },
@@ -825,6 +829,8 @@ function buildCodexOkResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    // `ok` always carries a real model answer — never a diagnostic.
+    outputIsDiagnostic: false,
     escalationLog: [],
   };
 }
@@ -839,16 +845,17 @@ function buildCodexIncompleteResult(
   const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? buildCodexIncompleteDiagnostic({
+    output: hasSalvage
+      ? scratchpad.latest()
+      : buildCodexIncompleteDiagnostic({
           turns,
           inputTokens,
           outputTokens,
           filesRead,
           filesWritten,
-        })
-      : scratchpad.latest(),
+        }),
     status: 'incomplete',
     usage: {
       inputTokens,
@@ -860,6 +867,7 @@ function buildCodexIncompleteResult(
     filesRead,
     filesWritten,
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }
@@ -868,10 +876,11 @@ function buildCodexForceSalvageResult(
   args: CodexResultCommonArgs & { softLimit: number },
 ): RunResult {
   const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit } = args;
+  const hasSalvage = !scratchpad.isEmpty();
   return {
-    output: scratchpad.isEmpty()
-      ? `[codex sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`
-      : scratchpad.latest(),
+    output: hasSalvage
+      ? scratchpad.latest()
+      : `[codex sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
     status: 'incomplete',
     usage: {
       inputTokens,
@@ -883,6 +892,7 @@ function buildCodexForceSalvageResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
   };
 }
@@ -891,10 +901,17 @@ function buildCodexMaxTurnsResult(
   args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string },
 ): RunResult {
   const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  const hasSalvage = !scratchpad.isEmpty();
+  // Note: `lastOutput` here is the model's final text for the max-turns
+  // boundary — real model content, not a diagnostic template. Only the
+  // `Agent exceeded max turns…` fallback (empty scratchpad AND empty
+  // lastOutput) is a diagnostic.
+  const output = hasSalvage
+    ? scratchpad.latest()
+    : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
+  const outputIsDiagnostic = !hasSalvage && !lastOutput;
   return {
-    output: scratchpad.isEmpty()
-      ? (lastOutput || `Agent exceeded max turns (${maxTurns}).`)
-      : scratchpad.latest(),
+    output,
     status: 'max_turns',
     usage: {
       inputTokens,
@@ -906,6 +923,7 @@ function buildCodexMaxTurnsResult(
     filesRead: tracker.getReads(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic,
     escalationLog: [],
   };
 }
