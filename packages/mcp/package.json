@@ -1,0 +1,33 @@
+{
+  "name": "@scope/multi-model-agent-mcp",
+  "version": "0.1.0",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "bin": {
+    "multi-model-agent": "./dist/cli.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./routing/render-provider-routing-matrix": {
+      "types": "./dist/routing/render-provider-routing-matrix.d.ts",
+      "import": "./dist/routing/render-provider-routing-matrix.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc"
+  },
+  "engines": { "node": ">=22.0.0" },
+  "dependencies": {
+    "@scope/multi-model-agent-core": "*",
+    "@modelcontextprotocol/sdk": "^1.0.0",
+    "zod": "^4.0.0"
+  },
+  "peerDependencies": {
+    "@openai/agents": "^0.8.0",
+    "openai": "^6.0.0"
+  }
+}
