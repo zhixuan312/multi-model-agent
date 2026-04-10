@@ -40,7 +40,8 @@
     }
   },
   "scripts": {
-    "build": "tsc"
+    "build": "tsc && chmod +x dist/cli.js",
+    "prepublishOnly": "npm run build"
   },
   "engines": { "node": ">=22.0.0" },
   "dependencies": {
