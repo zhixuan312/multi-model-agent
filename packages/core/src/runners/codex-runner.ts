@@ -21,6 +21,7 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
 } from './supervision.js';
+import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 import type { SandboxPolicy } from '../types.js';
 
@@ -612,12 +613,21 @@ export async function runCodex(
       }
       const detailed = pieces.join(' | ') || String(err);
 
+      // Classify the thrown error into a finer-grained RunStatus. Task 7
+      // introduces api_aborted / api_error / network_error alongside the
+      // catch-all 'error' status. The turn-scoped `lastResponseStatus`
+      // disambiguation above is ORTHOGONAL to this classification: the
+      // `detailed` message is still the rich operator-facing diagnostic,
+      // and `classifyError` only decides which RunStatus bucket the
+      // failure lands in.
+      const { status } = classifyError(err);
+
       // Salvage: if the scratchpad has buffered text from earlier turns,
       // return it as the output. Pre-Task-5 behavior returned only the
       // error string, losing 30k+ tokens of work on abort.
       return {
         output: scratchpad.isEmpty() ? `Sub-agent error: ${detailed}` : scratchpad.latest(),
-        status: 'error',
+        status,
         usage: {
           inputTokens,
           outputTokens,

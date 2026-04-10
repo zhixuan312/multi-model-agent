@@ -55,6 +55,7 @@ import {
   logWatchdogEvent,
   THINKING_DIAGNOSTIC_MARKER,
 } from './supervision.js';
+import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
@@ -366,17 +367,24 @@ export async function runOpenAI(
           escalationLog: [],
         };
       }
+      // Classify the thrown error into a finer-grained RunStatus so the
+      // escalation orchestrator (and downstream observers) can distinguish
+      // abort / network / HTTP-error / generic failure modes. We still
+      // surface the original error message as the `error` field — the
+      // classifier's `reason` is deliberately a stable category label and
+      // NOT the human-readable message.
+      const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
       return {
         output: scratchpad.isEmpty() ? `Sub-agent error: ${msg}` : scratchpad.latest(),
-        status: 'error',
+        status,
         usage: partialUsage(currentResult, runner.providerConfig),
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         escalationLog: [],
-        error: msg,
+        error: msg || reason,
       };
     }
   };

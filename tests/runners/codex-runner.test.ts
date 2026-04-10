@@ -564,7 +564,10 @@ describe('runCodex', () => {
       defaults,
     );
 
-    expect(result.status).toBe('error');
+    // Task 7: "Request was aborted" is classified as api_aborted (not the
+    // generic 'error') so the escalation orchestrator can recognise abort
+    // conditions specifically.
+    expect(result.status).toBe('api_aborted');
     // Scratchpad salvage: the buffered turn-1 text is returned as the output,
     // NOT swallowed as "Sub-agent error: ...".
     expect(result.output).toBe('useful partial findings');
@@ -612,7 +615,10 @@ describe('runCodex', () => {
       defaults,
     );
 
-    expect(result.status).toBe('error');
+    // Task 7: "Request was aborted" is classified as api_aborted. The
+    // turn-scoped lastResponseStatus disambiguation (Task 5) is orthogonal
+    // to this status and still runs below.
+    expect(result.status).toBe('api_aborted');
     // Pre-fix: error looked like "Request was aborted | last response status: completed"
     // Post-fix: the `| last response status: completed` suffix must NOT appear,
     // because that status belongs to turn 1, not to the failed turn 2.

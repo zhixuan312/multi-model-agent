@@ -19,6 +19,7 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
 } from './supervision.js';
+import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 
 /**
@@ -452,12 +453,16 @@ export async function runClaude(
       }
     } catch (err) {
       // Preserve partial usage — the scratchpad may have buffered text
-      // from turns that ran before the throw.
+      // from turns that ran before the throw. Route the thrown error
+      // through the shared classifier so the escalation orchestrator can
+      // distinguish abort / network / HTTP-error / generic failure modes.
+      const { status, reason } = classifyError(err);
+      const msg = err instanceof Error ? err.message : String(err);
       return {
         output: scratchpad.isEmpty()
-          ? `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`
+          ? `Sub-agent error: ${msg}`
           : scratchpad.latest(),
-        status: 'error',
+        status,
         usage: {
           inputTokens,
           outputTokens,
@@ -469,7 +474,7 @@ export async function runClaude(
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         escalationLog: [],
-        error: err instanceof Error ? err.message : String(err),
+        error: msg || reason,
       };
     }
 

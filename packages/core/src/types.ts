@@ -6,7 +6,15 @@ export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
-export type RunStatus = 'ok' | 'error' | 'timeout' | 'max_turns' | 'incomplete';
+export type RunStatus =
+  | 'ok'
+  | 'incomplete'
+  | 'max_turns'
+  | 'timeout'
+  | 'api_aborted'
+  | 'api_error'
+  | 'network_error'
+  | 'error';
 
 // === Task ===
 
