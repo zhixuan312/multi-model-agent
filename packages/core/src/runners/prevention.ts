@@ -68,3 +68,24 @@ export function buildReGroundingMessage(opts: BuildReGroundingMessageOptions): s
     'Make sure you have a plan to produce the final answer with your remaining budget.',
   ].join(' ');
 }
+
+export interface BuildBudgetPressureNudgeOptions {
+  inputTokens: number;
+  softLimit: number;
+}
+
+/**
+ * Nudge message the runner injects when the watchdog crosses its
+ * `warning` threshold (see supervision.checkWatchdogThreshold). The text
+ * is deliberately terse: the model is already close to the soft limit, so
+ * we tell it to stop exploring and produce a final answer from whatever
+ * it has gathered. Kept here so every runner (openai, claude, codex)
+ * uses byte-identical wording.
+ */
+export function buildBudgetPressureNudge(opts: BuildBudgetPressureNudgeOptions): string {
+  return (
+    `Budget pressure: you have used approximately ${opts.inputTokens} ` +
+    `input tokens out of a soft limit of ${opts.softLimit}. Stop exploring and ` +
+    `produce your complete final answer now with whatever you have gathered.`
+  );
+}

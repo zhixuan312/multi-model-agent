@@ -43,6 +43,7 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
+  buildBudgetPressureNudge,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -206,20 +207,49 @@ export async function runOpenAI(
     ];
   };
 
+  // Hoisted out of `run()` so the withTimeout callback (which runs in a
+  // different microtask chain) can still read partial usage from the last
+  // successful agentRun. `run()` updates this on every turn.
+  let currentResult: AgentRunOutput | undefined;
+
+  /**
+   * Local helper: run one agent turn and buffer its assistant text into
+   * the scratchpad. Closes over `agent`, `abortController`, and
+   * `scratchpad` so every call site in `run()` is just one line.
+   */
+  const runTurnAndBuffer = async (
+    input: string | AgentInputItem[],
+    turnBudget: number,
+  ): Promise<AgentRunOutput> => {
+    const result = (await agentRun(agent, input, {
+      maxTurns: turnBudget,
+      signal: abortController.signal,
+    })) as AgentRunOutput;
+    scratchpad.append(
+      result.state.usage.requests,
+      stripThinkingTags(extractAssistantText(result.newItems)),
+    );
+    return result;
+  };
+
   const run = async (): Promise<RunResult> => {
-    let currentResult: AgentRunOutput;
     try {
-      currentResult = await agentRun(agent, promptWithBudgetHint, {
-        maxTurns,
-        signal: abortController.signal,
-      });
-      scratchpad.append(
-        currentResult.state.usage.requests,
-        stripThinkingTags(extractAssistantText(currentResult.newItems)),
-      );
+      currentResult = await runTurnAndBuffer(promptWithBudgetHint, maxTurns);
 
       let supervisionRetries = 0;
-      let lastDegenerateOutput = '';
+      // Initialized to `null` (NOT ''): on the first turn there is no
+      // previous degenerate output to compare against, so the
+      // same-output early-out must be skipped. Initialising to ''
+      // would cause `sameDegenerateOutput('', '')` to fire on a first-
+      // turn empty output and break the loop before retries run.
+      let lastDegenerateOutput: string | null = null;
+      // Track the input-token count at which we last fired a warning
+      // nudge. This prevents nudging twice in a row for the same
+      // `currentResult` when validation still fails after a nudge
+      // response: the next loop iteration will see
+      // `currentInputTokens <= lastWarnedInputTokens` and fall through
+      // to validation / re-prompt instead of re-issuing the nudge.
+      let lastWarnedInputTokens = -1;
 
       // Supervision loop. On each iteration we:
       //   1. Check the watchdog (may force-terminate or nudge)
@@ -254,21 +284,21 @@ export async function runOpenAI(
           );
         }
 
-        if (watchdogStatus === 'warning') {
-          const warning =
-            `Budget pressure: you have used approximately ${currentInputTokens} ` +
-            `input tokens out of a soft limit of ${softLimit}. Stop exploring and ` +
-            `produce your complete final answer now with whatever you have gathered.`;
-          currentResult = await agentRun(agent, continueWith(currentResult, warning), {
-            maxTurns: 1,
-            signal: abortController.signal,
+        // Warning-band nudge: fire at most once per distinct input-token
+        // level. We dispatch the nudge turn, append to the scratchpad,
+        // record the new high-watermark, and then FALL THROUGH to the
+        // validation block below — the nudge response might itself be a
+        // perfectly valid final answer, so we must validate it in the
+        // SAME iteration. Without the fall-through, a valid nudge
+        // response would be thrown away and the loop would grind until
+        // force_salvage (pre-fix bug #1).
+        if (watchdogStatus === 'warning' && currentInputTokens > lastWarnedInputTokens) {
+          const warning = buildBudgetPressureNudge({
+            inputTokens: currentInputTokens,
+            softLimit,
           });
-          scratchpad.append(
-            currentResult.state.usage.requests,
-            stripThinkingTags(extractAssistantText(currentResult.newItems)),
-          );
-          // Re-enter the loop head (re-check watchdog & validation).
-          continue;
+          lastWarnedInputTokens = currentInputTokens;
+          currentResult = await runTurnAndBuffer(continueWith(currentResult, warning), 1);
         }
 
         // --- Validation check ---
@@ -279,24 +309,18 @@ export async function runOpenAI(
           return buildOkResult(stripped, currentResult, tracker, runner.providerConfig);
         }
 
-        // Degenerate. Apply same-output early-out and retry budget.
-        if (sameDegenerateOutput(stripped, lastDegenerateOutput)) break;
+        // Degenerate. Apply same-output early-out (only when we have a
+        // prior degenerate output to compare against) and retry budget.
+        if (lastDegenerateOutput !== null && sameDegenerateOutput(stripped, lastDegenerateOutput)) break;
         lastDegenerateOutput = stripped;
         supervisionRetries++;
         if (supervisionRetries >= MAX_SUPERVISION_RETRIES) break;
 
         // --- Re-prompt the model to recover ---
         const rePrompt = buildRePrompt(validation);
-        currentResult = await agentRun(agent, continueWith(currentResult, rePrompt), {
-          // Give the model a small budget to recover. One extra turn per
-          // retry is enough for the "emit your final answer" nudge.
-          maxTurns: 1,
-          signal: abortController.signal,
-        });
-        scratchpad.append(
-          currentResult.state.usage.requests,
-          stripThinkingTags(extractAssistantText(currentResult.newItems)),
-        );
+        // Give the model a small budget to recover. One extra turn per
+        // retry is enough for the "emit your final answer" nudge.
+        currentResult = await runTurnAndBuffer(continueWith(currentResult, rePrompt), 1);
 
         // --- Periodic re-grounding ---
         const turnsSoFar = currentResult.state.usage.requests;
@@ -308,14 +332,7 @@ export async function runOpenAI(
             toolCallsSoFar: tracker.getToolCalls().length,
             filesReadSoFar: tracker.getReads().length,
           });
-          currentResult = await agentRun(agent, continueWith(currentResult, reground), {
-            maxTurns: 1,
-            signal: abortController.signal,
-          });
-          scratchpad.append(
-            currentResult.state.usage.requests,
-            stripThinkingTags(extractAssistantText(currentResult.newItems)),
-          );
+          currentResult = await runTurnAndBuffer(continueWith(currentResult, reground), 1);
         }
       }
 
@@ -331,6 +348,8 @@ export async function runOpenAI(
     } catch (err) {
       if (err instanceof MaxTurnsExceededError) {
         // max_turns path: prefer scratchpad salvage over the bare diagnostic.
+        // Preserve whatever partial usage we accumulated in the last
+        // successful agentRun so the caller sees real numbers, not zeros.
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
@@ -339,8 +358,8 @@ export async function runOpenAI(
             ? `Agent exceeded max turns (${maxTurns}).`
             : scratchpad.latest(),
           status: 'max_turns',
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-          turns: maxTurns,
+          usage: partialUsage(currentResult, runner.providerConfig),
+          turns: currentResult?.state.usage.requests ?? maxTurns,
           filesRead,
           filesWritten,
           toolCalls,
@@ -350,8 +369,8 @@ export async function runOpenAI(
       return {
         output: scratchpad.isEmpty() ? `Sub-agent error: ${msg}` : scratchpad.latest(),
         status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-        turns: 0,
+        usage: partialUsage(currentResult, runner.providerConfig),
+        turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
@@ -371,8 +390,10 @@ export async function runOpenAI(
       filesRead: tracker.getReads(),
       filesWritten: tracker.getWrites(),
       toolCalls: tracker.getToolCalls(),
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-      turns: maxTurns,
+      // Preserve partial usage from the last successful agentRun so the
+      // caller sees real numbers, not zeros, on a timeout.
+      usage: partialUsage(currentResult, runner.providerConfig),
+      turns: currentResult?.state.usage.requests ?? maxTurns,
     }),
     abortController,
   );
@@ -508,4 +529,26 @@ function formatFileList(files: string[]): string {
   const MAX_SHOWN = 10;
   if (files.length <= MAX_SHOWN) return files.join(', ');
   return `${files.slice(0, MAX_SHOWN).join(', ')}, … ${files.length - MAX_SHOWN} more`;
+}
+
+/**
+ * Read whatever usage we managed to accumulate from the last successful
+ * `agentRun` before a throw, max_turns, or timeout. Used by every
+ * non-happy-path return so the caller sees real token counts (and a
+ * real cost estimate) instead of zeros.
+ */
+function partialUsage(
+  result: AgentRunOutput | undefined,
+  providerConfig: ProviderConfig,
+): RunResult['usage'] {
+  if (!result) {
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null };
+  }
+  const usage = result.state.usage;
+  return {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.totalTokens,
+    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+  };
 }

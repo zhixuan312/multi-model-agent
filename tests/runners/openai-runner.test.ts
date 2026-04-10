@@ -306,6 +306,94 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(result.output).toBe('salvageable scratchpad text');
   });
 
+  it('validates the warning-nudge response in the same iteration and returns ok when it is valid (regression #1)', async () => {
+    // Reviewer bug: the prior implementation fell into the warning
+    // branch, dispatched a nudge turn, then `continue`d back to the
+    // loop head — causing the watchdog to fire `warning` AGAIN
+    // (because input tokens only grow) and never validating the
+    // nudge response. A model that produced a perfect final answer
+    // in response to the nudge had its output discarded.
+    //
+    // Fix: fall through to validateCompletion() in the same iteration
+    // so a valid nudge response returns `ok`.
+    const pc = { ...providerConfig, inputTokenSoftLimit: 1_000_000 };
+
+    // First call: 850k input tokens (warning band: 80%-95%), degenerate
+    // final output so the watchdog nudge would have been dispatched.
+    // Second call: 900k input tokens (still warning band, higher than
+    // first) with a VALID final output. Under the fix this must be
+    // validated in the same iteration and returned as `ok`.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          inputTokens: 850_000,
+        }),
+      )
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: VALID_FINAL_OUTPUT,
+          inputTokens: 900_000,
+        }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, {
+      client: clientStub,
+      providerConfig: pc,
+      defaults,
+    });
+
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe(VALID_FINAL_OUTPUT);
+    // Exactly two calls: initial + one nudge. NOT three or more
+    // (which is what the pre-fix behaviour produced as the nudge
+    // loop kept re-firing until force_salvage).
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    // The nudge message is the last user turn on the second call.
+    const secondInput = mockRun.mock.calls[1][1] as Array<{ role: string; content: string }>;
+    expect(Array.isArray(secondInput)).toBe(true);
+    const lastMessage = secondInput[secondInput.length - 1];
+    expect(lastMessage.role).toBe('user');
+    expect(lastMessage.content).toContain('Budget pressure');
+  });
+
+  it('gives a first-turn empty output the full supervision retry budget (regression #5)', async () => {
+    // Reviewer bug: `lastDegenerateOutput` was initialised to '' and
+    // `sameDegenerateOutput('', '')` is true post-Task-2 — so a first
+    // turn with empty `stripped` output would trip the same-output
+    // early-out and break the supervision loop BEFORE any retry.
+    //
+    // Fix: initialise to `null` and only compare when non-null.
+    // Expected flow: empty first turn → re-prompt → valid second
+    // turn → ok.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: '',
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: '' }],
+              },
+            },
+          ],
+        }),
+      )
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT }));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe(VALID_FINAL_OUTPUT);
+    // Two calls: the supervision loop must have fired a re-prompt
+    // for the empty first turn instead of bailing out of the loop.
+    expect(mockRun).toHaveBeenCalledTimes(2);
+  });
+
   it('salvages scratchpad.latest() on an SDK error instead of returning "Sub-agent error: ..."', async () => {
     // First call succeeds with a degenerate fragment (populates scratchpad).
     // Second call (the re-prompt) throws — the runner should salvage the

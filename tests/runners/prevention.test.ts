@@ -2,6 +2,7 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
+  buildBudgetPressureNudge,
   RE_GROUNDING_INTERVAL_TURNS,
 } from '../../packages/core/src/runners/prevention.js';
 
@@ -93,5 +94,26 @@ describe('buildReGroundingMessage', () => {
 describe('RE_GROUNDING_INTERVAL_TURNS', () => {
   it('is 10', () => {
     expect(RE_GROUNDING_INTERVAL_TURNS).toBe(10);
+  });
+});
+
+describe('buildBudgetPressureNudge', () => {
+  it('mentions both the current input tokens and the soft limit', () => {
+    const msg = buildBudgetPressureNudge({ inputTokens: 850_000, softLimit: 1_000_000 });
+    expect(msg).toContain('850000');
+    expect(msg).toContain('1000000');
+  });
+
+  it('tells the model to stop exploring and produce a final answer', () => {
+    const msg = buildBudgetPressureNudge({ inputTokens: 100, softLimit: 200 });
+    expect(msg.toLowerCase()).toContain('stop exploring');
+    expect(msg.toLowerCase()).toContain('final answer');
+  });
+
+  it('is deterministic for the same inputs', () => {
+    const args = { inputTokens: 12345, softLimit: 20000 };
+    const a = buildBudgetPressureNudge(args);
+    const b = buildBudgetPressureNudge(args);
+    expect(a).toBe(b);
   });
 });
