@@ -1175,7 +1175,7 @@ In `packages/core/src/runners/supervision.ts`:
 ```ts
 export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
   // Never-drop is absolute. Partition the skeleton first, then budget the
-  // droppable partition against whatever event/byte room remains.
+  // droppable partition directly against the nominal 80-event / 16 KB cap.
   // If the skeleton alone exceeds the nominal cap, keep it anyway and mark
   // `capExceededByBoundaryEvents: true`.
 }
