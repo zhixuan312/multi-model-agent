@@ -1181,7 +1181,7 @@ export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[]
 }
 ```
 
-The implementation keeps the never-drop skeleton intact, then drops only the droppable partition by priority. If the retained droppable partition still does not fit, the fallback keeps the first 10 + last 30 droppable events only. The final trace may still exceed 80 events when the boundary skeleton itself is larger than the nominal cap; in that case the `_trimmed` marker includes `capExceededByBoundaryEvents: true`.
+The implementation keeps the never-drop skeleton intact and budgets the droppable partition directly against the nominal 80-event / 16 KB cap. Boundary events never consume droppable budget, and their payloads are preserved in full. If the retained droppable partition still does not fit, the fallback keeps the first 10 + last 30 droppable events only. When the boundary skeleton itself exceeds the nominal cap, the `_trimmed` marker includes `capExceededByBoundaryEvents: true` and `droppedCount: 0` if no droppable events were removed.
 
 ### 6.7 Result helper integration
 
