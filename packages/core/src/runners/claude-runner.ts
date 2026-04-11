@@ -508,6 +508,7 @@ export async function runClaude(
               turns,
               maxTurns,
               lastOutput: output,
+              reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns (user-declared maxTurns: ${maxTurns})`,
             });
             messageQueue.close();
             break;
@@ -558,6 +559,7 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
+              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
             });
             messageQueue.close();
             break;
@@ -573,6 +575,7 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
+              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
             });
             messageQueue.close();
             break;
@@ -725,9 +728,9 @@ function buildClaudeOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildClaudeIncompleteResult(
-  args: ClaudeResultCommonArgs,
+  args: ClaudeResultCommonArgs & { reason?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, reason } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const hasSalvage = !scratchpad.isEmpty();
@@ -755,6 +758,7 @@ function buildClaudeIncompleteResult(
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    error: reason,
   };
 }
 
@@ -785,9 +789,9 @@ function buildClaudeForceSalvageResult(
 }
 
 function buildClaudeMaxTurnsResult(
-  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string },
+  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's last streamed text before the
   // max-turns boundary — NOT a diagnostic template. If the scratchpad has
@@ -814,6 +818,7 @@ function buildClaudeMaxTurnsResult(
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic,
     escalationLog: [],
+    error: reason,
   };
 }
 

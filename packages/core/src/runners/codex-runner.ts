@@ -645,6 +645,7 @@ export async function runCodex(
               inputTokens,
               outputTokens,
               turns,
+              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
             });
             emit({ kind: 'done', status: exhausted.status });
             return exhausted;
@@ -704,6 +705,7 @@ export async function runCodex(
         turns,
         maxTurns,
         lastOutput: output,
+        reason: `hand-rolled loop exited after completing ${turns} of ${maxTurns} user-declared turns without producing a clean final answer`,
       });
       emit({ kind: 'done', status: maxTurnsResult.status });
       return maxTurnsResult;
@@ -854,9 +856,9 @@ function buildCodexOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildCodexIncompleteResult(
-  args: CodexResultCommonArgs,
+  args: CodexResultCommonArgs & { reason?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const hasSalvage = !scratchpad.isEmpty();
@@ -884,6 +886,7 @@ function buildCodexIncompleteResult(
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    error: reason,
   };
 }
 
@@ -914,9 +917,9 @@ function buildCodexForceSalvageResult(
 }
 
 function buildCodexMaxTurnsResult(
-  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string },
+  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's final text for the max-turns
   // boundary — real model content, not a diagnostic template. Only the
@@ -942,6 +945,7 @@ function buildCodexMaxTurnsResult(
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic,
     escalationLog: [],
+    error: reason,
   };
 }
 
