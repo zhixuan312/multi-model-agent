@@ -179,6 +179,26 @@ describe('validateCoverage — requiredMarkers', () => {
   });
 });
 
+describe('validateCoverage — combined checks', () => {
+  it('fails with the first failing reason when minSections fails before requiredMarkers', () => {
+    const result = validateCoverage('## only one\ncontent', {
+      minSections: 2,
+      requiredMarkers: ['missing-marker'],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 1 sections found');
+  });
+
+  it('passes when both minSections and requiredMarkers pass', () => {
+    const result = validateCoverage('## one\nmarker\n\n## two\nmarker', {
+      minSections: 2,
+      requiredMarkers: ['marker'],
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('buildRePrompt — empty', () => {
   it('produces a re-prompt that mentions the empty response', () => {
     const result = validateCompletion('');
@@ -302,6 +322,32 @@ describe('trimProgressTrace', () => {
     const trimmed = trimProgressTrace(events);
     expect(trimmed.length).toBeLessThan(events.length);
     expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
+  });
+
+  it('preserves all never-drop boundary events under pressure', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 15 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'x'.repeat(1000),
+      })),
+      { kind: 'escalation_start', previousProvider: 'codex', previousReason: 'escalate', nextProvider: 'claude' },
+      ...Array.from({ length: 15 }, (_, i) => ({
+        kind: 'tool_call' as const,
+        turn: i + 16,
+        toolSummary: 'y'.repeat(1000),
+      })),
+      { kind: 'injection', injectionType: 'reground', turn: 31, contentLengthChars: 123 },
+      { kind: 'injection', injectionType: 'supervise_empty', turn: 32, contentLengthChars: 456 },
+      { kind: 'done', status: 'ok' },
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'escalation_start')).toBe(true);
+    expect(trimmed.filter((event) => event.kind === 'injection')).toHaveLength(2);
+    expect(trimmed.some((event) => event.kind === 'done')).toBe(true);
   });
 
   it('drops all text_emission events before higher-priority events in a large trace', () => {
