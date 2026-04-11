@@ -275,6 +275,14 @@ export interface RunOptions {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional caller-declared output expectations. When supplied, the
+   *  supervision layer runs `validateCoverage` after `validateCompletion`'s
+   *  syntactic check passes, and re-prompts with specific missing-item
+   *  guidance if coverage is insufficient. Same 3-retry budget as other
+   *  degeneracy classes. Opt-in: callers who omit this field see zero
+   *  change in runner behavior. Generic across all workload shapes that
+   *  produce enumerable deliverables. */
+  expectedCoverage?: TaskSpec['expectedCoverage']
   /** Optional callback invoked by runners and the escalation orchestrator to
    *  stream in-flight progress events. See `ProgressEvent` for the full set
    *  of variants. Runners receive this via `provider.run(..., { onProgress })`

@@ -23,6 +23,7 @@ import {
 } from './prevention.js';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -604,6 +605,16 @@ export async function runCodex(
         if (toolCalls.length === 0) {
           const stripped = textThisTurn; // codex does not emit <think> tags
           const validation = validateCompletion(stripped);
+          if (validation.valid) {
+            // NEW: coverage check — only runs when caller declared expectations
+            if (options.expectedCoverage) {
+              const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+              if (!coverageValidation.valid) {
+                validation.kind = coverageValidation.kind;
+                validation.reason = coverageValidation.reason;
+              }
+            }
+          }
 
           if (validation.valid) {
             const ok = buildCodexOkResult({

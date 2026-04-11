@@ -21,6 +21,7 @@ import {
 } from './prevention.js';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -517,6 +518,17 @@ export async function runClaude(
           // (and keeps reading the iterator) or — if the retry budget is
           // spent / same-output early-out fires — exits as incomplete. ---
           const validation = validateCompletion(output);
+          if (validation.valid) {
+            // NEW: coverage check — only runs when caller declared expectations
+            if (options.expectedCoverage) {
+              const coverageValidation = validateCoverage(output, options.expectedCoverage);
+              if (!coverageValidation.valid) {
+                validation.kind = coverageValidation.kind;
+                validation.reason = coverageValidation.reason;
+              }
+            }
+          }
+
           if (validation.valid) {
             completedResult = buildClaudeOkResult({
               tracker,

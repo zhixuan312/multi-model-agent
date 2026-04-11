@@ -51,6 +51,7 @@ import {
 } from './prevention.js';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -98,6 +99,12 @@ export interface OpenAIRunnerOptions {
  * from a one-off fragment but not so many that a wedged model can burn the
  * budget via repeated re-prompts.
  */
+
+/** Maximum turns for each continuation (reprompt/reground/watchdog-warning) in the
+ * supervision loop. Higher than the old hardcoded 1 so the model can call a tool
+ * and reply to the tool result without immediately exhausting the sub-budget. */
+const SUPERVISION_CONTINUATION_BUDGET = 5;
+
 const MAX_SUPERVISION_RETRIES = 3;
 
 /**
@@ -397,12 +404,24 @@ export async function runOpenAI(
             contentLengthChars: warning.length,
           });
           lastWarnedInputTokens = currentInputTokens;
-          currentResult = await runTurnAndBuffer(continueWith(currentResult, warning), 1);
+          currentResult = await runTurnAndBuffer(continueWith(currentResult, warning), SUPERVISION_CONTINUATION_BUDGET);
         }
 
         // --- Validation check ---
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateCompletion(stripped);
+
+        if (validation.valid) {
+          // NEW: coverage check — only runs when caller declared expectations
+          if (options.expectedCoverage) {
+            const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+            if (!coverageValidation.valid) {
+              // Treat identically to a degenerate validation — same retry logic
+              validation.kind = coverageValidation.kind;
+              validation.reason = coverageValidation.reason;
+            }
+          }
+        }
 
         if (validation.valid) {
           const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig);
@@ -427,7 +446,7 @@ export async function runOpenAI(
         });
         // Give the model a small budget to recover. One extra turn per
         // retry is enough for the "emit your final answer" nudge.
-        currentResult = await runTurnAndBuffer(continueWith(currentResult, rePrompt), 1);
+        currentResult = await runTurnAndBuffer(continueWith(currentResult, rePrompt), SUPERVISION_CONTINUATION_BUDGET);
 
         // --- Periodic re-grounding ---
         const turnsSoFar = currentResult.state.usage.requests;
@@ -445,7 +464,7 @@ export async function runOpenAI(
             turn: currentResult.state.usage.requests,
             contentLengthChars: reground.length,
           });
-          currentResult = await runTurnAndBuffer(continueWith(currentResult, reground), 1);
+          currentResult = await runTurnAndBuffer(continueWith(currentResult, reground), SUPERVISION_CONTINUATION_BUDGET);
         }
       }
 
