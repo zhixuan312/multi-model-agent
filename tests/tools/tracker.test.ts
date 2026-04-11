@@ -42,12 +42,13 @@ describe('FileTracker', () => {
     expect(tracker.getWrites()).toEqual(['/tmp/bar.ts']);
   });
 
-  it('deduplicates directory listings independently', () => {
+  it('tracks directory listings in append order', () => {
     const tracker = new FileTracker();
     tracker.trackDirectoryList('/tmp/dir');
     tracker.trackDirectoryList('/tmp/dir');
+    tracker.trackDirectoryList('/tmp/other');
 
-    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/dir']);
+    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/dir', '/tmp/dir', '/tmp/other']);
   });
 
   it('a single file may appear in both reads and writes', () => {

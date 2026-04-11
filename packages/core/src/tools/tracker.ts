@@ -17,7 +17,7 @@
  */
 export class FileTracker {
   private reads = new Set<string>();
-  private dirs = new Set<string>();
+  private dirs: string[] = [];
   private writes = new Set<string>();
   private toolCalls: string[] = [];
   private readonly onToolCall?: (summary: string) => void;
@@ -37,7 +37,7 @@ export class FileTracker {
   }
 
   trackDirectoryList(dirPath: string): void {
-    this.dirs.add(dirPath);
+    this.dirs.push(dirPath);
   }
 
   trackWrite(filePath: string): void {
@@ -60,7 +60,7 @@ export class FileTracker {
   }
 
   getDirectoriesListed(): string[] {
-    return [...this.dirs].sort();
+    return [...this.dirs];
   }
 
   getWrites(): string[] {
@@ -73,7 +73,7 @@ export class FileTracker {
 
   reset(): void {
     this.reads.clear();
-    this.dirs.clear();
+    this.dirs = [];
     this.writes.clear();
     this.toolCalls = [];
   }
