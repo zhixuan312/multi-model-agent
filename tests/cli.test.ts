@@ -986,3 +986,45 @@ describe('computeAggregateCost (v0.3.0)', () => {
     });
   });
 });
+
+describe('delegate_tasks headline field (full mode)', () => {
+  it('full-mode response carries a headline string derived from the batch aggregates', async () => {
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const delegateTool = tools['delegate_tasks'];
+
+    const result = await delegateTool.handler(
+      {
+        tasks: [
+          {
+            prompt: 't1',
+            provider: 'mock',
+            tier: 'standard',
+            requiredCapabilities: [],
+            parentModel: 'claude-opus-4-6',
+          },
+          {
+            prompt: 't2',
+            provider: 'mock',
+            tier: 'standard',
+            requiredCapabilities: [],
+            parentModel: 'claude-opus-4-6',
+          },
+        ],
+        responseMode: 'full',
+      },
+      {},
+    );
+
+    const payload = JSON.parse(result.content[0].text);
+
+    expect(payload.mode).toBe('full');
+    expect(payload).toHaveProperty('headline');
+    expect(typeof payload.headline).toBe('string');
+
+    expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
+    expect(payload.headline).toContain('$0.00 actual');
+    expect(payload.headline).not.toContain('ROI');
+  });
+});

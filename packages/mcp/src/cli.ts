@@ -23,6 +23,7 @@ import type {
   BatchAggregateCost,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
+import { composeHeadline } from './headline.js';
 
 export const SERVER_NAME = 'multi-model-agent';
 const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
@@ -102,6 +103,12 @@ function buildFullResponse(
   return {
     batchId,
     mode: 'full' as const,
+    headline: composeHeadline({
+      timings: aggregates.timings,
+      batchProgress: aggregates.batchProgress,
+      aggregateCost: aggregates.aggregateCost,
+      taskSpecs: tasks,
+    }),
     timings: aggregates.timings,
     batchProgress: aggregates.batchProgress,
     aggregateCost: aggregates.aggregateCost,
