@@ -60,7 +60,7 @@ beforeEach(() => {
 
 async function makeServer() {
   const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
-  return buildMcpServer(sampleConfig(), { runTasksImpl: mockedRunTasks });
+  return buildMcpServer(sampleConfig(), { _testRunTasksOverride: mockedRunTasks });
 }
 
 async function callTool(server: any, toolName: string, input: unknown): Promise<any> {

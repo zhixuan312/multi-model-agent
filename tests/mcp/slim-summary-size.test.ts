@@ -29,7 +29,7 @@ beforeEach(() => {
 
 async function makeServer() {
   const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
-  return buildMcpServer(sampleConfig(), { runTasksImpl: mockedRunTasks });
+  return buildMcpServer(sampleConfig(), { _testRunTasksOverride: mockedRunTasks });
 }
 
 describe('slim summary envelope size', () => {

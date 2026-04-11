@@ -275,8 +275,8 @@ export function buildMcpServer(
      *  MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS > config file
      *  defaults.largeResponseThresholdChars > this option > default. */
     largeResponseThresholdChars?: number;
-    /** Test-only hook for injecting a stubbed runTasks implementation. */
-    runTasksImpl?: typeof runTasks;
+    /** Internal test-only hook for injecting a stubbed runTasks implementation. */
+    _testRunTasksOverride?: typeof runTasks;
   },
 ) {
   const providerKeys = Object.keys(config.providers);
@@ -296,7 +296,7 @@ export function buildMcpServer(
     ?? config.defaults.largeResponseThresholdChars
     ?? options?.largeResponseThresholdChars
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
-  const runTasksImpl = options?.runTasksImpl ?? runTasks;
+  const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
 
   const server = new McpServer({
     name: SERVER_NAME,

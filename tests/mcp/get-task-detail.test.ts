@@ -60,7 +60,7 @@ beforeEach(() => {
 
 async function makeServer() {
   const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
-  return buildMcpServer(sampleConfig(), { runTasksImpl: mockedRunTasks });
+  return buildMcpServer(sampleConfig(), { _testRunTasksOverride: mockedRunTasks });
 }
 
 async function callTool(server: any, toolName: string, input: unknown): Promise<any> {
@@ -98,11 +98,17 @@ describe('get_task_detail tool', () => {
     expect(detail.batchId).toBe(batchId);
     expect(detail.taskIndex).toBe(0);
     expect(detail.provider).toBe('mock');
-    expect(Array.isArray(detail.filesRead)).toBe(true);
-    expect(Array.isArray(detail.filesWritten)).toBe(true);
-    expect(Array.isArray(detail.directoriesListed)).toBe(true);
-    expect(Array.isArray(detail.toolCalls)).toBe(true);
-    expect(Array.isArray(detail.escalationLog)).toBe(true);
+    expect(detail.filesRead).toEqual(['src/read-0.ts', 'src/also-read-0.ts']);
+    expect(detail.filesWritten).toEqual(['src/wrote-0.ts']);
+    expect(detail.directoriesListed).toEqual(['src']);
+    expect(detail.toolCalls).toEqual([
+      'readFile src/read-0.ts',
+      'grep foo → 2 hits',
+      'writeFile src/wrote-0.ts',
+    ]);
+    expect(detail.escalationLog).toHaveLength(1);
+    expect(detail.escalationLog[0].provider).toBe('mock');
+    expect(detail.escalationLog[0].initialPromptHash).toBe('abc');
 
     expect(detail).not.toHaveProperty('output');
     expect(detail).not.toHaveProperty('status');
@@ -172,7 +178,11 @@ describe('get_task_detail tool', () => {
     const detail = await callTool(server, 'get_task_detail', { batchId: response.batchId, taskIndex: 0 });
 
     expect(detail).toHaveProperty('progressTrace');
-    expect(Array.isArray(detail.progressTrace)).toBe(true);
-    expect(detail.progressTrace.length).toBeGreaterThan(0);
+    expect(detail.progressTrace).toHaveLength(1);
+    expect(detail.progressTrace[0]).toMatchObject({
+      kind: 'escalation_start',
+      taskIndex: 0,
+      attempt: 0,
+    });
   });
 });

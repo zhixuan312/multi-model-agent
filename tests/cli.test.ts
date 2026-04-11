@@ -77,7 +77,7 @@ beforeEach(() => {
 const buildMcpServer = (
   config: MultiModelConfig = sampleConfig(),
   options?: Parameters<typeof rawBuildMcpServer>[1],
-) => rawBuildMcpServer(config, { ...options, runTasksImpl: stubRunTasks });
+) => rawBuildMcpServer(config, { ...options, _testRunTasksOverride: stubRunTasks });
 
 describe('server metadata', () => {
   it('server name is multi-model-agent', () => {
