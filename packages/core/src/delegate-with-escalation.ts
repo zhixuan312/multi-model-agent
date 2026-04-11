@@ -123,6 +123,7 @@ export async function delegateWithEscalation(
       effort: task.effort,
       sandboxPolicy: task.sandboxPolicy,
       expectedCoverage: task.expectedCoverage,
+      skipCompletionHeuristic: task.skipCompletionHeuristic,
       includeProgressTrace: task.includeProgressTrace,
       parentModel: task.parentModel,
       onProgress: safeSink,

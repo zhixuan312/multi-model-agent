@@ -52,8 +52,7 @@ import {
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
-  validateCompletion,
-  validateCoverage,
+  validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -459,18 +458,10 @@ export async function runOpenAI(
 
         // --- Validation check ---
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
-        const validation = validateCompletion(stripped);
-
-        // NEW: coverage check — only runs when syntactic validation passes
-        if (validation.valid && options.expectedCoverage) {
-          const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
-          if (!coverageValidation.valid) {
-            // Treat identically to a degenerate validation — same retry logic
-            validation.valid = false;
-            validation.kind = coverageValidation.kind;
-            validation.reason = coverageValidation.reason;
-          }
-        }
+        const validation = validateSubAgentOutput(stripped, {
+          expectedCoverage: options.expectedCoverage,
+          skipCompletionHeuristic: options.skipCompletionHeuristic,
+        });
 
         if (validation.valid) {
           const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel, shouldCaptureTrace ? traceBuffer : undefined);

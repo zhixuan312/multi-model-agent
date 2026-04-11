@@ -23,6 +23,7 @@ import type {
   BatchAggregateCost,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
+import { composeHeadline } from './headline.js';
 
 export const SERVER_NAME = 'multi-model-agent';
 const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
@@ -102,6 +103,12 @@ function buildFullResponse(
   return {
     batchId,
     mode: 'full' as const,
+    headline: composeHeadline({
+      timings: aggregates.timings,
+      batchProgress: aggregates.batchProgress,
+      aggregateCost: aggregates.aggregateCost,
+      taskSpecs: tasks,
+    }),
     timings: aggregates.timings,
     batchProgress: aggregates.batchProgress,
     aggregateCost: aggregates.aggregateCost,
@@ -139,8 +146,14 @@ function buildSummaryResponse(
   return {
     batchId,
     mode: 'summary' as const,
+    headline: composeHeadline({
+      timings: opts.timings,
+      batchProgress: opts.batchProgress,
+      aggregateCost: opts.aggregateCost,
+      taskSpecs: tasks,
+    }),
     ...(opts.autoEscaped && {
-      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_task_output({ batchId, taskIndex }) to fetch individual task outputs.`,
+      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_task_output({ batchId, taskIndex }) to fetch individual task outputs, or get_task_detail({ batchId, taskIndex }) for per-task metadata.`,
     }),
     timings: opts.timings,
     batchProgress: opts.batchProgress,
@@ -149,19 +162,15 @@ function buildSummaryResponse(
       taskIndex: i,
       provider: tasks[i].provider ?? '(auto)',
       status: r.status,
-      outputLength: r.output.length,
-      outputSha256: sha256Hex(r.output),
       turns: r.turns,
       durationMs: r.durationMs,
-      filesRead: r.filesRead,
-      filesWritten: r.filesWritten,
-      directoriesListed: r.directoriesListed,
-      toolCalls: r.toolCalls,
-      escalationLog: r.escalationLog,
+      outputLength: r.output.length,
+      outputSha256: sha256Hex(r.output),
       usage: r.usage,
-      ...(r.progressTrace && { progressTrace: r.progressTrace }),
+      escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
       ...(r.error && { error: r.error }),
-      _fetchWith: `get_task_output({ batchId: "${batchId}", taskIndex: ${i} })`,
+      _fetchOutputWith: `get_task_output({ batchId: "${batchId}", taskIndex: ${i} })`,
+      _fetchDetailWith: `get_task_detail({ batchId: "${batchId}", taskIndex: ${i} })`,
     })),
   };
 }
@@ -209,6 +218,11 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
         .describe('Substrings that must all appear somewhere in the output.'),
     }).optional().describe(
       'Optional caller-declared output expectations used for semantic incompleteness detection.',
+    ),
+    skipCompletionHeuristic: z.boolean().optional().describe(
+      'Opt-out: when true, the runner skips the no_terminator/fragment short-output ' +
+      'heuristics. Use for tight-format outputs (verdicts, CSV rows, opaque ids). ' +
+      'empty/thinking_only still fire. expectedCoverage passing is also authoritative.',
     ),
     includeProgressTrace: z.boolean().optional().describe(
       'Opt in to returning the bounded post-hoc progress trace for this task.',
@@ -261,6 +275,8 @@ export function buildMcpServer(
      *  MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS > config file
      *  defaults.largeResponseThresholdChars > this option > default. */
     largeResponseThresholdChars?: number;
+    /** Internal test-only hook for injecting a stubbed runTasks implementation. */
+    _testRunTasksOverride?: typeof runTasks;
   },
 ) {
   const providerKeys = Object.keys(config.providers);
@@ -280,6 +296,7 @@ export function buildMcpServer(
     ?? config.defaults.largeResponseThresholdChars
     ?? options?.largeResponseThresholdChars
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
+  const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
 
   const server = new McpServer({
     name: SERVER_NAME,
@@ -424,7 +441,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasks(tasks as TaskSpec[], config, {
+        results = await runTasksImpl(tasks as TaskSpec[], config, {
           onProgress: sendProgress,
           runtime: { contextBlockStore },
         });
@@ -538,7 +555,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasks(subset, config, {
+        results = await runTasksImpl(subset, config, {
           runtime: { contextBlockStore },
         });
       } finally {
@@ -632,6 +649,118 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
+  server.tool(
+    'get_task_detail',
+    `Retrieve per-task execution details (toolCalls, filesRead/Written/Listed, full escalationLog with reasons, progressTrace if opted in) for a task from a previous delegate_tasks batch. Use this when a batch returned in summary mode and you need to inspect what a specific task actually did — e.g., to debug a failure, verify file-write scope, or review the provider escalation chain. For the output text, use get_task_output instead. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired or evicted, re-dispatch via delegate_tasks with the full task specs.`,
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+      taskIndex: z.number().int().nonnegative().describe('Zero-based index of the task within the batch'),
+    },
+    async ({ batchId, taskIndex }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+
+      touchBatch(batchId, batch);
+
+      if (batch.results === undefined) {
+        throw new Error(
+          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
+        );
+      }
+
+      if (taskIndex < 0 || taskIndex >= batch.results.length) {
+        throw new Error(
+          `taskIndex ${taskIndex} is out of range for batch ${batchId} (batch has ${batch.results.length} tasks)`,
+        );
+      }
+
+      const result = batch.results[taskIndex];
+      const task = batch.tasks[taskIndex];
+
+      const detail = {
+        batchId,
+        taskIndex,
+        provider: task.provider ?? '(auto)',
+        filesRead: result.filesRead,
+        filesWritten: result.filesWritten,
+        directoriesListed: result.directoriesListed ?? [],
+        toolCalls: result.toolCalls,
+        escalationLog: result.escalationLog,
+        ...(result.progressTrace && { progressTrace: result.progressTrace }),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'get_batch_telemetry',
+    `Retrieve a compact ROI telemetry envelope for a previous delegate_tasks batch: the one-line headline (tasks/success/wall-clock/cost/ROI), wall-clock vs serial timings, per-task cost and savings, and provider escalation chains. Use this after every delegate_tasks call to surface the ROI story to the user — especially when the primary response came back in summary mode or hit a client-side size limit. Envelope size: a ~600-byte header plus ~200 bytes per task (so a 10-task batch is ~2.6 KB; a 50-task batch is ~10 KB). Bounded-small per task, but scales linearly, so enormous batches (100+ tasks) may approach the client's tool-result size limit. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired, the numbers are lost.`,
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+    },
+    async ({ batchId }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+
+      touchBatch(batchId, batch);
+
+      if (batch.results === undefined) {
+        throw new Error(
+          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
+        );
+      }
+
+      const wallClockMsEstimate = Math.max(
+        0,
+        ...batch.results.map((r) => r.durationMs ?? 0),
+      );
+      const timings = computeTimings(wallClockMsEstimate, batch.results);
+      const batchProgress = computeBatchProgress(batch.results);
+      const aggregateCost = computeAggregateCost(batch.results);
+      const headline = composeHeadline({
+        timings,
+        batchProgress,
+        aggregateCost,
+        taskSpecs: batch.tasks,
+      });
+
+      const envelope = {
+        batchId,
+        headline,
+        timings,
+        batchProgress,
+        aggregateCost,
+        results: batch.results.map((r, i) => ({
+          taskIndex: i,
+          provider: batch.tasks[i].provider ?? '(auto)',
+          status: r.status,
+          turns: r.turns,
+          durationMs: r.durationMs,
+          usage: r.usage,
+          escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
+          ...(r.error && { error: r.error }),
+        })),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }],
+      };
+    },
+  );
+
   return server;
 }
 
@@ -668,6 +797,11 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
 
 async function main() {
   const args = process.argv.slice(2);
+
+  if (args[0] === '--help' || args[0] === '-h') {
+    console.log('Usage: multi-model-agent serve [--config <path>]');
+    process.exit(0);
+  }
 
   if (args[0] !== 'serve') {
     console.error('Usage: multi-model-agent serve [--config <path>]');

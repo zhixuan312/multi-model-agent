@@ -23,8 +23,7 @@ import {
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
-  validateCompletion,
-  validateCoverage,
+  validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -616,17 +615,10 @@ export async function runCodex(
         // incomplete with scratchpad salvage.
         if (toolCalls.length === 0) {
           const stripped = textThisTurn; // codex does not emit <think> tags
-          const validation = validateCompletion(stripped);
-
-          // NEW: coverage check — only when syntactic validation passes
-          if (validation.valid && options.expectedCoverage) {
-            const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
-            if (!coverageValidation.valid) {
-              validation.valid = false;
-              validation.kind = coverageValidation.kind;
-              validation.reason = coverageValidation.reason;
-            }
-          }
+          const validation = validateSubAgentOutput(stripped, {
+            expectedCoverage: options.expectedCoverage,
+            skipCompletionHeuristic: options.skipCompletionHeuristic,
+          });
 
           if (validation.valid) {
             const ok = buildCodexOkResult({

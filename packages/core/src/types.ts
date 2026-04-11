@@ -50,6 +50,13 @@ export interface TaskSpec {
     /** Substrings that must all appear somewhere in the output. */
     requiredMarkers?: string[]
   }
+  /** Opt-out: when true, the runner skips the `no_terminator` and `fragment`
+   *  short-output heuristics for this task. Use for tight-format outputs
+   *  (single-line verdicts, CSV rows, opaque identifiers) that don't follow
+   *  prose conventions. The `empty` and `thinking_only` degeneracy checks
+   *  still fire independently. If `expectedCoverage` is also declared and
+   *  passes, coverage is authoritative — you don't need this flag. */
+  skipCompletionHeuristic?: boolean
   /** Opt-in progress capture for post-hoc execution observability. */
   includeProgressTrace?: boolean
   /** Optional hint about the parent session's model for saved-cost estimates. */
@@ -288,6 +295,13 @@ export interface RunOptions {
    *  change in runner behavior. Generic across all workload shapes that
    *  produce enumerable deliverables. */
   expectedCoverage?: TaskSpec['expectedCoverage']
+  /** Opt-out: when true, the runner skips the `no_terminator` and `fragment`
+   *  short-output heuristics for this task. Use for tight-format outputs
+   *  (single-line verdicts, CSV rows, opaque identifiers) that don't follow
+   *  prose conventions. The `empty` and `thinking_only` degeneracy checks
+   *  still fire independently. If `expectedCoverage` is also declared and
+   *  passes, coverage is authoritative — you don't need this flag. */
+  skipCompletionHeuristic?: boolean
   /** Optional callback invoked by runners and the escalation orchestrator to
    *  stream in-flight progress events. See `ProgressEvent` for the full set
    *  of variants. Runners receive this via `provider.run(..., { onProgress })`

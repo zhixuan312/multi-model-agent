@@ -475,3 +475,57 @@ export function logWatchdogEvent(
   }
   console.error(parts.join(' '));
 }
+
+/**
+ * Coordinator for sub-agent output validation.
+ *
+ * Replaces the runner-side coordination pattern where each runner called
+ * `validateCompletion` first and then (optionally) `validateCoverage`. That
+ * ordering had a bug: short, correct outputs on tight-format tasks tripped
+ * the `no_terminator` heuristic BEFORE the more authoritative coverage
+ * check had a chance to run, causing false-positive `incomplete` statuses.
+ *
+ * New priority order:
+ *
+ *   1. `empty` and `thinking_only` always fail first — these are "is
+ *      there content at all" signals, not "is the content done" signals.
+ *   2. If `expectedCoverage` is declared and passes, the output is valid
+ *      regardless of short-output heuristics. Coverage is authoritative.
+ *   3. If `expectedCoverage` is declared and fails, return the coverage
+ *      failure.
+ *   4. If `skipCompletionHeuristic` is set, the short-output heuristic is
+ *      skipped (only empty / thinking_only fire). Use this for tight-format
+ *      tasks that don't declare coverage.
+ *   5. Otherwise, fall through to the full `validateCompletion` heuristic
+ *      (the existing behavior).
+ *
+ * The underlying `validateCompletion` and `validateCoverage` functions are
+ * NOT modified — this is a pure coordination wrapper.
+ */
+export function validateSubAgentOutput(
+  text: string,
+  opts: {
+    expectedCoverage?: TaskSpec['expectedCoverage'];
+    skipCompletionHeuristic?: boolean;
+  } = {},
+): ValidationResult {
+  const completion = validateCompletion(text);
+  if (
+    !completion.valid &&
+    (completion.kind === 'empty' || completion.kind === 'thinking_only')
+  ) {
+    return completion;
+  }
+
+  if (opts.expectedCoverage) {
+    const coverage = validateCoverage(text, opts.expectedCoverage);
+    if (!coverage.valid) return coverage;
+    return { valid: true };
+  }
+
+  if (opts.skipCompletionHeuristic) {
+    return { valid: true };
+  }
+
+  return completion;
+}

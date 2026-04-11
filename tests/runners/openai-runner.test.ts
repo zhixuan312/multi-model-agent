@@ -573,9 +573,9 @@ describe('runOpenAI — prevention scaffolding integration', () => {
   });
 
   it('coverage validation: insufficient_coverage triggers re-prompt and retries', async () => {
-    // First run: valid-length output but missing required markers
+    // First run: short output that passes completion heuristic but lacks required markers
     mockRun.mockResolvedValueOnce(
-      makeMockRunResult({ finalOutput: 'Only mentions 1.1 but not 1.2 or 1.3' }),
+      makeMockRunResult({ finalOutput: 'Mentions section alpha only.' }),
     );
     // Second run (re-prompt): now includes all required markers
     mockRun.mockResolvedValueOnce(

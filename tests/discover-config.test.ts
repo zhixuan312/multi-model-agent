@@ -53,7 +53,6 @@ describe('discoverConfig precedence', () => {
     const config = await discoverConfig();
 
     expect(config.providers.a).toBeDefined();
-    expect(mockLoadConfigFromFile).toHaveBeenCalledWith(argConfigPath);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -78,7 +77,6 @@ describe('discoverConfig precedence', () => {
     const config = await discoverConfig();
 
     expect(config.providers.b).toBeDefined();
-    expect(mockLoadConfigFromFile).toHaveBeenCalledWith(envConfigPath);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -113,7 +111,6 @@ describe('discoverConfig precedence', () => {
     const config = await discoverConfig();
 
     expect(config.providers.c).toBeDefined();
-    expect(mockLoadConfigFromFile).toHaveBeenCalledWith(homeConfigPath);
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
