@@ -292,6 +292,12 @@ The MCP exposes four visibility surfaces so callers can see the UX value of dele
 
 Every number in that summary comes from the response envelope fields without caller-side arithmetic. The `retry_tasks` hint comes from inspecting `results[3].status` and `results[3].error`.
 
+**Narrate the headline after every batch.** Every `delegate_tasks` response envelope now contains a pre-computed `headline` field — a one-line summary of `tasks / success / wall-clock / cost / ROI`. Quote it verbatim to the user **before** discussing per-task outcomes or triaging failures. No arithmetic, no rounding, no unit conversion — the server already formatted it. Example:
+
+> *"Tally batch done — 11 tasks, 5/11 ok (45.5%), wall 5m 54s, saved ~18m 30s vs serial, $1.37 actual / $8.91 saved vs claude-opus-4-6 (7.5x ROI)."*
+
+If the primary `delegate_tasks` response came back in `summary` mode (or a client-side size limit obscured the envelope), call `get_batch_telemetry(batchId)` immediately — it returns the same `headline` and envelope fields in a response that is bounded per task (~600-byte header + ~200 bytes per task, so a typical 10–30-task batch fits in 2–7 KB, well under any client-side size limit). **Always narrate the headline, even when delegating silently inside a larger plan.**
+
 ## Tightening budgets for weaker models
 
 If a provider returns degraded output on long dispatches, lower its `inputTokenSoftLimit` in your `~/.multi-model/config.json`:
@@ -355,6 +361,10 @@ The default is `cwd-only`. Only set `sandboxPolicy: "none"` per-provider or per-
 
 **The `escalationLog` field** — an array of `AttemptRecord` entries, one per provider actually attempted within this dispatch. Length is 1 for tasks that succeeded on the first try; longer when auto-routing walked to a fallback. Each entry carries `provider`, `status`, `turns`, `inputTokens`, `outputTokens`, `costUSD`, `initialPromptLengthChars`, `initialPromptHash`, and an optional `reason`. `initialPromptHash` is a sha256 of the **canonical orchestrator-side brief** `${systemPrompt}\n\n${budgetHint}\n\n${prompt}` — it is *not* a wire-level checksum (each SDK wraps this in its own envelope before sending; Claude specifically prepends the `claude_code` preset to the system prompt). Use it to confirm *"the orchestrator sent the same brief on every attempt"*; it is cross-runner stable, so identical briefs produce identical hashes regardless of which runner executed them.
 
+**In `summary` mode**, each `results[i]` entry carries a slim shape (`status`, `turns`, `durationMs`, `usage`, `escalationChain`) — the bulky fields (`toolCalls`, `filesRead`, `filesWritten`, `directoriesListed`, full `escalationLog[].reason`, `progressTrace`) are moved to `get_task_detail(batchId, taskIndex)`. Use `get_task_detail` to inspect what a specific task actually did. The `escalationChain` field is a compact string array like `["minimax:incomplete","codex:ok"]` — use it for a one-line view of the provider walk; use `get_task_detail` for the full `AttemptRecord[]` with `reason` strings and per-attempt token counts.
+
+**Tight-format outputs and `skipCompletionHeuristic`.** Tasks whose expected output is a single line (e.g. `"verdict: pass"`, `"sha256: abc123"`, `"5 files modified"`) may trip the runner's `no_terminator` heuristic — the short-output check fires before the more authoritative coverage check. If your task declares `expectedCoverage` and the output passes, the coverage contract is authoritative and short-output heuristics are automatically skipped. If your task does not use `expectedCoverage` but has a tight, non-prose format, set `skipCompletionHeuristic: true` on the task spec to opt out of the short-output check entirely. The `empty` and `thinking_only` degeneracy checks still fire regardless — they are independent.
+
 ### Escalation Ladder
 
 **Never retry the same provider with the same prompt. Never escalate without changing something.**
@@ -390,6 +400,9 @@ Got a task?
 └─ Otherwise — labor with a zero-decision brief
       │
       └─► mcp__multi-model-agent__delegate_tasks
+            │
+            ├─► on return: quote response.headline verbatim
+            │   (or call get_batch_telemetry(batchId) if the headline is missing)
             │
             ├─ File-only mechanical work? ──► free provider, standard
             ├─ Needs web research? ──► web-capable provider, standard
