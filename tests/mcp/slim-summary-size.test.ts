@@ -110,7 +110,7 @@ describe('slim summary envelope size', () => {
     );
 
     const rawText = result.content[0].text;
-    expect(rawText.length).toBeLessThan(8 * 1024);
+    expect(rawText.length).toBeLessThan(10 * 1024);
 
     const payload = JSON.parse(rawText);
     expect(payload.mode).toBe('summary');

@@ -641,6 +641,57 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
+  server.tool(
+    'get_task_detail',
+    `Retrieve per-task execution details (toolCalls, filesRead/Written/Listed, full escalationLog with reasons, progressTrace if opted in) for a task from a previous delegate_tasks batch. Use this when a batch returned in summary mode and you need to inspect what a specific task actually did — e.g., to debug a failure, verify file-write scope, or review the provider escalation chain. For the output text, use get_task_output instead. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired or evicted, re-dispatch via delegate_tasks with the full task specs.`,
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+      taskIndex: z.number().int().nonnegative().describe('Zero-based index of the task within the batch'),
+    },
+    async ({ batchId, taskIndex }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+
+      touchBatch(batchId, batch);
+
+      if (batch.results === undefined) {
+        throw new Error(
+          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
+        );
+      }
+
+      if (taskIndex < 0 || taskIndex >= batch.results.length) {
+        throw new Error(
+          `taskIndex ${taskIndex} is out of range for batch ${batchId} (batch has ${batch.results.length} tasks)`,
+        );
+      }
+
+      const result = batch.results[taskIndex];
+      const task = batch.tasks[taskIndex];
+
+      const detail = {
+        batchId,
+        taskIndex,
+        provider: task.provider ?? '(auto)',
+        filesRead: result.filesRead,
+        filesWritten: result.filesWritten,
+        directoriesListed: result.directoriesListed ?? [],
+        toolCalls: result.toolCalls,
+        escalationLog: result.escalationLog,
+        ...(result.progressTrace && { progressTrace: result.progressTrace }),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }],
+      };
+    },
+  );
+
   return server;
 }
 
