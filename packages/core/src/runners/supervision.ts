@@ -150,25 +150,62 @@ export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[]
   }
 
   let result: ProgressTraceEntry[] = events.filter((_, index) => kept.has(index));
-  if (result.length > TRACE_MAX_EVENTS || traceSize(result as ProgressEvent[]) > TRACE_MAX_CHARS) {
-    const preserveFirst = 10;
-    const preserveLast = 30;
-    if (result.length > preserveFirst + preserveLast) {
-      const firstSlice = result.slice(0, preserveFirst);
-      const lastSlice = result.slice(-preserveLast);
-      const middleSlice = result.slice(preserveFirst, result.length - preserveLast);
-      droppedCount += middleSlice.length;
-      for (const event of middleSlice) {
-        if (event.kind !== '_trimmed') {
-          droppedKinds[event.kind] = (droppedKinds[event.kind] ?? 0) + 1;
-        }
+  const trimmedMarker =
+    droppedCount > 0 ? { kind: '_trimmed' as const, droppedCount, droppedKinds } : undefined;
+  const traceSizeWithMarker = (arr: ProgressTraceEntry[]): number =>
+    JSON.stringify(trimmedMarker ? [...arr, trimmedMarker] : arr).length;
+
+  const compactEvents = (
+    arr: ProgressTraceEntry[],
+    includeNeverDropStrings: boolean,
+    stringLimit: number,
+  ): ProgressTraceEntry[] =>
+    arr.map((event) => {
+      switch (event.kind) {
+        case 'text_emission':
+          return { ...event, preview: event.preview.slice(0, stringLimit) };
+        case 'tool_call':
+          return { ...event, toolSummary: event.toolSummary.slice(0, stringLimit) };
+        case 'turn_start':
+          return includeNeverDropStrings
+            ? { ...event, provider: event.provider.slice(0, stringLimit) }
+            : event;
+        case 'escalation_start':
+          return includeNeverDropStrings
+            ? {
+                ...event,
+                previousProvider: event.previousProvider.slice(0, stringLimit),
+                previousReason: event.previousReason.slice(0, stringLimit),
+                nextProvider: event.nextProvider.slice(0, stringLimit),
+              }
+            : event;
+        default:
+          return event;
       }
-      result = [...firstSlice, ...lastSlice];
+    });
+
+  if (result.length > TRACE_MAX_EVENTS || traceSizeWithMarker(result) > TRACE_MAX_CHARS) {
+    for (const includeNeverDropStrings of [false, true]) {
+      let stringLimit = 64;
+      while (true) {
+        const compacted = compactEvents(result, includeNeverDropStrings, stringLimit);
+        if (traceSizeWithMarker(compacted) <= TRACE_MAX_CHARS) {
+          result = compacted;
+          break;
+        }
+        if (stringLimit === 0) {
+          break;
+        }
+        stringLimit = Math.max(0, Math.floor(stringLimit / 2));
+      }
+      if (traceSizeWithMarker(result) <= TRACE_MAX_CHARS) {
+        break;
+      }
     }
   }
 
-  if (droppedCount > 0) {
-    result.push({ kind: '_trimmed', droppedCount, droppedKinds });
+  if (trimmedMarker) {
+    result.push(trimmedMarker);
   }
 
   return result;

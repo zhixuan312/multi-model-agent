@@ -324,7 +324,18 @@ describe('trimProgressTrace', () => {
     expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
   });
 
-  it('preserves all never-drop boundary events under pressure', () => {
+  it('stays within TRACE_MAX_CHARS even when only oversized never-drop events are provided', () => {
+    const events = Array.from({ length: 24 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `codex-${'x'.repeat(1500)}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(JSON.stringify(trimmed).length).toBeLessThanOrEqual(TRACE_MAX_CHARS);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(events.length);
+  });
+
+  it('preserves all never-drop boundary events when fallback-style pressure is exercised', () => {
     const events = [
       { kind: 'turn_start', turn: 1, provider: 'codex' },
       ...Array.from({ length: 15 }, (_, i) => ({
@@ -348,6 +359,7 @@ describe('trimProgressTrace', () => {
     expect(trimmed.some((event) => event.kind === 'escalation_start')).toBe(true);
     expect(trimmed.filter((event) => event.kind === 'injection')).toHaveLength(2);
     expect(trimmed.some((event) => event.kind === 'done')).toBe(true);
+    expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
   });
 
   it('drops all text_emission events before higher-priority events in a large trace', () => {
@@ -372,23 +384,25 @@ describe('trimProgressTrace', () => {
     );
   });
 
-  it('falls back to the first 10 and last 30 retained events when still oversized', () => {
-    const events = Array.from({ length: 50 }, (_, i) => ({
-      kind: 'turn_start' as const,
-      turn: i + 1,
-      provider: `codex-${'x'.repeat(400)}`,
-    }));
+  it('preserves never-drop events when the retained trace is still oversized', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: `codex-${'x'.repeat(400)}` },
+      ...Array.from({ length: 12 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 2,
+        chars: 1,
+        preview: 'y'.repeat(1000),
+      })),
+      { kind: 'escalation_start', previousProvider: `codex-${'x'.repeat(400)}`, previousReason: 'need more room', nextProvider: `claude-${'x'.repeat(400)}` },
+      { kind: 'injection', injectionType: 'reground', turn: 20, contentLengthChars: 123 },
+      { kind: 'done', status: 'ok' },
+    ];
     const trimmed = trimProgressTrace(events);
-    expect(trimmed).toHaveLength(41);
-    expect(trimmed[0]).toEqual(events[0]);
-    expect(trimmed[9]).toEqual(events[9]);
-    expect(trimmed[10]).toEqual(events[20]);
-    expect(trimmed[39]).toEqual(events[49]);
-    expect(trimmed[40]).toEqual({
-      kind: '_trimmed',
-      droppedCount: 10,
-      droppedKinds: { turn_start: 10 },
-    });
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'escalation_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'injection')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'done')).toBe(true);
+    expect(JSON.stringify(trimmed).length).toBeLessThanOrEqual(TRACE_MAX_CHARS);
   });
 });
 
