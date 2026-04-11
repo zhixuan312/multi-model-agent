@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '../types.js';
+import type { TaskSpec, ProgressEvent, ProgressTraceEntry } from '../types.js';
 import type { ModelProfile } from '../routing/model-profiles.js';
 
 /**
@@ -52,6 +53,125 @@ export interface ValidationResult {
 
 export interface ValidateCompletionOptions {
   minLength?: number;
+}
+
+export function validateCoverage(
+  text: string,
+  expected: NonNullable<TaskSpec['expectedCoverage']>,
+): ValidationResult {
+  if (expected.minSections !== undefined) {
+    const pattern = expected.sectionPattern ?? '^## ';
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern, 'gm');
+    } catch (err) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `invalid sectionPattern regex: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const count = (text.match(re) ?? []).length;
+    if (count < expected.minSections) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${count} sections found, expected at least ${expected.minSections}`,
+      };
+    }
+  }
+
+  if (expected.requiredMarkers?.length) {
+    const missing = expected.requiredMarkers.filter((marker) => !text.includes(marker));
+    if (missing.length > 0) {
+      const preview = missing.slice(0, 5).join(', ');
+      const extra = missing.length > 5 ? ` (+${missing.length - 5} more)` : '';
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${expected.requiredMarkers.length - missing.length} of ${expected.requiredMarkers.length} required markers found, missing: ${preview}${extra}`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+export const TRACE_MAX_EVENTS = 80;
+export const TRACE_MAX_CHARS = 16_384;
+
+export const TRACE_DROP_PRIORITY: Record<ProgressEvent['kind'], number> = {
+  text_emission: 1,
+  tool_call: 2,
+  turn_start: 100,
+  turn_complete: 100,
+  injection: 100,
+  escalation_start: 100,
+  done: 100,
+};
+
+export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
+  if (events.length === 0) return [];
+
+  const traceSize = (arr: ProgressEvent[]): number => JSON.stringify(arr).length;
+
+  if (events.length <= TRACE_MAX_EVENTS && traceSize(events) <= TRACE_MAX_CHARS) {
+    return events;
+  }
+
+  const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
+  let droppedCount = 0;
+
+  const indexed = events.map((event, index) => ({
+    event,
+    index,
+    priority: TRACE_DROP_PRIORITY[event.kind] ?? 50,
+  }));
+  const dropOrder = [...indexed].sort((a, b) => (a.priority - b.priority) || (a.index - b.index));
+
+  const kept = new Set(indexed.map((entry) => entry.index));
+  let keptCount = events.length;
+  let keptSize = traceSize(events);
+
+  for (const entry of dropOrder) {
+    if (keptCount <= TRACE_MAX_EVENTS && keptSize <= TRACE_MAX_CHARS) {
+      break;
+    }
+    if (entry.priority >= 100) {
+      break;
+    }
+
+    kept.delete(entry.index);
+    keptCount -= 1;
+    droppedKinds[entry.event.kind] = (droppedKinds[entry.event.kind] ?? 0) + 1;
+    droppedCount += 1;
+    const keptEvents = events.filter((_, index) => kept.has(index));
+    keptSize = traceSize(keptEvents);
+  }
+
+  let result: ProgressTraceEntry[] = events.filter((_, index) => kept.has(index));
+  if (result.length > TRACE_MAX_EVENTS || traceSize(result as ProgressEvent[]) > TRACE_MAX_CHARS) {
+    const preserveFirst = 10;
+    const preserveLast = 30;
+    if (result.length > preserveFirst + preserveLast) {
+      const firstSlice = result.slice(0, preserveFirst);
+      const lastSlice = result.slice(-preserveLast);
+      const middleSlice = result.slice(preserveFirst, result.length - preserveLast);
+      droppedCount += middleSlice.length;
+      for (const event of middleSlice) {
+        if (event.kind !== '_trimmed') {
+          droppedKinds[event.kind] = (droppedKinds[event.kind] ?? 0) + 1;
+        }
+      }
+      result = [...firstSlice, ...lastSlice];
+    }
+  }
+
+  if (droppedCount > 0) {
+    result.push({ kind: '_trimmed', droppedCount, droppedKinds });
+  }
+
+  return result;
 }
 
 const DEFAULT_MIN_LENGTH = 200;
@@ -218,6 +338,9 @@ export function buildRePrompt(result: ValidationResult): string {
         'first; otherwise produce the final answer now.',
       ].join(' ');
     }
+
+    case 'insufficient_coverage':
+      return `Your previous answer was structurally valid but does not cover everything the brief required: ${result.reason}. Continue your report by addressing the missing items. Do NOT restart from the beginning — append the missing sections to what you already wrote.`;
 
     default:
       return 'Your previous response was incomplete. Please produce your complete final answer as plain text.';

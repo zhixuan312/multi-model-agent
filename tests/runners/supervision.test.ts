@@ -1,10 +1,15 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
+  trimProgressTrace,
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
+  TRACE_MAX_EVENTS,
+  TRACE_MAX_CHARS,
+  TRACE_DROP_PRIORITY,
   WATCHDOG_WARNING_RATIO,
   WATCHDOG_FORCE_SALVAGE_RATIO,
   logWatchdogEvent,
@@ -87,6 +92,93 @@ describe('validateCompletion — no terminator detection', () => {
   });
 });
 
+describe('validateCoverage — empty expectation is a no-op', () => {
+  it('returns valid when no coverage rules are declared', () => {
+    const result = validateCoverage('anything at all', {});
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('validateCoverage — minSections', () => {
+  it('passes when the default section pattern is met', () => {
+    const result = validateCoverage('# heading\n\n## one\ntext\n\n## two\ntext', {
+      minSections: 2,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails when the default section pattern count is too low', () => {
+    const result = validateCoverage('## only one\ncontent', {
+      minSections: 2,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 1 sections found');
+  });
+
+  it('supports a custom sectionPattern', () => {
+    const result = validateCoverage('Section: one\n\nSection: two', {
+      minSections: 2,
+      sectionPattern: '^Section: ',
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('reports invalid sectionPattern regexes', () => {
+    const result = validateCoverage('## one', {
+      minSections: 1,
+      sectionPattern: '[',
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('invalid sectionPattern regex');
+  });
+});
+
+describe('validateCoverage — requiredMarkers', () => {
+  it('passes when all required markers are present', () => {
+    const result = validateCoverage('alpha beta gamma', {
+      requiredMarkers: ['alpha', 'beta', 'gamma'],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails when one required marker is missing', () => {
+    const result = validateCoverage('alpha gamma', {
+      requiredMarkers: ['alpha', 'beta', 'gamma'],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 2 of 3 required markers found');
+    expect(result.reason).toContain('missing: beta');
+  });
+
+  it('truncates long missing marker lists after five entries', () => {
+    const result = validateCoverage('kept-marker', {
+      requiredMarkers: [
+        'kept-marker',
+        'missing-a',
+        'missing-b',
+        'missing-c',
+        'missing-d',
+        'missing-e',
+        'missing-f',
+        'missing-g',
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('missing: missing-a, missing-b, missing-c, missing-d, missing-e (+2 more)');
+  });
+
+  it('treats an empty requiredMarkers array as a no-op', () => {
+    const result = validateCoverage('anything', {
+      requiredMarkers: [],
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('buildRePrompt — empty', () => {
   it('produces a re-prompt that mentions the empty response', () => {
     const result = validateCompletion('');
@@ -119,6 +211,138 @@ describe('buildRePrompt — no_terminator', () => {
     const result = validateCompletion('this is some text without a proper end');
     const prompt = buildRePrompt(result);
     expect(prompt).toContain('mid-thought');
+  });
+});
+
+describe('buildRePrompt — insufficient_coverage', () => {
+  it('tells the model not to restart and to append missing items', () => {
+    const prompt = buildRePrompt({
+      valid: false,
+      kind: 'insufficient_coverage',
+      reason: 'only 2 of 3 required markers found, missing: beta',
+    });
+    expect(prompt).toContain('structurally valid but does not cover everything the brief required');
+    expect(prompt).toContain('Do NOT restart from the beginning');
+    expect(prompt).toContain('append the missing sections');
+  });
+});
+
+describe('trace trimming exports', () => {
+  it('exposes the documented constants', () => {
+    expect(TRACE_MAX_EVENTS).toBe(80);
+    expect(TRACE_MAX_CHARS).toBe(16_384);
+    expect(TRACE_DROP_PRIORITY.text_emission).toBe(1);
+    expect(TRACE_DROP_PRIORITY.tool_call).toBe(2);
+    expect(TRACE_DROP_PRIORITY.turn_start).toBe(100);
+    expect(TRACE_DROP_PRIORITY.turn_complete).toBe(100);
+    expect(TRACE_DROP_PRIORITY.injection).toBe(100);
+    expect(TRACE_DROP_PRIORITY.done).toBe(100);
+  });
+});
+
+describe('trimProgressTrace', () => {
+  it('returns an empty array for empty input', () => {
+    expect(trimProgressTrace([])).toEqual([]);
+  });
+
+  it('returns the same array when both bounds are already satisfied', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      { kind: 'done', status: 'ok' },
+    ] as const;
+    expect(trimProgressTrace(events)).toBe(events);
+  });
+
+  it('trims low-priority events to satisfy the count bound first', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 80 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'x',
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed).toHaveLength(81);
+    expect(trimmed[0]).toEqual({ kind: 'turn_start', turn: 1, provider: 'codex' });
+    expect(trimmed[trimmed.length - 1]).toEqual({
+      kind: '_trimmed',
+      droppedCount: 1,
+      droppedKinds: { text_emission: 1 },
+    });
+  });
+
+  it('trims by priority when the size bound is exceeded', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        kind: 'tool_call' as const,
+        turn: i + 1,
+        toolSummary: 'tool'.repeat(4000),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed[0]).toEqual({ kind: 'turn_start', turn: 1, provider: 'codex' });
+    expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
+  });
+
+  it('drops low-priority events until both bounds are satisfied', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 84 }, (_, i) => ({
+        kind: i % 2 === 0 ? ('text_emission' as const) : ('tool_call' as const),
+        turn: i + 1,
+        ...(i % 2 === 0
+          ? { chars: 1, preview: 'x'.repeat(1000) }
+          : { toolSummary: 'y'.repeat(100) }),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
+  });
+
+  it('drops all text_emission events before higher-priority events in a large trace', () => {
+    const events = [
+      ...Array.from({ length: 500 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'x'.repeat(1000),
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        kind: 'turn_start' as const,
+        turn: i + 1,
+        provider: 'codex',
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    expect(trimmed[trimmed.length - 1]).toEqual(
+      expect.objectContaining({ kind: '_trimmed' }),
+    );
+  });
+
+  it('falls back to the first 10 and last 30 retained events when still oversized', () => {
+    const events = Array.from({ length: 50 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `codex-${'x'.repeat(400)}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed).toHaveLength(41);
+    expect(trimmed[0]).toEqual(events[0]);
+    expect(trimmed[9]).toEqual(events[9]);
+    expect(trimmed[10]).toEqual(events[20]);
+    expect(trimmed[39]).toEqual(events[49]);
+    expect(trimmed[40]).toEqual({
+      kind: '_trimmed',
+      droppedCount: 10,
+      droppedKinds: { turn_start: 10 },
+    });
   });
 });
 
