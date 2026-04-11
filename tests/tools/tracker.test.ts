@@ -21,6 +21,16 @@ describe('FileTracker', () => {
     expect(tracker.getWrites()).toEqual(['/tmp/baz.ts']);
   });
 
+  it('tracks listed directories separately from reads and writes', () => {
+    const tracker = new FileTracker();
+    tracker.trackDirectoryList('/tmp/dir-a');
+    tracker.trackDirectoryList('/tmp/dir-b');
+    tracker.trackRead('/tmp/file.txt');
+
+    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/dir-a', '/tmp/dir-b']);
+    expect(tracker.getReads()).toEqual(['/tmp/file.txt']);
+  });
+
   it('deduplicates reads and writes independently', () => {
     const tracker = new FileTracker();
     tracker.trackRead('/tmp/foo.ts');
@@ -32,6 +42,15 @@ describe('FileTracker', () => {
     expect(tracker.getWrites()).toEqual(['/tmp/bar.ts']);
   });
 
+  it('tracks directory listings in append order', () => {
+    const tracker = new FileTracker();
+    tracker.trackDirectoryList('/tmp/dir');
+    tracker.trackDirectoryList('/tmp/dir');
+    tracker.trackDirectoryList('/tmp/other');
+
+    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/dir', '/tmp/dir', '/tmp/other']);
+  });
+
   it('a single file may appear in both reads and writes', () => {
     const tracker = new FileTracker();
     tracker.trackRead('/tmp/foo.ts');
@@ -41,14 +60,36 @@ describe('FileTracker', () => {
     expect(tracker.getWrites()).toEqual(['/tmp/foo.ts']);
   });
 
+  it('a path can be tracked as both a read and a listed directory', () => {
+    const tracker = new FileTracker();
+    tracker.trackRead('/tmp/foo');
+    tracker.trackDirectoryList('/tmp/foo');
+
+    expect(tracker.getReads()).toEqual(['/tmp/foo']);
+    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/foo']);
+  });
+
+  it('getDirectoriesListed returns a defensive copy and defaults to empty', () => {
+    const tracker = new FileTracker();
+    expect(tracker.getDirectoriesListed()).toEqual([]);
+
+    tracker.trackDirectoryList('/tmp/a');
+    const snapshot = tracker.getDirectoriesListed();
+    snapshot.push('/tmp/mutated');
+
+    expect(tracker.getDirectoriesListed()).toEqual(['/tmp/a']);
+  });
+
   it('reset clears reads, writes, and tool calls', () => {
     const tracker = new FileTracker();
     tracker.trackRead('/tmp/foo.ts');
+    tracker.trackDirectoryList('/tmp/dir');
     tracker.trackWrite('/tmp/bar.ts');
     tracker.trackToolCall('grep(src/, "foo")');
     tracker.reset();
 
     expect(tracker.getReads()).toEqual([]);
+    expect(tracker.getDirectoriesListed()).toEqual([]);
     expect(tracker.getWrites()).toEqual([]);
     expect(tracker.getToolCalls()).toEqual([]);
   });

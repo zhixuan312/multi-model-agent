@@ -11,11 +11,13 @@ import { createHash } from 'node:crypto';
 import {
   withTimeout,
   computeCostUSD,
+  computeSavedCostUSD,
   type RunResult,
   type RunOptions,
   type ProviderConfig,
   type ProgressEvent,
 } from '../types.js';
+import { trimProgressTrace } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 
 /**
@@ -51,6 +53,7 @@ import {
 } from './prevention.js';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -98,6 +101,12 @@ export interface OpenAIRunnerOptions {
  * from a one-off fragment but not so many that a wedged model can burn the
  * budget via repeated re-prompts.
  */
+
+/** Maximum turns for each continuation (reprompt/reground/watchdog-warning) in the
+ * supervision loop. Higher than the old hardcoded 1 so the model can call a tool
+ * and reply to the tool result without immediately exhausting the sub-budget. */
+const SUPERVISION_CONTINUATION_BUDGET = 5;
+
 const MAX_SUPERVISION_RETRIES = 3;
 
 /**
@@ -141,6 +150,14 @@ export async function runOpenAI(
   const sandboxPolicy = options.sandboxPolicy ?? runner.providerConfig.sandboxPolicy ?? 'cwd-only';
   const abortController = new AbortController();
 
+  // --- Task timing + parent model (Task 9) --------------------------------
+  const taskStartMs = Date.now();
+  const parentModel = options.parentModel;
+
+  // --- Progress trace capture (Task 10) ---------------------------------
+  const shouldCaptureTrace = options.includeProgressTrace ?? false;
+  const traceBuffer: ProgressEvent[] = [];
+
   // --- Progress event emission (Task 9) -----------------------------------
   //
   // `onProgress` is already wrapped in `safeSink` by the orchestrator
@@ -149,6 +166,7 @@ export async function runOpenAI(
   // again here.
   const onProgress = options.onProgress;
   const emit = (event: ProgressEvent): void => {
+    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -317,6 +335,11 @@ export async function runOpenAI(
       currentResult = await runTurnAndBuffer(promptWithBudgetHint, maxTurns);
 
       let supervisionRetries = 0;
+      // Continuation-exhausted flag: set when runContinuationTurn catches a
+      // MaxTurnsExceededError on a re-prompt or re-ground continuation.
+      // The break below lands in the exhausted handler so we don't conflate
+      // a 5-turn sub-budget exhaustion with the user-declared maxTurns limit.
+      let supervisionExhausted = false;
       // Initialized to `null` (NOT ''): on the first turn there is no
       // previous degenerate output to compare against, so the
       // same-output early-out must be skipped. Initialising to ''
@@ -330,6 +353,32 @@ export async function runOpenAI(
       // `currentInputTokens <= lastWarnedInputTokens` and fall through
       // to validation / re-prompt instead of re-issuing the nudge.
       let lastWarnedInputTokens = -1;
+      let lastValidationKind: string | undefined = undefined;
+
+      /**
+       * Wraps a continuation turn (re-prompt or re-ground) that uses a small
+       * fixed budget. Catches MaxTurnsExceededError from the SDK and returns a
+       * discriminated union so callers can handle exhaustion without conflating it
+       * with the user-declared maxTurns limit.
+       */
+      async function runContinuationTurn(
+        currentResult: AgentRunOutput,
+        instruction: string,
+        budget: number,
+      ): Promise<
+        | { ok: true; result: AgentRunOutput }
+        | { ok: false; cause: MaxTurnsExceededError; label: 'continuation_exhausted'; turnAtFailure: number }
+      > {
+        try {
+          const result = await runTurnAndBuffer(continueWith(currentResult, instruction), budget);
+          return { ok: true, result };
+        } catch (err) {
+          if (err instanceof MaxTurnsExceededError) {
+            return { ok: false, cause: err, label: 'continuation_exhausted', turnAtFailure: currentResult.state.usage.requests };
+          }
+          throw err;
+        }
+      }
 
       // Supervision loop. On each iteration we:
       //   1. Check the watchdog (may force-terminate or nudge)
@@ -372,6 +421,9 @@ export async function runOpenAI(
             tracker,
             runner.providerConfig,
             softLimit,
+            Date.now() - taskStartMs,
+            parentModel,
+            shouldCaptureTrace ? traceBuffer : undefined,
           );
           emit({ kind: 'done', status: salvaged.status });
           return salvaged;
@@ -397,18 +449,37 @@ export async function runOpenAI(
             contentLengthChars: warning.length,
           });
           lastWarnedInputTokens = currentInputTokens;
-          currentResult = await runTurnAndBuffer(continueWith(currentResult, warning), 1);
+          const warningCont = await runContinuationTurn(currentResult, warning, SUPERVISION_CONTINUATION_BUDGET);
+          if (!warningCont.ok) {
+            supervisionExhausted = true;
+            break;
+          }
+          currentResult = warningCont.result;
         }
 
         // --- Validation check ---
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateCompletion(stripped);
 
+        // NEW: coverage check — only runs when syntactic validation passes
+        if (validation.valid && options.expectedCoverage) {
+          const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+          if (!coverageValidation.valid) {
+            // Treat identically to a degenerate validation — same retry logic
+            validation.valid = false;
+            validation.kind = coverageValidation.kind;
+            validation.reason = coverageValidation.reason;
+          }
+        }
+
         if (validation.valid) {
-          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig);
+          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel, shouldCaptureTrace ? traceBuffer : undefined);
           emit({ kind: 'done', status: ok.status });
           return ok;
         }
+
+        // Track last validation kind so the exhausted handler can report it.
+        lastValidationKind = validation.kind;
 
         // Degenerate. Apply same-output early-out (only when we have a
         // prior degenerate output to compare against) and retry budget.
@@ -427,7 +498,12 @@ export async function runOpenAI(
         });
         // Give the model a small budget to recover. One extra turn per
         // retry is enough for the "emit your final answer" nudge.
-        currentResult = await runTurnAndBuffer(continueWith(currentResult, rePrompt), 1);
+        const rePromptCont = await runContinuationTurn(currentResult, rePrompt, SUPERVISION_CONTINUATION_BUDGET);
+        if (!rePromptCont.ok) {
+          supervisionExhausted = true;
+          break;
+        }
+        currentResult = rePromptCont.result;
 
         // --- Periodic re-grounding ---
         const turnsSoFar = currentResult.state.usage.requests;
@@ -445,18 +521,30 @@ export async function runOpenAI(
             turn: currentResult.state.usage.requests,
             contentLengthChars: reground.length,
           });
-          currentResult = await runTurnAndBuffer(continueWith(currentResult, reground), 1);
+          const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+          if (!regroundCont.ok) {
+            supervisionExhausted = true;
+            break;
+          }
+          currentResult = regroundCont.result;
         }
       }
 
-      // Supervision exhausted (either retry budget or same-output early-out).
-      // Salvage from the scratchpad if we have anything; otherwise return the
-      // existing incomplete diagnostic.
+      // Supervision exhausted (either retry budget or same-output early-out or
+      // continuation-exhausted break). Salvage from the scratchpad if we have
+      // anything; otherwise return the existing incomplete diagnostic.
+      const exhaustedReason = supervisionExhausted
+        ? `supervision continuation sub-budget exhausted at turn ${currentResult.state.usage.requests}`
+        : `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${lastValidationKind ?? 'unknown'})`;
       const exhausted = buildSupervisionExhaustedResult(
         currentResult,
         scratchpad,
         tracker,
         runner.providerConfig,
+        Date.now() - taskStartMs,
+        parentModel,
+        shouldCaptureTrace ? traceBuffer : undefined,
+        { reason: exhaustedReason },
       );
       emit({ kind: 'done', status: exhausted.status });
       return exhausted;
@@ -468,20 +556,32 @@ export async function runOpenAI(
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
+        const partial = partialUsage(currentResult, runner.providerConfig);
+        const savedCostUSD = computeSavedCostUSD(
+          partial.costUSD,
+          partial.inputTokens,
+          partial.outputTokens,
+          parentModel,
+        );
         emit({ kind: 'done', status: 'max_turns' });
         const hasSalvage = !scratchpad.isEmpty();
+        const turnsAtFailure = currentResult?.state.usage.requests ?? maxTurns;
         return {
           output: hasSalvage
             ? scratchpad.latest()
             : `Agent exceeded max turns (${maxTurns}).`,
           status: 'max_turns',
-          usage: partialUsage(currentResult, runner.providerConfig),
-          turns: currentResult?.state.usage.requests ?? maxTurns,
+          error: `agent exhausted user-declared maxTurns limit (${maxTurns}) after ${turnsAtFailure} turns`,
+          usage: { ...partial, savedCostUSD },
+          turns: turnsAtFailure,
           filesRead,
+          directoriesListed: tracker.getDirectoriesListed(),
           filesWritten,
           toolCalls,
           outputIsDiagnostic: !hasSalvage,
           escalationLog: [],
+          durationMs: Date.now() - taskStartMs,
+          ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
         };
       }
       // Classify the thrown error into a finer-grained RunStatus so the
@@ -494,17 +594,27 @@ export async function runOpenAI(
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
+      const partial = partialUsage(currentResult, runner.providerConfig);
+      const savedCostUSD = computeSavedCostUSD(
+        partial.costUSD,
+        partial.inputTokens,
+        partial.outputTokens,
+        parentModel,
+      );
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
-        usage: partialUsage(currentResult, runner.providerConfig),
+        usage: { ...partial, savedCostUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
+        directoriesListed: tracker.getDirectoriesListed(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         error: msg || reason,
+        durationMs: Date.now() - taskStartMs,
+        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
   };
@@ -515,20 +625,30 @@ export async function runOpenAI(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
+      const partial = partialUsage(currentResult, runner.providerConfig);
+      const savedCostUSD = computeSavedCostUSD(
+        partial.costUSD,
+        partial.inputTokens,
+        partial.outputTokens,
+        parentModel,
+      );
       return {
         output: hasSalvage
           ? scratchpad.latest()
           : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
         filesRead: tracker.getReads(),
+        directoriesListed: tracker.getDirectoriesListed(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
-        usage: partialUsage(currentResult, runner.providerConfig),
+        usage: { ...partial, savedCostUSD },
         turns: currentResult?.state.usage.requests ?? maxTurns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        durationMs: Date.now() - taskStartMs,
+        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -542,9 +662,13 @@ function buildOkResult(
   currentResult: AgentRunOutput,
   tracker: FileTracker,
   providerConfig: ProviderConfig,
+  durationMs: number,
+  parentModel?: string,
+  traceBuffer?: ProgressEvent[],
 ): RunResult {
   const usage = currentResult.state.usage;
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
   return {
     output,
     status: 'ok',
@@ -553,14 +677,18 @@ function buildOkResult(
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
       costUSD,
+      savedCostUSD,
     },
     turns: usage.requests,
     filesRead: tracker.getReads(),
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
     // `ok` always carries a real model answer — never a diagnostic.
     outputIsDiagnostic: false,
     escalationLog: [],
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -569,12 +697,17 @@ function buildSupervisionExhaustedResult(
   scratchpad: TextScratchpad,
   tracker: FileTracker,
   providerConfig: ProviderConfig,
+  durationMs: number,
+  parentModel?: string,
+  traceBuffer?: ProgressEvent[],
+  opts?: { reason?: string },
 ): RunResult {
   const usage = currentResult.state.usage;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const toolCalls = tracker.getToolCalls();
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
   return {
     output: hasSalvage
@@ -593,13 +726,18 @@ function buildSupervisionExhaustedResult(
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
       costUSD,
+      savedCostUSD,
     },
     turns: usage.requests,
     filesRead,
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten,
     toolCalls,
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    ...(opts?.reason && { error: opts.reason }),
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -609,12 +747,16 @@ function buildForceSalvageResult(
   tracker: FileTracker,
   providerConfig: ProviderConfig,
   softLimit: number,
+  durationMs: number,
+  parentModel?: string,
+  traceBuffer?: ProgressEvent[],
 ): RunResult {
   const usage = currentResult.state.usage;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const toolCalls = tracker.getToolCalls();
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
   return {
     output: hasSalvage
@@ -626,13 +768,17 @@ function buildForceSalvageResult(
       outputTokens: usage.outputTokens,
       totalTokens: usage.totalTokens,
       costUSD,
+      savedCostUSD,
     },
     turns: usage.requests,
     filesRead,
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten,
     toolCalls,
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

@@ -75,6 +75,7 @@ const defaultsSchema = z.object({
   maxTurns: z.number().int().positive().default(200),
   timeoutMs: z.number().int().positive().default(600_000),
   tools: z.enum(['none', 'full']).default('full'),
+  largeResponseThresholdChars: z.number().int().positive().optional(),
 }).default(() => ({ maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const }));
 
 export const multiModelConfigSchema = z.object({

@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { ProgressEvent } from '../../packages/core/src/types.js';
+import path from 'path';
 
 /**
  * Long enough (>= 200 chars) to pass validateCompletion's minimum-length
@@ -24,12 +25,15 @@ vi.mock('../../packages/core/src/auth/codex-oauth.js', () => ({
 }));
 
 vi.mock('../../packages/core/src/tools/definitions.js', () => ({
-  createToolImplementations: vi.fn(() => ({
+  createToolImplementations: vi.fn((tracker) => ({
     readFile: vi.fn().mockResolvedValue('file content'),
     writeFile: vi.fn().mockResolvedValue(undefined),
     glob: vi.fn().mockResolvedValue(['a.ts']),
     grep: vi.fn().mockResolvedValue('1: match'),
-    listFiles: vi.fn().mockResolvedValue(['a.ts']),
+    listFiles: vi.fn().mockImplementation(async (dirPath: string) => {
+      tracker.trackDirectoryList(path.resolve(process.cwd(), dirPath));
+      return ['a.ts'];
+    }),
     runShell: vi.fn().mockResolvedValue({ stdout: 'ok', stderr: '', exitCode: 0 }),
   })),
 }));
@@ -554,8 +558,8 @@ describe('runCodex', () => {
             item: {
               type: 'function_call',
               call_id: 'c1',
-              name: 'read_file',
-              arguments: '{"path":"a.ts"}',
+              name: 'list_files',
+              arguments: '{"path":"."}',
             },
           };
           yield {
@@ -582,6 +586,7 @@ describe('runCodex', () => {
     // NOT swallowed as "Sub-agent error: ...".
     expect(result.output).toBe('useful partial findings');
     expect(result.error).toBeDefined();
+    expect(result.directoriesListed).toEqual([process.cwd()]);
   });
 
   // ─── 15. Task 5: abort-path error message is not misleading ────────────────

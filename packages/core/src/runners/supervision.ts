@@ -1,4 +1,5 @@
 import type { ProviderConfig } from '../types.js';
+import type { TaskSpec, ProgressEvent, ProgressTraceEntry } from '../types.js';
 import type { ModelProfile } from '../routing/model-profiles.js';
 
 /**
@@ -34,7 +35,13 @@ import type { ModelProfile } from '../routing/model-profiles.js';
  * ----------------------------------------------------------------------
  */
 
-export type DegenerateKind = 'empty' | 'thinking_only' | 'fragment' | 'no_terminator';
+/** Classification of a degenerate model response, including coverage failures. */
+export type DegenerateKind =
+  | 'empty'
+  | 'thinking_only'
+  | 'fragment'
+  | 'no_terminator'
+  | 'insufficient_coverage';
 
 export interface ValidationResult {
   valid: boolean;
@@ -46,6 +53,135 @@ export interface ValidationResult {
 
 export interface ValidateCompletionOptions {
   minLength?: number;
+}
+
+export function validateCoverage(
+  text: string,
+  expected: NonNullable<TaskSpec['expectedCoverage']>,
+): ValidationResult {
+  if (expected.minSections !== undefined) {
+    const pattern = expected.sectionPattern ?? '^## ';
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern, 'gm');
+    } catch (err) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `invalid sectionPattern regex: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const count = (text.match(re) ?? []).length;
+    if (count < expected.minSections) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${count} sections found, expected at least ${expected.minSections}`,
+      };
+    }
+  }
+
+  if (expected.requiredMarkers?.length) {
+    const missing = expected.requiredMarkers.filter((marker) => !text.includes(marker));
+    if (missing.length > 0) {
+      const preview = missing.slice(0, 5).join(', ');
+      const extra = missing.length > 5 ? ` (+${missing.length - 5} more)` : '';
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${expected.requiredMarkers.length - missing.length} of ${expected.requiredMarkers.length} required markers found, missing: ${preview}${extra}`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+export const TRACE_MAX_EVENTS = 80;
+export const TRACE_MAX_CHARS = 16_384;
+
+export const TRACE_DROP_PRIORITY: Record<ProgressEvent['kind'], number> = {
+  text_emission: 1,
+  tool_call: 2,
+  turn_start: 100,
+  turn_complete: 100,
+  injection: 100,
+  escalation_start: 100,
+  done: 100,
+};
+
+export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
+  if (events.length === 0) return [];
+
+  const traceSize = (arr: ProgressEvent[]): number => JSON.stringify(arr).length;
+  const isNeverDrop = (event: ProgressEvent): boolean => (TRACE_DROP_PRIORITY[event.kind] ?? 50) >= 100;
+
+  const keep: ProgressEvent[] = [];
+  const droppable: ProgressEvent[] = [];
+  for (const event of events) {
+    (isNeverDrop(event) ? keep : droppable).push(event);
+  }
+
+  if (events.length <= TRACE_MAX_EVENTS && traceSize(events) <= TRACE_MAX_CHARS) {
+    return events;
+  }
+
+  const keepBytes = traceSize(keep);
+  const remainingEventBudget = Math.max(0, TRACE_MAX_EVENTS - keep.length);
+  const remainingByteBudget = Math.max(0, TRACE_MAX_CHARS - keepBytes);
+
+  const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
+  const sortedDroppable = [...droppable].sort(
+    (a, b) => (TRACE_DROP_PRIORITY[a.kind] ?? 50) - (TRACE_DROP_PRIORITY[b.kind] ?? 50),
+  );
+  let retained = sortedDroppable;
+
+  while (
+    retained.length > remainingEventBudget ||
+    traceSize(retained) > remainingByteBudget
+  ) {
+    if (retained.length === 0) break;
+    const victim = retained.shift()!;
+    droppedKinds[victim.kind] = (droppedKinds[victim.kind] ?? 0) + 1;
+  }
+
+  if (
+    (retained.length > remainingEventBudget || traceSize(retained) > remainingByteBudget) &&
+    retained.length > 40
+  ) {
+    const retainedSet = new Set(retained);
+    const originalOrder = droppable.filter((event) => retainedSet.has(event));
+    const head = originalOrder.slice(0, 10);
+    const tail = originalOrder.slice(-30);
+    const keptSet = new Set([...head, ...tail]);
+    for (const event of originalOrder) {
+      if (!keptSet.has(event)) {
+        droppedKinds[event.kind] = (droppedKinds[event.kind] ?? 0) + 1;
+      }
+    }
+    retained = [...head, ...tail];
+  }
+
+  const retainedSet = new Set(retained);
+  const merged = events.filter((event) => isNeverDrop(event) || retainedSet.has(event));
+
+  const droppedCount = droppable.length - retained.length;
+  const capExceededByBoundaryEvents =
+    keep.length > TRACE_MAX_EVENTS || keepBytes > TRACE_MAX_CHARS;
+
+  if (droppedCount === 0 && !capExceededByBoundaryEvents) {
+    return merged;
+  }
+
+  return [
+    ...merged,
+    {
+      kind: '_trimmed' as const,
+      droppedCount,
+      droppedKinds,
+      ...(capExceededByBoundaryEvents ? { capExceededByBoundaryEvents: true } : {}),
+    },
+  ];
 }
 
 const DEFAULT_MIN_LENGTH = 200;
@@ -212,6 +348,9 @@ export function buildRePrompt(result: ValidationResult): string {
         'first; otherwise produce the final answer now.',
       ].join(' ');
     }
+
+    case 'insufficient_coverage':
+      return `Your previous answer was structurally valid but does not cover everything the brief required: ${result.reason}. Continue your report by addressing the missing items. Do NOT restart from the beginning — append the missing sections to what you already wrote.`;
 
     default:
       return 'Your previous response was incomplete. Please produce your complete final answer as plain text.';

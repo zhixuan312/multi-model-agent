@@ -153,6 +153,7 @@ const clientStub = {} as unknown as import('openai').default;
 describe('runOpenAI — prevention scaffolding integration', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mockRun.mockReset();
   });
   afterEach(() => {
     vi.clearAllMocks();
@@ -529,8 +530,15 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     // Second call (the re-prompt) throws — the runner should salvage the
     // scratchpad's latest() emission, not the bare error string.
     mockRun
-      .mockResolvedValueOnce(
-        makeMockRunResult({
+      .mockImplementationOnce(async (agent) => {
+        const { RunContext } = await import('@openai/agents');
+        const agentAny = agent as any;
+        const tools = agentAny.tools as Array<{ name: string; invoke: Function }>;
+        const listFilesTool = tools.find((t) => t.name === 'list_files');
+        if (listFilesTool) {
+          await listFilesTool.invoke(new RunContext(), JSON.stringify({ path: '.' }));
+        }
+        return makeMockRunResult({
           finalOutput: 'Let me check',
           newItems: [
             {
@@ -541,8 +549,8 @@ describe('runOpenAI — prevention scaffolding integration', () => {
               },
             },
           ],
-        }),
-      )
+        });
+      })
       .mockRejectedValueOnce(new Error('upstream API exploded'));
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
@@ -551,5 +559,93 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(result.status).toBe('error');
     expect(result.output).toBe('some buffered findings here');
     expect(result.error).toBe('upstream API exploded');
+    expect(result.directoriesListed).toEqual([process.cwd()]);
+  });
+
+  // Task 5 + 8: coverage validation integration + continuation budget regression
+  it('coverage validation: task without expectedCoverage skips validateCoverage', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT }));
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    // A task without expectedCoverage gets ok without needing coverage checks
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+    expect(result.status).toBe('ok');
+  });
+
+  it('coverage validation: insufficient_coverage triggers re-prompt and retries', async () => {
+    // First run: valid-length output but missing required markers
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: 'Only mentions 1.1 but not 1.2 or 1.3' }),
+    );
+    // Second run (re-prompt): now includes all required markers
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: 'Here are 1.1, 1.2, and 1.3 covered in detail.' }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI(
+      'Audit items 1.1, 1.2, 1.3',
+      {
+        expectedCoverage: {
+          requiredMarkers: ['1.1', '1.2', '1.3'],
+        },
+      },
+      { client: clientStub, providerConfig, defaults },
+    );
+
+    // Runner should have re-prompted once and then succeeded
+    expect(result.status).toBe('ok');
+    expect(mockRun).toHaveBeenCalledTimes(2);
+    expect(result.output).toContain('1.1');
+  });
+
+  it('coverage validation: insufficient_coverage exhausts retries → incomplete or error', async () => {
+    // All 3 calls return valid-length text but WITHOUT required markers.
+    // Mock exhausted on 4th call → runner falls to error path.
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: 'Only item alpha is covered here.' }),
+    );
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: 'Still only item alpha, nothing about beta.' }),
+    );
+    mockRun.mockRejectedValueOnce(new Error('mock exhausted'));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI(
+      'Audit items 1.1, 1.2, 1.3',
+      {
+        expectedCoverage: {
+          requiredMarkers: ['1.1', '1.2', '1.3'],
+        },
+      },
+      { client: clientStub, providerConfig, defaults },
+    );
+
+    // After 3 retries with no coverage recovery, runner exhausts retries
+    // and falls through to the outer error handler (when 4th mock call throws).
+    expect(['incomplete', 'error']).toContain(result.status);
+    expect(mockRun).toHaveBeenCalledTimes(3);
+  });
+
+  it('continuation budget: re-prompt continuation does not throw MaxTurnsExceededError with budget=5', async () => {
+    // First call: degenerate fragment → supervision re-prompts with budget=5
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: 'Fragment',
+        requests: 4,
+        outputTokens: 50,
+      }),
+    );
+    // Re-prompt continuation: the model needs a tool call and replies to it.
+    // With budget=1 this would exhaust and throw. With budget=5 it completes.
+    mockRun.mockResolvedValueOnce(makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, requests: 5 }));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    // With SUPERVISION_CONTINUATION_BUDGET=5, the re-prompt continuation
+    // gets enough budget to complete, not throw, and we get ok
+    expect(result.status).toBe('ok');
+    expect(mockRun).toHaveBeenCalledTimes(2); // initial + 1 continuation
   });
 });

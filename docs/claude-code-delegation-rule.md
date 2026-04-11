@@ -144,18 +144,28 @@ Don't read whole files in parent context if a cheap survey can locate the load-b
 
 ### Provider Routing
 
-The MCP's built-in routing is: **capability filter → tier filter → cheapest qualifying provider**. Layer the role mapping below on top.
+**Route by workload shape, not by price.** The free-vs-paid axis is secondary. The primary question is whether the task's shape fits what a lighter model can actually deliver.
 
-| Role | Default tier | Default provider | Escalate to |
-|---|---|---|---|
-| **Implementer** — single file, mechanical, fully-specified brief | `standard` | `minimax` (free) | `sonnet` / `codex` if it needs web fetch or ambiguous integration |
-| **Implementer** — multi-file, integration, pattern matching | `standard` | `sonnet` (mid) *or* `codex` if you have no mid tier | `codex` reasoning if the brief still has ambiguity |
-| **Implementer** — architecture, design judgment | `reasoning` | `codex` | (top of stack) |
-| **Per-task reviewer** (spec compliance) | `standard` | `minimax` (free) | escalate if the review surface is large |
-| **Per-task reviewer** (code quality) | `standard` | `sonnet` (mid) *or* `codex` | `codex` reasoning for security-sensitive code |
-| **Final whole-branch reviewer** | `reasoning` | `codex`, `effort: "high"` | (top of stack) |
+**Cheaper providers sweet spot** (e.g. minimax, claude-haiku):
+- ≤ 10 structured output sections
+- ≤ 50k input-token workload
+- Retrieval tasks (grep, glob, list with structured results)
+- Short-form judgment ("does this file match pattern X?", "summarize these 5 imports")
+- Single-file edits
+- Small test stubs
+- Focused research sub-questions
 
-> **Two-tier configs:** if you only have a free provider and a reasoning provider (no mid tier), collapse the middle rows into the reasoning tier. The rule still works — you just have fewer routing options.
+**Reasoning providers sweet spot** (e.g. codex, claude-opus):
+- ≥ 20 structured output sections
+- Ambiguous judgment that resists a clear rubric
+- Security-sensitive review
+- Whole-branch synthesis
+- Unknown-scope exploration
+- Cross-cutting refactors
+
+**Enumerable-deliverable workloads with many items + large input**: never dispatch as a single task. Either decompose and parallelize (see "Decompose and parallelize enumerable work" below) or use retrieval/judgment split. Typical examples: multi-file refactors (10+ files), test generation across many functions (25+), multi-PR review (15+ PRs), per-endpoint analysis (10+ endpoints), codebase audits against long checklists.
+
+The MCP's built-in routing is: **capability filter → tier filter → cheapest qualifying provider**. Set `tier: 'reasoning'` and a higher `effort` level on tasks that match the reasoning sweet spot; leave `tier: 'standard'` for tasks in the cheaper sweet spot.
 
 **Capability hints:**
 
@@ -198,6 +208,20 @@ Task 3: Make the timeout configurable.
 
 **The sharper your brief, the cheaper your delegation.**
 
+#### Declaring deliverable coverage
+
+Declare coverage when the deliverable is enumerable. If your brief asks for N discrete outputs, populate `expectedCoverage.requiredMarkers` with the item identifiers or set `minSections` for simpler shapes. The supervision layer will re-prompt the model with specific missing items and classify thin responses as `insufficient_coverage` instead of silently accepting them.
+
+Worked examples across workload shapes:
+
+- **Multi-file refactor**: `requiredMarkers: ["src/auth.ts", "src/user.ts", ..., "src/session.ts"]` — every file path must appear in the output.
+- **Test generation**: `requiredMarkers: ["computeTotal", "validateInput", "formatDate", ...]` — every function name must appear.
+- **Multi-PR review**: `requiredMarkers: ["#1234", "#1235", "#1236", ...]` — every PR number must appear.
+- **Per-endpoint analysis**: `requiredMarkers: ["/api/users", "/api/orders", "/api/refunds", ...]` — every endpoint path must appear.
+- **Codebase audit**: `requiredMarkers: ["1.1", "1.2", ..., "10.2"]` — one per checklist item.
+
+Do NOT declare coverage for one-shot tasks — bug fixes, single implementations, prose explanations, conversational responses, creative writing. The field is opt-in and has no meaning for deliverables you can't enumerate ahead of time. Setting a spurious `minSections: 1` is harmless but pointless.
+
 ### Dispatch Shape
 
 Every call to `mcp__multi-model-agent__delegate_tasks` must set:
@@ -211,6 +235,80 @@ Every call to `mcp__multi-model-agent__delegate_tasks` must set:
 - `effort` — only when dispatching to a reasoning-tier provider.
 
 **Parallelize when safe.** Independent tasks (different files, no shared state) dispatched in one `tasks` array run concurrently. Bundle them. **Never** dispatch two tasks in parallel that could conflict on the same files. Spec reviewer + code-quality reviewer for the *same* task are sequential (the reviewer needs to see the implementer's output); dispatch them in separate calls.
+
+## Decompose and parallelize enumerable work
+
+When the work has the shape "do N independent things," dispatch N tasks in one `delegate_tasks` call instead of one big task. The MCP runs them concurrently via `Promise.all`. Use `expectedCoverage.requiredMarkers` per task to pin what "done" looks like per-deliverable, and `batchId` + `retry_tasks` to re-dispatch any individual task that came back thin.
+
+**Pattern A: Decompose and parallelize**
+
+Worked examples (ordered cheapest-to-most-complex):
+
+1. **Multi-file refactor**: "Update import syntax in these 10 files" → 10 tasks, one per file. Each task has a minimal `requiredMarkers: ["<the file's primary export>"]` to catch a worker that silently skipped a file. Parent synthesizes if needed (usually unnecessary — per-file diffs are independent).
+
+2. **Test generation across many functions**: "Write unit tests for these 25 functions" → 5 tasks batched 5 functions each. `requiredMarkers: ["<function1>", "<function2>", ...]` per task. Parent collects test files.
+
+3. **Multi-PR review**: "Review these 15 PRs and flag anything concerning" → 15 tasks in parallel (or batched to your provider's rate limit). `requiredMarkers: ["<PR number>"]` per task. Parent synthesizes top-3 concerns across all PRs.
+
+4. **Per-endpoint analysis**: "Analyze these 10 API endpoints for X" → 10 tasks. `requiredMarkers: ["<endpoint path>"]` per task. Parent builds the cross-endpoint report.
+
+5. **Codebase audit** (internal testing ground example): 3 apps × 10 categories = 30 tasks. Each task audits one category for one app.
+
+Parallel dispatch saves wall-clock time — check `timings.estimatedParallelSavingsMs` in the response to see how much.
+
+**Pattern B: Retrieval / judgment split**
+
+When one part of the work is cheap retrieval (grep / list / map) and another part is expensive judgment (synthesize / review / decide), split them across providers. Phase 1: cheap provider does retrieval, emits structured evidence. Phase 2: `register_context_block` the evidence bundle, dispatch judgment to a reasoning provider. The judgment phase never has to re-traverse the source material — it reads the pre-built evidence bundle, dropping input tokens by ~70%.
+
+Example:
+
+- Phase 1 (parallel, minimax): "grep -rn for pattern X, Y, Z in these repos; return structured lists of file:line hits" → 15-20 cheap tasks, each producing a small structured output
+- Phase 2 (codex): `register_context_block({ id: "evidence-bundle", content: <concatenated retrieval results> })` → one judgment task that takes `contextBlockIds: ["evidence-bundle"]` and produces the final review
+
+This works for code review ("cheap finds changed files, expensive reviews them"), architecture analysis ("cheap maps module structure, expensive reasons about coupling"), large-scale refactor planning ("cheap enumerates call sites, expensive decides migration strategy"), and many other multi-phase workloads.
+
+## Measuring savings
+
+The MCP exposes four visibility surfaces so callers can see the UX value of delegation without computing anything themselves. All of them are **estimates** for budgeting and debugging, not accounting numbers — actual parent-model cost would vary with context, tool overhead, and retry patterns; actual serial execution would have different cache and warmup characteristics.
+
+**Per-task cost savings**:
+
+- `result.usage.costUSD` — what this task actually cost on the provider that ran it.
+- `result.usage.savedCostUSD` — estimated difference vs running the same token volume on your parent-session model. Only populated when you set `parentModel` on the task spec. Set it. It's the number that tells the user "you just saved $0.12 by delegating this instead of letting opus handle it."
+
+**Batch-level aggregates** (always present on the response envelope):
+
+- `aggregateCost.totalActualCostUSD` — sum of per-task costUSD across the batch
+- `aggregateCost.totalSavedCostUSD` — sum of per-task savedCostUSD (requires `parentModel` on at least one task)
+- `timings.wallClockMs` — how long the batch actually took
+- `timings.sumOfTaskMs` — sum of individual task durations (what serial execution would have taken)
+- `timings.estimatedParallelSavingsMs` — wall-clock time parallel dispatch bought back vs a hypothetical serial for-loop
+- `batchProgress.completedTasks` / `incompleteTasks` / `failedTasks` — static counts at response time
+- `batchProgress.successPercent` — clean-success rate (the batch is always 100% DONE by the time you see the response; this field measures how many finished cleanly, NOT progress)
+
+**Example summary a calling agent can compose directly from one `delegate_tasks` response**:
+
+> Dispatched 5 tasks in parallel. Total cost **$0.031** (estimated savings vs opus: **~$0.42**). Wall-clock: **42s** (estimated serial time saved: **~3m 16s**). **4 of 5 tasks completed successfully**, 1 failed with `api_error` — retry via `retry_tasks({ batchId, taskIndices: [3] })` once the provider is available.
+
+Every number in that summary comes from the response envelope fields without caller-side arithmetic. The `retry_tasks` hint comes from inspecting `results[3].status` and `results[3].error`.
+
+## Tightening budgets for weaker models
+
+If a provider returns degraded output on long dispatches, lower its `inputTokenSoftLimit` in your `~/.multi-model/config.json`:
+
+```json
+{
+  "providers": {
+    "minimax": {
+      "type": "openai-compatible",
+      "model": "MiniMax-M2",
+      "inputTokenSoftLimit": 100000
+    }
+  }
+}
+```
+
+Counter-intuitive but small models often produce better final answers under tighter budgets because they're forced to commit earlier. The watchdog will fire `force_salvage` at 95k instead of 190k; worst case is a half-read but bounded, instead of an exhausted exploration. Pair with task-level `maxTurns: 40` (instead of the default 200) when dispatching to weaker providers.
 
 ### Verification of Delegated Output
 
@@ -246,6 +344,8 @@ The default is `cwd-only`. Only set `sandboxPolicy: "none"` per-provider or per-
 |---|---|---|---|
 | `ok` | Worker finished normally with usable output | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. | Runner's agent loop returned a non-empty final message that passed the supervision completeness check. |
 | `incomplete` | Agent loop terminated but the runner had to salvage partial work from the scratchpad instead of accepting a final message | Read `output` — it contains the best text the scratchpad captured plus a diagnostic line (turn count, input tokens, which files were read). Re-dispatch with a tighter brief or escalate provider tier — do **not** retry the same provider with the same prompt. | Runner hit a degenerate completion (empty / thinking-only / fragment) and exhausted its supervision retries, **or** the input-token watchdog forced salvage at its 95% threshold. |
+
+> Note (v0.3+): `incomplete` is also produced when a caller declared `expectedCoverage` and the model's output didn't meet the coverage contract after 3 supervision re-prompts. The specific missing items are captured in `escalationLog[i].reason`. Fix by either splitting the task (see "Decompose and parallelize enumerable work"), escalating to a reasoning provider, or revisiting whether the coverage declaration is reasonable.
 | `max_turns` | Hit `maxTurns` before completing | Worker looped. Re-dispatch on a higher-tier provider with a tighter brief, or break the task down. The scratchpad is still salvaged into `output`. | The agent loop ran `maxTurns` iterations without emitting a final answer. |
 | `timeout` | Hit `timeoutMs` before completing | Task is too large or the worker is stuck. Break into smaller pieces; don't just raise the timeout. Scratchpad is salvaged into `output`. | The runner's per-attempt deadline fired. |
 | `api_aborted` | Provider-side abort — either a signal cancellation or a transport drop that the SDK reported as an abort | Inspect `error`. If transient, escalation has already walked the chain for auto-routed tasks — if none recovered, re-dispatch with a different provider or retry later. | Codex/Claude/OpenAI SDKs raise an abort error (e.g. `"Request was aborted"`, `AbortError`, signal cancellation). |

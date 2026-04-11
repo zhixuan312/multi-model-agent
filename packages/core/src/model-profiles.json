@@ -5,7 +5,12 @@
     "defaultCost": "high",
     "bestFor": "high-ambiguity tasks where the cost of error is high",
     "avoidFor": "routine implementation or batch transformations as the default choice",
+    "notes": "Family profile pegged to the latest generally available Opus pricing as of 2026-04-11.",
     "supportsEffort": true,
+    "inputCostPerMTok": 5,
+    "outputCostPerMTok": 25,
+    "rateSource": "https://claude.com/pricing",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 150000
   },
   {
@@ -14,7 +19,26 @@
     "defaultCost": "medium",
     "bestFor": "most professional coding and tool-using tasks",
     "avoidFor": "the hardest architectural decisions or highly ambiguous judgment calls",
+    "notes": "Family profile pegged to the latest generally available Sonnet pricing as of 2026-04-11.",
     "supportsEffort": true,
+    "inputCostPerMTok": 3,
+    "outputCostPerMTok": 15,
+    "rateSource": "https://claude.com/pricing",
+    "rateLookupDate": "2026-04-11",
+    "inputTokenSoftLimit": 150000
+  },
+  {
+    "prefix": "claude-haiku",
+    "tier": "standard",
+    "defaultCost": "low",
+    "bestFor": "fast low-cost coding, batch transformations, and routine implementation work",
+    "avoidFor": "high-stakes reasoning or ambiguous tasks where deeper judgment matters",
+    "notes": "Family profile pegged to the latest generally available Haiku pricing as of 2026-04-11.",
+    "supportsEffort": true,
+    "inputCostPerMTok": 1,
+    "outputCostPerMTok": 5,
+    "rateSource": "https://claude.com/pricing",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 150000
   },
   {
@@ -23,7 +47,12 @@
     "defaultCost": "medium",
     "bestFor": "reasoning-tier coding, agentic workflows, and tool use",
     "avoidFor": "cases where you explicitly prefer premium escalation over cost or latency",
+    "notes": "Family profile pegged to the latest generally available GPT-5 pricing as of 2026-04-11.",
     "supportsEffort": true,
+    "inputCostPerMTok": 2.5,
+    "outputCostPerMTok": 15,
+    "rateSource": "https://openai.com/api/pricing/",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 1000000
   },
   {
@@ -32,7 +61,12 @@
     "defaultCost": "low",
     "bestFor": "well-scoped coding and agent loops where cost matters",
     "avoidFor": "highest-stakes ambiguous work that needs top-tier judgment",
+    "notes": "Family profile pegged to the latest generally available MiniMax-M2 pricing as of 2026-04-11.",
     "supportsEffort": true,
+    "inputCostPerMTok": 0.3,
+    "outputCostPerMTok": 1.2,
+    "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 200000
   }
 ]

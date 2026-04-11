@@ -5,6 +5,7 @@
  * the caller:
  *
  *   - filesRead    → "what did the worker look at?" (debugging, audit trail)
+ *   - directoriesListed → "which directories were enumerated?" (exploration)
  *   - filesWritten → "what changed on disk?"        (review, rollback)
  *   - toolCalls    → "what did the worker actually do, in order?"
  *                                                   (debugging, post-mortem)
@@ -16,6 +17,7 @@
  */
 export class FileTracker {
   private reads = new Set<string>();
+  private dirs: string[] = [];
   private writes = new Set<string>();
   private toolCalls: string[] = [];
   private readonly onToolCall?: (summary: string) => void;
@@ -32,6 +34,10 @@ export class FileTracker {
 
   trackRead(filePath: string): void {
     this.reads.add(filePath);
+  }
+
+  trackDirectoryList(dirPath: string): void {
+    this.dirs.push(dirPath);
   }
 
   trackWrite(filePath: string): void {
@@ -53,6 +59,10 @@ export class FileTracker {
     return [...this.reads].sort();
   }
 
+  getDirectoriesListed(): string[] {
+    return [...this.dirs];
+  }
+
   getWrites(): string[] {
     return [...this.writes].sort();
   }
@@ -63,6 +73,7 @@ export class FileTracker {
 
   reset(): void {
     this.reads.clear();
+    this.dirs = [];
     this.writes.clear();
     this.toolCalls = [];
   }

@@ -1,13 +1,15 @@
 # multi-model-agent
 
+> **v0.3.0 released** — new: `expectedCoverage` for semantic incompleteness detection, `includeProgressTrace` for post-hoc observability, `parentModel` + `savedCostUSD` for delegation ROI visibility, `get_task_output` for paginated batch retrieval, and response pagination via `responseMode`. See the [delegation rule](./docs/claude-code-delegation-rule.md) for the new "Decompose and parallelize enumerable work" pattern.
+
 `multi-model-agent` is an MCP server for delegating work to multiple LLM providers from one tool call.
 
 It gives your MCP client a single tool, `delegate_tasks`, and runs the requested tasks in parallel across the providers you configure. The server can auto-route tasks to the cheapest eligible provider based on required capabilities and quality tier, or you can pin a task to a specific provider.
 
 ## What Users Get
 
-- One MCP tool: `delegate_tasks`
-- Parallel task execution
+- Four MCP tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_task_output`
+- Parallel task execution (independent tasks run concurrently)
 - Multiple provider types in one config:
   - `codex`
   - `claude`
@@ -17,6 +19,10 @@ It gives your MCP client a single tool, `delegate_tasks`, and runs the requested
   - task tier: `trivial`, `standard`, `reasoning`
   - effective cost tier: `free`, `low`, `medium`, `high`
 - Optional filesystem sandboxing per provider or per task
+- Response pagination via `responseMode` (full/summary/auto) to prevent inline rendering limits
+- Enumerable-deliverable coverage validation (`expectedCoverage`) with semantic incompleteness detection
+- Post-hoc execution observability via bounded `progressTrace` capture
+- Visible delegation ROI via `parentModel` + `savedCostUSD` per task and batch-level `timings` / `aggregateCost` aggregates
 
 ## Packages
 
@@ -229,7 +235,7 @@ The MCP tool description includes a live routing matrix based on your config so 
 
 ## `delegate_tasks` Input
 
-`delegate_tasks` accepts an array of tasks and runs them concurrently.
+`delegate_tasks` accepts an array of tasks and runs them concurrently. The response includes `batchId`, `mode` (full or summary), `timings`, `batchProgress`, and `aggregateCost`. Use `responseMode` to control pagination behavior.
 
 Example:
 
@@ -269,6 +275,10 @@ Task fields:
 | `cwd` | no | Working directory for file and shell tools |
 | `effort` | no | `none`, `low`, `medium`, `high` |
 | `sandboxPolicy` | no | `none` or `cwd-only` |
+| `contextBlockIds` | no | Array of context block ids from `register_context_block` |
+| `expectedCoverage` | no | Declare coverage contract: `minSections`, `sectionPattern`, `requiredMarkers` |
+| `includeProgressTrace` | no | Opt-in to bounded execution timeline capture in `progressTrace` |
+| `parentModel` | no | Model id for `savedCostUSD` estimation (e.g. `claude-opus-4-6`) |
 
 Supported capability names:
 
@@ -305,6 +315,17 @@ Provider fields:
 | `sandboxPolicy` | all | `none` or `cwd-only` |
 | `hostedTools` | all | `web_search`, `image_generation`, `code_interpreter` |
 | `costTier` | all | Overrides the default routing cost |
+| `inputTokenSoftLimit` | all | Per-provider input token soft limit override |
+| `inputCostPerMTok` | all | Override provider's input cost per million tokens |
+| `outputCostPerMTok` | all | Override provider's output cost per million tokens |
+
+## Other Tools
+
+The MCP server exposes three additional tools alongside `delegate_tasks`:
+
+- **`register_context_block`**: Store a content block under an id for reuse in later `delegate_tasks` calls via `contextBlockIds`. Avoids re-transmitting long briefs on every dispatch.
+- **`retry_tasks`**: Re-run specific task indices from a previous batch without re-transmitting briefs. Batches are cached for 30 minutes (100-batch LRU cap).
+- **`get_task_output`**: Fetch the full output of a specific task from a previous batch. Use when a batch returned in `summary` mode and you need the full text of one result.
 
 ## Local Development
 

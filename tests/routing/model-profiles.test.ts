@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findModelProfile, getEffectiveCostTier } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
-import type { ProviderConfig } from '@zhixuan92/multi-model-agent-core';
+import { findModelProfile, getEffectiveCostTier, modelProfileSchema } from '../../packages/core/src/routing/model-profiles.js';
+import type { ProviderConfig } from '../../packages/core/src/types.js';
 
 describe('findModelProfile', () => {
   it('matches claude-opus family by prefix', () => {
@@ -27,6 +27,30 @@ describe('findModelProfile', () => {
     expect(profile.tier).toBe('standard');
     expect(profile.defaultCost).toBe('low');
     expect(profile.avoidFor).toBeDefined();
+  });
+
+  it('exposes pricing metadata for rate-backed profiles', () => {
+    const profile = findModelProfile('gpt-5-codex');
+    expect(profile.inputCostPerMTok).toBe(2.5);
+    expect(profile.outputCostPerMTok).toBe(15);
+    expect(profile.rateSource).toBe('https://openai.com/api/pricing/');
+    expect(profile.rateLookupDate).toBe('2026-04-11');
+  });
+
+  it('exposes pricing metadata for MiniMax-M2 family profiles', () => {
+    const profile = findModelProfile('MiniMax-M2');
+    expect(profile.inputCostPerMTok).toBe(0.3);
+    expect(profile.outputCostPerMTok).toBe(1.2);
+    expect(profile.rateSource).toBe('https://platform.minimax.io/docs/guides/pricing-paygo');
+    expect(profile.rateLookupDate).toBe('2026-04-11');
+  });
+
+  it('matches claude-haiku family by prefix', () => {
+    const profile = findModelProfile('claude-haiku-4-5');
+    expect(profile.tier).toBe('standard');
+    expect(profile.defaultCost).toBe('low');
+    expect(profile.inputCostPerMTok).toBe(1);
+    expect(profile.outputCostPerMTok).toBe(5);
   });
 
   it('is case-insensitive', () => {
@@ -72,6 +96,7 @@ describe('findModelProfile', () => {
       expect(findModelProfile('gpt-5-codex').inputTokenSoftLimit).toBe(1_000_000);
       expect(findModelProfile('claude-sonnet-4-5').inputTokenSoftLimit).toBe(150_000);
       expect(findModelProfile('claude-opus-4-6').inputTokenSoftLimit).toBe(150_000);
+      expect(findModelProfile('claude-haiku-4-5').inputTokenSoftLimit).toBe(150_000);
       expect(findModelProfile('MiniMax-M2').inputTokenSoftLimit).toBe(200_000);
     });
 
@@ -79,13 +104,51 @@ describe('findModelProfile', () => {
       expect(findModelProfile('llama-3-70b').inputTokenSoftLimit).toBe(100_000);
     });
 
-    it('falls back to DEFAULT_PROFILE (100_000) for claude-haiku since no haiku profile exists', () => {
-      expect(findModelProfile('claude-haiku').inputTokenSoftLimit).toBe(100_000);
+    it('uses the claude-haiku family profile when present', () => {
+      expect(findModelProfile('claude-haiku').inputTokenSoftLimit).toBe(150_000);
     });
 
     it('falls back to claude-opus profile (150_000) for claude-opus-4-6[1m] since no [1m] profile exists', () => {
       // Matches "claude-opus" prefix, so it inherits the 150_000 opus limit, not a dedicated [1m] override.
       expect(findModelProfile('claude-opus-4-6[1m]').inputTokenSoftLimit).toBe(150_000);
+    });
+  });
+
+  describe('modelProfileSchema', () => {
+    it('accepts rate metadata when present', () => {
+      expect(
+        modelProfileSchema.safeParse({
+          prefix: 'gpt-5',
+          tier: 'reasoning',
+          defaultCost: 'medium',
+          bestFor: 'reasoning-tier coding, agentic workflows, and tool use',
+          avoidFor: 'cases where you explicitly prefer premium escalation over cost or latency',
+          supportsEffort: true,
+          inputTokenSoftLimit: 1_000_000,
+          inputCostPerMTok: 2.5,
+          outputCostPerMTok: 15,
+          rateSource: 'https://openai.com/api/pricing/',
+          rateLookupDate: '2026-04-11',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('accepts latest-family pricing metadata for MiniMax-M2', () => {
+      expect(
+        modelProfileSchema.safeParse({
+          prefix: 'MiniMax-M2',
+          tier: 'standard',
+          defaultCost: 'low',
+          bestFor: 'well-scoped coding and agent loops where cost matters',
+          avoidFor: 'highest-stakes ambiguous work that needs top-tier judgment',
+          supportsEffort: true,
+          inputTokenSoftLimit: 200_000,
+          inputCostPerMTok: 0.3,
+          outputCostPerMTok: 1.2,
+          rateSource: 'https://platform.minimax.io/docs/guides/pricing-paygo',
+          rateLookupDate: '2026-04-11',
+        }).success,
+      ).toBe(true);
     });
   });
 
@@ -103,6 +166,12 @@ describe('findModelProfile', () => {
     it('matches claude-sonnet across minor versions', () => {
       expect(findModelProfile('claude-sonnet-3-5').tier).toBe('standard');
       expect(findModelProfile('claude-sonnet-4-5').tier).toBe('standard');
+    });
+
+    it('matches claude-haiku across minor versions', () => {
+      expect(findModelProfile('claude-haiku-3').tier).toBe('standard');
+      expect(findModelProfile('claude-haiku-3-5').tier).toBe('standard');
+      expect(findModelProfile('claude-haiku-4-5').tier).toBe('standard');
     });
 
     it('matches gpt-5 across decimal and suffix variations', () => {

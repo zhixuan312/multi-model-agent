@@ -1,10 +1,15 @@
 import { vi, beforeEach, afterEach } from 'vitest';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
+  trimProgressTrace,
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
+  TRACE_MAX_EVENTS,
+  TRACE_MAX_CHARS,
+  TRACE_DROP_PRIORITY,
   WATCHDOG_WARNING_RATIO,
   WATCHDOG_FORCE_SALVAGE_RATIO,
   logWatchdogEvent,
@@ -87,6 +92,113 @@ describe('validateCompletion — no terminator detection', () => {
   });
 });
 
+describe('validateCoverage — empty expectation is a no-op', () => {
+  it('returns valid when no coverage rules are declared', () => {
+    const result = validateCoverage('anything at all', {});
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('validateCoverage — minSections', () => {
+  it('passes when the default section pattern is met', () => {
+    const result = validateCoverage('# heading\n\n## one\ntext\n\n## two\ntext', {
+      minSections: 2,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails when the default section pattern count is too low', () => {
+    const result = validateCoverage('## only one\ncontent', {
+      minSections: 2,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 1 sections found');
+  });
+
+  it('supports a custom sectionPattern', () => {
+    const result = validateCoverage('Section: one\n\nSection: two', {
+      minSections: 2,
+      sectionPattern: '^Section: ',
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('reports invalid sectionPattern regexes', () => {
+    const result = validateCoverage('## one', {
+      minSections: 1,
+      sectionPattern: '[',
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('invalid sectionPattern regex');
+  });
+});
+
+describe('validateCoverage — requiredMarkers', () => {
+  it('passes when all required markers are present', () => {
+    const result = validateCoverage('alpha beta gamma', {
+      requiredMarkers: ['alpha', 'beta', 'gamma'],
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('fails when one required marker is missing', () => {
+    const result = validateCoverage('alpha gamma', {
+      requiredMarkers: ['alpha', 'beta', 'gamma'],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 2 of 3 required markers found');
+    expect(result.reason).toContain('missing: beta');
+  });
+
+  it('truncates long missing marker lists after five entries', () => {
+    const result = validateCoverage('kept-marker', {
+      requiredMarkers: [
+        'kept-marker',
+        'missing-a',
+        'missing-b',
+        'missing-c',
+        'missing-d',
+        'missing-e',
+        'missing-f',
+        'missing-g',
+      ],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('missing: missing-a, missing-b, missing-c, missing-d, missing-e (+2 more)');
+  });
+
+  it('treats an empty requiredMarkers array as a no-op', () => {
+    const result = validateCoverage('anything', {
+      requiredMarkers: [],
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
+describe('validateCoverage — combined checks', () => {
+  it('fails with the first failing reason when minSections fails before requiredMarkers', () => {
+    const result = validateCoverage('## only one\ncontent', {
+      minSections: 2,
+      requiredMarkers: ['missing-marker'],
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+    expect(result.reason).toContain('only 1 sections found');
+  });
+
+  it('passes when both minSections and requiredMarkers pass', () => {
+    const result = validateCoverage('## one\nmarker\n\n## two\nmarker', {
+      minSections: 2,
+      requiredMarkers: ['marker'],
+    });
+    expect(result.valid).toBe(true);
+  });
+});
+
 describe('buildRePrompt — empty', () => {
   it('produces a re-prompt that mentions the empty response', () => {
     const result = validateCompletion('');
@@ -119,6 +231,283 @@ describe('buildRePrompt — no_terminator', () => {
     const result = validateCompletion('this is some text without a proper end');
     const prompt = buildRePrompt(result);
     expect(prompt).toContain('mid-thought');
+  });
+});
+
+describe('buildRePrompt — insufficient_coverage', () => {
+  it('tells the model not to restart and to append missing items', () => {
+    const prompt = buildRePrompt({
+      valid: false,
+      kind: 'insufficient_coverage',
+      reason: 'only 2 of 3 required markers found, missing: beta',
+    });
+    expect(prompt).toContain('structurally valid but does not cover everything the brief required');
+    expect(prompt).toContain('Do NOT restart from the beginning');
+    expect(prompt).toContain('append the missing sections');
+  });
+});
+
+describe('trace trimming exports', () => {
+  it('exposes the documented constants', () => {
+    expect(TRACE_MAX_EVENTS).toBe(80);
+    expect(TRACE_MAX_CHARS).toBe(16_384);
+    expect(TRACE_DROP_PRIORITY.text_emission).toBe(1);
+    expect(TRACE_DROP_PRIORITY.tool_call).toBe(2);
+    expect(TRACE_DROP_PRIORITY.turn_start).toBe(100);
+    expect(TRACE_DROP_PRIORITY.turn_complete).toBe(100);
+    expect(TRACE_DROP_PRIORITY.injection).toBe(100);
+    expect(TRACE_DROP_PRIORITY.done).toBe(100);
+  });
+});
+
+describe('trimProgressTrace', () => {
+  it('returns an empty array for empty input', () => {
+    expect(trimProgressTrace([])).toEqual([]);
+  });
+
+  it('returns the same array when both bounds are already satisfied', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      { kind: 'done', status: 'ok' },
+    ] as const;
+    expect(trimProgressTrace(events)).toBe(events);
+  });
+
+  it('trims droppable events to satisfy the count bound', () => {
+    const events = Array.from({ length: 81 }, (_, i) => ({
+      kind: 'text_emission' as const,
+      turn: i + 1,
+      chars: 1,
+      preview: 'x',
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed).toHaveLength(81);
+    expect(trimmed.filter((event) => event.kind === 'text_emission')).toHaveLength(80);
+    expect(trimmed[trimmed.length - 1]).toEqual({
+      kind: '_trimmed',
+      droppedCount: 1,
+      droppedKinds: { text_emission: 1 },
+    });
+  });
+
+  it('trims by priority when the size bound is exceeded', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 10 }, (_, i) => ({
+        kind: 'tool_call' as const,
+        turn: i + 1,
+        toolSummary: 'tool'.repeat(4000),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed[0]).toEqual({ kind: 'turn_start', turn: 1, provider: 'codex' });
+    expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
+  });
+
+  it('boundary fits but merged trace over 16KB → drops droppable events to satisfy remaining byte budget', () => {
+    // Boundary consumes part of the 16KB budget, so droppable entries must fit
+    // within the remaining bytes rather than the full cap.
+    const boundary = { kind: 'turn_start' as const, turn: 1, provider: 'b'.repeat(9000) };
+    const droppable = { kind: 'text_emission' as const, turn: 1, chars: 1, preview: 'd'.repeat(9000) };
+    const events = [boundary, droppable];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed[0]).toEqual(boundary);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(false);
+    const marker = trimmed[1];
+    expect(marker).toMatchObject({
+      kind: '_trimmed',
+      droppedCount: 1,
+      droppedKinds: { text_emission: 1 },
+    });
+  });
+
+  it('keeps all 100 never-drop turn_start events and marks boundary-cap pressure', () => {
+    const events = Array.from({ length: 100 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `codex-${'x'.repeat(20)}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        droppedCount: 0,
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+  });
+
+  it('preserves never-drop boundary strings in full when boundary-cap pressure is reported', () => {
+    const provider = 'provider-' + 'x'.repeat(400);
+    const events = Array.from({ length: 100 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `${provider}-${i}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
+    const first = trimmed.find((event) => event.kind === 'turn_start');
+    expect(first).toMatchObject({ provider: `${provider}-0` });
+    expect(trimmed.find((event) => event.kind === '_trimmed')).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+  });
+
+  it('keeps all never-drop turn_start events while dropping all text emissions when boundary events consume the nominal budget', () => {
+    const events = [
+      ...Array.from({ length: 100 }, (_, i) => ({
+        kind: 'turn_start' as const,
+        turn: i + 1,
+        provider: `codex-${'x'.repeat(12)}`,
+      })),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'y'.repeat(120),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(false);
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+    if (marker && marker.kind === '_trimmed') {
+      expect(marker.droppedCount).toBeGreaterThan(0);
+      expect(marker.droppedKinds.text_emission).toBeGreaterThan(0);
+    }
+  });
+
+  it('drops low-priority events until both bounds are satisfied', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 84 }, (_, i) => ({
+        kind: i % 2 === 0 ? ('text_emission' as const) : ('tool_call' as const),
+        turn: i + 1,
+        ...(i % 2 === 0
+          ? { chars: 1, preview: 'x'.repeat(1000) }
+          : { toolSummary: 'y'.repeat(100) }),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
+  });
+
+  it('preserves oversized never-drop events and marks boundary-cap pressure', () => {
+    const events = Array.from({ length: 24 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `codex-${'x'.repeat(1500)}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(events.length);
+    expect(trimmed[0]).toMatchObject({ provider: events[0].provider });
+    expect(trimmed.find((event) => event.kind === '_trimmed')).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        droppedCount: 0,
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+  });
+
+  it('preserves all never-drop boundary events when fallback-style pressure is exercised', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: 'codex' },
+      ...Array.from({ length: 15 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'x'.repeat(1000),
+      })),
+      { kind: 'escalation_start', previousProvider: 'codex', previousReason: 'escalate', nextProvider: 'claude' },
+      ...Array.from({ length: 15 }, (_, i) => ({
+        kind: 'tool_call' as const,
+        turn: i + 16,
+        toolSummary: 'y'.repeat(1000),
+      })),
+      { kind: 'injection', injectionType: 'reground', turn: 31, contentLengthChars: 123 },
+      { kind: 'injection', injectionType: 'supervise_empty', turn: 32, contentLengthChars: 456 },
+      { kind: 'done', status: 'ok' },
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'escalation_start')).toBe(true);
+    expect(trimmed.filter((event) => event.kind === 'injection')).toHaveLength(2);
+    expect(trimmed.some((event) => event.kind === 'done')).toBe(true);
+    expect(trimmed.find((event) => event.kind === '_trimmed')).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+      }),
+    );
+  });
+
+  it('drops only droppable events before higher-priority events in a large trace', () => {
+    const events = [
+      ...Array.from({ length: 500 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'x'.repeat(1000),
+      })),
+      ...Array.from({ length: 5 }, (_, i) => ({
+        kind: 'turn_start' as const,
+        turn: i + 1,
+        provider: 'codex',
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.length).toBeLessThan(events.length);
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        droppedCount: expect.any(Number),
+      }),
+    );
+    if (marker && marker.kind === '_trimmed') {
+      expect(marker.droppedCount).toBeGreaterThan(0);
+      expect(marker.droppedKinds.text_emission).toBeGreaterThan(0);
+    }
+  });
+
+  it('preserves never-drop events when fallback logic is exercised on droppable events only', () => {
+    const events = [
+      { kind: 'turn_start', turn: 1, provider: `codex-${'x'.repeat(400)}` },
+      ...Array.from({ length: 30 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 2,
+        chars: 1,
+        preview: 'y'.repeat(2000),
+      })),
+      { kind: 'escalation_start', previousProvider: `codex-${'x'.repeat(400)}`, previousReason: 'need more room', nextProvider: `claude-${'x'.repeat(400)}` },
+      { kind: 'injection', injectionType: 'reground', turn: 20, contentLengthChars: 123 },
+      { kind: 'done', status: 'ok' },
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'escalation_start')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'injection')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'done')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(true);
+    expect(trimmed.find((event) => event.kind === '_trimmed')).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+      }),
+    );
   });
 });
 

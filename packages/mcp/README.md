@@ -1,6 +1,17 @@
 # @zhixuan92/multi-model-agent-mcp
 
-MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Exposes one tool — `delegate_tasks` — that runs work in parallel across multiple LLM providers (Claude, Codex, OpenAI-compatible) and auto-routes each task to the cheapest provider that can handle it.
+MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Exposes four tools — `delegate_tasks`, `register_context_block`, `retry_tasks`, and `get_task_output` — that run work in parallel across multiple LLM providers (Claude, Codex, OpenAI-compatible) and auto-route each task to the cheapest provider that can handle it.
+
+## Features
+
+- **Auto-routing**: routes each task by capability filter → quality tier → cheapest qualifying provider
+- **Parallel execution**: independent tasks run concurrently via `Promise.all`
+- **Escalation on failure**: auto-routed tasks walk the full provider chain on failure, stopping at the first success
+- **Scratchpad salvage**: every termination path (incomplete, max_turns, timeout, error) populates output from the runner's scratchpad — no bare failures
+- **Response pagination**: configurable `responseMode` (full/summary/auto) prevents Claude Code inline rendering limits on large combined outputs; use `get_task_output` to fetch individual results from summary-mode batches
+- **Declare enumerable-deliverable coverage** (`expectedCoverage`) and get semantic incompleteness detection via re-prompting
+- **Bounded post-hoc progress traces** (`includeProgressTrace`) for long-running task debugging
+- **Visible cost and time savings**: `parentModel` + `savedCostUSD` per task; `timings` and `aggregateCost` batch-level aggregates for delegation ROI visibility
 
 ## How it works
 
@@ -121,20 +132,29 @@ Accepts an array of tasks and runs them concurrently. Auto-routes each task by c
       "tier": "reasoning",
       "requiredCapabilities": ["file_read", "file_write"],
       "tools": "full",
-      "cwd": "/path/to/project"
+      "cwd": "/path/to/project",
+      "parentModel": "claude-sonnet-4-5",
+      "includeProgressTrace": true
     },
     {
       "prompt": "Write tests for the auth module.",
       "tier": "standard",
       "requiredCapabilities": ["file_read", "file_write", "grep"],
       "tools": "full",
-      "cwd": "/path/to/project"
+      "cwd": "/path/to/project",
+      "expectedCoverage": {
+        "minSections": 3,
+        "sectionPattern": "^Test \\d+:",
+        "requiredMarkers": ["happy path", "edge case"]
+      }
     }
   ]
 }
 ```
 
-Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`.
+Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`, `contextBlockIds?`, `expectedCoverage?`, `includeProgressTrace?`, `parentModel?`.
+
+`expectedCoverage` supports `minSections?`, `sectionPattern?`, and `requiredMarkers?`. `includeProgressTrace` opts a task into returning its bounded post-hoc progress trace. `parentModel` lets the server estimate `savedCostUSD` relative to the calling model.
 
 Capabilities: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`.
 

@@ -6,6 +6,7 @@ import { getCodexAuth } from '../auth/codex-oauth.js';
 import {
   withTimeout,
   computeCostUSD,
+  computeSavedCostUSD,
   type RunResult,
   type RunOptions,
   type ProviderConfig,
@@ -23,11 +24,13 @@ import {
 } from './prevention.js';
 import {
   validateCompletion,
+  validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
+  trimProgressTrace,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -230,7 +233,10 @@ export async function runCodex(
   // upstream and cannot corrupt this loop. We do not need to wrap it
   // again here.
   const onProgress = options.onProgress;
+  const shouldCaptureTrace = options.includeProgressTrace ?? false;
+  const traceBuffer: ProgressEvent[] = [];
   const emit = (event: ProgressEvent): void => {
+    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -317,6 +323,10 @@ export async function runCodex(
   // --- Watchdog: resolve the input-token soft limit once per run ---
   const profile = findModelProfile(providerConfig.model);
   const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
+
+  // --- Task timing + parent model (Task 9) --------------------------------
+  const taskStartMs = Date.now();
+  const parentModel = options.parentModel;
 
   const run = async (): Promise<RunResult> => {
     const capture: { last?: RawErrorCapture } = {};
@@ -532,6 +542,9 @@ export async function runCodex(
             outputTokens,
             turns,
             softLimit,
+            durationMs: Date.now() - taskStartMs,
+            parentModel,
+            traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
           });
           emit({ kind: 'done', status: salvaged.status });
           return salvaged;
@@ -605,6 +618,16 @@ export async function runCodex(
           const stripped = textThisTurn; // codex does not emit <think> tags
           const validation = validateCompletion(stripped);
 
+          // NEW: coverage check — only when syntactic validation passes
+          if (validation.valid && options.expectedCoverage) {
+            const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+            if (!coverageValidation.valid) {
+              validation.valid = false;
+              validation.kind = coverageValidation.kind;
+              validation.reason = coverageValidation.reason;
+            }
+          }
+
           if (validation.valid) {
             const ok = buildCodexOkResult({
               tracker,
@@ -614,6 +637,9 @@ export async function runCodex(
               outputTokens,
               turns,
               output: stripped,
+              durationMs: Date.now() - taskStartMs,
+              parentModel,
+              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: ok.status });
             return ok;
@@ -634,6 +660,10 @@ export async function runCodex(
               inputTokens,
               outputTokens,
               turns,
+              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
+              durationMs: Date.now() - taskStartMs,
+              parentModel,
+              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: exhausted.status });
             return exhausted;
@@ -693,6 +723,10 @@ export async function runCodex(
         turns,
         maxTurns,
         lastOutput: output,
+        reason: `hand-rolled loop exited after completing ${turns} of ${maxTurns} user-declared turns without producing a clean final answer`,
+        durationMs: Date.now() - taskStartMs,
+        parentModel,
+        traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
       });
       emit({ kind: 'done', status: maxTurnsResult.status });
       return maxTurnsResult;
@@ -745,6 +779,8 @@ export async function runCodex(
       // error string, losing 30k+ tokens of work on abort.
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
+      const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
@@ -752,15 +788,19 @@ export async function runCodex(
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
-          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+          costUSD,
+          savedCostUSD,
         },
         turns,
         filesRead: tracker.getReads(),
+        directoriesListed: tracker.getDirectoriesListed(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         error: detailed,
+        durationMs: Date.now() - taskStartMs,
+        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
   };
@@ -771,6 +811,8 @@ export async function runCodex(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
+      const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
@@ -778,17 +820,21 @@ export async function runCodex(
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
         filesRead: tracker.getReads(),
+        directoriesListed: tracker.getDirectoriesListed(),
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         usage: {
           inputTokens,
           outputTokens,
           totalTokens: inputTokens + outputTokens,
-          costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+          costUSD,
+          savedCostUSD,
         },
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        durationMs: Date.now() - taskStartMs,
+        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -813,9 +859,11 @@ interface CodexResultCommonArgs {
 }
 
 function buildCodexOkResult(
-  args: CodexResultCommonArgs & { output: string },
+  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
 ): RunResult {
-  const { tracker, providerConfig, inputTokens, outputTokens, turns, output } = args;
+  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel, traceBuffer } = args;
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
     output,
     status: 'ok',
@@ -823,15 +871,19 @@ function buildCodexOkResult(
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+      costUSD,
+      savedCostUSD,
     },
     turns,
     filesRead: tracker.getReads(),
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
     // `ok` always carries a real model answer — never a diagnostic.
     outputIsDiagnostic: false,
     escalationLog: [],
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -840,11 +892,13 @@ function buildCodexOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildCodexIncompleteResult(
-  args: CodexResultCommonArgs,
+  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel, traceBuffer } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
   return {
     output: hasSalvage
@@ -861,21 +915,28 @@ function buildCodexIncompleteResult(
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+      costUSD,
+      savedCostUSD,
     },
     turns,
     filesRead,
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten,
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    error: reason,
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexForceSalvageResult(
-  args: CodexResultCommonArgs & { softLimit: number },
+  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel, traceBuffer } = args;
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
   return {
     output: hasSalvage
@@ -886,21 +947,25 @@ function buildCodexForceSalvageResult(
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+      costUSD,
+      savedCostUSD,
     },
     turns,
     filesRead: tracker.getReads(),
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexMaxTurnsResult(
-  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string },
+  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel, traceBuffer } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's final text for the max-turns
   // boundary — real model content, not a diagnostic template. Only the
@@ -910,6 +975,8 @@ function buildCodexMaxTurnsResult(
     ? scratchpad.latest()
     : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
   const outputIsDiagnostic = !hasSalvage && !lastOutput;
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
     output,
     status: 'max_turns',
@@ -917,14 +984,19 @@ function buildCodexMaxTurnsResult(
       inputTokens,
       outputTokens,
       totalTokens: inputTokens + outputTokens,
-      costUSD: computeCostUSD(inputTokens, outputTokens, providerConfig),
+      costUSD,
+      savedCostUSD,
     },
     turns,
     filesRead: tracker.getReads(),
+    directoriesListed: tracker.getDirectoriesListed(),
     filesWritten: tracker.getWrites(),
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic,
     escalationLog: [],
+    error: reason,
+    durationMs,
+    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

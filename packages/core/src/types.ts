@@ -1,4 +1,5 @@
 import type { ContextBlockStore } from './context/context-block-store.js';
+import { findModelProfile } from './routing/model-profiles.js';
 
 // === Tier & Capability ===
 
@@ -38,6 +39,21 @@ export interface TaskSpec {
    *  '\n\n---\n\n'. The field is stripped from the task that reaches the
    *  provider so runners never see it. See `expandContextBlocks`. */
   contextBlockIds?: string[]
+  /** Optional caller-declared output expectations. When supplied, the
+   *  supervision layer can validate the output for enumerable deliverables
+   *  after syntactic completion checks pass. */
+  expectedCoverage?: {
+    /** Minimum section count. A section is a line matching `sectionPattern`. */
+    minSections?: number
+    /** Regex for section headings. Applied with the multiline flag. */
+    sectionPattern?: string
+    /** Substrings that must all appear somewhere in the output. */
+    requiredMarkers?: string[]
+  }
+  /** Opt-in progress capture for post-hoc execution observability. */
+  includeProgressTrace?: boolean
+  /** Optional hint about the parent session's model for saved-cost estimates. */
+  parentModel?: string
 }
 
 // === Provider Config (discriminated union) ===
@@ -116,6 +132,11 @@ export interface MultiModelConfig {
     maxTurns: number
     timeoutMs: number
     tools: ToolMode
+    /** Character threshold that triggers auto-switch from 'full' to
+     *  'summary' response mode when the caller uses `responseMode: 'auto'`
+     *  (the default). Optional — defaults to 65_536 when absent.
+     *  Env var and buildMcpServer option can override at higher precedence. */
+    largeResponseThresholdChars?: number
   }
 }
 
@@ -126,6 +147,8 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   costUSD: number | null
+  /** Estimated cost savings versus the declared parent model, if known. */
+  savedCostUSD?: number | null
 }
 
 export interface RunResult {
@@ -158,7 +181,47 @@ export interface RunResult {
    *  occurred. Runners initialize this to `[]`; the escalation
    *  orchestrator populates it on each return path. */
   escalationLog: AttemptRecord[]
+  /** Wall-clock duration of this task in milliseconds. */
+  durationMs?: number
+  /** Directories whose entries the worker listed. */
+  directoriesListed?: string[]
+  /** Bounded trace of progress events emitted during this task's run. */
+  progressTrace?: ProgressTraceEntry[]
   error?: string
+}
+
+/** A captured progress entry, or a synthetic marker when trace trimming occurred. */
+export type ProgressTraceEntry =
+  | ProgressEvent
+  | {
+      kind: '_trimmed'
+      droppedCount: number
+      droppedKinds: Partial<Record<ProgressEvent['kind'], number>>
+      capExceededByBoundaryEvents?: boolean
+    }
+
+/** Aggregate timing metrics for a `delegate_tasks` batch. */
+export interface BatchTimings {
+  wallClockMs: number
+  sumOfTaskMs: number
+  estimatedParallelSavingsMs: number
+}
+
+/** Aggregate completion counts for a `delegate_tasks` batch. */
+export interface BatchProgress {
+  totalTasks: number
+  completedTasks: number
+  incompleteTasks: number
+  failedTasks: number
+  successPercent: number
+}
+
+/** Aggregate cost metrics for a `delegate_tasks` batch. */
+export interface BatchAggregateCost {
+  totalActualCostUSD: number
+  totalSavedCostUSD: number
+  actualCostUnavailableTasks: number
+  savedCostUnavailableTasks: number
 }
 
 /**
@@ -198,6 +261,8 @@ export interface AttemptRecord {
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
   reason?: string
+  /** Bounded progress trace captured for this attempt, when enabled. */
+  progressTrace?: ProgressTraceEntry[]
 }
 
 // === Provider (created by createProvider) ===
@@ -215,6 +280,14 @@ export interface RunOptions {
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
+  /** Optional caller-declared output expectations. When supplied, the
+   *  supervision layer runs `validateCoverage` after `validateCompletion`'s
+   *  syntactic check passes, and re-prompts with specific missing-item
+   *  guidance if coverage is insufficient. Same 3-retry budget as other
+   *  degeneracy classes. Opt-in: callers who omit this field see zero
+   *  change in runner behavior. Generic across all workload shapes that
+   *  produce enumerable deliverables. */
+  expectedCoverage?: TaskSpec['expectedCoverage']
   /** Optional callback invoked by runners and the escalation orchestrator to
    *  stream in-flight progress events. See `ProgressEvent` for the full set
    *  of variants. Runners receive this via `provider.run(..., { onProgress })`
@@ -241,6 +314,16 @@ export interface RunOptions {
    *  for the new attempt because the orchestrator resets its per-attempt
    *  closure. Passing nothing keeps existing behaviour (no-op). */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
+  /** Optional hint about the parent session's model for saved-cost estimates.
+   *  When supplied, `RunResult.usage.savedCostUSD` is computed against this
+   *  model's profile rates. */
+  parentModel?: string
+  /** Opt-in: when true, the runner captures every progress event fired
+   *  during this task's execution into a bounded, priority-trimmed
+   *  `progressTrace` on the final RunResult. Useful for post-hoc
+   *  execution observability on long-running delegated tasks. Zero
+   *  cost when false (the default). */
+  includeProgressTrace?: boolean
 }
 
 /**
@@ -282,6 +365,7 @@ export type ProgressEvent =
         | 'supervise_empty'
         | 'supervise_thinking'
         | 'supervise_fragment'
+        | 'supervise_insufficient_coverage'
         | 'watchdog_warning'
         | 'watchdog_force_salvage'
       turn: number
@@ -334,16 +418,56 @@ export function computeCostUSD(
   outputTokens: number,
   config: ProviderConfig,
 ): number | null {
-  const inRate = config.inputCostPerMTok;
-  const outRate = config.outputCostPerMTok;
-  if (
-    inRate === undefined || outRate === undefined ||
-    !Number.isFinite(inRate) || !Number.isFinite(outRate) ||
-    inRate < 0 || outRate < 0
-  ) {
+  const explicitRates = resolveRatePair(config.inputCostPerMTok, config.outputCostPerMTok);
+  if (explicitRates !== null) {
+    return (inputTokens * explicitRates.input + outputTokens * explicitRates.output) / 1_000_000;
+  }
+
+  const profile = findModelProfile(config.model);
+  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
+  if (profileRates === null) {
     return null;
   }
-  return (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
+
+  return (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000;
+}
+
+export function computeSavedCostUSD(
+  actualCostUSD: number | null,
+  inputTokens: number,
+  outputTokens: number,
+  parentModel: string | undefined,
+): number | null {
+  if (actualCostUSD === null || parentModel === undefined) {
+    return null;
+  }
+
+  const profile = findModelProfile(parentModel);
+  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
+  if (profileRates === null) {
+    return null;
+  }
+
+  const hypotheticalParentCostUSD =
+    (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000;
+  return hypotheticalParentCostUSD - actualCostUSD;
+}
+
+function resolveRatePair(
+  inputCostPerMTok: number | undefined,
+  outputCostPerMTok: number | undefined,
+): { input: number; output: number } | null {
+  if (
+    inputCostPerMTok !== undefined &&
+    outputCostPerMTok !== undefined &&
+    Number.isFinite(inputCostPerMTok) &&
+    Number.isFinite(outputCostPerMTok) &&
+    inputCostPerMTok >= 0 &&
+    outputCostPerMTok >= 0
+  ) {
+    return { input: inputCostPerMTok, output: outputCostPerMTok };
+  }
+  return null;
 }
 
 export function withTimeout<T>(
