@@ -692,6 +692,67 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
+  server.tool(
+    'get_batch_telemetry',
+    `Retrieve a compact ROI telemetry envelope for a previous delegate_tasks batch: the one-line headline (tasks/success/wall-clock/cost/ROI), wall-clock vs serial timings, per-task cost and savings, and provider escalation chains. Use this after every delegate_tasks call to surface the ROI story to the user — especially when the primary response came back in summary mode or hit a client-side size limit. Envelope size: a ~600-byte header plus ~200 bytes per task (so a 10-task batch is ~2.6 KB; a 50-task batch is ~10 KB). Bounded-small per task, but scales linearly, so enormous batches (100+ tasks) may approach the client's tool-result size limit. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired, the numbers are lost.`,
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+    },
+    async ({ batchId }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+
+      touchBatch(batchId, batch);
+
+      if (batch.results === undefined) {
+        throw new Error(
+          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
+        );
+      }
+
+      const wallClockMsEstimate = Math.max(
+        0,
+        ...batch.results.map((r) => r.durationMs ?? 0),
+      );
+      const timings = computeTimings(wallClockMsEstimate, batch.results);
+      const batchProgress = computeBatchProgress(batch.results);
+      const aggregateCost = computeAggregateCost(batch.results);
+      const headline = composeHeadline({
+        timings,
+        batchProgress,
+        aggregateCost,
+        taskSpecs: batch.tasks,
+      });
+
+      const envelope = {
+        batchId,
+        headline,
+        timings,
+        batchProgress,
+        aggregateCost,
+        results: batch.results.map((r, i) => ({
+          taskIndex: i,
+          provider: batch.tasks[i].provider ?? '(auto)',
+          status: r.status,
+          turns: r.turns,
+          durationMs: r.durationMs,
+          usage: r.usage,
+          escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
+          ...(r.error && { error: r.error }),
+        })),
+      };
+
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }],
+      };
+    },
+  );
+
   return server;
 }
 
