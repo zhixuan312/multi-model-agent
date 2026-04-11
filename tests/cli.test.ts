@@ -354,6 +354,18 @@ describe('delegate_tasks schema', () => {
     expect(result.data.includeProgressTrace).toBe(true);
     expect(result.data.parentModel).toBe('gpt-5.4');
   });
+
+  it('buildTaskSchema accepts skipCompletionHeuristic', () => {
+    const schema = buildTaskSchema(['mock']);
+    const result = schema.safeParse({
+      prompt: 'test',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+      skipCompletionHeuristic: true,
+    });
+    expect(result.success).toBe(true);
+  });
 });
 
 describe('delegate_tasks MCP input contract (v0.3.0)', () => {

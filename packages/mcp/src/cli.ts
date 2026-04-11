@@ -219,6 +219,11 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
     }).optional().describe(
       'Optional caller-declared output expectations used for semantic incompleteness detection.',
     ),
+    skipCompletionHeuristic: z.boolean().optional().describe(
+      'Opt-out: when true, the runner skips the no_terminator/fragment short-output ' +
+      'heuristics. Use for tight-format outputs (verdicts, CSV rows, opaque ids). ' +
+      'empty/thinking_only still fire. expectedCoverage passing is also authoritative.',
+    ),
     includeProgressTrace: z.boolean().optional().describe(
       'Opt in to returning the bounded post-hoc progress trace for this task.',
     ),
