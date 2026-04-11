@@ -1,21 +1,22 @@
 # @zhixuan92/multi-model-agent-mcp
 
-MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Exposes four tools — `delegate_tasks`, `register_context_block`, `retry_tasks`, and `get_task_output` — that run work in parallel across multiple LLM providers (Claude, Codex, OpenAI-compatible) and auto-route each task to the cheapest provider that can handle it.
+**Delegate work from your expensive parent-session model to a fleet of cheaper sub-agents, in parallel, from a single MCP tool call.**
 
-## Features
+This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets four tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, and `get_task_output`. Each `delegate_tasks` call runs the supplied tasks in parallel across the providers you configured, auto-routing each to the cheapest one that has the required capabilities and quality tier — or pinning to a specific provider when you want control.
 
-- **Auto-routing**: routes each task by capability filter → quality tier → cheapest qualifying provider
-- **Parallel execution**: independent tasks run concurrently via `Promise.all`
-- **Escalation on failure**: auto-routed tasks walk the full provider chain on failure, stopping at the first success
-- **Scratchpad salvage**: every termination path (incomplete, max_turns, timeout, error) populates output from the runner's scratchpad — no bare failures
-- **Response pagination**: configurable `responseMode` (full/summary/auto) prevents Claude Code inline rendering limits on large combined outputs; use `get_task_output` to fetch individual results from summary-mode batches
-- **Declare enumerable-deliverable coverage** (`expectedCoverage`) and get semantic incompleteness detection via re-prompting
-- **Bounded post-hoc progress traces** (`includeProgressTrace`) for long-running task debugging
-- **Visible cost and time savings**: `parentModel` + `savedCostUSD` per task; `timings` and `aggregateCost` batch-level aggregates for delegation ROI visibility
+## Why use it
+
+- **Cut cost and context.** Mechanical work (file edits, search, doc lookups) runs on cheap providers in a clean worker context. Your parent session's window stays lean and its judgment unblocked.
+- **Run tasks in parallel.** Independent tasks in one call execute concurrently; wall-clock time drops with task count.
+- **Mix providers in one config.** Claude, Codex, and any OpenAI-compatible endpoint (MiniMax, DeepSeek, Groq, local vLLM, …) live side-by-side.
+- **Auto-route and escalate.** Capability filter → tier filter → cheapest qualifying provider; on failure the chain is walked automatically, stopping at the first success.
+- **No bare failures.** Every termination path (incomplete, max_turns, timeout, error) populates `output` from the runner's scratchpad.
+- **Sandboxed by default.** `cwd-only` file tool confinement and shell-disabled by default. Opt out per-task only when needed.
+- **Visible ROI.** Every response surfaces `aggregateCost`, `timings`, and per-task `savedCostUSD` for delegation savings.
 
 ## How it works
 
-You don't run this server yourself. Your MCP client (Claude Code, Claude Desktop, Cursor, …) spawns it over stdio whenever a session starts, using the config snippet below. No install step, no long-running process to manage — `npx` fetches the latest version on demand.
+You don't run this server yourself. Your MCP client spawns it over stdio whenever a session starts, using the config snippets below. No install step, no long-running process to manage — `npx` fetches the latest version on demand each time.
 
 Requires Node `>= 22`.
 
@@ -83,6 +84,23 @@ claude mcp add multi-model-agent -s user \
 
 Without `-s user`, `claude mcp add` defaults to local scope and only registers the server in the current project.
 
+### Codex CLI
+
+Codex CLI reads MCP servers from `~/.codex/config.toml`. Add this block:
+
+```toml
+[mcp_servers.multi-model-agent]
+command = "npx"
+args = ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"]
+
+[mcp_servers.multi-model-agent.env]
+OPENAI_API_KEY = "sk-..."
+ANTHROPIC_API_KEY = "sk-ant-..."
+MINIMAX_API_KEY = "..."
+```
+
+Only set the env keys for the providers you actually configured. If you use `codex login`, the `codex` provider inside `multi-model-agent` reuses that auth automatically — but Claude, MiniMax, and other API-key providers still need to be passed through `[mcp_servers.multi-model-agent.env]` because the spawned MCP process does not inherit your shell environment. Restart `codex` after editing the file.
+
 ### Claude Desktop
 
 Add to `claude_desktop_config.json`:
@@ -104,6 +122,26 @@ Add to `claude_desktop_config.json`:
 ```
 
 Restart your MCP client after changing config.
+
+## Updating
+
+`npx -y @zhixuan92/multi-model-agent-mcp serve` **always fetches the latest published version** on each spawn — you never need to run `npm update` or re-register the server to pick up a release.
+
+To apply an update: **fully quit** your MCP client (⌘Q on macOS — just closing the window is not enough for Claude Code / Codex CLI because the MCP process lives with the session), then reopen. The next `delegate_tasks` call will spawn a fresh server from the latest npm version.
+
+**Pinning a version** — if you need reproducibility (CI, shared team config, debugging a regression), add an explicit version tag to the spawn command:
+
+```bash
+claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp@0.3.0 serve
+```
+
+or in `config.toml` / `claude_desktop_config.json`:
+
+```toml
+args = ["-y", "@zhixuan92/multi-model-agent-mcp@0.3.0", "serve"]
+```
+
+**Breaking changes** — this project is on 0.x semver. MINOR bumps (`0.2.x → 0.3.0`) may change the config schema or the `delegate_tasks` tool input. PATCH bumps (`0.3.0 → 0.3.1`) are strictly backwards-compatible bug fixes. Skim the [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/HEAD/CHANGELOG.md) before adopting a new MINOR version and update `~/.multi-model/config.json` (and any stored `delegate_tasks` call shapes in your rules/prompts) if the changelog calls out a schema change. Provider auth, the config file path, and the MCP tool names themselves are stable across all 0.x releases.
 
 ## Recommended: delegation rule for Claude Code
 
