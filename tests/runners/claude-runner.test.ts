@@ -432,18 +432,23 @@ describe('runClaude', () => {
   it('salvages scratchpad.latest() on an SDK error instead of returning "Sub-agent error: ..."', async () => {
     const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
-    (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
-      (async function* () {
-        yield assistantMsg('some buffered findings here');
-        throw new Error('upstream API exploded');
-      })(),
-    );
+    (query as ReturnType<typeof vi.fn>).mockImplementationOnce((opts: {
+      options: { mcpServers?: Record<string, any> };
+    }) => (async function* () {
+      const listFilesTool = opts.options.mcpServers?.['code-tools']?.instance?._registeredTools?.list_files;
+      if (listFilesTool) {
+        await listFilesTool.handler({ path: '.' });
+      }
+      yield assistantMsg('some buffered findings here');
+      throw new Error('upstream API exploded');
+    })());
 
     const result = await runClaude('task', {}, providerConfig, defaults);
 
     expect(result.status).toBe('error');
     expect(result.output).toBe('some buffered findings here');
     expect(result.error).toBe('upstream API exploded');
+    expect(result.directoriesListed).toEqual([process.cwd()]);
   });
 
   // -------------------------------------------------------------------------

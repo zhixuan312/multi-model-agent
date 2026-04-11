@@ -529,8 +529,15 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     // Second call (the re-prompt) throws — the runner should salvage the
     // scratchpad's latest() emission, not the bare error string.
     mockRun
-      .mockResolvedValueOnce(
-        makeMockRunResult({
+      .mockImplementationOnce(async (agent) => {
+        const { RunContext } = await import('@openai/agents');
+        const agentAny = agent as any;
+        const tools = agentAny.tools as Array<{ name: string; invoke: Function }>;
+        const listFilesTool = tools.find((t) => t.name === 'list_files');
+        if (listFilesTool) {
+          await listFilesTool.invoke(new RunContext(), JSON.stringify({ path: '.' }));
+        }
+        return makeMockRunResult({
           finalOutput: 'Let me check',
           newItems: [
             {
@@ -541,8 +548,8 @@ describe('runOpenAI — prevention scaffolding integration', () => {
               },
             },
           ],
-        }),
-      )
+        });
+      })
       .mockRejectedValueOnce(new Error('upstream API exploded'));
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
@@ -551,5 +558,6 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(result.status).toBe('error');
     expect(result.output).toBe('some buffered findings here');
     expect(result.error).toBe('upstream API exploded');
+    expect(result.directoriesListed).toEqual([process.cwd()]);
   });
 });
