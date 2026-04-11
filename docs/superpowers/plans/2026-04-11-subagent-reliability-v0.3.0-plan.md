@@ -1146,12 +1146,14 @@ This plan touches ~14 code files across both packages plus ~12 test files. Execu
     or other audit-specific modes (explicitly dropped during design review)
 
   trimProgressTrace(events):
-  - bounded by both TRACE_MAX_EVENTS (80) and TRACE_MAX_CHARS (16_384)
+  - caps the droppable partition at TRACE_MAX_EVENTS (80) / TRACE_MAX_CHARS (16_384)
   - priority-based drop order: text_emission first, tool_call second
   - never drops boundary events (turn_start, turn_complete,
     escalation_start, done, injection)
-  - fallback: first 10 + last 30 retention when priority drops aren't enough
-  - synthetic _trimmed marker with droppedCount + per-kind histogram
+  - fallback: first 10 + last 30 retention applies to droppable events only
+  - synthetic _trimmed marker with droppedCount + per-kind histogram, plus
+    capExceededByBoundaryEvents when the boundary skeleton alone exceeds the
+    nominal cap
 
   Plus a new buildRePrompt branch for the insufficient_coverage kind
   that tells the model to append missing items, not restart.
