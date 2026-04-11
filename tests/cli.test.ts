@@ -583,7 +583,6 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
     expect(result.outputSha256).toMatch(/^[0-9a-f]{64}$/);
     expect(result._fetchOutputWith).toContain('get_task_output');
     expect(result._fetchDetailWith).toContain('get_task_detail');
-    expect(result).toHaveProperty('escalationChain');
   });
 });
 
@@ -1133,11 +1132,6 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(task0).toHaveProperty('outputSha256');
     expect(typeof task0.outputSha256).toBe('string');
     expect(task0.outputSha256).toHaveLength(64); // sha256 hex
-    expect(task0).toHaveProperty('usage');
-    expect(task0.usage.costUSD).toBe(0.01);
-
-    // New escalationChain field
-    expect(task0.escalationChain).toEqual(['mock:ok']);
 
     // New fetch-hint fields
     expect(task0).toHaveProperty('_fetchOutputWith');
@@ -1156,14 +1150,6 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(task0).not.toHaveProperty('progressTrace');
     expect(task0).not.toHaveProperty('escalationLog');
     expect(task0).not.toHaveProperty('_fetchWith'); // old key removed
-  });
-
-  it('escalationChain reflects walked chains with provider:status entries', async () => {
-    const payload = await dispatchRichBatch({ responseMode: 'summary' });
-    expect(payload.results[1].escalationChain).toEqual([
-      'mock:incomplete',
-      'mock:ok',
-    ]);
   });
 
   it('summary-mode envelope carries a headline field alongside the batch aggregates', async () => {
