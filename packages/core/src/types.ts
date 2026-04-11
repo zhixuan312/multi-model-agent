@@ -38,6 +38,21 @@ export interface TaskSpec {
    *  '\n\n---\n\n'. The field is stripped from the task that reaches the
    *  provider so runners never see it. See `expandContextBlocks`. */
   contextBlockIds?: string[]
+  /** Optional caller-declared output expectations. When supplied, the
+   *  supervision layer can validate the output for enumerable deliverables
+   *  after syntactic completion checks pass. */
+  expectedCoverage?: {
+    /** Minimum section count. A section is a line matching `sectionPattern`. */
+    minSections?: number
+    /** Regex for section headings. Applied with the multiline flag. */
+    sectionPattern?: string
+    /** Substrings that must all appear somewhere in the output. */
+    requiredMarkers?: string[]
+  }
+  /** Opt-in progress capture for post-hoc execution observability. */
+  includeProgressTrace?: boolean
+  /** Optional hint about the parent session's model for saved-cost estimates. */
+  parentModel?: string
 }
 
 // === Provider Config (discriminated union) ===
@@ -126,6 +141,8 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   costUSD: number | null
+  /** Estimated cost savings versus the declared parent model, if known. */
+  savedCostUSD?: number | null
 }
 
 export interface RunResult {
@@ -158,7 +175,46 @@ export interface RunResult {
    *  occurred. Runners initialize this to `[]`; the escalation
    *  orchestrator populates it on each return path. */
   escalationLog: AttemptRecord[]
+  /** Wall-clock duration of this task in milliseconds. */
+  durationMs?: number
+  /** Directories whose entries the worker listed. */
+  directoriesListed?: string[]
+  /** Bounded trace of progress events emitted during this task's run. */
+  progressTrace?: ProgressTraceEntry[]
   error?: string
+}
+
+/** A captured progress entry, or a synthetic marker when trace trimming occurred. */
+export type ProgressTraceEntry =
+  | ProgressEvent
+  | {
+      kind: '_trimmed'
+      droppedCount: number
+      droppedKinds: Partial<Record<ProgressEvent['kind'], number>>
+    }
+
+/** Aggregate timing metrics for a `delegate_tasks` batch. */
+export interface BatchTimings {
+  wallClockMs: number
+  sumOfTaskMs: number
+  estimatedParallelSavingsMs: number
+}
+
+/** Aggregate completion counts for a `delegate_tasks` batch. */
+export interface BatchProgress {
+  totalTasks: number
+  completedTasks: number
+  incompleteTasks: number
+  failedTasks: number
+  successPercent: number
+}
+
+/** Aggregate cost metrics for a `delegate_tasks` batch. */
+export interface BatchAggregateCost {
+  totalActualCostUSD: number
+  totalSavedCostUSD: number
+  actualCostUnavailableTasks: number
+  savedCostUnavailableTasks: number
 }
 
 /**
@@ -198,6 +254,8 @@ export interface AttemptRecord {
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
   reason?: string
+  /** Bounded progress trace captured for this attempt, when enabled. */
+  progressTrace?: ProgressTraceEntry[]
 }
 
 // === Provider (created by createProvider) ===

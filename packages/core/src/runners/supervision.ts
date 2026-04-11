@@ -34,7 +34,13 @@ import type { ModelProfile } from '../routing/model-profiles.js';
  * ----------------------------------------------------------------------
  */
 
-export type DegenerateKind = 'empty' | 'thinking_only' | 'fragment' | 'no_terminator';
+/** Classification of a degenerate model response, including coverage failures. */
+export type DegenerateKind =
+  | 'empty'
+  | 'thinking_only'
+  | 'fragment'
+  | 'no_terminator'
+  | 'insufficient_coverage';
 
 export interface ValidationResult {
   valid: boolean;
