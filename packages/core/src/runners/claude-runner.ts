@@ -23,6 +23,7 @@ import {
 import {
   validateCompletion,
   validateCoverage,
+  validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
@@ -536,17 +537,10 @@ export async function runClaude(
           // is an immediate ok-exit. Degenerate output either re-prompts
           // (and keeps reading the iterator) or — if the retry budget is
           // spent / same-output early-out fires — exits as incomplete. ---
-          const validation = validateCompletion(output);
-
-          // NEW: coverage check — only when syntactic validation passes
-          if (validation.valid && options.expectedCoverage) {
-            const coverageValidation = validateCoverage(output, options.expectedCoverage);
-            if (!coverageValidation.valid) {
-              validation.valid = false;
-              validation.kind = coverageValidation.kind;
-              validation.reason = coverageValidation.reason;
-            }
-          }
+          const validation = validateSubAgentOutput(output, {
+            expectedCoverage: options.expectedCoverage,
+            skipCompletionHeuristic: options.skipCompletionHeuristic,
+          });
 
           if (validation.valid) {
             completedResult = buildClaudeOkResult({
