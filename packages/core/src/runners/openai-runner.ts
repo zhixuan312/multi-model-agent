@@ -52,8 +52,6 @@ import {
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
-  validateCompletion,
-  validateCoverage,
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
