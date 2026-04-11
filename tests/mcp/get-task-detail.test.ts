@@ -108,4 +108,67 @@ describe('get_task_detail tool', () => {
     expect(detail).not.toHaveProperty('durationMs');
     expect(detail).not.toHaveProperty('error');
   });
+
+  it('returns an error for an unknown batchId', async () => {
+    const server = buildMcpServer(sampleConfig());
+
+    await expect(
+      callTool(server, 'get_task_detail', { batchId: 'nonexistent', taskIndex: 0 }),
+    ).rejects.toThrow(/unknown or expired/);
+  });
+
+  it('returns an out-of-range error for a taskIndex past the batch size', async () => {
+    const server = buildMcpServer(sampleConfig());
+    const batchId = await dispatchFixtureBatch(server);
+
+    await expect(
+      callTool(server, 'get_task_detail', { batchId, taskIndex: 99 }),
+    ).rejects.toThrow(/out of range/);
+  });
+
+  it('omits progressTrace when the task was not dispatched with includeProgressTrace', async () => {
+    const server = buildMcpServer(sampleConfig());
+    const batchId = await dispatchFixtureBatch(server);
+
+    const detail = await callTool(server, 'get_task_detail', { batchId, taskIndex: 0 });
+    expect(detail).not.toHaveProperty('progressTrace');
+  });
+
+  it('includes progressTrace when the RunResult has one', async () => {
+    const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
+    vi.mocked(runTasksMod.runTasks).mockImplementationOnce(async () => [
+      {
+        output: 'ok',
+        status: 'ok',
+        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        progressTrace: [
+          { kind: 'escalation_start', at: 1000, taskIndex: 0, attempt: 0 } as any,
+        ],
+        durationMs: 100,
+      } as RunResult,
+    ]);
+
+    const server = buildMcpServer(sampleConfig());
+    const response = await callTool(server, 'delegate_tasks', {
+      tasks: [
+        {
+          prompt: 'traced',
+          provider: 'mock',
+          tier: 'standard',
+          requiredCapabilities: [],
+          includeProgressTrace: true,
+        },
+      ],
+    });
+    const detail = await callTool(server, 'get_task_detail', { batchId: response.batchId, taskIndex: 0 });
+
+    expect(detail).toHaveProperty('progressTrace');
+    expect(detail.progressTrace).toHaveLength(1);
+  });
 });
