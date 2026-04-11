@@ -13,6 +13,10 @@ export const modelProfileSchema = z.object({
   avoidFor: z.string().optional(),
   notes: z.string().optional(),
   supportsEffort: z.boolean(),
+  inputCostPerMTok: z.number().finite().nonnegative().optional(),
+  outputCostPerMTok: z.number().finite().nonnegative().optional(),
+  rateSource: z.string().min(1).optional(),
+  rateLookupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
   /** Per-model-family default for the watchdog input-token soft limit.
    *  See spec A.1.4. */
   inputTokenSoftLimit: z.number().int().positive(),

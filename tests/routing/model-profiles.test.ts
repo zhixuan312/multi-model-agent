@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { findModelProfile, getEffectiveCostTier } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
-import type { ProviderConfig } from '@zhixuan92/multi-model-agent-core';
+import { findModelProfile, getEffectiveCostTier, modelProfileSchema } from '../../packages/core/src/routing/model-profiles.js';
+import type { ProviderConfig } from '../../packages/core/src/types.js';
 
 describe('findModelProfile', () => {
   it('matches claude-opus family by prefix', () => {
@@ -27,6 +27,22 @@ describe('findModelProfile', () => {
     expect(profile.tier).toBe('standard');
     expect(profile.defaultCost).toBe('low');
     expect(profile.avoidFor).toBeDefined();
+  });
+
+  it('exposes pricing metadata for rate-backed profiles', () => {
+    const profile = findModelProfile('gpt-5-codex');
+    expect(profile.inputCostPerMTok).toBe(1.25);
+    expect(profile.outputCostPerMTok).toBe(10);
+    expect(profile.rateSource).toMatch(/OpenAI/i);
+    expect(profile.rateLookupDate).toBe('2026-04-11');
+  });
+
+  it('leaves pricing metadata undefined for MiniMax-M2', () => {
+    const profile = findModelProfile('MiniMax-M2');
+    expect(profile.inputCostPerMTok).toBeUndefined();
+    expect(profile.outputCostPerMTok).toBeUndefined();
+    expect(profile.rateSource).toBeUndefined();
+    expect(profile.rateLookupDate).toBeUndefined();
   });
 
   it('is case-insensitive', () => {
@@ -86,6 +102,40 @@ describe('findModelProfile', () => {
     it('falls back to claude-opus profile (150_000) for claude-opus-4-6[1m] since no [1m] profile exists', () => {
       // Matches "claude-opus" prefix, so it inherits the 150_000 opus limit, not a dedicated [1m] override.
       expect(findModelProfile('claude-opus-4-6[1m]').inputTokenSoftLimit).toBe(150_000);
+    });
+  });
+
+  describe('modelProfileSchema', () => {
+    it('accepts rate metadata when present', () => {
+      expect(
+        modelProfileSchema.safeParse({
+          prefix: 'gpt-5',
+          tier: 'reasoning',
+          defaultCost: 'medium',
+          bestFor: 'reasoning-tier coding, agentic workflows, and tool use',
+          avoidFor: 'cases where you explicitly prefer premium escalation over cost or latency',
+          supportsEffort: true,
+          inputTokenSoftLimit: 1_000_000,
+          inputCostPerMTok: 1.25,
+          outputCostPerMTok: 10,
+          rateSource: 'OpenAI pricing',
+          rateLookupDate: '2026-04-11',
+        }).success,
+      ).toBe(true);
+    });
+
+    it('accepts profiles without rate metadata', () => {
+      expect(
+        modelProfileSchema.safeParse({
+          prefix: 'MiniMax-M2',
+          tier: 'standard',
+          defaultCost: 'low',
+          bestFor: 'well-scoped coding and agent loops where cost matters',
+          avoidFor: 'highest-stakes ambiguous work that needs top-tier judgment',
+          supportsEffort: true,
+          inputTokenSoftLimit: 200_000,
+        }).success,
+      ).toBe(true);
     });
   });
 

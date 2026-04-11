@@ -6,6 +6,10 @@
     "bestFor": "high-ambiguity tasks where the cost of error is high",
     "avoidFor": "routine implementation or batch transformations as the default choice",
     "supportsEffort": true,
+    "inputCostPerMTok": 15,
+    "outputCostPerMTok": 75,
+    "rateSource": "Anthropic official pricing",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 150000
   },
   {
@@ -15,6 +19,10 @@
     "bestFor": "most professional coding and tool-using tasks",
     "avoidFor": "the hardest architectural decisions or highly ambiguous judgment calls",
     "supportsEffort": true,
+    "inputCostPerMTok": 3,
+    "outputCostPerMTok": 15,
+    "rateSource": "Anthropic official pricing",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 150000
   },
   {
@@ -24,6 +32,10 @@
     "bestFor": "reasoning-tier coding, agentic workflows, and tool use",
     "avoidFor": "cases where you explicitly prefer premium escalation over cost or latency",
     "supportsEffort": true,
+    "inputCostPerMTok": 1.25,
+    "outputCostPerMTok": 10,
+    "rateSource": "OpenAI official pricing",
+    "rateLookupDate": "2026-04-11",
     "inputTokenSoftLimit": 1000000
   },
   {

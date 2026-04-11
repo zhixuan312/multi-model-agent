@@ -1,11 +1,11 @@
 import { describe, it, expect } from 'vitest';
-import { computeCostUSD } from '../packages/core/src/types.js';
+import { computeCostUSD, computeSavedCostUSD } from '../packages/core/src/types.js';
 import type { ProviderConfig } from '../packages/core/src/types.js';
 
 describe('computeCostUSD', () => {
   const baseConfig: ProviderConfig = {
     type: 'codex',
-    model: 'gpt-5-codex',
+    model: 'llama-3-70b',
   };
 
   it('returns null when neither rate is configured', () => {
@@ -67,5 +67,64 @@ describe('computeCostUSD', () => {
       outputCostPerMTok: 1,
     } as ProviderConfig;
     expect(computeCostUSD(1, 1, config)).toBeNull();
+  });
+
+  it('falls back to the model profile when explicit rates are missing', () => {
+    const config: ProviderConfig = {
+      type: 'claude',
+      model: 'claude-sonnet-4-5',
+    };
+
+    expect(computeCostUSD(1_000_000, 500_000, config)).toBeCloseTo(10.5, 6);
+  });
+
+  it('keeps provider-config rates ahead of the model profile', () => {
+    const config: ProviderConfig = {
+      type: 'codex',
+      model: 'gpt-5-codex',
+      inputCostPerMTok: 2,
+      outputCostPerMTok: 20,
+    };
+
+    expect(computeCostUSD(1_000_000, 500_000, config)).toBeCloseTo(12, 6);
+  });
+
+  it('returns null for an unrated profile with no explicit config rates', () => {
+    const config: ProviderConfig = {
+      type: 'codex',
+      model: 'MiniMax-M2',
+    };
+
+    expect(computeCostUSD(1_000_000, 500_000, config)).toBeNull();
+  });
+});
+
+describe('computeSavedCostUSD', () => {
+  it('returns null when the parent model is undefined', () => {
+    expect(computeSavedCostUSD(1, 1, 1, undefined)).toBeNull();
+  });
+
+  it('returns null when the actual cost is unavailable', () => {
+    expect(computeSavedCostUSD(null, 1, 1, 'gpt-5-codex')).toBeNull();
+  });
+
+  it('returns null when the parent profile has no rates', () => {
+    expect(computeSavedCostUSD(1, 1_000, 1_000, 'MiniMax-M2')).toBeNull();
+  });
+
+  it('computes savings against a cheaper parent profile', () => {
+    const actualCostUSD = 4;
+    const inputTokens = 1_000_000;
+    const outputTokens = 500_000;
+
+    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'claude-opus-4-6')).toBeCloseTo(48.5, 6);
+  });
+
+  it('returns a negative value when the actual cost exceeds the parent profile cost', () => {
+    const actualCostUSD = 20;
+    const inputTokens = 1_000_000;
+    const outputTokens = 0;
+
+    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'gpt-5-codex')).toBeCloseTo(-18.75, 6);
   });
 });

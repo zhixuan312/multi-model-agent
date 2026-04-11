@@ -1,4 +1,5 @@
 import type { ContextBlockStore } from './context/context-block-store.js';
+import { findModelProfile } from './routing/model-profiles.js';
 
 // === Tier & Capability ===
 
@@ -393,16 +394,56 @@ export function computeCostUSD(
   outputTokens: number,
   config: ProviderConfig,
 ): number | null {
-  const inRate = config.inputCostPerMTok;
-  const outRate = config.outputCostPerMTok;
-  if (
-    inRate === undefined || outRate === undefined ||
-    !Number.isFinite(inRate) || !Number.isFinite(outRate) ||
-    inRate < 0 || outRate < 0
-  ) {
+  const explicitRates = resolveRatePair(config.inputCostPerMTok, config.outputCostPerMTok);
+  if (explicitRates !== null) {
+    return (inputTokens * explicitRates.input + outputTokens * explicitRates.output) / 1_000_000;
+  }
+
+  const profile = findModelProfile(config.model);
+  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
+  if (profileRates === null) {
     return null;
   }
-  return (inputTokens * inRate + outputTokens * outRate) / 1_000_000;
+
+  return (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000;
+}
+
+export function computeSavedCostUSD(
+  actualCostUSD: number | null,
+  inputTokens: number,
+  outputTokens: number,
+  parentModel: string | undefined,
+): number | null {
+  if (actualCostUSD === null || parentModel === undefined) {
+    return null;
+  }
+
+  const profile = findModelProfile(parentModel);
+  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
+  if (profileRates === null) {
+    return null;
+  }
+
+  const hypotheticalParentCostUSD =
+    (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000;
+  return hypotheticalParentCostUSD - actualCostUSD;
+}
+
+function resolveRatePair(
+  inputCostPerMTok: number | undefined,
+  outputCostPerMTok: number | undefined,
+): { input: number; output: number } | null {
+  if (
+    inputCostPerMTok !== undefined &&
+    outputCostPerMTok !== undefined &&
+    Number.isFinite(inputCostPerMTok) &&
+    Number.isFinite(outputCostPerMTok) &&
+    inputCostPerMTok >= 0 &&
+    outputCostPerMTok >= 0
+  ) {
+    return { input: inputCostPerMTok, output: outputCostPerMTok };
+  }
+  return null;
 }
 
 export function withTimeout<T>(
