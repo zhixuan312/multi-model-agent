@@ -411,15 +411,14 @@ export async function runOpenAI(
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateCompletion(stripped);
 
-        if (validation.valid) {
-          // NEW: coverage check — only runs when caller declared expectations
-          if (options.expectedCoverage) {
-            const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
-            if (!coverageValidation.valid) {
-              // Treat identically to a degenerate validation — same retry logic
-              validation.kind = coverageValidation.kind;
-              validation.reason = coverageValidation.reason;
-            }
+        // NEW: coverage check — only runs when syntactic validation passes
+        if (validation.valid && options.expectedCoverage) {
+          const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+          if (!coverageValidation.valid) {
+            // Treat identically to a degenerate validation — same retry logic
+            validation.valid = false;
+            validation.kind = coverageValidation.kind;
+            validation.reason = coverageValidation.reason;
           }
         }
 

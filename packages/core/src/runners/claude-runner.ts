@@ -518,14 +518,14 @@ export async function runClaude(
           // (and keeps reading the iterator) or — if the retry budget is
           // spent / same-output early-out fires — exits as incomplete. ---
           const validation = validateCompletion(output);
-          if (validation.valid) {
-            // NEW: coverage check — only runs when caller declared expectations
-            if (options.expectedCoverage) {
-              const coverageValidation = validateCoverage(output, options.expectedCoverage);
-              if (!coverageValidation.valid) {
-                validation.kind = coverageValidation.kind;
-                validation.reason = coverageValidation.reason;
-              }
+
+          // NEW: coverage check — only when syntactic validation passes
+          if (validation.valid && options.expectedCoverage) {
+            const coverageValidation = validateCoverage(output, options.expectedCoverage);
+            if (!coverageValidation.valid) {
+              validation.valid = false;
+              validation.kind = coverageValidation.kind;
+              validation.reason = coverageValidation.reason;
             }
           }
 

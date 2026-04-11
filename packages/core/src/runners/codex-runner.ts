@@ -605,14 +605,14 @@ export async function runCodex(
         if (toolCalls.length === 0) {
           const stripped = textThisTurn; // codex does not emit <think> tags
           const validation = validateCompletion(stripped);
-          if (validation.valid) {
-            // NEW: coverage check — only runs when caller declared expectations
-            if (options.expectedCoverage) {
-              const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
-              if (!coverageValidation.valid) {
-                validation.kind = coverageValidation.kind;
-                validation.reason = coverageValidation.reason;
-              }
+
+          // NEW: coverage check — only when syntactic validation passes
+          if (validation.valid && options.expectedCoverage) {
+            const coverageValidation = validateCoverage(stripped, options.expectedCoverage);
+            if (!coverageValidation.valid) {
+              validation.valid = false;
+              validation.kind = coverageValidation.kind;
+              validation.reason = coverageValidation.reason;
             }
           }
 
