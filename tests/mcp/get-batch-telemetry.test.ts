@@ -133,4 +133,27 @@ describe('get_batch_telemetry tool', () => {
     const telemetry = await callTool(server, 'get_batch_telemetry', { batchId: dispatch.batchId });
     expect(JSON.stringify(telemetry).length).toBeLessThan(2 * 1024);
   });
+
+  it('returns an error for an unknown batchId', async () => {
+    const server = buildMcpServer(sampleConfig());
+
+    await expect(
+      callTool(server, 'get_batch_telemetry', { batchId: 'nonexistent' }),
+    ).rejects.toThrow(/unknown or expired/);
+  });
+
+  it('returns byte-identical envelopes on consecutive calls (recompute consistency)', async () => {
+    const server = buildMcpServer(sampleConfig());
+    const dispatch = await callTool(server, 'delegate_tasks', {
+      tasks: [
+        { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+        { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+      ],
+    });
+
+    const first = await callTool(server, 'get_batch_telemetry', { batchId: dispatch.batchId });
+    const second = await callTool(server, 'get_batch_telemetry', { batchId: dispatch.batchId });
+
+    expect(JSON.stringify(first)).toBe(JSON.stringify(second));
+  });
 });
