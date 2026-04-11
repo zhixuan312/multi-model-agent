@@ -2,7 +2,7 @@
 
 **Delegate work from your expensive parent-session model to a fleet of cheaper sub-agents, in parallel, from a single MCP tool call.**
 
-This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets four tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, and `get_task_output`. Each `delegate_tasks` call runs the supplied tasks in parallel across the providers you configured, auto-routing each to the cheapest one that has the required capabilities and quality tier — or pinning to a specific provider when you want control.
+This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets six tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_task_output`, `get_task_detail`, and `get_batch_telemetry`. Each `delegate_tasks` call runs the supplied tasks in parallel across the providers you configured, auto-routing each to the cheapest one that has the required capabilities and quality tier — or pinning to a specific provider when you want control. Every response envelope carries a pre-computed `headline` field so the calling agent can narrate the ROI story in one line without any arithmetic.
 
 ## Why use it
 
@@ -12,6 +12,7 @@ This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixua
 - **Auto-route and escalate.** Capability filter → tier filter → cheapest qualifying provider; on failure the chain is walked automatically, stopping at the first success.
 - **No bare failures.** Every termination path (incomplete, max_turns, timeout, error) populates `output` from the runner's scratchpad.
 - **Sandboxed by default.** `cwd-only` file tool confinement and shell-disabled by default. Opt out per-task only when needed.
+- **Pre-computed ROI headline**: every `delegate_tasks` response carries a `headline` field — a one-line summary of tasks, success rate, wall-clock, serial savings, cost, and ROI. Quote it verbatim; no arithmetic required.
 - **Visible ROI.** Every response surfaces `aggregateCost`, `timings`, and per-task `savedCostUSD` for delegation savings.
 
 ## How it works
@@ -190,11 +191,21 @@ Accepts an array of tasks and runs them concurrently. Auto-routes each task by c
 }
 ```
 
-Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`, `contextBlockIds?`, `expectedCoverage?`, `includeProgressTrace?`, `parentModel?`.
+Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`, `contextBlockIds?`, `expectedCoverage?`, `includeProgressTrace?`, `parentModel?`, `skipCompletionHeuristic?`.
 
-`expectedCoverage` supports `minSections?`, `sectionPattern?`, and `requiredMarkers?`. `includeProgressTrace` opts a task into returning its bounded post-hoc progress trace. `parentModel` lets the server estimate `savedCostUSD` relative to the calling model.
+`expectedCoverage` supports `minSections?`, `sectionPattern?`, and `requiredMarkers?`. `includeProgressTrace` opts a task into returning its bounded post-hoc progress trace. `parentModel` lets the server estimate `savedCostUSD` relative to the calling model. `skipCompletionHeuristic: true` disables the short-output completion heuristic in the runner's supervision layer — use for tight-format outputs (single-line verdicts, CSV rows, opaque identifiers) that don't follow prose conventions. The `empty` and `thinking_only` degeneracy checks still fire independently. If you also set `expectedCoverage`, the coverage contract is authoritative and the short-output heuristic is automatically skipped on coverage pass — you don't need both.
 
 Capabilities: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`.
+
+### ROI headline
+
+Every `delegate_tasks` response envelope — both `full` mode and `summary` mode — carries a pre-computed `headline` field: a one-line summary of tasks / success rate / wall-clock / serial-savings / actual cost / saved cost / ROI multiplier (when a single baseline is declared). The calling agent is expected to quote it verbatim to the user after every dispatch, with no arithmetic. Example:
+
+> *"11 tasks, 5/11 ok (45.5%), wall 5m 54s, saved ~18m 30s vs serial, $1.37 actual / $8.91 saved vs claude-opus-4-6 (7.5x ROI)"*
+
+When a batch declares mixed parent models across its tasks, the ROI multiplier is suppressed (because a single ratio across different baselines is not coherent) and the cost clause reads `$X actual / $Y saved vs multiple baselines`. When no `parentModel` is declared, the cost clause collapses to `$X actual`.
+
+If the primary response came back via summary mode or a client-side limit obscured the envelope, call `get_batch_telemetry(batchId)` — it returns the same `headline` plus the envelope with a ~600-byte header and ~200 bytes per task in `results[]`. A typical 10–30-task batch comes back at 2–7 KB, well under the client's tool-result size limit; very large batches (100+ tasks) scale linearly and may approach the limit.
 
 ## Security
 

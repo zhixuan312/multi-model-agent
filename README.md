@@ -15,14 +15,16 @@ Running everything on one high-end model (Opus, GPT-5, etc.) is slow, expensive,
 
 ## What you get
 
-Four MCP tools:
+Six MCP tools:
 
 | Tool | Purpose |
 | --- | --- |
-| `delegate_tasks` | Dispatch an array of tasks; each runs on the cheapest qualifying provider, in parallel. |
+| `delegate_tasks` | Dispatch an array of tasks; each runs on the cheapest qualifying provider, in parallel. Every response carries a pre-computed `headline` field with the one-line ROI summary. |
 | `register_context_block` | Store a long brief once and reference it by id on subsequent dispatches. |
 | `retry_tasks` | Re-run specific task indices from a previous batch without re-sending briefs (30-minute LRU cache). |
 | `get_task_output` | Fetch the full text of a single task result from a `summary`-mode batch. |
+| `get_task_detail` | Fetch per-task execution metadata (`toolCalls`, `filesRead/Written/Listed`, full `escalationLog` with reasons, `progressTrace` if opted in) for a single task from a previous batch. |
+| `get_batch_telemetry` | Fetch a compact ROI envelope (<4 KB) for a previous batch — `headline`, `timings`, `batchProgress`, `aggregateCost`, and a per-task cost/timing rollup. Use as a fallback when the primary response was obscured by a client-side size limit. |
 
 Three provider types:
 
