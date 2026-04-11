@@ -200,6 +200,22 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
       '(in order, separated by "\\n\\n---\\n\\n") to `prompt` before dispatch. ' +
       'Use this to avoid re-transmitting long briefs across multiple calls.',
     ),
+    expectedCoverage: z.object({
+      minSections: z.number().int().positive().optional()
+        .describe('Minimum section count expected in the output.'),
+      sectionPattern: z.string().optional()
+        .describe('Regex for section headings, applied with the multiline flag.'),
+      requiredMarkers: z.array(z.string()).optional()
+        .describe('Substrings that must all appear somewhere in the output.'),
+    }).optional().describe(
+      'Optional caller-declared output expectations used for semantic incompleteness detection.',
+    ),
+    includeProgressTrace: z.boolean().optional().describe(
+      'Opt in to returning the bounded post-hoc progress trace for this task.',
+    ),
+    parentModel: z.string().optional().describe(
+      'Optional parent-session model identifier used to estimate savedCostUSD.',
+    ),
   });
 }
 

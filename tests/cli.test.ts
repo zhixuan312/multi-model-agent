@@ -327,6 +327,68 @@ describe('delegate_tasks schema', () => {
     });
     expect(result.success).toBe(true);
   });
+
+  it('accepts v0.3.0 MCP task fields', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      provider: 'mock',
+      tier: 'standard',
+      requiredCapabilities: [],
+      expectedCoverage: {
+        minSections: 2,
+        sectionPattern: '^##\\s+',
+        requiredMarkers: ['alpha', 'beta'],
+      },
+      includeProgressTrace: true,
+      parentModel: 'gpt-5.4',
+    });
+    expect(result.success).toBe(true);
+    if (!result.success) {
+      throw new Error('expected task schema parse to succeed');
+    }
+    expect(result.data.expectedCoverage).toEqual({
+      minSections: 2,
+      sectionPattern: '^##\\s+',
+      requiredMarkers: ['alpha', 'beta'],
+    });
+    expect(result.data.includeProgressTrace).toBe(true);
+    expect(result.data.parentModel).toBe('gpt-5.4');
+  });
+});
+
+describe('delegate_tasks MCP input contract (v0.3.0)', () => {
+  it('preserves expectedCoverage, includeProgressTrace, and parentModel in the registered MCP input schema', async () => {
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const delegateTool = tools['delegate_tasks'];
+
+    const parsed = delegateTool.inputSchema.parse({
+      tasks: [
+        {
+          prompt: 'do thing',
+          provider: 'mock',
+          tier: 'standard',
+          requiredCapabilities: [],
+          expectedCoverage: {
+            minSections: 2,
+            sectionPattern: '^##\\s+',
+            requiredMarkers: ['alpha', 'beta'],
+          },
+          includeProgressTrace: true,
+          parentModel: 'gpt-5.4',
+        },
+      ],
+    });
+
+    expect(parsed.tasks[0].expectedCoverage).toEqual({
+      minSections: 2,
+      sectionPattern: '^##\\s+',
+      requiredMarkers: ['alpha', 'beta'],
+    });
+    expect(parsed.tasks[0].includeProgressTrace).toBe(true);
+    expect(parsed.tasks[0].parentModel).toBe('gpt-5.4');
+  });
 });
 
 // Task 11: Response pagination + get_task_output + configurable threshold

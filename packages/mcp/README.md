@@ -132,20 +132,29 @@ Accepts an array of tasks and runs them concurrently. Auto-routes each task by c
       "tier": "reasoning",
       "requiredCapabilities": ["file_read", "file_write"],
       "tools": "full",
-      "cwd": "/path/to/project"
+      "cwd": "/path/to/project",
+      "parentModel": "claude-sonnet-4-5",
+      "includeProgressTrace": true
     },
     {
       "prompt": "Write tests for the auth module.",
       "tier": "standard",
       "requiredCapabilities": ["file_read", "file_write", "grep"],
       "tools": "full",
-      "cwd": "/path/to/project"
+      "cwd": "/path/to/project",
+      "expectedCoverage": {
+        "minSections": 3,
+        "sectionPattern": "^Test \\d+:",
+        "requiredMarkers": ["happy path", "edge case"]
+      }
     }
   ]
 }
 ```
 
-Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`.
+Per-task fields: `prompt`, `tier`, `requiredCapabilities`, `provider?`, `tools?`, `maxTurns?`, `timeoutMs?`, `cwd?`, `effort?`, `sandboxPolicy?`, `contextBlockIds?`, `expectedCoverage?`, `includeProgressTrace?`, `parentModel?`.
+
+`expectedCoverage` supports `minSections?`, `sectionPattern?`, and `requiredMarkers?`. `includeProgressTrace` opts a task into returning its bounded post-hoc progress trace. `parentModel` lets the server estimate `savedCostUSD` relative to the calling model.
 
 Capabilities: `file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`.
 
