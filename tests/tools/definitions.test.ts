@@ -60,6 +60,15 @@ describe('tool definitions', () => {
     await tools.listFiles(tmpDir);
 
     expect(tracker.getReads()).toContain(tmpDir);
+    expect(tracker.getDirectoriesListed()).toContain(tmpDir);
+  });
+
+  it('readFile does not populate tracker.directoriesListed', async () => {
+    const filePath = path.join(tmpDir, 'tracked.txt');
+    fs.writeFileSync(filePath, 'data');
+    await tools.readFile(filePath);
+
+    expect(tracker.getDirectoriesListed()).toEqual([]);
   });
 
   it('writeFile creates parent directories', async () => {

@@ -225,6 +225,7 @@ export function createToolImplementations(
       if (confine) await assertWithinCwd(cwd, resolved);
       const entries = await fs.readdir(resolved, { withFileTypes: true });
       tracker.trackRead(resolved);
+      tracker.trackDirectoryList(resolved);
       return entries.map(e => e.isDirectory() ? `${e.name}/` : e.name).sort();
     },
   };
