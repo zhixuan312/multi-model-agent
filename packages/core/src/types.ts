@@ -132,6 +132,11 @@ export interface MultiModelConfig {
     maxTurns: number
     timeoutMs: number
     tools: ToolMode
+    /** Character threshold that triggers auto-switch from 'full' to
+     *  'summary' response mode when the caller uses `responseMode: 'auto'`
+     *  (the default). Optional — defaults to 65_536 when absent.
+     *  Env var and buildMcpServer option can override at higher precedence. */
+    largeResponseThresholdChars?: number
   }
 }
 
@@ -309,6 +314,16 @@ export interface RunOptions {
    *  for the new attempt because the orchestrator resets its per-attempt
    *  closure. Passing nothing keeps existing behaviour (no-op). */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
+  /** Optional hint about the parent session's model for saved-cost estimates.
+   *  When supplied, `RunResult.usage.savedCostUSD` is computed against this
+   *  model's profile rates. */
+  parentModel?: string
+  /** Opt-in: when true, the runner captures every progress event fired
+   *  during this task's execution into a bounded, priority-trimmed
+   *  `progressTrace` on the final RunResult. Useful for post-hoc
+   *  execution observability on long-running delegated tasks. Zero
+   *  cost when false (the default). */
+  includeProgressTrace?: boolean
 }
 
 /**

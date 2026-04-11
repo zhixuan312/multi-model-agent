@@ -3,7 +3,7 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { randomUUID } from 'node:crypto';
+import { randomUUID, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -17,10 +17,154 @@ import type {
   MultiModelConfig,
   TaskSpec,
   ProgressEvent,
+  RunResult,
+  BatchTimings,
+  BatchProgress,
+  BatchAggregateCost,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 
 export const SERVER_NAME = 'multi-model-agent';
+const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
+
+function parsePositiveInt(s: string | undefined): number | undefined {
+  if (!s) return undefined;
+  const n = Number.parseInt(s, 10);
+  if (Number.isFinite(n) && n > 0 && String(n) === s.trim()) return n;
+  return undefined;
+}
+
+function sha256Hex(text: string): string {
+  return createHash('sha256').update(text).digest('hex');
+}
+
+export function computeTimings(wallClockMs: number, results: RunResult[]): BatchTimings {
+  const sumOfTaskMs = results.reduce((sum, r) => sum + (r.durationMs ?? 0), 0);
+  const estimatedParallelSavingsMs = Math.max(0, sumOfTaskMs - wallClockMs);
+  return { wallClockMs, sumOfTaskMs, estimatedParallelSavingsMs };
+}
+
+export function computeBatchProgress(results: RunResult[]): BatchProgress {
+  const totalTasks = results.length;
+  const completedTasks = results.filter((r) => r.status === 'ok').length;
+  const incompleteTasks = results.filter(
+    (r) => r.status === 'incomplete' || r.status === 'max_turns' || r.status === 'timeout',
+  ).length;
+  const failedTasks = results.filter(
+    (r) =>
+      r.status === 'error' ||
+      r.status === 'api_aborted' ||
+      r.status === 'api_error' ||
+      r.status === 'network_error',
+  ).length;
+  const successPercent =
+    totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 1000) / 10;
+  return { totalTasks, completedTasks, incompleteTasks, failedTasks, successPercent };
+}
+
+export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
+  let totalActualCostUSD = 0;
+  let totalSavedCostUSD = 0;
+  let actualCostUnavailableTasks = 0;
+  let savedCostUnavailableTasks = 0;
+
+  for (const r of results) {
+    if (r.usage.costUSD === null || r.usage.costUSD === undefined) {
+      actualCostUnavailableTasks += 1;
+    } else {
+      totalActualCostUSD += r.usage.costUSD;
+    }
+    if (r.usage.savedCostUSD === null || r.usage.savedCostUSD === undefined) {
+      savedCostUnavailableTasks += 1;
+    } else {
+      totalSavedCostUSD += r.usage.savedCostUSD;
+    }
+  }
+
+  return {
+    totalActualCostUSD,
+    totalSavedCostUSD,
+    actualCostUnavailableTasks,
+    savedCostUnavailableTasks,
+  };
+}
+
+function buildFullResponse(
+  batchId: string,
+  tasks: TaskSpec[],
+  results: RunResult[],
+  aggregates: {
+    timings: BatchTimings;
+    batchProgress: BatchProgress;
+    aggregateCost: BatchAggregateCost;
+  },
+) {
+  return {
+    batchId,
+    mode: 'full' as const,
+    timings: aggregates.timings,
+    batchProgress: aggregates.batchProgress,
+    aggregateCost: aggregates.aggregateCost,
+    results: results.map((r, i) => ({
+      provider: tasks[i].provider ?? '(auto)',
+      status: r.status,
+      output: r.output,
+      turns: r.turns,
+      durationMs: r.durationMs,
+      filesRead: r.filesRead,
+      filesWritten: r.filesWritten,
+      directoriesListed: r.directoriesListed,
+      toolCalls: r.toolCalls,
+      escalationLog: r.escalationLog,
+      usage: r.usage,
+      ...(r.progressTrace && { progressTrace: r.progressTrace }),
+      ...(r.error && { error: r.error }),
+    })),
+  };
+}
+
+function buildSummaryResponse(
+  batchId: string,
+  tasks: TaskSpec[],
+  results: RunResult[],
+  opts: {
+    autoEscaped: boolean;
+    totalOutputChars: number;
+    threshold: number;
+    timings: BatchTimings;
+    batchProgress: BatchProgress;
+    aggregateCost: BatchAggregateCost;
+  },
+) {
+  return {
+    batchId,
+    mode: 'summary' as const,
+    ...(opts.autoEscaped && {
+      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_task_output({ batchId, taskIndex }) to fetch individual task outputs.`,
+    }),
+    timings: opts.timings,
+    batchProgress: opts.batchProgress,
+    aggregateCost: opts.aggregateCost,
+    results: results.map((r, i) => ({
+      taskIndex: i,
+      provider: tasks[i].provider ?? '(auto)',
+      status: r.status,
+      outputLength: r.output.length,
+      outputSha256: sha256Hex(r.output),
+      turns: r.turns,
+      durationMs: r.durationMs,
+      filesRead: r.filesRead,
+      filesWritten: r.filesWritten,
+      directoriesListed: r.directoriesListed,
+      toolCalls: r.toolCalls,
+      escalationLog: r.escalationLog,
+      usage: r.usage,
+      ...(r.progressTrace && { progressTrace: r.progressTrace }),
+      ...(r.error && { error: r.error }),
+      _fetchWith: `get_task_output({ batchId: "${batchId}", taskIndex: ${i} })`,
+    })),
+  };
+}
 // Read the version from package.json at module load so the MCP server
 // metadata (and tests that assert against it) stays in lockstep with the
 // published npm package version. `createRequire` keeps the JSON read
@@ -91,11 +235,35 @@ export function buildTaskSchema(availableProviders: [string, ...string[]]) {
 const BATCH_TTL_MS = 30 * 60 * 1000;
 const BATCH_MAX = 100;
 
-export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
+export function buildMcpServer(
+  config: Parameters<typeof runTasks>[1],
+  options?: {
+    /** Character threshold that triggers auto-switch from 'full' to
+     *  'summary' response mode when the caller uses `responseMode: 'auto'`
+     *  (the default). Defaults to 65_536, tuned for Claude Code's inline
+     *  rendering limit. Precedence (highest first): env var
+     *  MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS > config file
+     *  defaults.largeResponseThresholdChars > this option > default. */
+    largeResponseThresholdChars?: number;
+  },
+) {
   const providerKeys = Object.keys(config.providers);
   if (providerKeys.length === 0) {
     throw new Error('buildMcpServer requires at least one configured provider.');
   }
+
+  // Resolve the threshold once at server startup
+  const envThreshold = parsePositiveInt(process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS);
+  if (process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS !== undefined && envThreshold === undefined) {
+    process.stderr.write(
+      `[multi-model-agent] warning: MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS=${process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS} is not a positive integer, ignoring\n`,
+    );
+  }
+  const resolvedThreshold =
+    envThreshold
+    ?? config.defaults.largeResponseThresholdChars
+    ?? options?.largeResponseThresholdChars
+    ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
 
   const server = new McpServer({
     name: SERVER_NAME,
@@ -109,7 +277,11 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
 
   // Per-server batch cache for `retry_tasks`. See the LRU comment block
   // above for eviction semantics.
-  const batchCache = new Map<string, { tasks: TaskSpec[]; expiresAt: number }>();
+  const batchCache = new Map<string, {
+    tasks: TaskSpec[];
+    results?: RunResult[];
+    expiresAt: number;
+  }>();
 
   const rememberBatch = (tasks: TaskSpec[]): string => {
     const id = randomUUID();
@@ -132,7 +304,7 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
    * evicted by `rememberBatch`'s LRU loop. Does NOT refresh the TTL —
    * expiry stays at the original creation time.
    */
-  const touchBatch = (id: string, entry: { tasks: TaskSpec[]; expiresAt: number }): void => {
+  const touchBatch = (id: string, entry: { tasks: TaskSpec[]; results?: RunResult[]; expiresAt: number }): void => {
     batchCache.delete(id);
     batchCache.set(id, entry);
   };
@@ -144,8 +316,15 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
     renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableProviders)).describe('Array of tasks to execute in parallel'),
+      responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
+        `How to shape the response envelope. 'full' (default via 'auto') includes each task's output inline. ` +
+        `'summary' returns per-task metadata + outputLength + outputSha256, with full outputs fetchable via ` +
+        `get_task_output. 'auto' (the default) returns 'full' when combined output fits under the server's ` +
+        `threshold (default 65 KB; configurable via env / config / buildMcpServer option), otherwise 'summary' ` +
+        `with an auto-escape note.`,
+      ),
     },
-    async ({ tasks }, extra) => {
+    async ({ tasks, responseMode = 'auto' }, extra) => {
       // --- OQ#6 resolution: MCP SDK progress notification API ---
       //
       // The @modelcontextprotocol/sdk >= 1.x exposes progress notifications
@@ -226,26 +405,48 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
       // (possibly updated) context-block store.
       const batchId = rememberBatch(tasks as TaskSpec[]);
 
-      const results = await runTasks(tasks as TaskSpec[], config, {
-        onProgress: sendProgress,
-        runtime: { contextBlockStore },
-      });
+      const batchStartMs = Date.now();
+      let results: RunResult[] = [];
+      try {
+        results = await runTasks(tasks as TaskSpec[], config, {
+          onProgress: sendProgress,
+          runtime: { contextBlockStore },
+        });
+      } finally {
+        // Always attach `results ?? []` so a mid-flight throw does not leave
+        // a dangling batchCache entry that `get_task_output` can't distinguish
+        // from "dispatch still in progress". Per spec §3.5 / §3.9 item 3.
+        const batchEntry = batchCache.get(batchId);
+        if (batchEntry) batchEntry.results = results;
+      }
+      const wallClockMs = Date.now() - batchStartMs;
 
-      const response = {
-        batchId,
-        results: results.map((r, i) => ({
-          provider: tasks[i].provider ?? '(auto)',
-          status: r.status,
-          output: r.output,
-          turns: r.turns,
-          filesRead: r.filesRead,
-          filesWritten: r.filesWritten,
-          toolCalls: r.toolCalls,
-          escalationLog: r.escalationLog,
-          usage: r.usage,
-          ...(r.error && { error: r.error }),
-        })),
-      };
+      // Determine effective response mode based on the configurable threshold
+      const totalOutputChars = results.reduce((sum, r) => sum + r.output.length, 0);
+      const effectiveMode: 'full' | 'summary' =
+        responseMode === 'full'
+          ? 'full'
+          : responseMode === 'summary'
+            ? 'summary'
+            : totalOutputChars > resolvedThreshold
+              ? 'summary'
+              : 'full';
+
+      const timings = computeTimings(wallClockMs, results);
+      const batchProgress = computeBatchProgress(results);
+      const aggregateCost = computeAggregateCost(results);
+
+      const response =
+        effectiveMode === 'full'
+          ? buildFullResponse(batchId, tasks, results, { timings, batchProgress, aggregateCost })
+          : buildSummaryResponse(batchId, tasks, results, {
+              autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
+              totalOutputChars,
+              threshold: resolvedThreshold,
+              timings,
+              batchProgress,
+              aggregateCost,
+            });
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
@@ -284,8 +485,12 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
       taskIndices: z
         .array(z.number().int().nonnegative())
         .describe('Zero-based indices (into the original batch) of the tasks to re-run'),
+      responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
+        `How to shape the response envelope for the retry batch. 'full' returns inline outputs. ` +
+        `'summary' returns outputLength + outputSha256. 'auto' (default) auto-escapes based on threshold.`,
+      ),
     },
-    async ({ batchId, taskIndices }) => {
+    async ({ batchId, taskIndices, responseMode = 'auto' }) => {
       const batch = batchCache.get(batchId);
       if (!batch || batch.expiresAt < Date.now()) {
         // Proactively drop the expired entry so subsequent lookups see
@@ -309,29 +514,104 @@ export function buildMcpServer(config: Parameters<typeof runTasks>[1]) {
         }
       }
       const subset = taskIndices.map((i) => batch.tasks[i]);
-      const results = await runTasks(subset, config, {
-        runtime: { contextBlockStore },
-      });
 
-      const response = {
-        batchId,
-        results: results.map((r, i) => ({
-          originalIndex: taskIndices[i],
-          provider: subset[i].provider ?? '(auto)',
-          status: r.status,
-          output: r.output,
-          turns: r.turns,
-          filesRead: r.filesRead,
-          filesWritten: r.filesWritten,
-          toolCalls: r.toolCalls,
-          escalationLog: r.escalationLog,
-          usage: r.usage,
-          ...(r.error && { error: r.error }),
-        })),
-      };
+      // Create a fresh batch for the retried tasks so the original batch
+      // entry is preserved and get_task_output can still retrieve it.
+      const retryBatchId = rememberBatch(subset);
+
+      const batchStartMs = Date.now();
+      let results: RunResult[] = [];
+      try {
+        results = await runTasks(subset, config, {
+          runtime: { contextBlockStore },
+        });
+      } finally {
+        const retryEntry = batchCache.get(retryBatchId);
+        if (retryEntry) retryEntry.results = results;
+      }
+      const wallClockMs = Date.now() - batchStartMs;
+
+      // Determine effective response mode
+      const totalOutputChars = results.reduce((sum, r) => sum + r.output.length, 0);
+      const effectiveMode: 'full' | 'summary' =
+        responseMode === 'full'
+          ? 'full'
+          : responseMode === 'summary'
+            ? 'summary'
+            : totalOutputChars > resolvedThreshold
+              ? 'summary'
+              : 'full';
+
+      const timings = computeTimings(wallClockMs, results);
+      const batchProgress = computeBatchProgress(results);
+      const aggregateCost = computeAggregateCost(results);
+
+      const response =
+        effectiveMode === 'full'
+          ? {
+              ...buildFullResponse(retryBatchId, subset, results, { timings, batchProgress, aggregateCost }),
+              originalBatchId: batchId,
+              originalIndices: taskIndices,
+            }
+          : {
+              ...buildSummaryResponse(retryBatchId, subset, results, {
+                autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
+                totalOutputChars,
+                threshold: resolvedThreshold,
+                timings,
+                batchProgress,
+                aggregateCost,
+              }),
+              originalBatchId: batchId,
+              originalIndices: taskIndices,
+            };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
+      };
+    },
+  );
+
+  server.tool(
+    'get_task_output',
+    `Retrieve the full text output of a specific task from a previous delegate_tasks batch.
+
+Use this when a prior delegate_tasks response came back with mode: 'summary' and you
+need the actual output of one specific task. The batchId is the one returned at the
+top of that response; taskIndex is 0-based into the original tasks array.
+
+Batches are cached in memory per MCP server instance with a 30-minute TTL from creation
+and a 100-entry LRU cap. Access touches the LRU order but does not refresh TTL. If the
+batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.`,
+    {
+      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
+      taskIndex: z.number().int().nonnegative().describe('Zero-based index of the task within the batch'),
+    },
+    async ({ batchId, taskIndex }) => {
+      const batch = batchCache.get(batchId);
+      if (!batch || batch.expiresAt < Date.now()) {
+        if (batch) batchCache.delete(batchId);
+        throw new Error(
+          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+        );
+      }
+
+      // Touch LRU order but NOT TTL
+      touchBatch(batchId, batch);
+
+      if (batch.results === undefined) {
+        throw new Error(`batch "${batchId}" has no stored results — this may indicate a dispatch failure`);
+      }
+
+      if (taskIndex < 0 || taskIndex >= batch.results.length) {
+        throw new Error(
+          `index ${taskIndex} is out of range for batch ${batchId} (size ${batch.results.length})`,
+        );
+      }
+
+      const result = batch.results[taskIndex];
+      return {
+        content: [{ type: 'text' as const, text: JSON.stringify({ output: result.output }, null, 2) }],
       };
     },
   );

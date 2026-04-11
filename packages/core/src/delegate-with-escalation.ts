@@ -122,6 +122,9 @@ export async function delegateWithEscalation(
       cwd: task.cwd,
       effort: task.effort,
       sandboxPolicy: task.sandboxPolicy,
+      expectedCoverage: task.expectedCoverage,
+      includeProgressTrace: task.includeProgressTrace,
+      parentModel: task.parentModel,
       onProgress: safeSink,
       onInitialRequest: (meta) => {
         initialPromptLengthChars = meta.lengthChars;
@@ -145,6 +148,7 @@ export async function delegateWithEscalation(
         result.status === 'ok'
           ? undefined
           : (result.error || `status=${result.status}`),
+      ...(result.progressTrace && { progressTrace: result.progressTrace }),
     };
 
     attempts.push({ result, record });
