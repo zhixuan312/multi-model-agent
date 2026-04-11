@@ -113,136 +113,75 @@ export const TRACE_DROP_PRIORITY: Record<ProgressEvent['kind'], number> = {
 export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
   if (events.length === 0) return [];
 
-  const traceSize = (arr: Array<ProgressEvent | ProgressTraceEntry>): number =>
-    JSON.stringify(arr).length;
-  const isNeverDrop = (event: ProgressEvent): boolean => TRACE_DROP_PRIORITY[event.kind] >= 100;
+  const traceSize = (arr: ProgressEvent[]): number => JSON.stringify(arr).length;
+  const isNeverDrop = (event: ProgressEvent): boolean => (TRACE_DROP_PRIORITY[event.kind] ?? 50) >= 100;
 
-  const indexed = events.map((event, index) => ({
-    event,
-    index,
-    priority: TRACE_DROP_PRIORITY[event.kind] ?? 50,
-    neverDrop: isNeverDrop(event),
-  }));
-  const boundaryEntries = indexed.filter((entry) => entry.neverDrop);
-  const droppableEntries = indexed.filter((entry) => !entry.neverDrop);
-  const boundaryEvents = boundaryEntries.map((entry) => entry.event);
-  const boundaryExceedsNominal =
-    boundaryEvents.length > TRACE_MAX_EVENTS || traceSize(boundaryEvents) > TRACE_MAX_CHARS;
-  const boundaryIndexSet = new Set(boundaryEntries.map((entry) => entry.index));
-  const retainedDroppable = new Map(
-    droppableEntries.map((entry) => [entry.index, entry.event] as const),
-  );
-  const buildDroppableTrace = (): ProgressTraceEntry[] =>
-    droppableEntries
-      .filter((entry) => retainedDroppable.has(entry.index))
-      .map((entry) => retainedDroppable.get(entry.index) ?? entry.event);
-  const buildMergedTrace = (): ProgressTraceEntry[] =>
-    events.flatMap((event, index) =>
-      boundaryIndexSet.has(index)
-        ? [event as ProgressTraceEntry]
-        : retainedDroppable.has(index)
-          ? [retainedDroppable.get(index) as ProgressTraceEntry]
-          : [],
-    );
-  const droppableTraceSize = (): number => traceSize(buildDroppableTrace());
-  const droppableWithinNominal = (): boolean =>
-    retainedDroppable.size <= TRACE_MAX_EVENTS && droppableTraceSize() <= TRACE_MAX_CHARS;
+  const keep: ProgressEvent[] = [];
+  const droppable: ProgressEvent[] = [];
+  for (const event of events) {
+    (isNeverDrop(event) ? keep : droppable).push(event);
+  }
+
+  if (events.length <= TRACE_MAX_EVENTS && traceSize(events) <= TRACE_MAX_CHARS) {
+    return events;
+  }
+
+  const keepBytes = traceSize(keep);
+  const remainingEventBudget = Math.max(0, TRACE_MAX_EVENTS - keep.length);
+  const remainingByteBudget = Math.max(0, TRACE_MAX_CHARS - keepBytes);
 
   const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
-  let droppedCount = 0;
-  if (droppableWithinNominal()) {
-    if (!boundaryExceedsNominal) {
-      return events;
-    }
-
-    return [
-      ...events,
-      {
-        kind: '_trimmed' as const,
-        droppedCount: 0,
-        droppedKinds: {},
-        capExceededByBoundaryEvents: true,
-      },
-    ];
-  }
-
-  const dropOrder = [...droppableEntries].sort(
-    (a, b) => (a.priority - b.priority) || (a.index - b.index),
+  const sortedDroppable = [...droppable].sort(
+    (a, b) => (TRACE_DROP_PRIORITY[a.kind] ?? 50) - (TRACE_DROP_PRIORITY[b.kind] ?? 50),
   );
+  let retained = sortedDroppable;
 
-  for (const entry of dropOrder) {
-    if (droppableWithinNominal()) break;
-    retainedDroppable.delete(entry.index);
-    droppedKinds[entry.event.kind] = (droppedKinds[entry.event.kind] ?? 0) + 1;
-    droppedCount += 1;
+  while (
+    retained.length > remainingEventBudget ||
+    traceSize(retained) > remainingByteBudget
+  ) {
+    if (retained.length === 0) break;
+    const victim = retained.shift()!;
+    droppedKinds[victim.kind] = (droppedKinds[victim.kind] ?? 0) + 1;
   }
 
-  if (!droppableWithinNominal() && retainedDroppable.size > 40) {
-    const retainedDroppableEntries = droppableEntries.filter((entry) => retainedDroppable.has(entry.index));
-    const firstSlice = retainedDroppableEntries.slice(0, 10);
-    const lastSlice = retainedDroppableEntries.slice(-30);
-    const middleSlice = retainedDroppableEntries.slice(10, retainedDroppableEntries.length - 30);
-    if (middleSlice.length > 0) {
-      for (const entry of middleSlice) {
-        retainedDroppable.delete(entry.index);
-        droppedKinds[entry.event.kind] = (droppedKinds[entry.event.kind] ?? 0) + 1;
-        droppedCount += 1;
-      }
-      for (const entry of [...firstSlice, ...lastSlice]) {
-        retainedDroppable.set(entry.index, entry.event);
-      }
-    }
-  }
-
-  const compactDroppableEvents = (stringLimit: number): boolean => {
-    for (const entry of retainedDroppableEntries()) {
-      switch (entry.event.kind) {
-        case 'text_emission':
-          retainedDroppable.set(entry.index, {
-            ...entry.event,
-            preview: entry.event.preview.slice(0, stringLimit),
-          });
-          break;
-        case 'tool_call':
-          retainedDroppable.set(entry.index, {
-            ...entry.event,
-            toolSummary: entry.event.toolSummary.slice(0, stringLimit),
-          });
-          break;
-        default:
-          break;
+  if (
+    (retained.length > remainingEventBudget || traceSize(retained) > remainingByteBudget) &&
+    retained.length > 40
+  ) {
+    const retainedSet = new Set(retained);
+    const originalOrder = droppable.filter((event) => retainedSet.has(event));
+    const head = originalOrder.slice(0, 10);
+    const tail = originalOrder.slice(-30);
+    const keptSet = new Set([...head, ...tail]);
+    for (const event of originalOrder) {
+      if (!keptSet.has(event)) {
+        droppedKinds[event.kind] = (droppedKinds[event.kind] ?? 0) + 1;
       }
     }
-    return droppableWithinNominal();
-  };
-
-  const retainedDroppableEntries = (): Array<(typeof droppableEntries)[number]> =>
-    droppableEntries.filter((entry) => retainedDroppable.has(entry.index));
-
-  if (!droppableWithinNominal()) {
-    for (let stringLimit = 64; ; stringLimit = stringLimit > 0 ? Math.max(0, Math.floor(stringLimit / 2)) : 0) {
-      if (compactDroppableEvents(stringLimit) || stringLimit === 0) {
-        break;
-      }
-    }
+    retained = [...head, ...tail];
   }
 
-  const result = buildMergedTrace();
-  const trimmedMarker =
-    droppedCount > 0 || boundaryExceedsNominal
-      ? {
-          kind: '_trimmed' as const,
-          droppedCount,
-          droppedKinds,
-          ...(boundaryExceedsNominal ? { capExceededByBoundaryEvents: true } : {}),
-        }
-      : undefined;
+  const retainedSet = new Set(retained);
+  const merged = events.filter((event) => isNeverDrop(event) || retainedSet.has(event));
 
-  if (!trimmedMarker) {
-    return result;
+  const droppedCount = droppable.length - retained.length;
+  const capExceededByBoundaryEvents =
+    keep.length > TRACE_MAX_EVENTS || keepBytes > TRACE_MAX_CHARS;
+
+  if (droppedCount === 0 && !capExceededByBoundaryEvents) {
+    return merged;
   }
 
-  return [...result, trimmedMarker];
+  return [
+    ...merged,
+    {
+      kind: '_trimmed' as const,
+      droppedCount,
+      droppedKinds,
+      ...(capExceededByBoundaryEvents ? { capExceededByBoundaryEvents: true } : {}),
+    },
+  ];
 }
 
 const DEFAULT_MIN_LENGTH = 200;

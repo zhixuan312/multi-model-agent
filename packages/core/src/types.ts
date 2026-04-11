@@ -365,6 +365,7 @@ export type ProgressEvent =
         | 'supervise_empty'
         | 'supervise_thinking'
         | 'supervise_fragment'
+        | 'supervise_insufficient_coverage'
         | 'watchdog_warning'
         | 'watchdog_force_salvage'
       turn: number

@@ -89,13 +89,13 @@ describe('computeCostUSD', () => {
     expect(computeCostUSD(1_000_000, 500_000, config)).toBeCloseTo(12, 6);
   });
 
-  it('returns null for an unrated profile with no explicit config rates', () => {
+  it('uses latest-family pricing for MiniMax-M2 profiles', () => {
     const config: ProviderConfig = {
       type: 'codex',
       model: 'MiniMax-M2',
     };
 
-    expect(computeCostUSD(1_000_000, 500_000, config)).toBeNull();
+    expect(computeCostUSD(1_000_000, 500_000, config)).toBeCloseTo(0.9, 6);
   });
 });
 
@@ -108,8 +108,8 @@ describe('computeSavedCostUSD', () => {
     expect(computeSavedCostUSD(null, 1, 1, 'gpt-5-codex')).toBeNull();
   });
 
-  it('returns null when the parent profile has no rates', () => {
-    expect(computeSavedCostUSD(1, 1_000, 1_000, 'MiniMax-M2')).toBeNull();
+  it('returns null when the parent profile is unknown', () => {
+    expect(computeSavedCostUSD(1, 1_000, 1_000, 'llama-3-70b')).toBeNull();
   });
 
   it('computes savings against a cheaper parent profile', () => {
@@ -117,7 +117,7 @@ describe('computeSavedCostUSD', () => {
     const inputTokens = 1_000_000;
     const outputTokens = 500_000;
 
-    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'claude-opus-4-6')).toBeCloseTo(48.5, 6);
+    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'claude-opus-4-6')).toBeCloseTo(13.5, 6);
   });
 
   it('returns a negative value when the actual cost exceeds the parent profile cost', () => {
@@ -125,6 +125,6 @@ describe('computeSavedCostUSD', () => {
     const inputTokens = 1_000_000;
     const outputTokens = 0;
 
-    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'gpt-5-codex')).toBeCloseTo(-18.75, 6);
+    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'gpt-5-codex')).toBeCloseTo(-17.5, 6);
   });
 });

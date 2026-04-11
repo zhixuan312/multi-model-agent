@@ -305,13 +305,21 @@ describe('trimProgressTrace', () => {
     expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
   });
 
-  it('keeps droppable events when boundary and droppable partitions are each under cap but merged size is over cap', () => {
+  it('boundary fits but merged trace over 16KB → drops droppable events to satisfy remaining byte budget', () => {
+    // Boundary consumes part of the 16KB budget, so droppable entries must fit
+    // within the remaining bytes rather than the full cap.
     const boundary = { kind: 'turn_start' as const, turn: 1, provider: 'b'.repeat(9000) };
     const droppable = { kind: 'text_emission' as const, turn: 1, chars: 1, preview: 'd'.repeat(9000) };
     const events = [boundary, droppable];
     const trimmed = trimProgressTrace(events);
-    expect(trimmed).toEqual(events);
-    expect(trimmed.some((event) => event.kind === '_trimmed')).toBe(false);
+    expect(trimmed[0]).toEqual(boundary);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(false);
+    const marker = trimmed[1];
+    expect(marker).toMatchObject({
+      kind: '_trimmed',
+      droppedCount: 1,
+      droppedKinds: { text_emission: 1 },
+    });
   });
 
   it('keeps all 100 never-drop turn_start events and marks boundary-cap pressure', () => {
@@ -351,7 +359,7 @@ describe('trimProgressTrace', () => {
     );
   });
 
-  it('keeps all never-drop turn_start events while dropping text emissions under pressure', () => {
+  it('keeps all never-drop turn_start events while dropping all text emissions when boundary events consume the nominal budget', () => {
     const events = [
       ...Array.from({ length: 100 }, (_, i) => ({
         kind: 'turn_start' as const,
@@ -367,7 +375,7 @@ describe('trimProgressTrace', () => {
     ];
     const trimmed = trimProgressTrace(events);
     expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
-    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(true);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(false);
     const marker = trimmed.find((event) => event.kind === '_trimmed');
     expect(marker).toEqual(
       expect.objectContaining({
