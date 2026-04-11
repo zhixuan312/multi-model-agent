@@ -704,6 +704,17 @@ describe('validateSubAgentOutput (coordinator)', () => {
     expect(result.kind).toBe('empty');
   });
 
+  it('regression: short verdict output with passing expectedCoverage is valid (previously no_terminator false positive)', () => {
+    const output = 'verdict: pass, 5/5 sections found, no concerns';
+    const result = validateSubAgentOutput(output, {
+      expectedCoverage: {
+        requiredMarkers: ['verdict:', 'sections found'],
+      },
+    });
+    expect(result.valid).toBe(true);
+    expect(result.kind).toBeUndefined();
+  });
+
   it('default (no opts) matches validateCompletion — no_terminator for short terminator-less output', () => {
     const text = 'verdict: pass';
     const coord = validateSubAgentOutput(text);

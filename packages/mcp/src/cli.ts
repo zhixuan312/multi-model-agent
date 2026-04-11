@@ -795,6 +795,11 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
 async function main() {
   const args = process.argv.slice(2);
 
+  if (args[0] === '--help' || args[0] === '-h') {
+    console.log('Usage: multi-model-agent serve [--config <path>]');
+    process.exit(0);
+  }
+
   if (args[0] !== 'serve') {
     console.error('Usage: multi-model-agent serve [--config <path>]');
     process.exit(1);
