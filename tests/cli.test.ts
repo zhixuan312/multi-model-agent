@@ -581,7 +581,9 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
     expect(result.outputLength).toBeDefined();
     expect(typeof result.outputLength).toBe('number');
     expect(result.outputSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(result._fetchWith).toContain('get_task_output');
+    expect(result._fetchOutputWith).toContain('get_task_output');
+    expect(result._fetchDetailWith).toContain('get_task_detail');
+    expect(result).toHaveProperty('escalationChain');
   });
 });
 
@@ -1026,5 +1028,155 @@ describe('delegate_tasks headline field (full mode)', () => {
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
     expect(payload.headline).toContain('$0.00 actual');
     expect(payload.headline).not.toContain('ROI');
+  });
+});
+
+describe('delegate_tasks summary mode — slim shape', () => {
+  /**
+   * Helper: run the delegate_tasks handler with an inline mock override so
+   * the returned RunResult[] has realistic bulky fields (filesRead/Written,
+   * toolCalls, escalationLog with reasons). The summary-shape assertions
+   * need these populated on the source side to verify the slim output
+   * correctly OMITS them.
+   */
+  async function dispatchRichBatch(opts: {
+    responseMode?: 'full' | 'summary' | 'auto';
+  } = {}): Promise<any> {
+    const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
+    vi.mocked(runTasksMod.runTasks).mockImplementationOnce(
+      async (tasks: unknown): Promise<RunResult[]> => {
+        const arr = tasks as { prompt: string }[];
+        return arr.map((_, i): RunResult => ({
+          output: `rich output for task ${i}`,
+          status: 'ok',
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01, savedCostUSD: 0.05 },
+          turns: 3 + i,
+          filesRead: [`src/a-${i}.ts`, `src/b-${i}.ts`],
+          filesWritten: [`src/c-${i}.ts`],
+          directoriesListed: ['src'],
+          toolCalls: [
+            `readFile src/a-${i}.ts`,
+            `grep foo *.ts → ${2 + i} hits`,
+            `writeFile src/c-${i}.ts`,
+          ],
+          outputIsDiagnostic: false,
+          escalationLog: i === 0
+            ? [
+                {
+                  provider: 'mock',
+                  status: 'ok',
+                  turns: 3,
+                  inputTokens: 100,
+                  outputTokens: 50,
+                  costUSD: 0.01,
+                  initialPromptLengthChars: 500,
+                  initialPromptHash: 'abc123',
+                },
+              ]
+            : [
+                {
+                  provider: 'mock',
+                  status: 'incomplete',
+                  turns: 5,
+                  inputTokens: 200,
+                  outputTokens: 100,
+                  costUSD: 0.005,
+                  initialPromptLengthChars: 500,
+                  initialPromptHash: 'def456',
+                  reason: 'degenerate completion after supervision retries',
+                },
+                {
+                  provider: 'mock',
+                  status: 'ok',
+                  turns: 4,
+                  inputTokens: 300,
+                  outputTokens: 150,
+                  costUSD: 0.015,
+                  initialPromptLengthChars: 500,
+                  initialPromptHash: 'def456',
+                },
+              ],
+          durationMs: 1000 + i * 500,
+        }));
+      },
+    );
+
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const delegateTool = (server as any)._registeredTools['delegate_tasks'];
+    const result = await delegateTool.handler(
+      {
+        tasks: [
+          { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
+          { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
+        ],
+        ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
+      },
+      {},
+    );
+    return JSON.parse(result.content[0].text);
+  }
+
+  it('emits the slim per-task shape without bulky fields', async () => {
+    const payload = await dispatchRichBatch({ responseMode: 'summary' });
+
+    expect(payload.mode).toBe('summary');
+    expect(payload.results).toHaveLength(2);
+
+    const task0 = payload.results[0];
+    expect(task0.taskIndex).toBe(0);
+    expect(task0.provider).toBe('mock');
+    expect(task0.status).toBe('ok');
+    expect(task0.turns).toBe(3);
+    expect(task0.durationMs).toBe(1000);
+    expect(task0.outputLength).toBe('rich output for task 0'.length);
+    expect(task0).toHaveProperty('outputSha256');
+    expect(typeof task0.outputSha256).toBe('string');
+    expect(task0.outputSha256).toHaveLength(64); // sha256 hex
+    expect(task0).toHaveProperty('usage');
+    expect(task0.usage.costUSD).toBe(0.01);
+
+    // New escalationChain field
+    expect(task0.escalationChain).toEqual(['mock:ok']);
+
+    // New fetch-hint fields
+    expect(task0).toHaveProperty('_fetchOutputWith');
+    expect(task0).toHaveProperty('_fetchDetailWith');
+    expect(task0._fetchOutputWith).toContain('get_task_output');
+    expect(task0._fetchOutputWith).toContain(payload.batchId);
+    expect(task0._fetchOutputWith).toContain('taskIndex: 0');
+    expect(task0._fetchDetailWith).toContain('get_task_detail');
+    expect(task0._fetchDetailWith).toContain(payload.batchId);
+
+    // Assert dropped fields are NOT present on the slim per-task entry.
+    expect(task0).not.toHaveProperty('filesRead');
+    expect(task0).not.toHaveProperty('filesWritten');
+    expect(task0).not.toHaveProperty('directoriesListed');
+    expect(task0).not.toHaveProperty('toolCalls');
+    expect(task0).not.toHaveProperty('progressTrace');
+    expect(task0).not.toHaveProperty('escalationLog');
+    expect(task0).not.toHaveProperty('_fetchWith'); // old key removed
+  });
+
+  it('escalationChain reflects walked chains with provider:status entries', async () => {
+    const payload = await dispatchRichBatch({ responseMode: 'summary' });
+    expect(payload.results[1].escalationChain).toEqual([
+      'mock:incomplete',
+      'mock:ok',
+    ]);
+  });
+
+  it('summary-mode envelope carries a headline field alongside the batch aggregates', async () => {
+    const payload = await dispatchRichBatch({ responseMode: 'summary' });
+
+    expect(payload).toHaveProperty('headline');
+    expect(payload).toHaveProperty('timings');
+    expect(payload).toHaveProperty('batchProgress');
+    expect(payload).toHaveProperty('aggregateCost');
+    expect(typeof payload.headline).toBe('string');
+    expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
+    expect(payload.headline).toContain('$0.02 actual');
+    expect(payload.headline).toContain('$0.10 saved vs claude-opus-4-6');
+    expect(payload.headline).toContain('ROI');
   });
 });

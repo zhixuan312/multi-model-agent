@@ -72,8 +72,9 @@ savedCostUnavailableTasks}). If the combined output across tasks is small,
 mode: 'full' with inline outputs; if it exceeds the server's threshold
 (default 64 KB, configurable via env MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS
 / config defaults.largeResponseThresholdChars / buildMcpServer option),
-mode: 'summary' with per-task outputLength + outputSha256 + _fetchWith
-hint — fetch individual outputs with get_task_output({ batchId, taskIndex }).
+mode: 'summary' with per-task outputLength + outputSha256 + _fetchOutputWith
+hint — fetch individual outputs with get_task_output({ batchId, taskIndex }),
+or per-task metadata with get_task_detail({ batchId, taskIndex }).
 Set responseMode: 'full' to force inline, 'summary' to force summary, or
 omit for auto-escape.
 
