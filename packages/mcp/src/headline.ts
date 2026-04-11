@@ -62,18 +62,32 @@ export function composeHeadline(input: ComposeHeadlineInput): string {
   // Wall clock
   parts.push(`wall ${formatDuration(timings.wallClockMs)}`);
 
+  // Divide-by-zero guard — before any other cost or savings clause.
+  // If totalActualCostUSD === 0, we collapse to "$0.00 actual" regardless
+  // of parentModel set size (rows 6, 7, 8). This check must come BEFORE the
+  // parallel savings clause so we don't emit "saved ~Xs" for zero-cost batches.
+  if (aggregateCost.totalActualCostUSD === 0) {
+    parts.push(`${formatCurrency(aggregateCost.totalActualCostUSD)} actual`);
+    return parts.join(', ');
+  }
+
   // Parallel savings clause — omitted when single task or savings <= 0
   if (taskSpecs.length > 1 && timings.estimatedParallelSavingsMs > 0) {
     parts.push(`saved ~${formatDuration(timings.estimatedParallelSavingsMs)} vs serial`);
   }
 
-  // Cost clause — single-baseline happy path only (row 1). Other branches in Task 2.
+  // Cost clause — six-branch decision table from spec §1.
   const parentSet = new Set(
     taskSpecs
       .map((t) => t.parentModel)
       .filter((m): m is string => typeof m === 'string' && m.length > 0),
   );
-  if (aggregateCost.totalActualCostUSD > 0 && parentSet.size === 1) {
+
+  if (parentSet.size === 0) {
+    // Row 2: no parentModel declared, positive cost. Show actual only.
+    parts.push(`${formatCurrency(aggregateCost.totalActualCostUSD)} actual`);
+  } else if (parentSet.size === 1) {
+    // Rows 1, 3, 4: single baseline, positive cost. Emit full clause with ROI.
     const parentLabel = [...parentSet][0];
     const ratio =
       (aggregateCost.totalActualCostUSD + aggregateCost.totalSavedCostUSD) /
@@ -82,7 +96,12 @@ export function composeHeadline(input: ComposeHeadlineInput): string {
       `${formatCurrency(aggregateCost.totalActualCostUSD)} actual / ${formatCurrency(aggregateCost.totalSavedCostUSD)} saved vs ${parentLabel} (${ratio.toFixed(1)}x ROI)`,
     );
   } else {
-    parts.push(`${formatCurrency(aggregateCost.totalActualCostUSD)} actual`);
+    // Row 5: mixed baselines, positive cost. ROI multiplier is NOT coherent
+    // across different parent baselines (different denominators), so we drop
+    // it. The $saved number is still valid as an additive dollar quantity.
+    parts.push(
+      `${formatCurrency(aggregateCost.totalActualCostUSD)} actual / ${formatCurrency(aggregateCost.totalSavedCostUSD)} saved vs multiple baselines`,
+    );
   }
 
   return parts.join(', ');
