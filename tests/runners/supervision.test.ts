@@ -14,6 +14,8 @@ import {
   WATCHDOG_FORCE_SALVAGE_RATIO,
   logWatchdogEvent,
   type WatchdogEventDetails,
+  validateSubAgentOutput,
+  THINKING_DIAGNOSTIC_MARKER,
 } from '../../packages/core/src/runners/supervision.js';
 import type { ProviderConfig } from '../../packages/core/src/types.js';
 import type { ModelProfile } from '../../packages/core/src/routing/model-profiles.js';
@@ -650,5 +652,72 @@ describe('logWatchdogEvent — MULTI_MODEL_DEBUG output', () => {
     expect(stderrSpy).toHaveBeenCalledTimes(1);
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('WATCHDOG force_salvage'));
     expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('scratchpadChars=30000'));
+  });
+});
+
+describe('validateSubAgentOutput (coordinator)', () => {
+  it('empty output always fails even when expectedCoverage is declared', () => {
+    const result = validateSubAgentOutput('', {
+      expectedCoverage: { minSections: 2 },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('empty');
+  });
+
+  it('thinking_only output always fails even when expectedCoverage is declared', () => {
+    const result = validateSubAgentOutput(THINKING_DIAGNOSTIC_MARKER, {
+      expectedCoverage: { minSections: 2 },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('thinking_only');
+  });
+
+  it('expectedCoverage passing makes short terminator-less output valid', () => {
+    const result = validateSubAgentOutput('verdict: pass, section-alpha, section-beta', {
+      expectedCoverage: {
+        requiredMarkers: ['section-alpha', 'section-beta'],
+      },
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('expectedCoverage failing propagates as insufficient_coverage', () => {
+    const result = validateSubAgentOutput('verdict: pass, section-alpha', {
+      expectedCoverage: {
+        requiredMarkers: ['section-alpha', 'section-beta'],
+      },
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('insufficient_coverage');
+  });
+
+  it('skipCompletionHeuristic: true makes a short terminator-less output valid without coverage', () => {
+    const result = validateSubAgentOutput('minimax,ok,0.02,5m 30s', {
+      skipCompletionHeuristic: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('skipCompletionHeuristic: true still fails on empty', () => {
+    const result = validateSubAgentOutput('', { skipCompletionHeuristic: true });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('empty');
+  });
+
+  it('default (no opts) matches validateCompletion — no_terminator for short terminator-less output', () => {
+    const text = 'verdict: pass';
+    const coord = validateSubAgentOutput(text);
+    const direct = validateCompletion(text);
+    expect(coord).toEqual(direct);
+    expect(coord.valid).toBe(false);
+    expect(coord.kind).toBe('no_terminator');
+  });
+
+  it('default (no opts) matches validateCompletion — long prose is valid', () => {
+    const text = 'This is a long explanation. '.repeat(20);
+    const coord = validateSubAgentOutput(text);
+    const direct = validateCompletion(text);
+    expect(coord).toEqual(direct);
+    expect(coord.valid).toBe(true);
   });
 });
