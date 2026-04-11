@@ -1,28 +1,42 @@
 # multi-model-agent
 
-> **v0.3.0 released** — new: `expectedCoverage` for semantic incompleteness detection, `includeProgressTrace` for post-hoc observability, `parentModel` + `savedCostUSD` for delegation ROI visibility, `get_task_output` for paginated batch retrieval, and response pagination via `responseMode`. See the [delegation rule](./docs/claude-code-delegation-rule.md) for the new "Decompose and parallelize enumerable work" pattern.
+**Delegate work from your expensive parent-session model to a fleet of cheaper sub-agents, in parallel, from a single MCP tool call.**
 
-`multi-model-agent` is an MCP server for delegating work to multiple LLM providers from one tool call.
+Running everything on one high-end model (Opus, GPT-5, etc.) is slow, expensive, and fills your session's context window with mechanical labor. `multi-model-agent` is an MCP server that gives your client a single tool, `delegate_tasks`, which runs those tasks in parallel across the providers you configure — auto-routing each task to the cheapest provider that has the required capabilities and quality tier, or pinning to a specific provider when you want control.
 
-It gives your MCP client a single tool, `delegate_tasks`, and runs the requested tasks in parallel across the providers you configure. The server can auto-route tasks to the cheapest eligible provider based on required capabilities and quality tier, or you can pin a task to a specific provider.
+## Why use it
 
-## What Users Get
+- **Cut cost and context.** Mechanical work (file edits, search, tests, doc lookups) runs on cheap providers in a clean worker context. Your parent session keeps its window lean and its judgment unblocked.
+- **Run tasks in parallel.** Independent tasks in one call execute concurrently — wall-clock time drops linearly with task count.
+- **Mix providers in one config.** Claude, Codex (via `codex login` or `OPENAI_API_KEY`), and any OpenAI-compatible endpoint (MiniMax, DeepSeek, Groq, local vLLM, …) live side-by-side.
+- **Auto-route by capability + tier + cost.** Declare what the task needs; the server picks the cheapest qualifying provider and walks the escalation chain on failure.
+- **Sandboxed by default.** Every delegated sub-agent is confined to the task's working directory until you opt out. Shell is off by default.
+- **Visible ROI.** Every response includes `aggregateCost`, `timings`, and per-task `savedCostUSD` so you can see the savings without computing anything.
 
-- Four MCP tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_task_output`
-- Parallel task execution (independent tasks run concurrently)
-- Multiple provider types in one config:
-  - `codex`
-  - `claude`
-  - `openai-compatible`
-- Auto-routing by:
-  - required capabilities
-  - task tier: `trivial`, `standard`, `reasoning`
-  - effective cost tier: `free`, `low`, `medium`, `high`
-- Optional filesystem sandboxing per provider or per task
-- Response pagination via `responseMode` (full/summary/auto) to prevent inline rendering limits
-- Enumerable-deliverable coverage validation (`expectedCoverage`) with semantic incompleteness detection
-- Post-hoc execution observability via bounded `progressTrace` capture
-- Visible delegation ROI via `parentModel` + `savedCostUSD` per task and batch-level `timings` / `aggregateCost` aggregates
+## What you get
+
+Four MCP tools:
+
+| Tool | Purpose |
+| --- | --- |
+| `delegate_tasks` | Dispatch an array of tasks; each runs on the cheapest qualifying provider, in parallel. |
+| `register_context_block` | Store a long brief once and reference it by id on subsequent dispatches. |
+| `retry_tasks` | Re-run specific task indices from a previous batch without re-sending briefs (30-minute LRU cache). |
+| `get_task_output` | Fetch the full text of a single task result from a `summary`-mode batch. |
+
+Three provider types:
+
+- `claude` — via `@anthropic-ai/claude-agent-sdk`
+- `codex` — OpenAI Responses API with `codex login` or `OPENAI_API_KEY`
+- `openai-compatible` — any OpenAI-compatible endpoint (`baseUrl` + `apiKey`/`apiKeyEnv`)
+
+Routing axes:
+
+- required capabilities (`file_read`, `file_write`, `grep`, `glob`, `shell`, `web_search`, `web_fetch`)
+- quality tier (`trivial`, `standard`, `reasoning`)
+- cost tier (`free`, `low`, `medium`, `high`)
+
+Plus: optional per-task filesystem sandboxing, response pagination (`responseMode`), enumerable-deliverable coverage validation (`expectedCoverage`), and bounded post-hoc progress traces (`includeProgressTrace`).
 
 ## Packages
 
@@ -38,7 +52,7 @@ This repo contains two workspace packages:
 ### 1. Requirements
 
 - Node.js `>=22`
-- An MCP client such as Claude Code or Claude Desktop
+- An MCP client such as Claude Code, Claude Desktop, Codex CLI, or Cursor
 - Credentials for at least one provider
 
 Provider auth currently works like this:
@@ -126,13 +140,17 @@ Set `sandboxPolicy: "none"` per-provider or per-task only when you intentionally
 
 ### 4. Register the MCP server
 
-For Claude Code, register at **user scope** (`-s user`) so the server is available in every directory, not just the one you ran the command in:
+You don't install or run a binary yourself. Each MCP client spawns the server over stdio using the `npx` command below. Pick the client(s) you use:
+
+#### Claude Code
+
+Register at **user scope** (`-s user`) so the server is available in every directory, not just the one you ran the command in:
 
 ```bash
 claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
-If your providers need environment variables:
+If your providers need environment variables, pass them with `-e`:
 
 ```bash
 claude mcp add multi-model-agent -s user \
@@ -157,7 +175,28 @@ claude mcp remove multi-model-agent -s local
 claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
-For Claude Desktop, add this to `claude_desktop_config.json`:
+#### Codex CLI
+
+Codex CLI reads MCP servers from `~/.codex/config.toml`. Add this block:
+
+```toml
+[mcp_servers.multi-model-agent]
+command = "npx"
+args = ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"]
+
+[mcp_servers.multi-model-agent.env]
+OPENAI_API_KEY = "sk-..."
+ANTHROPIC_API_KEY = "sk-ant-..."
+MINIMAX_API_KEY = "..."
+```
+
+Only include the env keys for the providers you configured in `~/.multi-model/config.json`. Restart `codex` after editing the file.
+
+> **Tip:** if you are already logged in via `codex login`, the `codex` provider inside `multi-model-agent` will reuse that auth automatically and you don't need `OPENAI_API_KEY` in the env block — but any *other* providers that need an API key (Claude, MiniMax, etc.) still must be passed through the env block because the spawned MCP server doesn't inherit your shell environment.
+
+#### Claude Desktop
+
+Add this to `claude_desktop_config.json`:
 
 ```json
 {
@@ -199,6 +238,38 @@ Then ask your client to call `delegate_tasks` with a trivial task such as:
 }
 ```
 
+## Updating
+
+The `npx -y @zhixuan92/multi-model-agent-mcp serve` command in every install recipe above **always fetches the latest published version** on each spawn (that is what `-y` does). You do not need to run `npm update` or re-register the server to pick up a new release.
+
+To apply an update:
+
+1. **Quit your MCP client fully** (Claude Code, Claude Desktop, Codex CLI). Just closing the window is not always enough — on macOS, use *Quit* from the menu or `⌘Q`. Claude Code sessions keep the MCP server process alive until the session ends.
+2. Restart the client. On the next `delegate_tasks` call, `npx` will fetch the latest version from npm.
+3. Optional: clear npm's cached npx executables with `npx clear-npx-cache` if you suspect a stale build. Rarely needed.
+
+### Pinning a version
+
+If you want reproducibility (CI, shared team config, debugging a regression), pin a specific version in the spawn command:
+
+```bash
+claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp@0.3.0 serve
+```
+
+or in `config.toml` / `claude_desktop_config.json`:
+
+```toml
+args = ["-y", "@zhixuan92/multi-model-agent-mcp@0.3.0", "serve"]
+```
+
+Replace `0.3.0` with any published version. Without an explicit version tag, `npx` follows the `latest` dist-tag.
+
+### Breaking changes and migration
+
+The project is on **0.x semver**: any MINOR bump (`0.2.x → 0.3.0`) may change the config schema, the `delegate_tasks` tool input, or provider defaults. PATCH bumps (`0.3.0 → 0.3.1`) are strictly backwards-compatible bug fixes.
+
+Always skim [`CHANGELOG.md`](./CHANGELOG.md) before picking up a new MINOR version. If the changelog calls out a config or tool-input change, update `~/.multi-model/config.json` (and any stored `delegate_tasks` call shapes in rules/prompts) before restarting your client. Provider auth, `~/.multi-model/config.json` location, and the MCP tool names themselves are stable across all 0.x releases.
+
 ## Recommended: Delegation Rule for Claude Code
 
 Claude Code's native `Task` / `Agent` subagents inherit your parent session's expensive model and eat its context window. We ship a drop-in rule file that teaches Claude Code **when** to delegate work through `delegate_tasks` instead — mechanical edits go to free providers, reasoning-tier work goes to expensive providers only when needed, and independent tasks run in parallel.
@@ -213,7 +284,7 @@ curl -o ~/.claude/rules/multi-model-delegation.md \
 
 Then restart Claude Code. The full rule — install options, scope (what to delegate vs. keep native), provider routing table, dispatch examples, and status handling — lives in [`docs/claude-code-delegation-rule.md`](./docs/claude-code-delegation-rule.md). Read that file for the complete version before adjusting it to your own provider names.
 
-**Superpowers users:** the rule pairs with `superpowers:writing-plans`. Specific per-task scope (file paths, mechanical vs. integration vs. architectural, capabilities needed) lets the rule auto-route each task to the cheapest qualifying provider. Vague plans force escalation and cost more. See the *"Writing plans that delegate well"* section of the rule file for examples.
+**Superpowers users:** the rule pairs with `superpowers:writing-plans`. Specific per-task scope (file paths, mechanical vs. integration vs. architectural, capabilities needed) lets the rule auto-route each task to the cheapest qualifying provider. Vague plans force escalation and cost more. See the *"Writing Delegable Briefs"* section of the rule file for examples.
 
 ## How Routing Works
 
