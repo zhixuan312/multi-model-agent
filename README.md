@@ -24,7 +24,7 @@ Six MCP tools:
 | `retry_tasks` | Re-run specific task indices from a previous batch without re-sending briefs (30-minute LRU cache). |
 | `get_task_output` | Fetch the full text of a single task result from a `summary`-mode batch. |
 | `get_task_detail` | Fetch per-task execution metadata (`toolCalls`, `filesRead/Written/Listed`, full `escalationLog` with reasons, `progressTrace` if opted in) for a single task from a previous batch. |
-| `get_batch_telemetry` | Fetch per-task execution metadata for every task in a previous batch — `headline`, `timings`, `batchProgress`, `aggregateCost`, and a per-task cost/timing rollup. Use as a fallback when the primary response was obscured by a client-side size limit. Sizing is linear per task rather than capped. |
+| `get_batch_telemetry` | Fetch a compact ROI telemetry envelope for a previous batch — `headline`, `timings`, `batchProgress`, `aggregateCost`, and a per-task cost/timing rollup. Use as a fallback when the primary response was obscured by a client-side size limit. Sizing is linear per task rather than capped. |
 
 Three provider types:
 
