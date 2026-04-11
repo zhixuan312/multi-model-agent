@@ -113,51 +113,90 @@ export const TRACE_DROP_PRIORITY: Record<ProgressEvent['kind'], number> = {
 export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
   if (events.length === 0) return [];
 
-  const traceSize = (arr: ProgressEvent[]): number => JSON.stringify(arr).length;
+  const traceSize = (arr: Array<ProgressEvent | ProgressTraceEntry>): number =>
+    JSON.stringify(arr).length;
+  const isNeverDrop = (event: ProgressEvent): boolean => TRACE_DROP_PRIORITY[event.kind] >= 100;
 
   if (events.length <= TRACE_MAX_EVENTS && traceSize(events) <= TRACE_MAX_CHARS) {
     return events;
   }
 
-  const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
-  let droppedCount = 0;
-
   const indexed = events.map((event, index) => ({
     event,
     index,
     priority: TRACE_DROP_PRIORITY[event.kind] ?? 50,
+    neverDrop: isNeverDrop(event),
   }));
-  const dropOrder = [...indexed].sort((a, b) => (a.priority - b.priority) || (a.index - b.index));
+  const boundaryEntries = indexed.filter((entry) => entry.neverDrop);
+  const droppableEntries = indexed.filter((entry) => !entry.neverDrop);
+  const boundaryEvents = boundaryEntries.map((entry) => entry.event);
+  const boundaryExceedsNominal =
+    boundaryEvents.length > TRACE_MAX_EVENTS || traceSize(boundaryEvents) > TRACE_MAX_CHARS;
+  const boundaryIndexSet = new Set(boundaryEntries.map((entry) => entry.index));
 
-  const kept = new Set(indexed.map((entry) => entry.index));
-  let keptCount = events.length;
-  let keptSize = traceSize(events);
+  const buildMergedTrace = (keptDroppableIndices: Set<number>): ProgressTraceEntry[] =>
+    events.filter(
+      (_, index) => boundaryIndexSet.has(index) || keptDroppableIndices.has(index),
+    );
+
+  const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
+  let droppedCount = 0;
+  const remainingEventBudget = Math.max(0, TRACE_MAX_EVENTS - boundaryEntries.length);
+
+  const dropOrder = [...droppableEntries].sort(
+    (a, b) => (a.priority - b.priority) || (a.index - b.index),
+  );
+  let keptDroppableIndices = new Set(droppableEntries.map((entry) => entry.index));
 
   for (const entry of dropOrder) {
-    if (keptCount <= TRACE_MAX_EVENTS && keptSize <= TRACE_MAX_CHARS) {
-      break;
-    }
-    if (entry.priority >= 100) {
+    const merged = buildMergedTrace(keptDroppableIndices);
+    if (
+      keptDroppableIndices.size <= remainingEventBudget &&
+      traceSize(merged) <= TRACE_MAX_CHARS
+    ) {
       break;
     }
 
-    kept.delete(entry.index);
-    keptCount -= 1;
+    keptDroppableIndices.delete(entry.index);
     droppedKinds[entry.event.kind] = (droppedKinds[entry.event.kind] ?? 0) + 1;
     droppedCount += 1;
-    const keptEvents = events.filter((_, index) => kept.has(index));
-    keptSize = traceSize(keptEvents);
   }
 
-  let result: ProgressTraceEntry[] = events.filter((_, index) => kept.has(index));
+  let result = buildMergedTrace(keptDroppableIndices);
+
+  if (traceSize(result) > TRACE_MAX_CHARS && keptDroppableIndices.size > 40) {
+    const retainedDroppableEntries = droppableEntries.filter((entry) =>
+      keptDroppableIndices.has(entry.index),
+    );
+    const firstSlice = retainedDroppableEntries.slice(0, 10);
+    const lastSlice = retainedDroppableEntries.slice(-30);
+    const middleSlice = retainedDroppableEntries.slice(10, retainedDroppableEntries.length - 30);
+    if (middleSlice.length > 0) {
+      droppedCount += middleSlice.length;
+      for (const entry of middleSlice) {
+        droppedKinds[entry.event.kind] = (droppedKinds[entry.event.kind] ?? 0) + 1;
+        keptDroppableIndices.delete(entry.index);
+      }
+      keptDroppableIndices = new Set([...firstSlice, ...lastSlice].map((entry) => entry.index));
+      result = buildMergedTrace(keptDroppableIndices);
+    }
+  }
+
   const trimmedMarker =
-    droppedCount > 0 ? { kind: '_trimmed' as const, droppedCount, droppedKinds } : undefined;
+    droppedCount > 0 || boundaryExceedsNominal
+      ? {
+          kind: '_trimmed' as const,
+          droppedCount,
+          droppedKinds,
+          ...(boundaryExceedsNominal ? { capExceededByBoundaryEvents: true } : {}),
+        }
+      : undefined;
   const traceSizeWithMarker = (arr: ProgressTraceEntry[]): number =>
     JSON.stringify(trimmedMarker ? [...arr, trimmedMarker] : arr).length;
 
   const compactEvents = (
     arr: ProgressTraceEntry[],
-    includeNeverDropStrings: boolean,
+    includeBoundaryStrings: boolean,
     stringLimit: number,
   ): ProgressTraceEntry[] =>
     arr.map((event) => {
@@ -167,11 +206,11 @@ export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[]
         case 'tool_call':
           return { ...event, toolSummary: event.toolSummary.slice(0, stringLimit) };
         case 'turn_start':
-          return includeNeverDropStrings
+          return includeBoundaryStrings
             ? { ...event, provider: event.provider.slice(0, stringLimit) }
             : event;
         case 'escalation_start':
-          return includeNeverDropStrings
+          return includeBoundaryStrings
             ? {
                 ...event,
                 previousProvider: event.previousProvider.slice(0, stringLimit),
@@ -184,24 +223,26 @@ export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[]
       }
     });
 
-  if (result.length > TRACE_MAX_EVENTS || traceSizeWithMarker(result) > TRACE_MAX_CHARS) {
-    for (const includeNeverDropStrings of [false, true]) {
+  const shrinkToCap = (arr: ProgressTraceEntry[]): ProgressTraceEntry[] => {
+    let current = arr;
+    for (const includeBoundaryStrings of [false, true]) {
       let stringLimit = 64;
       while (true) {
-        const compacted = compactEvents(result, includeNeverDropStrings, stringLimit);
+        const compacted = compactEvents(current, includeBoundaryStrings, stringLimit);
         if (traceSizeWithMarker(compacted) <= TRACE_MAX_CHARS) {
-          result = compacted;
-          break;
+          return compacted;
         }
         if (stringLimit === 0) {
           break;
         }
         stringLimit = Math.max(0, Math.floor(stringLimit / 2));
       }
-      if (traceSizeWithMarker(result) <= TRACE_MAX_CHARS) {
-        break;
-      }
     }
+    return current;
+  };
+
+  if (traceSizeWithMarker(result) > TRACE_MAX_CHARS) {
+    result = shrinkToCap(result);
   }
 
   if (trimmedMarker) {

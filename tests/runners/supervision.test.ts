@@ -308,6 +308,54 @@ describe('trimProgressTrace', () => {
     expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
   });
 
+  it('keeps all 100 never-drop turn_start events and marks boundary-cap pressure', () => {
+    const events = Array.from({ length: 100 }, (_, i) => ({
+      kind: 'turn_start' as const,
+      turn: i + 1,
+      provider: `codex-${'x'.repeat(20)}`,
+    }));
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        droppedCount: 0,
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+  });
+
+  it('keeps all never-drop turn_start events while dropping text emissions under pressure', () => {
+    const events = [
+      ...Array.from({ length: 100 }, (_, i) => ({
+        kind: 'turn_start' as const,
+        turn: i + 1,
+        provider: `codex-${'x'.repeat(12)}`,
+      })),
+      ...Array.from({ length: 500 }, (_, i) => ({
+        kind: 'text_emission' as const,
+        turn: i + 1,
+        chars: 1,
+        preview: 'y'.repeat(120),
+      })),
+    ];
+    const trimmed = trimProgressTrace(events);
+    expect(trimmed.filter((event) => event.kind === 'turn_start')).toHaveLength(100);
+    expect(trimmed.some((event) => event.kind === 'text_emission')).toBe(false);
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        capExceededByBoundaryEvents: true,
+      }),
+    );
+    if (marker && marker.kind === '_trimmed') {
+      expect(marker.droppedCount).toBeGreaterThan(0);
+      expect(marker.droppedKinds.text_emission).toBeGreaterThan(0);
+    }
+  });
+
   it('drops low-priority events until both bounds are satisfied', () => {
     const events = [
       { kind: 'turn_start', turn: 1, provider: 'codex' },
@@ -362,7 +410,7 @@ describe('trimProgressTrace', () => {
     expect(trimmed[trimmed.length - 1]).toMatchObject({ kind: '_trimmed' });
   });
 
-  it('drops all text_emission events before higher-priority events in a large trace', () => {
+  it('drops only droppable events before higher-priority events in a large trace', () => {
     const events = [
       ...Array.from({ length: 500 }, (_, i) => ({
         kind: 'text_emission' as const,
@@ -379,12 +427,20 @@ describe('trimProgressTrace', () => {
     const trimmed = trimProgressTrace(events);
     expect(trimmed.length).toBeLessThan(events.length);
     expect(trimmed.some((event) => event.kind === 'turn_start')).toBe(true);
-    expect(trimmed[trimmed.length - 1]).toEqual(
-      expect.objectContaining({ kind: '_trimmed' }),
+    const marker = trimmed.find((event) => event.kind === '_trimmed');
+    expect(marker).toEqual(
+      expect.objectContaining({
+        kind: '_trimmed',
+        droppedCount: expect.any(Number),
+      }),
     );
+    if (marker && marker.kind === '_trimmed') {
+      expect(marker.droppedCount).toBeGreaterThan(0);
+      expect(marker.droppedKinds.text_emission).toBeGreaterThan(0);
+    }
   });
 
-  it('preserves never-drop events when the retained trace is still oversized', () => {
+  it('preserves never-drop events when fallback logic is exercised on droppable events only', () => {
     const events = [
       { kind: 'turn_start', turn: 1, provider: `codex-${'x'.repeat(400)}` },
       ...Array.from({ length: 12 }, (_, i) => ({

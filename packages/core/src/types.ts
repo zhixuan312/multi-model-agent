@@ -191,6 +191,7 @@ export type ProgressTraceEntry =
       kind: '_trimmed'
       droppedCount: number
       droppedKinds: Partial<Record<ProgressEvent['kind'], number>>
+      capExceededByBoundaryEvents?: boolean
     }
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
