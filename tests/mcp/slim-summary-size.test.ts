@@ -1,5 +1,5 @@
-import { describe, it, expect, vi } from 'vitest';
-import { buildMcpServer } from '@zhixuan92/multi-model-agent-mcp';
+import { describe, it, expect, vi, beforeEach } from 'vitest';
+import { runTasks as mockedRunTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
@@ -22,6 +22,15 @@ const sampleConfig = (): MultiModelConfig => ({
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
+
+beforeEach(() => {
+  vi.resetModules();
+});
+
+async function makeServer() {
+  const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
+  return buildMcpServer(sampleConfig(), { runTasksImpl: mockedRunTasks });
+}
 
 describe('slim summary envelope size', () => {
   it('11-task batch with worst-case escalation chains stays under 8 KB', async () => {
@@ -91,7 +100,7 @@ describe('slim summary envelope size', () => {
     const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
     vi.mocked(runTasksMod.runTasks).mockImplementationOnce(async () => worstCaseResults);
 
-    const server = buildMcpServer(sampleConfig());
+    const server = await makeServer();
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const delegateTool = (server as any)._registeredTools['delegate_tasks'];
     const result = await delegateTool.handler(

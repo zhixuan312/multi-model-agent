@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, computeTimings, computeBatchProgress, computeAggregateCost } from '@zhixuan92/multi-model-agent-mcp';
+import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, computeTimings, computeBatchProgress, computeAggregateCost } from '../packages/mcp/src/cli.js';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 // Mock runTasks so the `delegate_tasks` handler returns fast without
@@ -40,6 +40,44 @@ const sampleConfig = (): MultiModelConfig => ({
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
+
+const stubRunTasks = vi.fn(
+  async (tasks: { prompt: string }[]): Promise<RunResult[]> =>
+    tasks.map(() => ({
+      output: 'stub ok',
+      status: 'ok' as const,
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+      turns: 1,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+    })),
+);
+
+beforeEach(() => {
+  stubRunTasks.mockReset();
+  stubRunTasks.mockImplementation(
+    async (tasks: { prompt: string }[]): Promise<RunResult[]> =>
+      tasks.map(() => ({
+        output: 'stub ok',
+        status: 'ok' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+      })),
+  );
+});
+
+const buildMcpServer = (
+  config: MultiModelConfig = sampleConfig(),
+  options?: Parameters<typeof rawBuildMcpServer>[1],
+) => rawBuildMcpServer(config, { ...options, runTasksImpl: stubRunTasks });
 
 describe('server metadata', () => {
   it('server name is multi-model-agent', () => {
@@ -492,8 +530,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   });
 
   it('large batch + responseMode: auto → mode: summary with note', async () => {
-    const { runTasks: originalRunTasks } = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(originalRunTasks).mockResolvedValueOnce([
+    stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(70000),
         status: 'ok' as const,
@@ -515,8 +552,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   });
 
   it('large batch + responseMode: full → mode: full anyway (escape hatch)', async () => {
-    const { runTasks: originalRunTasks } = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(originalRunTasks).mockResolvedValueOnce([
+    stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(70000),
         status: 'ok' as const,
@@ -542,8 +578,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   });
 
   it('configurable threshold via buildMcpServer option triggers summary mode', async () => {
-    const { runTasks: originalRunTasks } = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(originalRunTasks).mockResolvedValueOnce([
+    stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(200),
         status: 'ok' as const,
@@ -563,8 +598,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   });
 
   it('configurable threshold via env var triggers summary mode', async () => {
-    const { runTasks: originalRunTasks } = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(originalRunTasks).mockResolvedValueOnce([
+    stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(200),
         status: 'ok' as const,
@@ -614,8 +648,7 @@ describe('get_task_output tool (v0.3.0)', () => {
     const delegateTool = tools['delegate_tasks'];
     const getTool = tools['get_task_output'];
 
-    const { runTasks: originalRunTasks } = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(originalRunTasks).mockResolvedValueOnce([
+    stubRunTasks.mockResolvedValueOnce([
       {
         output: 'the exact output text',
         status: 'ok' as const,
@@ -1053,8 +1086,7 @@ describe('delegate_tasks summary mode — slim shape', () => {
   async function dispatchRichBatch(opts: {
     responseMode?: 'full' | 'summary' | 'auto';
   } = {}): Promise<any> {
-    const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(runTasksMod.runTasks).mockImplementationOnce(
+    stubRunTasks.mockImplementationOnce(
       async (tasks: unknown): Promise<RunResult[]> => {
         const arr = tasks as { prompt: string }[];
         return arr.map((_, i): RunResult => ({

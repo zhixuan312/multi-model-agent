@@ -275,6 +275,8 @@ export function buildMcpServer(
      *  MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS > config file
      *  defaults.largeResponseThresholdChars > this option > default. */
     largeResponseThresholdChars?: number;
+    /** Test-only hook for injecting a stubbed runTasks implementation. */
+    runTasksImpl?: typeof runTasks;
   },
 ) {
   const providerKeys = Object.keys(config.providers);
@@ -294,6 +296,7 @@ export function buildMcpServer(
     ?? config.defaults.largeResponseThresholdChars
     ?? options?.largeResponseThresholdChars
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
+  const runTasksImpl = options?.runTasksImpl ?? runTasks;
 
   const server = new McpServer({
     name: SERVER_NAME,
@@ -438,7 +441,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasks(tasks as TaskSpec[], config, {
+        results = await runTasksImpl(tasks as TaskSpec[], config, {
           onProgress: sendProgress,
           runtime: { contextBlockStore },
         });
@@ -552,7 +555,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasks(subset, config, {
+        results = await runTasksImpl(subset, config, {
           runtime: { contextBlockStore },
         });
       } finally {
