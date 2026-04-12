@@ -5,6 +5,7 @@ import type {
   AttemptRecord,
   ProgressEvent,
 } from './types.js';
+import { retryableFor } from './error-codes.js';
 
 export interface DelegateOptions {
   explicitlyPinned?: boolean;
@@ -93,6 +94,8 @@ export async function delegateWithEscalation(
     if (options.explicitlyPinned) {
       return {
         ...result,
+        errorCode: result.errorCode ?? result.status,
+        retryable: result.retryable ?? retryableFor(result.status),
         escalationLog: attempts.map((a) => a.record),
       };
     }
@@ -108,9 +111,12 @@ export async function delegateWithEscalation(
     }
   }
 
+  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
   return {
     ...best,
-    status: best.status === 'ok' ? 'incomplete' : best.status,
+    status: finalStatus,
+    errorCode: best.errorCode ?? finalStatus,
+    retryable: best.retryable ?? retryableFor(finalStatus),
     escalationLog: attempts.map((a) => a.record),
   };
 }

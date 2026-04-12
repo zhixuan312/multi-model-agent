@@ -2,14 +2,14 @@
 
 **Delegate work from your expensive parent-session model to a fleet of cheaper sub-agents, in parallel, from a single MCP tool call.**
 
-This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets six tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_task_output`, `get_task_detail`, and `get_batch_telemetry`. Each `delegate_tasks` call runs the supplied tasks in parallel across the providers you configured, auto-routing each to the cheapest one that has the required capabilities and quality tier — or pinning to a specific provider when you want control. Every response envelope carries a pre-computed `headline` field so the calling agent can narrate the ROI story in one line without any arithmetic.
+This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets nine tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_batch_slice`, `execute_plan_task`, `audit_document`, `debug_task`, `review_code`, and `verify_work`. Each `delegate_tasks` call runs the supplied tasks in parallel across the agents you configured, auto-routing each to the cheapest one that has the required capabilities and agent type — or pinning to a specific agent when you want control. Every response envelope carries a pre-computed `headline` field so the calling agent can narrate the ROI story in one line without any arithmetic.
 
 ## Why use it
 
-- **Cut cost and context.** Mechanical work (file edits, search, doc lookups) runs on cheap providers in a clean worker context. Your parent session's window stays lean and its judgment unblocked.
+- **Cut cost and context.** Mechanical work (file edits, search, doc lookups) runs on cheap agents in a clean worker context. Your parent session's window stays lean and its judgment unblocked.
 - **Run tasks in parallel.** Independent tasks in one call execute concurrently; wall-clock time drops with task count.
-- **Mix providers in one config.** Claude, Codex, and any OpenAI-compatible endpoint (MiniMax, DeepSeek, Groq, local vLLM, …) live side-by-side.
-- **Auto-route and escalate.** Capability filter → tier filter → cheapest qualifying provider; on failure the chain is walked automatically, stopping at the first success.
+- **Mix agents in one config.** Claude, Codex, and any OpenAI-compatible endpoint (MiniMax, DeepSeek, Groq, local vLLM, …) live side-by-side.
+- **Auto-route and escalate.** Capability filter → agent type routing; on failure the chain is walked automatically, stopping at the first success.
 - **No bare failures.** Every termination path (incomplete, max_turns, timeout, error) populates `output` from the runner's scratchpad.
 - **Sandboxed by default.** `cwd-only` file tool confinement and shell-disabled by default. Opt out per-task only when needed.
 - **Pre-computed ROI headline**: every `delegate_tasks` response carries a `headline` field — a one-line summary of tasks, success rate, wall-clock, serial savings, cost, and ROI. Quote it verbatim; no arithmetic required.
@@ -27,24 +27,16 @@ Create `~/.multi-model/config.json`:
 
 ```json
 {
-  "providers": {
-    "claude": {
-      "type": "claude",
-      "model": "claude-sonnet-4-6",
-      "costTier": "medium"
-    },
-    "codex": {
-      "type": "codex",
-      "model": "gpt-5-codex",
-      "costTier": "medium"
-    },
-    "minimax": {
+  "agents": {
+    "standard": {
       "type": "openai-compatible",
-      "model": "MiniMax-M2",
-      "baseUrl": "https://api.minimax.io/v1",
-      "apiKeyEnv": "MINIMAX_API_KEY",
-      "costTier": "free",
-      "hostedTools": ["web_search"]
+      "model": "claude-sonnet-4-6",
+      "baseUrl": "https://api.claude.ai/v1"
+    },
+    "complex": {
+      "type": "openai-compatible",
+      "model": "claude-opus-4-6",
+      "baseUrl": "https://api.claude.ai/v1"
     }
   },
   "defaults": {
@@ -57,11 +49,10 @@ Create `~/.multi-model/config.json`:
 
 Config lookup order: `--config <path>` → `MULTI_MODEL_CONFIG` env var → `~/.multi-model/config.json`.
 
-Provider auth:
+Agent auth:
 
-- **`codex`** uses `codex login` if available, otherwise `OPENAI_API_KEY`
-- **`claude`** uses `ANTHROPIC_API_KEY` if set, otherwise the local Claude auth flow
-- **`openai-compatible`** uses `apiKeyEnv` (preferred) or inline `apiKey`
+- **OpenAI-compatible** agents use `apiKeyEnv` (preferred) or inline `apiKey`
+- **Claude** agents use `ANTHROPIC_API_KEY` if set, otherwise the local Claude auth flow
 
 ## Setup
 
@@ -73,7 +64,7 @@ One command — the client will spawn the server on demand. Use `-s user` so the
 claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
-If your providers need environment variables:
+If your agents need environment variables:
 
 ```bash
 claude mcp add multi-model-agent -s user \
@@ -100,7 +91,7 @@ ANTHROPIC_API_KEY = "sk-ant-..."
 MINIMAX_API_KEY = "..."
 ```
 
-Only set the env keys for the providers you actually configured. If you use `codex login`, the `codex` provider inside `multi-model-agent` reuses that auth automatically — but Claude, MiniMax, and other API-key providers still need to be passed through `[mcp_servers.multi-model-agent.env]` because the spawned MCP process does not inherit your shell environment. Restart `codex` after editing the file.
+Only set the env keys for the agents you actually configured. If you use `codex login`, the `codex` agent inside `multi-model-agent` reuses that auth automatically — but Claude, MiniMax, and other API-key agents still need to be passed through `[mcp_servers.multi-model-agent.env]` because the spawned MCP process does not inherit your shell environment. Restart `codex` after editing the file.
 
 ### Claude Desktop
 
@@ -146,7 +137,7 @@ args = ["-y", "@zhixuan92/multi-model-agent-mcp@0.3.0", "serve"]
 
 ## Recommended: delegation rule for Claude Code
 
-Claude Code's native `Task` / `Agent` subagents inherit your parent session's expensive model and eat its context window. We ship a drop-in rule file that teaches Claude Code **when** to delegate work through `delegate_tasks` instead — mechanical edits go to free providers, reasoning-tier work escalates only when needed, and independent tasks run in parallel.
+Claude Code's native `Task` / `Agent` subagents inherit your parent session's expensive model and eat its context window. We ship a drop-in rule file that teaches Claude Code **when** to delegate work through `delegate_tasks` instead — mechanical edits go to free agents, reasoning-tier work escalates only when needed, and independent tasks run in parallel.
 
 Install globally:
 
@@ -205,7 +196,7 @@ Every `delegate_tasks` response envelope — both `full` mode and `summary` mode
 
 When a batch declares mixed parent models across its tasks, the ROI multiplier is suppressed (because a single ratio across different baselines is not coherent) and the cost clause reads `$X actual / $Y saved vs multiple baselines`. When no `parentModel` is declared, the cost clause collapses to `$X actual`.
 
-If the primary response came back via summary mode or a client-side limit obscured the envelope, call `get_batch_telemetry(batchId)` — it returns the same `headline` plus the envelope with a ~600-byte header and ~200 bytes per task in `results[]`. A typical 10–30-task batch comes back at 2–7 KB, well under the client's tool-result size limit; very large batches (100+ tasks) scale linearly and may approach the limit.
+If the primary response came back via summary mode or a client-side limit obscured the envelope, call `get_batch_slice({ batchId, slice: 'telemetry' })` — it returns the same `headline` plus the envelope with a ~600-byte header and ~200 bytes per task in `results[]`. A typical 10–30-task batch comes back at 2–7 KB, well under the client's tool-result size limit; very large batches (100+ tasks) scale linearly and may approach the limit.
 
 ## Security
 

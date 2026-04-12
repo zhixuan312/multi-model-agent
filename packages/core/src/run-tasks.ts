@@ -246,6 +246,35 @@ async function executeReviewedLifecycle(
       finalImplResult.toolCalls,
       finalImplResult.filesWritten,
     );
+
+    if (qualityResult.status === 'changes_required' && maxRounds > 0) {
+      for (let round = 0; round < maxRounds; round++) {
+        const reworkPrompt = `${task.prompt}\n\n## Quality Review Feedback (round ${round + 1}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`;
+
+        const reworkResult = await delegateWithEscalation(
+          { ...task, prompt: reworkPrompt },
+          [resolved.provider],
+          { explicitlyPinned: true, onProgress },
+        );
+
+        finalImplResult = reworkResult;
+        const reworkReport = parseStructuredReport(reworkResult.output);
+        finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
+
+        const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+
+        qualityResult = await runQualityReview(
+          otherProvider,
+          packet,
+          finalImplReport,
+          reworkContents,
+          reworkResult.toolCalls,
+          reworkResult.filesWritten,
+        );
+
+        if (qualityResult.status === 'approved') break;
+      }
+    }
   }
 
   const finalReport = specReport ?? finalImplReport;
@@ -263,7 +292,8 @@ async function executeReviewedLifecycle(
     workerStatus,
     specReviewStatus: specStatus,
     qualityReviewStatus: qualityResult.status,
-    implementationReport: aggregated,
+    structuredReport: aggregated,
+    implementationReport: effectiveImplReport,
     specReviewReport: specReport,
     qualityReviewReport: qualityResult.report,
     agents: {

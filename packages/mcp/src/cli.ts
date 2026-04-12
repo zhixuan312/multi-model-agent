@@ -25,6 +25,11 @@ import type {
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import { composeHeadline } from './headline.js';
+import { registerExecutePlanTask } from './tools/execute-plan-task.js';
+import { registerAuditDocument } from './tools/audit-document.js';
+import { registerDebugTask } from './tools/debug-task.js';
+import { registerReviewCode } from './tools/review-code.js';
+import { registerVerifyWork } from './tools/verify-work.js';
 
 export const SERVER_NAME = 'multi-model-agent';
 const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
@@ -797,7 +802,9 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
           durationMs: r.durationMs,
           usage: r.usage,
           escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
-          ...(r.error && { error: r.error }),
+      ...(r.error && { error: r.error }),
+      ...(r.errorCode && { errorCode: r.errorCode }),
+      ...(r.retryable !== undefined && { retryable: r.retryable }),
         })),
       };
 
@@ -806,6 +813,12 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
       };
     },
   );
+
+  registerExecutePlanTask(server, config);
+  registerAuditDocument(server, config);
+  registerDebugTask(server, config);
+  registerReviewCode(server, config);
+  registerVerifyWork(server, config);
 
   return server;
 }
