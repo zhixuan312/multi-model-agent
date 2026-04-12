@@ -60,6 +60,10 @@
       "types": "./dist/routing/get-provider-eligibility.d.ts",
       "import": "./dist/routing/get-provider-eligibility.js"
     },
+    "./routing/resolve-agent": {
+      "types": "./dist/routing/resolve-agent.d.ts",
+      "import": "./dist/routing/resolve-agent.js"
+    },
     "./provider": {
       "types": "./dist/provider.d.ts",
       "import": "./dist/provider.js"

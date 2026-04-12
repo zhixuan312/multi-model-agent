@@ -32,6 +32,7 @@ const DEFAULT_PROFILE: ModelProfile = {
   bestFor: 'general tasks (unprofiled model — defaults applied)',
   supportsEffort: false,
   inputTokenSoftLimit: 100_000,
+  capabilities: [],
 };
 
 // Validate and sort once at module load — longest prefix wins
