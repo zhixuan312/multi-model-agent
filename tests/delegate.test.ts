@@ -158,4 +158,19 @@ describe('runTasks', () => {
     expect(results[0].retryable).toBe(false);
     expect(results[0].briefQualityWarnings?.length).toBeGreaterThan(0);
   });
+
+  it('1.0.0 runTasks sets errorCode on capability_missing', async () => {
+    const results = await runTasks(
+      [{ prompt: 'task', agentType: 'standard', requiredCapabilities: ['web_search'] }],
+      {
+        agents: {
+          standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+          complex: { type: 'openai-compatible', model: 'y', baseUrl: 'https://example.invalid/v2' },
+        },
+        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      },
+    );
+    expect(results[0].status).toBe('error');
+    expect(results[0].errorCode).toBe('capability_missing');
+  });
 });

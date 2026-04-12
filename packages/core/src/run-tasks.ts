@@ -148,7 +148,7 @@ export async function runTasks(
   return Promise.all(
     resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {
-        return Promise.resolve(errorResult(r.error));
+        return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
       const refused = refusedResults[index];
       if (refused) {
