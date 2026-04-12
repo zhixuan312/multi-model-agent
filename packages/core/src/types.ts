@@ -37,9 +37,15 @@ export type RunStatus =
   | 'api_error'
   | 'network_error'
   | 'error'
-  | 'brief_too_vague';
+  | 'brief_too_vague'
+  | 'cost_exceeded';
 
 // === Task ===
+
+export interface FormatConstraints {
+  inputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+  outputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+}
 
 export interface TaskSpec {
   prompt: string
@@ -91,6 +97,8 @@ export interface TaskSpec {
   reviewPolicy?: 'full' | 'spec_only' | 'off'
   /** Maximum number of spec review rework rounds. Defaults to 2. */
   maxReviewRounds?: number
+  /** Optional format constraints for input/output. */
+  formatConstraints?: FormatConstraints
 }
 
 // === Provider Config (discriminated union) ===
@@ -399,6 +407,10 @@ export interface RunOptions {
    *  execution observability on long-running delegated tasks. Zero
    *  cost when false (the default). */
   includeProgressTrace?: boolean
+  /** Optional cost ceiling in USD. Runner will reject tool calls that would exceed this budget. */
+  maxCostUSD?: number
+  /** Optional format constraints for input/output. */
+  formatConstraints?: FormatConstraints
 }
 
 /**

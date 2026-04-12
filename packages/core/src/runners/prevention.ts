@@ -12,6 +12,8 @@
  * See spec Part A.1 for the design rationale.
  */
 
+import type { FormatConstraints } from '../types.js';
+
 export function buildSystemPrompt(): string {
   return [
     'You are a sub-agent completing a single task end-to-end. Read these rules before you begin any tool calls.',
@@ -88,4 +90,18 @@ export function buildBudgetPressureNudge(opts: BuildBudgetPressureNudgeOptions):
     `input tokens out of a soft limit of ${opts.softLimit}. Stop exploring and ` +
     `produce your complete final answer now with whatever you have gathered.`
   );
+}
+
+export function buildFormatConstraintSuffix(constraints: FormatConstraints): string {
+  if (!constraints.inputFormat && !constraints.outputFormat) return '';
+  
+  const parts: string[] = [];
+  if (constraints.inputFormat) {
+    parts.push(`input format: ${constraints.inputFormat}`);
+  }
+  if (constraints.outputFormat) {
+    parts.push(`output format: ${constraints.outputFormat}`);
+  }
+  
+  return '\n\n' + parts.join(' ');
 }

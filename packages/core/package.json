@@ -95,6 +95,14 @@
     "./error-codes": {
       "types": "./dist/error-codes.d.ts",
       "import": "./dist/error-codes.js"
+    },
+    "./cost/cost-meter": {
+      "types": "./dist/cost/cost-meter.d.ts",
+      "import": "./dist/cost/cost-meter.js"
+    },
+    "./tools/call-cache": {
+      "types": "./dist/tools/call-cache.d.ts",
+      "import": "./dist/tools/call-cache.js"
     }
   },
   "scripts": {

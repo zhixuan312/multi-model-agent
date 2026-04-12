@@ -58,6 +58,8 @@ export async function delegateWithEscalation(
       skipCompletionHeuristic: task.skipCompletionHeuristic,
       includeProgressTrace: task.includeProgressTrace,
       parentModel: task.parentModel,
+      maxCostUSD: task.maxCostUSD,
+      formatConstraints: task.formatConstraints,
       onProgress: safeSink,
       onInitialRequest: (meta) => {
         initialPromptLengthChars = meta.lengthChars;

@@ -15,11 +15,14 @@ import {
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
+import { CostMeter } from '../cost/cost-meter.js';
+import { CallCache } from '../tools/call-cache.js';
 import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -258,6 +261,54 @@ export async function runCodex(
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
+  // --- Cost meter (Task 25) ------------------------------------------------
+  const costMeter = new CostMeter({ ceiling: options.maxCostUSD });
+
+  // --- Call cache (Task 25) ------------------------------------------------
+  const callCache = new CallCache();
+  const agentType = providerConfig.type ?? 'codex';
+
+  // Track last turn cost for estimating next turn cost
+  let lastTurnCostUSD = 0;
+
+  /**
+   * Check if we can afford the next turn based on previous turn cost estimate.
+   */
+  function canAffordNextTurn(): boolean {
+    if (!costMeter.canProceed(lastTurnCostUSD > 0 ? lastTurnCostUSD : 0.001)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Build a cost_exceeded result.
+   */
+  function buildCostExceededResult(): RunResult {
+    const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+    const savedCostUSD = computeSavedCostUSD(costUSD ?? 0, inputTokens, outputTokens, parentModel);
+    return {
+      output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
+      status: 'cost_exceeded',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUSD: costUSD ?? 0,
+        savedCostUSD,
+      },
+      turns,
+      filesRead: tracker.getReads(),
+      directoriesListed: tracker.getDirectoriesListed(),
+      filesWritten: tracker.getWrites(),
+      toolCalls: tracker.getToolCalls(),
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: Date.now() - taskStartMs,
+      ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
+    };
+  }
+
   const codexTools = toolMode === 'full' ? buildCodexTools(toolImpls, sandboxPolicy) : [];
   const toolsByName = new Map(codexTools.map(t => [t.name, t]));
   const responsesTools = codexTools.map(t => ({
@@ -286,7 +337,7 @@ export async function runCodex(
   // provider/maxTurns options). The budget hint is prepended to the user
   // prompt so the model sees it as part of its task brief, while the system
   // prompt is threaded through the Responses API `instructions` field.
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -379,6 +430,9 @@ export async function runCodex(
 
     try {
       while (turns < maxTurns) {
+        // Track tokens at start of turn for cost accounting
+        const tokensAtTurnStart = inputTokens;
+        const outputTokensAtTurnStart = outputTokens;
         turns++;
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
@@ -572,6 +626,9 @@ export async function runCodex(
 
         // --- Periodic re-grounding inside the loop ---------------------
         if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+          if (!canAffordNextTurn()) {
+            return buildCostExceededResult();
+          }
           const reground = buildReGroundingMessage({
             originalPromptExcerpt: prompt,
             currentTurn: turns,
@@ -606,6 +663,15 @@ export async function runCodex(
           cumulativeInputTokens: inputTokens,
           cumulativeOutputTokens: outputTokens,
         });
+
+        // Track cost for this turn (Task 25)
+        const turnInputTokens = inputTokens - tokensAtTurnStart;
+        const turnOutputTokens = outputTokens - outputTokensAtTurnStart;
+        const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+        if (turnCost !== null) {
+          lastTurnCostUSD = turnCost;
+          costMeter.add(turnCost);
+        }
 
         // If the model made no tool calls, the turn ended with either a
         // final answer or a degenerate emission. Wrap in the supervision
@@ -666,6 +732,9 @@ export async function runCodex(
           // to the re-prompt directly.
           lastDegenerateOutput = stripped;
           supervisionRetries++;
+          if (!canAffordNextTurn()) {
+            return buildCostExceededResult();
+          }
           const rePrompt = buildRePrompt(validation);
           input.push({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any

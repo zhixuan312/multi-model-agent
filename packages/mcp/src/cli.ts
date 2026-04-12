@@ -21,6 +21,7 @@ import type {
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,
+  AgentCapability,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import { composeHeadline } from './headline.js';
@@ -188,41 +189,126 @@ export const SERVER_VERSION = pkg.version;
 
 export function buildTaskSchema(availableAgents: [string, ...string[]]) {
   return z.object({
-    prompt: z.string().describe('Task prompt for the sub-agent'),
-    agentType: z.enum(availableAgents).describe('Agent type (standard or complex)').optional(),
-    tools: z.enum(['none', 'full']).optional().describe('Tool access mode. Default: full'),
-    maxTurns: z.number().int().positive().optional().describe('Max agent loop turns. Default: 200'),
-    timeoutMs: z.number().int().positive().optional().describe('Timeout in ms. Default: 600000'),
-    cwd: z.string().optional().describe('Working directory for file/shell tools'),
-    effort: z.enum(['none', 'low', 'medium', 'high']).optional()
-      .describe("Reasoning effort."),
-    sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe('File-system confinement policy. Default: cwd-only'),
+    prompt: z.string().describe(
+      'WHAT: The natural-language instruction that tells the sub-agent what task to perform.\n' +
+      'WHEN: Always required; this is the primary input for every task.\n' +
+      'DEFAULT: Required — no default, must be provided.\n' +
+      'INTERACTION: Concatenated with expanded context blocks (if contextBlockIds is set) before dispatch.',
+    ),
+    agentType: z.enum(availableAgents).optional().describe(
+      'WHAT: Selects which agent implementation handles this task (standard vs complex).\n' +
+      'WHEN: Optional; defaults to auto-selection based on prompt complexity heuristics.\n' +
+      'DEFAULT: Auto-select (server chooses based on internal heuristics).\n' +
+      'INTERACTION: Determines which agent config (from config.agents) is used for routing and capability resolution.',
+    ),
+    tools: z.enum(['none', 'full']).optional().describe(
+      'WHAT: Controls whether the sub-agent has access to tool APIs (read, write, bash, etc).\n' +
+      'WHEN: Set to none when the task is purely prompt-only (e.g., translation, summarization).\n' +
+      'DEFAULT: full — agent has access to all configured tools.\n' +
+      'INTERACTION: When tools is none, the runner bypasses tool-capability checks even if the agent config declares tools.',
+    ),
+    maxTurns: z.number().int().positive().optional().describe(
+      'WHAT: Caps the number of agent loop turns (prompt → model → tool_calls → ...) before termination.\n' +
+      'WHEN: Use to bound execution length for tasks that risk running away (e.g., deep research).\n' +
+      'DEFAULT: 200 — inherited from server-level defaults if not specified.\n' +
+      'INTERACTION: When maxTurns is reached, the task terminates with status max_turns rather than ok.',
+    ),
+    timeoutMs: z.number().int().positive().optional().describe(
+      'WHAT: Wall-clock time limit in milliseconds for the entire task execution.\n' +
+      'WHEN: Use to prevent runaway tasks from consuming budget indefinitely.\n' +
+      'DEFAULT: 600000 (10 minutes) — inherited from server-level defaults if not specified.\n' +
+      'INTERACTION: When timeoutMs is reached, the task terminates with status timeout regardless of progress.',
+    ),
+    cwd: z.string().optional().describe(
+      'WHAT: Working directory that file/shell tools resolve relative to for this task.\n' +
+      'WHEN: Set when tasks run in different directories or you need isolation from the server process cwd.\n' +
+      'DEFAULT: Server process cwd (inherited from the running process environment).\n' +
+      'INTERACTION: sandboxPolicy further constrains what paths are accessible; cwd does not bypass sandbox restrictions.',
+    ),
+    effort: z.enum(['none', 'low', 'medium', 'high']).optional().describe(
+      'WHAT: Controls how much reasoning effort the model applies before responding.\n' +
+      'WHEN: Higher effort costs more but produces better results for complex tasks; none skips extended reasoning.\n' +
+      'DEFAULT: low — minimal reasoning unless the task demands more.\n' +
+      'INTERACTION: effort maps to model-side extended thinking settings; not all providers support all effort levels.',
+    ),
+    sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe(
+      'WHAT: File-system confinement policy controlling what paths the sub-agent can access.\n' +
+      'WHEN: Set to cwd-only when untrusted prompts could attempt path traversal attacks.\n' +
+      'DEFAULT: cwd-only — agent restricted to cwd and descendants only.\n' +
+      'INTERACTION: sandboxPolicy is enforced before tool execution; cwd-only does not restrict network access.',
+    ),
+    requiredCapabilities: z.array(z.string()).optional().describe(
+      'WHAT: List of capability identifiers the assigned agent must possess to handle this task.\n' +
+      'WHEN: Use when a task requires specific abilities like web_search or web_fetch that not all agents have.\n' +
+      'DEFAULT: No required capabilities (any agent can be selected).\n' +
+      'INTERACTION: If no agent satisfies requiredCapabilities, the batch dispatch returns a no_capable_agent error.',
+    ),
     contextBlockIds: z.array(z.string()).optional().describe(
-      'Optional context block ids previously stored via register_context_block. ' +
-      'The server resolves each id to its stored content and prepends the blocks ' +
-      '(in order, separated by "\\n\\n---\\n\\n") to `prompt` before dispatch. ' +
-      'Use this to avoid re-transmitting long briefs across multiple calls.',
+      'WHAT: References to context blocks previously stored via register_context_block.\n' +
+      'WHEN: Use to inject long briefing material without re-transmitting it across multiple calls.\n' +
+      'DEFAULT: No context blocks — prompt is sent as-is.\n' +
+      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\\n\\n", and prepends to prompt before dispatch.',
     ),
     expectedCoverage: z.object({
-      minSections: z.number().int().positive().optional()
-        .describe('Minimum section count expected in the output.'),
-      sectionPattern: z.string().optional()
-        .describe('Regex for section headings, applied with the multiline flag.'),
-      requiredMarkers: z.array(z.string()).optional()
-        .describe('Substrings that must all appear somewhere in the output.'),
+      minSections: z.number().int().positive().optional().describe(
+        'WHAT: Minimum number of output sections the task must produce to be considered complete.\n' +
+        'WHEN: Use when tasks should produce multi-section deliverables (reports, docs with distinct parts).\n' +
+        'DEFAULT: No minimum — not required to pass coverage check.\n' +
+        'INTERACTION: Checked after syntactic completion heuristics; if minSections is set but not met, task may be marked incomplete.',
+      ),
+      sectionPattern: z.string().optional().describe(
+        'WHAT: Regex pattern applied with multiline flag to identify section headings in the output.\n' +
+        'WHEN: Use when output sections must follow a specific heading format (e.g., markdown ## headers).\n' +
+        'DEFAULT: No pattern — section boundaries are inferred only by minSections count.\n' +
+        'INTERACTION: Each match increments the section count toward minSections; used for coverage validation.',
+      ),
+      requiredMarkers: z.array(z.string()).optional().describe(
+        'WHAT: Substrings that must all appear somewhere in the output for coverage to pass.\n' +
+        'WHEN: Use when output must contain specific terms, filenames, or anchors (e.g., "Conclusion", "Usage").\n' +
+        'DEFAULT: No required markers — coverage passes on syntactic completion alone.\n' +
+        'INTERACTION: If any requiredMarkers entry is absent, coverage check fails and task may be marked incomplete.',
+      ),
     }).optional().describe(
-      'Optional caller-declared output expectations used for semantic incompleteness detection.',
+      'WHAT: Caller-declared output expectations used for semantic completeness checking beyond syntactic heuristics.\n' +
+      'WHEN: Use when output has enumerable deliverables (sections, keywords, specific values) that the model should produce.\n' +
+      'DEFAULT: No expected coverage — task is judged complete purely on syntactic signals (has output, has terminator).\n' +
+      'INTERACTION: expectedCoverage results are authoritative alongside skipCompletionHeuristic; both must pass for the task to be deemed complete.',
     ),
     skipCompletionHeuristic: z.boolean().optional().describe(
-      'Opt-out: when true, the runner skips the no_terminator/fragment short-output ' +
-      'heuristics. Use for tight-format outputs (verdicts, CSV rows, opaque ids). ' +
-      'empty/thinking_only still fire. expectedCoverage passing is also authoritative.',
+      'WHAT: Disables the no_terminator and fragment short-output heuristics for this task.\n' +
+      'WHEN: Use for tight-format outputs (single-line verdicts, CSV rows, opaque ids) that break prose heuristics.\n' +
+      'DEFAULT: false — short-output heuristics are active.\n' +
+      'INTERACTION: The empty and thinking_only degeneracy checks still fire independently; expectedCoverage passing remains authoritative when set.',
     ),
     includeProgressTrace: z.boolean().optional().describe(
-      'Opt in to returning the bounded post-hoc progress trace for this task.',
+      'WHAT: Opts in to capturing and returning a bounded post-hoc progress trace for this task.\n' +
+      'WHEN: Use for debugging, observability, or auditing when you need to reconstruct execution flow.\n' +
+      'DEFAULT: false — no progress trace returned.\n' +
+      'INTERACTION: Progress trace increases response payload size; consider disabling for high-volume batches.',
     ),
     parentModel: z.string().optional().describe(
-      'Optional parent-session model identifier used to estimate savedCostUSD.',
+      'WHAT: Identifier for the parent session model used to estimate saved cost when reusing prior context.\n' +
+      'WHEN: Set when you want accurate savedCostUSD figures in batch results and have the parent session model info.\n' +
+      'DEFAULT: No parent model — savedCostUSD will be null in results.\n' +
+      'INTERACTION: Used to look up parent context length for context-length-based cost estimation; influences headline ROI display.',
+    ),
+    maxCostUSD: z.number().nonnegative().optional().describe(
+      'WHAT: Cost ceiling in USD for this task\'s execution.\n' +
+      'WHEN: Use when you want to cap spend on expensive operations or prevent runaway token usage.\n' +
+      'DEFAULT: No cost ceiling — unlimited spend allowed.\n' +
+      'INTERACTION: When maxCostUSD is reached, the task terminates with status cost_exceeded rather than ok.',
+    ),
+    reviewPolicy: z.enum(['full', 'spec_only', 'off']).optional().describe(
+      'WHAT: Quality review policy controlling whether spec and quality review steps run after task completion.\n' +
+      'WHEN: Set to off for fire-and-forget tasks; set to spec_only to skip quality review but keep spec review.\n' +
+      'DEFAULT: full — both spec review and quality review run when configured.\n' +
+      'INTERACTION: reviewPolicy is enforced at the runner level; off skips all review even if reviewPolicy is configured in defaults.',
+    ),
+    maxReviewRounds: z.number().int().nonnegative().optional().describe(
+      'WHAT: Maximum number of spec review rework rounds before the loop terminates.\n' +
+      'WHEN: Use to bound iterative refinement cycles for tasks that could otherwise run indefinitely.\n' +
+      'DEFAULT: 2 rework rounds — inherited from server-level defaults if not specified.\n' +
+      'INTERACTION: When maxReviewRounds is exhausted, the task moves to the next step regardless of spec review outcome.',
     ),
   });
 }
@@ -600,57 +686,27 @@ export function buildMcpServer(
   );
 
   server.tool(
-    'get_task_output',
-    `Retrieve the full text output of a specific task from a previous delegate_tasks batch.
+    'get_batch_slice',
+    `Retrieve a specific "slice" of data from a previous delegate_tasks batch.
 
-Use this when a prior delegate_tasks response came back with mode: 'summary' and you
-need the actual output of one specific task. The batchId is the one returned at the
-top of that response; taskIndex is 0-based into the original tasks array.
+Three slices are available:
+- \`output\`: The full text output of a specific task (requires taskIndex).
+- \`detail\`: Per-task execution details including toolCalls, filesRead/Written/Listed,
+  escalationLog, progressTrace, review statuses (workerStatus, specReviewStatus,
+  qualityReviewStatus), agents provenance, and implementation/spec/quality reports
+  (requires taskIndex).
+- \`telemetry\`: Batch-wide ROI telemetry envelope with headline, timings, batchProgress,
+  and aggregateCost (taskIndex not needed).
 
 Batches are cached in memory per MCP server instance with a 30-minute TTL from creation
 and a 100-entry LRU cap. Access touches the LRU order but does not refresh TTL. If the
 batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.`,
     {
       batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
-      taskIndex: z.number().int().nonnegative().describe('Zero-based index of the task within the batch'),
+      slice: z.enum(['output', 'detail', 'telemetry']).describe('Which slice to retrieve'),
+      taskIndex: z.number().int().nonnegative().optional().describe('Zero-based index of the task (required for output and detail slices)'),
     },
-    async ({ batchId, taskIndex }) => {
-      const batch = batchCache.get(batchId);
-      if (!batch || batch.expiresAt < Date.now()) {
-        if (batch) batchCache.delete(batchId);
-        throw new Error(
-          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
-        );
-      }
-
-      // Touch LRU order but NOT TTL
-      touchBatch(batchId, batch);
-
-      if (batch.results === undefined) {
-        throw new Error(`batch "${batchId}" has no stored results — this may indicate a dispatch failure`);
-      }
-
-      if (taskIndex < 0 || taskIndex >= batch.results.length) {
-        throw new Error(
-          `index ${taskIndex} is out of range for batch ${batchId} (size ${batch.results.length})`,
-        );
-      }
-
-      const result = batch.results[taskIndex];
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify({ output: result.output }, null, 2) }],
-      };
-    },
-  );
-
-  server.tool(
-    'get_task_detail',
-    `Retrieve per-task execution details (toolCalls, filesRead/Written/Listed, full escalationLog with reasons, progressTrace if opted in) for a task from a previous delegate_tasks batch. Use this when a batch returned in summary mode and you need to inspect what a specific task actually did — e.g., to debug a failure, verify file-write scope, or review the provider escalation chain. For the output text, use get_task_output instead. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired or evicted, re-dispatch via delegate_tasks with the full task specs.`,
-    {
-      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
-      taskIndex: z.number().int().nonnegative().describe('Zero-based index of the task within the batch'),
-    },
-    async ({ batchId, taskIndex }) => {
+    async ({ batchId, slice, taskIndex }) => {
       const batch = batchCache.get(batchId);
       if (!batch || batch.expiresAt < Date.now()) {
         if (batch) batchCache.delete(batchId);
@@ -667,56 +723,55 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
         );
       }
 
-      if (taskIndex < 0 || taskIndex >= batch.results.length) {
-        throw new Error(
-          `taskIndex ${taskIndex} is out of range for batch ${batchId} (batch has ${batch.results.length} tasks)`,
-        );
+      if (slice === 'output' || slice === 'detail') {
+        if (taskIndex === undefined) {
+          throw new Error(
+            `taskIndex is required for slice "${slice}" — please specify which task to retrieve`,
+          );
+        }
+        if (taskIndex < 0 || taskIndex >= batch.results.length) {
+          throw new Error(
+            `index ${taskIndex} is out of range for batch ${batchId} (size ${batch.results.length})`,
+          );
+        }
       }
 
-      const result = batch.results[taskIndex];
-      const task = batch.tasks[taskIndex];
-
-      const detail = {
-        batchId,
-        taskIndex,
-        agentType: task.agentType ?? '(auto)',
-        filesRead: result.filesRead,
-        filesWritten: result.filesWritten,
-        directoriesListed: result.directoriesListed ?? [],
-        toolCalls: result.toolCalls,
-        escalationLog: result.escalationLog,
-        ...(result.progressTrace && { progressTrace: result.progressTrace }),
-      };
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }],
-      };
-    },
-  );
-
-  server.tool(
-    'get_batch_telemetry',
-    `Retrieve a compact ROI telemetry envelope for a previous delegate_tasks batch: the one-line headline (tasks/success/wall-clock/cost/ROI), wall-clock vs serial timings, per-task cost and savings, and provider escalation chains. Use this after every delegate_tasks call to surface the ROI story to the user — especially when the primary response came back in summary mode or hit a client-side size limit. Envelope size: a ~600-byte header plus ~200 bytes per task (so a 10-task batch is ~2.6 KB; a 50-task batch is ~10 KB). Bounded-small per task, but scales linearly, so enormous batches (100+ tasks) may approach the client's tool-result size limit. Batches live in an in-memory cache with a 30-minute TTL; if the batch is expired, the numbers are lost.`,
-    {
-      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
-    },
-    async ({ batchId }) => {
-      const batch = batchCache.get(batchId);
-      if (!batch || batch.expiresAt < Date.now()) {
-        if (batch) batchCache.delete(batchId);
-        throw new Error(
-          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
-        );
+      if (slice === 'output') {
+        const result = batch.results[taskIndex!];
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify({ output: result.output }, null, 2) }],
+        };
       }
 
-      touchBatch(batchId, batch);
+      if (slice === 'detail') {
+        const result = batch.results[taskIndex!];
+        const task = batch.tasks[taskIndex!];
 
-      if (batch.results === undefined) {
-        throw new Error(
-          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
-        );
+        const detail = {
+          batchId,
+          taskIndex: taskIndex,
+          agentType: task.agentType ?? '(auto)',
+          filesRead: result.filesRead,
+          filesWritten: result.filesWritten,
+          directoriesListed: result.directoriesListed ?? [],
+          toolCalls: result.toolCalls,
+          escalationLog: result.escalationLog,
+          workerStatus: result.workerStatus,
+          specReviewStatus: result.specReviewStatus,
+          qualityReviewStatus: result.qualityReviewStatus,
+          agents: result.agents,
+          implementationReport: result.implementationReport,
+          specReviewReport: result.specReviewReport,
+          qualityReviewReport: result.qualityReviewReport,
+          ...(result.progressTrace && { progressTrace: result.progressTrace }),
+        };
+
+        return {
+          content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }],
+        };
       }
 
+      // slice === 'telemetry'
       const wallClockMsEstimate = Math.max(
         0,
         ...batch.results.map((r) => r.durationMs ?? 0),

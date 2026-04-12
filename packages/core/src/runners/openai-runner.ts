@@ -44,11 +44,14 @@ import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createOpenAITools } from '../tools/openai-adapter.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
+import { CostMeter } from '../cost/cost-meter.js';
+import { CallCache } from '../tools/call-cache.js';
 import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -169,12 +172,22 @@ export async function runOpenAI(
     if (onProgress) onProgress(event);
   };
 
+  // --- Cost meter (Task 25) ------------------------------------------------
+  const costMeter = new CostMeter({ ceiling: options.maxCostUSD });
+
+  // --- Call cache (Task 25) ------------------------------------------------
+  const callCache = new CallCache();
+  const agentType = runner.providerConfig.type ?? 'openai-compatible';
+
   // Hoisted out of `run()` so the withTimeout callback (which runs in a
   // different microtask chain) can still read partial usage from the last
   // successful agentRun. `run()` updates this on every turn. Declared
   // here (before the tracker) so the FileTracker callback closure can
   // reference it without a TDZ issue at construction.
   let currentResult: AgentRunOutput | undefined;
+
+  // Track last turn cost for estimating next turn cost (used by runTurnAndBuffer)
+  let lastTurnCostUSD = 0;
 
   // The tracker fires `onToolCall` synchronously inside every
   // `trackToolCall(...)` — which itself is called from inside a tool
@@ -207,7 +220,7 @@ export async function runOpenAI(
   // provider. Per-turn budget information is threaded through buildBudgetHint
   // (prepended to the first user prompt) and buildReGroundingMessage
   // (injected every RE_GROUNDING_INTERVAL_TURNS turns).
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -326,6 +339,12 @@ export async function runOpenAI(
       cumulativeInputTokens: result.state.usage.inputTokens,
       cumulativeOutputTokens: result.state.usage.outputTokens,
     });
+    // Track cost for this turn
+    const turnCost = computeCostUSD(result.state.usage.inputTokens, result.state.usage.outputTokens, runner.providerConfig);
+    if (turnCost !== null) {
+      lastTurnCostUSD = turnCost;
+      costMeter.add(turnCost);
+    }
     return result;
   };
 
@@ -353,6 +372,37 @@ export async function runOpenAI(
       // to validation / re-prompt instead of re-issuing the nudge.
       let lastWarnedInputTokens = -1;
       let lastValidationKind: string | undefined = undefined;
+
+      /**
+       * Check if we can afford the next turn based on previous turn cost estimate.
+       */
+      function canAffordNextTurn(): boolean {
+        if (!costMeter.canProceed(lastTurnCostUSD > 0 ? lastTurnCostUSD : 0.001)) {
+          return false;
+        }
+        return true;
+      }
+
+      /**
+       * Build a cost_exceeded result.
+       */
+      function buildCostExceededResult(turnsAtFailure: number): RunResult {
+        const partial = partialUsage(currentResult, runner.providerConfig);
+        return {
+          output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
+          status: 'cost_exceeded',
+          usage: { ...partial, savedCostUSD: 0 },
+          turns: turnsAtFailure,
+          filesRead: tracker.getReads(),
+          directoriesListed: tracker.getDirectoriesListed(),
+          filesWritten: tracker.getWrites(),
+          toolCalls: tracker.getToolCalls(),
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          durationMs: Date.now() - taskStartMs,
+          ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
+        };
+      }
 
       /**
        * Wraps a continuation turn (re-prompt or re-ground) that uses a small
@@ -448,6 +498,11 @@ export async function runOpenAI(
             contentLengthChars: warning.length,
           });
           lastWarnedInputTokens = currentInputTokens;
+          if (!canAffordNextTurn()) {
+            const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
+            emit({ kind: 'done', status: costExceeded.status });
+            return costExceeded;
+          }
           const warningCont = await runContinuationTurn(currentResult, warning, SUPERVISION_CONTINUATION_BUDGET);
           if (!warningCont.ok) {
             supervisionExhausted = true;
@@ -489,6 +544,11 @@ export async function runOpenAI(
         });
         // Give the model a small budget to recover. One extra turn per
         // retry is enough for the "emit your final answer" nudge.
+        if (!canAffordNextTurn()) {
+          const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
+          emit({ kind: 'done', status: costExceeded.status });
+          return costExceeded;
+        }
         const rePromptCont = await runContinuationTurn(currentResult, rePrompt, SUPERVISION_CONTINUATION_BUDGET);
         if (!rePromptCont.ok) {
           supervisionExhausted = true;
@@ -499,6 +559,11 @@ export async function runOpenAI(
         // --- Periodic re-grounding ---
         const turnsSoFar = currentResult.state.usage.requests;
         if (turnsSoFar > 0 && turnsSoFar % RE_GROUNDING_INTERVAL_TURNS === 0) {
+          if (!canAffordNextTurn()) {
+            const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
+            emit({ kind: 'done', status: costExceeded.status });
+            return costExceeded;
+          }
           const reground = buildReGroundingMessage({
             originalPromptExcerpt: prompt,
             currentTurn: turnsSoFar,
@@ -512,6 +577,11 @@ export async function runOpenAI(
             turn: currentResult.state.usage.requests,
             contentLengthChars: reground.length,
           });
+          if (!canAffordNextTurn()) {
+            const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
+            emit({ kind: 'done', status: costExceeded.status });
+            return costExceeded;
+          }
           const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
           if (!regroundCont.ok) {
             supervisionExhausted = true;

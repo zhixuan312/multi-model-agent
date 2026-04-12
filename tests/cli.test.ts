@@ -962,6 +962,57 @@ describe('computeAggregateCost (v0.3.0)', () => {
   });
 });
 
+describe('buildTaskSchema descriptions', () => {
+  const schema = buildTaskSchema(['standard', 'complex']);
+  const shape = schema.shape;
+
+  const EXPECTED_TOP_LEVEL_FIELDS = [
+    'prompt',
+    'agentType',
+    'tools',
+    'maxTurns',
+    'timeoutMs',
+    'cwd',
+    'effort',
+    'sandboxPolicy',
+    'requiredCapabilities',
+    'contextBlockIds',
+    'expectedCoverage',
+    'skipCompletionHeuristic',
+    'includeProgressTrace',
+    'parentModel',
+    'maxCostUSD',
+    'reviewPolicy',
+    'maxReviewRounds',
+  ];
+
+  for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
+    it(`${fieldName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+      const fieldDef = shape[fieldName];
+      expect(fieldDef, `field ${fieldName} should exist in schema`).toBeDefined();
+      const desc = (fieldDef as any).description;
+      expect(desc).toMatch(/WHAT:/);
+      expect(desc).toMatch(/WHEN:/);
+      expect(desc).toMatch(/DEFAULT:/);
+      expect(desc).toMatch(/INTERACTION:/);
+    });
+  }
+
+  describe('expectedCoverage nested fields', () => {
+    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
+
+    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
+      it(`${innerName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+        const desc = (innerDef as any).description;
+        expect(desc).toMatch(/WHAT:/);
+        expect(desc).toMatch(/WHEN:/);
+        expect(desc).toMatch(/DEFAULT:/);
+        expect(desc).toMatch(/INTERACTION:/);
+      });
+    }
+  });
+});
+
 describe('delegate_tasks headline field (full mode)', () => {
   it('full-mode response carries a headline string derived from the batch aggregates', async () => {
     const server = buildMcpServer(sampleConfig());
@@ -1001,6 +1052,57 @@ describe('delegate_tasks headline field (full mode)', () => {
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
     expect(payload.headline).toContain('$0.00 actual');
     expect(payload.headline).not.toContain('ROI');
+  });
+});
+
+describe('buildTaskSchema descriptions', () => {
+  const schema = buildTaskSchema(['standard', 'complex']);
+  const shape = schema.shape;
+
+  const EXPECTED_TOP_LEVEL_FIELDS = [
+    'prompt',
+    'agentType',
+    'tools',
+    'maxTurns',
+    'timeoutMs',
+    'cwd',
+    'effort',
+    'sandboxPolicy',
+    'requiredCapabilities',
+    'contextBlockIds',
+    'expectedCoverage',
+    'skipCompletionHeuristic',
+    'includeProgressTrace',
+    'parentModel',
+    'maxCostUSD',
+    'reviewPolicy',
+    'maxReviewRounds',
+  ];
+
+  for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
+    it(`${fieldName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+      const fieldDef = shape[fieldName];
+      expect(fieldDef, `field ${fieldName} should exist in schema`).toBeDefined();
+      const desc = (fieldDef as any).description;
+      expect(desc).toMatch(/WHAT:/);
+      expect(desc).toMatch(/WHEN:/);
+      expect(desc).toMatch(/DEFAULT:/);
+      expect(desc).toMatch(/INTERACTION:/);
+    });
+  }
+
+  describe('expectedCoverage nested fields', () => {
+    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
+
+    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
+      it(`${innerName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+        const desc = (innerDef as any).description;
+        expect(desc).toMatch(/WHAT:/);
+        expect(desc).toMatch(/WHEN:/);
+        expect(desc).toMatch(/DEFAULT:/);
+        expect(desc).toMatch(/INTERACTION:/);
+      });
+    }
   });
 });
 

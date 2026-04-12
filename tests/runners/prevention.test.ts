@@ -3,6 +3,7 @@ import {
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from '../../packages/core/src/runners/prevention.js';
 
@@ -115,5 +116,28 @@ describe('buildBudgetPressureNudge', () => {
     const a = buildBudgetPressureNudge(args);
     const b = buildBudgetPressureNudge(args);
     expect(a).toBe(b);
+  });
+});
+
+describe('buildFormatConstraintSuffix (1.0.0)', () => {
+  it('returns empty string when no constraints', () => {
+    const s = buildFormatConstraintSuffix({});
+    expect(s).toBe('');
+  });
+
+  it('adds input format when specified', () => {
+    const s = buildFormatConstraintSuffix({ inputFormat: 'json' });
+    expect(s).toContain('input format: json');
+  });
+
+  it('adds output format when specified', () => {
+    const s = buildFormatConstraintSuffix({ outputFormat: 'yaml' });
+    expect(s).toContain('output format: yaml');
+  });
+
+  it('combines both when both specified', () => {
+    const s = buildFormatConstraintSuffix({ inputFormat: 'json', outputFormat: 'yaml' });
+    expect(s).toContain('input format: json');
+    expect(s).toContain('output format: yaml');
   });
 });

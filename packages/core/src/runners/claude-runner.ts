@@ -13,11 +13,14 @@ import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createClaudeToolServer } from '../tools/claude-adapter.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
+import { CostMeter } from '../cost/cost-meter.js';
+import { CallCache } from '../tools/call-cache.js';
 import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -158,6 +161,54 @@ export async function runClaude(
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
+  // --- Cost meter (Task 25) ------------------------------------------------
+  const costMeter = new CostMeter({ ceiling: options.maxCostUSD });
+
+  // --- Call cache (Task 25) ------------------------------------------------
+  const callCache = new CallCache();
+  const agentType = providerConfig.type ?? 'claude';
+
+  // Track last turn cost for estimating next turn cost
+  let lastTurnCostUSD = 0;
+
+  /**
+   * Check if we can afford the next turn based on previous turn cost estimate.
+   */
+  function canAffordNextTurn(): boolean {
+    if (!costMeter.canProceed(lastTurnCostUSD > 0 ? lastTurnCostUSD : 0.001)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Build a cost_exceeded result.
+   */
+  function buildCostExceededResult(): RunResult {
+    const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
+    const savedCostUSD = computeSavedCostUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+    return {
+      output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
+      status: 'cost_exceeded',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUSD: finalCostUSD,
+        savedCostUSD,
+      },
+      turns,
+      filesRead: tracker.getReads(),
+      directoriesListed: tracker.getDirectoriesListed(),
+      filesWritten: tracker.getWrites(),
+      toolCalls: tracker.getToolCalls(),
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: Date.now() - taskStartMs,
+      ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
+    };
+  }
+
   // --- Prevention layer: system prompt + budget hint ---
   //
   // buildSystemPrompt() is deliberately static and parameter-free (same
@@ -168,7 +219,7 @@ export async function runClaude(
   // node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1460-1465 for the
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -406,6 +457,11 @@ export async function runClaude(
           // the CLI subprocess decides to emit a final result after it
           // processes the new user message. ---
           if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+            if (!canAffordNextTurn()) {
+              completedResult = buildCostExceededResult();
+              messageQueue.close();
+              break;
+            }
             const reground = buildReGroundingMessage({
               originalPromptExcerpt: prompt,
               currentTurn: turns,
@@ -467,6 +523,13 @@ export async function runClaude(
             cumulativeInputTokens: inputTokens,
             cumulativeOutputTokens: outputTokens,
           });
+
+          // Track cost for this turn (Task 25)
+          const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+          if (turnCost !== null) {
+            lastTurnCostUSD = turnCost;
+            costMeter.add(turnCost);
+          }
 
           // --- Watchdog check on the result message as well: input tokens
           // have just jumped and we may now be in force_salvage territory.
@@ -601,6 +664,11 @@ export async function runClaude(
           }
 
           // Push the re-prompt and continue reading the iterator.
+          if (!canAffordNextTurn()) {
+            completedResult = buildCostExceededResult();
+            messageQueue.close();
+            break;
+          }
           const rePrompt = buildRePrompt(validation);
           emit({
             kind: 'injection',
