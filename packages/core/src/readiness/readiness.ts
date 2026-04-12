@@ -1,3 +1,5 @@
+import type { TaskSpec, BriefQualityWarning, ReadinessResult, BriefQualityPolicy } from '../types.js';
+
 export function hasScopePillar(prompt: string): boolean {
   if (!prompt.trim()) return false;
   // File path with extension
@@ -82,4 +84,51 @@ export function detectNamedCodeArtifact(prompt: string): boolean {
 
 export function detectReasonableLength(prompt: string): boolean {
   return prompt.length >= 50 && prompt.length <= 500;
+}
+
+export function evaluateReadiness(task: { prompt: string; briefQualityPolicy?: BriefQualityPolicy }, mode?: BriefQualityPolicy): ReadinessResult {
+  const policy = mode ?? task.briefQualityPolicy ?? 'normalize';
+  
+  if (policy === 'off') {
+    return { action: 'ignored', missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
+  }
+
+  const missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[] = [];
+  if (!hasScopePillar(task.prompt)) missingPillars.push('scope');
+  if (!hasInputsPillar(task.prompt)) missingPillars.push('inputs');
+  if (!hasDoneConditionPillar(task.prompt)) missingPillars.push('done_condition');
+  if (!hasOutputContractPillar(task.prompt, false)) missingPillars.push('output_contract');
+
+  const layer2Warnings: BriefQualityWarning[] = [];
+  if (detectOutsourcedDiscovery(task.prompt)) layer2Warnings.push('outsourced_discovery');
+  if (detectBrittleLineAnchors(task.prompt)) layer2Warnings.push('brittle_line_anchors');
+  if (detectMixedEnvironmentActions(task.prompt)) layer2Warnings.push('mixed_environment_actions');
+
+  const layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[] = [];
+  if (detectConcretePath(task.prompt)) layer3Hints.push('concrete_path');
+  if (detectNamedCodeArtifact(task.prompt)) layer3Hints.push('named_code_artifact');
+  const reasonableLength = detectReasonableLength(task.prompt);
+  if (!reasonableLength) layer3Hints.push('reasonable_length');
+
+  const briefQualityWarnings: BriefQualityWarning[] = [...layer2Warnings];
+  if (missingPillars.includes('scope')) briefQualityWarnings.push('bare_topic_noun');
+  if (missingPillars.includes('done_condition')) briefQualityWarnings.push('no_done_condition');
+  if (missingPillars.includes('output_contract')) briefQualityWarnings.push('no_output_contract');
+  if (task.prompt.length < 50) briefQualityWarnings.push('tiny_brief');
+  if (task.prompt.length > 500) briefQualityWarnings.push('huge_brief');
+
+  let action: ReadinessResult['action'] = 'warn';
+  
+  if (policy === 'normalize') {
+    if (missingPillars.length > 0) action = 'refuse';
+    else if (layer2Warnings.length > 0) action = 'normalize';
+    else action = 'warn';
+  } else if (policy === 'strict') {
+    if (missingPillars.length > 0) action = 'refuse';
+    else action = 'warn';
+  } else if (policy === 'warn') {
+    action = 'warn';
+  }
+
+  return { action, missingPillars, layer2Warnings, layer3Hints, briefQualityWarnings };
 }

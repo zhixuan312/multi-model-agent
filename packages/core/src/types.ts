@@ -36,7 +36,8 @@ export type RunStatus =
   | 'api_aborted'
   | 'api_error'
   | 'network_error'
-  | 'error';
+  | 'error'
+  | 'brief_too_vague';
 
 // === Task ===
 
@@ -82,6 +83,10 @@ export interface TaskSpec {
   includeProgressTrace?: boolean
   /** Optional hint about the parent session's model for saved-cost estimates. */
   parentModel?: string
+  /** Brief quality policy for readiness evaluation. */
+  briefQualityPolicy?: BriefQualityPolicy
+  /** Optional budget for normalization. */
+  maxCostUSD?: number
 }
 
 // === Provider Config (discriminated union) ===
@@ -220,6 +225,12 @@ export interface RunResult {
   /** Bounded trace of progress events emitted during this task's run. */
   progressTrace?: ProgressTraceEntry[]
   error?: string
+  /** Error code for refused briefs. */
+  errorCode?: string
+  /** Whether the task can be retried. */
+  retryable?: boolean
+  /** Brief quality warnings from readiness evaluation. */
+  briefQualityWarnings?: BriefQualityWarning[]
 }
 
 /** A captured progress entry, or a synthetic marker when trace trimming occurred. */
@@ -441,6 +452,28 @@ export interface ProviderEligibility {
   eligible: boolean
   /** Reasons only present when eligible === false. */
   reasons: EligibilityFailure[]
+}
+
+// === Brief Quality ===
+
+export type BriefQualityWarning =
+  | 'outsourced_discovery'
+  | 'brittle_line_anchors'
+  | 'mixed_environment_actions'
+  | 'bare_topic_noun'
+  | 'no_done_condition'
+  | 'no_output_contract'
+  | 'tiny_brief'
+  | 'huge_brief';
+
+export type BriefQualityPolicy = 'normalize' | 'strict' | 'warn' | 'off' | undefined;
+
+export interface ReadinessResult {
+  action: 'refuse' | 'normalize' | 'warn' | 'ignored'
+  missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[]
+  layer2Warnings: BriefQualityWarning[]
+  layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[]
+  briefQualityWarnings: BriefQualityWarning[]
 }
 
 // === Utilities ===

@@ -123,3 +123,59 @@ describe('Layer 3 hints', () => {
     expect(detectReasonableLength('fix it')).toBe(false);
   });
 });
+
+import { evaluateReadiness } from '@zhixuan92/multi-model-agent-core/readiness/readiness';
+import type { TaskSpec } from '@zhixuan92/multi-model-agent-core';
+
+const badBrief: TaskSpec = {
+  prompt: 'Fix the thing.',
+  agentType: 'standard',
+};
+
+const acceptableBrief: TaskSpec = {
+  prompt:
+    'Update the auth middleware in src/auth/middleware.ts to use JWT. ' +
+    'Follow the pattern from users.ts. Verify the exact imports. ' +
+    'Done when tsc passes and the existing auth tests still pass.',
+  agentType: 'standard',
+};
+
+const idealBrief: TaskSpec = {
+  prompt:
+    'Update `src/auth/middleware.ts` to use `jsonwebtoken`. ' +
+    'Import `verifyToken` from `src/auth/jwt-utils.ts`. ' +
+    'Do not modify `src/auth/jwt-utils.ts`. Done when tsc passes.',
+  agentType: 'standard',
+};
+
+describe('evaluateReadiness policy table', () => {
+  it('normalize mode refuses a bad brief', () => {
+    const r = evaluateReadiness(badBrief, 'normalize');
+    expect(r.action).toBe('refuse');
+    expect(r.missingPillars.length).toBeGreaterThan(0);
+  });
+  it('strict mode refuses a bad brief', () => {
+    expect(evaluateReadiness(badBrief, 'strict').action).toBe('refuse');
+  });
+  it('warn mode never refuses', () => {
+    const r = evaluateReadiness(badBrief, 'warn');
+    expect(r.action).toBe('warn');
+    expect(r.briefQualityWarnings.length).toBeGreaterThan(0);
+  });
+  it('off mode returns ignored', () => {
+    expect(evaluateReadiness(badBrief, 'off').action).toBe('ignored');
+  });
+  it('normalize mode triggers normalization on Layer 2 hit', () => {
+    const r = evaluateReadiness(acceptableBrief, 'normalize');
+    expect(r.action).toBe('normalize');
+    expect(r.layer2Warnings.length).toBeGreaterThan(0);
+  });
+  it('normalize mode passes ideal brief (no Layer 2 warnings)', () => {
+    const r = evaluateReadiness(idealBrief, 'normalize');
+    expect(r.action).toBe('warn');
+    expect(r.layer2Warnings).toEqual([]);
+  });
+  it('defaults to normalize when policy is undefined', () => {
+    expect(evaluateReadiness(acceptableBrief, undefined).action).toBe('normalize');
+  });
+});

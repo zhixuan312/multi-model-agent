@@ -7,11 +7,13 @@ import type {
   RunTasksRuntime,
   AgentType,
   AgentCapability,
+  BriefQualityWarning,
 } from './types.js';
 import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
+import { evaluateReadiness } from './readiness/readiness.js';
 
 export type RunTasksProgressCallback = (
   taskIndex: number,
@@ -72,6 +74,36 @@ export async function runTasks(
     }
   });
 
+  const readinessResults = expandedTasks.map((entry) => {
+    if ('error' in entry) return undefined;
+    const task = entry as TaskSpec;
+    if (task.briefQualityPolicy === undefined) return undefined;
+    return evaluateReadiness(task, task.briefQualityPolicy);
+  });
+
+  const refusedResults = expandedTasks.map((entry, idx) => {
+    if ('error' in entry) return undefined;
+    const readiness = readinessResults[idx];
+    if (!readiness) return undefined;
+    if (readiness.action === 'refuse') {
+      return {
+        output: `Brief too vague: missing ${readiness.missingPillars.join(', ')}`,
+        status: 'brief_too_vague' as const,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+        turns: 0,
+        filesRead: [] as string[],
+        filesWritten: [] as string[],
+        toolCalls: [] as string[],
+        outputIsDiagnostic: true,
+        escalationLog: [] as RunResult['escalationLog'],
+        errorCode: 'brief_too_vague',
+        briefQualityWarnings: readiness.briefQualityWarnings as BriefQualityWarning[],
+        retryable: false,
+      };
+    }
+    return undefined;
+  });
+
   const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
     if ('error' in entry) {
       return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
@@ -98,6 +130,10 @@ export async function runTasks(
     resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {
         return Promise.resolve(errorResult(r.error));
+      }
+      const refused = refusedResults[index];
+      if (refused) {
+        return Promise.resolve(refused);
       }
       const taskProgress = options.onProgress
         ? (event: ProgressEvent) => options.onProgress!(index, event)

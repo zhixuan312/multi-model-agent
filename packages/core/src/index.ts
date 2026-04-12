@@ -31,6 +31,9 @@ export type {
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
+  BriefQualityWarning,
+  BriefQualityPolicy,
+  ReadinessResult,
 } from './types.js';
 
 // Context blocks
@@ -50,6 +53,21 @@ export { createProvider } from './provider.js';
 
 // Run tasks
 export { runTasks } from './run-tasks.js';
+
+// Readiness
+export {
+  evaluateReadiness,
+  hasScopePillar,
+  hasInputsPillar,
+  hasDoneConditionPillar,
+  hasOutputContractPillar,
+  detectOutsourcedDiscovery,
+  detectBrittleLineAnchors,
+  detectMixedEnvironmentActions,
+  detectConcretePath,
+  detectNamedCodeArtifact,
+  detectReasonableLength,
+} from './readiness/readiness.js';
 
 // Agent resolution
 export { resolveAgent } from './routing/resolve-agent.js';

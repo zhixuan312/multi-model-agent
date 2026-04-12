@@ -141,4 +141,21 @@ describe('runTasks', () => {
     };
     expect(cfg.capabilities).toEqual(['web_search']);
   });
+
+  it('1.0.0 runTasks refuses a bad brief under normalize mode', async () => {
+    const results = await runTasks(
+      [{ prompt: 'Fix the thing.', agentType: 'standard', briefQualityPolicy: 'normalize' }],
+      {
+        agents: {
+          standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+          complex: { type: 'claude', model: 'claude-opus-4-6' },
+        },
+        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      },
+    );
+    expect(results[0].status).toBe('brief_too_vague');
+    expect(results[0].errorCode).toBe('brief_too_vague');
+    expect(results[0].retryable).toBe(false);
+    expect(results[0].briefQualityWarnings?.length).toBeGreaterThan(0);
+  });
 });
