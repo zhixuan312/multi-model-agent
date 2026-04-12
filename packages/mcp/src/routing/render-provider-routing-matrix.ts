@@ -1,30 +1,23 @@
-import type { Capability, MultiModelConfig, ProviderConfig } from '@zhixuan92/multi-model-agent-core';
-import { getBaseCapabilities } from '@zhixuan92/multi-model-agent-core/routing/capabilities';
-import { findModelProfile, getEffectiveCostTier } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
+import type { AgentConfig, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { findModelCapabilities, findModelProfile } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
 import type { ModelProfile } from '@zhixuan92/multi-model-agent-core/routing/model-profiles';
 
 const ROUTING_RECIPE = `How to route a task:
-1. Capability filter (HARD): exclude providers missing any required capability.
-2. Quality filter: exclude providers whose tier is below the task's tier.
-   Tier ordering: trivial < standard < reasoning.
-3. Cost preference (STRONG): among the remainder, prefer the cheapest tier.
-   If a 'free' provider qualifies, pick it. Only escalate to paid tiers when
-   the task tier or required capabilities demand it.
+1. Select the agent type based on required capabilities.
+2. If the selected agent lacks required capabilities, auto-escalate to the other agent type.
+3. Among available agents, prefer the one that meets capability requirements.
 
-Tier guidance for the consumer LLM:
-- 'trivial' — well-defined edits, lookups, formatting. One obvious answer.
+Agent guidance:
 - 'standard' — most code work. Clear spec, multiple valid approaches.
-- 'reasoning' — ambiguous, architectural, research, or high-stakes.
-  Use when requirements are unclear or judgment is required.
+- 'complex' — ambiguous, architectural, research, or high-stakes tasks requiring more reasoning.
 
 Optional 'effort' knob (per task):
-- Only providers marked 'effort: supported' in the matrix honor this field.
-- Use 'high' for reasoning-tier tasks when you want maximum depth,
+- Only agents marked 'effort: supported' in the matrix honor this field.
+- Use 'high' for complex tasks when you want maximum depth,
   'medium' for balanced, 'low' for fast-but-shallow, 'none' to disable
-  thinking entirely on providers that default it on. Omit the field on
-  providers that do not support it.`;
+  thinking entirely on agents that default it on.`;
 
-const TOOL_NOTES = `Sub-agent tool notes (apply to every provider):
+const TOOL_NOTES = `Sub-agent tool notes (apply to every agent):
 - 'grep' accepts a file OR a directory. When given a directory it searches
   recursively (output is prefixed file:line). Prefer one recursive grep over
   many readFile calls when the worker needs to find usages or patterns.
@@ -32,19 +25,18 @@ const TOOL_NOTES = `Sub-agent tool notes (apply to every provider):
   otherwise salvaged from a running scratchpad. You ALWAYS get text back,
   even on 'incomplete' / 'timeout' / 'api_error' / 'network_error' paths.
 - Tasks that need shell ('pnpm', 'pytest', 'tsc', 'git') only work on
-  providers configured with sandboxPolicy: 'none'. Otherwise keep shell
+  agents configured with sandboxPolicy: 'none'. Otherwise keep shell
   work on the parent session, not in a delegated sub-agent.
 
 Escalation, statuses, streaming, and batch helpers:
-- Auto-routed tasks (no 'provider' set) walk the full capability+tier
-  chain cheapest-first on failure. The chain stops at the first 'ok'.
-  If every provider fails, the best salvage is returned and the
-  per-task 'escalationLog' shows every attempt. Explicit pins
-  ('provider' set) run as a single attempt — pinning opts out.
+- Auto-routed tasks (no 'agentType' set) use 'standard' agent.
+- If the selected agent lacks required capabilities, auto-escalate to 'complex'.
+- If every agent fails, the best salvage is returned and the
+  per-task 'escalationLog' shows every attempt.
 - Status values: 'ok', 'incomplete', 'max_turns', 'timeout',
   'api_aborted', 'api_error', 'network_error', 'error'.
   'incomplete' = scratchpad salvage after a degenerate completion;
-  'api_aborted' = provider-side abort; 'api_error' = HTTP error with
+  'api_aborted' = agent-side abort; 'api_error' = HTTP error with
   a numeric .status; 'network_error' = transport failure
   (ECONNREFUSED / ENOTFOUND / /network/i).
 - Streaming: if your MCP client passes '_meta.progressToken' on the
@@ -63,22 +55,21 @@ Escalation, statuses, streaming, and batch helpers:
   shared across multiple tasks are sent to the parent session only
   once.
 
-RESPONSE SHAPE (v0.3+): Every delegate_tasks response includes a top-level
+RESPONSE SHAPE (v1.0+): Every delegate_tasks response includes a top-level
 batchId, mode ('full' or 'summary'), timings ({wallClockMs, sumOfTaskMs,
 estimatedParallelSavingsMs}), batchProgress ({totalTasks, completedTasks,
 incompleteTasks, failedTasks, successPercent}), and aggregateCost
-({totalActualCostUSD, totalSavedCostUSD, actualCostUnavailableTasks,
-savedCostUnavailableTasks}). If the combined output across tasks is small,
+({totalActualCostUSD, totalSavedCostUSD}). If the combined output across tasks is small,
 mode: 'full' with inline outputs; if it exceeds the server's threshold
 (default 64 KB, configurable via env MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS
 / config defaults.largeResponseThresholdChars / buildMcpServer option),
-mode: 'summary' with per-task outputLength + outputSha256 + _fetchOutputWith
-hint — fetch individual outputs with get_task_output({ batchId, taskIndex }),
-or per-task metadata with get_task_detail({ batchId, taskIndex }).
+mode: 'summary' with per-task outputLength + outputSha256 + _fetchWith
+hint — fetch individual outputs with get_batch_slice({ batchId, slice: 'output', taskIndex }),
+or per-task details with get_batch_slice({ batchId, slice: 'detail', taskIndex }).
 Set responseMode: 'full' to force inline, 'summary' to force summary, or
 omit for auto-escape.
 
-COVERAGE DECLARATION (v0.3+): For tasks with enumerable deliverables
+COVERAGE DECLARATION (v1.0+): For tasks with enumerable deliverables
 (multi-file refactors, test generation across many functions, multi-PR
 review, per-endpoint reports, per-function test stubs, audit checklists),
 set expectedCoverage on the task spec with either minSections: N,
@@ -90,7 +81,7 @@ Do NOT set expectedCoverage for one-shot tasks (bug fixes, single
 implementations, prose, creative writing) — the field is opt-in and has
 no meaning for deliverables you can't enumerate ahead of time.
 
-COST + TIME VISIBILITY (v0.3+): Set parentModel on the task spec (e.g.
+COST + TIME VISIBILITY (v1.0+): Set parentModel on the task spec (e.g.
 'claude-opus-4-6') to get usage.savedCostUSD — the ESTIMATED cost
 difference vs running the same token volume on that parent model.
 Positive means delegation was cheaper. Both usage.costUSD (actual) and
@@ -102,46 +93,23 @@ serial for-loop. batchProgress.successPercent is a clean-success rate
 (the batch is always 100% done by the time you see the response —
 successPercent measures how many finished cleanly, NOT progress).
 
-PROGRESS TRACE (v0.3+): Set includeProgressTrace: true on the task spec
-to receive a bounded, priority-trimmed trace of the execution timeline
-in the final RunResult.progressTrace. Useful for post-hoc debugging of
-long-running tasks — did the worker loop through supervision retries,
-where did it stall, did it escalate across providers. The trace is
-trimmed at 80 events and 16 KB; text_emission and tool_call events are
-dropped first under pressure (their content is already in output /
-toolCalls). Boundary events (turn_start, turn_complete, escalation_start,
-injection, done) are never dropped. If trimming fired, a synthetic
-_trimmed marker at the end of the trace reports the dropped count and
-per-kind histogram.
-
-NOTE: progress-events at the MCP protocol level (notifications/progress)
-are emitted correctly by the server and delivered to the MCP client.
-Whether your client renders them live depends on the client — some
-render them as in-flight tool-call status lines, others don't surface
-them to the calling LLM at all. includeProgressTrace gives you the
-full timeline post-hoc regardless of your client's live-rendering
-behavior.
-
 AVAILABLE TOOLS: delegate_tasks (this one), register_context_block
 (stash reusable brief content referenced via TaskSpec.contextBlockIds),
 retry_tasks (re-dispatch specific indices from a previous batch),
-get_task_output (fetch individual task outputs when a response was in
-summary mode).`;
+get_batch_slice (fetch outputs/details/telemetry when a response was in
+summary mode or for per-task introspection).`;
 
-function renderProviderBlock(
+function renderAgentBlock(
   name: string,
-  config: ProviderConfig,
-  capabilities: Capability[],
+  config: AgentConfig,
+  capabilities: ('web_search' | 'web_fetch')[],
   profile: ModelProfile,
-  costSource: 'config' | 'default',
 ): string {
-  const cost = getEffectiveCostTier(config);
-  const costSuffix = costSource === 'config' ? ' (from config)' : '';
   const effortLabel = profile.supportsEffort ? 'supported' : 'not supported';
   const lines = [
     `${name} (${config.model})`,
-    `  tools: ${capabilities.join(', ')}`,
-    `  tier: ${profile.tier} | cost: ${cost}${costSuffix} | effort: ${effortLabel}`,
+    `  capabilities: ${capabilities.join(', ') || '(none)'}`,
+    `  cost: ${profile.defaultCost} | effort: ${effortLabel}`,
     `  best for: ${profile.bestFor}`,
   ];
   if (profile.notes) {
@@ -155,21 +123,24 @@ function renderProviderBlock(
 
 /**
  * Renders the full routing matrix for the MCP tool description.
- * Helps the consuming LLM understand provider capabilities and routing rules.
+ * Helps the consuming LLM understand agent capabilities and routing rules.
  */
 export function renderProviderRoutingMatrix(config: MultiModelConfig): string {
-  const blocks = Object.entries(config.providers).map(([name, providerConfig]) => {
-    const capabilities = getBaseCapabilities(providerConfig);
-    const profile = findModelProfile(providerConfig.model);
-    const costSource: 'config' | 'default' = providerConfig.costTier ? 'config' : 'default';
-    return renderProviderBlock(name, providerConfig, capabilities, profile, costSource);
+  if (!config.agents) {
+    return 'No agents configured.';
+  }
+
+  const blocks = Object.entries(config.agents).map(([name, agentConfig]) => {
+    const capabilities = agentConfig.capabilities ?? findModelCapabilities(agentConfig.model);
+    const profile = findModelProfile(agentConfig.model);
+    return renderAgentBlock(name, agentConfig, capabilities, profile);
   });
 
   return [
-    'Delegate tasks to sub-agents running on different LLM providers.',
+    'Delegate tasks to sub-agents running on different LLM models.',
     'All tasks execute concurrently.',
     '',
-    'Available providers:',
+    'Available agents:',
     '',
     blocks.join('\n\n'),
     '',

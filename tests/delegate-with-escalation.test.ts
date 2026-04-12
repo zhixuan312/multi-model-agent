@@ -38,7 +38,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('ok', 'should not be called')),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [okProvider, expensiveProvider]);
 
     expect(result.status).toBe('ok');
@@ -62,7 +62,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('ok', 'complete answer')),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [failingProvider, okProvider]);
 
     expect(result.status).toBe('ok');
@@ -91,7 +91,7 @@ describe('delegateWithEscalation', () => {
         ),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [cheapFail, expensiveFail]);
 
     expect(result.status).toBe('incomplete');
@@ -135,7 +135,7 @@ describe('delegateWithEscalation', () => {
     // doesn't exercise the bug.
     expect(longErrorDiagnostic.length).toBeGreaterThan(realPartial.length);
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [cheapIncomplete, expensiveError]);
 
     expect(result.output).toBe(realPartial);
@@ -171,7 +171,7 @@ describe('delegateWithEscalation', () => {
 
     expect(longDiagnostic.length).toBeGreaterThan(realShort.length);
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [realProvider, diagnosticProvider]);
 
     expect(result.output).toBe(realShort);
@@ -197,7 +197,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr, true)),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [firstErr, secondErr]);
 
     expect(result.output).toBe(longErr);
@@ -220,7 +220,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('ok', 'complete')),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     await delegateWithEscalation(task, [failingProvider, okProvider], { onProgress });
 
     // Exactly one escalation_start event between the two attempts.
@@ -257,7 +257,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('ok', 'success')),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     await delegateWithEscalation(task, [okProvider], { onProgress });
 
     expect(events.filter((e) => e.kind === 'escalation_start')).toHaveLength(0);
@@ -289,7 +289,7 @@ describe('delegateWithEscalation', () => {
       run: makeMockRunner(1300, 'cafebabe', 'ok', 'done'),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [cheap, expensive]);
 
     expect(result.escalationLog).toHaveLength(2);
@@ -308,7 +308,7 @@ describe('delegateWithEscalation', () => {
       run: vi.fn().mockResolvedValue(makeMockResult('ok', 'done')),
     };
 
-    const task: TaskSpec = { prompt: 'test', tier: 'standard', requiredCapabilities: [] };
+    const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [silent]);
 
     expect(result.escalationLog[0].initialPromptLengthChars).toBe(0);
@@ -324,9 +324,6 @@ describe('delegateWithEscalation', () => {
 
     const task: TaskSpec = {
       prompt: 'test',
-      tier: 'standard',
-      requiredCapabilities: [],
-      provider: 'pinned',
     };
     const result = await delegateWithEscalation(task, [failingProvider], {
       explicitlyPinned: true,

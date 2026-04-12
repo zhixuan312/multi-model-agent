@@ -13,12 +13,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -89,12 +86,9 @@ describe('slim summary envelope size', () => {
         },
       ],
       durationMs: 354_000,
-      progressTrace: Array.from({ length: 20 }, (_, j) => ({
-        kind: 'escalation_start' as any,
-        at: Date.now(),
-        taskIndex: i,
-        attempt: j,
-      })),
+      workerStatus: 'done' as const,
+      specReviewStatus: 'approved' as const,
+      qualityReviewStatus: 'approved' as const,
     }));
 
     const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
@@ -107,11 +101,8 @@ describe('slim summary envelope size', () => {
       {
         tasks: Array.from({ length: 11 }, (_, i) => ({
           prompt: `task ${i}`,
-          provider: 'mock',
-          tier: 'standard',
-          requiredCapabilities: [],
+          agentType: 'standard' as const,
           parentModel: 'claude-opus-4-6',
-          includeProgressTrace: true,
         })),
         responseMode: 'summary',
       },
@@ -123,6 +114,7 @@ describe('slim summary envelope size', () => {
 
     const payload = JSON.parse(rawText);
     expect(payload.mode).toBe('summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     expect(payload.results).toHaveLength(11);
     expect(payload.headline).toContain('11 tasks');
 
@@ -132,5 +124,12 @@ describe('slim summary envelope size', () => {
     expect(task0).not.toHaveProperty('toolCalls');
     expect(task0).not.toHaveProperty('escalationLog');
     expect(task0).not.toHaveProperty('progressTrace');
+    expect(task0).toHaveProperty('_fetchWith');
+    expect(task0._fetchWith).toContain('get_batch_slice');
+    expect(task0).not.toHaveProperty('_fetchOutputWith');
+    expect(task0).not.toHaveProperty('_fetchDetailWith');
+    expect(task0).toHaveProperty('workerStatus');
+    expect(task0).toHaveProperty('specReviewStatus');
+    expect(task0).toHaveProperty('qualityReviewStatus');
   });
 });

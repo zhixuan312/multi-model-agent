@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -40,25 +40,13 @@
       "types": "./dist/config/load.d.ts",
       "import": "./dist/config/load.js"
     },
-    "./routing/capabilities": {
-      "types": "./dist/routing/capabilities.d.ts",
-      "import": "./dist/routing/capabilities.js"
-    },
     "./routing/model-profiles": {
       "types": "./dist/routing/model-profiles.d.ts",
       "import": "./dist/routing/model-profiles.js"
     },
-    "./routing/resolve-task-capabilities": {
-      "types": "./dist/routing/resolve-task-capabilities.d.ts",
-      "import": "./dist/routing/resolve-task-capabilities.js"
-    },
-    "./routing/select-provider-for-task": {
-      "types": "./dist/routing/select-provider-for-task.d.ts",
-      "import": "./dist/routing/select-provider-for-task.js"
-    },
-    "./routing/get-provider-eligibility": {
-      "types": "./dist/routing/get-provider-eligibility.d.ts",
-      "import": "./dist/routing/get-provider-eligibility.js"
+    "./routing/resolve-agent": {
+      "types": "./dist/routing/resolve-agent.d.ts",
+      "import": "./dist/routing/resolve-agent.js"
     },
     "./provider": {
       "types": "./dist/provider.d.ts",
@@ -71,6 +59,50 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./readiness/readiness": {
+      "types": "./dist/readiness/readiness.d.ts",
+      "import": "./dist/readiness/readiness.js"
+    },
+    "./readiness/normalization-budget": {
+      "types": "./dist/readiness/normalization-budget.d.ts",
+      "import": "./dist/readiness/normalization-budget.js"
+    },
+    "./readiness/normalize-brief": {
+      "types": "./dist/readiness/normalize-brief.d.ts",
+      "import": "./dist/readiness/normalize-brief.js"
+    },
+    "./reporting/structured-report": {
+      "types": "./dist/reporting/structured-report.d.ts",
+      "import": "./dist/reporting/structured-report.js"
+    },
+    "./review/reviewer-prompt": {
+      "types": "./dist/review/reviewer-prompt.d.ts",
+      "import": "./dist/review/reviewer-prompt.js"
+    },
+    "./review/spec-reviewer": {
+      "types": "./dist/review/spec-reviewer.d.ts",
+      "import": "./dist/review/spec-reviewer.js"
+    },
+    "./review/quality-reviewer": {
+      "types": "./dist/review/quality-reviewer.d.ts",
+      "import": "./dist/review/quality-reviewer.js"
+    },
+    "./review/aggregate-result": {
+      "types": "./dist/review/aggregate-result.d.ts",
+      "import": "./dist/review/aggregate-result.js"
+    },
+    "./error-codes": {
+      "types": "./dist/error-codes.d.ts",
+      "import": "./dist/error-codes.js"
+    },
+    "./cost/cost-meter": {
+      "types": "./dist/cost/cost-meter.d.ts",
+      "import": "./dist/cost/cost-meter.js"
+    },
+    "./tools/call-cache": {
+      "types": "./dist/tools/call-cache.d.ts",
+      "import": "./dist/tools/call-cache.js"
     }
   },
   "scripts": {

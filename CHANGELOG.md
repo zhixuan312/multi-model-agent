@@ -5,7 +5,70 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [1.0.0] - 2026-04-12
+
+**Breaking rewrite from v0.4.0.** The config schema, tool surface, task fields, and lifecycle have all changed. See the migration table at the end of this entry.
+
+### New Features
+
+- **Reviewed lifecycle (core).** Every task now passes through a five-phase lifecycle: `Brief → Readiness check → Dispatch → Execute → Review (if enabled) → Aggregate`. The readiness check (`normalizeBrief`) evaluates prompt quality before any money is spent — it surfaces vague scopes, overambitious dispatches, and missing context before the worker runs.
+- **Specialized tools (mcp).** Five new tools beyond basic batch dispatch:
+  - `execute_plan_task` — run a single step from an implementation plan
+  - `audit_document` — verify a spec document's requirements are met
+  - `debug_task` — triage a failure against known failure patterns
+  - `review_code` — structural quality review of a diff or module
+  - `verify_work` — confirm implementation matches spec
+- **Two-slot agent model (core).** Tasks declare `agentType: "standard"` (fast, cheap, capability-gated) or `agentType: "complex"` (slower, reasoning) instead of `tier`. Auto-routing selects the cheapest configured agent satisfying the required capabilities and declared `agentType`.
+- **Cost ceiling (core).** Each task can declare a `maxCostUSD` that aborts execution before spending beyond the threshold. Prevents runaway dispatches on ambiguous tasks.
+- **Call cache (core).** Repeated identical calls (same prompt + model hash) return the cached result within a sliding window, avoiding redundant spend on retry paths.
+- **Format constraints (core).** `expectedCoverage` declared per task enforces structured output requirements — `minSections`, `sectionPattern`, `requiredMarkers`. The supervision layer re-prompts on missing items and classifies thin responses as `insufficient_coverage`.
+- **Structured errors (core).** Per-task status is now one of ten protocol values: `ok`, `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, `error`, `brief_too_vague`, `cost_exceeded`. All ten surface the best-effort scratchpad into `output` before returning.
+- **`schemaVersion` field (mcp).** Every response envelope carries `schemaVersion: "1.0.0"` so callers can branch on the schema shape without relying on version checks.
+
+### Breaking Changes
+
+- **`config.providers` → `config.agents`** (core). The top-level config key is now `agents`, reflecting the two-slot model. Provider entries inside `agents` use `provider` to name the underlying API type (`openai-compatible`, etc.).
+- **`task.tier` → `task.agentType`** (core). `trivial`/`standard`/`reasoning` tiers are replaced by `agentType: "standard"` or `agentType: "complex"`. Standard maps roughly to `standard`; complex maps roughly to `reasoning`. `trivial` is now just `agentType: "standard"` with no special routing treatment.
+- **`get_task_output`, `get_task_detail`, `get_batch_telemetry` → `get_batch_slice`** (mcp). Three fetch tools are consolidated into one. `get_batch_slice(batchId, slice)` where `slice` is `"output"`, `"detail"`, or `"telemetry"`.
+- **`progressTrace` removed** (core). The bounded execution timeline capture is replaced by structured `AttemptRecord[]` entries in `get_batch_slice(..., "detail")`. `initialPromptHash` provides cross-runner stable identification of identical briefs.
+- **`hostedTools` narrowed for `openai-compatible`** (core). Only `web_search` is available by default for openai-compatible providers. Other tools (`image_generation`, `code_interpreter`) require explicit opt-in.
+- **`BatchAggregateCost` trimmed** (mcp). `actualCostUnavailableTasks` and `savedCostUnavailableTasks` are removed. The aggregate cost shape is now: `totalActualCostUSD`, `totalSavedCostUSD`.
+
+### Migration: v0.4.0 → v1.0.0
+
+| v0.4.0 | v1.0.0 | Notes |
+|---|---|---|
+| `config.providers` | `config.agents` | Config top-level key renamed |
+| `task.tier: "trivial"\|"standard"\|"reasoning"` | `task.agentType: "standard"\|"complex"` | Tier replaced by two-slot agentType |
+| `get_task_output(batchId, taskIndex)` | `get_batch_slice(batchId, "output", { taskIndex })` | Consolidated into one tool |
+| `get_task_detail(batchId, taskIndex)` | `get_batch_slice(batchId, "detail", { taskIndex })` | Consolidated into one tool |
+| `get_batch_telemetry(batchId)` | `get_batch_slice(batchId, "telemetry")` | Consolidated into one tool |
+| `progressTrace` field | Removed | Use `get_batch_slice(..., "detail")` for `AttemptRecord[]` |
+| `hostedTools: ["web_search", ...]` on openai-compatible | Only `web_search` available by default | Others require explicit opt-in |
+| `BatchAggregateCost.actualCostUnavailableTasks` | Removed | — |
+| `BatchAggregateCost.savedCostUnavailableTasks` | Removed | — |
+| `delegate_tasks` with `responseMode: "full"` | `responseMode: "full"` unchanged | Full mode shape preserved |
+| `delegate_tasks` with `responseMode: "summary"` | `responseMode: "summary"` unchanged | Summary shape preserved, but fetch tools consolidated |
+| `tier: "reasoning"` + `effort: "high"` | `agentType: "complex"` | No effort change; agentType drives routing |
+| `expectedCoverage` with `requiredMarkers` | `expectedCoverage` with `requiredMarkers` | Unchanged |
+| `skipCompletionHeuristic` | `skipCompletionHeuristic` | Unchanged |
+| `contextBlockIds` | `contextBlockIds` | Unchanged |
+| `retry_tasks(batchId, taskIndices)` | `retry_tasks(batchId, taskIndices)` | Unchanged |
+| `register_context_block(id, content)` | `register_context_block(id, content)` | Unchanged |
+
+### New Tools Summary
+
+| Tool | When to use it |
+|---|---|
+| `delegate_tasks` | Main batch dispatch; auto-routes to standard or complex slot |
+| `register_context_block` | Store long briefs or evidence bundles once, reference by id |
+| `retry_tasks` | Re-dispatch specific tasks from a batch |
+| `get_batch_slice` | Fetch output/detail/telemetry from a previous batch |
+| `execute_plan_task` | Single step from an implementation plan |
+| `audit_document` | Spec compliance audit |
+| `debug_task` | Failure triage against known patterns |
+| `review_code` | Structural code quality review |
+| `verify_work` | Implementation vs spec verification |
 
 ## [0.4.0] - 2026-04-11
 
@@ -122,7 +185,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v0.4.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.0.0...HEAD
+[1.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v0.4.0...mcp-v1.0.0
 [0.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v0.3.1...mcp-v0.4.0
 [0.1.2]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.1...v0.1.2
 [0.1.1]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.0...v0.1.1

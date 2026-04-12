@@ -1,5 +1,5 @@
 import type { ProviderConfig } from '../types.js';
-import type { TaskSpec, ProgressEvent, ProgressTraceEntry } from '../types.js';
+import type { TaskSpec, ProgressEvent } from '../types.js';
 import type { ModelProfile } from '../routing/model-profiles.js';
 
 /**
@@ -95,93 +95,6 @@ export function validateCoverage(
   }
 
   return { valid: true };
-}
-
-export const TRACE_MAX_EVENTS = 80;
-export const TRACE_MAX_CHARS = 16_384;
-
-export const TRACE_DROP_PRIORITY: Record<ProgressEvent['kind'], number> = {
-  text_emission: 1,
-  tool_call: 2,
-  turn_start: 100,
-  turn_complete: 100,
-  injection: 100,
-  escalation_start: 100,
-  done: 100,
-};
-
-export function trimProgressTrace(events: ProgressEvent[]): ProgressTraceEntry[] {
-  if (events.length === 0) return [];
-
-  const traceSize = (arr: ProgressEvent[]): number => JSON.stringify(arr).length;
-  const isNeverDrop = (event: ProgressEvent): boolean => (TRACE_DROP_PRIORITY[event.kind] ?? 50) >= 100;
-
-  const keep: ProgressEvent[] = [];
-  const droppable: ProgressEvent[] = [];
-  for (const event of events) {
-    (isNeverDrop(event) ? keep : droppable).push(event);
-  }
-
-  if (events.length <= TRACE_MAX_EVENTS && traceSize(events) <= TRACE_MAX_CHARS) {
-    return events;
-  }
-
-  const keepBytes = traceSize(keep);
-  const remainingEventBudget = Math.max(0, TRACE_MAX_EVENTS - keep.length);
-  const remainingByteBudget = Math.max(0, TRACE_MAX_CHARS - keepBytes);
-
-  const droppedKinds: Partial<Record<ProgressEvent['kind'], number>> = {};
-  const sortedDroppable = [...droppable].sort(
-    (a, b) => (TRACE_DROP_PRIORITY[a.kind] ?? 50) - (TRACE_DROP_PRIORITY[b.kind] ?? 50),
-  );
-  let retained = sortedDroppable;
-
-  while (
-    retained.length > remainingEventBudget ||
-    traceSize(retained) > remainingByteBudget
-  ) {
-    if (retained.length === 0) break;
-    const victim = retained.shift()!;
-    droppedKinds[victim.kind] = (droppedKinds[victim.kind] ?? 0) + 1;
-  }
-
-  if (
-    (retained.length > remainingEventBudget || traceSize(retained) > remainingByteBudget) &&
-    retained.length > 40
-  ) {
-    const retainedSet = new Set(retained);
-    const originalOrder = droppable.filter((event) => retainedSet.has(event));
-    const head = originalOrder.slice(0, 10);
-    const tail = originalOrder.slice(-30);
-    const keptSet = new Set([...head, ...tail]);
-    for (const event of originalOrder) {
-      if (!keptSet.has(event)) {
-        droppedKinds[event.kind] = (droppedKinds[event.kind] ?? 0) + 1;
-      }
-    }
-    retained = [...head, ...tail];
-  }
-
-  const retainedSet = new Set(retained);
-  const merged = events.filter((event) => isNeverDrop(event) || retainedSet.has(event));
-
-  const droppedCount = droppable.length - retained.length;
-  const capExceededByBoundaryEvents =
-    keep.length > TRACE_MAX_EVENTS || keepBytes > TRACE_MAX_CHARS;
-
-  if (droppedCount === 0 && !capExceededByBoundaryEvents) {
-    return merged;
-  }
-
-  return [
-    ...merged,
-    {
-      kind: '_trimmed' as const,
-      droppedCount,
-      droppedKinds,
-      ...(capExceededByBoundaryEvents ? { capExceededByBoundaryEvents: true } : {}),
-    },
-  ];
 }
 
 const DEFAULT_MIN_LENGTH = 200;

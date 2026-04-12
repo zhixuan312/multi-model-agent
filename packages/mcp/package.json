@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-mcp",
-  "version": "0.4.0",
+  "version": "1.0.0",
   "type": "module",
   "license": "MIT",
   "description": "MCP server for multi-model-agent. Exposes a delegate_tasks tool that routes work to Claude, Codex, or OpenAI-compatible sub-agents based on capability, quality tier, and cost.",
@@ -39,6 +39,26 @@
     "./routing/render-provider-routing-matrix": {
       "types": "./dist/routing/render-provider-routing-matrix.d.ts",
       "import": "./dist/routing/render-provider-routing-matrix.js"
+    },
+    "./tools/execute-plan-task": {
+      "types": "./dist/tools/execute-plan-task.d.ts",
+      "import": "./dist/tools/execute-plan-task.js"
+    },
+    "./tools/audit-document": {
+      "types": "./dist/tools/audit-document.d.ts",
+      "import": "./dist/tools/audit-document.js"
+    },
+    "./tools/debug-task": {
+      "types": "./dist/tools/debug-task.d.ts",
+      "import": "./dist/tools/debug-task.js"
+    },
+    "./tools/review-code": {
+      "types": "./dist/tools/review-code.d.ts",
+      "import": "./dist/tools/review-code.js"
+    },
+    "./tools/verify-work": {
+      "types": "./dist/tools/verify-work.d.ts",
+      "import": "./dist/tools/verify-work.js"
     }
   },
   "scripts": {
@@ -50,7 +70,7 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.0.0",
-    "@zhixuan92/multi-model-agent-core": "^0.4.0",
+    "@zhixuan92/multi-model-agent-core": "^1.0.0",
     "zod": "^4.0.0"
   }
 }

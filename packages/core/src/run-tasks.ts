@@ -5,35 +5,31 @@ import type {
   MultiModelConfig,
   ProgressEvent,
   RunTasksRuntime,
+  AgentType,
+  AgentCapability,
+  BriefQualityWarning,
 } from './types.js';
 import { createProvider } from './provider.js';
-import { getProviderEligibility } from './routing/get-provider-eligibility.js';
-import { selectProviderForTask } from './routing/select-provider-for-task.js';
-import { buildEscalationChain, delegateWithEscalation } from './delegate-with-escalation.js';
+import { resolveAgent } from './routing/resolve-agent.js';
+import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
+import { evaluateReadiness } from './readiness/readiness.js';
+import { normalizeBrief } from './readiness/normalize-brief.js';
+import { runSpecReview } from './review/spec-reviewer.js';
+import { runQualityReview } from './review/quality-reviewer.js';
+import { aggregateResult } from './review/aggregate-result.js';
+import type { ParsedStructuredReport } from './reporting/structured-report.js';
+import { parseStructuredReport } from './reporting/structured-report.js';
+import type { NormalizationResult } from './readiness/normalize-brief.js';
+import fs from 'fs/promises';
 
-/**
- * Per-task progress sink. `runTasks` invokes this for every
- * `ProgressEvent` emitted while working on task at `taskIndex`. The caller
- * (today: the MCP cli bridge) is responsible for disambiguating which task
- * emitted which event — this is the cheapest contract: the orchestrator
- * already knows each task's position in the input array, so the caller
- * doesn't have to wrap N closures.
- */
 export type RunTasksProgressCallback = (
   taskIndex: number,
   event: ProgressEvent,
 ) => void;
 
 export interface RunTasksOptions {
-  /** Optional progress sink. See `RunTasksProgressCallback`. When omitted,
-   *  no progress events are produced — backward-compatible with callers
-   *  that predate Task 8. */
   onProgress?: RunTasksProgressCallback;
-  /** Runtime dependencies the orchestrator needs at dispatch time. Today
-   *  this is just the context-block store used to expand
-   *  `TaskSpec.contextBlockIds`. Kept as a nested field so existing callers
-   *  that only pass `onProgress` don't break. */
   runtime?: RunTasksRuntime;
 }
 
@@ -46,8 +42,6 @@ function errorResult(error: string): RunResult {
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
-    // Orchestrator-level error wrapper (e.g. "no eligible provider",
-    // contextBlockIds expansion failure) — pure diagnostic, no salvage.
     outputIsDiagnostic: true,
     escalationLog: [],
     error,
@@ -55,46 +49,263 @@ function errorResult(error: string): RunResult {
 }
 
 type ResolvedTask =
-  | { task: TaskSpec; pinned: true; provider: Provider }
-  | { task: TaskSpec; pinned: false }
-  | { task: TaskSpec; error: string } // routing/eligibility failure
+  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } }
+  | { task: TaskSpec; error: string; errorCode: string };
 
 async function executeTask(
   resolved: Exclude<ResolvedTask, { error: string }>,
-  config: MultiModelConfig,
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<RunResult> {
   try {
-    if (resolved.pinned) {
-      // Explicit pin: chain of length 1, no escalation.
-      return await delegateWithEscalation(
-        resolved.task,
-        [resolved.provider],
-        { explicitlyPinned: true, onProgress },
-      );
-    }
-    // Auto-routed: walk all eligible providers cheapest-first.
-    const chain = buildEscalationChain(resolved.task, config);
-    if (chain.length === 0) {
-      // Defensive: selectProviderForTask succeeded earlier so eligibility
-      // existed at resolution time. If the chain is somehow empty now we
-      // surface a structured error rather than throwing.
-      return errorResult('No eligible provider found for task at dispatch time.');
-    }
-    return await delegateWithEscalation(resolved.task, chain, { onProgress });
+    return await delegateWithEscalation(
+      resolved.task,
+      [resolved.resolved.provider],
+      { explicitlyPinned: true, onProgress },
+    );
   } catch (err) {
     return errorResult(err instanceof Error ? err.message : String(err));
   }
 }
 
-/**
- * Run tasks concurrently. Each RunResult corresponds to the matching TaskSpec
- * at the same index. One task failing does not affect others.
- *
- * When `options.onProgress` is supplied, it is called with `(taskIndex, event)`
- * for every progress event emitted by that task's provider run or the
- * escalation orchestrator. See `ProgressEvent` for variants.
- */
+function extractWorkerStatus(
+  report: ParsedStructuredReport | undefined,
+): 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' {
+  if (!report || !report.summary) return 'done';
+  const s = report.summary.toLowerCase();
+  if (s.includes('needs_context')) return 'needs_context';
+  if (s.includes('blocked')) return 'blocked';
+  if (s.includes('done_with_concerns') || s.includes('concerns')) return 'done_with_concerns';
+  return 'done';
+}
+
+async function readImplementerFileContents(
+  filesWritten: string[],
+  cwd: string | undefined,
+): Promise<Record<string, string>> {
+  const contents: Record<string, string> = {};
+  const basePath = cwd ?? process.cwd();
+  for (const filePath of filesWritten) {
+    try {
+      const resolved = filePath.startsWith('/') ? filePath : `${basePath}/${filePath}`;
+      const content = await fs.readFile(resolved, 'utf-8');
+      contents[filePath] = content.length > 50_000
+        ? content.slice(0, 50_000) + '\n[truncated at 50KB]'
+        : content;
+    } catch {
+      contents[filePath] = '[file not readable]';
+    }
+  }
+  return contents;
+}
+
+function buildFallbackImplReport(result: RunResult): ParsedStructuredReport {
+  const parsed = parseStructuredReport(result.output);
+  if (parsed.summary) {
+    return parsed;
+  }
+  return {
+    summary: result.output.substring(0, 200),
+    filesChanged: result.filesWritten.map(f => ({ path: f, summary: 'updated' })),
+    normalizationDecisions: [],
+    validationsRun: [],
+    deviationsFromBrief: [],
+    unresolved: [],
+  };
+}
+
+async function executeReviewedLifecycle(
+  task: TaskSpec,
+  resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
+  config: MultiModelConfig,
+  normResult: NormalizationResult | undefined,
+  onProgress?: (event: ProgressEvent) => void,
+): Promise<RunResult> {
+  const reviewPolicy = task.reviewPolicy ?? 'full';
+  const maxRounds = task.maxReviewRounds ?? 2;
+  const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
+
+  const implResult = await delegateWithEscalation(
+    task,
+    [resolved.provider],
+    { explicitlyPinned: true, onProgress },
+  );
+
+  const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
+  const workerStatus = extractWorkerStatus(implReport);
+
+  if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+    };
+  }
+
+  if (reviewPolicy === 'off') {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+      implementationReport: implReport,
+    };
+  }
+
+  let otherProvider: Provider;
+  try {
+    otherProvider = createProvider(otherSlot, config);
+  } catch {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+    };
+  }
+
+  const packet = {
+    normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
+    scope: normResult?.writeSet ?? [],
+    doneCondition: 'tsc passes',
+  };
+
+  let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
+
+  const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+
+  let specResult = await runSpecReview(
+    otherProvider,
+    packet,
+    effectiveImplReport,
+    fileContents,
+    implResult.toolCalls,
+  );
+
+  let finalImplResult = implResult;
+  let finalImplReport = effectiveImplReport;
+  let specStatus = specResult.status;
+  let specReport = specResult.report;
+
+  if (specStatus === 'changes_required' && maxRounds > 0) {
+    for (let round = 0; round < maxRounds; round++) {
+      const reworkPrompt = `${task.prompt}\n\n## Spec Review Feedback (round ${round + 1}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`;
+
+      const reworkResult = await delegateWithEscalation(
+        { ...task, prompt: reworkPrompt },
+        [resolved.provider],
+        { explicitlyPinned: true, onProgress },
+      );
+
+      finalImplResult = reworkResult;
+      const reworkReport = parseStructuredReport(reworkResult.output);
+      finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
+
+      const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+      fileContents = reworkContents;
+
+      specResult = await runSpecReview(
+        otherProvider,
+        packet,
+        finalImplReport,
+        reworkContents,
+        reworkResult.toolCalls,
+      );
+
+      specStatus = specResult.status;
+      specReport = specResult.report;
+
+      if (specStatus === 'approved') break;
+    }
+  }
+
+  let qualityResult: { status: 'approved' | 'changes_required' | 'not_run'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'not_run', report: undefined, findings: [] };
+  if (reviewPolicy === 'full') {
+    qualityResult = await runQualityReview(
+      otherProvider,
+      packet,
+      specReport ?? finalImplReport,
+      fileContents,
+      finalImplResult.toolCalls,
+      finalImplResult.filesWritten,
+    );
+
+    if (qualityResult.status === 'changes_required' && maxRounds > 0) {
+      for (let round = 0; round < maxRounds; round++) {
+        const reworkPrompt = `${task.prompt}\n\n## Quality Review Feedback (round ${round + 1}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`;
+
+        const reworkResult = await delegateWithEscalation(
+          { ...task, prompt: reworkPrompt },
+          [resolved.provider],
+          { explicitlyPinned: true, onProgress },
+        );
+
+        finalImplResult = reworkResult;
+        const reworkReport = parseStructuredReport(reworkResult.output);
+        finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
+
+        const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+
+        qualityResult = await runQualityReview(
+          otherProvider,
+          packet,
+          finalImplReport,
+          reworkContents,
+          reworkResult.toolCalls,
+          reworkResult.filesWritten,
+        );
+
+        if (qualityResult.status === 'approved') break;
+      }
+    }
+  }
+
+  const finalReport = specReport ?? finalImplReport;
+
+  const aggregated = aggregateResult(
+    finalReport,
+    specReport,
+    qualityResult.report,
+    specStatus,
+    qualityResult.status,
+  );
+
+  return {
+    ...finalImplResult,
+    workerStatus,
+    specReviewStatus: specStatus,
+    qualityReviewStatus: qualityResult.status,
+    structuredReport: aggregated,
+    implementationReport: finalImplReport,
+    specReviewReport: specReport,
+    qualityReviewReport: qualityResult.report,
+    agents: {
+      normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+      implementer: resolved.slot,
+      specReviewer: otherSlot,
+      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'not_run',
+    },
+  };
+}
+
 export async function runTasks(
   tasks: TaskSpec[],
   config: MultiModelConfig,
@@ -102,13 +313,6 @@ export async function runTasks(
 ): Promise<RunResult[]> {
   if (tasks.length === 0) return [];
 
-  // Expand context blocks up-front so the rest of the pipeline sees a
-  // self-contained prompt. `expandContextBlocks` is a no-op for tasks
-  // without `contextBlockIds` and for calls that omit `runtime`, so
-  // existing callers are unaffected. A missing block id throws
-  // `ContextBlockNotFoundError` synchronously — we convert it to an
-  // error-result for the specific task so the rest of the batch still
-  // runs.
   const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
     try {
       return expandContextBlocks(task, options.runtime?.contextBlockStore);
@@ -117,62 +321,98 @@ export async function runTasks(
     }
   });
 
-  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
+  const readinessResults = expandedTasks.map((entry) => {
+    if ('error' in entry) return undefined;
+    const task = entry as TaskSpec;
+    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
+  });
+
+  const refusedResults = expandedTasks.map((entry, idx) => {
+    if ('error' in entry) return undefined;
+    const readiness = readinessResults[idx];
+    if (!readiness) return undefined;
+    if (readiness.action === 'refuse') {
+      return {
+        output: `Brief too vague: missing ${readiness.missingPillars.join(', ')}`,
+        status: 'brief_too_vague' as const,
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+        turns: 0,
+        filesRead: [] as string[],
+        filesWritten: [] as string[],
+        toolCalls: [] as string[],
+        outputIsDiagnostic: true,
+        escalationLog: [] as RunResult['escalationLog'],
+        errorCode: 'brief_too_vague',
+        briefQualityWarnings: readiness.briefQualityWarnings as BriefQualityWarning[],
+        retryable: false,
+      };
+    }
+    return undefined;
+  });
+
+  const normalizationResults = await Promise.all(
+    expandedTasks.map(async (entry, idx) => {
+      if ('error' in entry) return undefined;
+      const readiness = readinessResults[idx];
+      if (!readiness || readiness.action !== 'normalize') return undefined;
+      return await normalizeBrief(entry as TaskSpec, config);
+    }),
+  );
+
+  const effectiveTasks: (TaskSpec | { error: string })[] = expandedTasks.map((entry, idx) => {
+    if ('error' in entry) return entry;
+    const norm = normalizationResults[idx];
+    if (norm && !norm.skipped) {
+      return { ...(entry as TaskSpec), prompt: norm.normalizedPrompt };
+    }
+    return entry;
+  });
+
+  const resolved: ResolvedTask[] = effectiveTasks.map((entry, idx): ResolvedTask => {
     if ('error' in entry) {
-      return { task: tasks[idx], error: entry.error };
+      return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
     }
     const task = entry;
-    // If provider specified, validate and use it
-    if (task.provider) {
-      const eligibility = getProviderEligibility(task, config);
-      const report = eligibility.find((e) => e.name === task.provider);
-      if (!report) {
-        // Provider explicitly named but not in config — fail fast with error result
-        return {
-          task,
-          error: `Provider "${task.provider}" not found in config.`,
-        };
-      }
-      if (!report.eligible) {
-        const reasons = report.reasons.map((r) => r.message).join('; ');
-        return {
-          task,
-          error: `Provider "${task.provider}" is ineligible: ${reasons}`,
-        };
-      }
+    const agentType: AgentType = task.agentType ?? 'standard';
+    try {
+      const resolved_agent = resolveAgent(
+        agentType,
+        (task.requiredCapabilities ?? []) as AgentCapability[],
+        config,
+      );
+      return { task, resolved: resolved_agent };
+    } catch (err) {
       return {
         task,
-        pinned: true,
-        provider: createProvider(task.provider, config),
+        error: err instanceof Error ? err.message : String(err),
+        errorCode: 'capability_missing',
       };
     }
-
-    // Auto-routing — selectProviderForTask is still used here so the "no
-    // eligible provider" error path stays identical to pre-escalation
-    // behavior. The actual chain is constructed inside executeTask.
-    const selected = selectProviderForTask(task, config);
-    if (!selected) {
-      const available = Object.keys(config.providers);
-      return {
-        task,
-        error: `No eligible provider found for task (required tier: ${task.tier}, capabilities: ${task.requiredCapabilities.join(', ') || 'none'}). Available providers: ${available.join(', ') || 'none'}.`,
-      };
-    }
-    return { task, pinned: false };
   });
 
   return Promise.all(
     resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {
-        return Promise.resolve(errorResult(r.error));
+        return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
-      // Bind the task index into a per-task sink so the caller can
-      // disambiguate which task an event belongs to without threading
-      // extra fields through the orchestrator.
+      const refused = refusedResults[index];
+      if (refused) {
+        return Promise.resolve(refused);
+      }
+      const normResult = normalizationResults[index];
       const taskProgress = options.onProgress
         ? (event: ProgressEvent) => options.onProgress!(index, event)
         : undefined;
-      return executeTask(r, config, taskProgress);
+
+      const readiness = readinessResults[index];
+      return executeReviewedLifecycle(r.task, r.resolved, config, normResult, taskProgress).then(
+        (result) => {
+          if (readiness && readiness.briefQualityWarnings.length > 0) {
+            return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
+          }
+          return result;
+        },
+      );
     }),
   );
 }

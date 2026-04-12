@@ -32,8 +32,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 1.37,
       totalSavedCostUSD: 8.91,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs = taskSpecsWithParent(11, 'claude-opus-4-6');
 
@@ -58,8 +56,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0.09,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 7,
     };
     const taskSpecs = taskSpecsWithParent(7, undefined);
 
@@ -84,8 +80,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0.05,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs = taskSpecsWithParent(5, 'claude-opus-4-6');
 
@@ -110,8 +104,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 18.05,
       totalSavedCostUSD: 34.73,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs = taskSpecsWithParent(30, 'claude-opus-4-6');
 
@@ -136,8 +128,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0.22,
       totalSavedCostUSD: 1.64,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs: Pick<TaskSpec, 'parentModel'>[] = [
       { parentModel: 'claude-opus-4-6' },
@@ -171,8 +161,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 3,
     };
     const taskSpecs = taskSpecsWithParent(3, undefined);
 
@@ -197,8 +185,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs = taskSpecsWithParent(3, 'claude-opus-4-6');
 
@@ -223,8 +209,6 @@ describe('composeHeadline', () => {
     const aggregateCost: BatchAggregateCost = {
       totalActualCostUSD: 0,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     };
     const taskSpecs: Pick<TaskSpec, 'parentModel'>[] = [
       { parentModel: 'claude-opus-4-6' },

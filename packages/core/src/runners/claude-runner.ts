@@ -13,11 +13,14 @@ import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
 import { createClaudeToolServer } from '../tools/claude-adapter.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
+import { CostMeter } from '../cost/cost-meter.js';
+import { CallCache } from '../tools/call-cache.js';
 import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -27,7 +30,6 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
-  trimProgressTrace,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -132,10 +134,7 @@ export async function runClaude(
   // upstream and cannot corrupt this loop. We do not need to wrap it
   // again here.
   const onProgress = options.onProgress;
-  const shouldCaptureTrace = options.includeProgressTrace ?? false;
-  const traceBuffer: ProgressEvent[] = [];
   const emit = (event: ProgressEvent): void => {
-    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -158,6 +157,53 @@ export async function runClaude(
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
 
+  // --- Cost meter (Task 25) ------------------------------------------------
+  const costMeter = new CostMeter({ ceiling: options.maxCostUSD });
+
+  // --- Call cache (Task 25) ------------------------------------------------
+  const callCache = new CallCache();
+  const agentType = providerConfig.type ?? 'claude';
+
+  // Track last turn cost for estimating next turn cost
+  let lastTurnCostUSD = 0;
+
+  /**
+   * Check if we can afford the next turn based on previous turn cost estimate.
+   */
+  function canAffordNextTurn(): boolean {
+    if (!costMeter.canProceed(lastTurnCostUSD > 0 ? lastTurnCostUSD : 0.001)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Build a cost_exceeded result.
+   */
+  function buildCostExceededResult(): RunResult {
+    const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
+    const savedCostUSD = computeSavedCostUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+    return {
+      output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
+      status: 'cost_exceeded',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUSD: finalCostUSD,
+        savedCostUSD,
+      },
+      turns,
+      filesRead: tracker.getReads(),
+      directoriesListed: tracker.getDirectoriesListed(),
+      filesWritten: tracker.getWrites(),
+      toolCalls: tracker.getToolCalls(),
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: Date.now() - taskStartMs,
+    };
+  }
+
   // --- Prevention layer: system prompt + budget hint ---
   //
   // buildSystemPrompt() is deliberately static and parameter-free (same
@@ -168,7 +214,7 @@ export async function runClaude(
   // node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1460-1465 for the
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -375,7 +421,6 @@ export async function runClaude(
               softLimit,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             abortController.abort();
@@ -406,6 +451,11 @@ export async function runClaude(
           // the CLI subprocess decides to emit a final result after it
           // processes the new user message. ---
           if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+            if (!canAffordNextTurn()) {
+              completedResult = buildCostExceededResult();
+              messageQueue.close();
+              break;
+            }
             const reground = buildReGroundingMessage({
               originalPromptExcerpt: prompt,
               currentTurn: turns,
@@ -468,6 +518,13 @@ export async function runClaude(
             cumulativeOutputTokens: outputTokens,
           });
 
+          // Track cost for this turn (Task 25)
+          const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+          if (turnCost !== null) {
+            lastTurnCostUSD = turnCost;
+            costMeter.add(turnCost);
+          }
+
           // --- Watchdog check on the result message as well: input tokens
           // have just jumped and we may now be in force_salvage territory.
           // The post-result site ONLY handles force_salvage. `warning` is
@@ -502,7 +559,6 @@ export async function runClaude(
               softLimit,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             abortController.abort();
@@ -525,7 +581,6 @@ export async function runClaude(
               reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns (user-declared maxTurns: ${maxTurns})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             break;
@@ -552,7 +607,6 @@ export async function runClaude(
               output,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             break;
@@ -575,7 +629,6 @@ export async function runClaude(
               reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             break;
@@ -594,13 +647,17 @@ export async function runClaude(
               reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             messageQueue.close();
             break;
           }
 
           // Push the re-prompt and continue reading the iterator.
+          if (!canAffordNextTurn()) {
+            completedResult = buildCostExceededResult();
+            messageQueue.close();
+            break;
+          }
           const rePrompt = buildRePrompt(validation);
           emit({
             kind: 'injection',
@@ -641,7 +698,6 @@ export async function runClaude(
         escalationLog: [],
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
 
@@ -664,7 +720,6 @@ export async function runClaude(
       turns,
       durationMs: Date.now() - taskStartMs,
       parentModel,
-      traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
     });
     emit({ kind: 'done', status: drained.status });
     return drained;
@@ -696,7 +751,6 @@ export async function runClaude(
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -732,9 +786,9 @@ function effectiveClaudeCost(
 }
 
 function buildClaudeOkResult(
-  args: ClaudeResultCommonArgs & { output: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: ClaudeResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, output, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, output, durationMs, parentModel } = args;
   const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
@@ -756,7 +810,6 @@ function buildClaudeOkResult(
     outputIsDiagnostic: false,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -765,9 +818,9 @@ function buildClaudeOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildClaudeIncompleteResult(
-  args: ClaudeResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: ClaudeResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, reason, durationMs, parentModel } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
@@ -800,14 +853,13 @@ function buildClaudeIncompleteResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildClaudeForceSalvageResult(
-  args: ClaudeResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: ClaudeResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel } = args;
   const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
@@ -831,14 +883,13 @@ function buildClaudeForceSalvageResult(
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildClaudeMaxTurnsResult(
-  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's last streamed text before the
   // max-turns boundary — NOT a diagnostic template. If the scratchpad has
@@ -870,7 +921,6 @@ function buildClaudeMaxTurnsResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

@@ -15,11 +15,14 @@ import {
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
+import { CostMeter } from '../cost/cost-meter.js';
+import { CallCache } from '../tools/call-cache.js';
 import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
   buildBudgetPressureNudge,
+  buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
 import {
@@ -29,7 +32,6 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
-  trimProgressTrace,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -232,10 +234,7 @@ export async function runCodex(
   // upstream and cannot corrupt this loop. We do not need to wrap it
   // again here.
   const onProgress = options.onProgress;
-  const shouldCaptureTrace = options.includeProgressTrace ?? false;
-  const traceBuffer: ProgressEvent[] = [];
   const emit = (event: ProgressEvent): void => {
-    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -257,6 +256,53 @@ export async function runCodex(
     emit({ kind: 'tool_call', turn: turns, toolSummary: summary });
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
+
+  // --- Cost meter (Task 25) ------------------------------------------------
+  const costMeter = new CostMeter({ ceiling: options.maxCostUSD });
+
+  // --- Call cache (Task 25) ------------------------------------------------
+  const callCache = new CallCache();
+  const agentType = providerConfig.type ?? 'codex';
+
+  // Track last turn cost for estimating next turn cost
+  let lastTurnCostUSD = 0;
+
+  /**
+   * Check if we can afford the next turn based on previous turn cost estimate.
+   */
+  function canAffordNextTurn(): boolean {
+    if (!costMeter.canProceed(lastTurnCostUSD > 0 ? lastTurnCostUSD : 0.001)) {
+      return false;
+    }
+    return true;
+  }
+
+  /**
+   * Build a cost_exceeded result.
+   */
+  function buildCostExceededResult(): RunResult {
+    const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+    const savedCostUSD = computeSavedCostUSD(costUSD ?? 0, inputTokens, outputTokens, parentModel);
+    return {
+      output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
+      status: 'cost_exceeded',
+      usage: {
+        inputTokens,
+        outputTokens,
+        totalTokens: inputTokens + outputTokens,
+        costUSD: costUSD ?? 0,
+        savedCostUSD,
+      },
+      turns,
+      filesRead: tracker.getReads(),
+      directoriesListed: tracker.getDirectoriesListed(),
+      filesWritten: tracker.getWrites(),
+      toolCalls: tracker.getToolCalls(),
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: Date.now() - taskStartMs,
+    };
+  }
 
   const codexTools = toolMode === 'full' ? buildCodexTools(toolImpls, sandboxPolicy) : [];
   const toolsByName = new Map(codexTools.map(t => [t.name, t]));
@@ -286,7 +332,7 @@ export async function runCodex(
   // provider/maxTurns options). The budget hint is prepended to the user
   // prompt so the model sees it as part of its task brief, while the system
   // prompt is threaded through the Responses API `instructions` field.
-  const systemPrompt = buildSystemPrompt();
+  const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ maxTurns });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -379,6 +425,9 @@ export async function runCodex(
 
     try {
       while (turns < maxTurns) {
+        // Track tokens at start of turn for cost accounting
+        const tokensAtTurnStart = inputTokens;
+        const outputTokensAtTurnStart = outputTokens;
         turns++;
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
@@ -543,7 +592,6 @@ export async function runCodex(
             softLimit,
             durationMs: Date.now() - taskStartMs,
             parentModel,
-            traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
           });
           emit({ kind: 'done', status: salvaged.status });
           return salvaged;
@@ -572,6 +620,9 @@ export async function runCodex(
 
         // --- Periodic re-grounding inside the loop ---------------------
         if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
+          if (!canAffordNextTurn()) {
+            return buildCostExceededResult();
+          }
           const reground = buildReGroundingMessage({
             originalPromptExcerpt: prompt,
             currentTurn: turns,
@@ -607,6 +658,15 @@ export async function runCodex(
           cumulativeOutputTokens: outputTokens,
         });
 
+        // Track cost for this turn (Task 25)
+        const turnInputTokens = inputTokens - tokensAtTurnStart;
+        const turnOutputTokens = outputTokens - outputTokensAtTurnStart;
+        const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+        if (turnCost !== null) {
+          lastTurnCostUSD = turnCost;
+          costMeter.add(turnCost);
+        }
+
         // If the model made no tool calls, the turn ended with either a
         // final answer or a degenerate emission. Wrap in the supervision
         // state machine: valid text is an immediate ok-exit; degenerate
@@ -631,7 +691,6 @@ export async function runCodex(
               output: stripped,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: ok.status });
             return ok;
@@ -655,7 +714,6 @@ export async function runCodex(
               reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: exhausted.status });
             return exhausted;
@@ -666,6 +724,9 @@ export async function runCodex(
           // to the re-prompt directly.
           lastDegenerateOutput = stripped;
           supervisionRetries++;
+          if (!canAffordNextTurn()) {
+            return buildCostExceededResult();
+          }
           const rePrompt = buildRePrompt(validation);
           input.push({
             // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -718,7 +779,6 @@ export async function runCodex(
         reason: `hand-rolled loop exited after completing ${turns} of ${maxTurns} user-declared turns without producing a clean final answer`,
         durationMs: Date.now() - taskStartMs,
         parentModel,
-        traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
       });
       emit({ kind: 'done', status: maxTurnsResult.status });
       return maxTurnsResult;
@@ -792,7 +852,6 @@ export async function runCodex(
         escalationLog: [],
         error: detailed,
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
   };
@@ -826,7 +885,6 @@ export async function runCodex(
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -851,9 +909,9 @@ interface CodexResultCommonArgs {
 }
 
 function buildCodexOkResult(
-  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel } = args;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
@@ -875,7 +933,6 @@ function buildCodexOkResult(
     outputIsDiagnostic: false,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -884,9 +941,9 @@ function buildCodexOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildCodexIncompleteResult(
-  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
@@ -919,14 +976,13 @@ function buildCodexIncompleteResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexForceSalvageResult(
-  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel } = args;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
@@ -950,14 +1006,13 @@ function buildCodexForceSalvageResult(
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexMaxTurnsResult(
-  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's final text for the max-turns
   // boundary — real model content, not a diagnostic template. Only the
@@ -988,7 +1043,6 @@ function buildCodexMaxTurnsResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

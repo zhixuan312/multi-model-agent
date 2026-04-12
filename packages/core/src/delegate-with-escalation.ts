@@ -3,69 +3,15 @@ import type {
   RunResult,
   Provider,
   AttemptRecord,
-  MultiModelConfig,
-  CostTier,
   ProgressEvent,
 } from './types.js';
-import { createProvider } from './provider.js';
-import { getProviderEligibility } from './routing/get-provider-eligibility.js';
-import { getEffectiveCostTier } from './routing/model-profiles.js';
+import { retryableFor } from './error-codes.js';
 
 export interface DelegateOptions {
-  /** When true, the orchestrator does not walk the chain on failure —
-   *  the first (and only) provider's result is returned as-is. */
   explicitlyPinned?: boolean;
-  /** Optional in-flight progress sink. When provided, it is threaded into
-   *  every `provider.run(...)` call so runners can emit turn/tool/injection
-   *  events, and the orchestrator itself emits one `escalation_start` event
-   *  between attempts whenever it hops to the next provider in the chain.
-   *  The callback MUST NOT throw. See `ProgressEvent` for variants. */
   onProgress?: (event: ProgressEvent) => void;
 }
 
-// NOTE: must stay byte-identical to the ordering in
-// routing/select-provider-for-task.ts so the head of the escalation chain is
-// the same provider auto-routing would have picked. If you change one, change
-// both.
-const COST_ORDER: Record<CostTier, number> = { free: 0, low: 1, medium: 2, high: 3 };
-
-
-/**
- * Build the escalation chain for an auto-routed task. Returns all eligible
- * providers sorted cheapest-first with alphabetical tiebreak — this mirrors
- * `selectProviderForTask`'s ordering so the first element of the chain is the
- * same provider auto-routing would have picked.
- *
- * Eligibility (capability + tier filters) is handled entirely by
- * `getProviderEligibility`; we just drop the ineligible entries.
- */
-export function buildEscalationChain(
-  task: TaskSpec,
-  config: MultiModelConfig,
-): Provider[] {
-  const eligibility = getProviderEligibility(task, config);
-  const eligible = eligibility.filter((e) => e.eligible);
-
-  eligible.sort((a, b) => {
-    const aTier = COST_ORDER[getEffectiveCostTier(a.config)] ?? 3;
-    const bTier = COST_ORDER[getEffectiveCostTier(b.config)] ?? 3;
-    if (aTier !== bTier) return aTier - bTier;
-    return a.name.localeCompare(b.name);
-  });
-
-  return eligible.map((e) => createProvider(e.name, config));
-}
-
-/**
- * Walks the provider chain for an auto-routed task. Returns the first
- * successful result; if all attempts fail, returns the best salvageable
- * output (longest non-empty) with status 'incomplete' and the full
- * escalation log.
- *
- * For explicitly-pinned tasks, the chain has length 1 and there is no
- * walking — the pinned provider's result is returned as-is. See spec
- * Part A.4.
- */
 export async function delegateWithEscalation(
   task: TaskSpec,
   chain: Provider[],
@@ -75,17 +21,11 @@ export async function delegateWithEscalation(
     throw new Error('delegateWithEscalation called with empty chain');
   }
 
-  // Wrap the user-supplied sink with try/catch so a throwing callback can
-  // never corrupt a task. The contract says callbacks MUST NOT throw, but
-  // Tasks 9-11 will call this from hot runner loops — defense in depth.
-  // This wrapper is also the callback handed to `provider.run`, so runner
-  // emissions are covered by the same guard.
   const safeSink: ((event: ProgressEvent) => void) | undefined = options.onProgress
     ? (event) => {
         try {
           options.onProgress!(event);
         } catch {
-          // Swallow — a broken sink must not affect dispatch.
         }
       }
     : undefined;
@@ -95,8 +35,6 @@ export async function delegateWithEscalation(
   for (let i = 0; i < chain.length; i++) {
     const provider = chain[i];
 
-    // Emit one `escalation_start` between attempts (never before the first).
-    // The previous attempt's record is guaranteed to exist here because i>0.
     if (i > 0 && safeSink) {
       const prev = attempts[attempts.length - 1].record;
       safeSink({
@@ -107,11 +45,6 @@ export async function delegateWithEscalation(
       });
     }
 
-    // Per-attempt metadata captured via the runner's `onInitialRequest`
-    // callback. Reset inside the loop so a subsequent escalation hop
-    // starts fresh. The runner invokes this exactly once per attempt
-    // (Task 12). We wrap assignment in try/catch at the runner site, but
-    // assigning to these locals cannot itself throw.
     let initialPromptLengthChars = 0;
     let initialPromptHash = '';
 
@@ -124,8 +57,9 @@ export async function delegateWithEscalation(
       sandboxPolicy: task.sandboxPolicy,
       expectedCoverage: task.expectedCoverage,
       skipCompletionHeuristic: task.skipCompletionHeuristic,
-      includeProgressTrace: task.includeProgressTrace,
       parentModel: task.parentModel,
+      maxCostUSD: task.maxCostUSD,
+      formatConstraints: task.formatConstraints,
       onProgress: safeSink,
       onInitialRequest: (meta) => {
         initialPromptLengthChars = meta.lengthChars;
@@ -142,14 +76,10 @@ export async function delegateWithEscalation(
       costUSD: result.usage.costUSD,
       initialPromptLengthChars,
       initialPromptHash,
-      // Use `||` (not `??`) so an empty-string error falls through to the
-      // status sentinel — an empty `reason` would be indistinguishable from
-      // an `ok` row in the escalation log.
       reason:
         result.status === 'ok'
           ? undefined
           : (result.error || `status=${result.status}`),
-      ...(result.progressTrace && { progressTrace: result.progressTrace }),
     };
 
     attempts.push({ result, record });
@@ -161,45 +91,16 @@ export async function delegateWithEscalation(
       };
     }
 
-    // Pinned: stop after the first attempt regardless of status.
     if (options.explicitlyPinned) {
       return {
         ...result,
+        errorCode: result.errorCode ?? result.status,
+        retryable: result.retryable ?? retryableFor(result.status),
         escalationLog: attempts.map((a) => a.record),
       };
     }
   }
 
-  // All providers failed. Return the best salvageable output.
-  //
-  // Two-tier selection based on `RunResult.outputIsDiagnostic`:
-  //
-  //   Tier 1 (preferred): attempts whose `output` contains real
-  //   model-produced content — a clean final answer (on `ok`, but
-  //   `ok` short-circuits above so we never see one here) or
-  //   `scratchpad.latest()` text that the runner actually buffered
-  //   before termination. These are flagged `outputIsDiagnostic: false`.
-  //
-  //   Tier 2 (fallback): attempts whose `output` is a runner-synthesized
-  //   diagnostic template (`"Sub-agent error: …"`, `"Agent timed out…"`,
-  //   `buildXxxIncompleteDiagnostic(...)`, etc.) because the scratchpad
-  //   was empty at termination. These are `outputIsDiagnostic: true`.
-  //
-  // Why: status alone is NOT enough. Two `incomplete` attempts can both
-  // exist where one has genuine scratchpad content and the other has
-  // just the diagnostic template — picking by raw output length would
-  // silently discard the real work in favor of a longer diagnostic.
-  // Likewise a late `api_error` attempt with a long
-  // `"Sub-agent error: <stack trace>"` would beat an earlier
-  // `incomplete` attempt with a shorter genuine partial.
-  //
-  // Within each tier we still pick the longest output, because a
-  // longer genuine salvage is usually more useful than a shorter one,
-  // and among pure-diagnostic attempts a longer diagnostic usually
-  // carries more debugging signal than a shorter one.
-  //
-  // Note: the `ok` short-circuit above means every entry here is non-ok,
-  // so the status-remap below is defensive only.
   const realContentAttempts = attempts.filter((a) => !a.result.outputIsDiagnostic);
   const pool = realContentAttempts.length > 0 ? realContentAttempts : attempts;
 
@@ -210,9 +111,12 @@ export async function delegateWithEscalation(
     }
   }
 
+  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
   return {
     ...best,
-    status: best.status === 'ok' ? 'incomplete' : best.status,
+    status: finalStatus,
+    errorCode: best.errorCode ?? finalStatus,
+    retryable: best.retryable ?? retryableFor(finalStatus),
     escalationLog: attempts.map((a) => a.record),
   };
 }

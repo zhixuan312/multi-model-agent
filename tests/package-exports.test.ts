@@ -30,14 +30,9 @@ describe('package exports contract', () => {
       expect(typeof mod.runTasks).toBe('function');
     });
 
-    it('exports getBaseCapabilities as a function', async () => {
+    it('exports resolveAgent as a function', async () => {
       const mod = await import('@zhixuan92/multi-model-agent-core');
-      expect(typeof mod.getBaseCapabilities).toBe('function');
-    });
-
-    it('exports resolveTaskCapabilities as a function', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core');
-      expect(typeof mod.resolveTaskCapabilities).toBe('function');
+      expect(typeof mod.resolveAgent).toBe('function');
     });
 
     it('exports findModelProfile as a function', async () => {
@@ -50,17 +45,7 @@ describe('package exports contract', () => {
       expect(typeof mod.getEffectiveCostTier).toBe('function');
     });
 
-    it('exports selectProviderForTask as a function', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core');
-      expect(typeof mod.selectProviderForTask).toBe('function');
-    });
-
-    it('exports getProviderEligibility as a function', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core');
-      expect(typeof mod.getProviderEligibility).toBe('function');
-    });
-
-    // OMITTED: Type-only exports (Tier, Capability, ToolMode, SandboxPolicy,
+    // OMITTED: Type-only exports (AgentType, AgentCapability, AgentConfig,
     // Effort, CostTier, RunStatus, TaskSpec, ProviderConfig, MultiModelConfig,
     // TokenUsage, RunResult, Provider, RunOptions, ProviderEligibility, etc.)
     // are compile-time-only TypeScript types — erased at runtime, cannot be
@@ -80,33 +65,15 @@ describe('package exports contract', () => {
       expect(typeof mod.loadConfigFromFile).toBe('function');
     });
 
-    it('exports ./routing/capabilities with getBaseCapabilities', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core/routing/capabilities');
-      expect(typeof mod.getBaseCapabilities).toBe('function');
-    });
-
     it('exports ./routing/model-profiles with findModelProfile and getEffectiveCostTier', async () => {
       const mod = await import('@zhixuan92/multi-model-agent-core/routing/model-profiles');
       expect(typeof mod.findModelProfile).toBe('function');
       expect(typeof mod.getEffectiveCostTier).toBe('function');
     });
 
-    it(
-      'exports ./routing/resolve-task-capabilities with resolveTaskCapabilities',
-      async () => {
-        const mod = await import('@zhixuan92/multi-model-agent-core/routing/resolve-task-capabilities');
-        expect(typeof mod.resolveTaskCapabilities).toBe('function');
-      },
-    );
-
-    it('exports ./routing/select-provider-for-task with selectProviderForTask', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core/routing/select-provider-for-task');
-      expect(typeof mod.selectProviderForTask).toBe('function');
-    });
-
-    it('exports ./routing/get-provider-eligibility with getProviderEligibility', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-core/routing/get-provider-eligibility');
-      expect(typeof mod.getProviderEligibility).toBe('function');
+    it('exports ./routing/resolve-agent with resolveAgent', async () => {
+      const mod = await import('@zhixuan92/multi-model-agent-core/routing/resolve-agent');
+      expect(typeof mod.resolveAgent).toBe('function');
     });
 
     it('exports ./provider with createProvider', async () => {

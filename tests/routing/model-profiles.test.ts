@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findModelProfile, getEffectiveCostTier, modelProfileSchema } from '../../packages/core/src/routing/model-profiles.js';
+import { findModelProfile, findModelCapabilities, getEffectiveCostTier, modelProfileSchema } from '../../packages/core/src/routing/model-profiles.js';
 import type { ProviderConfig } from '../../packages/core/src/types.js';
 
 describe('findModelProfile', () => {
@@ -226,5 +226,23 @@ describe('getEffectiveCostTier', () => {
       baseUrl: 'https://api.example.com/v1',
     };
     expect(getEffectiveCostTier(config)).toBe('medium');
+  });
+});
+
+describe('findModelCapabilities (1.0.0)', () => {
+  it('returns capabilities for claude-opus', () => {
+    expect(findModelCapabilities('claude-opus-4-6')).toEqual(['web_search', 'web_fetch']);
+  });
+
+  it('returns capabilities for deepseek', () => {
+    expect(findModelCapabilities('deepseek-r1')).toEqual([]);
+  });
+
+  it('returns empty array for unknown model', () => {
+    expect(findModelCapabilities('totally-unknown-model')).toEqual([]);
+  });
+
+  it('returns capabilities for gpt-5', () => {
+    expect(findModelCapabilities('gpt-5-codex')).toEqual(['web_search']);
   });
 });

@@ -1,12 +1,31 @@
 import type { ContextBlockStore } from './context/context-block-store.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
-// === Tier & Capability ===
+// === Tool Mode & Sandbox ===
 
-export type Tier = 'trivial' | 'standard' | 'reasoning';
-export type Capability = 'file_read' | 'file_write' | 'grep' | 'glob' | 'shell' | 'web_search' | 'web_fetch';
 export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
+
+// === 1.0.0 Agent Model ===
+
+export type AgentType = 'standard' | 'complex';
+export type AgentCapability = 'web_search' | 'web_fetch';
+
+export interface AgentConfig {
+  type: 'openai-compatible' | 'claude' | 'codex'
+  model: string
+  baseUrl?: string
+  apiKey?: string
+  apiKeyEnv?: string
+  capabilities?: AgentCapability[]
+  inputCostPerMTok?: number
+  outputCostPerMTok?: number
+  maxTurns?: number
+  timeoutMs?: number
+  sandboxPolicy?: SandboxPolicy
+  inputTokenSoftLimit?: number
+}
+
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type RunStatus =
@@ -17,16 +36,21 @@ export type RunStatus =
   | 'api_aborted'
   | 'api_error'
   | 'network_error'
-  | 'error';
+  | 'error'
+  | 'brief_too_vague'
+  | 'cost_exceeded';
 
 // === Task ===
 
+export interface FormatConstraints {
+  inputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+  outputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+}
+
 export interface TaskSpec {
   prompt: string
-  /** Provider name. If omitted, core auto-selects. */
-  provider?: string
-  tier: Tier
-  requiredCapabilities: Capability[]
+  agentType?: AgentType
+  requiredCapabilities?: AgentCapability[]
   tools?: ToolMode
   maxTurns?: number
   timeoutMs?: number
@@ -57,10 +81,18 @@ export interface TaskSpec {
    *  still fire independently. If `expectedCoverage` is also declared and
    *  passes, coverage is authoritative — you don't need this flag. */
   skipCompletionHeuristic?: boolean
-  /** Opt-in progress capture for post-hoc execution observability. */
-  includeProgressTrace?: boolean
   /** Optional hint about the parent session's model for saved-cost estimates. */
   parentModel?: string
+  /** Brief quality policy for readiness evaluation. */
+  briefQualityPolicy?: BriefQualityPolicy
+  /** Optional budget for normalization. */
+  maxCostUSD?: number
+  /** Review policy for the execution loop. */
+  reviewPolicy?: 'full' | 'spec_only' | 'off'
+  /** Maximum number of spec review rework rounds. Defaults to 2. */
+  maxReviewRounds?: number
+  /** Optional format constraints for input/output. */
+  formatConstraints?: FormatConstraints
 }
 
 // === Provider Config (discriminated union) ===
@@ -113,7 +145,7 @@ export interface OpenAICompatibleProviderConfig {
   maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
-  hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
+  hostedTools?: 'web_search'[]
   costTier?: CostTier
   /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
   inputCostPerMTok?: number
@@ -134,7 +166,10 @@ export type ProviderConfig =
 // === Config ===
 
 export interface MultiModelConfig {
-  providers: Record<string, ProviderConfig>
+  agents: {
+    standard: AgentConfig
+    complex: AgentConfig
+  }
   defaults: {
     maxTurns: number
     timeoutMs: number
@@ -192,20 +227,35 @@ export interface RunResult {
   durationMs?: number
   /** Directories whose entries the worker listed. */
   directoriesListed?: string[]
-  /** Bounded trace of progress events emitted during this task's run. */
-  progressTrace?: ProgressTraceEntry[]
   error?: string
+  /** Error code for refused briefs. */
+  errorCode?: string
+  /** Whether the task can be retried. */
+  retryable?: boolean
+  /** Brief quality warnings from readiness evaluation. */
+  briefQualityWarnings?: BriefQualityWarning[]
+  /** Worker status extracted from implementer report summary. */
+  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
+  /** Spec review outcome. */
+  specReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  /** Quality review outcome. */
+  qualityReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  /** Aggregated structured report from the reviewed execution loop. */
+  structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** Which agent ran in each role. */
+  agents?: {
+    normalizer: 'standard' | 'complex' | 'skipped'
+    implementer: 'standard' | 'complex' | 'not_run'
+    specReviewer: 'standard' | 'complex' | 'not_run'
+    qualityReviewer: 'standard' | 'complex' | 'not_run'
+  }
+  /** The implementer's structured report. */
+  implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** The spec reviewer's structured report. */
+  specReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** The quality reviewer's structured report. */
+  qualityReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
 }
-
-/** A captured progress entry, or a synthetic marker when trace trimming occurred. */
-export type ProgressTraceEntry =
-  | ProgressEvent
-  | {
-      kind: '_trimmed'
-      droppedCount: number
-      droppedKinds: Partial<Record<ProgressEvent['kind'], number>>
-      capExceededByBoundaryEvents?: boolean
-    }
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {
@@ -227,8 +277,6 @@ export interface BatchProgress {
 export interface BatchAggregateCost {
   totalActualCostUSD: number
   totalSavedCostUSD: number
-  actualCostUnavailableTasks: number
-  savedCostUnavailableTasks: number
 }
 
 /**
@@ -268,8 +316,6 @@ export interface AttemptRecord {
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
   reason?: string
-  /** Bounded progress trace captured for this attempt, when enabled. */
-  progressTrace?: ProgressTraceEntry[]
 }
 
 // === Provider (created by createProvider) ===
@@ -332,12 +378,10 @@ export interface RunOptions {
    *  When supplied, `RunResult.usage.savedCostUSD` is computed against this
    *  model's profile rates. */
   parentModel?: string
-  /** Opt-in: when true, the runner captures every progress event fired
-   *  during this task's execution into a bounded, priority-trimmed
-   *  `progressTrace` on the final RunResult. Useful for post-hoc
-   *  execution observability on long-running delegated tasks. Zero
-   *  cost when false (the default). */
-  includeProgressTrace?: boolean
+  /** Optional cost ceiling in USD. Runner will reject tool calls that would exceed this budget. */
+  maxCostUSD?: number
+  /** Optional format constraints for input/output. */
+  formatConstraints?: FormatConstraints
 }
 
 /**
@@ -416,6 +460,28 @@ export interface ProviderEligibility {
   eligible: boolean
   /** Reasons only present when eligible === false. */
   reasons: EligibilityFailure[]
+}
+
+// === Brief Quality ===
+
+export type BriefQualityWarning =
+  | 'outsourced_discovery'
+  | 'brittle_line_anchors'
+  | 'mixed_environment_actions'
+  | 'bare_topic_noun'
+  | 'no_done_condition'
+  | 'no_output_contract'
+  | 'tiny_brief'
+  | 'huge_brief';
+
+export type BriefQualityPolicy = 'normalize' | 'strict' | 'warn' | 'off' | undefined;
+
+export interface ReadinessResult {
+  action: 'refuse' | 'normalize' | 'warn' | 'ignored'
+  missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[]
+  layer2Warnings: BriefQualityWarning[]
+  layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[]
+  briefQualityWarnings: BriefQualityWarning[]
 }
 
 // === Utilities ===

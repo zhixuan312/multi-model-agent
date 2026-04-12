@@ -31,12 +31,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -109,12 +106,12 @@ describe('buildMcpServer', () => {
     expect(server).toBeDefined();
   });
 
-  it('throws when config has no providers', () => {
+  it('throws when config has no agents', () => {
     const config: MultiModelConfig = {
-      providers: {},
+      agents: {},
       defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
     };
-    expect(() => buildMcpServer(config)).toThrow(/at least one configured provider/);
+    expect(() => buildMcpServer(config)).toThrow(/at least one configured agent/);
   });
 });
 
@@ -129,10 +126,9 @@ describe('delegate_tasks tool description', () => {
     expect(tools).toBeDefined();
     const delegate = tools['delegate_tasks'];
     expect(delegate).toBeDefined();
-    expect(delegate.description).toContain('Available providers');
-    expect(delegate.description).toContain('mock');
-    expect(delegate.description).toContain('Capability filter');
-    expect(delegate.description).toContain('STRONG');
+    expect(delegate.description).toContain('Available agents');
+    expect(delegate.description).toContain('standard');
+    expect(delegate.description).toContain('complex');
   });
 });
 
@@ -196,9 +192,6 @@ describe('context-block + retry_tasks tools', () => {
           tasks: [
             {
               prompt: label,
-              provider: 'mock',
-              tier: 'standard',
-              requiredCapabilities: [],
             },
           ],
         },
@@ -247,14 +240,12 @@ describe('context-block + retry_tasks tools', () => {
 });
 
 describe('delegate_tasks schema — contextBlockIds', () => {
-  const taskSchema = buildTaskSchema(['mock']);
+  const taskSchema = buildTaskSchema(['standard', 'complex']);
 
   it('accepts a task with contextBlockIds', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       contextBlockIds: ['a', 'b'],
     });
     expect(result.success).toBe(true);
@@ -263,71 +254,26 @@ describe('delegate_tasks schema — contextBlockIds', () => {
   it('accepts a task with no contextBlockIds (optional)', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
     });
     expect(result.success).toBe(true);
   });
 });
 
 describe('delegate_tasks schema', () => {
-  const taskSchema = buildTaskSchema(['mock']);
+  const taskSchema = buildTaskSchema(['standard', 'complex']);
 
-  it('accepts a task with tier and requiredCapabilities', () => {
+  it('accepts a task with agentType', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: ['file_read'],
+      agentType: 'standard',
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects a task missing tier', () => {
+  it('accepts a task with no agentType (auto-select)', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects a task missing requiredCapabilities', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects invalid tier values', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'super-duper',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects invalid capability values', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: ['psychic_powers'],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts an empty requiredCapabilities array', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'trivial',
-      requiredCapabilities: [],
     });
     expect(result.success).toBe(true);
   });
@@ -336,9 +282,7 @@ describe('delegate_tasks schema', () => {
     for (const effort of ['none', 'low', 'medium', 'high'] as const) {
       const result = taskSchema.safeParse({
         prompt: 'do thing',
-        provider: 'mock',
-        tier: 'standard',
-        requiredCapabilities: [],
+        agentType: 'standard',
         effort,
       });
       expect(result.success).toBe(true);
@@ -348,36 +292,21 @@ describe('delegate_tasks schema', () => {
   it('rejects invalid effort values', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       effort: 'extreme',
     });
     expect(result.success).toBe(false);
   });
 
-  it('accepts a task with no effort field (optional)', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(true);
-  });
-
   it('accepts v0.3.0 MCP task fields', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       expectedCoverage: {
         minSections: 2,
         sectionPattern: '^##\\s+',
         requiredMarkers: ['alpha', 'beta'],
       },
-      includeProgressTrace: true,
       parentModel: 'gpt-5.4',
     });
     expect(result.success).toBe(true);
@@ -389,17 +318,14 @@ describe('delegate_tasks schema', () => {
       sectionPattern: '^##\\s+',
       requiredMarkers: ['alpha', 'beta'],
     });
-    expect(result.data.includeProgressTrace).toBe(true);
     expect(result.data.parentModel).toBe('gpt-5.4');
   });
 
   it('buildTaskSchema accepts skipCompletionHeuristic', () => {
-    const schema = buildTaskSchema(['mock']);
+    const schema = buildTaskSchema(['standard', 'complex']);
     const result = schema.safeParse({
       prompt: 'test',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       skipCompletionHeuristic: true,
     });
     expect(result.success).toBe(true);
@@ -407,7 +333,7 @@ describe('delegate_tasks schema', () => {
 });
 
 describe('delegate_tasks MCP input contract (v0.3.0)', () => {
-  it('preserves expectedCoverage, includeProgressTrace, and parentModel in the registered MCP input schema', async () => {
+  it('preserves expectedCoverage and parentModel in the registered MCP input schema', async () => {
     const server = buildMcpServer(sampleConfig());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools = (server as any)._registeredTools;
@@ -417,15 +343,12 @@ describe('delegate_tasks MCP input contract (v0.3.0)', () => {
       tasks: [
         {
           prompt: 'do thing',
-          provider: 'mock',
-          tier: 'standard',
-          requiredCapabilities: [],
+          agentType: 'standard',
           expectedCoverage: {
             minSections: 2,
             sectionPattern: '^##\\s+',
             requiredMarkers: ['alpha', 'beta'],
           },
-          includeProgressTrace: true,
           parentModel: 'gpt-5.4',
         },
       ],
@@ -436,7 +359,6 @@ describe('delegate_tasks MCP input contract (v0.3.0)', () => {
       sectionPattern: '^##\\s+',
       requiredMarkers: ['alpha', 'beta'],
     });
-    expect(parsed.tasks[0].includeProgressTrace).toBe(true);
     expect(parsed.tasks[0].parentModel).toBe('gpt-5.4');
   });
 });
@@ -502,9 +424,6 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
         tasks: [
           {
             prompt: 'do thing',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
           },
         ],
         ...(responseMode && { responseMode }),
@@ -622,31 +541,35 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   it('summary mode result has correct shape', async () => {
     const server = buildMcpServer(sampleConfig());
     const payload = await dispatchOne(server, 'summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     const result = payload.results[0];
     expect(result.taskIndex).toBe(0);
     expect(result.outputLength).toBeDefined();
     expect(typeof result.outputLength).toBe('number');
     expect(result.outputSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(result._fetchOutputWith).toContain('get_task_output');
-    expect(result._fetchDetailWith).toContain('get_task_detail');
+    expect(result._fetchWith).toContain('get_batch_slice');
+    expect(result._fetchWith).toContain('batchId');
+    expect(result._fetchWith).toContain('taskIndex: 0');
+    expect(result).not.toHaveProperty('_fetchOutputWith');
+    expect(result).not.toHaveProperty('_fetchDetailWith');
   });
 });
 
-describe('get_task_output tool (v0.3.0)', () => {
+describe('get_batch_slice tool', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getTools = (server: ReturnType<typeof buildMcpServer>): Record<string, any> => (server as any)._registeredTools;
 
-  it('registers get_task_output alongside other tools', () => {
+  it('registers get_batch_slice alongside other tools', () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
-    expect(tools['get_task_output']).toBeDefined();
+    expect(tools['get_batch_slice']).toBeDefined();
   });
 
-  it('valid batchId + taskIndex → returns full text', async () => {
+  it('slice=output: valid batchId + taskIndex → returns full text', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     stubRunTasks.mockResolvedValueOnce([
       {
@@ -663,76 +586,76 @@ describe('get_task_output tool (v0.3.0)', () => {
     ]);
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
-    const outputRes = await getTool.handler({ batchId, taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId, slice: 'output', taskIndex: 0 }, {});
     const outputPayload = JSON.parse(outputRes.content[0].text);
     expect(outputPayload.output).toBe('the exact output text');
   });
 
-  it('unknown batchId → throws "unknown or expired"', async () => {
+  it('slice=output: unknown batchId → throws "unknown or expired"', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
     await expect(
-      getTool.handler({ batchId: 'does-not-exist', taskIndex: 0 }, {}),
+      sliceTool.handler({ batchId: 'does-not-exist', slice: 'output', taskIndex: 0 }, {}),
     ).rejects.toThrow(/unknown or expired/);
   });
 
-  it('out-of-range taskIndex → throws "out of range"', async () => {
+  it('slice=output: out-of-range taskIndex → throws "out of range"', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
     await expect(
-      getTool.handler({ batchId, taskIndex: 99 }, {}),
+      sliceTool.handler({ batchId, slice: 'output', taskIndex: 99 }, {}),
     ).rejects.toThrow(/out of range/);
   });
 
-  it('get_task_output touches LRU order', async () => {
+  it('slice=output touches LRU order', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     // Dispatch 100 batches
     const batchIds: string[] = [];
     for (let i = 0; i < 100; i++) {
       const res = await delegateTool.handler(
-        { tasks: [{ prompt: `batch-${i}`, provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+        { tasks: [{ prompt: `batch-${i}`, agentType: 'standard' as const }] },
         {},
       );
       batchIds.push(JSON.parse(res.content[0].text).batchId);
     }
 
-    // Touch the first batch via get_task_output
-    await getTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
+    // Touch the first batch via get_batch_slice
+    await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
 
     // Dispatch 1 more batch — this should evict the oldest-not-touched (batch[1])
     await delegateTool.handler(
-      { tasks: [{ prompt: 'new-batch', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'new-batch', agentType: 'standard' as const }] },
       {},
     );
 
     // batch[1] should be gone (evicted), but batch[0] should still work
     await expect(
-      getTool.handler({ batchId: batchIds[1], taskIndex: 0 }, {}),
+      sliceTool.handler({ batchId: batchIds[1], slice: 'output', taskIndex: 0 }, {}),
     ).rejects.toThrow(/unknown or expired/);
 
     // batch[0] still works
-    const outputRes = await getTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
     expect(outputRes.content).toBeDefined();
   });
 });
@@ -755,9 +678,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 'task-0', agentType: 'standard' as const },
+          { prompt: 'task-1', agentType: 'standard' as const },
+          { prompt: 'task-2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -780,15 +703,15 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
     const retryTool = tools['retry_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     // Dispatch a 3-task batch
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 'task-0', agentType: 'standard' as const },
+          { prompt: 'task-1', agentType: 'standard' as const },
+          { prompt: 'task-2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -806,8 +729,8 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
 
     expect(retryBatchId).not.toBe(originalBatchId);
 
-    // Original batch still has results accessible
-    const originalOutput = await getTool.handler({ batchId: originalBatchId, taskIndex: 1 }, {});
+    // Original batch still has results accessible via get_batch_slice
+    const originalOutput = await sliceTool.handler({ batchId: originalBatchId, slice: 'output', taskIndex: 1 }, {});
     expect(originalOutput.content).toBeDefined();
 
     // Retry batch has the retried task
@@ -823,7 +746,7 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const retryTool = tools['retry_tasks'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'task-0', agentType: 'standard' as const }] },
       {},
     );
     const batchId = JSON.parse(dispatchRes.content[0].text).batchId;
@@ -843,9 +766,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 't0', agentType: 'standard' as const },
+          { prompt: 't1', agentType: 'standard' as const },
+          { prompt: 't2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -996,11 +919,9 @@ describe('computeAggregateCost (v0.3.0)', () => {
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.03, 5);
     expect(agg.totalSavedCostUSD).toBeCloseTo(0.30, 5);
-    expect(agg.actualCostUnavailableTasks).toBe(0);
-    expect(agg.savedCostUnavailableTasks).toBe(0);
   });
 
-  it('known actual cost + no parentModel → actualCostUnavailable: 0, savedCostUnavailable: N', () => {
+  it('known actual cost + no parentModel → savedCostUSD is 0', () => {
     const results: RunResult[] = [
       { ...baseMockResult, usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100, costUSD: 0.01, savedCostUSD: null } },
       { ...baseMockResult, usage: { inputTokens: 2000, outputTokens: 200, totalTokens: 2200, costUSD: 0.02, savedCostUSD: null } },
@@ -1008,18 +929,15 @@ describe('computeAggregateCost (v0.3.0)', () => {
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.03, 5);
     expect(agg.totalSavedCostUSD).toBe(0);
-    expect(agg.actualCostUnavailableTasks).toBe(0);
-    expect(agg.savedCostUnavailableTasks).toBe(2);
   });
 
-  it('null costUSD → contributes 0 and increments actualCostUnavailableTasks', () => {
+  it('null costUSD → contributes 0', () => {
     const results: RunResult[] = [
       { ...baseMockResult, usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100, costUSD: null, savedCostUSD: null } },
       { ...baseMockResult, usage: { inputTokens: 2000, outputTokens: 200, totalTokens: 2200, costUSD: 0.02, savedCostUSD: null } },
     ];
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.02, 5);
-    expect(agg.actualCostUnavailableTasks).toBe(1);
   });
 
   it('empty batch → zeros', () => {
@@ -1027,9 +945,57 @@ describe('computeAggregateCost (v0.3.0)', () => {
     expect(agg).toEqual({
       totalActualCostUSD: 0,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     });
+  });
+});
+
+describe('buildTaskSchema descriptions', () => {
+  const schema = buildTaskSchema(['standard', 'complex']);
+  const shape = schema.shape;
+
+  const EXPECTED_TOP_LEVEL_FIELDS = [
+    'prompt',
+    'agentType',
+    'tools',
+    'maxTurns',
+    'timeoutMs',
+    'cwd',
+    'effort',
+    'sandboxPolicy',
+    'requiredCapabilities',
+    'contextBlockIds',
+    'expectedCoverage',
+    'skipCompletionHeuristic',
+    'parentModel',
+    'maxCostUSD',
+    'reviewPolicy',
+    'maxReviewRounds',
+  ];
+
+  for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
+    it(`${fieldName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+      const fieldDef = shape[fieldName];
+      expect(fieldDef, `field ${fieldName} should exist in schema`).toBeDefined();
+      const desc = (fieldDef as any).description;
+      expect(desc).toMatch(/WHAT:/);
+      expect(desc).toMatch(/WHEN:/);
+      expect(desc).toMatch(/DEFAULT:/);
+      expect(desc).toMatch(/INTERACTION:/);
+    });
+  }
+
+  describe('expectedCoverage nested fields', () => {
+    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
+
+    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
+      it(`${innerName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+        const desc = (innerDef as any).description;
+        expect(desc).toMatch(/WHAT:/);
+        expect(desc).toMatch(/WHEN:/);
+        expect(desc).toMatch(/DEFAULT:/);
+        expect(desc).toMatch(/INTERACTION:/);
+      });
+    }
   });
 });
 
@@ -1045,16 +1011,10 @@ describe('delegate_tasks headline field (full mode)', () => {
         tasks: [
           {
             prompt: 't1',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
             parentModel: 'claude-opus-4-6',
           },
           {
             prompt: 't2',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
             parentModel: 'claude-opus-4-6',
           },
         ],
@@ -1072,6 +1032,56 @@ describe('delegate_tasks headline field (full mode)', () => {
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
     expect(payload.headline).toContain('$0.00 actual');
     expect(payload.headline).not.toContain('ROI');
+  });
+});
+
+describe('buildTaskSchema descriptions', () => {
+  const schema = buildTaskSchema(['standard', 'complex']);
+  const shape = schema.shape;
+
+  const EXPECTED_TOP_LEVEL_FIELDS = [
+    'prompt',
+    'agentType',
+    'tools',
+    'maxTurns',
+    'timeoutMs',
+    'cwd',
+    'effort',
+    'sandboxPolicy',
+    'requiredCapabilities',
+    'contextBlockIds',
+    'expectedCoverage',
+    'skipCompletionHeuristic',
+    'parentModel',
+    'maxCostUSD',
+    'reviewPolicy',
+    'maxReviewRounds',
+  ];
+
+  for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
+    it(`${fieldName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+      const fieldDef = shape[fieldName];
+      expect(fieldDef, `field ${fieldName} should exist in schema`).toBeDefined();
+      const desc = (fieldDef as any).description;
+      expect(desc).toMatch(/WHAT:/);
+      expect(desc).toMatch(/WHEN:/);
+      expect(desc).toMatch(/DEFAULT:/);
+      expect(desc).toMatch(/INTERACTION:/);
+    });
+  }
+
+  describe('expectedCoverage nested fields', () => {
+    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
+
+    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
+      it(`${innerName} description follows WHAT/WHEN/DEFAULT/INTERACTION format`, () => {
+        const desc = (innerDef as any).description;
+        expect(desc).toMatch(/WHAT:/);
+        expect(desc).toMatch(/WHEN:/);
+        expect(desc).toMatch(/DEFAULT:/);
+        expect(desc).toMatch(/INTERACTION:/);
+      });
+    }
   });
 });
 
@@ -1150,8 +1160,8 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const result = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
-          { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
+          { prompt: 't1', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+          { prompt: 't2', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
         ],
         ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
       },
@@ -1164,11 +1174,12 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const payload = await dispatchRichBatch({ responseMode: 'summary' });
 
     expect(payload.mode).toBe('summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     expect(payload.results).toHaveLength(2);
 
     const task0 = payload.results[0];
     expect(task0.taskIndex).toBe(0);
-    expect(task0.provider).toBe('mock');
+    expect(task0.agentType).toBe('standard');
     expect(task0.status).toBe('ok');
     expect(task0.turns).toBe(3);
     expect(task0.durationMs).toBe(1000);
@@ -1177,14 +1188,11 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(typeof task0.outputSha256).toBe('string');
     expect(task0.outputSha256).toHaveLength(64); // sha256 hex
 
-    // New fetch-hint fields
-    expect(task0).toHaveProperty('_fetchOutputWith');
-    expect(task0).toHaveProperty('_fetchDetailWith');
-    expect(task0._fetchOutputWith).toContain('get_task_output');
-    expect(task0._fetchOutputWith).toContain(payload.batchId);
-    expect(task0._fetchOutputWith).toContain('taskIndex: 0');
-    expect(task0._fetchDetailWith).toContain('get_task_detail');
-    expect(task0._fetchDetailWith).toContain(payload.batchId);
+    // New fetch-hint field
+    expect(task0).toHaveProperty('_fetchWith');
+    expect(task0._fetchWith).toContain('get_batch_slice');
+    expect(task0._fetchWith).toContain(payload.batchId);
+    expect(task0._fetchWith).toContain('taskIndex: 0');
 
     // Assert dropped fields are NOT present on the slim per-task entry.
     expect(task0).not.toHaveProperty('filesRead');
@@ -1193,7 +1201,8 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(task0).not.toHaveProperty('toolCalls');
     expect(task0).not.toHaveProperty('progressTrace');
     expect(task0).not.toHaveProperty('escalationLog');
-    expect(task0).not.toHaveProperty('_fetchWith'); // old key removed
+    expect(task0).not.toHaveProperty('_fetchOutputWith');
+    expect(task0).not.toHaveProperty('_fetchDetailWith');
   });
 
   it('summary-mode envelope carries a headline field alongside the batch aggregates', async () => {

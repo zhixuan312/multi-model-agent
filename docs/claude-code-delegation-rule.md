@@ -4,16 +4,16 @@ Drop-in rule that teaches Claude Code **when** to delegate work to `multi-model-
 
 ## What this rule gives you
 
-- **Context savings.** Your parent Claude Code session inherits an expensive model by default. This rule redirects mechanical work through `delegate_tasks` — each delegated task runs on a clean, cheap worker context — so your parent session's window stays lean.
-- **Cost routing.** Labor goes to free / cheap providers. Reasoning-tier work escalates to expensive providers only when the task genuinely needs it.
+- **Context savings.** Your parent session inherits an expensive model by default. This rule redirects mechanical work through `delegate_tasks` — each delegated task runs on a clean, cheap worker context — so your parent session's window stays lean.
+- **Cost routing.** Labor goes to `standard` slot (cheap / fast). Work that genuinely needs reasoning goes to `complex` slot (slower, higher cost, but only when warranted).
 - **Concurrency.** Independent tasks dispatched in one `delegate_tasks` call run in parallel.
 - **A clear mental model** — *parent = judgment, delegated workers = labor* — so Claude Code stops over-delegating trivial reads and under-delegating big chunks of work.
 
 ## Prerequisites
 
-1. `multi-model-agent` MCP registered at **user scope** — see the main [README](../README.md#4-register-the-mcp-server).
-2. A `~/.multi-model/config.json` with at least two providers at different cost tiers. The routing guidance below assumes example provider names `minimax` (free) and `codex` (reasoning), with an optional mid-tier `sonnet`. **Substitute your own provider names** wherever you see these.
-3. (Optional but strongly recommended) [Superpowers](https://github.com/obra/superpowers) installed — several parts of the rule reference its skills by name. The rule still applies if you don't use Superpowers; just treat those references as "whenever you would normally dispatch a subagent."
+1. `multi-model-agent` MCP registered at **user scope** — see the main [README](../README.md#quick-start).
+2. A `~/.multi-model/config.json` with at least two agents at different `agentType` slots. The routing guidance below assumes example agent names `fast` (standard) and `reasoner` (complex). **Substitute your own agent names** wherever you see these.
+3. (Optional but strongly recommended) [Superpowers](https://github.com/obra/superpowers) installed — several parts of the rule reference its skills by name. The rule still applies without Superpowers; treat those references as "whenever you would normally dispatch a subagent."
 
 ## Installation
 
@@ -39,11 +39,11 @@ Restart Claude Code after installing so it picks up the new rule file.
 
 ## Rule Body
 
-Everything below this line is the rule content Claude Code will read. Copy from here down if you're pasting into an existing instruction file. Replace the example provider names (`minimax`, `codex`, optional `sonnet`) with the names from your own `~/.multi-model/config.json`.
+Everything below this line is the rule content Claude Code will read. Copy from here down if you're pasting into an existing instruction file. Replace the example agent names (`fast`, `reasoner`) with the names from your own `~/.multi-model/config.json`.
 
 ### The Principle
 
-The parent Claude Code session runs on whatever model you've selected — typically the most capable and most expensive in your stack. **The parent's job is judgment, not labor.** Judgment is what you're paying the expensive model for; labor is what the cheaper delegated providers are for.
+The parent session runs on whatever model you've selected — typically the most capable and most expensive in your stack. **The parent's job is judgment, not labor.** Judgment is what you're paying the expensive model for; labor is what the cheaper delegated agents are for.
 
 Everything in this rule derives from that single principle. When in doubt, ask: *is this decision-making, or is it mechanical execution of an already-made decision?*
 
@@ -72,6 +72,18 @@ Everything in this rule derives from that single principle. When in doubt, ask: 
 
 **Composition rule — judgment-first, then delegate fully-specified labor.** Real tasks mix judgment and labor. The parent finishes its judgment work first, produces a **zero-decision brief** (a prompt the worker can execute without making any design or scope calls), and *then* dispatches. **Never delegate "figure out how to fix this and implement it."** Only delegate "implement this exact change." If the worker has to make a decision, the judgment leaked out of the parent — claw it back and re-dispatch with a tighter brief.
 
+### The Five-Phase Contract
+
+Every delegated task moves through five phases:
+
+1. **Brief** — parent produces a zero-decision brief
+2. **Readiness check** — `normalizeBrief` evaluates the brief and outputs a `ReadinessReport` (`READY` or `NOT_READY` with named gaps). If `NOT_READY`, fix the brief before dispatching
+3. **Dispatch** — route to `standard` or `complex` slot based on `agentType`
+4. **Execute** — agent works under cost ceiling, call cache, format constraints
+5. **Review** (if enabled) — spec/quality review on the *other* slot (not the slot that did the work)
+
+The readiness check is the gate. A `NOT_READY` verdict means the brief is too vague, too ambitious, or missing required context — fix it before spending money.
+
 ### Decision Procedure
 
 Walk this in order for every task:
@@ -90,17 +102,18 @@ Walk this in order for every task:
    - Shell, planning, trivial-inline, native-only → handle per exception.
    - Otherwise → continue.
 
-4. **Route the labor.**
-   - Default → cheapest qualifying provider (typically `minimax`, standard tier).
-   - Web research / docs lookup → a provider with `web_search` (typically `codex`). This is intentionally cheaper than the parent's own `WebSearch` tool because the results land in worker context, not yours.
-   - Reasoning-tier review (final whole-branch, security-sensitive, architecture) → reasoning-tier provider (typically `codex`) with `effort: "medium"` or `"high"`.
-   - Same task already failed on the cheap tier → escalate, don't retry identically.
+4. **Readiness check passes?** Call `normalizeBrief` (or equivalent readiness evaluator) on your draft brief.
+   - **`NOT_READY`** → fix the named gaps before dispatching
+   - **`READY`** → continue
 
-5. **Dispatch via `mcp__multi-model-agent__delegate_tasks`** using the dispatch shape below.
+5. **Route the labor.**
+   - Default → cheapest qualifying `standard` slot (typically `fast`)
+   - Web research / docs lookup → a provider with `web_search` (typically `fast` with hosted tools, or `reasoner` if scope is large)
+   - Multi-file integration, architecture, security review, whole-branch synthesis → `complex` slot (typically `reasoner`)
 
 ### Named Exceptions
 
-**Shell stays in the parent — by default.** `shell` is a capability the MCP *can* expose (set `sandboxPolicy: "none"` on a provider or task), but most users leave it off because delegated workers run outside the parent session's Bash and their output is harder to inspect. Keep `pnpm`, `pytest`, `tsc`, `git`, lint, and build commands in the parent via `Bash` unless you have a specific reason to delegate them.
+**Shell stays in the parent — by default.** `shell` is a capability the MCP *can* expose (set `sandboxPolicy: "none"` on an agent or task), but most users leave it off because delegated workers run outside the parent session's Bash and their output is harder to inspect. Keep `pnpm`, `pytest`, `tsc`, `git`, lint, and build commands in the parent via `Bash` unless you have a specific reason to delegate them.
 
 > **TDD pattern with delegated editing:** parent dispatches the *edit*, parent runs the *test* via `Bash`, parent feeds test output into a follow-up dispatch if fixes are needed. This is how you get cheap editing without giving up visible test output.
 
@@ -127,7 +140,7 @@ If any of the four is false, delegate.
 
 **Native `Agent` tool only for things the MCP genuinely can't do.**
 
-- `subagent_type: "Explore"` — *avoid by default*. The MCP can do multi-file exploration on a free provider at zero cost. Use native `Explore` only when exploration genuinely needs the parent session's accumulated grep priors.
+- `subagent_type: "Explore"` — *avoid by default*. The MCP can do multi-file exploration on a `standard` slot at low cost. Use native `Explore` only when exploration genuinely needs the parent session's accumulated grep priors.
 - `subagent_type: "Plan"` — architecture planning that has to integrate back into the running session.
 - `subagent_type: "claude-code-guide"`, `statusline-setup` — specialized helpers with no MCP equivalent.
 - `subagent_type: "general-purpose"` → **never**. If the work is delegable, use the MCP. If it isn't delegable, it shouldn't be in a subagent at all.
@@ -136,17 +149,17 @@ If any of the four is false, delegate.
 
 Hybrid pattern: **delegate the survey, read the load-bearing bits inline.** When the parent needs to understand a piece of code to make a judgment call, don't pull whole files into the expensive parent context. Instead:
 
-1. Dispatch a survey task to the free provider: *"Read these files, summarize the data flow, flag any suspicious or surprising bits."* The reading happens in worker context — you pay nothing for the bytes.
+1. Dispatch a survey task to the `standard` slot: *"Read these files, summarize the data flow, flag any suspicious or surprising bits."* The reading happens in worker context — you pay nothing for the bytes.
 2. Parent reads only the specific lines / functions the survey flagged, in parent context.
 3. Parent forms its judgment from the small surface it actually read.
 
 Don't read whole files in parent context if a cheap survey can locate the load-bearing parts first.
 
-### Provider Routing
+### AgentType Routing
 
-**Route by workload shape, not by price.** The free-vs-paid axis is secondary. The primary question is whether the task's shape fits what a lighter model can actually deliver.
+**Route by workload shape, not by price.** The `standard` vs `complex` axis is about capability fit, not budget preference.
 
-**Cheaper providers sweet spot** (e.g. minimax, claude-haiku):
+**`standard` slot sweet spot** (e.g. MiniMax-M2, claude-sonnet):
 - ≤ 10 structured output sections
 - ≤ 50k input-token workload
 - Retrieval tasks (grep, glob, list with structured results)
@@ -155,7 +168,7 @@ Don't read whole files in parent context if a cheap survey can locate the load-b
 - Small test stubs
 - Focused research sub-questions
 
-**Reasoning providers sweet spot** (e.g. codex, claude-opus):
+**`complex` slot sweet spot** (e.g. codex, claude-opus):
 - ≥ 20 structured output sections
 - Ambiguous judgment that resists a clear rubric
 - Security-sensitive review
@@ -165,15 +178,27 @@ Don't read whole files in parent context if a cheap survey can locate the load-b
 
 **Enumerable-deliverable workloads with many items + large input**: never dispatch as a single task. Either decompose and parallelize (see "Decompose and parallelize enumerable work" below) or use retrieval/judgment split. Typical examples: multi-file refactors (10+ files), test generation across many functions (25+), multi-PR review (15+ PRs), per-endpoint analysis (10+ endpoints), codebase audits against long checklists.
 
-The MCP's built-in routing is: **capability filter → tier filter → cheapest qualifying provider**. Set `tier: 'reasoning'` and a higher `effort` level on tasks that match the reasoning sweet spot; leave `tier: 'standard'` for tasks in the cheaper sweet spot.
+The MCP's routing is: **capability filter → `agentType` filter → cheapest qualifying agent**. Set `agentType: "complex"` for work in the complex sweet spot; leave `agentType: "standard"` for standard sweet spot work.
 
 **Capability hints:**
 
-- Most providers expose `file_read`, `file_write`, `grep`, `glob`. Always pass these as `requiredCapabilities` for code work.
+- Most agents expose `file_read`, `file_write`, `grep`, `glob`. Always pass these as `requiredCapabilities` for code work.
 - `web_search` / `web_fetch` are provider-specific. Add them to `requiredCapabilities` only when the task truly needs them — they constrain routing.
-- `shell` is advertised as a capability only when the provider (or task) has `sandboxPolicy: "none"`. See the shell exception above before adding `"shell"` to `requiredCapabilities`.
+- `shell` is advertised as a capability only when the agent (or task) has `sandboxPolicy: "none"`. See the shell exception above before adding `"shell"` to `requiredCapabilities`.
 
-**Effort knob:** reasoning-tier providers honor the `effort` field. Use `effort: "high"` for final whole-branch review and architecture work; `effort: "medium"` is the default for normal reasoning-tier dispatches.
+### Using the Specialized Tools
+
+The five specialized tools are purpose-built for specific sub-routines. Use them instead of hand-rolling `delegate_tasks` calls for these shapes:
+
+| Tool | When to use it | What it does |
+|---|---|---|
+| `execute_plan_task` | Running a single step from an implementation plan | Steps through a plan with proper checkpointing |
+| `audit_document` | Verifying a spec document's requirements are met | Checks each requirement, flags gaps |
+| `debug_task` | Triage a failure against known failure patterns | Maps symptoms to known patterns, suggests fixes |
+| `review_code` | Structural quality review of a diff or module | Checks structure, style, security, test coverage |
+| `verify_work` | Confirm implementation matches spec | Cross-checks against spec requirements |
+
+For tasks that don't fit one of these shapes, use `delegate_tasks` directly.
 
 ### Writing Delegable Briefs
 
@@ -186,7 +211,32 @@ Every brief should state:
 3. **Explicit capabilities needed.** If the task needs `web_search`, say so. If it needs `shell`, don't delegate (see the exception).
 4. **Explicit acceptance criteria.** *"Zod schema validates positive integers; no runtime coercion"*. The worker should know what "done" looks like without guessing.
 
-**Good brief → cheap delegation:**
+**Brief quality → routing outcome:**
+
+- **Good brief** → `agentType: "standard"` routes cleanly to the cheap slot
+- **Vague brief** → forces escalation to `complex` or returns `NOT_READY` from readiness check
+
+**The sharper your brief, the cheaper your delegation.**
+
+#### Examples
+
+**Bad** (vague, forces escalation):
+
+```
+Task 3: Make the timeout configurable.
+```
+
+→ worker must decide: which file? schema change? new CLI flag? default value? The parent leaked judgment into the brief. Forces `agentType: "complex"` or gets `NOT_READY`.
+
+**Acceptable** (direction is clear, still needs context):
+
+```
+Task 3: Add a configurable timeout to the HTTP client.
+```
+
+→ routes to `standard` but may need follow-up clarification.
+
+**Ideal** (zero-decision, explicit scope):
 
 ```
 Task 3 (mechanical, single file): In src/config.ts, add a
@@ -196,43 +246,33 @@ Do not run tests. Done = the schema compiles and the new field is
 present with the correct validator.
 ```
 
-→ routes cleanly to the free provider at standard tier.
-
-**Vague brief → forced escalation:**
-
-```
-Task 3: Make the timeout configurable.
-```
-
-→ forces the worker to decide: which file? schema change? new CLI flag? default value? The parent has leaked judgment into the brief, and the routing has to escalate or the result will be wrong.
-
-**The sharper your brief, the cheaper your delegation.**
+→ routes cleanly to `standard` at lowest cost.
 
 #### Declaring deliverable coverage
 
-Declare coverage when the deliverable is enumerable. If your brief asks for N discrete outputs, populate `expectedCoverage.requiredMarkers` with the item identifiers or set `minSections` for simpler shapes. The supervision layer will re-prompt the model with specific missing items and classify thin responses as `insufficient_coverage` instead of silently accepting them.
+Declare coverage when the deliverable is enumerable. If your brief asks for N discrete outputs, populate `expectedCoverage.requiredMarkers` with the item identifiers or set `minSections` for simpler shapes. The supervision layer will re-prompt with specific missing items and classify thin responses as `insufficient_coverage` instead of silently accepting them.
 
-Worked examples across workload shapes:
+Worked examples:
 
-- **Multi-file refactor**: `requiredMarkers: ["src/auth.ts", "src/user.ts", ..., "src/session.ts"]` — every file path must appear in the output.
-- **Test generation**: `requiredMarkers: ["computeTotal", "validateInput", "formatDate", ...]` — every function name must appear.
-- **Multi-PR review**: `requiredMarkers: ["#1234", "#1235", "#1236", ...]` — every PR number must appear.
-- **Per-endpoint analysis**: `requiredMarkers: ["/api/users", "/api/orders", "/api/refunds", ...]` — every endpoint path must appear.
-- **Codebase audit**: `requiredMarkers: ["1.1", "1.2", ..., "10.2"]` — one per checklist item.
+- **Multi-file refactor**: `requiredMarkers: ["src/auth.ts", "src/user.ts", ..., "src/session.ts"]`
+- **Test generation**: `requiredMarkers: ["computeTotal", "validateInput", "formatDate", ...]`
+- **Multi-PR review**: `requiredMarkers: ["#1234", "#1235", "#1236", ...]`
+- **Per-endpoint analysis**: `requiredMarkers: ["/api/users", "/api/orders", "/api/refunds", ...]`
+- **Codebase audit**: `requiredMarkers: ["1.1", "1.2", ..., "10.2"]`
 
-Do NOT declare coverage for one-shot tasks — bug fixes, single implementations, prose explanations, conversational responses, creative writing. The field is opt-in and has no meaning for deliverables you can't enumerate ahead of time. Setting a spurious `minSections: 1` is harmless but pointless.
+Do NOT declare coverage for one-shot tasks — bug fixes, single implementations, prose explanations, conversational responses, creative writing.
 
 ### Dispatch Shape
 
 Every call to `mcp__multi-model-agent__delegate_tasks` must set:
 
 - `prompt` — the zero-decision brief. Include full context; the worker has no prior memory of your session.
-- `tier` — `standard` by default; `reasoning` for security / architecture / final review.
-- `requiredCapabilities` — `["file_read", "file_write", "grep", "glob"]` for code work. Add `"web_search"` / `"web_fetch"` only when genuinely needed (it forces routing to a provider that has it). Do **not** add `"shell"` unless you have a deliberate reason.
-- `provider` — explicit, per the routing table. Omit only if you want the MCP to pick purely by cost.
+- `agentType` — `"standard"` by default; `"complex"` for multi-file integration, architecture, security, final review.
+- `requiredCapabilities` — `["file_read", "file_write", "grep", "glob"]` for code work. Add `"web_search"` / `"web_fetch"` only when genuinely needed. Do **not** add `"shell"` unless you have a deliberate reason.
 - `cwd` — absolute working directory. Never omit; never default to `/`. Use the project or worktree root.
 - `sandboxPolicy: "cwd-only"` — confine file writes to the working directory. Only relax this if the task legitimately needs to touch sibling repos.
-- `effort` — only when dispatching to a reasoning-tier provider.
+
+For `agentType: "complex"` dispatches, you can set `effort: "high"` to signal that the reasoning slot should apply maximum reasoning effort.
 
 **Parallelize when safe.** Independent tasks (different files, no shared state) dispatched in one `tasks` array run concurrently. Bundle them. **Never** dispatch two tasks in parallel that could conflict on the same files. Spec reviewer + code-quality reviewer for the *same* task are sequential (the reviewer needs to see the implementer's output); dispatch them in separate calls.
 
@@ -244,168 +284,89 @@ When the work has the shape "do N independent things," dispatch N tasks in one `
 
 Worked examples (ordered cheapest-to-most-complex):
 
-1. **Multi-file refactor**: "Update import syntax in these 10 files" → 10 tasks, one per file. Each task has a minimal `requiredMarkers: ["<the file's primary export>"]` to catch a worker that silently skipped a file. Parent synthesizes if needed (usually unnecessary — per-file diffs are independent).
+1. **Multi-file refactor**: "Update import syntax in these 10 files" → 10 tasks, one per file. Each task has a minimal `requiredMarkers: ["<the file's primary export>"]` to catch a worker that silently skipped a file.
 
-2. **Test generation across many functions**: "Write unit tests for these 25 functions" → 5 tasks batched 5 functions each. `requiredMarkers: ["<function1>", "<function2>", ...]` per task. Parent collects test files.
+2. **Test generation across many functions**: "Write unit tests for these 25 functions" → 5 tasks batched 5 functions each. `requiredMarkers: ["<function1>", "<function2>", ...]` per task.
 
-3. **Multi-PR review**: "Review these 15 PRs and flag anything concerning" → 15 tasks in parallel (or batched to your provider's rate limit). `requiredMarkers: ["<PR number>"]` per task. Parent synthesizes top-3 concerns across all PRs.
+3. **Multi-PR review**: "Review these 15 PRs and flag anything concerning" → 15 tasks in parallel (or batched to your provider's rate limit). `requiredMarkers: ["<PR number>"]` per task.
 
-4. **Per-endpoint analysis**: "Analyze these 10 API endpoints for X" → 10 tasks. `requiredMarkers: ["<endpoint path>"]` per task. Parent builds the cross-endpoint report.
-
-5. **Codebase audit** (internal testing ground example): 3 apps × 10 categories = 30 tasks. Each task audits one category for one app.
-
-Parallel dispatch saves wall-clock time — check `timings.estimatedParallelSavingsMs` in the response to see how much.
+4. **Per-endpoint analysis**: "Analyze these 10 API endpoints for X" → 10 tasks. `requiredMarkers: ["<endpoint path>"]` per task.
 
 **Pattern B: Retrieval / judgment split**
 
-When one part of the work is cheap retrieval (grep / list / map) and another part is expensive judgment (synthesize / review / decide), split them across providers. Phase 1: cheap provider does retrieval, emits structured evidence. Phase 2: `register_context_block` the evidence bundle, dispatch judgment to a reasoning provider. The judgment phase never has to re-traverse the source material — it reads the pre-built evidence bundle, dropping input tokens by ~70%.
+When one part of the work is cheap retrieval (grep / list / map) and another part is expensive judgment (synthesize / review / decide), split them across slots. Phase 1: `standard` slot does retrieval, emits structured evidence. Phase 2: `register_context_block` the evidence bundle, dispatch judgment to `complex` slot. The judgment phase never has to re-traverse the source material — it reads the pre-built evidence bundle, dropping input tokens by ~70%.
 
 Example:
-
-- Phase 1 (parallel, minimax): "grep -rn for pattern X, Y, Z in these repos; return structured lists of file:line hits" → 15-20 cheap tasks, each producing a small structured output
-- Phase 2 (codex): `register_context_block({ id: "evidence-bundle", content: <concatenated retrieval results> })` → one judgment task that takes `contextBlockIds: ["evidence-bundle"]` and produces the final review
-
-This works for code review ("cheap finds changed files, expensive reviews them"), architecture analysis ("cheap maps module structure, expensive reasons about coupling"), large-scale refactor planning ("cheap enumerates call sites, expensive decides migration strategy"), and many other multi-phase workloads.
+- Phase 1 (parallel, `standard`): "grep -rn for pattern X, Y, Z in these repos; return structured lists of file:line hits" → 15-20 cheap tasks
+- Phase 2 (`complex`): `register_context_block({ id: "evidence-bundle", content: <concatenated retrieval results> })` → one judgment task that takes `contextBlockIds: ["evidence-bundle"]`
 
 ## Measuring savings
 
-The MCP exposes four visibility surfaces so callers can see the UX value of delegation without computing anything themselves. All of them are **estimates** for budgeting and debugging, not accounting numbers — actual parent-model cost would vary with context, tool overhead, and retry patterns; actual serial execution would have different cache and warmup characteristics.
+Every `delegate_tasks` response envelope contains:
 
-**Per-task cost savings**:
+- `headline` — pre-computed one-liner: `tasks / success / wall-clock / cost / ROI`. Quote it verbatim to the user without arithmetic.
+- `timings.wallClockMs` — actual batch wall-clock
+- `timings.sumOfTaskMs` — what serial execution would have taken
+- `timings.estimatedParallelSavingsMs` — wall-clock time saved vs serial
+- `aggregateCost.totalActualCostUSD` / `totalSavedCostUSD` — batch cost rollup
 
-- `result.usage.costUSD` — what this task actually cost on the provider that ran it.
-- `result.usage.savedCostUSD` — estimated difference vs running the same token volume on your parent-session model. Only populated when you set `parentModel` on the task spec. Set it. It's the number that tells the user "you just saved $0.12 by delegating this instead of letting opus handle it."
+**If the primary response was truncated** (client-side size limit), call `get_batch_slice(batchId, "telemetry")` to retrieve the headline and envelope fields in a bounded-small response.
 
-**Batch-level aggregates** (always present on the response envelope):
+## Status Handling
 
-- `aggregateCost.totalActualCostUSD` — sum of per-task costUSD across the batch
-- `aggregateCost.totalSavedCostUSD` — sum of per-task savedCostUSD (requires `parentModel` on at least one task)
-- `timings.wallClockMs` — how long the batch actually took
-- `timings.sumOfTaskMs` — sum of individual task durations (what serial execution would have taken)
-- `timings.estimatedParallelSavingsMs` — wall-clock time parallel dispatch bought back vs a hypothetical serial for-loop
-- `batchProgress.completedTasks` / `incompleteTasks` / `failedTasks` — static counts at response time
-- `batchProgress.successPercent` — clean-success rate (the batch is always 100% DONE by the time you see the response; this field measures how many finished cleanly, NOT progress)
+Every task returns one of eight protocol status values:
 
-**Example summary a calling agent can compose directly from one `delegate_tasks` response**:
-
-> Dispatched 5 tasks in parallel. Total cost **$0.031** (estimated savings vs opus: **~$0.42**). Wall-clock: **42s** (estimated serial time saved: **~3m 16s**). **4 of 5 tasks completed successfully**, 1 failed with `api_error` — retry via `retry_tasks({ batchId, taskIndices: [3] })` once the provider is available.
-
-Every number in that summary comes from the response envelope fields without caller-side arithmetic. The `retry_tasks` hint comes from inspecting `results[3].status` and `results[3].error`.
-
-**Narrate the headline after every batch.** Every `delegate_tasks` response envelope now contains a pre-computed `headline` field — a one-line summary of `tasks / success / wall-clock / cost / ROI`. Quote it verbatim to the user **before** discussing per-task outcomes or triaging failures. No arithmetic, no rounding, no unit conversion — the server already formatted it. Example:
-
-> *"Tally batch done — 11 tasks, 5/11 ok (45.5%), wall 5m 54s, saved ~18m 30s vs serial, $1.37 actual / $8.91 saved vs claude-opus-4-6 (7.5x ROI)."*
-
-If the primary `delegate_tasks` response came back in `summary` mode (or a client-side size limit obscured the envelope), call `get_batch_telemetry(batchId)` immediately — it returns the same `headline` and envelope fields in a response that is bounded per task (~600-byte header + ~200 bytes per task, so a typical 10–30-task batch fits in 2–7 KB, well under any client-side size limit). **Always narrate the headline, even when delegating silently inside a larger plan.**
-
-## Tightening budgets for weaker models
-
-If a provider returns degraded output on long dispatches, lower its `inputTokenSoftLimit` in your `~/.multi-model/config.json`:
-
-```json
-{
-  "providers": {
-    "minimax": {
-      "type": "openai-compatible",
-      "model": "MiniMax-M2",
-      "inputTokenSoftLimit": 100000
-    }
-  }
-}
-```
-
-Counter-intuitive but small models often produce better final answers under tighter budgets because they're forced to commit earlier. The watchdog will fire `force_salvage` at 95k instead of 190k; worst case is a half-read but bounded, instead of an exhausted exploration. Pair with task-level `maxTurns: 40` (instead of the default 200) when dispatching to weaker providers.
-
-### Verification of Delegated Output
-
-When a worker returns `status: "ok"`, apply tiered verification:
-
-- **Mechanical task + small diff (≤30 lines) + tests pass** → trust, don't re-read the diff.
-- **Larger diff, or judgment-flavored task** → parent reads the diff inline.
-- **Security-sensitive code** (auth, payments, JWT, anything in the trust boundary) → parent reads inline **and** dispatches a separate reasoning-tier review pass.
-- **Worker said *"I had to make a decision about X"*** → parent reads inline. The worker has confessed that judgment leaked — claw it back.
-- **Tests failed** → parent reads the diff to debug.
-
-Tests passing is **necessary but not sufficient** for trust. Don't outsource *"is this the right code"* to the test suite.
-
-### Sandbox Enforcement
-
-When you dispatch with `sandboxPolicy: "cwd-only"` (the recommended default), the MCP applies the following rules inside every delegated task. These are enforced per-call in the core `assertWithinCwd` helper — the model can see the rejection message and retry with a corrected path.
-
-1. **File reads** are confined to `cwd` and its descendants. Paths outside (absolute paths elsewhere, `../` traversal) are rejected with an error surfaced to the model.
-2. **File writes** are subject to the same restriction.
-3. **Symlink resolution uses `fs.realpath`.** A symlink inside `cwd` that points outside `cwd` is treated as outside and rejected — the check runs on the resolved real path, not the literal path the model passed.
-4. **Nonexistent target paths** resolve by walking back to the nearest existing ancestor and reapplying the same check, so symlinks in ancestor directories are still caught.
-5. **`runShell` is hard-disabled** under `cwd-only`. Calling it returns an error telling the model to use `readFile` / `writeFile` / `grep` / `glob` / `listFiles` instead. Only tasks (or providers) with `sandboxPolicy: "none"` get shell access at all.
-6. **The check is per-call**, not per-session. Every tool invocation re-validates — there is no "trusted" state the model can earn inside a run.
-7. **Errors are surfaced to the model** as normal tool errors, not silently swallowed. The model observes the rejection in its tool result and can adjust (e.g. re-root a path, ask for the right `cwd`).
-
-The default is `cwd-only`. Only set `sandboxPolicy: "none"` per-provider or per-task when you intentionally want shell access or cross-repo file writes — and remember that `shell` only appears in a provider's capability set when its effective sandbox policy is `"none"`, so auto-routing will not accidentally route shell work into a sandboxed worker.
-
-### Status Handling
-
-`delegate_tasks` returns one object per task with fields `provider`, `status`, `output`, `turns`, `filesRead`, `filesWritten`, `toolCalls`, `escalationLog`, `usage`, and optionally `error`. The `status` field is one of exactly eight protocol values:
-
-| `status` | Meaning | What caller should do | How it happens |
-|---|---|---|---|
-| `ok` | Worker finished normally with usable output | Read `output`. Apply tiered verification. Check for any "blocked" / "needs context" markers the worker may have put in its text. | Runner's agent loop returned a non-empty final message that passed the supervision completeness check. |
-| `incomplete` | Agent loop terminated but the runner had to salvage partial work from the scratchpad instead of accepting a final message | Read `output` — it contains the best text the scratchpad captured plus a diagnostic line (turn count, input tokens, which files were read). Re-dispatch with a tighter brief or escalate provider tier — do **not** retry the same provider with the same prompt. If `expectedCoverage` was declared, `escalationLog[i].reason` names the specific markers the worker missed; fix by splitting the task (see "Decompose and parallelize enumerable work"), escalating to a reasoning provider, or revisiting whether the coverage declaration is reasonable. | Runner hit a degenerate completion (empty / thinking-only / fragment) and exhausted its supervision retries, the input-token watchdog forced salvage at its 95% threshold, or a declared `expectedCoverage` contract went unmet after supervision re-prompts. |
-| `max_turns` | Hit `maxTurns` before completing | Worker looped. Re-dispatch on a higher-tier provider with a tighter brief, or break the task down. The scratchpad is still salvaged into `output`. | The agent loop ran `maxTurns` iterations without emitting a final answer. |
-| `timeout` | Hit `timeoutMs` before completing | Task is too large or the worker is stuck. Break into smaller pieces; don't just raise the timeout. Scratchpad is salvaged into `output`. | The runner's per-attempt deadline fired. |
-| `api_aborted` | Provider-side abort — either a signal cancellation or a transport drop that the SDK reported as an abort | Inspect `error`. If transient, escalation has already walked the chain for auto-routed tasks — if none recovered, re-dispatch with a different provider or retry later. | Codex/Claude/OpenAI SDKs raise an abort error (e.g. `"Request was aborted"`, `AbortError`, signal cancellation). |
-| `api_error` | HTTP error from the provider (the thrown error had a numeric `.status`) | Read `error` for the status code and provider message. 4xx → fix the request; 5xx → retry/escalate. Scratchpad is still salvaged. | Provider returned a non-2xx HTTP response. |
-| `network_error` | Transport-level failure before the request reached the provider | Read `error`. Usually transient — escalation has already tried the chain; if everything failed, retry later. | `code === 'ECONNREFUSED'`, `code === 'ENOTFOUND'`, or a message matching `/network/i`. |
-| `error` | Everything else — a runner-side exception that doesn't fit the buckets above | Read `error`. Usually a capability mismatch, missing API key, an unavailable model, or a bug in the runner. Fix the call; don't blindly retry. | Thrown exception with no matching classification (`assertWithinCwd` violations, validation errors, unexpected SDK shapes, etc.). |
+| `status` | Meaning | Caller action |
+|---|---|---|
+| `ok` | Worker finished normally | Read `output`. Apply tiered verification. |
+| `incomplete` | Worker salvaged partial work | Read `output`. Fix brief or escalate `agentType`. |
+| `max_turns` | Hit `maxTurns` before completing | Re-dispatch with tighter brief or escalate to `complex`. |
+| `timeout` | Hit `timeoutMs` before completing | Break into smaller pieces; don't just raise the timeout. |
+| `api_aborted` | Provider-side abort | Retry with a different agent or later. |
+| `api_error` | HTTP error from provider | Read `error`. 4xx → fix request; 5xx → retry/escalate. |
+| `network_error` | Transport-level failure | Retry later; escalation already walked the chain. |
+| `error` | Runner-side exception | Read `error`. Fix the call; don't blindly retry. |
 
 **Two layers — don't confuse them.** The eight values above are the *protocol* status. Any `DONE` / `BLOCKED` / `NEEDS_CONTEXT` / `DONE_WITH_CONCERNS` conventions (from Superpowers prompt templates, for example) live *inside* the `output` text, not in `status`. A worker can return `status: "ok"` with `output` text saying *"BLOCKED: I need access to the prod config file."* Read both layers.
 
-**The `escalationLog` field** — an array of `AttemptRecord` entries, one per provider actually attempted within this dispatch. Length is 1 for tasks that succeeded on the first try; longer when auto-routing walked to a fallback. Each entry carries `provider`, `status`, `turns`, `inputTokens`, `outputTokens`, `costUSD`, `initialPromptLengthChars`, `initialPromptHash`, and an optional `reason`. `initialPromptHash` is a sha256 of the **canonical orchestrator-side brief** `${systemPrompt}\n\n${budgetHint}\n\n${prompt}` — it is *not* a wire-level checksum (each SDK wraps this in its own envelope before sending; Claude specifically prepends the `claude_code` preset to the system prompt). Use it to confirm *"the orchestrator sent the same brief on every attempt"*; it is cross-runner stable, so identical briefs produce identical hashes regardless of which runner executed them.
+**Scratchpad salvage runs on every termination path.** `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, and `error` all populate `output` from the best scratchpad content the runner captured.
 
-**In `summary` mode**, each `results[i]` entry carries a slim shape (`status`, `turns`, `durationMs`, `usage`, `escalationChain`) — the bulky fields (`toolCalls`, `filesRead`, `filesWritten`, `directoriesListed`, full `escalationLog[].reason`, `progressTrace`) are moved to `get_task_detail(batchId, taskIndex)`. Use `get_task_detail` to inspect what a specific task actually did. The `escalationChain` field is a compact string array like `["minimax:incomplete","codex:ok"]` — use it for a one-line view of the provider walk; use `get_task_detail` for the full `AttemptRecord[]` with `reason` strings and per-attempt token counts.
-
-**Tight-format outputs and `skipCompletionHeuristic`.** Tasks whose expected output is a single line (e.g. `"verdict: pass"`, `"sha256: abc123"`, `"5 files modified"`) may trip the runner's `no_terminator` heuristic — the short-output check fires before the more authoritative coverage check. If your task declares `expectedCoverage` and the output passes, the coverage contract is authoritative and short-output heuristics are automatically skipped. If your task does not use `expectedCoverage` but has a tight, non-prose format, set `skipCompletionHeuristic: true` on the task spec to opt out of the short-output check entirely. The `empty` and `thinking_only` degeneracy checks still fire regardless — they are independent.
+**Retry via `retry_tasks`.** Every `delegate_tasks` response includes a `batchId`. To re-run a subset, call `retry_tasks({ batchId, taskIndices })` — original briefs stay server-side. Batches expire 30 minutes after creation with a 100-batch LRU cap.
 
 ### Escalation Ladder
 
-**Never retry the same provider with the same prompt. Never escalate without changing something.**
+**Never retry the same agent with the same prompt. Never escalate without changing something.**
 
-**The MCP handles provider-level escalation for you on auto-routed tasks.** When a task omits `provider`, the MCP walks the full escalation chain (capability + tier filter, cheapest-first) automatically on failure — you do not need to re-dispatch manually to get a task routed to the next-cheapest qualifying provider. The chain walk stops at the first `ok`. If every provider fails, the best salvaged result is returned and `escalationLog` shows every attempt. **Explicit pins (`provider:` set on the task) still run as a single attempt** — pinning opts out of the auto-walk, and one failure is the final answer.
+The MCP handles agent-level escalation for you on auto-routed tasks. When a task omits `agent`, the MCP walks the escalation chain automatically. Explicit pins (`agent:` set) run as a single attempt.
 
-**Scratchpad salvage runs on every termination path.** `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, and `error` all still populate `output` from the best scratchpad content the runner captured. You never get a bare failure with no text — there is always *something* to read, even if it's just the diagnostic line.
+**When you still need to escalate by hand** (e.g. you pinned an agent, or the auto-walk exhausted all options):
 
-**Retry failed tasks via `retry_tasks`.** Every `delegate_tasks` response includes a top-level `batchId`. To re-run a subset, call `retry_tasks` with `{ batchId, taskIndices }` (0-based indices into the original batch) — the original briefs stay server-side, so the parent does not re-transmit them. Batches expire 30 minutes **after creation** (not last access — access does not refresh TTL); under memory pressure they are evicted **LRU** (least-recently-*used*: a hot batch you keep retrying stays alive, cold newer batches get evicted first) with a cap of 100 batches. If the batch is gone, fall back to `delegate_tasks` with full task specs.
-
-**When you still need to escalate by hand** (e.g. you pinned a provider, or the auto-walk exhausted all options):
-
-1. **First failure** → re-dispatch on the *same* provider with an **enriched prompt** (more context, tighter acceptance criteria, explicit file paths).
-2. **Second failure** → escalate to the reasoning tier.
-3. **Failure on the reasoning tier** → break the task into smaller pieces and restart, or claw back to parent inline.
-
-When the worker's text output reports it's blocked (`status: "ok"` but blocked in the text):
-
-- **Missing context** → enrich the prompt and re-dispatch on the same provider.
-- **Reasoning gap** → escalate to the reasoning tier.
-- **Capability gap** (worker wants to run tests / shell) → run the command yourself in `Bash`, feed its output into a follow-up dispatch. Do **not** fall back to a Claude-native `general-purpose` subagent for shell.
+1. **First failure** → re-dispatch on the *same* agent with an **enriched prompt** (more context, tighter acceptance criteria, explicit file paths).
+2. **Second failure** → escalate to `complex` slot.
+3. **Failure on `complex`** → break the task into smaller pieces and restart, or claw back to parent inline.
 
 ### Quick Reference
 
 ```
 Got a task?
 │
-├─ Is it conversational / user-watching? ──► parent inline
-├─ Is it pure judgment (planning, review, taste)? ──► parent inline
+├─ Conversational / user-watching? ──► parent inline
+├─ Pure judgment (planning, review, taste)? ──► parent inline
 ├─ Trivial-inline 4-condition test passes? ──► parent inline
 ├─ Needs shell and sandboxPolicy is not "none"? ──► parent Bash
-├─ Is it Explore / Plan / claude-code-guide? ──► native Agent tool
+├─ Native Agent tool (Explore/Plan/claude-code-guide)? ──► native tool
 └─ Otherwise — labor with a zero-decision brief
       │
       └─► mcp__multi-model-agent__delegate_tasks
             │
-            ├─► on return: quote response.headline verbatim
-            │   (or call get_batch_telemetry(batchId) if the headline is missing)
+            ├─ Brief quality check (readiness)?
+            │     └─ NOT_READY → fix brief first
             │
-            ├─ File-only mechanical work? ──► free provider, standard
-            ├─ Needs web research? ──► web-capable provider, standard
-            ├─ Multi-file integration? ──► mid or reasoning, standard
-            └─ Architecture / final review / security? ──► reasoning, effort: high
+            ├─ agentType: "standard"
+            │     ├─ File-only mechanical work? ──► fast, standard
+            │     ├─ Needs web research? ──► fast with web_search
+            │     └─ Multi-file / integration? ──► reasoner, complex
+            │
+            └─ On return: quote headline verbatim
+                  (or call get_batch_slice(..., "telemetry") if truncated)
 ```
