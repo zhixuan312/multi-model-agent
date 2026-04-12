@@ -133,7 +133,6 @@ function buildFullResponse(
       implementationReport: r.implementationReport,
       specReviewReport: r.specReviewReport,
       qualityReviewReport: r.qualityReviewReport,
-      ...(r.progressTrace && { progressTrace: r.progressTrace }),
       ...(r.error && { error: r.error }),
     })),
   };
@@ -292,12 +291,6 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'WHEN: Use for tight-format outputs (single-line verdicts, CSV rows, opaque ids) that break prose heuristics.\n' +
       'DEFAULT: false — short-output heuristics are active.\n' +
       'INTERACTION: The empty and thinking_only degeneracy checks still fire independently; expectedCoverage passing remains authoritative when set.',
-    ),
-    includeProgressTrace: z.boolean().optional().describe(
-      'WHAT: Opts in to capturing and returning a bounded post-hoc progress trace for this task.\n' +
-      'WHEN: Use for debugging, observability, or auditing when you need to reconstruct execution flow.\n' +
-      'DEFAULT: false — no progress trace returned.\n' +
-      'INTERACTION: Progress trace increases response payload size; consider disabling for high-volume batches.',
     ),
     parentModel: z.string().optional().describe(
       'WHAT: Identifier for the parent session model used to estimate saved cost when reusing prior context.\n' +
@@ -705,7 +698,7 @@ export function buildMcpServer(
 Three slices are available:
 - \`output\`: The full text output of a specific task (requires taskIndex).
 - \`detail\`: Per-task execution details including toolCalls, filesRead/Written/Listed,
-  escalationLog, progressTrace, review statuses (workerStatus, specReviewStatus,
+  escalationLog, review statuses (workerStatus, specReviewStatus,
   qualityReviewStatus), agents provenance, and implementation/spec/quality reports
   (requires taskIndex).
 - \`telemetry\`: Batch-wide ROI telemetry envelope with headline, timings, batchProgress,
@@ -776,7 +769,6 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
           implementationReport: result.implementationReport,
           specReviewReport: result.specReviewReport,
           qualityReviewReport: result.qualityReviewReport,
-          ...(result.progressTrace && { progressTrace: result.progressTrace }),
         };
 
         return {

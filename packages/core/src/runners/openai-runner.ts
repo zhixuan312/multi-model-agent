@@ -17,7 +17,6 @@ import {
   type ProviderConfig,
   type ProgressEvent,
 } from '../types.js';
-import { trimProgressTrace } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 
 /**
@@ -156,10 +155,6 @@ export async function runOpenAI(
   const taskStartMs = Date.now();
   const parentModel = options.parentModel;
 
-  // --- Progress trace capture (Task 10) ---------------------------------
-  const shouldCaptureTrace = options.includeProgressTrace ?? false;
-  const traceBuffer: ProgressEvent[] = [];
-
   // --- Progress event emission (Task 9) -----------------------------------
   //
   // `onProgress` is already wrapped in `safeSink` by the orchestrator
@@ -168,7 +163,6 @@ export async function runOpenAI(
   // again here.
   const onProgress = options.onProgress;
   const emit = (event: ProgressEvent): void => {
-    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -400,7 +394,6 @@ export async function runOpenAI(
           outputIsDiagnostic: true,
           escalationLog: [],
           durationMs: Date.now() - taskStartMs,
-          ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
         };
       }
 
@@ -472,7 +465,6 @@ export async function runOpenAI(
             softLimit,
             Date.now() - taskStartMs,
             parentModel,
-            shouldCaptureTrace ? traceBuffer : undefined,
           );
           emit({ kind: 'done', status: salvaged.status });
           return salvaged;
@@ -519,7 +511,7 @@ export async function runOpenAI(
         });
 
         if (validation.valid) {
-          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel, shouldCaptureTrace ? traceBuffer : undefined);
+          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel);
           emit({ kind: 'done', status: ok.status });
           return ok;
         }
@@ -604,7 +596,6 @@ export async function runOpenAI(
         runner.providerConfig,
         Date.now() - taskStartMs,
         parentModel,
-        shouldCaptureTrace ? traceBuffer : undefined,
         { reason: exhaustedReason },
       );
       emit({ kind: 'done', status: exhausted.status });
@@ -642,7 +633,92 @@ export async function runOpenAI(
           outputIsDiagnostic: !hasSalvage,
           escalationLog: [],
           durationMs: Date.now() - taskStartMs,
-          ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
+        };
+      }
+
+      function buildSupervisionExhaustedResult(
+        currentResult: AgentRunOutput,
+        scratchpad: TextScratchpad,
+        tracker: FileTracker,
+        providerConfig: ProviderConfig,
+        durationMs: number,
+        parentModel?: string,
+        opts?: { reason?: string },
+      ): RunResult {
+        const usage = currentResult.state.usage;
+        const filesRead = tracker.getReads();
+        const filesWritten = tracker.getWrites();
+        const toolCalls = tracker.getToolCalls();
+        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+        const hasSalvage = !scratchpad.isEmpty();
+        return {
+          output: hasSalvage
+            ? scratchpad.latest()
+            : buildIncompleteDiagnostic({
+                providerLabel: 'openai-compatible',
+                turns: usage.requests,
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                filesRead,
+                filesWritten,
+              }),
+          status: 'incomplete',
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+            costUSD,
+            savedCostUSD,
+          },
+          turns: usage.requests,
+          filesRead,
+          directoriesListed: tracker.getDirectoriesListed(),
+          filesWritten,
+          toolCalls,
+          outputIsDiagnostic: !hasSalvage,
+          escalationLog: [],
+          ...(opts?.reason && { error: opts.reason }),
+          durationMs,
+        };
+      }
+
+      function buildForceSalvageResult(
+        currentResult: AgentRunOutput,
+        scratchpad: TextScratchpad,
+        tracker: FileTracker,
+        providerConfig: ProviderConfig,
+        softLimit: number,
+        durationMs: number,
+        parentModel?: string,
+      ): RunResult {
+        const usage = currentResult.state.usage;
+        const filesRead = tracker.getReads();
+        const filesWritten = tracker.getWrites();
+        const toolCalls = tracker.getToolCalls();
+        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+        const hasSalvage = !scratchpad.isEmpty();
+        return {
+          output: hasSalvage
+            ? scratchpad.latest()
+            : `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
+          status: 'incomplete',
+          usage: {
+            inputTokens: usage.inputTokens,
+            outputTokens: usage.outputTokens,
+            totalTokens: usage.totalTokens,
+            costUSD,
+            savedCostUSD,
+          },
+          turns: usage.requests,
+          filesRead,
+          directoriesListed: tracker.getDirectoriesListed(),
+          filesWritten,
+          toolCalls,
+          outputIsDiagnostic: !hasSalvage,
+          escalationLog: [],
+          durationMs,
         };
       }
       // Classify the thrown error into a finer-grained RunStatus so the
@@ -675,7 +751,6 @@ export async function runOpenAI(
         escalationLog: [],
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
   };
@@ -709,7 +784,6 @@ export async function runOpenAI(
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -725,7 +799,6 @@ function buildOkResult(
   providerConfig: ProviderConfig,
   durationMs: number,
   parentModel?: string,
-  traceBuffer?: ProgressEvent[],
 ): RunResult {
   const usage = currentResult.state.usage;
   const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
@@ -749,7 +822,6 @@ function buildOkResult(
     outputIsDiagnostic: false,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -760,7 +832,6 @@ function buildSupervisionExhaustedResult(
   providerConfig: ProviderConfig,
   durationMs: number,
   parentModel?: string,
-  traceBuffer?: ProgressEvent[],
   opts?: { reason?: string },
 ): RunResult {
   const usage = currentResult.state.usage;
@@ -798,7 +869,6 @@ function buildSupervisionExhaustedResult(
     escalationLog: [],
     ...(opts?.reason && { error: opts.reason }),
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -810,7 +880,6 @@ function buildForceSalvageResult(
   softLimit: number,
   durationMs: number,
   parentModel?: string,
-  traceBuffer?: ProgressEvent[],
 ): RunResult {
   const usage = currentResult.state.usage;
   const filesRead = tracker.getReads();
@@ -839,7 +908,6 @@ function buildForceSalvageResult(
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

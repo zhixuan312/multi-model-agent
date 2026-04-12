@@ -20,7 +20,6 @@ export type {
   MultiModelConfig,
   TokenUsage,
   RunResult,
-  ProgressTraceEntry,
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,

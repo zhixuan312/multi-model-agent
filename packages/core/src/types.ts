@@ -85,8 +85,6 @@ export interface TaskSpec {
    *  still fire independently. If `expectedCoverage` is also declared and
    *  passes, coverage is authoritative — you don't need this flag. */
   skipCompletionHeuristic?: boolean
-  /** Opt-in progress capture for post-hoc execution observability. */
-  includeProgressTrace?: boolean
   /** Optional hint about the parent session's model for saved-cost estimates. */
   parentModel?: string
   /** Brief quality policy for readiness evaluation. */
@@ -234,8 +232,6 @@ export interface RunResult {
   durationMs?: number
   /** Directories whose entries the worker listed. */
   directoriesListed?: string[]
-  /** Bounded trace of progress events emitted during this task's run. */
-  progressTrace?: ProgressTraceEntry[]
   error?: string
   /** Error code for refused briefs. */
   errorCode?: string
@@ -265,16 +261,6 @@ export interface RunResult {
   /** The quality reviewer's structured report. */
   qualityReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
 }
-
-/** A captured progress entry, or a synthetic marker when trace trimming occurred. */
-export type ProgressTraceEntry =
-  | ProgressEvent
-  | {
-      kind: '_trimmed'
-      droppedCount: number
-      droppedKinds: Partial<Record<ProgressEvent['kind'], number>>
-      capExceededByBoundaryEvents?: boolean
-    }
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {
@@ -337,8 +323,6 @@ export interface AttemptRecord {
   initialPromptHash: string
   /** Why this attempt was abandoned, if it was. Empty if status === 'ok'. */
   reason?: string
-  /** Bounded progress trace captured for this attempt, when enabled. */
-  progressTrace?: ProgressTraceEntry[]
 }
 
 // === Provider (created by createProvider) ===
@@ -401,12 +385,6 @@ export interface RunOptions {
    *  When supplied, `RunResult.usage.savedCostUSD` is computed against this
    *  model's profile rates. */
   parentModel?: string
-  /** Opt-in: when true, the runner captures every progress event fired
-   *  during this task's execution into a bounded, priority-trimmed
-   *  `progressTrace` on the final RunResult. Useful for post-hoc
-   *  execution observability on long-running delegated tasks. Zero
-   *  cost when false (the default). */
-  includeProgressTrace?: boolean
   /** Optional cost ceiling in USD. Runner will reject tool calls that would exceed this budget. */
   maxCostUSD?: number
   /** Optional format constraints for input/output. */

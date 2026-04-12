@@ -89,12 +89,6 @@ describe('slim summary envelope size', () => {
       workerStatus: 'done' as const,
       specReviewStatus: 'approved' as const,
       qualityReviewStatus: 'approved' as const,
-      progressTrace: Array.from({ length: 20 }, (_, j) => ({
-        kind: 'escalation_start' as any,
-        at: Date.now(),
-        taskIndex: i,
-        attempt: j,
-      })),
     }));
 
     const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
@@ -109,7 +103,6 @@ describe('slim summary envelope size', () => {
           prompt: `task ${i}`,
           agentType: 'standard' as const,
           parentModel: 'claude-opus-4-6',
-          includeProgressTrace: true,
         })),
         responseMode: 'summary',
       },

@@ -56,7 +56,6 @@ export async function delegateWithEscalation(
       sandboxPolicy: task.sandboxPolicy,
       expectedCoverage: task.expectedCoverage,
       skipCompletionHeuristic: task.skipCompletionHeuristic,
-      includeProgressTrace: task.includeProgressTrace,
       parentModel: task.parentModel,
       maxCostUSD: task.maxCostUSD,
       formatConstraints: task.formatConstraints,
@@ -80,7 +79,6 @@ export async function delegateWithEscalation(
         result.status === 'ok'
           ? undefined
           : (result.error || `status=${result.status}`),
-      ...(result.progressTrace && { progressTrace: result.progressTrace }),
     };
 
     attempts.push({ result, record });

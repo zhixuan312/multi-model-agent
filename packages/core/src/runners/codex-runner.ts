@@ -32,7 +32,6 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
-  trimProgressTrace,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -235,10 +234,7 @@ export async function runCodex(
   // upstream and cannot corrupt this loop. We do not need to wrap it
   // again here.
   const onProgress = options.onProgress;
-  const shouldCaptureTrace = options.includeProgressTrace ?? false;
-  const traceBuffer: ProgressEvent[] = [];
   const emit = (event: ProgressEvent): void => {
-    if (shouldCaptureTrace) traceBuffer.push(event);
     if (onProgress) onProgress(event);
   };
 
@@ -305,7 +301,6 @@ export async function runCodex(
       outputIsDiagnostic: true,
       escalationLog: [],
       durationMs: Date.now() - taskStartMs,
-      ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
     };
   }
 
@@ -597,7 +592,6 @@ export async function runCodex(
             softLimit,
             durationMs: Date.now() - taskStartMs,
             parentModel,
-            traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
           });
           emit({ kind: 'done', status: salvaged.status });
           return salvaged;
@@ -697,7 +691,6 @@ export async function runCodex(
               output: stripped,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: ok.status });
             return ok;
@@ -721,7 +714,6 @@ export async function runCodex(
               reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
-              traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
             });
             emit({ kind: 'done', status: exhausted.status });
             return exhausted;
@@ -787,7 +779,6 @@ export async function runCodex(
         reason: `hand-rolled loop exited after completing ${turns} of ${maxTurns} user-declared turns without producing a clean final answer`,
         durationMs: Date.now() - taskStartMs,
         parentModel,
-        traceBuffer: shouldCaptureTrace ? traceBuffer : undefined,
       });
       emit({ kind: 'done', status: maxTurnsResult.status });
       return maxTurnsResult;
@@ -861,7 +852,6 @@ export async function runCodex(
         escalationLog: [],
         error: detailed,
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     }
   };
@@ -895,7 +885,6 @@ export async function runCodex(
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,
-        ...(shouldCaptureTrace && { progressTrace: trimProgressTrace(traceBuffer) }),
       };
     },
     abortController,
@@ -920,9 +909,9 @@ interface CodexResultCommonArgs {
 }
 
 function buildCodexOkResult(
-  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel } = args;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
@@ -944,7 +933,6 @@ function buildCodexOkResult(
     outputIsDiagnostic: false,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
@@ -953,9 +941,9 @@ function buildCodexOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildCodexIncompleteResult(
-  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel } = args;
   const filesRead = tracker.getReads();
   const filesWritten = tracker.getWrites();
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
@@ -988,14 +976,13 @@ function buildCodexIncompleteResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexForceSalvageResult(
-  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel } = args;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   const hasSalvage = !scratchpad.isEmpty();
@@ -1019,14 +1006,13 @@ function buildCodexForceSalvageResult(
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 
 function buildCodexMaxTurnsResult(
-  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string; traceBuffer?: ProgressEvent[] },
+  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel, traceBuffer } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
   // Note: `lastOutput` here is the model's final text for the max-turns
   // boundary — real model content, not a diagnostic template. Only the
@@ -1057,7 +1043,6 @@ function buildCodexMaxTurnsResult(
     escalationLog: [],
     error: reason,
     durationMs,
-    ...(traceBuffer && { progressTrace: trimProgressTrace(traceBuffer) }),
   };
 }
 

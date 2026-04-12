@@ -245,58 +245,6 @@ describe('get_batch_slice tool', () => {
     expect(JSON.stringify(telemetry).length).toBeLessThan(2 * 1024);
   });
 
-  it('omits progressTrace when the RunResult has none', async () => {
-    const server = await makeServer();
-    const batchId = await dispatchFixtureBatch(server);
-
-    const detail = await callTool(server, 'get_batch_slice', { batchId, slice: 'detail', taskIndex: 0 });
-    expect(detail).not.toHaveProperty('progressTrace');
-  });
-
-  it('includes progressTrace when the RunResult has one', async () => {
-    const runTasksMod = await import('@zhixuan92/multi-model-agent-core/run-tasks');
-    vi.mocked(runTasksMod.runTasks).mockImplementationOnce(async () => [
-      {
-        output: 'ok',
-        status: 'ok',
-        usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0 },
-        turns: 1,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: false,
-        escalationLog: [],
-        progressTrace: [
-          { kind: 'escalation_start', at: 1000, taskIndex: 0, attempt: 0 } as any,
-        ],
-        durationMs: 100,
-        workerStatus: 'done',
-        specReviewStatus: 'not_run',
-        qualityReviewStatus: 'not_run',
-      } as RunResult,
-    ]);
-
-    const server = await makeServer();
-    const response = await callTool(server, 'delegate_tasks', {
-      tasks: [
-        {
-          prompt: 'traced',
-          agentType: 'standard' as const,
-          includeProgressTrace: true,
-        },
-      ],
-    });
-    const detail = await callTool(server, 'get_batch_slice', { batchId: response.batchId, slice: 'detail', taskIndex: 0 });
-
-    expect(detail).toHaveProperty('progressTrace');
-    expect(detail.progressTrace).toHaveLength(1);
-    expect(detail.progressTrace[0]).toMatchObject({
-      kind: 'escalation_start',
-      taskIndex: 0,
-      attempt: 0,
-    });
-  });
-
   it('old get_task_output tool is NOT registered', async () => {
     const server = await makeServer();
     expect(server._registeredTools?.get_task_output).toBeUndefined();
