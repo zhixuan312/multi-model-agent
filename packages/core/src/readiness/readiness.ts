@@ -52,3 +52,34 @@ export function hasOutputContractPillar(prompt: string, disableStructuredReport?
   if (/expectedcoverage|requiredmarkers/.test(prompt.toLowerCase())) return true;
   return false;
 }
+
+export function detectOutsourcedDiscovery(prompt: string): boolean {
+  const lc = prompt.toLowerCase();
+  return /find (out |the )?(right|correct)|figure out|verify the exact|determine (the |which )|look up|check (the )?(right|correct) (file|import|path|function)/.test(lc);
+}
+
+export function detectBrittleLineAnchors(prompt: string): boolean {
+  // Has "lines X-Y" or "lines X–Y" without a semantic anchor nearby
+  if (!/lines?\s+\d+[\s–-]+\d+/i.test(prompt)) return false;
+  // Check if there's a backtick identifier near the line range (semantic anchor)
+  if (/\`[\w`]+\`\s*\(?\s*lines?\s*\d+/i.test(prompt)) return false;
+  return true;
+}
+
+export function detectMixedEnvironmentActions(prompt: string): boolean {
+  const lc = prompt.toLowerCase();
+  return /&&?\s*(git\s+(commit|push|pull|merge|rebase)|npm\s+(publish|version)|docker\s+(build|run|push)|deploy|release)/.test(lc) ||
+    /(commit|push|pull|merge)\s+(and|&|then)\s+(commit|push|build)/.test(lc);
+}
+
+export function detectConcretePath(prompt: string): boolean {
+  return /\/[\w.-]+\.\w+/.test(prompt);
+}
+
+export function detectNamedCodeArtifact(prompt: string): boolean {
+  return /`[\w`]+\`/.test(prompt);
+}
+
+export function detectReasonableLength(prompt: string): boolean {
+  return prompt.length >= 50 && prompt.length <= 500;
+}

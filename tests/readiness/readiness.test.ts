@@ -69,3 +69,57 @@ describe('Layer 1: output contract', () => {
     expect(hasOutputContractPillar('Fix the bug.', true)).toBe(false);
   });
 });
+
+import {
+  detectOutsourcedDiscovery,
+  detectBrittleLineAnchors,
+  detectMixedEnvironmentActions,
+  detectConcretePath,
+  detectNamedCodeArtifact,
+  detectReasonableLength,
+} from '@zhixuan92/multi-model-agent-core/readiness/readiness';
+
+describe('Layer 2: outsourced discovery', () => {
+  it('flags "verify the exact imports"', () => {
+    expect(detectOutsourcedDiscovery('Verify the exact imports.')).toBe(true);
+  });
+  it('flags "figure out the right path"', () => {
+    expect(detectOutsourcedDiscovery('Figure out the right path.')).toBe(true);
+  });
+  it('does not flag concrete briefs', () => {
+    expect(detectOutsourcedDiscovery('Update src/auth.ts line 42.')).toBe(false);
+  });
+});
+
+describe('Layer 2: brittle line anchors', () => {
+  it('flags bare line-range', () => {
+    expect(detectBrittleLineAnchors('Extract lines 98–386 into a helper.')).toBe(true);
+  });
+  it('does not flag when semantic anchor present', () => {
+    expect(detectBrittleLineAnchors('Refactor `computeWeeklyStats` (lines 98-140).')).toBe(false);
+  });
+});
+
+describe('Layer 2: mixed environment actions', () => {
+  it('flags commit/push', () => {
+    expect(detectMixedEnvironmentActions('Update auth.ts, then commit and push.')).toBe(true);
+  });
+  it('does not flag plain implementation', () => {
+    expect(detectMixedEnvironmentActions('Update src/auth.ts to use JWT.')).toBe(false);
+  });
+});
+
+describe('Layer 3 hints', () => {
+  it('detectConcretePath fires on file path', () => {
+    expect(detectConcretePath('src/x.ts')).toBe(true);
+  });
+  it('detectNamedCodeArtifact fires on backtick identifier', () => {
+    expect(detectNamedCodeArtifact('Refactor `computeWeeklyStats`.')).toBe(true);
+  });
+  it('detectReasonableLength fires on 100-char brief', () => {
+    expect(detectReasonableLength('a'.repeat(100))).toBe(true);
+  });
+  it('detectReasonableLength rejects tiny brief', () => {
+    expect(detectReasonableLength('fix it')).toBe(false);
+  });
+});
