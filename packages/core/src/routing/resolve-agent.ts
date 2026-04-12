@@ -9,7 +9,7 @@ export interface ResolvedAgent {
 }
 
 function resolveCapabilities(agent: AgentConfig): AgentCapability[] {
-  return agent.capabilities ?? findModelCapabilities(agent.model);
+  return agent.capabilities ?? findModelCapabilities(agent.model) ?? [];
 }
 
 function hasAllCapabilities(
@@ -17,7 +17,7 @@ function hasAllCapabilities(
   required: AgentCapability[],
 ): boolean {
   if (required.length === 0) return true;
-  const available = resolveCapabilities(agent);
+  const available = resolveCapabilities(agent) ?? [];
   return required.every((cap) => available.includes(cap));
 }
 
@@ -31,8 +31,14 @@ export function resolveAgent(
   requiredCapabilities: AgentCapability[],
   config: MultiModelConfig,
 ): ResolvedAgent {
-  const agents = config.agents ?? { standard: config.providers['standard'] as any, complex: config.providers['complex'] as any };
+  const agents = config.agents;
+  if (!agents) {
+    throw new Error('capability_missing: config must have agents defined');
+  }
   const declared = agents[agentType];
+  if (!declared) {
+    throw new Error(`capability_missing: agent "${agentType}" not found in config`);
+  }
   if (hasAllCapabilities(declared, requiredCapabilities)) {
     return {
       slot: agentType,
@@ -43,7 +49,7 @@ export function resolveAgent(
 
   const otherSlot = OTHER_SLOT[agentType];
   const other = agents[otherSlot];
-  if (hasAllCapabilities(other, requiredCapabilities)) {
+  if (other && hasAllCapabilities(other, requiredCapabilities)) {
     return {
       slot: otherSlot,
       provider: createProvider(otherSlot, config),
@@ -54,7 +60,7 @@ export function resolveAgent(
   const missing = requiredCapabilities.filter(
     (cap) =>
       !resolveCapabilities(declared).includes(cap) &&
-      !resolveCapabilities(other).includes(cap),
+      (other ? resolveCapabilities(other).includes(cap) : true),
   );
   throw new Error(
     `capability_missing: neither standard nor complex agent has: ${missing.join(', ')}`,

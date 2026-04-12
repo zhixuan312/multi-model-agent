@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { CostTier, ProviderConfig, Tier } from '../types.js';
+import type { CostTier, ProviderConfig } from '../types.js';
 import profileData from '../model-profiles.json' with { type: 'json' };
 
 const tierSchema = z.enum(['trivial', 'standard', 'reasoning']);

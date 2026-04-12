@@ -44,12 +44,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -83,8 +80,8 @@ describe('get_batch_telemetry tool', () => {
     const server = await makeServer();
     const dispatch = await callTool(server, 'delegate_tasks', {
       tasks: [
-        { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
-        { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
+        { prompt: 't1', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+        { prompt: 't2', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
       ],
     });
 
@@ -116,7 +113,7 @@ describe('get_batch_telemetry tool', () => {
     expect(task0).toHaveProperty('taskIndex', 0);
     expect(task0).toHaveProperty('status');
     expect(Array.isArray(task0.escalationChain)).toBe(true);
-    expect(task0).toHaveProperty('provider');
+    expect(task0).toHaveProperty('agentType');
     expect(task0).toHaveProperty('turns');
     expect(task0).toHaveProperty('durationMs');
     expect(task0).toHaveProperty('usage');
@@ -134,8 +131,8 @@ describe('get_batch_telemetry tool', () => {
     const server = await makeServer();
     const dispatch = await callTool(server, 'delegate_tasks', {
       tasks: [
-        { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-        { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+        { prompt: 't1', agentType: 'standard' as const },
+        { prompt: 't2', agentType: 'standard' as const },
       ],
     });
 
@@ -155,8 +152,8 @@ describe('get_batch_telemetry tool', () => {
     const server = await makeServer();
     const dispatch = await callTool(server, 'delegate_tasks', {
       tasks: [
-        { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-        { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+        { prompt: 't1', agentType: 'standard' as const },
+        { prompt: 't2', agentType: 'standard' as const },
       ],
     });
 

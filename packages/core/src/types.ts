@@ -1,10 +1,8 @@
 import type { ContextBlockStore } from './context/context-block-store.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
-// === Tier & Capability ===
+// === Tool Mode & Sandbox ===
 
-export type Tier = 'trivial' | 'standard' | 'reasoning';
-export type Capability = 'file_read' | 'file_write' | 'grep' | 'glob' | 'shell' | 'web_search' | 'web_fetch';
 export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 
@@ -44,10 +42,12 @@ export type RunStatus =
 
 export interface TaskSpec {
   prompt: string
-  /** Provider name. If omitted, core auto-selects. */
+  /** @deprecated Use agentType instead. provider is ignored by run-tasks. */
   provider?: string
-  tier: Tier
-  requiredCapabilities: Capability[]
+  /** @deprecated Use agentType instead. tier is ignored by run-tasks. */
+  tier?: string
+  agentType?: AgentType
+  requiredCapabilities?: AgentCapability[]
   tools?: ToolMode
   maxTurns?: number
   timeoutMs?: number

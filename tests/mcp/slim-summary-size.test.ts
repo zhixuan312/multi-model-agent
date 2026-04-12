@@ -13,12 +13,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -107,9 +104,7 @@ describe('slim summary envelope size', () => {
       {
         tasks: Array.from({ length: 11 }, (_, i) => ({
           prompt: `task ${i}`,
-          provider: 'mock',
-          tier: 'standard',
-          requiredCapabilities: [],
+          agentType: 'standard' as const,
           parentModel: 'claude-opus-4-6',
           includeProgressTrace: true,
         })),

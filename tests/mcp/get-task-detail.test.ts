@@ -44,12 +44,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -81,8 +78,8 @@ async function callTool(server: any, toolName: string, input: unknown): Promise<
 async function dispatchFixtureBatch(server: any): Promise<string> {
   const response = await callTool(server, 'delegate_tasks', {
     tasks: [
-      { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-      { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+      { prompt: 't1', agentType: 'standard' as const },
+      { prompt: 't2', agentType: 'standard' as const },
     ],
   });
   return response.batchId;
@@ -97,7 +94,7 @@ describe('get_task_detail tool', () => {
 
     expect(detail.batchId).toBe(batchId);
     expect(detail.taskIndex).toBe(0);
-    expect(detail.provider).toBe('mock');
+    expect(detail.agentType).toBe('standard');
     expect(detail.filesRead).toEqual(['src/read-0.ts', 'src/also-read-0.ts']);
     expect(detail.filesWritten).toEqual(['src/wrote-0.ts']);
     expect(detail.directoriesListed).toEqual(['src']);
@@ -168,9 +165,7 @@ describe('get_task_detail tool', () => {
       tasks: [
         {
           prompt: 'traced',
-          provider: 'mock',
-          tier: 'standard',
-          requiredCapabilities: [],
+          agentType: 'standard' as const,
           includeProgressTrace: true,
         },
       ],

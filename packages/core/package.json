@@ -40,25 +40,9 @@
       "types": "./dist/config/load.d.ts",
       "import": "./dist/config/load.js"
     },
-    "./routing/capabilities": {
-      "types": "./dist/routing/capabilities.d.ts",
-      "import": "./dist/routing/capabilities.js"
-    },
     "./routing/model-profiles": {
       "types": "./dist/routing/model-profiles.d.ts",
       "import": "./dist/routing/model-profiles.js"
-    },
-    "./routing/resolve-task-capabilities": {
-      "types": "./dist/routing/resolve-task-capabilities.d.ts",
-      "import": "./dist/routing/resolve-task-capabilities.js"
-    },
-    "./routing/select-provider-for-task": {
-      "types": "./dist/routing/select-provider-for-task.d.ts",
-      "import": "./dist/routing/select-provider-for-task.js"
-    },
-    "./routing/get-provider-eligibility": {
-      "types": "./dist/routing/get-provider-eligibility.d.ts",
-      "import": "./dist/routing/get-provider-eligibility.js"
     },
     "./routing/resolve-agent": {
       "types": "./dist/routing/resolve-agent.d.ts",

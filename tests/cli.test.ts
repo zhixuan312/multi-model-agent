@@ -31,12 +31,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
 });
 
 const sampleConfig = (): MultiModelConfig => ({
-  providers: {
-    mock: {
-      type: 'openai-compatible',
-      model: 'test-model',
-      baseUrl: 'http://localhost:1234/v1',
-    },
+  agents: {
+    standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
+    complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
   defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
 });
@@ -109,12 +106,12 @@ describe('buildMcpServer', () => {
     expect(server).toBeDefined();
   });
 
-  it('throws when config has no providers', () => {
+  it('throws when config has no agents', () => {
     const config: MultiModelConfig = {
-      providers: {},
+      agents: {},
       defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
     };
-    expect(() => buildMcpServer(config)).toThrow(/at least one configured provider/);
+    expect(() => buildMcpServer(config)).toThrow(/at least one configured agent/);
   });
 });
 
@@ -129,10 +126,9 @@ describe('delegate_tasks tool description', () => {
     expect(tools).toBeDefined();
     const delegate = tools['delegate_tasks'];
     expect(delegate).toBeDefined();
-    expect(delegate.description).toContain('Available providers');
-    expect(delegate.description).toContain('mock');
-    expect(delegate.description).toContain('Capability filter');
-    expect(delegate.description).toContain('STRONG');
+    expect(delegate.description).toContain('Available agents');
+    expect(delegate.description).toContain('standard');
+    expect(delegate.description).toContain('complex');
   });
 });
 
@@ -247,14 +243,12 @@ describe('context-block + retry_tasks tools', () => {
 });
 
 describe('delegate_tasks schema — contextBlockIds', () => {
-  const taskSchema = buildTaskSchema(['mock']);
+  const taskSchema = buildTaskSchema(['standard', 'complex']);
 
   it('accepts a task with contextBlockIds', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       contextBlockIds: ['a', 'b'],
     });
     expect(result.success).toBe(true);
@@ -263,71 +257,26 @@ describe('delegate_tasks schema — contextBlockIds', () => {
   it('accepts a task with no contextBlockIds (optional)', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
     });
     expect(result.success).toBe(true);
   });
 });
 
 describe('delegate_tasks schema', () => {
-  const taskSchema = buildTaskSchema(['mock']);
+  const taskSchema = buildTaskSchema(['standard', 'complex']);
 
-  it('accepts a task with tier and requiredCapabilities', () => {
+  it('accepts a task with agentType', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: ['file_read'],
+      agentType: 'standard',
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects a task missing tier', () => {
+  it('accepts a task with no agentType (auto-select)', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects a task missing requiredCapabilities', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects invalid tier values', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'super-duper',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('rejects invalid capability values', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: ['psychic_powers'],
-    });
-    expect(result.success).toBe(false);
-  });
-
-  it('accepts an empty requiredCapabilities array', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'trivial',
-      requiredCapabilities: [],
     });
     expect(result.success).toBe(true);
   });
@@ -336,9 +285,7 @@ describe('delegate_tasks schema', () => {
     for (const effort of ['none', 'low', 'medium', 'high'] as const) {
       const result = taskSchema.safeParse({
         prompt: 'do thing',
-        provider: 'mock',
-        tier: 'standard',
-        requiredCapabilities: [],
+        agentType: 'standard',
         effort,
       });
       expect(result.success).toBe(true);
@@ -348,30 +295,16 @@ describe('delegate_tasks schema', () => {
   it('rejects invalid effort values', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       effort: 'extreme',
     });
     expect(result.success).toBe(false);
   });
 
-  it('accepts a task with no effort field (optional)', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
-    });
-    expect(result.success).toBe(true);
-  });
-
   it('accepts v0.3.0 MCP task fields', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       expectedCoverage: {
         minSections: 2,
         sectionPattern: '^##\\s+',
@@ -394,12 +327,10 @@ describe('delegate_tasks schema', () => {
   });
 
   it('buildTaskSchema accepts skipCompletionHeuristic', () => {
-    const schema = buildTaskSchema(['mock']);
+    const schema = buildTaskSchema(['standard', 'complex']);
     const result = schema.safeParse({
       prompt: 'test',
-      provider: 'mock',
-      tier: 'standard',
-      requiredCapabilities: [],
+      agentType: 'standard',
       skipCompletionHeuristic: true,
     });
     expect(result.success).toBe(true);
@@ -417,9 +348,7 @@ describe('delegate_tasks MCP input contract (v0.3.0)', () => {
       tasks: [
         {
           prompt: 'do thing',
-          provider: 'mock',
-          tier: 'standard',
-          requiredCapabilities: [],
+          agentType: 'standard',
           expectedCoverage: {
             minSections: 2,
             sectionPattern: '^##\\s+',
@@ -663,7 +592,7 @@ describe('get_task_output tool (v0.3.0)', () => {
     ]);
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
@@ -690,7 +619,7 @@ describe('get_task_output tool (v0.3.0)', () => {
     const getTool = tools['get_task_output'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
@@ -711,7 +640,7 @@ describe('get_task_output tool (v0.3.0)', () => {
     const batchIds: string[] = [];
     for (let i = 0; i < 100; i++) {
       const res = await delegateTool.handler(
-        { tasks: [{ prompt: `batch-${i}`, provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+        { tasks: [{ prompt: `batch-${i}`, agentType: 'standard' as const }] },
         {},
       );
       batchIds.push(JSON.parse(res.content[0].text).batchId);
@@ -722,7 +651,7 @@ describe('get_task_output tool (v0.3.0)', () => {
 
     // Dispatch 1 more batch — this should evict the oldest-not-touched (batch[1])
     await delegateTool.handler(
-      { tasks: [{ prompt: 'new-batch', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'new-batch', agentType: 'standard' as const }] },
       {},
     );
 
@@ -755,9 +684,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 'task-0', agentType: 'standard' as const },
+          { prompt: 'task-1', agentType: 'standard' as const },
+          { prompt: 'task-2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -786,9 +715,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 'task-2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 'task-0', agentType: 'standard' as const },
+          { prompt: 'task-1', agentType: 'standard' as const },
+          { prompt: 'task-2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -823,7 +752,7 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const retryTool = tools['retry_tasks'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'task-0', provider: 'mock', tier: 'standard', requiredCapabilities: [] }] },
+      { tasks: [{ prompt: 'task-0', agentType: 'standard' as const }] },
       {},
     );
     const batchId = JSON.parse(dispatchRes.content[0].text).batchId;
@@ -843,9 +772,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't0', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
-          { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [] },
+          { prompt: 't0', agentType: 'standard' as const },
+          { prompt: 't1', agentType: 'standard' as const },
+          { prompt: 't2', agentType: 'standard' as const },
         ],
       },
       {},
@@ -1150,8 +1079,8 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const result = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't1', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
-          { prompt: 't2', provider: 'mock', tier: 'standard', requiredCapabilities: [], parentModel: 'claude-opus-4-6' },
+          { prompt: 't1', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+          { prompt: 't2', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
         ],
         ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
       },
@@ -1168,7 +1097,7 @@ describe('delegate_tasks summary mode — slim shape', () => {
 
     const task0 = payload.results[0];
     expect(task0.taskIndex).toBe(0);
-    expect(task0.provider).toBe('mock');
+    expect(task0.agentType).toBe('standard');
     expect(task0.status).toBe('ok');
     expect(task0.turns).toBe(3);
     expect(task0.durationMs).toBe(1000);

@@ -4,8 +4,6 @@ export { parseConfig, multiModelConfigSchema } from './config/schema.js';
 
 // Types (re-export all)
 export type {
-  Tier,
-  Capability,
   ToolMode,
   SandboxPolicy,
   AgentType,
@@ -53,9 +51,7 @@ export { createProvider } from './provider.js';
 // Run tasks
 export { runTasks } from './run-tasks.js';
 
-// Routing helpers
-export { getBaseCapabilities } from './routing/capabilities.js';
-export { resolveTaskCapabilities } from './routing/resolve-task-capabilities.js';
+// Agent resolution
+export { resolveAgent } from './routing/resolve-agent.js';
+export type { ResolvedAgent } from './routing/resolve-agent.js';
 export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
-export { selectProviderForTask } from './routing/select-provider-for-task.js';
-export { getProviderEligibility } from './routing/get-provider-eligibility.js';

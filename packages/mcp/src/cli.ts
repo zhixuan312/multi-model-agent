@@ -113,7 +113,7 @@ function buildFullResponse(
     batchProgress: aggregates.batchProgress,
     aggregateCost: aggregates.aggregateCost,
     results: results.map((r, i) => ({
-      provider: tasks[i].provider ?? '(auto)',
+      agentType: tasks[i].agentType ?? '(auto)',
       status: r.status,
       output: r.output,
       turns: r.turns,
@@ -160,7 +160,7 @@ function buildSummaryResponse(
     aggregateCost: opts.aggregateCost,
     results: results.map((r, i) => ({
       taskIndex: i,
-      provider: tasks[i].provider ?? '(auto)',
+      agentType: tasks[i].agentType ?? '(auto)',
       status: r.status,
       turns: r.turns,
       durationMs: r.durationMs,
@@ -186,16 +186,10 @@ const packageRequire = createRequire(import.meta.url);
 const pkg = packageRequire('../package.json') as { version: string };
 export const SERVER_VERSION = pkg.version;
 
-export function buildTaskSchema(availableProviders: [string, ...string[]]) {
+export function buildTaskSchema(availableAgents: [string, ...string[]]) {
   return z.object({
     prompt: z.string().describe('Task prompt for the sub-agent'),
-    provider: z.enum(availableProviders).describe('Provider name').optional(),
-    tier: z.enum(['trivial', 'standard', 'reasoning'])
-      .describe('Required quality tier.'),
-    requiredCapabilities: z.array(z.enum([
-      'file_read', 'file_write', 'grep', 'glob',
-      'shell', 'web_search', 'web_fetch',
-    ])).describe('Capabilities this task requires. Empty array if none.'),
+    agentType: z.enum(availableAgents).describe('Agent type (standard or complex)').optional(),
     tools: z.enum(['none', 'full']).optional().describe('Tool access mode. Default: full'),
     maxTurns: z.number().int().positive().optional().describe('Max agent loop turns. Default: 200'),
     timeoutMs: z.number().int().positive().optional().describe('Timeout in ms. Default: 600000'),
@@ -279,9 +273,9 @@ export function buildMcpServer(
     _testRunTasksOverride?: typeof runTasks;
   },
 ) {
-  const providerKeys = Object.keys(config.providers);
-  if (providerKeys.length === 0) {
-    throw new Error('buildMcpServer requires at least one configured provider.');
+  const agentKeys = config.agents ? Object.keys(config.agents) : [];
+  if (agentKeys.length === 0) {
+    throw new Error('buildMcpServer requires at least one configured agent.');
   }
 
   // Resolve the threshold once at server startup
@@ -342,13 +336,13 @@ export function buildMcpServer(
     batchCache.set(id, entry);
   };
 
-  const availableProviders = providerKeys as [string, ...string[]];
+  const availableAgents = agentKeys as [string, ...string[]];
 
   server.tool(
     'delegate_tasks',
     renderProviderRoutingMatrix(config),
     {
-      tasks: z.array(buildTaskSchema(availableProviders)).describe('Array of tasks to execute in parallel'),
+      tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
       responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
         `How to shape the response envelope. 'full' (default via 'auto') includes each task's output inline. ` +
         `'summary' returns per-task metadata + outputLength + outputSha256, with full outputs fetchable via ` +
@@ -471,8 +465,8 @@ export function buildMcpServer(
 
       const response =
         effectiveMode === 'full'
-          ? buildFullResponse(batchId, tasks, results, { timings, batchProgress, aggregateCost })
-          : buildSummaryResponse(batchId, tasks, results, {
+          ? buildFullResponse(batchId, tasks as TaskSpec[], results, { timings, batchProgress, aggregateCost })
+          : buildSummaryResponse(batchId, tasks as TaskSpec[], results, {
               autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
               totalOutputChars,
               threshold: resolvedThreshold,
@@ -685,7 +679,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
       const detail = {
         batchId,
         taskIndex,
-        provider: task.provider ?? '(auto)',
+        agentType: task.agentType ?? '(auto)',
         filesRead: result.filesRead,
         filesWritten: result.filesWritten,
         directoriesListed: result.directoriesListed ?? [],
@@ -745,7 +739,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
         aggregateCost,
         results: batch.results.map((r, i) => ({
           taskIndex: i,
-          provider: batch.tasks[i].provider ?? '(auto)',
+          agentType: batch.tasks[i].agentType ?? '(auto)',
           status: r.status,
           turns: r.turns,
           durationMs: r.durationMs,
@@ -809,10 +803,10 @@ async function main() {
   }
 
   const config = await discoverConfig();
-  const providerNames = Object.keys(config.providers);
+  const agentNames = config.agents ? Object.keys(config.agents) : [];
 
-  if (providerNames.length === 0) {
-    console.error('No providers configured. Create ~/.multi-model/config.json or pass --config <path>.');
+  if (agentNames.length === 0) {
+    console.error('No agents configured. Create ~/.multi-model/config.json or pass --config <path>.');
     process.exit(1);
   }
 
