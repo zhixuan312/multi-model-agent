@@ -57,7 +57,7 @@ export function hasOutputContractPillar(prompt: string, disableStructuredReport?
 
 export function detectOutsourcedDiscovery(prompt: string): boolean {
   const lc = prompt.toLowerCase();
-  return /find (out |the )?(right|correct)|figure out|verify the exact|determine (the |which )|look up|check (the )?(right|correct) (file|import|path|function)/.test(lc);
+  return /find (out |the )?(right|correct)|figure out|verify the exact|determine (the |which )|look up|check (the )?(right|correct) (file|import|path|function)|follow the same (pattern|logic)|based on the same/.test(lc);
 }
 
 export function detectBrittleLineAnchors(prompt: string): boolean {

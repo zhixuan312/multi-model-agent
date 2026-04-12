@@ -71,6 +71,30 @@
     "./readiness/normalize-brief": {
       "types": "./dist/readiness/normalize-brief.d.ts",
       "import": "./dist/readiness/normalize-brief.js"
+    },
+    "./reporting/structured-report": {
+      "types": "./dist/reporting/structured-report.d.ts",
+      "import": "./dist/reporting/structured-report.js"
+    },
+    "./review/reviewer-prompt": {
+      "types": "./dist/review/reviewer-prompt.d.ts",
+      "import": "./dist/review/reviewer-prompt.js"
+    },
+    "./review/spec-reviewer": {
+      "types": "./dist/review/spec-reviewer.d.ts",
+      "import": "./dist/review/spec-reviewer.js"
+    },
+    "./review/quality-reviewer": {
+      "types": "./dist/review/quality-reviewer.d.ts",
+      "import": "./dist/review/quality-reviewer.js"
+    },
+    "./review/aggregate-result": {
+      "types": "./dist/review/aggregate-result.d.ts",
+      "import": "./dist/review/aggregate-result.js"
+    },
+    "./error-codes": {
+      "types": "./dist/error-codes.d.ts",
+      "import": "./dist/error-codes.js"
     }
   },
   "scripts": {

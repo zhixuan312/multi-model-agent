@@ -15,6 +15,13 @@ import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { evaluateReadiness } from './readiness/readiness.js';
 import { normalizeBrief } from './readiness/normalize-brief.js';
+import { runSpecReview } from './review/spec-reviewer.js';
+import { runQualityReview } from './review/quality-reviewer.js';
+import { aggregateResult } from './review/aggregate-result.js';
+import type { ParsedStructuredReport } from './reporting/structured-report.js';
+import { parseStructuredReport } from './reporting/structured-report.js';
+import type { NormalizationResult } from './readiness/normalize-brief.js';
+import fs from 'fs/promises';
 
 export type RunTasksProgressCallback = (
   taskIndex: number,
@@ -58,6 +65,214 @@ async function executeTask(
   } catch (err) {
     return errorResult(err instanceof Error ? err.message : String(err));
   }
+}
+
+function extractWorkerStatus(
+  report: ParsedStructuredReport | undefined,
+): 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' {
+  if (!report || !report.summary) return 'done';
+  const s = report.summary.toLowerCase();
+  if (s.includes('needs_context')) return 'needs_context';
+  if (s.includes('blocked')) return 'blocked';
+  if (s.includes('done_with_concerns') || s.includes('concerns')) return 'done_with_concerns';
+  return 'done';
+}
+
+async function readImplementerFileContents(
+  filesWritten: string[],
+  cwd: string | undefined,
+): Promise<Record<string, string>> {
+  const contents: Record<string, string> = {};
+  const basePath = cwd ?? process.cwd();
+  for (const filePath of filesWritten) {
+    try {
+      const resolved = filePath.startsWith('/') ? filePath : `${basePath}/${filePath}`;
+      const content = await fs.readFile(resolved, 'utf-8');
+      contents[filePath] = content.length > 50_000
+        ? content.slice(0, 50_000) + '\n[truncated at 50KB]'
+        : content;
+    } catch {
+      contents[filePath] = '[file not readable]';
+    }
+  }
+  return contents;
+}
+
+function buildFallbackImplReport(result: RunResult): ParsedStructuredReport {
+  const parsed = parseStructuredReport(result.output);
+  if (parsed.summary) {
+    return parsed;
+  }
+  return {
+    summary: result.output.substring(0, 200),
+    filesChanged: result.filesWritten.map(f => ({ path: f, summary: 'updated' })),
+    normalizationDecisions: [],
+    validationsRun: [],
+    deviationsFromBrief: [],
+    unresolved: [],
+  };
+}
+
+async function executeReviewedLifecycle(
+  task: TaskSpec,
+  resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
+  config: MultiModelConfig,
+  normResult: NormalizationResult | undefined,
+  onProgress?: (event: ProgressEvent) => void,
+): Promise<RunResult> {
+  const reviewPolicy = task.reviewPolicy ?? 'full';
+  const maxRounds = task.maxReviewRounds ?? 2;
+  const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
+
+  const implResult = await delegateWithEscalation(
+    task,
+    [resolved.provider],
+    { explicitlyPinned: true, onProgress },
+  );
+
+  const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
+  const workerStatus = extractWorkerStatus(implReport);
+
+  if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+    };
+  }
+
+  if (reviewPolicy === 'off') {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+      implementationReport: implReport,
+    };
+  }
+
+  let otherProvider: Provider;
+  try {
+    otherProvider = createProvider(otherSlot, config);
+  } catch {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_run',
+      qualityReviewStatus: 'not_run',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_run',
+        qualityReviewer: 'not_run',
+      },
+    };
+  }
+
+  const packet = {
+    normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
+    scope: normResult?.writeSet ?? [],
+    doneCondition: 'tsc passes',
+  };
+
+  const fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
+
+  const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+
+  let specResult = await runSpecReview(
+    otherProvider,
+    packet,
+    effectiveImplReport,
+    fileContents,
+    implResult.toolCalls,
+  );
+
+  let finalImplResult = implResult;
+  let finalImplReport = effectiveImplReport;
+  let specStatus = specResult.status;
+  let specReport = specResult.report;
+
+  if (specStatus === 'changes_required' && maxRounds > 0) {
+    for (let round = 0; round < maxRounds; round++) {
+      const reworkPrompt = `${task.prompt}\n\n## Spec Review Feedback (round ${round + 1}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`;
+
+      const reworkResult = await delegateWithEscalation(
+        { ...task, prompt: reworkPrompt },
+        [resolved.provider],
+        { explicitlyPinned: true, onProgress },
+      );
+
+      finalImplResult = reworkResult;
+      const reworkReport = parseStructuredReport(reworkResult.output);
+      finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
+
+      const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+
+      specResult = await runSpecReview(
+        otherProvider,
+        packet,
+        finalImplReport,
+        reworkContents,
+        reworkResult.toolCalls,
+      );
+
+      specStatus = specResult.status;
+      specReport = specResult.report;
+
+      if (specStatus === 'approved') break;
+    }
+  }
+
+  let qualityResult: { status: 'approved' | 'changes_required' | 'not_run'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'not_run', report: undefined, findings: [] };
+  if (reviewPolicy === 'full') {
+    qualityResult = await runQualityReview(
+      otherProvider,
+      packet,
+      specReport ?? finalImplReport,
+      fileContents,
+      finalImplResult.toolCalls,
+      finalImplResult.filesWritten,
+    );
+  }
+
+  const finalReport = specReport ?? finalImplReport;
+
+  const aggregated = aggregateResult(
+    finalReport,
+    specReport,
+    qualityResult.report,
+    specStatus,
+    qualityResult.status,
+  );
+
+  return {
+    ...finalImplResult,
+    workerStatus,
+    specReviewStatus: specStatus,
+    qualityReviewStatus: qualityResult.status,
+    implementationReport: aggregated,
+    specReviewReport: specReport,
+    qualityReviewReport: qualityResult.report,
+    agents: {
+      normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+      implementer: resolved.slot,
+      specReviewer: otherSlot,
+      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'not_run',
+    },
+  };
 }
 
 export async function runTasks(
@@ -154,10 +369,12 @@ export async function runTasks(
       if (refused) {
         return Promise.resolve(refused);
       }
+      const normResult = normalizationResults[index];
       const taskProgress = options.onProgress
         ? (event: ProgressEvent) => options.onProgress!(index, event)
         : undefined;
-      return executeTask(r, taskProgress);
+
+      return executeReviewedLifecycle(r.task, r.resolved, config, normResult, taskProgress);
     }),
   );
 }

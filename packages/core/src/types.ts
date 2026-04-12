@@ -87,6 +87,10 @@ export interface TaskSpec {
   briefQualityPolicy?: BriefQualityPolicy
   /** Optional budget for normalization. */
   maxCostUSD?: number
+  /** Review policy for the execution loop. */
+  reviewPolicy?: 'full' | 'spec_only' | 'off'
+  /** Maximum number of spec review rework rounds. Defaults to 2. */
+  maxReviewRounds?: number
 }
 
 // === Provider Config (discriminated union) ===
@@ -231,6 +235,27 @@ export interface RunResult {
   retryable?: boolean
   /** Brief quality warnings from readiness evaluation. */
   briefQualityWarnings?: BriefQualityWarning[]
+  /** Worker status extracted from implementer report summary. */
+  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
+  /** Spec review outcome. */
+  specReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  /** Quality review outcome. */
+  qualityReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  /** Aggregated structured report from the reviewed execution loop. */
+  structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** Which agent ran in each role. */
+  agents?: {
+    normalizer: 'standard' | 'complex' | 'skipped'
+    implementer: 'standard' | 'complex' | 'not_run'
+    specReviewer: 'standard' | 'complex' | 'not_run'
+    qualityReviewer: 'standard' | 'complex' | 'not_run'
+  }
+  /** The implementer's structured report. */
+  implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** The spec reviewer's structured report. */
+  specReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
+  /** The quality reviewer's structured report. */
+  qualityReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
 }
 
 /** A captured progress entry, or a synthetic marker when trace trimming occurred. */

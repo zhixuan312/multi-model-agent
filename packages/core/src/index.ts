@@ -35,6 +35,7 @@ export type {
   BriefQualityPolicy,
   ReadinessResult,
 } from './types.js';
+export { ParsedStructuredReport } from './reporting/structured-report.js';
 
 // Context blocks
 export {

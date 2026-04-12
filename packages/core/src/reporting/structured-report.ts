@@ -18,13 +18,18 @@ Any intentional or unintentional deviations from the original brief.
 Open questions, incomplete items, or items requiring further investigation.
 `.trim();
 
+export interface FileChange {
+  path: string;
+  summary: string;
+}
+
 export interface ParsedStructuredReport {
   summary: string | null;
-  filesChanged: string[];
+  filesChanged: FileChange[];
   normalizationDecisions: string[][];
-  validationsRun: string[];
-  deviationsFromBrief: string | null;
-  unresolved: string | null;
+  validationsRun: Array<{ command: string; result: string }>;
+  deviationsFromBrief: string[];
+  unresolved: string[];
 }
 
 export function parseStructuredReport(output: string): ParsedStructuredReport {
@@ -34,8 +39,8 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
       filesChanged: [],
       normalizationDecisions: [],
       validationsRun: [],
-      deviationsFromBrief: null,
-      unresolved: null,
+      deviationsFromBrief: [],
+      unresolved: [],
     };
   }
 
@@ -43,11 +48,11 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
 
   return {
     summary: sections['summary']?.[0] ?? null,
-    filesChanged: parseListSection(sections['files changed']),
+    filesChanged: parseFilesChanged(sections['files changed']),
     normalizationDecisions: parseNormalizationDecisions(sections['normalization decisions']),
-    validationsRun: parseListSection(sections['validations run']),
-    deviationsFromBrief: sections['deviations from brief']?.[0] ?? null,
-    unresolved: sections['unresolved']?.[0] ?? null,
+    validationsRun: parseValidationsRun(sections['validations run']),
+    deviationsFromBrief: sections['deviations from brief'] ?? [],
+    unresolved: sections['unresolved'] ?? [],
   };
 }
 
@@ -78,6 +83,30 @@ function parseListSection(lines: string[] | undefined): string[] {
   return lines
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'));
+}
+
+function parseFilesChanged(lines: string[] | undefined): FileChange[] {
+  if (!lines) return [];
+  return lines
+    .map(l => l.replace(/^[-*]\s*/, '').trim())
+    .filter(l => l && !l.startsWith('#'))
+    .map(l => {
+      const colonIdx = l.indexOf(':');
+      if (colonIdx === -1) return { path: l, summary: '' };
+      return { path: l.slice(0, colonIdx).trim(), summary: l.slice(colonIdx + 1).trim() };
+    });
+}
+
+function parseValidationsRun(lines: string[] | undefined): Array<{ command: string; result: string }> {
+  if (!lines) return [];
+  return lines
+    .map(l => l.replace(/^[-*]\s*/, '').trim())
+    .filter(l => l && !l.startsWith('#'))
+    .map(l => {
+      const colonIdx = l.indexOf(':');
+      if (colonIdx === -1) return { command: l, result: '' };
+      return { command: l.slice(0, colonIdx).trim(), result: l.slice(colonIdx + 1).trim() };
+    });
 }
 
 function parseNormalizationDecisions(lines: string[] | undefined): string[][] {

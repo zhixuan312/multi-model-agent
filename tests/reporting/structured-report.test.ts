@@ -39,17 +39,23 @@ None.`;
 
     const r = parseStructuredReport(output);
     expect(r.summary).toBe('Implemented the feature.');
-    expect(r.filesChanged).toEqual(['src/auth.ts', 'src/auth.test.ts']);
+    expect(r.filesChanged).toEqual([
+      { path: 'src/auth.ts', summary: '' },
+      { path: 'src/auth.test.ts', summary: '' },
+    ]);
     expect(r.normalizationDecisions).toEqual([['"the pattern" → src/users.ts:45']]);
-    expect(r.validationsRun).toEqual(['tsc passes', 'tests pass']);
-    expect(r.deviationsFromBrief).toBe('None.');
-    expect(r.unresolved).toBe('None.');
+    expect(r.validationsRun).toEqual([
+      { command: 'tsc passes', result: '' },
+      { command: 'tests pass', result: '' },
+    ]);
+    expect(r.deviationsFromBrief).toEqual(['None.']);
+    expect(r.unresolved).toEqual(['None.']);
   });
 
   it('handles missing optional sections', () => {
     const r = parseStructuredReport('## Summary\nDone.\n\n## Unresolved\nItem 1.');
     expect(r.summary).toBe('Done.');
-    expect(r.unresolved).toBe('Item 1.');
+    expect(r.unresolved).toEqual(['Item 1.']);
   });
 
   it('returns null fields for empty/missing sections', () => {

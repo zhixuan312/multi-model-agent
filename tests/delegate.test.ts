@@ -173,4 +173,69 @@ describe('runTasks', () => {
     expect(results[0].status).toBe('error');
     expect(results[0].errorCode).toBe('capability_missing');
   });
+
+  it('1.0.0 RunResult carries review statuses and per-phase subreports', () => {
+    const result: import('@zhixuan92/multi-model-agent-core').RunResult = {
+      output: 'done',
+      status: 'ok',
+      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+      turns: 1,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      briefQualityWarnings: [],
+      retryable: false,
+      workerStatus: 'done',
+      specReviewStatus: 'approved',
+      qualityReviewStatus: 'approved',
+      agents: {
+        normalizer: 'skipped',
+        implementer: 'standard',
+        specReviewer: 'complex',
+        qualityReviewer: 'complex',
+      },
+      implementationReport: {
+        summary: 'did it',
+        filesChanged: [],
+        normalizationDecisions: [],
+        validationsRun: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+      specReviewReport: {
+        summary: 'looks good',
+        filesChanged: [],
+        normalizationDecisions: [],
+        validationsRun: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+      qualityReviewReport: {
+        summary: 'code is clean',
+        filesChanged: [],
+        normalizationDecisions: [],
+        validationsRun: [],
+        deviationsFromBrief: [],
+        unresolved: [],
+      },
+    };
+    expect(result.workerStatus).toBe('done');
+    expect(result.specReviewStatus).toBe('approved');
+    expect(result.qualityReviewStatus).toBe('approved');
+    expect(result.agents?.implementer).toBe('standard');
+    expect(result.agents?.specReviewer).toBe('complex');
+  });
+
+  it('1.0.0 TaskSpec accepts reviewPolicy and maxReviewRounds', () => {
+    const task: import('@zhixuan92/multi-model-agent-core').TaskSpec = {
+      prompt: 'do X',
+      agentType: 'standard',
+      reviewPolicy: 'full',
+      maxReviewRounds: 2,
+    };
+    expect(task.reviewPolicy).toBe('full');
+    expect(task.maxReviewRounds).toBe(2);
+  });
 });
