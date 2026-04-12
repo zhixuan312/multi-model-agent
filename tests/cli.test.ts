@@ -551,31 +551,35 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   it('summary mode result has correct shape', async () => {
     const server = buildMcpServer(sampleConfig());
     const payload = await dispatchOne(server, 'summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     const result = payload.results[0];
     expect(result.taskIndex).toBe(0);
     expect(result.outputLength).toBeDefined();
     expect(typeof result.outputLength).toBe('number');
     expect(result.outputSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(result._fetchOutputWith).toContain('get_task_output');
-    expect(result._fetchDetailWith).toContain('get_task_detail');
+    expect(result._fetchWith).toContain('get_batch_slice');
+    expect(result._fetchWith).toContain('batchId');
+    expect(result._fetchWith).toContain('taskIndex: 0');
+    expect(result).not.toHaveProperty('_fetchOutputWith');
+    expect(result).not.toHaveProperty('_fetchDetailWith');
   });
 });
 
-describe('get_task_output tool (v0.3.0)', () => {
+describe('get_batch_slice tool', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getTools = (server: ReturnType<typeof buildMcpServer>): Record<string, any> => (server as any)._registeredTools;
 
-  it('registers get_task_output alongside other tools', () => {
+  it('registers get_batch_slice alongside other tools', () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
-    expect(tools['get_task_output']).toBeDefined();
+    expect(tools['get_batch_slice']).toBeDefined();
   });
 
-  it('valid batchId + taskIndex → returns full text', async () => {
+  it('slice=output: valid batchId + taskIndex → returns full text', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     stubRunTasks.mockResolvedValueOnce([
       {
@@ -598,25 +602,25 @@ describe('get_task_output tool (v0.3.0)', () => {
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
-    const outputRes = await getTool.handler({ batchId, taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId, slice: 'output', taskIndex: 0 }, {});
     const outputPayload = JSON.parse(outputRes.content[0].text);
     expect(outputPayload.output).toBe('the exact output text');
   });
 
-  it('unknown batchId → throws "unknown or expired"', async () => {
+  it('slice=output: unknown batchId → throws "unknown or expired"', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
     await expect(
-      getTool.handler({ batchId: 'does-not-exist', taskIndex: 0 }, {}),
+      sliceTool.handler({ batchId: 'does-not-exist', slice: 'output', taskIndex: 0 }, {}),
     ).rejects.toThrow(/unknown or expired/);
   });
 
-  it('out-of-range taskIndex → throws "out of range"', async () => {
+  it('slice=output: out-of-range taskIndex → throws "out of range"', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     const dispatchRes = await delegateTool.handler(
       { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
@@ -626,15 +630,15 @@ describe('get_task_output tool (v0.3.0)', () => {
     const batchId = dispatchPayload.batchId;
 
     await expect(
-      getTool.handler({ batchId, taskIndex: 99 }, {}),
+      sliceTool.handler({ batchId, slice: 'output', taskIndex: 99 }, {}),
     ).rejects.toThrow(/out of range/);
   });
 
-  it('get_task_output touches LRU order', async () => {
+  it('slice=output touches LRU order', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     // Dispatch 100 batches
     const batchIds: string[] = [];
@@ -646,8 +650,8 @@ describe('get_task_output tool (v0.3.0)', () => {
       batchIds.push(JSON.parse(res.content[0].text).batchId);
     }
 
-    // Touch the first batch via get_task_output
-    await getTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
+    // Touch the first batch via get_batch_slice
+    await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
 
     // Dispatch 1 more batch — this should evict the oldest-not-touched (batch[1])
     await delegateTool.handler(
@@ -657,11 +661,11 @@ describe('get_task_output tool (v0.3.0)', () => {
 
     // batch[1] should be gone (evicted), but batch[0] should still work
     await expect(
-      getTool.handler({ batchId: batchIds[1], taskIndex: 0 }, {}),
+      sliceTool.handler({ batchId: batchIds[1], slice: 'output', taskIndex: 0 }, {}),
     ).rejects.toThrow(/unknown or expired/);
 
     // batch[0] still works
-    const outputRes = await getTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
     expect(outputRes.content).toBeDefined();
   });
 });
@@ -709,7 +713,7 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
     const retryTool = tools['retry_tasks'];
-    const getTool = tools['get_task_output'];
+    const sliceTool = tools['get_batch_slice'];
 
     // Dispatch a 3-task batch
     const dispatchRes = await delegateTool.handler(
@@ -735,8 +739,8 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
 
     expect(retryBatchId).not.toBe(originalBatchId);
 
-    // Original batch still has results accessible
-    const originalOutput = await getTool.handler({ batchId: originalBatchId, taskIndex: 1 }, {});
+    // Original batch still has results accessible via get_batch_slice
+    const originalOutput = await sliceTool.handler({ batchId: originalBatchId, slice: 'output', taskIndex: 1 }, {});
     expect(originalOutput.content).toBeDefined();
 
     // Retry batch has the retried task
@@ -1195,6 +1199,7 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const payload = await dispatchRichBatch({ responseMode: 'summary' });
 
     expect(payload.mode).toBe('summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     expect(payload.results).toHaveLength(2);
 
     const task0 = payload.results[0];
@@ -1208,14 +1213,11 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(typeof task0.outputSha256).toBe('string');
     expect(task0.outputSha256).toHaveLength(64); // sha256 hex
 
-    // New fetch-hint fields
-    expect(task0).toHaveProperty('_fetchOutputWith');
-    expect(task0).toHaveProperty('_fetchDetailWith');
-    expect(task0._fetchOutputWith).toContain('get_task_output');
-    expect(task0._fetchOutputWith).toContain(payload.batchId);
-    expect(task0._fetchOutputWith).toContain('taskIndex: 0');
-    expect(task0._fetchDetailWith).toContain('get_task_detail');
-    expect(task0._fetchDetailWith).toContain(payload.batchId);
+    // New fetch-hint field
+    expect(task0).toHaveProperty('_fetchWith');
+    expect(task0._fetchWith).toContain('get_batch_slice');
+    expect(task0._fetchWith).toContain(payload.batchId);
+    expect(task0._fetchWith).toContain('taskIndex: 0');
 
     // Assert dropped fields are NOT present on the slim per-task entry.
     expect(task0).not.toHaveProperty('filesRead');
@@ -1224,7 +1226,8 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(task0).not.toHaveProperty('toolCalls');
     expect(task0).not.toHaveProperty('progressTrace');
     expect(task0).not.toHaveProperty('escalationLog');
-    expect(task0).not.toHaveProperty('_fetchWith'); // old key removed
+    expect(task0).not.toHaveProperty('_fetchOutputWith');
+    expect(task0).not.toHaveProperty('_fetchDetailWith');
   });
 
   it('summary-mode envelope carries a headline field alongside the batch aggregates', async () => {

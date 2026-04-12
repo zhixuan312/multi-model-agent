@@ -86,6 +86,9 @@ describe('slim summary envelope size', () => {
         },
       ],
       durationMs: 354_000,
+      workerStatus: 'done' as const,
+      specReviewStatus: 'approved' as const,
+      qualityReviewStatus: 'approved' as const,
       progressTrace: Array.from({ length: 20 }, (_, j) => ({
         kind: 'escalation_start' as any,
         at: Date.now(),
@@ -118,6 +121,7 @@ describe('slim summary envelope size', () => {
 
     const payload = JSON.parse(rawText);
     expect(payload.mode).toBe('summary');
+    expect(payload.schemaVersion).toBe('1.0.0');
     expect(payload.results).toHaveLength(11);
     expect(payload.headline).toContain('11 tasks');
 
@@ -127,5 +131,12 @@ describe('slim summary envelope size', () => {
     expect(task0).not.toHaveProperty('toolCalls');
     expect(task0).not.toHaveProperty('escalationLog');
     expect(task0).not.toHaveProperty('progressTrace');
+    expect(task0).toHaveProperty('_fetchWith');
+    expect(task0._fetchWith).toContain('get_batch_slice');
+    expect(task0).not.toHaveProperty('_fetchOutputWith');
+    expect(task0).not.toHaveProperty('_fetchDetailWith');
+    expect(task0).toHaveProperty('workerStatus');
+    expect(task0).toHaveProperty('specReviewStatus');
+    expect(task0).toHaveProperty('qualityReviewStatus');
   });
 });

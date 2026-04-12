@@ -102,6 +102,7 @@ function buildFullResponse(
   },
 ) {
   return {
+    schemaVersion: '1.0.0',
     batchId,
     mode: 'full' as const,
     headline: composeHeadline({
@@ -125,6 +126,13 @@ function buildFullResponse(
       toolCalls: r.toolCalls,
       escalationLog: r.escalationLog,
       usage: r.usage,
+      workerStatus: r.workerStatus,
+      specReviewStatus: r.specReviewStatus,
+      qualityReviewStatus: r.qualityReviewStatus,
+      agents: r.agents,
+      implementationReport: r.implementationReport,
+      specReviewReport: r.specReviewReport,
+      qualityReviewReport: r.qualityReviewReport,
       ...(r.progressTrace && { progressTrace: r.progressTrace }),
       ...(r.error && { error: r.error }),
     })),
@@ -145,6 +153,7 @@ function buildSummaryResponse(
   },
 ) {
   return {
+    schemaVersion: '1.0.0',
     batchId,
     mode: 'summary' as const,
     headline: composeHeadline({
@@ -154,7 +163,7 @@ function buildSummaryResponse(
       taskSpecs: tasks,
     }),
     ...(opts.autoEscaped && {
-      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_task_output({ batchId, taskIndex }) to fetch individual task outputs, or get_task_detail({ batchId, taskIndex }) for per-task metadata.`,
+      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_batch_slice({ batchId, slice: 'output', taskIndex }) to fetch individual task outputs, or get_batch_slice({ batchId, slice: 'detail', taskIndex }) for per-task metadata.`,
     }),
     timings: opts.timings,
     batchProgress: opts.batchProgress,
@@ -169,9 +178,13 @@ function buildSummaryResponse(
       outputSha256: sha256Hex(r.output),
       usage: r.usage,
       escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
+      workerStatus: r.workerStatus,
+      specReviewStatus: r.specReviewStatus,
+      qualityReviewStatus: r.qualityReviewStatus,
       ...(r.error && { error: r.error }),
-      _fetchOutputWith: `get_task_output({ batchId: "${batchId}", taskIndex: ${i} })`,
-      _fetchDetailWith: `get_task_detail({ batchId: "${batchId}", taskIndex: ${i} })`,
+      ...(r.errorCode && { errorCode: r.errorCode }),
+      ...(r.retryable !== undefined && { retryable: r.retryable }),
+      _fetchWith: `get_batch_slice({ batchId: "${batchId}", taskIndex: ${i} })`,
     })),
   };
 }
@@ -432,7 +445,7 @@ export function buildMcpServer(
       responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
         `How to shape the response envelope. 'full' (default via 'auto') includes each task's output inline. ` +
         `'summary' returns per-task metadata + outputLength + outputSha256, with full outputs fetchable via ` +
-        `get_task_output. 'auto' (the default) returns 'full' when combined output fits under the server's ` +
+        `get_batch_slice. 'auto' (the default) returns 'full' when combined output fits under the server's ` +
         `threshold (default 65 KB; configurable via env / config / buildMcpServer option), otherwise 'summary' ` +
         `with an auto-escape note.`,
       ),
@@ -527,7 +540,7 @@ export function buildMcpServer(
         });
       } finally {
         // Always attach `results ?? []` so a mid-flight throw does not leave
-        // a dangling batchCache entry that `get_task_output` can't distinguish
+        // a dangling batchCache entry that `get_batch_slice` can't distinguish
         // from "dispatch still in progress". Per spec §3.5 / §3.9 item 3.
         const batchEntry = batchCache.get(batchId);
         if (batchEntry) batchEntry.results = results;
@@ -629,7 +642,7 @@ export function buildMcpServer(
       const subset = taskIndices.map((i) => batch.tasks[i]);
 
       // Create a fresh batch for the retried tasks so the original batch
-      // entry is preserved and get_task_output can still retrieve it.
+      // entry is preserved and get_batch_slice can still retrieve it.
       const retryBatchId = rememberBatch(subset);
 
       const batchStartMs = Date.now();
