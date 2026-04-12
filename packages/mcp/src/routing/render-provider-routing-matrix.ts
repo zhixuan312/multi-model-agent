@@ -59,8 +59,7 @@ RESPONSE SHAPE (v0.3+): Every delegate_tasks response includes a top-level
 batchId, mode ('full' or 'summary'), timings ({wallClockMs, sumOfTaskMs,
 estimatedParallelSavingsMs}), batchProgress ({totalTasks, completedTasks,
 incompleteTasks, failedTasks, successPercent}), and aggregateCost
-({totalActualCostUSD, totalSavedCostUSD, actualCostUnavailableTasks,
-savedCostUnavailableTasks}). If the combined output across tasks is small,
+({totalActualCostUSD, totalSavedCostUSD}). If the combined output across tasks is small,
 mode: 'full' with inline outputs; if it exceeds the server's threshold
 (default 64 KB, configurable via env MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS
 / config defaults.largeResponseThresholdChars / buildMcpServer option),

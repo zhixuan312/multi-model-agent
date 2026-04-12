@@ -925,11 +925,9 @@ describe('computeAggregateCost (v0.3.0)', () => {
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.03, 5);
     expect(agg.totalSavedCostUSD).toBeCloseTo(0.30, 5);
-    expect(agg.actualCostUnavailableTasks).toBe(0);
-    expect(agg.savedCostUnavailableTasks).toBe(0);
   });
 
-  it('known actual cost + no parentModel → actualCostUnavailable: 0, savedCostUnavailable: N', () => {
+  it('known actual cost + no parentModel → savedCostUSD is 0', () => {
     const results: RunResult[] = [
       { ...baseMockResult, usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100, costUSD: 0.01, savedCostUSD: null } },
       { ...baseMockResult, usage: { inputTokens: 2000, outputTokens: 200, totalTokens: 2200, costUSD: 0.02, savedCostUSD: null } },
@@ -937,18 +935,15 @@ describe('computeAggregateCost (v0.3.0)', () => {
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.03, 5);
     expect(agg.totalSavedCostUSD).toBe(0);
-    expect(agg.actualCostUnavailableTasks).toBe(0);
-    expect(agg.savedCostUnavailableTasks).toBe(2);
   });
 
-  it('null costUSD → contributes 0 and increments actualCostUnavailableTasks', () => {
+  it('null costUSD → contributes 0', () => {
     const results: RunResult[] = [
       { ...baseMockResult, usage: { inputTokens: 1000, outputTokens: 100, totalTokens: 1100, costUSD: null, savedCostUSD: null } },
       { ...baseMockResult, usage: { inputTokens: 2000, outputTokens: 200, totalTokens: 2200, costUSD: 0.02, savedCostUSD: null } },
     ];
     const agg = computeAggregateCost(results);
     expect(agg.totalActualCostUSD).toBeCloseTo(0.02, 5);
-    expect(agg.actualCostUnavailableTasks).toBe(1);
   });
 
   it('empty batch → zeros', () => {
@@ -956,8 +951,6 @@ describe('computeAggregateCost (v0.3.0)', () => {
     expect(agg).toEqual({
       totalActualCostUSD: 0,
       totalSavedCostUSD: 0,
-      actualCostUnavailableTasks: 0,
-      savedCostUnavailableTasks: 0,
     });
   });
 });

@@ -282,8 +282,6 @@ export interface BatchProgress {
 export interface BatchAggregateCost {
   totalActualCostUSD: number
   totalSavedCostUSD: number
-  actualCostUnavailableTasks: number
-  savedCostUnavailableTasks: number
 }
 
 /**

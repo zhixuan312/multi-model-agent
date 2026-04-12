@@ -67,18 +67,12 @@ export function computeBatchProgress(results: RunResult[]): BatchProgress {
 export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
   let totalActualCostUSD = 0;
   let totalSavedCostUSD = 0;
-  let actualCostUnavailableTasks = 0;
-  let savedCostUnavailableTasks = 0;
 
   for (const r of results) {
-    if (r.usage.costUSD === null || r.usage.costUSD === undefined) {
-      actualCostUnavailableTasks += 1;
-    } else {
+    if (r.usage.costUSD !== null && r.usage.costUSD !== undefined) {
       totalActualCostUSD += r.usage.costUSD;
     }
-    if (r.usage.savedCostUSD === null || r.usage.savedCostUSD === undefined) {
-      savedCostUnavailableTasks += 1;
-    } else {
+    if (r.usage.savedCostUSD !== null && r.usage.savedCostUSD !== undefined) {
       totalSavedCostUSD += r.usage.savedCostUSD;
     }
   }
@@ -86,8 +80,6 @@ export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
   return {
     totalActualCostUSD,
     totalSavedCostUSD,
-    actualCostUnavailableTasks,
-    savedCostUnavailableTasks,
   };
 }
 
