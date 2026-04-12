@@ -67,6 +67,10 @@
     "./readiness/normalization-budget": {
       "types": "./dist/readiness/normalization-budget.d.ts",
       "import": "./dist/readiness/normalization-budget.js"
+    },
+    "./readiness/normalize-brief": {
+      "types": "./dist/readiness/normalize-brief.d.ts",
+      "import": "./dist/readiness/normalize-brief.js"
     }
   },
   "scripts": {

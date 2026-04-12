@@ -14,6 +14,7 @@ import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { evaluateReadiness } from './readiness/readiness.js';
+import { normalizeBrief } from './readiness/normalize-brief.js';
 
 export type RunTasksProgressCallback = (
   taskIndex: number,
@@ -104,7 +105,25 @@ export async function runTasks(
     return undefined;
   });
 
-  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
+  const normalizationResults = await Promise.all(
+    expandedTasks.map(async (entry, idx) => {
+      if ('error' in entry) return undefined;
+      const readiness = readinessResults[idx];
+      if (!readiness || readiness.action !== 'normalize') return undefined;
+      return await normalizeBrief(entry as TaskSpec, config);
+    }),
+  );
+
+  const effectiveTasks: (TaskSpec | { error: string })[] = expandedTasks.map((entry, idx) => {
+    if ('error' in entry) return entry;
+    const norm = normalizationResults[idx];
+    if (norm && !norm.skipped) {
+      return { ...(entry as TaskSpec), prompt: norm.normalizedPrompt };
+    }
+    return entry;
+  });
+
+  const resolved: ResolvedTask[] = effectiveTasks.map((entry, idx): ResolvedTask => {
     if ('error' in entry) {
       return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
     }
