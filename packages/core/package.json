@@ -59,6 +59,10 @@
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
+    },
+    "./readiness/readiness": {
+      "types": "./dist/readiness/readiness.d.ts",
+      "import": "./dist/readiness/readiness.js"
     }
   },
   "scripts": {
