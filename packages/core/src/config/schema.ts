@@ -13,6 +13,7 @@ import type {
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
 const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
+const openAICompatibleHostedToolsSchema = z.array(z.enum(['web_search']));
 const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // Per-million-token pricing for cost computation. Must be non-negative; zero
 // is allowed (free providers can set both rates to 0 to get a deterministic
@@ -57,7 +58,7 @@ export const openAICompatibleProviderConfigSchema = z.object({
   maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
   sandboxPolicy: sandboxPolicySchema,
-  hostedTools: hostedToolsSchema.optional(),
+  hostedTools: openAICompatibleHostedToolsSchema.optional(),
   costTier: costTierSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,

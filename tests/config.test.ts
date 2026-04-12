@@ -324,3 +324,47 @@ describe('1.0.0 agents config schema', () => {
     expect(config.agents.standard.capabilities).toEqual(['web_search']);
   });
 });
+
+describe('provider config hostedTools validation', () => {
+  it('rejects openai-compatible with hostedTools containing image_generation', () => {
+    const raw = {
+      providers: {
+        bad: {
+          type: 'openai-compatible',
+          model: 'test',
+          baseUrl: 'https://api.example.com/v1',
+          hostedTools: ['web_search', 'image_generation'],
+        },
+      },
+    };
+    expect(() => parseConfig(raw)).toThrow();
+  });
+
+  it('accepts codex with hostedTools including image_generation', () => {
+    const raw = {
+      providers: {
+        good: {
+          type: 'codex',
+          model: 'gpt-5',
+          hostedTools: ['web_search', 'image_generation'],
+        },
+      },
+    };
+    const config = parseConfig(raw);
+    expect(config.providers.good.hostedTools).toEqual(['web_search', 'image_generation']);
+  });
+
+  it('accepts claude with hostedTools including image_generation', () => {
+    const raw = {
+      providers: {
+        good: {
+          type: 'claude',
+          model: 'claude-opus-4-6',
+          hostedTools: ['web_search', 'image_generation'],
+        },
+      },
+    };
+    const config = parseConfig(raw);
+    expect(config.providers.good.hostedTools).toEqual(['web_search', 'image_generation']);
+  });
+});

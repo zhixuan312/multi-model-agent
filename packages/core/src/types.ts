@@ -149,7 +149,7 @@ export interface OpenAICompatibleProviderConfig {
   maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
-  hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
+  hostedTools?: 'web_search'[]
   costTier?: CostTier
   /** Optional pricing in USD per million input tokens. Used to compute RunResult.usage.costUSD. */
   inputCostPerMTok?: number
