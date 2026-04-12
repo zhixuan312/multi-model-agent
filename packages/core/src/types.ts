@@ -156,6 +156,10 @@ export type ProviderConfig =
 
 export interface MultiModelConfig {
   providers: Record<string, ProviderConfig>
+  agents?: {
+    standard: AgentConfig
+    complex: AgentConfig
+  }
   defaults: {
     maxTurns: number
     timeoutMs: number

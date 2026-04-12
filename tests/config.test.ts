@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
+import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import fs from 'fs';
 import path from 'path';
@@ -229,5 +230,97 @@ describe('loadConfigFromFile', () => {
     const config = await loadConfigFromFile(configPath);
 
     expect(config.providers.claude.effort).toBe('none');
+  });
+});
+
+describe('1.0.0 agents config schema', () => {
+  it('accepts a minimal two-slot config', () => {
+    const raw = {
+      agents: {
+        standard: { type: 'codex', model: 'gpt-5-codex' },
+        complex: { type: 'claude', model: 'claude-opus-4-6' },
+      },
+    };
+    const config = parseConfig(raw);
+    expect(config.agents.standard.type).toBe('codex');
+    expect(config.agents.complex.type).toBe('claude');
+  });
+
+  it('accepts openai-compatible with baseUrl + apiKeyEnv', () => {
+    const raw = {
+      agents: {
+        standard: {
+          type: 'openai-compatible',
+          model: 'deepseek-r1',
+          baseUrl: 'https://api.deepseek.com/v1',
+          apiKeyEnv: 'DEEPSEEK_API_KEY',
+        },
+        complex: { type: 'claude', model: 'claude-opus-4-6' },
+      },
+    };
+    expect(() => parseConfig(raw)).not.toThrow();
+  });
+
+  it('rejects openai-compatible without baseUrl', () => {
+    const raw = {
+      agents: {
+        standard: { type: 'openai-compatible', model: 'x' },
+        complex: { type: 'claude', model: 'claude-opus-4-6' },
+      },
+    };
+    expect(() => parseConfig(raw)).toThrow(/baseUrl/);
+  });
+
+  it('rejects claude with baseUrl (wrong auth block pasted)', () => {
+    const raw = {
+      agents: {
+        standard: { type: 'codex', model: 'gpt-5-codex' },
+        complex: {
+          type: 'claude',
+          model: 'claude-opus-4-6',
+          baseUrl: 'https://wrong.example.com',
+        },
+      },
+    };
+    expect(() => parseConfig(raw)).toThrow();
+  });
+
+  it('rejects codex with apiKey (wrong auth block pasted)', () => {
+    const raw = {
+      agents: {
+        standard: {
+          type: 'codex',
+          model: 'gpt-5-codex',
+          apiKey: 'sk-wrong',
+        },
+        complex: { type: 'claude', model: 'claude-opus-4-6' },
+      },
+    };
+    expect(() => parseConfig(raw)).toThrow();
+  });
+
+  it('rejects config missing the complex slot', () => {
+    const raw = {
+      agents: {
+        standard: { type: 'codex', model: 'gpt-5-codex' },
+      },
+    };
+    expect(() => parseConfig(raw)).toThrow();
+  });
+
+  it('accepts optional capabilities override', () => {
+    const raw = {
+      agents: {
+        standard: {
+          type: 'openai-compatible',
+          model: 'local-llama',
+          baseUrl: 'http://localhost:8080/v1',
+          capabilities: ['web_search'],
+        },
+        complex: { type: 'claude', model: 'claude-opus-4-6' },
+      },
+    };
+    const config = parseConfig(raw);
+    expect(config.agents.standard.capabilities).toEqual(['web_search']);
   });
 });

@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import type {
+  AgentConfig,
   CodexProviderConfig,
   ClaudeProviderConfig,
   MultiModelConfig,
@@ -69,6 +70,43 @@ export const providerConfigSchema = z.discriminatedUnion('type', [
   openAICompatibleProviderConfigSchema,
 ]);
 
+const capabilitiesSchema = z.array(z.enum(['web_search', 'web_fetch'])).optional();
+
+const baseAgentFields = {
+  model: z.string().min(1),
+  capabilities: capabilitiesSchema,
+  inputCostPerMTok: tokenCostSchema,
+  outputCostPerMTok: tokenCostSchema,
+  maxTurns: z.number().int().positive().optional(),
+  timeoutMs: z.number().int().positive().optional(),
+  sandboxPolicy: sandboxPolicySchema,
+  inputTokenSoftLimit: z.number().int().positive().optional(),
+};
+
+const openAICompatibleAgentSchema = z.object({
+  type: z.literal('openai-compatible'),
+  baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible agents'),
+  apiKey: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  ...baseAgentFields,
+});
+
+const claudeAgentSchema = z.object({
+  type: z.literal('claude'),
+  ...baseAgentFields,
+}).strict();
+
+const codexAgentSchema = z.object({
+  type: z.literal('codex'),
+  ...baseAgentFields,
+}).strict();
+
+const agentConfigSchema = z.discriminatedUnion('type', [
+  openAICompatibleAgentSchema,
+  claudeAgentSchema,
+  codexAgentSchema,
+]);
+
 // === MultiModelConfig schema ===
 
 const defaultsSchema = z.object({
@@ -80,6 +118,10 @@ const defaultsSchema = z.object({
 
 export const multiModelConfigSchema = z.object({
   providers: z.record(z.string(), providerConfigSchema).default({}),
+  agents: z.object({
+    standard: agentConfigSchema,
+    complex: agentConfigSchema,
+  }).optional(),
   defaults: defaultsSchema,
 });
 
