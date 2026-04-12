@@ -20,6 +20,7 @@ export const modelProfileSchema = z.object({
   /** Per-model-family default for the watchdog input-token soft limit.
    *  See spec A.1.4. */
   inputTokenSoftLimit: z.number().int().positive(),
+  capabilities: z.array(z.enum(['web_search', 'web_fetch'])).default([]),
 });
 
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
@@ -50,6 +51,10 @@ export function findModelProfile(modelId: string): ModelProfile {
     }
   }
   return { ...DEFAULT_PROFILE };
+}
+
+export function findModelCapabilities(modelId: string): ('web_search' | 'web_fetch')[] {
+  return findModelProfile(modelId).capabilities ?? [];
 }
 
 export function getEffectiveCostTier(config: ProviderConfig): CostTier {

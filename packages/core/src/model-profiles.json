@@ -11,7 +11,8 @@
     "outputCostPerMTok": 25,
     "rateSource": "https://claude.com/pricing",
     "rateLookupDate": "2026-04-11",
-    "inputTokenSoftLimit": 150000
+    "inputTokenSoftLimit": 150000,
+    "capabilities": ["web_search", "web_fetch"]
   },
   {
     "prefix": "claude-sonnet",
@@ -25,7 +26,8 @@
     "outputCostPerMTok": 15,
     "rateSource": "https://claude.com/pricing",
     "rateLookupDate": "2026-04-11",
-    "inputTokenSoftLimit": 150000
+    "inputTokenSoftLimit": 150000,
+    "capabilities": ["web_search", "web_fetch"]
   },
   {
     "prefix": "claude-haiku",
@@ -39,7 +41,8 @@
     "outputCostPerMTok": 5,
     "rateSource": "https://claude.com/pricing",
     "rateLookupDate": "2026-04-11",
-    "inputTokenSoftLimit": 150000
+    "inputTokenSoftLimit": 150000,
+    "capabilities": ["web_search", "web_fetch"]
   },
   {
     "prefix": "gpt-5",
@@ -53,7 +56,8 @@
     "outputCostPerMTok": 15,
     "rateSource": "https://openai.com/api/pricing/",
     "rateLookupDate": "2026-04-11",
-    "inputTokenSoftLimit": 1000000
+    "inputTokenSoftLimit": 1000000,
+    "capabilities": ["web_search"]
   },
   {
     "prefix": "MiniMax-M2",
@@ -67,6 +71,7 @@
     "outputCostPerMTok": 1.2,
     "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
     "rateLookupDate": "2026-04-11",
-    "inputTokenSoftLimit": 200000
+    "inputTokenSoftLimit": 200000,
+    "capabilities": []
   }
 ]
