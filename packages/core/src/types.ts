@@ -49,10 +49,6 @@ export interface FormatConstraints {
 
 export interface TaskSpec {
   prompt: string
-  /** @deprecated Use agentType instead. provider is ignored by run-tasks. */
-  provider?: string
-  /** @deprecated Use agentType instead. tier is ignored by run-tasks. */
-  tier?: string
   agentType?: AgentType
   requiredCapabilities?: AgentCapability[]
   tools?: ToolMode
@@ -170,8 +166,7 @@ export type ProviderConfig =
 // === Config ===
 
 export interface MultiModelConfig {
-  providers: Record<string, ProviderConfig>
-  agents?: {
+  agents: {
     standard: AgentConfig
     complex: AgentConfig
   }

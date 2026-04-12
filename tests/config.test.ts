@@ -6,6 +6,19 @@ import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+const minimalAgentConfig = {
+  standard: {
+    type: 'openai-compatible' as const,
+    model: 'test-model',
+    baseUrl: 'https://test.example.com/v1',
+  },
+  complex: {
+    type: 'openai-compatible' as const,
+    model: 'test-model-complex',
+    baseUrl: 'https://test2.example.com/v1',
+  },
+};
+
 describe('loadConfigFromFile', () => {
   let tmpDir: string;
 
@@ -20,38 +33,28 @@ describe('loadConfigFromFile', () => {
   it('loads a valid config file', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        deepseek: {
+      agents: {
+        standard: {
           type: 'openai-compatible',
           model: 'deepseek-r1',
           baseUrl: 'https://api.deepseek.com/v1',
           apiKeyEnv: 'DEEPSEEK_API_KEY',
+        },
+        complex: {
+          type: 'openai-compatible',
+          model: 'claude-opus-4-6',
+          baseUrl: 'https://api.claude.ai/v1',
         },
       },
     }));
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.providers.deepseek.type).toBe('openai-compatible');
-    expect(config.providers.deepseek.model).toBe('deepseek-r1');
+    expect(config.agents.standard.type).toBe('openai-compatible');
+    expect(config.agents.standard.model).toBe('deepseek-r1');
     expect(config.defaults.maxTurns).toBe(200);
     expect(config.defaults.timeoutMs).toBe(600000);
     expect(config.defaults.tools).toBe('full');
-  });
-
-  it('applies defaults when only providers given', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        codex: { type: 'codex', model: 'gpt-5.4' },
-      },
-    }));
-
-    const config = await loadConfigFromFile(configPath);
-
-    expect(config.defaults.maxTurns).toBe(200);
-    expect(config.defaults.tools).toBe('full');
-    expect(config.providers.codex.type).toBe('codex');
   });
 
   it('throws when explicit config path does not exist', async () => {
@@ -60,11 +63,12 @@ describe('loadConfigFromFile', () => {
     );
   });
 
-  it('validates provider type enum', async () => {
+  it('validates agent type enum', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        bad: { type: 'invalid-type', model: 'whatever' },
+      agents: {
+        standard: { type: 'invalid-type', model: 'whatever' } as any,
+        complex: minimalAgentConfig.complex,
       },
     }));
 
@@ -74,7 +78,7 @@ describe('loadConfigFromFile', () => {
   it('rejects maxTurns <= 0', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {},
+      agents: minimalAgentConfig,
       defaults: { maxTurns: 0 },
     }));
     await expect(loadConfigFromFile(configPath)).rejects.toThrow();
@@ -83,7 +87,7 @@ describe('loadConfigFromFile', () => {
   it('rejects negative timeoutMs', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {},
+      agents: minimalAgentConfig,
       defaults: { timeoutMs: -1 },
     }));
     await expect(loadConfigFromFile(configPath)).rejects.toThrow();
@@ -92,18 +96,8 @@ describe('loadConfigFromFile', () => {
   it('rejects non-integer maxTurns', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {},
+      agents: minimalAgentConfig,
       defaults: { maxTurns: 1.5 },
-    }));
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
-  });
-
-  it('rejects provider-level maxTurns <= 0', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        bad: { type: 'openai-compatible', model: 'test', maxTurns: -5 },
-      },
     }));
     await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
@@ -111,7 +105,7 @@ describe('loadConfigFromFile', () => {
   it('merges user defaults with system defaults', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {},
+      agents: minimalAgentConfig,
       defaults: { maxTurns: 50 },
     }));
 
@@ -122,93 +116,34 @@ describe('loadConfigFromFile', () => {
     expect(config.defaults.tools).toBe('full');
   });
 
-  it('parses costTier when present', async () => {
+  it('parses effort when present', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        minimax: {
-          type: 'openai-compatible',
-          model: 'MiniMax-M2',
-          baseUrl: 'https://api.example.com/v1',
-          costTier: 'free',
-        },
-      },
-    }));
-
-    const config = await loadConfigFromFile(configPath);
-
-    expect(config.providers.minimax.costTier).toBe('free');
-  });
-
-  it('accepts config without costTier (optional field)', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        gpt: {
-          type: 'openai-compatible',
-          model: 'gpt-5',
-          baseUrl: 'https://api.example.com/v1',
-        },
-      },
-    }));
-
-    const config = await loadConfigFromFile(configPath);
-
-    expect(config.providers.gpt.costTier).toBeUndefined();
-  });
-
-  it('rejects invalid costTier values', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        bad: {
-          type: 'openai-compatible',
-          model: 'x',
-          baseUrl: 'https://api.example.com/v1',
-          costTier: 'gigantic',
-        },
-      },
-    }));
-
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
-  });
-
-  it('rejects openai-compatible without baseUrl', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        bad: { type: 'openai-compatible', model: 'test' },
-      },
-    }));
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow(/baseUrl/);
-  });
-
-  it('parses a valid effort enum value', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        claude: {
+      agents: {
+        standard: {
           type: 'claude',
           model: 'claude-opus-4-6',
           effort: 'high',
         },
+        complex: minimalAgentConfig.complex,
       },
     }));
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.providers.claude.effort).toBe('high');
+    expect(config.agents.standard.effort).toBe('high');
   });
 
   it('rejects invalid effort values', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        bad: {
+      agents: {
+        standard: {
           type: 'claude',
           model: 'claude-opus-4-6',
           effort: 'ultra',
         },
+        complex: minimalAgentConfig.complex,
       },
     }));
 
@@ -218,18 +153,73 @@ describe('loadConfigFromFile', () => {
   it('accepts effort=none as a valid disable signal', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
-      providers: {
-        claude: {
+      agents: {
+        standard: {
           type: 'claude',
           model: 'claude-opus-4-6',
           effort: 'none',
         },
+        complex: minimalAgentConfig.complex,
       },
     }));
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.providers.claude.effort).toBe('none');
+    expect(config.agents.standard.effort).toBe('none');
+  });
+
+  it('rejects openai-compatible without baseUrl', async () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      agents: {
+        standard: { type: 'openai-compatible', model: 'test' } as any,
+        complex: minimalAgentConfig.complex,
+      },
+    }));
+    await expect(loadConfigFromFile(configPath)).rejects.toThrow(/baseUrl/);
+  });
+
+  it('accepts optional capabilities override', async () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      agents: {
+        standard: {
+          type: 'openai-compatible',
+          model: 'local-llama',
+          baseUrl: 'http://localhost:8080/v1',
+          capabilities: ['web_search'],
+        },
+        complex: minimalAgentConfig.complex,
+      },
+    }));
+
+    const config = await loadConfigFromFile(configPath);
+    expect(config.agents.standard.capabilities).toEqual(['web_search']);
+  });
+
+  it('warns on inline apiKey (warnOnInlineApiKey)', async () => {
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      agents: {
+        standard: {
+          type: 'openai-compatible',
+          model: 'test',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: 'sk-inline-key',
+        },
+        complex: minimalAgentConfig.complex,
+      },
+    }));
+
+    let warned = false;
+    const originalWarn = console.warn;
+    console.warn = () => { warned = true; };
+    try {
+      await loadConfigFromFile(configPath);
+    } finally {
+      console.warn = originalWarn;
+    }
+    expect(warned).toBe(true);
   });
 });
 
@@ -325,16 +315,17 @@ describe('1.0.0 agents config schema', () => {
   });
 });
 
-describe('provider config hostedTools validation', () => {
+describe('agent config hostedTools validation', () => {
   it('rejects openai-compatible with hostedTools containing image_generation', () => {
     const raw = {
-      providers: {
-        bad: {
+      agents: {
+        standard: {
           type: 'openai-compatible',
           model: 'test',
           baseUrl: 'https://api.example.com/v1',
           hostedTools: ['web_search', 'image_generation'],
         },
+        complex: minimalAgentConfig.complex,
       },
     };
     expect(() => parseConfig(raw)).toThrow();
@@ -342,29 +333,31 @@ describe('provider config hostedTools validation', () => {
 
   it('accepts codex with hostedTools including image_generation', () => {
     const raw = {
-      providers: {
-        good: {
+      agents: {
+        standard: {
           type: 'codex',
           model: 'gpt-5',
           hostedTools: ['web_search', 'image_generation'],
         },
+        complex: minimalAgentConfig.complex,
       },
     };
     const config = parseConfig(raw);
-    expect(config.providers.good.hostedTools).toEqual(['web_search', 'image_generation']);
+    expect(config.agents.standard.hostedTools).toEqual(['web_search', 'image_generation']);
   });
 
   it('accepts claude with hostedTools including image_generation', () => {
     const raw = {
-      providers: {
-        good: {
+      agents: {
+        standard: {
           type: 'claude',
           model: 'claude-opus-4-6',
           hostedTools: ['web_search', 'image_generation'],
         },
+        complex: minimalAgentConfig.complex,
       },
     };
     const config = parseConfig(raw);
-    expect(config.providers.good.hostedTools).toEqual(['web_search', 'image_generation']);
+    expect(config.agents.standard.hostedTools).toEqual(['web_search', 'image_generation']);
   });
 });

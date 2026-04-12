@@ -3,18 +3,18 @@ import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
 /**
- * Warn if any openai-compatible provider in the parsed config carries an
- * inline `apiKey` instead of using `apiKeyEnv`. The schema permits both for
- * backwards compatibility, but storing a plaintext API key in a config file
- * that may end up in a backup, dotfile repo, or git is a footgun. We surface
- * the issue at load time, once, so the operator notices.
+ * Warn if any openai-compatible agent in the parsed config carries an
+ * inline `apiKey` instead of using `apiKeyEnv`. The schema permits both,
+ * but storing a plaintext API key in a config file that may end up in a
+ * backup, dotfile repo, or git is a footgun. We surface the issue at load
+ * time, once, so the operator notices.
  */
 function warnOnInlineApiKey(config: MultiModelConfig, configPath: string): void {
   const offenders: string[] = [];
-  for (const [name, provider] of Object.entries(config.providers)) {
+  for (const [name, agent] of Object.entries(config.agents)) {
     if (
-      provider.type === 'openai-compatible' &&
-      typeof (provider as { apiKey?: unknown }).apiKey === 'string'
+      agent.type === 'openai-compatible' &&
+      typeof (agent as { apiKey?: unknown }).apiKey === 'string'
     ) {
       offenders.push(name);
     }
@@ -23,7 +23,7 @@ function warnOnInlineApiKey(config: MultiModelConfig, configPath: string): void 
     // eslint-disable-next-line no-console
     console.warn(
       `[multi-model-agent] WARNING: ${configPath} stores an inline \`apiKey\` for ` +
-        `provider(s): ${offenders.join(', ')}. Prefer \`apiKeyEnv\` and read the key ` +
+        `agent(s): ${offenders.join(', ')}. Prefer \`apiKeyEnv\` and read the key ` +
         `from an environment variable so it never lands in version control.`,
     );
   }

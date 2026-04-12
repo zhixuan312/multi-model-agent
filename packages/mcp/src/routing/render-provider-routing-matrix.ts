@@ -55,7 +55,7 @@ Escalation, statuses, streaming, and batch helpers:
   shared across multiple tasks are sent to the parent session only
   once.
 
-RESPONSE SHAPE (v0.3+): Every delegate_tasks response includes a top-level
+RESPONSE SHAPE (v1.0+): Every delegate_tasks response includes a top-level
 batchId, mode ('full' or 'summary'), timings ({wallClockMs, sumOfTaskMs,
 estimatedParallelSavingsMs}), batchProgress ({totalTasks, completedTasks,
 incompleteTasks, failedTasks, successPercent}), and aggregateCost
@@ -69,7 +69,7 @@ or per-task details with get_batch_slice({ batchId, slice: 'detail', taskIndex }
 Set responseMode: 'full' to force inline, 'summary' to force summary, or
 omit for auto-escape.
 
-COVERAGE DECLARATION (v0.3+): For tasks with enumerable deliverables
+COVERAGE DECLARATION (v1.0+): For tasks with enumerable deliverables
 (multi-file refactors, test generation across many functions, multi-PR
 review, per-endpoint reports, per-function test stubs, audit checklists),
 set expectedCoverage on the task spec with either minSections: N,
@@ -81,7 +81,7 @@ Do NOT set expectedCoverage for one-shot tasks (bug fixes, single
 implementations, prose, creative writing) — the field is opt-in and has
 no meaning for deliverables you can't enumerate ahead of time.
 
-COST + TIME VISIBILITY (v0.3+): Set parentModel on the task spec (e.g.
+COST + TIME VISIBILITY (v1.0+): Set parentModel on the task spec (e.g.
 'claude-opus-4-6') to get usage.savedCostUSD — the ESTIMATED cost
 difference vs running the same token volume on that parent model.
 Positive means delegation was cheaper. Both usage.costUSD (actual) and

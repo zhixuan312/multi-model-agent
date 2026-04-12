@@ -188,7 +188,7 @@ async function executeReviewedLifecycle(
     doneCondition: 'tsc passes',
   };
 
-  const fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
+  let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
 
   const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
@@ -220,6 +220,7 @@ async function executeReviewedLifecycle(
       finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
 
       const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+      fileContents = reworkContents;
 
       specResult = await runSpecReview(
         otherProvider,
@@ -293,7 +294,7 @@ async function executeReviewedLifecycle(
     specReviewStatus: specStatus,
     qualityReviewStatus: qualityResult.status,
     structuredReport: aggregated,
-    implementationReport: effectiveImplReport,
+    implementationReport: finalImplReport,
     specReviewReport: specReport,
     qualityReviewReport: qualityResult.report,
     agents: {
@@ -323,8 +324,7 @@ export async function runTasks(
   const readinessResults = expandedTasks.map((entry) => {
     if ('error' in entry) return undefined;
     const task = entry as TaskSpec;
-    if (task.briefQualityPolicy === undefined) return undefined;
-    return evaluateReadiness(task, task.briefQualityPolicy);
+    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
   });
 
   const refusedResults = expandedTasks.map((entry, idx) => {
@@ -404,7 +404,15 @@ export async function runTasks(
         ? (event: ProgressEvent) => options.onProgress!(index, event)
         : undefined;
 
-      return executeReviewedLifecycle(r.task, r.resolved, config, normResult, taskProgress);
+      const readiness = readinessResults[index];
+      return executeReviewedLifecycle(r.task, r.resolved, config, normResult, taskProgress).then(
+        (result) => {
+          if (readiness && readiness.briefQualityWarnings.length > 0) {
+            return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
+          }
+          return result;
+        },
+      );
     }),
   );
 }

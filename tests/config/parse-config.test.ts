@@ -1,10 +1,21 @@
 import { describe, it, expect } from 'vitest';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 
+const minimalAgentConfig = {
+  type: 'openai-compatible' as const,
+  model: 'test-model',
+  baseUrl: 'https://test.example.com/v1',
+};
+
 describe('parseConfig', () => {
-  it('parses valid minimal config and applies all defaults', () => {
-    const result = parseConfig({});
-    expect(result.providers).toEqual({});
+  it('parses valid minimal config with agents', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+    });
+    expect(result.agents.standard.model).toBe('test-model');
     expect(result.defaults.maxTurns).toBe(200);
     expect(result.defaults.timeoutMs).toBe(600_000);
     expect(result.defaults.tools).toBe('full');
@@ -12,66 +23,92 @@ describe('parseConfig', () => {
 
   it('parses valid full config', () => {
     const input = {
-      providers: {
-        c: { type: 'claude', model: 'claude-sonnet-4-6', effort: 'high' },
+      agents: {
+        standard: { type: 'claude', model: 'claude-sonnet-4-6' },
+        complex: { type: 'openai-compatible', model: 'gpt-5', baseUrl: 'https://api.example.com' },
       },
       defaults: { maxTurns: 50, timeoutMs: 120_000, tools: 'none' },
     };
     const result = parseConfig(input);
-    expect(result.providers.c.model).toBe('claude-sonnet-4-6');
+    expect(result.agents.complex.model).toBe('gpt-5');
     expect(result.defaults.maxTurns).toBe(50);
     expect(result.defaults.tools).toBe('none');
   });
 
-  it('throws on invalid provider type', () => {
+  it('throws on invalid agent type', () => {
     expect(() => parseConfig({
-      providers: { bad: { type: 'unknown', model: 'x' } },
+      agents: {
+        standard: { type: 'unknown', model: 'x' } as any,
+        complex: minimalAgentConfig,
+      },
     })).toThrow();
   });
 
   it('throws on negative maxTurns in defaults', () => {
     expect(() => parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
       defaults: { maxTurns: -1, timeoutMs: 600_000, tools: 'full' },
     })).toThrow();
   });
 
   it('throws on openai-compatible without baseUrl', () => {
     expect(() => parseConfig({
-      providers: { bad: { type: 'openai-compatible', model: 'x' } },
+      agents: {
+        standard: { type: 'openai-compatible', model: 'x' } as any,
+        complex: minimalAgentConfig,
+      },
     })).toThrow(/baseUrl/);
   });
 
   it('throws on invalid effort value', () => {
     expect(() => parseConfig({
-      providers: { c: { type: 'claude', model: 'x', effort: 'ultra' } },
-    })).toThrow();
-  });
-
-  it('throws on invalid costTier value', () => {
-    expect(() => parseConfig({
-      providers: { c: { type: 'claude', model: 'x', costTier: 'expensive' } },
+      agents: {
+        standard: { type: 'claude', model: 'x', effort: 'ultra' } as any,
+        complex: minimalAgentConfig,
+      },
     })).toThrow();
   });
 
   it('throws on non-integer timeoutMs', () => {
     expect(() => parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
       defaults: { maxTurns: 200, timeoutMs: 1.5, tools: 'full' },
     })).toThrow();
   });
 
   it('throws on zero maxTurns', () => {
     expect(() => parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
       defaults: { maxTurns: 0, timeoutMs: 600_000, tools: 'full' },
     })).toThrow();
   });
 
-  it('applies provider-level overrides on top of defaults', () => {
-    const result = parseConfig({
-      providers: {
-        c: { type: 'claude', model: 'claude-sonnet-4-6', maxTurns: 10 },
-      },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
-    });
-    expect(result.providers['c'].maxTurns).toBe(10);
+  it('throws when agents missing', () => {
+    expect(() => parseConfig({})).toThrow();
+  });
+
+  it('throws when agents.standard missing', () => {
+    expect(() => parseConfig({
+      agents: {
+        complex: minimalAgentConfig,
+      } as any,
+    })).toThrow();
+  });
+
+  it('throws when agents.complex missing', () => {
+    expect(() => parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+      } as any,
+    })).toThrow();
   });
 });

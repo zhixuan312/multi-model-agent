@@ -8,8 +8,15 @@ export default defineConfig({
     exclude: ['.worktrees/**', '**/node_modules/**'],
   },
   resolve: {
-    alias: {
-      '@zhixuan92/multi-model-agent-core/provider': path.resolve(__dirname, 'packages/core/src/provider.ts'),
-    },
+    alias: [
+      {
+        find: /^@zhixuan92\/multi-model-agent-core$/,
+        replacement: path.resolve(__dirname, 'packages/core/src/index.ts'),
+      },
+      {
+        find: /^@zhixuan92\/multi-model-agent-core\/(.+)$/,
+        replacement: path.resolve(__dirname, 'packages/core/src/$1.ts'),
+      },
+    ],
   },
 });

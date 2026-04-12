@@ -7,7 +7,7 @@ Running everything on your main agent (Opus, GPT-5, etc.) is slow, expensive, an
 ## Three Pillars of v1.0.0
 
 ### 1. Cross-model blind spot detection
-The **readiness check** (phase 1) evaluates every brief before dispatch. It catches vague prompts, under-specified scopes, and contextually undersupplied requests — and tells the caller exactly what is missing before money is spent on a worker that will guess.
+The **readiness check** (phase 1) evaluates every brief before dispatch. It catches vague prompts, under-specified scopes, and contextually undersupplied requests — surfacing `briefQualityWarnings` in the result so the caller knows what to improve. By default (`briefQualityPolicy: 'warn'`), warnings are surfaced but dispatch proceeds. Set `'strict'` to refuse vague briefs before money is spent, or `'normalize'` to auto-enrich them.
 
 ### 2. Two-slot agent model
 Every task routes to one of two slots:
@@ -53,13 +53,14 @@ Brief → Readiness check → Dispatch → Execute → Review (if enabled) → A
 ```
 
 ### Phase 1 — Brief / Readiness check
-`normalizeBrief` evaluates the prompt quality and outputs a structured `ReadinessReport`:
+`evaluateReadiness` runs on every brief before dispatch (default policy: `warn`). It detects missing pillars (scope, inputs, done condition, output contract) and layer-2 warnings (outsourced discovery, brittle line anchors, mixed environment actions). Results are surfaced as `briefQualityWarnings` on the task result.
 
-- `isVague: true` — the prompt has no explicit scope or acceptance criteria
-- `isOverambitious: true` — the task would exceed cost ceiling or context limits
-- `isContextuallyUndersupplied: true` — required background is missing
-
-The report tells the caller exactly what to add before dispatch. A `READY` verdict proceeds to phase 2; `NOT_READY` halts and names the gap.
+| `briefQualityPolicy` | Behavior |
+|---|---|
+| `warn` (default) | Evaluate and surface warnings; dispatch proceeds |
+| `strict` | Refuse briefs with missing pillars (`brief_too_vague` status) |
+| `normalize` | Refuse if missing pillars; auto-enrich if layer-2 warnings |
+| `off` | Skip readiness evaluation entirely |
 
 ### Phase 2 — Dispatch
 Route to the appropriate agent slot (`standard` or `complex`) based on `agentType`. Auto-routing selects the cheapest configured agent that has the required capabilities.

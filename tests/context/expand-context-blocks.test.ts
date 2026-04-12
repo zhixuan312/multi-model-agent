@@ -7,7 +7,7 @@ import {
 import type { TaskSpec } from '../../packages/core/src/types.js';
 
 function makeTask(prompt: string, contextBlockIds?: string[]): TaskSpec {
-  return { prompt, tier: 'standard', requiredCapabilities: [], contextBlockIds };
+  return { prompt, contextBlockIds };
 }
 
 describe('expandContextBlocks', () => {

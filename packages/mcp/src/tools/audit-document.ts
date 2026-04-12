@@ -14,7 +14,7 @@ export type AuditDocumentParams = z.infer<typeof auditDocumentSchema>;
 export function registerAuditDocument(server: McpServer, config: MultiModelConfig) {
   server.tool(
     'audit_document',
-    'Audit a document using two parallel agents (standard + complex) for comprehensive coverage.',
+    'Audit a document for security, performance, correctness, or style issues using a single agent (defaults to complex).',
     auditDocumentSchema.shape,
     async (params: AuditDocumentParams) => {
       const agentType = params.agentType ?? 'complex';

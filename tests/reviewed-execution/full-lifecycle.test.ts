@@ -30,8 +30,9 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
       name: slot,
       config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
       run: async (prompt: string) => {
-        if (prompt.includes('do the task')) return impl;
-        return review;
+        if (typeof prompt === 'string' && prompt.startsWith('You are a spec compliance reviewer')) return review;
+        if (typeof prompt === 'string' && prompt.startsWith('You are a code quality reviewer')) return review;
+        return impl;
       },
     }),
   };
@@ -52,8 +53,7 @@ const config: MultiModelConfig = {
 };
 
 describe('full reviewed lifecycle', () => {
-  // Implementation verified by individual review module tests
-  it.skip('happy path: implement → spec review → quality review → aggregated result', async () => {
+  it('happy path: implement → spec review → quality review → aggregated result', async () => {
     const results = await runTasks(
       [{ prompt: 'do the task at src/a.ts. Done when tsc passes.', agentType: 'standard' as const }],
       config,
@@ -81,8 +81,7 @@ describe('full reviewed lifecycle', () => {
     expect(results[0].qualityReviewStatus).toBe('not_run');
   });
 
-  // Implementation verified by individual review module tests
-  it.skip('reviewPolicy=spec_only skips quality review', async () => {
+  it('reviewPolicy=spec_only skips quality review', async () => {
     const results = await runTasks(
       [{
         prompt: 'do the task at src/a.ts. Done when tsc passes.',

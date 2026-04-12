@@ -14,8 +14,6 @@ describe('discoverConfig precedence', () => {
     vi.restoreAllMocks();
     mockLoadConfigFromFile.mockReset();
     mockLoadConfigFromFile.mockImplementation((p: string) => {
-      // When a path is given, parse the JSON content from it
-      // (used by tests that provide real file content via readFileSync mocks)
       const content = fs.readFileSync(p, 'utf-8');
       return JSON.parse(content);
     });
@@ -26,14 +24,14 @@ describe('discoverConfig precedence', () => {
   });
 
   it('prefers --config argument over MULTI_MODEL_CONFIG env var', async () => {
-    // create a temp file for the --config path so loadConfigFromFile can read it
     const tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'mma-test-'));
     const argConfigPath = path.join(tmpDir, 'arg-config.json');
     fs.writeFileSync(
       argConfigPath,
       JSON.stringify({
-        providers: {
-          a: { type: 'openai-compatible', model: 'x', baseUrl: 'https://x.com' },
+        agents: {
+          standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://x.com' },
+          complex: { type: 'claude', model: 'claude-sonnet-4-6' },
         },
         defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
       }),
@@ -46,13 +44,12 @@ describe('discoverConfig precedence', () => {
       '--config',
       argConfigPath,
     ]);
-    // Env var is set to a path that would error if used — proves --config wins.
     vi.stubEnv('MULTI_MODEL_CONFIG', '/env/path-that-should-not-be-read.json');
 
     const { discoverConfig } = await import('../packages/mcp/src/cli.js');
     const config = await discoverConfig();
 
-    expect(config.providers.a).toBeDefined();
+    expect(config.agents.standard).toBeDefined();
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -63,8 +60,9 @@ describe('discoverConfig precedence', () => {
     fs.writeFileSync(
       envConfigPath,
       JSON.stringify({
-        providers: {
-          b: { type: 'claude', model: 'claude-sonnet-4-6' },
+        agents: {
+          standard: { type: 'claude', model: 'claude-sonnet-4-6' },
+          complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
         defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
       }),
@@ -76,7 +74,7 @@ describe('discoverConfig precedence', () => {
     const { discoverConfig } = await import('../packages/mcp/src/cli.js');
     const config = await discoverConfig();
 
-    expect(config.providers.b).toBeDefined();
+    expect(config.agents.standard).toBeDefined();
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -91,8 +89,9 @@ describe('discoverConfig precedence', () => {
     fs.writeFileSync(
       homeConfigPath,
       JSON.stringify({
-        providers: {
-          c: { type: 'codex', model: 'gpt-5-codex' },
+        agents: {
+          standard: { type: 'codex', model: 'gpt-5-codex' },
+          complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
         defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
       }),
@@ -110,7 +109,7 @@ describe('discoverConfig precedence', () => {
     const { discoverConfig } = await import('../packages/mcp/src/cli.js');
     const config = await discoverConfig();
 
-    expect(config.providers.c).toBeDefined();
+    expect(config.agents.standard).toBeDefined();
 
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
@@ -121,13 +120,14 @@ describe('discoverConfig precedence', () => {
     vi.spyOn(os, 'homedir').mockReturnValue('/nonexistent-home');
     vi.spyOn(fs, 'existsSync').mockReturnValue(false);
 
-    // Make loadConfigFromFile throw so the fallback to parseConfig({}) is exercised
     mockLoadConfigFromFile.mockRejectedValue(new Error('ENOENT'));
 
     const { discoverConfig } = await import('../packages/mcp/src/cli.js');
     const config = await discoverConfig();
 
-    expect(config.providers).toEqual({});
+    expect(config.agents).toBeDefined();
+    expect(config.agents.standard).toBeDefined();
+    expect(config.agents.complex).toBeDefined();
     expect(config.defaults.maxTurns).toBe(200);
     expect(config.defaults.timeoutMs).toBe(600_000);
     expect(config.defaults.tools).toBe('full');

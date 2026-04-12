@@ -180,7 +180,7 @@ function buildSummaryResponse(
       ...(r.error && { error: r.error }),
       ...(r.errorCode && { errorCode: r.errorCode }),
       ...(r.retryable !== undefined && { retryable: r.retryable }),
-      _fetchWith: `get_batch_slice({ batchId: "${batchId}", taskIndex: ${i} })`,
+      _fetchWith: `get_batch_slice({ batchId: "${batchId}", slice: "output", taskIndex: ${i} })`,
     })),
   };
 }
@@ -205,11 +205,11 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'INTERACTION: Concatenated with expanded context blocks (if contextBlockIds is set) before dispatch.',
     ),
     agentType: z.enum(availableAgents).optional().describe(
-      'WHAT: Selects which agent implementation handles this task (standard vs complex).\n' +
-      'WHEN: Optional; defaults to auto-selection based on prompt complexity heuristics.\n' +
-      'DEFAULT: Auto-select (server chooses based on internal heuristics).\n' +
-      'INTERACTION: Determines which agent config (from config.agents) is used for routing and capability resolution.',
-    ),
+        'WHAT: Selects which labor agent handles this task — standard (cheap, straightforward) or complex (expensive, harder reasoning).\n' +
+        'WHEN: Always declare explicitly. The parent decides whether this is standard or complex labor.\n' +
+        'DEFAULT: standard (when omitted, routes to the standard agent).\n' +
+        'INTERACTION: The system enforces capability floors — if the task requires web_search and standard lacks it, silently routes to complex.',
+      ),
     tools: z.enum(['none', 'full']).optional().describe(
       'WHAT: Controls whether the sub-agent has access to tool APIs (read, write, bash, etc).\n' +
       'WHEN: Set to none when the task is purely prompt-only (e.g., translation, summarization).\n' +
@@ -312,6 +312,12 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'WHEN: Use to bound iterative refinement cycles for tasks that could otherwise run indefinitely.\n' +
       'DEFAULT: 2 rework rounds — inherited from server-level defaults if not specified.\n' +
       'INTERACTION: When maxReviewRounds is exhausted, the task moves to the next step regardless of spec review outcome.',
+    ),
+    briefQualityPolicy: z.enum(['normalize', 'strict', 'warn', 'off']).optional().describe(
+      'WHAT: Controls how readiness evaluation handles vague briefs before dispatch.\n' +
+      'WHEN: Set to normalize to auto-enrich vague briefs; strict to refuse them; warn to evaluate and surface warnings; off to skip.\n' +
+      'DEFAULT: warn — readiness evaluates every brief and surfaces warnings, but does not block dispatch.\n' +
+      'INTERACTION: When strict, a vague brief returns status brief_too_vague without spending any tokens. When normalize, the system enriches the brief via a normalization pass before dispatch.',
     ),
   });
 }
@@ -850,8 +856,13 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
     return loadConfigFromFile(defaultPath);
   }
 
-  // Fallback: empty config
-  return parseConfig({});
+  // Fallback: empty config with required agents
+  return parseConfig({
+    agents: {
+      standard: { type: 'claude', model: 'claude-sonnet-4-6' },
+      complex: { type: 'claude', model: 'claude-sonnet-4-6' },
+    },
+  });
 }
 
 async function main() {

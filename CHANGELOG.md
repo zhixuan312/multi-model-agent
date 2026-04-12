@@ -19,11 +19,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - `review_code` — structural quality review of a diff or module
   - `verify_work` — confirm implementation matches spec
 - **Two-slot agent model (core).** Tasks declare `agentType: "standard"` (fast, cheap, capability-gated) or `agentType: "complex"` (slower, reasoning) instead of `tier`. Auto-routing selects the cheapest configured agent satisfying the required capabilities and declared `agentType`.
-- **Cost ceiling (core).** Each task can declare a `costCeilingUSD` that aborts execution before spending beyond the threshold. Prevents runaway dispatches on ambiguous tasks.
+- **Cost ceiling (core).** Each task can declare a `maxCostUSD` that aborts execution before spending beyond the threshold. Prevents runaway dispatches on ambiguous tasks.
 - **Call cache (core).** Repeated identical calls (same prompt + model hash) return the cached result within a sliding window, avoiding redundant spend on retry paths.
 - **Format constraints (core).** `expectedCoverage` declared per task enforces structured output requirements — `minSections`, `sectionPattern`, `requiredMarkers`. The supervision layer re-prompts on missing items and classifies thin responses as `insufficient_coverage`.
-- **Structured errors (core).** Per-task status is now one of eight protocol values: `ok`, `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, `error`. All eight surface the best-effort scratchpad into `output` before returning.
-- **`schemaVersion` field (mcp).** Every response envelope carries `schemaVersion: "1.0"` so callers can branch on the schema shape without relying on version checks.
+- **Structured errors (core).** Per-task status is now one of ten protocol values: `ok`, `incomplete`, `max_turns`, `timeout`, `api_aborted`, `api_error`, `network_error`, `error`, `brief_too_vague`, `cost_exceeded`. All ten surface the best-effort scratchpad into `output` before returning.
+- **`schemaVersion` field (mcp).** Every response envelope carries `schemaVersion: "1.0.0"` so callers can branch on the schema shape without relying on version checks.
 
 ### Breaking Changes
 
@@ -32,7 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`get_task_output`, `get_task_detail`, `get_batch_telemetry` → `get_batch_slice`** (mcp). Three fetch tools are consolidated into one. `get_batch_slice(batchId, slice)` where `slice` is `"output"`, `"detail"`, or `"telemetry"`.
 - **`progressTrace` removed** (core). The bounded execution timeline capture is replaced by structured `AttemptRecord[]` entries in `get_batch_slice(..., "detail")`. `initialPromptHash` provides cross-runner stable identification of identical briefs.
 - **`hostedTools` narrowed for `openai-compatible`** (core). Only `web_search` is available by default for openai-compatible providers. Other tools (`image_generation`, `code_interpreter`) require explicit opt-in.
-- **`BatchAggregateCost` trimmed** (mcp). `actualCostUnavailableTasks` and `savedCostUnavailableTasks` are removed. The aggregate cost shape is now: `totalActualCostUSD`, `totalSavedCostUSD`, `totalInputTokens`, `totalOutputTokens`, `taskCount`.
+- **`BatchAggregateCost` trimmed** (mcp). `actualCostUnavailableTasks` and `savedCostUnavailableTasks` are removed. The aggregate cost shape is now: `totalActualCostUSD`, `totalSavedCostUSD`.
 
 ### Migration: v0.4.0 → v1.0.0
 

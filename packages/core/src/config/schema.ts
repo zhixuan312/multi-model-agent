@@ -1,81 +1,25 @@
 import { z } from 'zod';
 import type {
-  AgentConfig,
-  CodexProviderConfig,
-  ClaudeProviderConfig,
   MultiModelConfig,
-  OpenAICompatibleProviderConfig,
-  ProviderConfig,
 } from '../types.js';
 
-// === Per-provider Zod schemas ===
+// === Shared field schemas ===
 
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
-const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
 const openAICompatibleHostedToolsSchema = z.array(z.enum(['web_search']));
 const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // Per-million-token pricing for cost computation. Must be non-negative; zero
-// is allowed (free providers can set both rates to 0 to get a deterministic
+// is allowed (free agents can set both rates to 0 to get a deterministic
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
-
-export const codexProviderConfigSchema = z.object({
-  type: z.literal('codex'),
-  model: z.string(),
-  effort: effortSchema.optional(),
-  maxTurns: z.number().int().positive().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  sandboxPolicy: sandboxPolicySchema,
-  hostedTools: hostedToolsSchema.optional(),
-  costTier: costTierSchema.optional(),
-  inputCostPerMTok: tokenCostSchema,
-  outputCostPerMTok: tokenCostSchema,
-  inputTokenSoftLimit: z.number().int().positive().optional(),
-});
-
-export const claudeProviderConfigSchema = z.object({
-  type: z.literal('claude'),
-  model: z.string(),
-  effort: effortSchema.optional(),
-  maxTurns: z.number().int().positive().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  sandboxPolicy: sandboxPolicySchema,
-  hostedTools: hostedToolsSchema.optional(),
-  costTier: costTierSchema.optional(),
-  inputCostPerMTok: tokenCostSchema,
-  outputCostPerMTok: tokenCostSchema,
-  inputTokenSoftLimit: z.number().int().positive().optional(),
-});
-
-export const openAICompatibleProviderConfigSchema = z.object({
-  type: z.literal('openai-compatible'),
-  model: z.string(),
-  baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible providers'),
-  apiKey: z.string().optional(),
-  apiKeyEnv: z.string().optional(),
-  effort: effortSchema.optional(),
-  maxTurns: z.number().int().positive().optional(),
-  timeoutMs: z.number().int().positive().optional(),
-  sandboxPolicy: sandboxPolicySchema,
-  hostedTools: openAICompatibleHostedToolsSchema.optional(),
-  costTier: costTierSchema.optional(),
-  inputCostPerMTok: tokenCostSchema,
-  outputCostPerMTok: tokenCostSchema,
-  inputTokenSoftLimit: z.number().int().positive().optional(),
-});
-
-export const providerConfigSchema = z.discriminatedUnion('type', [
-  codexProviderConfigSchema,
-  claudeProviderConfigSchema,
-  openAICompatibleProviderConfigSchema,
-]);
 
 const capabilitiesSchema = z.array(z.enum(['web_search', 'web_fetch'])).optional();
 
 const baseAgentFields = {
   model: z.string().min(1),
   capabilities: capabilitiesSchema,
+  effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
   maxTurns: z.number().int().positive().optional(),
@@ -89,16 +33,19 @@ const openAICompatibleAgentSchema = z.object({
   baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible agents'),
   apiKey: z.string().optional(),
   apiKeyEnv: z.string().optional(),
+  hostedTools: openAICompatibleHostedToolsSchema.optional(),
   ...baseAgentFields,
 });
 
 const claudeAgentSchema = z.object({
   type: z.literal('claude'),
+  hostedTools: hostedToolsSchema.optional(),
   ...baseAgentFields,
 }).strict();
 
 const codexAgentSchema = z.object({
   type: z.literal('codex'),
+  hostedTools: hostedToolsSchema.optional(),
   ...baseAgentFields,
 }).strict();
 
@@ -118,11 +65,10 @@ const defaultsSchema = z.object({
 }).default(() => ({ maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const }));
 
 export const multiModelConfigSchema = z.object({
-  providers: z.record(z.string(), providerConfigSchema).default({}),
   agents: z.object({
     standard: agentConfigSchema,
     complex: agentConfigSchema,
-  }).optional(),
+  }),
   defaults: defaultsSchema,
 });
 

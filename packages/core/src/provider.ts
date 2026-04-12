@@ -2,9 +2,6 @@ import type { AgentType, Provider, RunResult, RunOptions, MultiModelConfig, Prov
 import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
 
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
-  if (!config.agents) {
-    throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);
-  }
   const agentConfig = config.agents[slot];
   if (!agentConfig) {
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);

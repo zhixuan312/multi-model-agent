@@ -192,9 +192,6 @@ describe('context-block + retry_tasks tools', () => {
           tasks: [
             {
               prompt: label,
-              provider: 'mock',
-              tier: 'standard',
-              requiredCapabilities: [],
             },
           ],
         },
@@ -427,9 +424,6 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
         tasks: [
           {
             prompt: 'do thing',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
           },
         ],
         ...(responseMode && { responseMode }),
@@ -1017,16 +1011,10 @@ describe('delegate_tasks headline field (full mode)', () => {
         tasks: [
           {
             prompt: 't1',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
             parentModel: 'claude-opus-4-6',
           },
           {
             prompt: 't2',
-            provider: 'mock',
-            tier: 'standard',
-            requiredCapabilities: [],
             parentModel: 'claude-opus-4-6',
           },
         ],
