@@ -120,6 +120,39 @@ describe('runTasks', () => {
     expect(results[0].status).toBe('error');
     expect(results[0].error).toContain('No eligible provider found');
   });
+
+  it('1.0.0 AgentType and AgentCapability types are importable', () => {
+    const agentType: import('@zhixuan92/multi-model-agent-core').AgentType = 'standard';
+    const cap: import('@zhixuan92/multi-model-agent-core').AgentCapability = 'web_search';
+    expect(agentType).toBe('standard');
+    expect(cap).toBe('web_search');
+  });
+
+  it('1.0.0 AgentConfig interface accepts the minimal shape', () => {
+    const cfg: import('@zhixuan92/multi-model-agent-core').AgentConfig = {
+      type: 'claude',
+      model: 'claude-opus-4-6',
+    };
+    expect(cfg.type).toBe('claude');
+    expect(cfg.model).toBe('claude-opus-4-6');
+    expect(cfg.capabilities).toBeUndefined();
+  });
+
+  it('1.0.0 AgentConfig accepts all optional fields', () => {
+    const cfg: import('@zhixuan92/multi-model-agent-core').AgentConfig = {
+      type: 'openai-compatible',
+      model: 'deepseek-r1',
+      baseUrl: 'https://api.deepseek.com/v1',
+      apiKeyEnv: 'DEEPSEEK_API_KEY',
+      capabilities: ['web_search'],
+      inputCostPerMTok: 0.55,
+      outputCostPerMTok: 2.19,
+      maxTurns: 100,
+      timeoutMs: 300_000,
+      sandboxPolicy: 'cwd-only',
+    };
+    expect(cfg.capabilities).toEqual(['web_search']);
+  });
 });
 
 describe('resolveTaskCapabilities', () => {

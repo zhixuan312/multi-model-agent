@@ -7,6 +7,27 @@ export type Tier = 'trivial' | 'standard' | 'reasoning';
 export type Capability = 'file_read' | 'file_write' | 'grep' | 'glob' | 'shell' | 'web_search' | 'web_fetch';
 export type ToolMode = 'none' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
+
+// === 1.0.0 Agent Model ===
+
+export type AgentType = 'standard' | 'complex';
+export type AgentCapability = 'web_search' | 'web_fetch';
+
+export interface AgentConfig {
+  type: 'openai-compatible' | 'claude' | 'codex'
+  model: string
+  baseUrl?: string
+  apiKey?: string
+  apiKeyEnv?: string
+  capabilities?: AgentCapability[]
+  inputCostPerMTok?: number
+  outputCostPerMTok?: number
+  maxTurns?: number
+  timeoutMs?: number
+  sandboxPolicy?: SandboxPolicy
+  inputTokenSoftLimit?: number
+}
+
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type RunStatus =
