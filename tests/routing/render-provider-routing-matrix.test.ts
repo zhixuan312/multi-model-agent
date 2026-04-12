@@ -76,7 +76,7 @@ describe('renderProviderRoutingMatrix — v0.3.0 TOOL_NOTES additions', () => {
     const desc = renderProviderRoutingMatrix(config);
     expect(desc).toMatch(/batchId/);
     expect(desc).toMatch(/mode.*full.*summary|summary.*full/);
-    expect(desc).toMatch(/get_task_output/);
+    expect(desc).toMatch(/get_batch_slice/);
   });
 
   it('includes coverage declaration paragraph', () => {
@@ -94,17 +94,11 @@ describe('renderProviderRoutingMatrix — v0.3.0 TOOL_NOTES additions', () => {
     expect(desc).toMatch(/successPercent/);
   });
 
-  it('includes progress trace paragraph', () => {
-    const desc = renderProviderRoutingMatrix(config);
-    expect(desc).toMatch(/includeProgressTrace/);
-    expect(desc).toMatch(/post-hoc/);
-  });
-
-  it('available tools paragraph lists all four', () => {
+  it('available tools paragraph lists get_batch_slice', () => {
     const desc = renderProviderRoutingMatrix(config);
     expect(desc).toMatch(/delegate_tasks/);
     expect(desc).toMatch(/register_context_block/);
     expect(desc).toMatch(/retry_tasks/);
-    expect(desc).toMatch(/get_task_output/);
+    expect(desc).toMatch(/get_batch_slice/);
   });
 });

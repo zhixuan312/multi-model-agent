@@ -64,9 +64,9 @@ savedCostUnavailableTasks}). If the combined output across tasks is small,
 mode: 'full' with inline outputs; if it exceeds the server's threshold
 (default 64 KB, configurable via env MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS
 / config defaults.largeResponseThresholdChars / buildMcpServer option),
-mode: 'summary' with per-task outputLength + outputSha256 + _fetchOutputWith
-hint — fetch individual outputs with get_task_output({ batchId, taskIndex }),
-or per-task metadata with get_task_detail({ batchId, taskIndex }).
+mode: 'summary' with per-task outputLength + outputSha256 + _fetchWith
+hint — fetch individual outputs with get_batch_slice({ batchId, slice: 'output', taskIndex }),
+or per-task details with get_batch_slice({ batchId, slice: 'detail', taskIndex }).
 Set responseMode: 'full' to force inline, 'summary' to force summary, or
 omit for auto-escape.
 
@@ -94,31 +94,11 @@ serial for-loop. batchProgress.successPercent is a clean-success rate
 (the batch is always 100% done by the time you see the response —
 successPercent measures how many finished cleanly, NOT progress).
 
-PROGRESS TRACE (v0.3+): Set includeProgressTrace: true on the task spec
-to receive a bounded, priority-trimmed trace of the execution timeline
-in the final RunResult.progressTrace. Useful for post-hoc debugging of
-long-running tasks — did the worker loop through supervision retries,
-where did it stall, did it escalate across agents. The trace is
-trimmed at 80 events and 16 KB; text_emission and tool_call events are
-dropped first under pressure (their content is already in output /
-toolCalls). Boundary events (turn_start, turn_complete, escalation_start,
-injection, done) are never dropped. If trimming fired, a synthetic
-_trimmed marker at the end of the trace reports the dropped count and
-per-kind histogram.
-
-NOTE: progress-events at the MCP protocol level (notifications/progress)
-are emitted correctly by the server and delivered to the MCP client.
-Whether your client renders them live depends on the client — some
-render them as in-flight tool-call status lines, others don't surface
-them to the calling LLM at all. includeProgressTrace gives you the
-full timeline post-hoc regardless of your client's live-rendering
-behavior.
-
 AVAILABLE TOOLS: delegate_tasks (this one), register_context_block
 (stash reusable brief content referenced via TaskSpec.contextBlockIds),
 retry_tasks (re-dispatch specific indices from a previous batch),
-get_task_output (fetch individual task outputs when a response was in
-summary mode).`;
+get_batch_slice (fetch outputs/details/telemetry when a response was in
+summary mode or for per-task introspection).`;
 
 function renderAgentBlock(
   name: string,
