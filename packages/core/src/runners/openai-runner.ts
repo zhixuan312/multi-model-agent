@@ -16,6 +16,7 @@ import {
   type RunOptions,
   type ProviderConfig,
   type ProgressEvent,
+  type ToolMode,
 } from '../types.js';
 import { injectionTypeFor } from './injection-type.js';
 
@@ -93,7 +94,7 @@ export function stripThinkingTags(text: string): string {
 export interface OpenAIRunnerOptions {
   client: OpenAI;
   providerConfig: ProviderConfig;
-  defaults: { maxTurns: number; timeoutMs: number; tools: 'none' | 'full' };
+  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode };
 }
 
 /**

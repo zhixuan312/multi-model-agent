@@ -11,6 +11,7 @@ import {
   type RunOptions,
   type ProviderConfig,
   type ProgressEvent,
+  type ToolMode,
 } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
@@ -216,7 +217,7 @@ export async function runCodex(
   prompt: string,
   options: RunOptions,
   providerConfig: ProviderConfig,
-  defaults: { maxTurns: number; timeoutMs: number; tools: 'none' | 'full' },
+  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
   const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? defaults.maxTurns;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;

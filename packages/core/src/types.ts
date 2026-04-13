@@ -3,7 +3,7 @@ import { findModelProfile } from './routing/model-profiles.js';
 
 // === Tool Mode & Sandbox ===
 
-export type ToolMode = 'none' | 'full';
+export type ToolMode = 'none' | 'readonly' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 
 // === 1.0.0 Agent Model ===
