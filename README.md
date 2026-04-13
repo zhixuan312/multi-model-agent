@@ -1,158 +1,65 @@
 # multi-model-agent
 
-**A fleet of sub-agents, one tool call, zero context pollution.**
+Delegate the labor, keep the judgment. Your expensive model stays on architecture — mechanical work runs on a fleet of cheaper agents, in parallel, for 90% less.
 
-Running everything on your main agent (Opus, GPT-5, etc.) is slow, expensive, and fills your context window with mechanical labor. `multi-model-agent` is an MCP server that gives your client a single tool, `delegate_tasks`, which runs tasks in parallel across a fleet of cheaper workers — auto-routing each one to the right slot, enforcing cost ceilings, and surfacing structured reports.
+An MCP server for Claude Code, Codex CLI, Cursor, Gemini CLI, and Claude Desktop. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
 
-## Three Pillars of v1.0.0
+## Why
 
-### 1. Cross-model blind spot detection
-The **readiness check** (phase 1) evaluates every brief before dispatch. It catches vague prompts, under-specified scopes, and contextually undersupplied requests — surfacing `briefQualityWarnings` in the result so the caller knows what to improve. By default (`briefQualityPolicy: 'warn'`), warnings are surfaced but dispatch proceeds. Set `'strict'` to refuse vague briefs before money is spent, or `'normalize'` to auto-enrich them.
+Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste. multi-model-agent fixes this:
 
-### 2. Two-slot agent model
-Every task routes to one of two slots:
+- **Save 90%+ on implementation labor.** Mechanical work runs on standard agents at $0.01-0.03/task. Review and audit runs on complex agents at $0.30-0.65/task. Your flagship model does neither.
+- **Keep your context window clean.** Every task runs in an isolated worker context. Zero implementation tokens pollute your architect session.
+- **Ship faster with parallelism.** Independent tasks execute concurrently — 30-45% wall-clock savings on multi-file work.
+- **Catch bugs with cross-agent review.** Implementation and review run on different models. Different training data, different blind spots, structural quality you can't get from self-review.
 
-| Slot | When to use it | Speed | Cost |
-|---|---|---|---|
-| `standard` | Mechanical work, retrievals, single-file edits, focused research | Fast | Cheap |
-| `complex` | Multi-file integration, architecture decisions, security review, whole-branch synthesis | Slow | Higher |
-
-The server picks the cheapest configured agent that satisfies the task's required capabilities and declared `agentType`.
-
-### 3. Superpowers specialization
-Four tools beyond basic dispatch — each one is a specialized sub-routine with opinionated defaults:
-
-| Tool | Purpose |
-|---|---|
-| `audit_document` | Verify a spec document's requirements are met |
-| `debug_task` | Triage a failure against known failure patterns |
-| `review_code` | Structural quality review of a diff or module |
-| `verify_work` | Confirm implementation matches spec |
-
-## Eight Tools
-
-The MCP server exposes eight tools:
-
-| Tool | Purpose |
-|---|---|
-| `delegate_tasks` | Dispatch a batch of tasks; concurrent execution, auto-routing, cost ceiling |
-| `register_context_block` | Store a reusable context block (long briefs, evidence bundles) |
-| `retry_tasks` | Re-dispatch specific tasks from a batch (30-min LRU cache) |
-| `get_batch_slice` | Fetch output, detail, or telemetry from a previous batch |
-| `audit_document` | Specialized: spec compliance audit |
-| `debug_task` | Specialized: failure triage |
-| `review_code` | Specialized: code quality review |
-| `verify_work` | Specialized: implementation verification |
-
-## Five-Phase Lifecycle
-
-```
-Brief → Readiness check → Dispatch → Execute → Review (if enabled) → Aggregate
-```
-
-### Phase 1 — Brief / Readiness check
-`evaluateReadiness` runs on every brief before dispatch (default policy: `warn`). It detects missing pillars (scope, inputs, done condition, output contract) and layer-2 warnings (outsourced discovery, brittle line anchors, mixed environment actions). Results are surfaced as `briefQualityWarnings` on the task result.
-
-| `briefQualityPolicy` | Behavior |
-|---|---|
-| `warn` (default) | Evaluate and surface warnings; dispatch proceeds |
-| `strict` | Refuse briefs with missing pillars (`brief_too_vague` status) |
-| `normalize` | Refuse if missing pillars; auto-enrich if layer-2 warnings |
-| `off` | Skip readiness evaluation entirely |
-
-### Phase 2 — Dispatch
-Route to the appropriate agent slot (`standard` or `complex`) based on `agentType`. Auto-routing selects the cheapest configured agent that has the required capabilities.
-
-### Phase 3 — Execute
-The agent performs the work under enforced constraints:
-
-- **Cost ceiling** — task aborts before spending more than the declared ceiling
-- **Call cache** — repeated identical calls (same prompt + model) return the cached result
-- **Format constraints** — structured output requirements declared via `expectedCoverage`
-
-### Phase 4 — Review (optional)
-Spec review and quality review run on the *other* slot — not the same slot that did the work. This prevents self-review bias.
-
-### Phase 5 — Aggregate
-Merge all per-agent reports into a single structured `BatchReport` with `headline`, `timings`, `aggregateCost`, `batchProgress`, and per-task cost rollup.
-
-## Minimal Config
-
-```json
-{
-  "agents": {
-    "fast": {
-      "agentType": "standard",
-      "provider": "openai-compatible",
-      "model": "MiniMax-M2",
-      "baseUrl": "https://api.minimax.io/v1",
-      "apiKeyEnv": "MINIMAX_API_KEY",
-      "hostedTools": ["web_search"]
-    },
-    "reasoner": {
-      "agentType": "complex",
-      "provider": "openai-compatible",
-      "model": "MiniMax-M2-32K",
-      "baseUrl": "https://api.minimax.io/v1",
-      "apiKeyEnv": "MINIMAX_API_KEY"
-    }
-  },
-  "defaults": {
-    "maxTurns": 200,
-    "timeoutMs": 600000,
-    "tools": "full"
-  }
-}
-```
-
-Config lookup order:
-1. `--config <path>`
-2. `MULTI_MODEL_CONFIG`
-3. `~/.multi-model/config.json`
-
-## Packages
-
-| Package | Purpose |
-|---|---|
-| `@zhixuan92/multi-model-agent-core` | Routing, config loading, agent runners, execution |
-| `@zhixuan92/multi-model-agent-mcp` | MCP stdio server exposing the nine tools |
+| Project | Tasks | With multi-model-agent | Single flagship model | Saved | Time |
+|---|---|---|---|---|---|
+| Feature implementation (30 files) | ~50 | $1.50 | ~$50 | **97%** | ~35 min |
+| Full web SPA | 59 | $5.65 | ~$68 | **92%** | ~50 min |
+| Backend microservice | 91 | $8.21 | ~$104 | **92%** | ~1.5 hrs |
 
 ## Quick Start
 
-### 1. Requirements
+Requires Node >= 22 and an MCP client.
 
-- Node.js `>=22`
-- An MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor)
-- Credentials for at least one provider
-
-### 2. Create your config
+### 1. Create config
 
 ```bash
-mkdir -p ~/.multi-model
-touch ~/.multi-model/config.json
-# edit with the minimal config above
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
+{
+  "agents": {
+    "standard": {
+      "type": "openai-compatible",
+      "model": "MiniMax-M2",
+      "baseUrl": "https://api.minimax.io/v1",
+      "apiKeyEnv": "MINIMAX_API_KEY"
+    },
+    "complex": {
+      "type": "openai-compatible",
+      "model": "gpt-5",
+      "baseUrl": "https://api.openai.com/v1",
+      "apiKeyEnv": "OPENAI_API_KEY"
+    }
+  },
+  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+}
+EOF
 ```
 
-### 3. Register the MCP server
+Use any mix: Claude, GPT, DeepSeek, MiniMax, Groq, local vLLM — anything OpenAI-compatible works in either slot.
 
-#### Claude Code (user scope)
-
-```bash
-claude mcp add multi-model-agent -s user -- npx -y @zhixuan92/multi-model-agent-mcp serve
-```
-
-With env vars:
+### 2. Register the MCP server
 
 ```bash
 claude mcp add multi-model-agent -s user \
-  -e MINIMAX_API_KEY=... \
+  -e MINIMAX_API_KEY=... -e OPENAI_API_KEY=... \
   -- npx -y @zhixuan92/multi-model-agent-mcp serve
 ```
 
-#### Codex CLI
+<details><summary>Codex CLI / Claude Desktop / Cursor</summary>
 
-Add to `~/.codex/config.toml`:
-
+**Codex CLI** — add to `~/.codex/config.toml`:
 ```toml
 [mcp_servers.multi-model-agent]
 command = "npx"
@@ -160,62 +67,115 @@ args = ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"]
 
 [mcp_servers.multi-model-agent.env]
 MINIMAX_API_KEY = "..."
+OPENAI_API_KEY = "..."
 ```
 
-#### Claude Desktop
-
-Add to `claude_desktop_config.json`:
-
+**Claude Desktop** — add to `claude_desktop_config.json`:
 ```json
 {
   "mcpServers": {
     "multi-model-agent": {
       "command": "npx",
       "args": ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"],
-      "env": { "MINIMAX_API_KEY": "..." }
+      "env": { "MINIMAX_API_KEY": "...", "OPENAI_API_KEY": "..." }
     }
   }
 }
 ```
 
-### 4. Verify
+</details>
+
+### 3. Verify
 
 ```bash
-claude mcp list
+claude mcp list   # should show multi-model-agent
 ```
 
-Test with a trivial task:
+Your AI assistant now has `delegate_tasks` and 7 other tools. Ask it to delegate work — it knows when to use them.
 
-```json
-{
-  "tasks": [{
-    "prompt": "Say hello.",
-    "agentType": "standard",
-    "requiredCapabilities": []
-  }]
-}
+## How It Works
+
+You configure two labor slots:
+
+| Slot | Purpose | Example models |
+|---|---|---|
+| `complex` | Advanced labor — code review, auditing, security analysis | GPT-5, Claude Opus, Claude Sonnet |
+| `standard` | Heavy lifting — file writes, test runs, implementation | MiniMax, DeepSeek, Claude Haiku |
+
+Your own model (whatever you're talking to) stays on architecture, design, and decisions. It never enters the labor slots.
+
+Every task goes through a reviewed lifecycle:
+
+```
+Brief → Readiness check → Implement → Spec review → Quality review → Report
 ```
 
-## Updating
+Implementation and review run on *different* agents — cross-agent review catches what self-review can't.
 
-`npx -y @zhixuan92/multi-model-agent-mcp serve` **always fetches the latest published version** on each spawn. To update:
+## Tools
 
-1. Fully quit your MCP client (`⌘Q` on macOS)
-2. Restart — the next `delegate_tasks` call pulls the new version
+**Core**
 
-To pin a version:
+| Tool | Purpose |
+|---|---|
+| `delegate_tasks` | Dispatch tasks in parallel with full control over execution |
 
+**Specialized presets** — if you use [superpowers](https://github.com/anthropics/claude-code-plugins) for Claude Code, these map directly to your workflow:
+
+| Tool | Workflow match | Preset |
+|---|---|---|
+| `audit_document` | Spec auditing after brainstorming/planning | Complex agent, no review pipeline. Parallel file audit. |
+| `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. |
+| `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. |
+| `debug_task` | Systematic debugging | Complex agent, 1 review round. Hypothesis-driven investigation. |
+
+Not using superpowers? These tools work standalone — they're just opinionated defaults over `delegate_tasks` for common patterns.
+
+**Utilities**
+
+| Tool | Purpose |
+|---|---|
+| `register_context_block` | Store reusable context (long briefs, reference docs) |
+| `retry_tasks` | Re-run specific tasks from a previous batch |
+| `get_batch_slice` | Fetch output or telemetry from a previous batch |
+
+<details><summary><strong>Configuration</strong></summary>
+
+Config lookup order: `--config <path>` → `MULTI_MODEL_CONFIG` env → `~/.multi-model/config.json`
+
+Agent types: `openai-compatible`, `claude`, `codex`. Any OpenAI-compatible endpoint works — MiniMax, DeepSeek, Groq, Together, local vLLM.
+
+Auth:
+- **OpenAI-compatible**: `apiKeyEnv` (recommended) or inline `apiKey`
+- **Claude**: Local Claude auth flow, or `ANTHROPIC_API_KEY` env
+- **Codex**: `codex login`, or `OPENAI_API_KEY` env
+
+</details>
+
+<details><summary><strong>Security & Sandbox</strong></summary>
+
+- Default `sandboxPolicy: "cwd-only"` confines agents to the task's working directory
+- Path traversal and symlinks resolved via `fs.realpath` — escapes are rejected
+- `runShell` disabled under `cwd-only`. Opt in per-task with `sandboxPolicy: "none"`
+- `readFile` rejects >50 MiB; `writeFile` rejects >100 MiB
+- Never commit API keys — use `apiKeyEnv` and env vars
+
+</details>
+
+<details><summary><strong>Updating</strong></summary>
+
+`npx -y @zhixuan92/multi-model-agent-mcp serve` fetches the latest version on each spawn. To update: fully quit your MCP client, reopen.
+
+Pin a version for reproducibility:
 ```bash
-# in spawn command
 npx -y @zhixuan92/multi-model-agent-mcp@1.0.0 serve
-
-# in config files
-args = ["-y", "@zhixuan92/multi-model-agent-mcp@1.0.0", "serve"]
 ```
 
-## Recommended: Delegation Rule for Claude Code
+</details>
 
-Install globally:
+<details><summary><strong>Delegation rule for Claude Code</strong></summary>
+
+Install a drop-in rule that teaches Claude Code when to delegate vs do work itself:
 
 ```bash
 mkdir -p ~/.claude/rules
@@ -223,46 +183,34 @@ curl -o ~/.claude/rules/multi-model-delegation.md \
   https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/docs/claude-code-delegation-rule.md
 ```
 
-The rule teaches Claude Code **when** to delegate (judgment stays in parent, labor goes to the fleet) and **how** to brief workers for zero-decision execution. Full reference: [`docs/claude-code-delegation-rule.md`](./docs/claude-code-delegation-rule.md).
+Full reference: [`docs/claude-code-delegation-rule.md`](./docs/claude-code-delegation-rule.md)
 
-## Security Best Practices
+</details>
 
-- **Never commit API keys.** Use `apiKeyEnv` and set the value via your shell or MCP client config.
-- **Restrict file permissions:**
-  ```bash
-  chmod 600 ~/.multi-model/config.json
-  chmod 600 ~/.codex/auth.json
-  ```
-- **Keep `sandboxPolicy: cwd-only`** (default) unless a task genuinely needs shell access.
-- **File size caps:** `readFile` rejects targets >50 MiB; `writeFile` rejects content >100 MiB.
+<details><summary><strong>Troubleshooting</strong></summary>
 
-## Local Development
+| Problem | Fix |
+|---|---|
+| `No agents configured` | Create `~/.multi-model/config.json` or pass `--config` |
+| Task never routes | Check `requiredCapabilities` and `agentType` match your config |
+| Shell tasks fail | Set `sandboxPolicy: "none"` on the agent or task |
+| `openai-compatible` fails | Add `baseUrl` + `apiKey`/`apiKeyEnv` |
+| Client doesn't see changes | Fully quit and reopen the MCP client |
+
+</details>
+
+<details><summary><strong>Local development</strong></summary>
 
 ```bash
-npm install
-npm run build
-npm test
-npm run serve   # MCP server on stdio
+npm install && npm run build && npm test
 ```
 
-Repo layout:
+| Package | Purpose |
+|---|---|
+| `@zhixuan92/multi-model-agent-core` | Routing, config, runners, execution |
+| `@zhixuan92/multi-model-agent-mcp` | MCP stdio server, tool schemas |
 
-- `packages/core` — routing, config, runners, execution
-- `packages/mcp` — MCP stdio server and tool schema
-- `tests` — Vitest coverage
-- `scripts` — local helper scripts
-
-See [`CONTRIBUTING.md`](./CONTRIBUTING.md) for the full contributor workflow.
-
-## Troubleshooting
-
-| Problem | Likely cause | Fix |
-|---|---|---|
-| `No agents configured` | Config file missing or empty | Create `~/.multi-model/config.json` or pass `--config` |
-| Task never routes | Missing capability or wrong `agentType` | Check `requiredCapabilities` and `agentType` in your config |
-| `shell` tasks fail | Sandbox is `cwd-only` | Set `sandboxPolicy: "none"` on the agent or task |
-| `openai-compatible` fails | `baseUrl` missing | Add `baseUrl` + `apiKey`/`apiKeyEnv` to the agent entry |
-| MCP client doesn't see changes | Client not restarted | Fully quit and reopen the client |
+</details>
 
 ## License
 
