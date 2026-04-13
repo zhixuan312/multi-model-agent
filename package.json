@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "0.1.0",
+  "version": "1.1.0",
   "private": true,
   "license": "MIT",
   "description": "MCP server that delegates tasks to sub-agents running on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
