@@ -25,6 +25,30 @@ Requires Node >= 22 and an MCP client.
 
 ### 1. Create config
 
+Three agent types are supported — use whichever matches your setup:
+
+| Type | Auth | API key needed? |
+|---|---|---|
+| `claude` | Your existing Claude Code / Claude subscription | No — uses local OAuth |
+| `codex` | Your existing Codex subscription (`codex login`) | No — reads `~/.codex/auth.json` |
+| `openai-compatible` | Any OpenAI-compatible API (GPT, MiniMax, DeepSeek, Groq, local vLLM) | Yes — `apiKeyEnv` or `apiKey` |
+
+**If you have Claude Code and/or Codex** — zero API keys needed:
+
+```bash
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
+{
+  "agents": {
+    "standard": { "type": "codex", "model": "codex-mini-latest" },
+    "complex": { "type": "claude", "model": "claude-sonnet-4-20250514" }
+  },
+  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+}
+EOF
+```
+
+**If you prefer OpenAI-compatible endpoints:**
+
 ```bash
 mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 {
@@ -47,11 +71,16 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 EOF
 ```
 
-Use any mix: Claude, GPT, DeepSeek, MiniMax, Groq, local vLLM — anything OpenAI-compatible works in either slot.
+Mix and match freely — e.g., `claude` for complex + `openai-compatible` for standard.
 
 ### 2. Register the MCP server
 
 ```bash
+# Claude/Codex agents (no env vars needed):
+claude mcp add multi-model-agent -s user \
+  -- npx -y @zhixuan92/multi-model-agent-mcp serve
+
+# OpenAI-compatible agents (pass API keys):
 claude mcp add multi-model-agent -s user \
   -e MINIMAX_API_KEY=... -e OPENAI_API_KEY=... \
   -- npx -y @zhixuan92/multi-model-agent-mcp serve
@@ -65,9 +94,10 @@ claude mcp add multi-model-agent -s user \
 command = "npx"
 args = ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"]
 
-[mcp_servers.multi-model-agent.env]
-MINIMAX_API_KEY = "..."
-OPENAI_API_KEY = "..."
+# Only needed for openai-compatible agents:
+# [mcp_servers.multi-model-agent.env]
+# MINIMAX_API_KEY = "..."
+# OPENAI_API_KEY = "..."
 ```
 
 **Claude Desktop** — add to `claude_desktop_config.json`:
@@ -77,11 +107,13 @@ OPENAI_API_KEY = "..."
     "multi-model-agent": {
       "command": "npx",
       "args": ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"],
-      "env": { "MINIMAX_API_KEY": "...", "OPENAI_API_KEY": "..." }
+      "env": {}
     }
   }
 }
 ```
+
+Add API key env vars only if using `openai-compatible` agents.
 
 </details>
 
