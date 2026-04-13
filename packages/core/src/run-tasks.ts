@@ -13,6 +13,7 @@ import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
+import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';
 import { normalizeBrief } from './readiness/normalize-brief.js';
 import { runSpecReview } from './review/spec-reviewer.js';
@@ -407,6 +408,17 @@ export async function runTasks(
       };
     }
   });
+
+  // C5: Apply effort default when not explicitly set
+  for (const r of resolved) {
+    if ('error' in r) continue;
+    if (r.task.effort === undefined) {
+      const inferred = inferEffort(r.task.prompt);
+      if (inferred !== undefined) {
+        r.task = { ...r.task, effort: inferred };
+      }
+    }
+  }
 
   // C3: Inject parallel-safety suffix when dispatching 2+ tasks
   if (resolved.length > 1) {
