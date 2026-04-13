@@ -5,7 +5,7 @@ import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 
 export interface QualityReviewResult {
-  status: 'approved' | 'changes_required' | 'not_run';
+  status: 'approved' | 'changes_required' | 'skipped' | 'error';
   report?: ParsedStructuredReport;
   findings: string[];
 }
@@ -19,7 +19,7 @@ export async function runQualityReview(
   filesWritten: string[],
 ): Promise<QualityReviewResult> {
   if (filesWritten.length === 0) {
-    return { status: 'not_run', findings: [] };
+    return { status: 'skipped', findings: [] };
   }
 
   let result;
@@ -38,16 +38,16 @@ export async function runQualityReview(
       { explicitlyPinned: true },
     );
   } catch {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   if (result.status !== 'ok') {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   const report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   const summaryLower = report.summary.toLowerCase();

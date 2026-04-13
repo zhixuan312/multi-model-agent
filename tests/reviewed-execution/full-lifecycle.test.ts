@@ -77,8 +77,8 @@ describe('full reviewed lifecycle', () => {
       }],
       config,
     );
-    expect(results[0].specReviewStatus).toBe('not_run');
-    expect(results[0].qualityReviewStatus).toBe('not_run');
+    expect(results[0].specReviewStatus).toBe('skipped');
+    expect(results[0].qualityReviewStatus).toBe('skipped');
   });
 
   it('reviewPolicy=spec_only skips quality review', async () => {
@@ -91,6 +91,6 @@ describe('full reviewed lifecycle', () => {
       config,
     );
     expect(results[0].specReviewStatus).toBe('approved');
-    expect(results[0].qualityReviewStatus).toBe('not_run');
+    expect(results[0].qualityReviewStatus).toBe('skipped');
   });
 });

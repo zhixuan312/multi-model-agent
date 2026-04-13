@@ -4,8 +4,8 @@ export function aggregateResult(
   implReport: ParsedStructuredReport,
   specReport: ParsedStructuredReport | undefined,
   qualityReport: ParsedStructuredReport | undefined,
-  specStatus: 'approved' | 'changes_required' | 'not_run',
-  qualityStatus: 'approved' | 'changes_required' | 'not_run',
+  specStatus: 'approved' | 'changes_required' | 'skipped' | 'error',
+  qualityStatus: 'approved' | 'changes_required' | 'skipped' | 'error',
 ): ParsedStructuredReport {
   const prefix =
     specStatus === 'changes_required'

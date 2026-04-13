@@ -43,9 +43,9 @@ describe('runSpecReview', () => {
     expect(r.findings.length).toBeGreaterThan(0);
   });
 
-  it('returns not_run on reviewer dispatch failure', async () => {
+  it('returns error on reviewer dispatch failure', async () => {
     const p = mockProvider('timed out', 'timeout');
     const r = await runSpecReview(p, packet, implReport, {}, []);
-    expect(r.status).toBe('not_run');
+    expect(r.status).toBe('error');
   });
 });

@@ -137,13 +137,13 @@ async function executeReviewedLifecycle(
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
     };
   }
@@ -152,13 +152,13 @@ async function executeReviewedLifecycle(
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
       implementationReport: implReport,
     };
@@ -171,13 +171,13 @@ async function executeReviewedLifecycle(
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
     };
   }
@@ -237,7 +237,7 @@ async function executeReviewedLifecycle(
     }
   }
 
-  let qualityResult: { status: 'approved' | 'changes_required' | 'not_run'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'not_run', report: undefined, findings: [] };
+  let qualityResult: { status: 'approved' | 'changes_required' | 'skipped' | 'error'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'skipped', report: undefined, findings: [] };
   if (reviewPolicy === 'full') {
     qualityResult = await runQualityReview(
       otherProvider,
@@ -301,7 +301,7 @@ async function executeReviewedLifecycle(
       normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
       implementer: resolved.slot,
       specReviewer: otherSlot,
-      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'not_run',
+      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
     },
   };
 }

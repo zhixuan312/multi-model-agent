@@ -42,7 +42,7 @@ describe('runQualityReview', () => {
   it('auto-skips when filesWritten is empty', async () => {
     const p = mockProvider('should not be called');
     const r = await runQualityReview(p, packet, implReport, {}, [], []);
-    expect(r.status).toBe('not_run');
+    expect(r.status).toBe('skipped');
     expect((p.run as any).mock.calls.length).toBe(0);
   });
 });

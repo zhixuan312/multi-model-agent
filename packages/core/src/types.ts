@@ -237,17 +237,17 @@ export interface RunResult {
   /** Worker status extracted from implementer report summary. */
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
   /** Spec review outcome. */
-  specReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
   /** Quality review outcome. */
-  qualityReviewStatus?: 'approved' | 'changes_required' | 'not_run'
+  qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
   /** Aggregated structured report from the reviewed execution loop. */
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   /** Which agent ran in each role. */
   agents?: {
     normalizer: 'standard' | 'complex' | 'skipped'
     implementer: 'standard' | 'complex' | 'not_run'
-    specReviewer: 'standard' | 'complex' | 'not_run'
-    qualityReviewer: 'standard' | 'complex' | 'not_run'
+    specReviewer: 'standard' | 'complex' | 'skipped'
+    qualityReviewer: 'standard' | 'complex' | 'skipped'
   }
   /** The implementer's structured report. */
   implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
@@ -270,7 +270,7 @@ export interface BatchProgress {
   completedTasks: number
   incompleteTasks: number
   failedTasks: number
-  successPercent: number
+  successPercent: number;
 }
 
 /** Aggregate cost metrics for a `delegate_tasks` batch. */
