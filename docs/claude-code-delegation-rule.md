@@ -19,7 +19,7 @@ When executing a plan, assign `agentType` per task based on nature:
 - `standard` — clear spec, worker follows instructions without judgment
 - `complex` — requires reasoning about trade-offs, ambiguous scope, security-sensitive
 
-Always set `cwd` (absolute project root) and `sandboxPolicy: 'cwd-only'` on every dispatch.
+Set `cwd` (absolute project root) on any dispatch that reads or writes files. Set `sandboxPolicy: 'cwd-only'` unless the task genuinely needs shell access or paths outside the project.
 
 ## Brief Discipline
 
