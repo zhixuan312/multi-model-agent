@@ -164,6 +164,22 @@ function buildCodexTools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy
       },
     },
     {
+      name: 'edit_file',
+      description: 'Replace a unique string in an existing file. Use this instead of write_file ' +
+        'when you need to change a specific part of a file without rewriting the whole thing. ' +
+        'oldContent must match exactly one location in the file — include enough surrounding ' +
+        'context (nearby lines) to make it unique.',
+      parameters: z.toJSONSchema(z.object({
+        path: z.string().describe('File path to edit'),
+        oldContent: z.string().describe('Exact string to find (must be unique in file)'),
+        newContent: z.string().describe('Replacement string'),
+      })) as Record<string, unknown>,
+      execute: async (args) => {
+        await impl.editFile(args.path as string, args.oldContent as string, args.newContent as string);
+        return `File edited: ${args.path}`;
+      },
+    },
+    {
       name: 'glob',
       description: 'Find files matching a glob pattern in the working directory.',
       parameters: z.toJSONSchema(z.object({

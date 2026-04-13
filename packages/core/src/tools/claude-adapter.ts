@@ -33,6 +33,23 @@ export function createClaudeToolServer(
     },
   );
 
+  const editFile = tool(
+    'edit_file',
+    'Replace a unique string in an existing file. Use this instead of write_file ' +
+      'when you need to change a specific part of a file without rewriting the whole thing. ' +
+      'oldContent must match exactly one location in the file \u2014 include enough surrounding ' +
+      'context (nearby lines) to make it unique.',
+    {
+      path: z.string().describe('File path to edit'),
+      oldContent: z.string().describe('Exact string to find (must be unique in file)'),
+      newContent: z.string().describe('Replacement string'),
+    },
+    async ({ path, oldContent, newContent }) => {
+      await impl.editFile(path, oldContent, newContent);
+      return { content: [{ type: 'text' as const, text: `File edited: ${path}` }] };
+    },
+  );
+
   const runShell = tool(
     'run_shell',
     'Execute a shell command and return stdout, stderr, and exit code. Use for running tests, installing packages, etc.',
@@ -80,7 +97,7 @@ export function createClaudeToolServer(
   );
 
   const allTools = [
-    readFile, writeFile, globTool, grepTool, listFiles,
+    readFile, writeFile, editFile, globTool, grepTool, listFiles,
     ...(sandboxPolicy !== 'cwd-only' ? [runShell] : []),
   ];
 
