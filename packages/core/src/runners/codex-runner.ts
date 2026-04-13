@@ -13,6 +13,7 @@ import {
   type ProgressEvent,
   type ToolMode,
 } from '../types.js';
+import { READONLY_TOOL_IDS } from '../tools/definitions.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
 import { TextScratchpad } from '../tools/scratchpad.js';
@@ -138,7 +139,9 @@ interface CodexTool {
   execute: (args: Record<string, unknown>) => Promise<string>;
 }
 
-function buildCodexTools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy): CodexTool[] {
+function buildCodexTools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy, toolMode: ToolMode = 'full'): CodexTool[] {
+  if (toolMode === 'none') return [];
+
   const tools: CodexTool[] = [
     {
       name: 'read_file',
@@ -208,6 +211,10 @@ function buildCodexTools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy
         return JSON.stringify(result);
       },
     });
+  }
+
+  if (toolMode === 'readonly') {
+    return tools.filter(t => (READONLY_TOOL_IDS as readonly string[]).includes(t.name));
   }
 
   return tools;
@@ -305,7 +312,7 @@ export async function runCodex(
     };
   }
 
-  const codexTools = toolMode === 'full' ? buildCodexTools(toolImpls, sandboxPolicy) : [];
+  const codexTools = buildCodexTools(toolImpls, sandboxPolicy, toolMode);
   const toolsByName = new Map(codexTools.map(t => [t.name, t]));
   const responsesTools = codexTools.map(t => ({
     type: 'function' as const,
@@ -320,7 +327,7 @@ export async function runCodex(
   // matrix's claim that codex has web_search true at default settings — the
   // user's guiding principle is to minimize required config.
   const configuredHostedTools = providerConfig.hostedTools ?? ['web_search'];
-  const hostedTools = toolMode === 'full'
+  const hostedTools = toolMode !== 'none'
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     ? configuredHostedTools.map(t => ({ type: t } as any))
     : [];

@@ -1,9 +1,16 @@
 import { tool, createSdkMcpServer } from '@anthropic-ai/claude-agent-sdk';
 import { z } from 'zod';
 import type { ToolImplementations } from './definitions.js';
-import type { SandboxPolicy } from '../types.js';
+import type { SandboxPolicy, ToolMode } from '../types.js';
+import { READONLY_TOOL_IDS } from './definitions.js';
 
-export function createClaudeToolServer(impl: ToolImplementations, sandboxPolicy: SandboxPolicy = 'cwd-only') {
+export function createClaudeToolServer(
+  impl: ToolImplementations,
+  sandboxPolicy: SandboxPolicy = 'cwd-only',
+  toolMode: ToolMode = 'full',
+) {
+  if (toolMode === 'none') return null;
+
   const readFile = tool(
     'read_file',
     'Read the contents of a file at the given path. Returns the full file content as a string.',
@@ -72,12 +79,18 @@ export function createClaudeToolServer(impl: ToolImplementations, sandboxPolicy:
     },
   );
 
+  const allTools = [
+    readFile, writeFile, globTool, grepTool, listFiles,
+    ...(sandboxPolicy !== 'cwd-only' ? [runShell] : []),
+  ];
+
+  const filteredTools = toolMode === 'readonly'
+    ? allTools.filter(t => (READONLY_TOOL_IDS as readonly string[]).includes(t.name))
+    : allTools;
+
   return createSdkMcpServer({
     name: 'code-tools',
     version: '1.0.0',
-    tools: [
-      readFile, writeFile, globTool, grepTool, listFiles,
-      ...(sandboxPolicy !== 'cwd-only' ? [runShell] : []),
-    ],
+    tools: filteredTools,
   });
 }
