@@ -55,10 +55,6 @@
     "./tools/verify-work": {
       "types": "./dist/tools/verify-work.d.ts",
       "import": "./dist/tools/verify-work.js"
-    },
-    "./tools/batch-response": {
-      "types": "./dist/tools/batch-response.d.ts",
-      "import": "./dist/tools/batch-response.js"
     }
   },
   "scripts": {

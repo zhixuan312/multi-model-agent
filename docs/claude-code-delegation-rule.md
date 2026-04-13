@@ -188,17 +188,16 @@ The MCP's routing is: **capability filter → `agentType` filter → cheapest qu
 
 ### Using the Specialized Tools
 
-The five specialized tools are purpose-built for specific sub-routines. Use them instead of hand-rolling `delegate_tasks` calls for these shapes:
+The four specialized tools are purpose-built for specific sub-routines. Use them instead of hand-rolling `delegate_tasks` calls for these shapes:
 
 | Tool | When to use it | What it does |
 |---|---|---|
-| `execute_plan_task` | Running a single step from an implementation plan | Steps through a plan with proper checkpointing |
-| `audit_document` | Verifying a spec document's requirements are met | Checks each requirement, flags gaps |
+| `audit_document` | Verifying a spec document's requirements are met | Checks each requirement, flags gaps. Accepts file paths — multiple files audited in parallel. |
 | `debug_task` | Triage a failure against known failure patterns | Maps symptoms to known patterns, suggests fixes |
-| `review_code` | Structural quality review of a diff or module | Checks structure, style, security, test coverage |
-| `verify_work` | Confirm implementation matches spec | Cross-checks against spec requirements |
+| `review_code` | Structural quality review of a diff or module | Checks structure, style, security, test coverage. Accepts file paths — multiple files reviewed in parallel. |
+| `verify_work` | Confirm implementation matches spec | Cross-checks against spec requirements. Accepts file paths — multiple files verified in parallel. |
 
-For tasks that don't fit one of these shapes, use `delegate_tasks` directly.
+For tasks that don't fit one of these shapes, or that need pipeline customization (reviewPolicy, maxReviewRounds, effort, etc.), use `delegate_tasks` directly.
 
 ### Writing Delegable Briefs
 

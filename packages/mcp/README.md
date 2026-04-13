@@ -2,7 +2,7 @@
 
 **Delegate work from your expensive parent-session model to a fleet of cheaper sub-agents, in parallel, from a single MCP tool call.**
 
-This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets nine tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_batch_slice`, `execute_plan_task`, `audit_document`, `debug_task`, `review_code`, and `verify_work`. Each `delegate_tasks` call runs the supplied tasks in parallel across the agents you configured, auto-routing each to the cheapest one that has the required capabilities and agent type — or pinning to a specific agent when you want control. Every response envelope carries a pre-computed `headline` field so the calling agent can narrate the ROI story in one line without any arithmetic.
+This is the MCP stdio server for [`multi-model-agent`](https://github.com/zhixuan312/multi-model-agent). Your MCP client (Claude Code, Claude Desktop, Codex CLI, Cursor, …) spawns it on demand and gets eight tools: `delegate_tasks`, `register_context_block`, `retry_tasks`, `get_batch_slice`, `audit_document`, `debug_task`, `review_code`, and `verify_work`. Each `delegate_tasks` call runs the supplied tasks in parallel across the agents you configured, auto-routing each to the cheapest one that has the required capabilities and agent type — or pinning to a specific agent when you want control. Every response envelope carries a pre-computed `headline` field so the calling agent can narrate the ROI story in one line without any arithmetic.
 
 ## Why use it
 

@@ -12,8 +12,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Features
 
 - **Reviewed lifecycle (core).** Every task now passes through a five-phase lifecycle: `Brief → Readiness check → Dispatch → Execute → Review (if enabled) → Aggregate`. The readiness check (`normalizeBrief`) evaluates prompt quality before any money is spent — it surfaces vague scopes, overambitious dispatches, and missing context before the worker runs.
-- **Specialized tools (mcp).** Five new tools beyond basic batch dispatch:
-  - `execute_plan_task` — run a single step from an implementation plan
+- **Specialized tools (mcp).** Four tools beyond basic batch dispatch:
   - `audit_document` — verify a spec document's requirements are met
   - `debug_task` — triage a failure against known failure patterns
   - `review_code` — structural quality review of a diff or module
@@ -64,7 +63,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `register_context_block` | Store long briefs or evidence bundles once, reference by id |
 | `retry_tasks` | Re-dispatch specific tasks from a batch |
 | `get_batch_slice` | Fetch output/detail/telemetry from a previous batch |
-| `execute_plan_task` | Single step from an implementation plan |
 | `audit_document` | Spec compliance audit |
 | `debug_task` | Failure triage against known patterns |
 | `review_code` | Structural code quality review |

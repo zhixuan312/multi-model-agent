@@ -20,27 +20,25 @@ Every task routes to one of two slots:
 The server picks the cheapest configured agent that satisfies the task's required capabilities and declared `agentType`.
 
 ### 3. Superpowers specialization
-Five tools beyond basic dispatch — each one is a specialized sub-routine with opinionated defaults:
+Four tools beyond basic dispatch — each one is a specialized sub-routine with opinionated defaults:
 
 | Tool | Purpose |
 |---|---|
-| `execute_plan_task` | Run a single step from an implementation plan |
 | `audit_document` | Verify a spec document's requirements are met |
 | `debug_task` | Triage a failure against known failure patterns |
 | `review_code` | Structural quality review of a diff or module |
 | `verify_work` | Confirm implementation matches spec |
 
-## Nine Tools
+## Eight Tools
 
-The MCP server exposes nine tools:
+The MCP server exposes eight tools:
 
 | Tool | Purpose |
 |---|---|
 | `delegate_tasks` | Dispatch a batch of tasks; concurrent execution, auto-routing, cost ceiling |
 | `register_context_block` | Store a reusable context block (long briefs, evidence bundles) |
 | `retry_tasks` | Re-dispatch specific tasks from a batch (30-min LRU cache) |
-| `get_batch_slice` | Fetch output, detail, or telemetry from a previous batch (replaces `get_task_output`, `get_task_detail`, `get_batch_telemetry`) |
-| `execute_plan_task` | Specialized: single plan-step execution |
+| `get_batch_slice` | Fetch output, detail, or telemetry from a previous batch |
 | `audit_document` | Specialized: spec compliance audit |
 | `debug_task` | Specialized: failure triage |
 | `review_code` | Specialized: code quality review |
