@@ -8,6 +8,7 @@ import {
   type RunOptions,
   type ProviderConfig,
   type ProgressEvent,
+  type ToolMode,
 } from '../types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
@@ -116,7 +117,7 @@ export async function runClaude(
   prompt: string,
   options: RunOptions,
   providerConfig: ProviderConfig,
-  defaults: { maxTurns: number; timeoutMs: number; tools: 'none' | 'full' },
+  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
   const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? defaults.maxTurns;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
@@ -264,16 +265,21 @@ export async function runClaude(
     },
   };
 
-  if (toolMode === 'full') {
-    const toolServer = createClaudeToolServer(toolImpls, sandboxPolicy);
-    queryOptions.mcpServers = { 'code-tools': toolServer };
+  if (toolMode !== 'none') {
+    const toolServer = createClaudeToolServer(toolImpls, sandboxPolicy, toolMode);
+    if (toolServer) {
+      queryOptions.mcpServers = { 'code-tools': toolServer };
+    }
     // Enable Claude's built-in WebSearch and WebFetch alongside our MCP code
     // tool server, so the capabilities matrix's claim that claude has
     // web_search + web_fetch is actually true at runtime. Shell is NOT in
     // this list — it stays behind the sandboxPolicy gate via our code-tools
     // MCP server's runShell implementation.
     queryOptions.tools = ['WebSearch', 'WebFetch'];
-    queryOptions.allowedTools = ['mcp__code-tools__*', 'WebSearch', 'WebFetch'];
+    queryOptions.allowedTools = [
+      ...(toolServer ? ['mcp__code-tools__*'] : []),
+      'WebSearch', 'WebFetch',
+    ];
   } else {
     queryOptions.tools = [];
   }

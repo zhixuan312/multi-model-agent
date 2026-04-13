@@ -3,6 +3,8 @@ import {
   createToolImplementations,
   MAX_READ_FILE_BYTES,
   MAX_WRITE_FILE_BYTES,
+  READONLY_TOOL_IMPLS,
+  READONLY_TOOL_IDS,
 } from '../../packages/core/src/tools/definitions.js';
 import { FileTracker } from '../../packages/core/src/tools/tracker.js';
 import fs from 'fs';
@@ -366,5 +368,17 @@ describe('tool definitions', () => {
       await tools.writeFile(target, small);
       expect(fs.readFileSync(target, 'utf-8')).toBe(small);
     });
+  });
+});
+
+describe('READONLY_TOOL_IMPLS', () => {
+  it('contains exactly the 4 read-only implementation names', () => {
+    expect(READONLY_TOOL_IMPLS).toEqual(['readFile', 'grep', 'glob', 'listFiles']);
+  });
+});
+
+describe('READONLY_TOOL_IDS', () => {
+  it('contains exactly the 4 read-only adapter tool IDs', () => {
+    expect(READONLY_TOOL_IDS).toEqual(['read_file', 'grep', 'glob', 'list_files']);
   });
 });

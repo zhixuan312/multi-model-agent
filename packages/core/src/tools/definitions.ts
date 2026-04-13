@@ -71,6 +71,12 @@ export interface ToolImplementations {
   listFiles(dirPath: string): Promise<string[]>;
 }
 
+/** Internal implementation method names (camelCase). */
+export const READONLY_TOOL_IMPLS = ['readFile', 'grep', 'glob', 'listFiles'] as const;
+
+/** Adapter-facing tool IDs (snake_case). */
+export const READONLY_TOOL_IDS = ['read_file', 'grep', 'glob', 'list_files'] as const;
+
 export function createToolImplementations(
   tracker: FileTracker,
   cwd: string,

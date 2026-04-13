@@ -16,6 +16,7 @@ import {
   type RunOptions,
   type ProviderConfig,
   type ProgressEvent,
+  type ToolMode,
 } from '../types.js';
 import { injectionTypeFor } from './injection-type.js';
 
@@ -93,7 +94,7 @@ export function stripThinkingTags(text: string): string {
 export interface OpenAIRunnerOptions {
   client: OpenAI;
   providerConfig: ProviderConfig;
-  defaults: { maxTurns: number; timeoutMs: number; tools: 'none' | 'full' };
+  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode };
 }
 
 /**
@@ -194,11 +195,11 @@ export async function runOpenAI(
     emit({ kind: 'tool_call', turn: inflightTurn, toolSummary: summary });
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
-  const fileTools = toolMode === 'full' ? createOpenAITools(toolImpls, sandboxPolicy) : [];
+  const fileTools = createOpenAITools(toolImpls, sandboxPolicy, toolMode);
 
   // Add hosted tools (web_search, image_generation, etc.) if configured — only when tools are enabled
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hostedTools = toolMode === 'full'
+  const hostedTools = toolMode !== 'none'
     ? (runner.providerConfig.hostedTools ?? []).map(t => ({ type: t } as any))
     : [];
   const tools = [...fileTools, ...hostedTools];

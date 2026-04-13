@@ -1,9 +1,16 @@
 import { tool } from '@openai/agents';
 import { z } from 'zod';
 import type { ToolImplementations } from './definitions.js';
-import type { SandboxPolicy } from '../types.js';
+import { READONLY_TOOL_IDS } from './definitions.js';
+import type { SandboxPolicy, ToolMode } from '../types.js';
 
-export function createOpenAITools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy = 'cwd-only') {
+export function createOpenAITools(
+  impl: ToolImplementations,
+  sandboxPolicy: SandboxPolicy = 'cwd-only',
+  toolMode: ToolMode = 'full',
+) {
+  if (toolMode === 'none') return [];
+
   const readFile = tool({
     name: 'read_file',
     description: 'Read the contents of a file at the given path. Returns the full file content as a string.',
@@ -79,8 +86,14 @@ export function createOpenAITools(impl: ToolImplementations, sandboxPolicy: Sand
     },
   });
 
-  return [
+  const allTools = [
     readFile, writeFile, globTool, grepTool, listFiles,
     ...(sandboxPolicy !== 'cwd-only' ? [runShell] : []),
   ];
+
+  if (toolMode === 'readonly') {
+    return allTools.filter(t => (READONLY_TOOL_IDS as readonly string[]).includes(t.name));
+  }
+
+  return allTools;
 }

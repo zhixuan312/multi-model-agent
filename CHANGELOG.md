@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.1.0] - 2026-04-13
+
+### Added
+- **`readonly` tool mode (core).** New `ToolMode` value `'readonly'` enables read-only filesystem access (readFile, grep, glob, listFiles) while blocking writes and shell. Hosted tools (web_search, WebSearch/WebFetch) remain enabled in readonly mode. All three runners (OpenAI, Claude, Codex) and both adapters support readonly filtering.
+- **Platform parity for specialized tools (mcp).** All 4 specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) now accept `filePaths`, `cwd`, `contextBlockIds`, and `tools` parameters. Each returns a metadata block with usage, status, files touched, and tool calls.
+- **Fan-out parallel dispatch.** When specialized tools receive multiple `filePaths` without inline content, each file becomes a separate parallel task via `runTasks()`. Response uses a dedicated `fan_out` envelope (no batchId — not cache-backed).
+- **`auditType` accepts array and `'general'`.** `audit_document` now accepts `['security', 'correctness']` or `'general'` (all four categories). `review_code` gains `outputFormat` parameter.
+- **`verify_work` enforces `checklist.min(1)`.**
+- **Shared tool infrastructure (mcp).** New internal modules: `shared.ts` (commonToolFields, dispatch logic, metadata builder, prompt helpers) and `batch-response.ts` (extracted from cli.ts).
+
+### Changed
+- **`delegate_tasks` description** now includes routing guidance for specialized tools.
+- **`buildTaskSchema` tools enum** updated to `'none' | 'readonly' | 'full'`.
+- **`debug_task` preset** now explicitly sets `reviewPolicy: 'full'` (was implicit via default).
+- **Batch response builders** extracted from cli.ts into batch-response.ts. Re-exported from cli.ts for backward compatibility.
+
+### Removed
+- **`execute_plan_task` tool.** Subsumed by `delegate_tasks` with a single-element task array. Source, tests, registration, and package export all removed.
+
+### Documentation
+- **READMEs rewritten.** Marketing-first structure with savings table, quick start, collapsible details. MCP and core READMEs are complementary (no duplication).
+- **Delegation rule rewritten.** Auto-pipeline for superpowers users (3 spec audit rounds, 2 plan audit rounds, automatic implementation + review). Standalone usage for non-superpowers users. 124 lines, imperative style.
+
 ## [1.0.0] - 2026-04-12
 
 **Breaking rewrite from v0.4.0.** The config schema, tool surface, task fields, and lifecycle have all changed. See the migration table at the end of this entry.
@@ -12,8 +35,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### New Features
 
 - **Reviewed lifecycle (core).** Every task now passes through a five-phase lifecycle: `Brief → Readiness check → Dispatch → Execute → Review (if enabled) → Aggregate`. The readiness check (`normalizeBrief`) evaluates prompt quality before any money is spent — it surfaces vague scopes, overambitious dispatches, and missing context before the worker runs.
-- **Specialized tools (mcp).** Five new tools beyond basic batch dispatch:
-  - `execute_plan_task` — run a single step from an implementation plan
+- **Specialized tools (mcp).** Four tools beyond basic batch dispatch:
   - `audit_document` — verify a spec document's requirements are met
   - `debug_task` — triage a failure against known failure patterns
   - `review_code` — structural quality review of a diff or module
@@ -64,7 +86,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 | `register_context_block` | Store long briefs or evidence bundles once, reference by id |
 | `retry_tasks` | Re-dispatch specific tasks from a batch |
 | `get_batch_slice` | Fetch output/detail/telemetry from a previous batch |
-| `execute_plan_task` | Single step from an implementation plan |
 | `audit_document` | Spec compliance audit |
 | `debug_task` | Failure triage against known patterns |
 | `review_code` | Structural code quality review |

@@ -25,11 +25,17 @@ import type {
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import { composeHeadline } from './headline.js';
-import { registerExecutePlanTask } from './tools/execute-plan-task.js';
+import {
+  computeTimings,
+  computeBatchProgress,
+  computeAggregateCost,
+} from './tools/batch-response.js';
 import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
 import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
+
+export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
 
 export const SERVER_NAME = 'multi-model-agent';
 const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
@@ -43,49 +49,6 @@ function parsePositiveInt(s: string | undefined): number | undefined {
 
 function sha256Hex(text: string): string {
   return createHash('sha256').update(text).digest('hex');
-}
-
-export function computeTimings(wallClockMs: number, results: RunResult[]): BatchTimings {
-  const sumOfTaskMs = results.reduce((sum, r) => sum + (r.durationMs ?? 0), 0);
-  const estimatedParallelSavingsMs = Math.max(0, sumOfTaskMs - wallClockMs);
-  return { wallClockMs, sumOfTaskMs, estimatedParallelSavingsMs };
-}
-
-export function computeBatchProgress(results: RunResult[]): BatchProgress {
-  const totalTasks = results.length;
-  const completedTasks = results.filter((r) => r.status === 'ok').length;
-  const incompleteTasks = results.filter(
-    (r) => r.status === 'incomplete' || r.status === 'max_turns' || r.status === 'timeout',
-  ).length;
-  const failedTasks = results.filter(
-    (r) =>
-      r.status === 'error' ||
-      r.status === 'api_aborted' ||
-      r.status === 'api_error' ||
-      r.status === 'network_error',
-  ).length;
-  const successPercent =
-    totalTasks === 0 ? 0 : Math.round((completedTasks / totalTasks) * 1000) / 10;
-  return { totalTasks, completedTasks, incompleteTasks, failedTasks, successPercent };
-}
-
-export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
-  let totalActualCostUSD = 0;
-  let totalSavedCostUSD = 0;
-
-  for (const r of results) {
-    if (r.usage.costUSD !== null && r.usage.costUSD !== undefined) {
-      totalActualCostUSD += r.usage.costUSD;
-    }
-    if (r.usage.savedCostUSD !== null && r.usage.savedCostUSD !== undefined) {
-      totalSavedCostUSD += r.usage.savedCostUSD;
-    }
-  }
-
-  return {
-    totalActualCostUSD,
-    totalSavedCostUSD,
-  };
 }
 
 function buildFullResponse(
@@ -210,7 +173,7 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
         'DEFAULT: standard (when omitted, routes to the standard agent).\n' +
         'INTERACTION: The system enforces capability floors — if the task requires web_search and standard lacks it, silently routes to complex.',
       ),
-    tools: z.enum(['none', 'full']).optional().describe(
+    tools: z.enum(['none', 'readonly', 'full']).optional().describe(
       'WHAT: Controls whether the sub-agent has access to tool APIs (read, write, bash, etc).\n' +
       'WHEN: Set to none when the task is purely prompt-only (e.g., translation, summarization).\n' +
       'DEFAULT: full — agent has access to all configured tools.\n' +
@@ -256,7 +219,7 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'WHAT: References to context blocks previously stored via register_context_block.\n' +
       'WHEN: Use to inject long briefing material without re-transmitting it across multiple calls.\n' +
       'DEFAULT: No context blocks — prompt is sent as-is.\n' +
-      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\\n\\n", and prepends to prompt before dispatch.',
+      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\n\\n", and prepends to prompt before dispatch.',
     ),
     expectedCoverage: z.object({
       minSections: z.number().int().positive().optional().describe(
@@ -435,7 +398,11 @@ export function buildMcpServer(
 
   server.tool(
     'delegate_tasks',
-    renderProviderRoutingMatrix(config),
+    'Execute one or more tasks in parallel with full control over execution parameters. ' +
+      'Use this when (A) your task doesn\'t match audit_document, review_code, verify_work, or debug_task, ' +
+      'or (B) you need pipeline customization (reviewPolicy, maxReviewRounds, effort, etc.) beyond what ' +
+      'the specialized tools expose.\n\n' +
+      renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
       responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
@@ -820,7 +787,6 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
-  registerExecutePlanTask(server, config);
   registerAuditDocument(server, config);
   registerDebugTask(server, config);
   registerReviewCode(server, config);
