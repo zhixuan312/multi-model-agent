@@ -111,7 +111,16 @@ export async function delegateWithEscalation(
     }
   }
 
-  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
+  const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
+
+  // C2: Promote incomplete → ok when agent self-assessed as done AND produced file artifacts
+  const finalStatus =
+    baseStatus === 'incomplete' &&
+    best.workerStatus === 'done' &&
+    best.filesWritten.length > 0
+      ? 'ok'
+      : baseStatus;
+
   return {
     ...best,
     status: finalStatus,
