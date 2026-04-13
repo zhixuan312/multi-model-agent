@@ -31,6 +31,7 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
+  hasCompletedWork,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -598,7 +599,7 @@ export async function runClaude(
           // spent / same-output early-out fires — exits as incomplete. ---
           const validation = validateSubAgentOutput(output, {
             expectedCoverage: options.expectedCoverage,
-            skipCompletionHeuristic: options.skipCompletionHeuristic,
+            skipCompletionHeuristic: options.skipCompletionHeuristic || hasCompletedWork(tracker.getToolCalls()),
           });
 
           if (validation.valid) {

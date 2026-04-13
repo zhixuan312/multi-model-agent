@@ -34,6 +34,7 @@ import {
   resolveInputTokenSoftLimit,
   checkWatchdogThreshold,
   logWatchdogEvent,
+  hasCompletedWork,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';

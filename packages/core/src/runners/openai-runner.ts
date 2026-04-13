@@ -62,6 +62,7 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
   THINKING_DIAGNOSTIC_MARKER,
+  hasCompletedWork,
 } from './supervision.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
@@ -508,7 +509,7 @@ export async function runOpenAI(
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateSubAgentOutput(stripped, {
           expectedCoverage: options.expectedCoverage,
-          skipCompletionHeuristic: options.skipCompletionHeuristic,
+          skipCompletionHeuristic: options.skipCompletionHeuristic || hasCompletedWork(tracker.getToolCalls()),
         });
 
         if (validation.valid) {
