@@ -91,7 +91,7 @@ OPENAI_API_KEY = "..."
 claude mcp list   # should show multi-model-agent
 ```
 
-Your AI assistant now has `delegate_tasks` and 7 other tools. Ask it to delegate work — it knows when to use them.
+Your AI assistant now has 8 tools. Ask it to delegate work — it knows when to use them.
 
 ## How It Works
 
