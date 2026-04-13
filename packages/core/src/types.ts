@@ -435,6 +435,7 @@ export type ProgressEvent =
       previousReason: string
       nextProvider: string
     }
+  | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
   | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===
