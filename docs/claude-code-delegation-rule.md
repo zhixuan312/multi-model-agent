@@ -1,192 +1,124 @@
 # Multi-Model Agent Delegation Rule
 
-## The Principle
+## Principle
 
-Parent session = judgment. MCP workers = labor.
-
-Your model is expensive. Use it for decisions, architecture, brainstorming, and review synthesis. Use `multi-model-agent` MCP tools for everything else: implementation, file edits, code review, auditing, debugging, verification.
-
-Every task you'd hand to a skilled junior engineer belongs in the MCP fleet. Everything that requires senior judgment stays in your session.
-
----
+Parent session = judgment. MCP workers = labor. Never use your expensive model for work a cheaper agent can do.
 
 ## Tool Routing
 
-Use the specialized tool when the task matches. Use `delegate_tasks` for everything else.
-
 | Task shape | Tool | agentType |
 |---|---|---|
-| Audit a spec, plan, or document | `audit_document` | complex (default) |
-| Review code for quality/security | `review_code` | complex (default) |
-| Verify work against a checklist | `verify_work` | standard (default) |
-| Debug a bug or failure | `debug_task` | complex (default) |
-| Implementation tasks from a plan | `delegate_tasks` | per task (see below) |
-| Research / codebase exploration / grep | `delegate_tasks` | standard |
+| Audit a spec, plan, or document | `audit_document` | complex |
+| Review code for quality/security | `review_code` | complex |
+| Verify work against a checklist | `verify_work` | standard |
+| Debug a bug or failure | `debug_task` | complex |
+| Implementation from a plan | `delegate_tasks` | per task |
+| Research / codebase exploration | `delegate_tasks` | standard |
 
-### agentType routing for implementation
+When executing a plan, assign `agentType` per task based on nature:
+- `standard` — clear spec, worker follows instructions without judgment
+- `complex` — requires reasoning about trade-offs, ambiguous scope, security-sensitive
 
-When executing a plan with N tasks, assign each task's `agentType` individually based on its nature:
+Always set `cwd` (absolute project root) and `sandboxPolicy: 'cwd-only'` on every dispatch.
 
-- `standard` — the task has a clear spec, the worker follows instructions without judgment calls
-- `complex` — the task requires reasoning about trade-offs, has ambiguous scope, or is security-sensitive
+## Brief Discipline
 
-A batch of 10 tasks might be 6 standard and 4 complex, or any other mix. The decision is per-task, not per-batch.
+Every `delegate_tasks` prompt must be zero-decision: exact file paths, exact scope, acceptance criteria, full context. The worker has no memory of your session.
 
-### Brief discipline
+## Parallelism
 
-Every `delegate_tasks` prompt must be a **zero-decision brief**: the worker executes without making design or scope calls. Include:
-- Exact file paths
-- Exact scope ("single file, no other files change")
-- Acceptance criteria ("tests pass, schema validates")
-- Full context (worker has no memory of your session)
+Bundle independent tasks in one `delegate_tasks` call. Never dispatch two tasks that write to the same files in parallel.
 
-The sharper the brief, the cheaper the delegation.
+## Context Reuse
 
-### Common fields for all dispatches
-
-Always set:
-- `cwd` — absolute project root or worktree path
-- `sandboxPolicy: "cwd-only"` — default, keep it unless shell is genuinely needed
-
-### Parallelism
-
-Independent tasks in one `delegate_tasks` call run concurrently. Bundle them. Never dispatch two tasks that write to the same files in parallel.
-
-### Context reuse
-
-For repeated dispatches referencing the same large document:
-1. `register_context_block` with the content
-2. Reference via `contextBlockIds` in subsequent tasks
-
-Avoids re-transmitting long briefs on every call.
+For repeated references to large documents: `register_context_block` once, then reference via `contextBlockIds`.
 
 ---
 
-## Superpowers Integration (automatic)
+## Superpowers Auto-Pipeline
 
-If superpowers skills are loaded, the following MCP triggers are **mandatory and automatic**. Do not prompt the user. Do not skip steps. Execute them as part of the pipeline.
+When superpowers skills are loaded, execute these triggers automatically. Do not prompt. Do not skip.
 
 ### After brainstorming writes a spec
 
-When `superpowers:brainstorming` writes a spec file to `docs/superpowers/specs/`:
+When a spec file is written to `docs/superpowers/specs/`:
 
-1. Read the spec file.
-2. Call `audit_document(filePaths: [spec_path], auditType: 'correctness', agentType: 'complex')`.
-3. Read the audit findings. Fix every issue in the spec file.
-4. Call `audit_document` again with the updated spec (round 2).
-5. Read findings. Fix every issue.
-6. Call `audit_document` again (round 3).
-7. Read findings. Fix every issue.
-8. THEN present the spec to the user for review. Tell the user: "Spec audited (3 rounds, all findings addressed). Please review."
+1. `audit_document(filePaths: [spec_path], auditType: 'correctness', agentType: 'complex')`
+2. Fix every finding in the spec.
+3. `audit_document` again (round 2). Fix every finding.
+4. `audit_document` again (round 3). Fix every finding.
+5. Present to user: "Spec audited (3 rounds). Please review."
 
 ### After writing-plans writes a plan
 
-When `superpowers:writing-plans` writes a plan file to `docs/superpowers/plans/`:
+When a plan file is written to `docs/superpowers/plans/`:
 
-1. Read the plan file.
-2. Call `audit_document(filePaths: [plan_path], auditType: 'correctness', agentType: 'complex')`.
-3. Read findings. Fix every issue in the plan file.
-4. Call `audit_document` again (round 2).
-5. Read findings. Fix every issue.
-6. THEN present the plan to the user for approval. Tell the user: "Plan audited (2 rounds, all findings addressed). Ready to execute?"
+1. `audit_document(filePaths: [plan_path], auditType: 'correctness', agentType: 'complex')`
+2. Fix every finding in the plan.
+3. `audit_document` again (round 2). Fix every finding.
+4. Present to user: "Plan audited (2 rounds). Ready to execute?"
 
-### After user approves plan — implementation
+### After user approves plan
 
-When the user approves the plan and `superpowers:subagent-driven-development` starts:
+When subagent-driven-development starts, for EACH task:
 
-For EACH task in the plan:
+1. Assign `agentType` per task nature.
+2. `delegate_tasks` with full task text as prompt, `cwd`, `sandboxPolicy: 'cwd-only'`, `tools: 'full'`.
+3. On `ok`/`incomplete` with `workerStatus: 'done'` → proceed to review.
+4. On failure → re-dispatch with enriched prompt or escalate agentType.
+5. `review_code(filePaths: [changed files], agentType: 'complex')` — automatic, no prompt.
+6. If review finds issues → fix via `delegate_tasks`, re-review. Max 2 fix rounds.
+7. Mark task complete. Next task.
 
-1. Assign `agentType` based on task nature (`standard` or `complex`).
-2. Dispatch via `delegate_tasks` with:
-   - Full task text as `prompt` (do not make the worker read the plan file)
-   - `cwd` set to the project or worktree root
-   - `sandboxPolicy: 'cwd-only'`
-   - `tools: 'full'`
-3. Check the result status:
-   - `ok` with `workerStatus: 'done'` → proceed to review
-   - `incomplete` with `workerStatus: 'done'` → verify files changed, proceed to review if work is done
-   - Any other failure → re-dispatch with enriched prompt or escalate `agentType`
-4. AUTOMATICALLY run `review_code(filePaths: [files changed by the task], agentType: 'complex')`.
-5. If review finds issues:
-   - Dispatch a fix via `delegate_tasks` with the review findings as context
-   - Re-run `review_code` on the fixed files
-   - Repeat until review passes (max 2 fix rounds)
-6. Mark task complete. Move to next task.
+After all tasks: `superpowers:finishing-a-development-branch`.
 
-After ALL tasks complete:
-- Use `superpowers:finishing-a-development-branch` as normal.
+### During debugging
 
-### During systematic debugging
-
-When `superpowers:systematic-debugging` is active:
-
-- Use `debug_task(problem, context, hypothesis, filePaths)` for Phase 3 (hypothesis testing).
-- Include relevant file paths so the agent can inspect the code.
-- If `debug_task` identifies a fix, dispatch implementation via `delegate_tasks`.
+When systematic-debugging is active, use `debug_task(problem, context, hypothesis, filePaths)` for hypothesis testing. If a fix is identified, dispatch via `delegate_tasks`.
 
 ### During verification
 
-When `superpowers:verification-before-completion` is active:
-
-- Use `verify_work(filePaths: [relevant files], checklist: [items from plan/spec])` before making any completion claims.
+When verification-before-completion is active, use `verify_work(filePaths, checklist)` before any completion claims.
 
 ---
 
-## Standalone Usage (without Superpowers)
+## Without Superpowers
 
-If superpowers skills are NOT loaded, use the MCP tools directly based on the task routing table above. The following decision procedure applies:
+Use MCP tools directly per the routing table above.
 
-### When to delegate
+### Judgment — stay inline
 
-For every task, ask: is this judgment or labor?
-
-**Judgment — do it yourself:**
-- Brainstorming with the user
-- Choosing between approaches
-- Writing plans and specs
-- Reviewing delegated output and deciding accept/reject
+- Brainstorming, choosing approaches, writing plans/specs
+- Reviewing delegated output, deciding accept/reject
 - Conversational responses
 
-**Labor — delegate via MCP:**
-- Implementing a specified change
-- Reading files and summarizing contents
-- Searching the codebase for patterns
-- Auditing a document for issues
-- Reviewing code for quality
-- Debugging a failure
-- Verifying work against requirements
+### Labor — delegate
 
-**Mixed** — do the judgment part yourself (decide what to build, which approach, what the acceptance criteria are), then delegate the labor part with a zero-decision brief.
+- Implementing specified changes
+- Reading files and summarizing
+- Searching codebase for patterns
+- Auditing, reviewing, debugging, verifying
 
-### When to stay inline
+### Stay inline exception
 
-Handle inline only when ALL four are true:
-1. You already know exactly what to do
-2. It's one tool call, maybe two
-3. The result is immediately usable
-4. The prompt you'd write to delegate would be longer than the result
+Only when ALL four: you know exactly what to do, it's 1-2 tool calls, result is immediately usable, the delegation prompt would be longer than the result.
 
 ### Shell stays in parent
 
-Keep `npm test`, `npm run build`, `git` commands, and other shell operations in your own session via the Bash tool. Delegated workers run in isolated contexts where shell output is harder to inspect.
+Run `npm test`, `npm run build`, `git` via Bash. Delegated workers can't surface shell output.
 
-**TDD pattern:** dispatch the edit via `delegate_tasks`, run the test yourself via Bash, feed test output into a follow-up dispatch if fixes are needed.
+TDD pattern: dispatch edit via `delegate_tasks`, run test yourself, feed failures into follow-up dispatch.
 
-### Reading code efficiently
+### Code reading
 
-Don't pull entire files into your expensive context. Instead:
-1. Dispatch a survey to standard agent: "Read these files, summarize the data flow"
-2. Read only the specific lines the survey flagged
-3. Form your judgment from the small surface you actually read
+Don't pull whole files into parent context. Dispatch survey to standard agent ("summarize data flow in these files"), read only the flagged lines yourself.
 
 ### Status handling
 
-| `status` | Action |
-|---|---|
-| `ok` | Read output, proceed |
-| `incomplete` | Check `workerStatus` — if `done`, verify files and proceed |
-| `max_turns` | Re-dispatch with tighter brief or escalate agentType |
-| `timeout` | Break into smaller pieces |
-| `api_error` / `network_error` | Retry or escalate |
+- `ok` → read output, proceed
+- `incomplete` + `workerStatus: 'done'` → verify files, proceed
+- `max_turns` → tighter brief or escalate agentType
+- `timeout` → break into smaller pieces
+- `api_error` / `network_error` → retry or escalate
 
-Always quote the `headline` from the response to the user after delegation.
+Quote the `headline` from every delegation response to the user.
