@@ -1,29 +1,23 @@
 import { describe, it, expect } from 'vitest';
 import { verifyWorkSchema } from '@zhixuan92/multi-model-agent-mcp/tools/verify-work';
 
-describe('verify_work', () => {
-  it('accepts valid params', () => {
-    const result = verifyWorkSchema.safeParse({
-      work: 'implementation of feature X',
-      checklist: ['has tests', 'handles edge cases'],
-    });
-    expect(result.success).toBe(true);
+describe('verify_work schema', () => {
+  it('accepts work with checklist', () => {
+    expect(verifyWorkSchema.safeParse({ work: 'done', checklist: ['item1'] }).success).toBe(true);
   });
-
+  it('accepts filePaths without work', () => {
+    expect(verifyWorkSchema.safeParse({ filePaths: ['a.ts'], checklist: ['check'] }).success).toBe(true);
+  });
   it('rejects empty checklist', () => {
-    const result = verifyWorkSchema.safeParse({
-      work: 'implementation of feature X',
-      checklist: [],
-    });
-    expect(result.success).toBe(true);
+    expect(verifyWorkSchema.safeParse({ work: 'done', checklist: [] }).success).toBe(false);
   });
-
-  it('rejects invalid agentType', () => {
-    const result = verifyWorkSchema.safeParse({
-      work: 'implementation',
-      checklist: ['item 1'],
-      agentType: 'invalid',
-    });
-    expect(result.success).toBe(false);
+  it('rejects missing checklist', () => {
+    expect(verifyWorkSchema.safeParse({ work: 'done' }).success).toBe(false);
+  });
+  it('accepts common fields', () => {
+    expect(verifyWorkSchema.safeParse({ work: 'x', checklist: ['c'], cwd: '/tmp', tools: 'readonly' }).success).toBe(true);
+  });
+  it('allows both work and filePaths absent (handler validates)', () => {
+    expect(verifyWorkSchema.safeParse({ checklist: ['c'] }).success).toBe(true);
   });
 });
