@@ -1,21 +1,5 @@
 # Multi-Model Agent Delegation Rule
 
-This rule requires the `multi-model-agent` MCP server registered at user scope.
-If `mcp__multi-model-agent__delegate_tasks` is not available, this rule does not apply.
-
-## Installation
-
-```bash
-# Global (every project)
-mkdir -p ~/.claude/rules
-curl -o ~/.claude/rules/multi-model-delegation.md \
-  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/docs/claude-code-delegation-rule.md
-```
-
-Restart Claude Code after installing.
-
----
-
 ## The Principle
 
 Parent session = judgment. MCP workers = labor.
