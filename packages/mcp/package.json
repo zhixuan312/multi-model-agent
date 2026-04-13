@@ -40,10 +40,6 @@
       "types": "./dist/routing/render-provider-routing-matrix.d.ts",
       "import": "./dist/routing/render-provider-routing-matrix.js"
     },
-    "./tools/execute-plan-task": {
-      "types": "./dist/tools/execute-plan-task.d.ts",
-      "import": "./dist/tools/execute-plan-task.js"
-    },
     "./tools/audit-document": {
       "types": "./dist/tools/audit-document.d.ts",
       "import": "./dist/tools/audit-document.js"
@@ -59,6 +55,10 @@
     "./tools/verify-work": {
       "types": "./dist/tools/verify-work.d.ts",
       "import": "./dist/tools/verify-work.js"
+    },
+    "./tools/batch-response": {
+      "types": "./dist/tools/batch-response.d.ts",
+      "import": "./dist/tools/batch-response.js"
     }
   },
   "scripts": {
