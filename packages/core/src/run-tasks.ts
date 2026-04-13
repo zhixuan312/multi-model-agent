@@ -133,6 +133,24 @@ async function executeReviewedLifecycle(
   const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
   const workerStatus = extractWorkerStatus(implReport);
 
+  // C6a: Skip review when there are no file artifacts to review
+  const hasWorkProduct = implResult.filesWritten.length > 0;
+  if (!hasWorkProduct) {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
+      },
+      implementationReport: implReport,
+    };
+  }
+
   if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
     return {
       ...implResult,
