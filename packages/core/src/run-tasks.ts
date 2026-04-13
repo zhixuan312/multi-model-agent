@@ -408,6 +408,23 @@ export async function runTasks(
     }
   });
 
+  // C3: Inject parallel-safety suffix when dispatching 2+ tasks
+  if (resolved.length > 1) {
+    const PARALLEL_SAFETY_SUFFIX =
+      '\n\nYou are running in parallel with other tasks. ' +
+      'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
+      'Only run task-specific test commands if provided.';
+
+    for (const r of resolved) {
+      if ('error' in r) continue;
+      r.task = {
+        ...r.task,
+        prompt: r.task.prompt + PARALLEL_SAFETY_SUFFIX +
+          (r.task.testCommand ? `\nTo verify your work, run: \`${r.task.testCommand}\`` : ''),
+      };
+    }
+  }
+
   return Promise.all(
     resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {

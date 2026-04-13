@@ -282,6 +282,12 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'DEFAULT: warn — readiness evaluates every brief and surfaces warnings, but does not block dispatch.\n' +
       'INTERACTION: When strict, a vague brief returns status brief_too_vague without spending any tokens. When normalize, the system enriches the brief via a normalization pass before dispatch.',
     ),
+    testCommand: z.string().optional().describe(
+      'WHAT: Shell command for task-specific verification (e.g., "npx vitest run tests/foo.test.ts").\n' +
+      'WHEN: Set when the task runs in parallel and you want to steer the agent toward a targeted test instead of a full-project build.\n' +
+      'DEFAULT: No test command — agent decides how to verify.\n' +
+      'INTERACTION: When set and the task runs in parallel with others, the command is recommended to the agent in a parallel-safety prompt suffix.',
+    ),
   });
 }
 

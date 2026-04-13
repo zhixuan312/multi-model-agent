@@ -93,6 +93,9 @@ export interface TaskSpec {
   maxReviewRounds?: number
   /** Optional format constraints for input/output. */
   formatConstraints?: FormatConstraints
+  /** Optional shell command for task-specific verification. Injected into
+   *  parallel-safety prompt suffix when present. */
+  testCommand?: string
 }
 
 // === Provider Config (discriminated union) ===
