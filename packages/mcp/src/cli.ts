@@ -173,7 +173,7 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
         'DEFAULT: standard (when omitted, routes to the standard agent).\n' +
         'INTERACTION: The system enforces capability floors — if the task requires web_search and standard lacks it, silently routes to complex.',
       ),
-    tools: z.enum(['none', 'full']).optional().describe(
+    tools: z.enum(['none', 'readonly', 'full']).optional().describe(
       'WHAT: Controls whether the sub-agent has access to tool APIs (read, write, bash, etc).\n' +
       'WHEN: Set to none when the task is purely prompt-only (e.g., translation, summarization).\n' +
       'DEFAULT: full — agent has access to all configured tools.\n' +
@@ -398,7 +398,11 @@ export function buildMcpServer(
 
   server.tool(
     'delegate_tasks',
-    renderProviderRoutingMatrix(config),
+    'Execute one or more tasks in parallel with full control over execution parameters. ' +
+      'Use this when (A) your task doesn\'t match audit_document, review_code, verify_work, or debug_task, ' +
+      'or (B) you need pipeline customization (reviewPolicy, maxReviewRounds, effort, etc.) beyond what ' +
+      'the specialized tools expose.\n\n' +
+      renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
       responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
