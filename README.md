@@ -175,7 +175,7 @@ npx -y @zhixuan92/multi-model-agent-mcp@1.0.0 serve
 
 <details><summary><strong>Delegation rule for Claude Code</strong></summary>
 
-Install a drop-in rule that teaches Claude Code when to delegate vs do work itself:
+Drop-in rule that automates the full pipeline. With [superpowers](https://github.com/anthropics/claude-code-plugins): auto-audits specs (3 rounds), auto-audits plans (2 rounds), dispatches implementation via MCP, auto-reviews code after each task. Without superpowers: routes judgment vs labor correctly.
 
 ```bash
 mkdir -p ~/.claude/rules
