@@ -195,11 +195,11 @@ export async function runOpenAI(
     emit({ kind: 'tool_call', turn: inflightTurn, toolSummary: summary });
   });
   const toolImpls = createToolImplementations(tracker, cwd, sandboxPolicy, abortController.signal);
-  const fileTools = toolMode === 'full' ? createOpenAITools(toolImpls, sandboxPolicy) : [];
+  const fileTools = createOpenAITools(toolImpls, sandboxPolicy, toolMode);
 
   // Add hosted tools (web_search, image_generation, etc.) if configured — only when tools are enabled
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const hostedTools = toolMode === 'full'
+  const hostedTools = toolMode !== 'none'
     ? (runner.providerConfig.hostedTools ?? []).map(t => ({ type: t } as any))
     : [];
   const tools = [...fileTools, ...hostedTools];
