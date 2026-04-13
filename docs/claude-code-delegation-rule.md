@@ -63,7 +63,7 @@ When a plan file is written to `docs/superpowers/plans/`:
 When subagent-driven-development starts, for EACH task:
 
 1. Assign `agentType` per task nature.
-2. `delegate_tasks` with full task text as prompt, `cwd`, `sandboxPolicy: 'cwd-only'`, `tools: 'full'`.
+2. `delegate_tasks` with full task text as prompt, `cwd`, `sandboxPolicy: 'cwd-only'`. Use `tools: 'full'` for implementation, `tools: 'readonly'` for read-only tasks.
 3. On `ok`/`incomplete` with `workerStatus: 'done'` → proceed to review.
 4. On failure → re-dispatch with enriched prompt or escalate agentType.
 5. `review_code(filePaths: [changed files], agentType: 'complex')` — automatic, no prompt.
@@ -105,7 +105,7 @@ Only when ALL four: you know exactly what to do, it's 1-2 tool calls, result is 
 
 ### Shell stays in parent
 
-Run `npm test`, `npm run build`, `git` via Bash. Delegated workers can't surface shell output.
+Run `npm test`, `npm run build`, `git` via Bash. Shell output from delegated workers is not interactively visible — keep build/test commands in your session.
 
 TDD pattern: dispatch edit via `delegate_tasks`, run test yourself, feed failures into follow-up dispatch.
 
@@ -117,8 +117,10 @@ Don't pull whole files into parent context. Dispatch survey to standard agent ("
 
 - `ok` → read output, proceed
 - `incomplete` + `workerStatus: 'done'` → verify files, proceed
+- `brief_too_vague` → sharpen the brief (add file paths, scope, acceptance criteria)
 - `max_turns` → tighter brief or escalate agentType
 - `timeout` → break into smaller pieces
-- `api_error` / `network_error` → retry or escalate
+- `cost_exceeded` → break into smaller pieces or raise `maxCostUSD`
+- `api_error` / `network_error` / `api_aborted` → retry or escalate
 
 Quote the `headline` from every delegation response to the user.
