@@ -50,7 +50,7 @@ function mockResult(overrides: Partial<RunResult> = {}): RunResult {
     turns: 3, durationMs: 5000,
     filesRead: [], filesWritten: [], toolCalls: [],
     outputIsDiagnostic: false, escalationLog: [],
-    workerStatus: 'done', specReviewStatus: 'not_run', qualityReviewStatus: 'not_run',
+    workerStatus: 'done', specReviewStatus: 'skipped', qualityReviewStatus: 'skipped',
     ...overrides,
   };
 }

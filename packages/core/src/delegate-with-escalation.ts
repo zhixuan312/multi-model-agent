@@ -12,6 +12,21 @@ export interface DelegateOptions {
   onProgress?: (event: ProgressEvent) => void;
 }
 
+const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'network_error']);
+const TIMEOUT_STATUS = 'timeout';
+const MAX_RETRIES = 2;
+const BASE_DELAY_MS = 1000;
+
+function sleep(ms: number): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+function maxRetriesForStatus(status: string): number {
+  if (TRANSIENT_STATUSES.has(status)) return MAX_RETRIES;
+  if (status === TIMEOUT_STATUS) return 1;
+  return 0;
+}
+
 export async function delegateWithEscalation(
   task: TaskSpec,
   chain: Provider[],
@@ -48,24 +63,43 @@ export async function delegateWithEscalation(
     let initialPromptLengthChars = 0;
     let initialPromptHash = '';
 
-    const result = await provider.run(task.prompt, {
-      tools: task.tools,
-      maxTurns: task.maxTurns,
-      timeoutMs: task.timeoutMs,
-      cwd: task.cwd,
-      effort: task.effort,
-      sandboxPolicy: task.sandboxPolicy,
-      expectedCoverage: task.expectedCoverage,
-      skipCompletionHeuristic: task.skipCompletionHeuristic,
-      parentModel: task.parentModel,
-      maxCostUSD: task.maxCostUSD,
-      formatConstraints: task.formatConstraints,
-      onProgress: safeSink,
-      onInitialRequest: (meta) => {
-        initialPromptLengthChars = meta.lengthChars;
-        initialPromptHash = meta.sha256;
-      },
-    });
+    let result: RunResult;
+    let cumulativeCostUSD = 0;
+
+    for (let attempt = 0; ; attempt++) {
+      const adjustedMaxCostUSD =
+        task.maxCostUSD !== undefined ? Math.max(0, task.maxCostUSD - cumulativeCostUSD) : undefined;
+
+      result = await provider.run(task.prompt, {
+        tools: task.tools,
+        maxTurns: task.maxTurns,
+        timeoutMs: task.timeoutMs,
+        cwd: task.cwd,
+        effort: task.effort,
+        sandboxPolicy: task.sandboxPolicy,
+        expectedCoverage: task.expectedCoverage,
+        skipCompletionHeuristic: task.skipCompletionHeuristic,
+        parentModel: task.parentModel,
+        maxCostUSD: adjustedMaxCostUSD,
+        formatConstraints: task.formatConstraints,
+        onProgress: safeSink,
+        onInitialRequest: (meta) => {
+          initialPromptLengthChars = meta.lengthChars;
+          initialPromptHash = meta.sha256;
+        },
+      });
+
+      const maxRetries = maxRetriesForStatus(result.status);
+      if (result.status === 'ok' || maxRetries === 0 || attempt >= maxRetries) break;
+
+      const attemptCost = result.usage.costUSD ?? 0;
+      cumulativeCostUSD += attemptCost;
+      if (task.maxCostUSD !== undefined && cumulativeCostUSD >= task.maxCostUSD) break;
+
+      const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
+      safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status, delayMs });
+      await sleep(delayMs);
+    }
 
     const record: AttemptRecord = {
       provider: provider.name,
@@ -111,7 +145,16 @@ export async function delegateWithEscalation(
     }
   }
 
-  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
+  const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
+
+  // C2: Promote incomplete → ok when agent self-assessed as done AND produced file artifacts
+  const finalStatus =
+    baseStatus === 'incomplete' &&
+    best.workerStatus === 'done' &&
+    best.filesWritten.length > 0
+      ? 'ok'
+      : baseStatus;
+
   return {
     ...best,
     status: finalStatus,

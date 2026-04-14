@@ -40,7 +40,7 @@ describe('aggregateResult', () => {
   });
 
   it('prefixes with [Spec review exhausted] when spec exhausted', () => {
-    const r = aggregateResult(implReport, specReport, undefined, 'changes_required', 'not_run');
+    const r = aggregateResult(implReport, specReport, undefined, 'changes_required', 'skipped');
     expect(r.summary).toContain('[Spec review exhausted]');
   });
 
@@ -49,8 +49,8 @@ describe('aggregateResult', () => {
     expect(r.summary).toContain('[Quality review exhausted]');
   });
 
-  it('handles undefined quality report (not_run)', () => {
-    const r = aggregateResult(implReport, specReport, undefined, 'approved', 'not_run');
+  it('handles undefined quality report (skipped)', () => {
+    const r = aggregateResult(implReport, specReport, undefined, 'approved', 'skipped');
     expect(r.summary).toContain('[Reviewed]');
     expect(r.validationsRun).toHaveLength(2);
   });

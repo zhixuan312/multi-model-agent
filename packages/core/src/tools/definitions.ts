@@ -65,6 +65,7 @@ export interface ShellResult {
 export interface ToolImplementations {
   readFile(filePath: string): Promise<string>;
   writeFile(filePath: string, content: string): Promise<void>;
+  editFile(filePath: string, oldContent: string, newContent: string): Promise<void>;
   runShell(command: string): Promise<ShellResult>;
   glob(pattern: string): Promise<string[]>;
   grep(pattern: string, target: string): Promise<string>;
@@ -117,6 +118,36 @@ export function createToolImplementations(
       }
       await fs.mkdir(path.dirname(resolved), { recursive: true });
       await fs.writeFile(resolved, content, 'utf-8');
+      tracker.trackWrite(resolved);
+    },
+
+    async editFile(filePath: string, oldContent: string, newContent: string): Promise<void> {
+      tracker.trackToolCall(`editFile(${filePath}, ${oldContent.length}B→${newContent.length}B)`);
+      const resolved = path.resolve(cwd, filePath);
+      if (confine) await assertWithinCwd(cwd, resolved);
+
+      const existing = await fs.readFile(resolved, 'utf-8');
+
+      const firstIndex = existing.indexOf(oldContent);
+      if (firstIndex === -1) {
+        throw new Error(`oldContent not found in file "${filePath}"`);
+      }
+      const secondIndex = existing.indexOf(oldContent, firstIndex + oldContent.length);
+      if (secondIndex !== -1) {
+        throw new Error(
+          `oldContent matches multiple locations in "${filePath}" — provide more surrounding context for a unique match`,
+        );
+      }
+
+      const updated = existing.slice(0, firstIndex) + newContent + existing.slice(firstIndex + oldContent.length);
+
+      if (updated.length > MAX_WRITE_FILE_BYTES) {
+        throw new Error(
+          `Edited content too large: ${updated.length} bytes (max ${MAX_WRITE_FILE_BYTES})`,
+        );
+      }
+
+      await fs.writeFile(resolved, updated, 'utf-8');
       tracker.trackWrite(resolved);
     },
 

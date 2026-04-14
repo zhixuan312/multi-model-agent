@@ -82,8 +82,8 @@ describe('buildMetadataBlock', () => {
       toolCalls: ['readFile(a.ts)'],
       outputIsDiagnostic: false, escalationLog: [],
       workerStatus: 'done' as const,
-      specReviewStatus: 'not_run' as const,
-      qualityReviewStatus: 'not_run' as const,
+      specReviewStatus: 'skipped' as const,
+      qualityReviewStatus: 'skipped' as const,
     } satisfies RunResult;
     const block = buildMetadataBlock(r);
     expect(block.type).toBe('text');

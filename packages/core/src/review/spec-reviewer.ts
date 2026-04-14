@@ -5,7 +5,7 @@ import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 
 export interface SpecReviewResult {
-  status: 'approved' | 'changes_required' | 'not_run';
+  status: 'approved' | 'changes_required' | 'error';
   report?: ParsedStructuredReport;
   findings: string[];
 }
@@ -35,16 +35,16 @@ export async function runSpecReview(
       { explicitlyPinned: true },
     );
   } catch {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   if (result.status !== 'ok') {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   const report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'not_run', findings: [] };
+    return { status: 'error', findings: [] };
   }
 
   const summaryLower = report.summary.toLowerCase();

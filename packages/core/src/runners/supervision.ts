@@ -107,7 +107,7 @@ const REPROMPT_TAIL_QUOTE = 60;
 
 /**
  * Marker returned by `stripThinkingTags` when the entire final message was
- * `<think>...</think>` reasoning and stripping left nothing. Exported here
+ * `<think>...` reasoning and stripping left nothing. Exported here
  * (rather than from openai-runner.ts) so that `validateCompletion` can detect
  * the marker without importing the runner, and so other runners can reuse it
  * when they implement their own thinking-only salvage. There is exactly one
@@ -232,7 +232,7 @@ export function buildRePrompt(result: ValidationResult): string {
 
     case 'thinking_only':
       return [
-        'Your previous response contained only <think>...</think> reasoning, with no',
+        'Your previous response contained only <think>... reasoning, with no',
         'plain-text answer outside the tags. The reasoning tags are stripped before the',
         'response is returned to the caller, so a thinking-only response is equivalent',
         'to no response at all. Please respond again with your complete final answer as',
@@ -387,6 +387,19 @@ export function logWatchdogEvent(
     parts.push(`scratchpadChars=${details.scratchpadChars}`);
   }
   console.error(parts.join(' '));
+}
+
+/** camelCase tool names (matching tracker.trackToolCall format in definitions.ts)
+ *  that indicate file-level artifact production. */
+export const FILE_MUTATING_TOOLS = new Set(['writeFile', 'editFile']);
+
+export function extractToolName(toolCallEntry: string): string {
+  const parenIndex = toolCallEntry.indexOf('(');
+  return parenIndex === -1 ? toolCallEntry : toolCallEntry.slice(0, parenIndex);
+}
+
+export function hasCompletedWork(toolCalls: string[]): boolean {
+  return toolCalls.some(tc => FILE_MUTATING_TOOLS.has(extractToolName(tc)));
 }
 
 /**

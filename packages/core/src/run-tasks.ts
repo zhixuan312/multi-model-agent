@@ -13,6 +13,7 @@ import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
+import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';
 import { normalizeBrief } from './readiness/normalize-brief.js';
 import { runSpecReview } from './review/spec-reviewer.js';
@@ -133,17 +134,35 @@ async function executeReviewedLifecycle(
   const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
   const workerStatus = extractWorkerStatus(implReport);
 
+  // C6a: Skip review when there are no file artifacts to review
+  const hasWorkProduct = implResult.filesWritten.length > 0;
+  if (!hasWorkProduct) {
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
+      },
+      implementationReport: implReport,
+    };
+  }
+
   if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
     };
   }
@@ -152,13 +171,13 @@ async function executeReviewedLifecycle(
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
       implementationReport: implReport,
     };
@@ -171,13 +190,13 @@ async function executeReviewedLifecycle(
     return {
       ...implResult,
       workerStatus,
-      specReviewStatus: 'not_run',
-      qualityReviewStatus: 'not_run',
+      specReviewStatus: 'skipped',
+      qualityReviewStatus: 'skipped',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
-        specReviewer: 'not_run',
-        qualityReviewer: 'not_run',
+        specReviewer: 'skipped',
+        qualityReviewer: 'skipped',
       },
     };
   }
@@ -237,7 +256,7 @@ async function executeReviewedLifecycle(
     }
   }
 
-  let qualityResult: { status: 'approved' | 'changes_required' | 'not_run'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'not_run', report: undefined, findings: [] };
+  let qualityResult: { status: 'approved' | 'changes_required' | 'skipped' | 'error'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'skipped', report: undefined, findings: [] };
   if (reviewPolicy === 'full') {
     qualityResult = await runQualityReview(
       otherProvider,
@@ -301,7 +320,7 @@ async function executeReviewedLifecycle(
       normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
       implementer: resolved.slot,
       specReviewer: otherSlot,
-      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'not_run',
+      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
     },
   };
 }
@@ -389,6 +408,34 @@ export async function runTasks(
       };
     }
   });
+
+  // C5: Apply effort default when not explicitly set
+  for (const r of resolved) {
+    if ('error' in r) continue;
+    if (r.task.effort === undefined) {
+      const inferred = inferEffort(r.task.prompt);
+      if (inferred !== undefined) {
+        r.task = { ...r.task, effort: inferred };
+      }
+    }
+  }
+
+  // C3: Inject parallel-safety suffix when dispatching 2+ tasks
+  if (resolved.length > 1) {
+    const PARALLEL_SAFETY_SUFFIX =
+      '\n\nYou are running in parallel with other tasks. ' +
+      'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
+      'Only run task-specific test commands if provided.';
+
+    for (const r of resolved) {
+      if ('error' in r) continue;
+      r.task = {
+        ...r.task,
+        prompt: r.task.prompt + PARALLEL_SAFETY_SUFFIX +
+          (r.task.testCommand ? `\nTo verify your work, run: \`${r.task.testCommand}\`` : ''),
+      };
+    }
+  }
 
   return Promise.all(
     resolved.map((r, index): Promise<RunResult> => {

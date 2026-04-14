@@ -216,10 +216,13 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'INTERACTION: If no agent satisfies requiredCapabilities, the batch dispatch returns a no_capable_agent error.',
     ),
     contextBlockIds: z.array(z.string()).optional().describe(
-      'WHAT: References to context blocks previously stored via register_context_block.\n' +
-      'WHEN: Use to inject long briefing material without re-transmitting it across multiple calls.\n' +
+      'WHAT: References to content blocks stored via register_context_block. The server resolves ' +
+      'each id, concatenates blocks in order (separated by \'---\'), and prepends them to the ' +
+      'task prompt before dispatch.\n' +
+      'WHEN: Use when multiple tasks share the same large context (specs, files, schemas) — ' +
+      'the content is transmitted once via register_context_block instead of duplicated in every task prompt.\n' +
       'DEFAULT: No context blocks — prompt is sent as-is.\n' +
-      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\n\\n", and prepends to prompt before dispatch.',
+      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\\n\\n", and prepends to prompt before dispatch.',
     ),
     expectedCoverage: z.object({
       minSections: z.number().int().positive().optional().describe(
@@ -259,7 +262,12 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'INTERACTION: Used to look up parent context length for context-length-based cost estimation; influences headline ROI display.',
     ),
     maxCostUSD: z.number().nonnegative().optional().describe(
-      'WHAT: Cost ceiling in USD for this task\'s execution.\n' +
+      'WHAT: Cost ceiling in USD for this task\'s execution. Enforcement: checked before each tool ' +
+      'call — the current LLM response completes, but the next tool call is rejected if it ' +
+      'would exceed the ceiling. The task then returns status \'cost_exceeded\' with partial ' +
+      'output (whatever the agent produced before hitting the ceiling). A small portion of ' +
+      'this budget is reserved for normalization (brief rewriting). Set to 0 to skip ' +
+      'normalization entirely.\n' +
       'WHEN: Use when you want to cap spend on expensive operations or prevent runaway token usage.\n' +
       'DEFAULT: No cost ceiling — unlimited spend allowed.\n' +
       'INTERACTION: When maxCostUSD is reached, the task terminates with status cost_exceeded rather than ok.',
@@ -281,6 +289,12 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
       'WHEN: Set to normalize to auto-enrich vague briefs; strict to refuse them; warn to evaluate and surface warnings; off to skip.\n' +
       'DEFAULT: warn — readiness evaluates every brief and surfaces warnings, but does not block dispatch.\n' +
       'INTERACTION: When strict, a vague brief returns status brief_too_vague without spending any tokens. When normalize, the system enriches the brief via a normalization pass before dispatch.',
+    ),
+    testCommand: z.string().optional().describe(
+      'WHAT: Shell command for task-specific verification (e.g., "npx vitest run tests/foo.test.ts").\n' +
+      'WHEN: Set when the task runs in parallel and you want to steer the agent toward a targeted test instead of a full-project build.\n' +
+      'DEFAULT: No test command — agent decides how to verify.\n' +
+      'INTERACTION: When set and the task runs in parallel with others, the command is recommended to the agent in a parallel-safety prompt suffix.',
     ),
   });
 }
@@ -545,11 +559,23 @@ export function buildMcpServer(
 
   server.tool(
     'register_context_block',
-    'Store a content block under an id (or auto-generated UUID) for reuse in later delegate_tasks calls. ' +
-      'Use this to avoid re-transmitting long briefs on every dispatch. Blocks are referenced from a ' +
-      'task via its `contextBlockIds` array — the server resolves each id to its stored content and ' +
-      'prepends the blocks to the task `prompt` at dispatch time. Blocks live in an in-memory store ' +
-      'with a 30-minute TTL and a 100-entry LRU cap.',
+    'Store a reusable content block for later delegate_tasks calls. Returns a block id.\n\n' +
+      'When this saves money:\n' +
+      '- You\'re dispatching 3+ tasks that all need the same file or spec as context\n' +
+      '- You\'re doing multiple rounds of review/audit on the same document\n' +
+      '- Your shared context is >2K tokens (below that, duplication cost is negligible)\n\n' +
+      'Example workflow:\n' +
+      '  1. register_context_block({ content: <spec file contents> })  -> { id: "abc123" }\n' +
+      '  2. delegate_tasks({ tasks: [\n' +
+      '       { prompt: "Review section 1", contextBlockIds: ["abc123"] },\n' +
+      '       { prompt: "Review section 2", contextBlockIds: ["abc123"] },\n' +
+      '       { prompt: "Review section 3", contextBlockIds: ["abc123"] }\n' +
+      '     ]})\n' +
+      '  -> The spec is transmitted once to the server, not three times.\n\n' +
+      'Without context blocks: 3 tasks x 25K tokens = 75K input tokens transmitted.\n' +
+      'With context blocks: 25K stored once + 3 x reference = ~25K total.\n\n' +
+      'Blocks live in an in-memory store with a 30-minute TTL and 100-entry LRU cap.\n' +
+      'If a block expires before use, delegate_tasks returns an error identifying the missing id.',
     {
       id: z.string().optional().describe('Optional id; auto-generated UUID if omitted'),
       content: z.string().describe('The content to store'),
@@ -564,11 +590,17 @@ export function buildMcpServer(
 
   server.tool(
     'retry_tasks',
-    'Re-run specific tasks from a previous delegate_tasks batch by their indices, without ' +
-      're-transmitting the original briefs. Pass the `batchId` returned by delegate_tasks ' +
-      'and an array of task indices (0-based) to re-dispatch. Batches live in an in-memory ' +
-      'cache with a 30-minute TTL; if the batch has expired, re-dispatch the tasks explicitly ' +
-      'via delegate_tasks.',
+    'Re-run specific tasks from a previous delegate_tasks batch.\n\n' +
+      'When to use:\n' +
+      '- A task returned \'incomplete\' but you believe a retry will succeed\n' +
+      '  (e.g., after fixing a file the task depends on, or after a parallel conflict is resolved)\n' +
+      '- You want to re-run a subset of a batch without re-transmitting prompts and context blocks\n\n' +
+      'When NOT to use (re-dispatch via delegate_tasks instead):\n' +
+      '- You need to change the task prompt, tools, effort, or limits\n' +
+      '- The original batch is older than 30 minutes (cache TTL)\n' +
+      '- You want to try a different provider or agent type\n\n' +
+      'Pass the batchId returned by delegate_tasks and an array of 0-based task indices.\n' +
+      'Batches live in an in-memory cache with a 30-minute TTL and 100-entry LRU cap.',
     {
       batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
       taskIndices: z
