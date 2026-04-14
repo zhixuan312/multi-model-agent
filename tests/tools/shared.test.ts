@@ -93,6 +93,47 @@ describe('buildMetadataBlock', () => {
     expect(parsed.filesRead).toEqual(['a.ts']);
     expect(parsed.directoriesListed).toEqual(['.']);
   });
+
+  it('includes escalationLog and agents when present', () => {
+    const r = {
+      output: 'test', status: 'ok' as const,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+      turns: 3, durationMs: 5000,
+      filesRead: [], filesWritten: [], directoriesListed: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [{ provider: 'openai', status: 'ok' as const }],
+      workerStatus: 'done' as const,
+      specReviewStatus: 'skipped' as const,
+      qualityReviewStatus: 'skipped' as const,
+      agents: {
+        implementer: { provider: 'openai', model: 'gpt-4o-mini' },
+      },
+    } satisfies RunResult;
+    const block = buildMetadataBlock(r);
+    const parsed = JSON.parse(block.text);
+    expect(parsed.escalationLog).toEqual([{ provider: 'openai', status: 'ok' }]);
+    expect(parsed.agents).toEqual({ implementer: { provider: 'openai', model: 'gpt-4o-mini' } });
+  });
+
+  it('serializes empty escalationLog as empty array, omits agents when undefined', () => {
+    const r = {
+      output: 'test', status: 'ok' as const,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+      turns: 3, durationMs: 5000,
+      filesRead: [], filesWritten: [], directoriesListed: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      workerStatus: 'done' as const,
+      specReviewStatus: 'skipped' as const,
+      qualityReviewStatus: 'skipped' as const,
+    } satisfies RunResult;
+    const block = buildMetadataBlock(r);
+    const parsed = JSON.parse(block.text);
+    expect(parsed.escalationLog).toEqual([]);
+    expect(parsed).not.toHaveProperty('agents');
+  });
 });
 
 describe('applyCommonFields', () => {
@@ -106,5 +147,13 @@ describe('applyCommonFields', () => {
     const result = applyCommonFields({ prompt: 'test' }, {});
     expect(result).toEqual({ prompt: 'test' });
     expect('cwd' in result).toBe(false);
+  });
+  it('merges maxCostUSD into taskSpec', () => {
+    const result = applyCommonFields({}, { maxCostUSD: 0.50 });
+    expect(result.maxCostUSD).toBe(0.50);
+  });
+  it('omits maxCostUSD when undefined', () => {
+    const result = applyCommonFields({}, {});
+    expect('maxCostUSD' in result).toBe(false);
   });
 });

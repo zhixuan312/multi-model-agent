@@ -10,6 +10,8 @@ export const commonToolFields = {
     .describe('IDs of registered context blocks to prepend to prompt.'),
   tools: z.enum(['none', 'readonly', 'full']).optional()
     .describe('Tool access level for the sub-agent. Defaults to full.'),
+  maxCostUSD: z.number().nonnegative().optional()
+    .describe('Cost ceiling in USD. Task terminates with cost_exceeded when hit.'),
 };
 
 function hasContent(value: string | undefined): boolean {
@@ -59,6 +61,8 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
       filesWritten: result.filesWritten,
       directoriesListed: result.directoriesListed ?? [],
       toolCalls: result.toolCalls,
+      escalationLog: result.escalationLog,
+      agents: result.agents,
     }, null, 2),
   };
 }
@@ -74,11 +78,12 @@ export function buildPerFilePrompt(filePath: string, promptTemplate: string): st
 
 export function applyCommonFields(
   taskSpec: Partial<TaskSpec>,
-  params: { cwd?: string; contextBlockIds?: string[]; tools?: ToolMode },
+  params: { cwd?: string; contextBlockIds?: string[]; tools?: ToolMode; maxCostUSD?: number },
 ): Partial<TaskSpec> {
   const result = { ...taskSpec };
   if (params.cwd !== undefined) result.cwd = params.cwd;
   if (params.contextBlockIds !== undefined) result.contextBlockIds = params.contextBlockIds;
   if (params.tools !== undefined) result.tools = params.tools;
+  if (params.maxCostUSD !== undefined) result.maxCostUSD = params.maxCostUSD;
   return result;
 }
