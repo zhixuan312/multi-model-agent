@@ -23,6 +23,9 @@ describe('review_code schema', () => {
   it('allows both absent (handler validates)', () => {
     expect(reviewCodeSchema.safeParse({}).success).toBe(true);
   });
+  it('accepts maxCostUSD', () => {
+    expect(reviewCodeSchema.safeParse({ code: 'x', maxCostUSD: 0.50 }).success).toBe(true);
+  });
 });
 
 // --- Handler tests ---
@@ -92,5 +95,21 @@ describe('review_code handler', () => {
     registerReviewCode(mockServer as any, {} as any);
     await getHandler()({ code: 'x', outputFormat: 'json' });
     expect(mockRunTasks.mock.calls[0][0][0].formatConstraints).toEqual({ outputFormat: 'json' });
+  });
+
+  it('passes maxCostUSD through to TaskSpec', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerReviewCode(mockServer as any, {} as any);
+    await getHandler()({ code: 'x', maxCostUSD: 0.30 });
+    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.30);
+  });
+
+  it('omits maxCostUSD from TaskSpec when not provided', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerReviewCode(mockServer as any, {} as any);
+    await getHandler()({ code: 'x' });
+    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

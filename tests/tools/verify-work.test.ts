@@ -23,6 +23,9 @@ describe('verify_work schema', () => {
   it('allows both work and filePaths absent (handler validates)', () => {
     expect(verifyWorkSchema.safeParse({ checklist: ['c'] }).success).toBe(true);
   });
+  it('accepts maxCostUSD', () => {
+    expect(verifyWorkSchema.safeParse({ work: 'w', checklist: ['a'], maxCostUSD: 2.00 }).success).toBe(true);
+  });
 });
 
 // --- Handler tests ---
@@ -89,5 +92,21 @@ describe('verify_work handler', () => {
     expect(tasks[1].prompt).toContain('1. compiles');
     const envelope = JSON.parse(result.content[0].text);
     expect(envelope.mode).toBe('fan_out');
+  });
+
+  it('passes maxCostUSD through to TaskSpec', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerVerifyWork(mockServer as any, {} as any);
+    await getHandler()({ work: 'w', checklist: ['a'], maxCostUSD: 0.15 });
+    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.15);
+  });
+
+  it('omits maxCostUSD from TaskSpec when not provided', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerVerifyWork(mockServer as any, {} as any);
+    await getHandler()({ work: 'w', checklist: ['a'] });
+    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

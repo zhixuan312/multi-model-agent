@@ -30,6 +30,7 @@ export function buildSystemPrompt(): string {
     '- Batch related grep patterns: if you need to find 3 symbols, use a single regex with alternation (symbol1|symbol2|symbol3), not 3 separate grep calls.',
     '- For large files: use grep to locate relevant sections first. Only readFile the file if you need broad context that grep cannot provide.',
     '- readFile is expensive. grep is cheap. Prefer grep to locate what you need.',
+    '- When modifying part of an existing file, use edit_file — not write_file (which rewrites the entire file) and not run_shell with sed/awk (which is error-prone). edit_file replaces a unique string match: provide enough surrounding context lines in oldContent to ensure exactly one match. Use write_file only when creating a new file or rewriting the entire content intentionally.',
     '',
     'Write findings as you go. Do not save all your findings for the final message. As you discover things, mention them in your assistant turns. This is preserved in the runner scratchpad and salvageable if the run is interrupted. The final message should be the synthesis, not the only place findings appear.',
     '',

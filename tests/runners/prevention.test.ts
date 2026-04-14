@@ -28,6 +28,28 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('<think>');
   });
 
+  it('steers workers toward edit_file for partial modifications', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('edit_file');
+  });
+
+  it('forbids write_file for partial edits', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('not write_file');
+  });
+
+  it('forbids run_shell with sed/awk for edits', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('not run_shell');
+    expect(prompt).toContain('sed/awk');
+  });
+
+  it('requires enough surrounding context for unique match', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('unique string match');
+    expect(prompt).toContain('surrounding context');
+  });
+
   it('is deterministic — two calls produce byte-identical output', () => {
     const a = buildSystemPrompt();
     const b = buildSystemPrompt();

@@ -18,6 +18,9 @@ describe('debug_task schema', () => {
   it('rejects missing problem', () => {
     expect(debugTaskSchema.safeParse({ context: 'ctx' }).success).toBe(false);
   });
+  it('accepts maxCostUSD', () => {
+    expect(debugTaskSchema.safeParse({ problem: 'p', maxCostUSD: 0.10 }).success).toBe(true);
+  });
 });
 
 // --- Handler tests ---
@@ -111,5 +114,21 @@ describe('debug_task handler', () => {
     const meta = JSON.parse(result.content[1].text);
     expect(meta.usage.costUSD).toBe(0.05);
     expect(meta.usage.inputTokens).toBe(500);
+  });
+
+  it('passes maxCostUSD through to TaskSpec', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerDebugTask(mockServer as any, {} as any);
+    await getHandler()({ problem: 'p', maxCostUSD: 0.20 });
+    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.20);
+  });
+
+  it('omits maxCostUSD from TaskSpec when not provided', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerDebugTask(mockServer as any, {} as any);
+    await getHandler()({ problem: 'p' });
+    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

@@ -32,6 +32,12 @@ describe('audit_document schema', () => {
   it('allows both absent (handler validates)', () => {
     expect(auditDocumentSchema.safeParse({ auditType: 'security' }).success).toBe(true);
   });
+  it('accepts maxCostUSD', () => {
+    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'correctness', maxCostUSD: 1.23 }).success).toBe(true);
+  });
+  it('rejects negative maxCostUSD', () => {
+    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'correctness', maxCostUSD: -1 }).success).toBe(false);
+  });
 });
 
 // --- Handler tests ---
@@ -143,5 +149,21 @@ describe('audit_document handler', () => {
 
     await getHandler()({ document: 'doc', auditType: 'general' });
     expect(mockRunTasks.mock.calls[0][0][0].prompt).toContain('security, performance, correctness, and style');
+  });
+
+  it('passes maxCostUSD through to TaskSpec', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, {} as any);
+    await getHandler()({ document: 'doc', auditType: 'security', maxCostUSD: 0.42 });
+    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.42);
+  });
+
+  it('omits maxCostUSD from TaskSpec when not provided', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, {} as any);
+    await getHandler()({ document: 'doc', auditType: 'security' });
+    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });
