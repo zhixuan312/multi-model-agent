@@ -5,6 +5,29 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.2.1] - 2026-04-14
+
+### Added
+- **`edit_file` steering in sub-agent system prompt (core).** Workers are now guided to prefer `edit_file` for partial modifications instead of `write_file` (full rewrite) or `run_shell` with sed/awk (error-prone). Added to the "Tool efficiency rules" section of `buildSystemPrompt()` in `prevention.ts`.
+- **`maxCostUSD` on all specialized tools (mcp).** `audit_document`, `review_code`, `verify_work`, and `debug_task` now accept an optional `maxCostUSD` parameter, passed through to `runTasks()` via `commonToolFields` and `applyCommonFields()`. Callers can budget individual audits and reviews.
+- **`escalationLog` and `agents` in single-task metadata (mcp).** `buildMetadataBlock()` now includes `escalationLog` (provider attempt chain) and `agents` (which agent ran each lifecycle role). Previously only available in fan-out mode via `buildFanOutResponse()`.
+
+## [1.2.0] - 2026-04-13
+
+### Added
+- **`edit_file` tool for surgical edits (core).** New tool that replaces a unique string match in an existing file, wired into all three adapters (OpenAI, Claude, Codex). Requires `oldContent` to match exactly one location.
+- **Effort inference from task prompt shape (core).** `inferEffort()` auto-selects effort level (`none`/`low`/`medium`/`high`) based on prompt characteristics when not explicitly declared.
+- **Parallel-safe build instructions (core).** Concurrent tasks receive guidance to use targeted test commands instead of full-project builds.
+- **Auto-retry transient errors (core).** `api_error`, `network_error`, and `timeout` statuses trigger automatic retry with exponential backoff (up to 2 retries).
+- **`incomplete` → `ok` promotion (core).** When `workerStatus` is `done` and file artifacts exist, tasks are promoted from `incomplete` to `ok`.
+- **`hasCompletedWork` flag (core).** Supervision skips stylistic heuristics (fragment, no-terminator) after file writes, reducing false-positive `incomplete` statuses.
+- **Auto-skip review when no artifacts (core).** Review pipeline is skipped when the task produced no file artifacts, saving review budget.
+- **Tool-use efficiency rules in system prompt (core).** Sub-agents receive guidance on avoiding redundant file reads, batching grep patterns, and preferring grep over readFile.
+
+### Changed
+- **Review status types (core).** `'not_run'` replaced with `'skipped'`/`'error'` for clearer semantics.
+- **`retry_tasks`, `maxCostUSD`, and context block descriptions improved (mcp).** Clearer WHAT/WHEN/DEFAULT/INTERACTION documentation on MCP tool parameters.
+
 ## [1.1.0] - 2026-04-13
 
 ### Added
@@ -206,7 +229,10 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.0.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...HEAD
+[1.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.0...mcp-v1.2.1
+[1.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.1.0...mcp-v1.2.0
+[1.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.0.0...mcp-v1.1.0
 [1.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v0.4.0...mcp-v1.0.0
 [0.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v0.3.1...mcp-v0.4.0
 [0.1.2]: https://github.com/zhixuan312/multi-model-agent/compare/v0.1.1...v0.1.2
