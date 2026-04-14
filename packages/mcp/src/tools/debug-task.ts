@@ -22,7 +22,7 @@ export type DebugTaskParams = z.infer<typeof debugTaskSchema>;
 export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
   server.tool(
     'debug_task',
-    'Debug a problem using hypothesis-driven investigation. Always single-task \u2014 file paths provide context for the investigation. Preset: complex agent, 1 review round. Use delegate_tasks only for custom pipeline config.',
+    'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
     debugTaskSchema.shape,
     async (params: DebugTaskParams) => {
       const agentType = params.agentType ?? 'complex';

@@ -39,6 +39,11 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
           ],
           durationMs: 1000,
           workerStatus: 'done' as const,
+          terminationReason: {
+            cause: 'finished' as const, turnsUsed: 3, turnsAllowed: 200,
+            hasFileArtifacts: true, usedShell: false,
+            workerSelfAssessment: 'done' as const, wasPromoted: false,
+          },
           specReviewStatus: 'approved' as const,
           qualityReviewStatus: 'approved' as const,
           agents: {
@@ -152,7 +157,7 @@ describe('get_batch_slice tool', () => {
     ]);
     expect(detail.escalationLog).toHaveLength(1);
     expect(detail.escalationLog[0].provider).toBe('mock');
-    expect(detail.workerStatus).toBe('done');
+    expect(detail.terminationReason?.workerSelfAssessment).toBe('done');
     expect(detail.specReviewStatus).toBe('approved');
     expect(detail.qualityReviewStatus).toBe('approved');
     expect(detail.agents).toEqual({

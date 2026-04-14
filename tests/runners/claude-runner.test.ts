@@ -287,7 +287,7 @@ describe('runClaude', () => {
     expect(captured.options?.systemPrompt?.type).toBe('preset');
     expect(captured.options?.systemPrompt?.preset).toBe('claude_code');
     expect(captured.options?.systemPrompt?.append).toContain('final assistant message');
-    expect(captured.options?.systemPrompt?.append).toContain('Anti-pattern');
+    expect(captured.options?.systemPrompt?.append).toContain('Tool rules:');
 
     // Prompt is passed as an AsyncIterable (streaming-input mode) —
     // verify it is not a plain string and that it is iterable.
@@ -307,9 +307,9 @@ describe('runClaude', () => {
     };
     expect(firstMsg.type).toBe('user');
     expect(firstMsg.message.role).toBe('user');
-    expect(firstMsg.message.content).toContain('Budget reminder');
+    expect(firstMsg.message.content).toContain('Budget:');
     expect(firstMsg.message.content).toContain('original user task');
-    expect(firstMsg.message.content.indexOf('Budget reminder')).toBeLessThan(
+    expect(firstMsg.message.content.indexOf('Budget:')).toBeLessThan(
       firstMsg.message.content.indexOf('original user task'),
     );
   });
@@ -387,7 +387,7 @@ describe('runClaude', () => {
     const iterator = (capturedQueue as AsyncIterable<unknown>)[Symbol.asyncIterator]();
     const first = await iterator.next();
     const firstMsg = first.value as { message: { content: string } };
-    expect(firstMsg.message.content).toContain('Budget reminder');
+    expect(firstMsg.message.content).toContain('Budget:');
     const second = await iterator.next();
     expect(second.done).toBe(false);
     const secondMsg = second.value as { message: { content: string } };

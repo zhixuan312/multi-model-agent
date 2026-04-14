@@ -38,10 +38,17 @@ describe('createClaudeToolServer', () => {
     expect(names).toContain('list_files');
   });
 
-  it('full mode with cwd-only excludes run_shell', () => {
+  it('full mode with cwd-only includes run_shell', () => {
+    // shell access is controlled by toolMode, not sandboxPolicy
     const server = createClaudeToolServer(mockToolImpls(), 'cwd-only', 'full');
     const names = getToolNames(server);
     expect(names).toContain('write_file');
+    expect(names).toContain('run_shell');
+  });
+
+  it('no-shell mode excludes run_shell', () => {
+    const server = createClaudeToolServer(mockToolImpls(), 'cwd-only', 'no-shell');
+    const names = getToolNames(server);
     expect(names).not.toContain('run_shell');
   });
 

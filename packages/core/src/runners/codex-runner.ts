@@ -216,7 +216,7 @@ function buildCodexTools(impl: ToolImplementations, sandboxPolicy: SandboxPolicy
     },
   ];
 
-  if (sandboxPolicy !== 'cwd-only') {
+  if (toolMode === 'full') {
     tools.push({
       name: 'run_shell',
       description: 'Execute a shell command and return stdout, stderr, and exit code. Use for running tests, installing packages, etc.',
@@ -703,6 +703,7 @@ export async function runCodex(
           const validation = validateSubAgentOutput(stripped, {
             expectedCoverage: options.expectedCoverage,
             skipCompletionHeuristic: options.skipCompletionHeuristic,
+            hasCompletedWork: hasCompletedWork(tracker.getToolCalls()),
           });
 
           if (validation.valid) {

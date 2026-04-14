@@ -599,7 +599,8 @@ export async function runClaude(
           // spent / same-output early-out fires — exits as incomplete. ---
           const validation = validateSubAgentOutput(output, {
             expectedCoverage: options.expectedCoverage,
-            skipCompletionHeuristic: options.skipCompletionHeuristic || hasCompletedWork(tracker.getToolCalls()),
+            skipCompletionHeuristic: options.skipCompletionHeuristic,
+            hasCompletedWork: hasCompletedWork(tracker.getToolCalls()),
           });
 
           if (validation.valid) {

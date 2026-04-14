@@ -509,7 +509,8 @@ export async function runOpenAI(
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateSubAgentOutput(stripped, {
           expectedCoverage: options.expectedCoverage,
-          skipCompletionHeuristic: options.skipCompletionHeuristic || hasCompletedWork(tracker.getToolCalls()),
+          skipCompletionHeuristic: options.skipCompletionHeuristic,
+          hasCompletedWork: hasCompletedWork(tracker.getToolCalls()),
         });
 
         if (validation.valid) {

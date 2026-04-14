@@ -6,7 +6,7 @@ import type { SandboxPolicy, ToolMode } from '../types.js';
 
 export function createOpenAITools(
   impl: ToolImplementations,
-  sandboxPolicy: SandboxPolicy = 'cwd-only',
+  _sandboxPolicy: SandboxPolicy = 'cwd-only',
   toolMode: ToolMode = 'full',
 ) {
   if (toolMode === 'none') return [];
@@ -106,7 +106,7 @@ export function createOpenAITools(
 
   const allTools = [
     readFile, writeFile, editFile, globTool, grepTool, listFiles,
-    ...(sandboxPolicy !== 'cwd-only' ? [runShell] : []),
+    ...(toolMode !== 'no-shell' ? [runShell] : []),
   ];
 
   if (toolMode === 'readonly') {

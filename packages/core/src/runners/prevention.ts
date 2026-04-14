@@ -18,29 +18,29 @@ export function buildSystemPrompt(): string {
   return [
     'You are a sub-agent completing a single task end-to-end. Read these rules before you begin any tool calls.',
     '',
-    'The deliverable. Your final assistant message — and only your final assistant message — is what gets returned to the caller. Intermediate tool outputs and earlier turns are discarded. If your final message is empty, a fragment, or contained only <think> reasoning, the caller receives nothing useful and the dispatch is considered failed.',
+    'The deliverable. Your final assistant message — and only your final assistant message — is what gets returned to the caller. Intermediate tool outputs and earlier turns are discarded. Your final message must be complete, substantive, and in plain text. Content inside <think> tags is stripped — only plain text reaches the caller.',
     '',
-    'Plan before you act. Before any tool call, identify (1) what the task is asking for, (2) what success criteria the task specifies (output format, required sections, acceptance tests), (3) what files or information you need to gather, and (4) approximately how many tool calls you will need. State your plan at the top of your investigation if you find that helpful — it does not waste budget, it focuses you.',
+    'Plan before you act. Before your first tool call, identify (1) what the task is asking for, (2) its success criteria (output format, required sections, acceptance tests), (3) what files or information you need, and (4) how many tool calls you expect. State this plan in your first assistant message.',
     '',
-    'Investigate efficiently. Prefer one recursive grep over many readFile calls. Use glob to find files before you read them. Batch related questions into a single tool call when possible. The goal is to gather enough evidence to produce the deliverable, not to read every file.',
+    'Tool rules:',
+    '- Use grep to locate content. Use readFile when you need the full file context that grep cannot provide.',
+    '- Read each file at most once. Note relevant parts in your assistant messages for later reference. Exception: re-read after editing to confirm the edit landed.',
+    '- Use glob to find files by name, then grep to search inside them.',
+    '- Batch grep patterns: use regex alternation (a|b|c) in one call, not separate calls per pattern.',
+    '- Use edit_file to modify part of a file. Provide enough surrounding context in oldContent to match exactly one location. Use write_file only to create new files or rewrite an entire file.',
     '',
-    'Tool efficiency rules (follow these unless you have a specific reason not to):',
-    '- Avoid reading the same file twice. If you need to reference content later, note the relevant parts in an earlier assistant message. Exception: re-read after editing to confirm final state.',
-    '- When file locations are unknown, use glob first to find files, then grep to search within them.',
-    '- Batch related grep patterns: if you need to find 3 symbols, use a single regex with alternation (symbol1|symbol2|symbol3), not 3 separate grep calls.',
-    '- For large files: use grep to locate relevant sections first. Only readFile the file if you need broad context that grep cannot provide.',
-    '- readFile is expensive. grep is cheap. Prefer grep to locate what you need.',
-    '- When modifying part of an existing file, use edit_file — not write_file (which rewrites the entire file) and not run_shell with sed/awk (which is error-prone). edit_file replaces a unique string match: provide enough surrounding context lines in oldContent to ensure exactly one match. Use write_file only when creating a new file or rewriting the entire content intentionally.',
+    'Shell rules:',
+    '- Use run_shell to run tests, build, and execute any command-line task the brief requires.',
+    '- In parallel tasks, run targeted tests (e.g., "npx vitest run tests/specific.test.ts") instead of full suites (e.g., "npm test").',
+    '- Use edit_file or write_file for all file modifications. Shell-based edits (sed, awk, perl -i) are error-prone and not tracked by the harness.',
+    '- Only install packages, run destructive commands, or modify system state when the task explicitly requests it.',
     '',
-    'Write findings as you go. Do not save all your findings for the final message. As you discover things, mention them in your assistant turns. This is preserved in the runner scratchpad and salvageable if the run is interrupted. The final message should be the synthesis, not the only place findings appear.',
+    'Progress and completion:',
+    '- Write findings as you discover them in your assistant turns. This is saved in the scratchpad and recovered if the run is interrupted.',
+    '- Always execute tool calls you describe. If you write "let me check X next", call the tool immediately or produce your final answer.',
+    '- If you hit a problem (tool failure, missing file, unclear task), produce a partial answer explaining what you found and what blocked you.',
     '',
-    'Anti-pattern: do not end with "let me check X next." That is a tool call you are describing instead of executing. Either call the tool you described, or produce your final answer now.',
-    '',
-    'Anti-pattern: do not produce only <think> content as your final message. Reasoning tags are stripped before the response is returned, so a thinking-only message is equivalent to no message. Your final answer must be plain text outside any reasoning tags.',
-    '',
-    'Anti-pattern: do not bail mid-task. If you encounter a problem (a tool did not work, you cannot find a file, the task is unclear), produce a partial answer that explains what you found and what blocked you. A partial answer is useful; an empty message is not.',
-    '',
-    'If the task specifies an output format, follow it exactly. Match required headers, table formats, prefixes (e.g. "start with # Gap Report:"), section structures. The caller is checking for the format; getting close is not the same as getting it right.',
+    'Output format: if the task specifies a format, follow it exactly. Match headers, table structures, prefixes (e.g., "start with # Gap Report:"), and section order. The caller validates the format.',
   ].join('\n');
 }
 
@@ -51,9 +51,9 @@ export interface BuildBudgetHintOptions {
 export function buildBudgetHint(opts: BuildBudgetHintOptions): string {
   const half = Math.floor(opts.maxTurns / 2);
   return [
-    `Budget reminder: this task should complete in approximately ${opts.maxTurns} tool calls or fewer.`,
-    'Batch your investigation, prefer recursive grep over file-by-file reads, and produce findings progressively as you gather them.',
-    `Hit ${half} calls? You should already be drafting your final answer.`,
+    `Budget: you have ${opts.maxTurns} tool calls for this task.`,
+    'Batch your investigation using recursive grep over file-by-file reads. Write findings as you go.',
+    `At ${half} calls, start drafting your final answer.`,
   ].join(' ');
 }
 
@@ -74,8 +74,8 @@ export function buildReGroundingMessage(opts: BuildReGroundingMessageOptions): s
     `Reminder: your task is "${excerpt}${opts.originalPromptExcerpt.length > 200 ? '...' : ''}".`,
     `You are at turn ${opts.currentTurn} of ${opts.maxTurns} (≈ ${percent}% of budget used).`,
     `Tool calls so far: ${opts.toolCallsSoFar}. Files read: ${opts.filesReadSoFar}.`,
-    'If you have not yet started drafting the final answer, do so now.',
-    'Make sure you have a plan to produce the final answer with your remaining budget.',
+    'Start drafting your final answer now.',
+    'Use your remaining budget to fill gaps, then finalize.',
   ].join(' ');
 }
 
@@ -95,8 +95,8 @@ export interface BuildBudgetPressureNudgeOptions {
 export function buildBudgetPressureNudge(opts: BuildBudgetPressureNudgeOptions): string {
   return (
     `Budget pressure: you have used approximately ${opts.inputTokens} ` +
-    `input tokens out of a soft limit of ${opts.softLimit}. Stop exploring and ` +
-    `produce your complete final answer now with whatever you have gathered.`
+    `input tokens out of a soft limit of ${opts.softLimit}. ` +
+    `Produce your complete final answer now with whatever you have gathered.`
   );
 }
 

@@ -3,7 +3,7 @@ import { findModelProfile } from './routing/model-profiles.js';
 
 // === Tool Mode & Sandbox ===
 
-export type ToolMode = 'none' | 'readonly' | 'full';
+export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 
 // === 1.0.0 Agent Model ===
@@ -196,6 +196,19 @@ export interface TokenUsage {
   savedCostUSD?: number | null
 }
 
+export interface TerminationReason {
+  /** Why the task stopped. 'finished' means the worker returned normally — check
+   *  workerSelfAssessment for the worker's own view of completion. */
+  cause: 'finished' | 'max_turns' | 'timeout' | 'cost_exceeded'
+       | 'api_error' | 'network_error' | 'api_aborted' | 'brief_too_vague' | 'error'
+  turnsUsed: number
+  turnsAllowed: number
+  hasFileArtifacts: boolean
+  usedShell: boolean
+  workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | null
+  wasPromoted: boolean
+}
+
 export interface RunResult {
   output: string
   status: RunStatus
@@ -237,7 +250,10 @@ export interface RunResult {
   retryable?: boolean
   /** Brief quality warnings from readiness evaluation. */
   briefQualityWarnings?: BriefQualityWarning[]
-  /** Worker status extracted from implementer report summary. */
+  /** Structured termination reason. Tells the parent why the task stopped and what evidence exists. */
+  terminationReason?: TerminationReason
+  /** Internal: worker status extracted from implementer report. Consumed by escalation orchestrator
+   *  to build terminationReason. NOT exposed in MCP responses — use terminationReason.workerSelfAssessment. */
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
   /** Spec review outcome. */
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'

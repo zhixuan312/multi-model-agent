@@ -90,7 +90,7 @@ export function buildFanOutResponse(
         toolCalls: r.toolCalls,
         escalationLog: r.escalationLog,
         usage: r.usage,
-        workerStatus: r.workerStatus,
+        terminationReason: r.terminationReason,
         specReviewStatus: r.specReviewStatus,
         qualityReviewStatus: r.qualityReviewStatus,
         agents: r.agents,

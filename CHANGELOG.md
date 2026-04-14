@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.3.0] - 2026-04-15
+
+### Added
+- **`no-shell` tool mode (core).** New `ToolMode` value `'no-shell'` enables all file tools (read, write, edit, grep, glob) while blocking shell access. Use for tasks with untrusted prompt content.
+- **`TerminationReason` on `RunResult` (core).** Structured field reporting why a task stopped (`cause`), turn usage (`turnsUsed`/`turnsAllowed`), artifact evidence (`hasFileArtifacts`, `usedShell`), worker self-assessment, and whether status was promoted. Replaces the need to cross-reference multiple fields.
+- **Shell usage guidance in worker system prompt (core).** Workers receive clear rules: use `run_shell` for tests, builds, and command-line tasks; use `edit_file`/`write_file` for file modifications; run targeted tests in parallel.
+
+### Changed
+- **`sandboxPolicy: 'cwd-only'` no longer blocks shell (core).** File tools remain confined to the cwd tree. Shell commands (`run_shell`) now execute freely under `cwd-only` — controlled by `tools` mode instead. Previously, `cwd-only` blocked both file paths and shell access. Callers who relied on shell blocking must switch to `tools: 'no-shell'`.
+- **Completion detection redesign (core).** `FILE_MUTATING_TOOLS` renamed to `COMPLETED_WORK_TOOLS`, now includes `runShell`. `validateSubAgentOutput` accepts `workerStatus` and `hasCompletedWork` as explicit signals. `workerStatus: 'done'` with work evidence is trusted. Promotion logic recognizes shell-only tasks with substantive output.
+- **`workerStatus` internalized (core, mcp).** Removed from MCP response surfaces (delegate_tasks, fan-out, metadata block, batch slice). Use `terminationReason.workerSelfAssessment` instead. Still available internally for escalation logic.
+- **Field descriptions simplified (mcp).** All 15+ `buildTaskSchema()` field descriptions and 4 specialized tool descriptions rewritten. One-line-first pattern replaces verbose WHAT/WHEN/DEFAULT/INTERACTION format.
+- **Worker system prompt rewritten for clarity (core).** Restructured into Tool rules, Shell rules, Progress and completion sections. All instructions are direct and unambiguous.
+
 ## [1.2.1] - 2026-04-14
 
 ### Added
@@ -229,7 +243,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.3.0...HEAD
+[1.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...mcp-v1.3.0
 [1.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.0...mcp-v1.2.1
 [1.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.1.0...mcp-v1.2.0
 [1.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.0.0...mcp-v1.1.0

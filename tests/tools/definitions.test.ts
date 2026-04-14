@@ -211,8 +211,11 @@ describe('tool definitions', () => {
   });
 
   describe('runShell sandboxing', () => {
-    it('runShell is blocked under cwd-only policy', async () => {
-      await expect(tools.runShell('echo hello')).rejects.toThrow(/runShell is disabled under sandboxPolicy "cwd-only"/);
+    it('runShell is allowed under cwd-only policy', async () => {
+      // shell access is controlled by toolMode, not sandboxPolicy
+      const result = await tools.runShell('echo hello');
+      expect(result.stdout.trim()).toBe('hello');
+      expect(result.exitCode).toBe(0);
     });
 
     it('runShell is allowed under policy none', async () => {
