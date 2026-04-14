@@ -8,8 +8,8 @@ export const commonToolFields = {
     .describe('Working directory for file access. Defaults to server process.cwd().'),
   contextBlockIds: z.array(z.string()).optional()
     .describe('IDs of registered context blocks to prepend to prompt.'),
-  tools: z.enum(['none', 'readonly', 'full']).optional()
-    .describe('Tool access level for the sub-agent. Defaults to full.'),
+  tools: z.enum(['none', 'readonly', 'no-shell', 'full']).optional()
+    .describe('Sub-agent tool access. Default: full (read, write, shell). Set to no-shell to block shell for untrusted prompts.'),
   maxCostUSD: z.number().nonnegative().optional()
     .describe('Cost ceiling in USD. Task terminates with cost_exceeded when hit.'),
 };
@@ -47,7 +47,7 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
     type: 'text' as const,
     text: JSON.stringify({
       status: result.status,
-      workerStatus: result.workerStatus,
+      terminationReason: result.terminationReason,
       specReviewStatus: result.specReviewStatus,
       qualityReviewStatus: result.qualityReviewStatus,
       usage: {

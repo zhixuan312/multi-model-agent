@@ -153,9 +153,6 @@ export function createToolImplementations(
 
     async runShell(command: string): Promise<ShellResult> {
       tracker.trackToolCall(`runShell(${command.length > 80 ? command.slice(0, 77) + '…' : command})`);
-      if (confine) {
-        throw new Error('runShell is disabled under sandboxPolicy "cwd-only". Use readFile, writeFile, grep, glob, or listFiles instead.');
-      }
       try {
         const { stdout, stderr } = await execAsync(command, {
           cwd,

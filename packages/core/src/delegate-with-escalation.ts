@@ -1,11 +1,19 @@
 import type {
   TaskSpec,
   RunResult,
+  RunStatus,
   Provider,
   AttemptRecord,
   ProgressEvent,
+  TerminationReason,
 } from './types.js';
 import { retryableFor } from './error-codes.js';
+import { hasCompletedWork, extractToolName } from './runners/supervision.js';
+
+function statusToCause(status: RunStatus): TerminationReason['cause'] {
+  if (status === 'ok' || status === 'incomplete') return 'finished';
+  return status;
+}
 
 export interface DelegateOptions {
   explicitlyPinned?: boolean;
@@ -147,17 +155,32 @@ export async function delegateWithEscalation(
 
   const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
 
-  // C2: Promote incomplete → ok when agent self-assessed as done AND produced file artifacts
+  // C2: Promote incomplete → ok when agent self-assessed as done AND produced work artifacts
+  const outputIsSubstantive =
+    best.output.trim().length > 0 && !best.outputIsDiagnostic;
   const finalStatus =
     baseStatus === 'incomplete' &&
     best.workerStatus === 'done' &&
-    best.filesWritten.length > 0
+    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls)) &&
+    outputIsSubstantive
       ? 'ok'
       : baseStatus;
+
+  const wasPromoted = finalStatus === 'ok' && baseStatus === 'incomplete';
+  const terminationReason: TerminationReason = {
+    cause: statusToCause(finalStatus),
+    turnsUsed: best.turns,
+    turnsAllowed: task.maxTurns ?? 200,
+    hasFileArtifacts: best.filesWritten.length > 0,
+    usedShell: best.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
+    workerSelfAssessment: best.workerStatus ?? null,
+    wasPromoted,
+  };
 
   return {
     ...best,
     status: finalStatus,
+    terminationReason,
     errorCode: best.errorCode ?? finalStatus,
     retryable: best.retryable ?? retryableFor(finalStatus),
     escalationLog: attempts.map((a) => a.record),

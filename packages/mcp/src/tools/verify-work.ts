@@ -40,7 +40,7 @@ function buildVerifyPrompt(
 export function registerVerifyWork(server: McpServer, config: MultiModelConfig) {
   server.tool(
     'verify_work',
-    'Verify completed work against a checklist with pass/fail evidence. Accepts inline description or file paths \u2014 multiple files are verified in parallel, each against the same checklist. Preset: standard agent, spec review only. Use delegate_tasks only for custom pipeline config.',
+    'Verify work against a checklist with pass/fail evidence. Accepts inline description or file paths (multiple files verified in parallel). Preset: standard agent, spec review only.',
     verifyWorkSchema.shape,
     async (params: VerifyWorkParams) => {
       const validation = validateInput(params.work, params.filePaths);

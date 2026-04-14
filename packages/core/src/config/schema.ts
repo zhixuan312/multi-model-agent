@@ -60,7 +60,7 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 const defaultsSchema = z.object({
   maxTurns: z.number().int().positive().default(200),
   timeoutMs: z.number().int().positive().default(600_000),
-  tools: z.enum(['none', 'readonly', 'full']).default('full'),
+  tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
 }).default(() => ({ maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const }));
 

@@ -53,7 +53,7 @@ function buildAuditPrompt(
 export function registerAuditDocument(server: McpServer, config: MultiModelConfig) {
   server.tool(
     'audit_document',
-    'Audit documents or files for issues. Accepts inline content or file paths \u2014 multiple files are audited in parallel, each as a separate task. Preset: complex agent, no review pipeline. Use this for any audit task. Use delegate_tasks only for custom pipeline config or tasks that don\'t match a specialized tool.',
+    'Audit documents for issues. Accepts inline content or file paths (multiple files audit in parallel). Preset: complex agent, no review. Use delegate_tasks only for custom config.',
     auditDocumentSchema.shape,
     async (params: AuditDocumentParams) => {
       const validation = validateInput(params.document, params.filePaths);

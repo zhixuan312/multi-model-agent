@@ -86,7 +86,7 @@ function buildFullResponse(
       toolCalls: r.toolCalls,
       escalationLog: r.escalationLog,
       usage: r.usage,
-      workerStatus: r.workerStatus,
+      terminationReason: r.terminationReason,
       specReviewStatus: r.specReviewStatus,
       qualityReviewStatus: r.qualityReviewStatus,
       agents: r.agents,
@@ -137,7 +137,7 @@ function buildSummaryResponse(
       outputSha256: sha256Hex(r.output),
       usage: r.usage,
       escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
-      workerStatus: r.workerStatus,
+      terminationReason: r.terminationReason,
       specReviewStatus: r.specReviewStatus,
       qualityReviewStatus: r.qualityReviewStatus,
       ...(r.error && { error: r.error }),
@@ -162,139 +162,68 @@ export const SERVER_VERSION = pkg.version;
 export function buildTaskSchema(availableAgents: [string, ...string[]]) {
   return z.object({
     prompt: z.string().describe(
-      'WHAT: The natural-language instruction that tells the sub-agent what task to perform.\n' +
-      'WHEN: Always required; this is the primary input for every task.\n' +
-      'DEFAULT: Required — no default, must be provided.\n' +
-      'INTERACTION: Concatenated with expanded context blocks (if contextBlockIds is set) before dispatch.',
+      'The task instruction. Required. Concatenated with context blocks (if contextBlockIds set) before dispatch.',
     ),
     agentType: z.enum(availableAgents).optional().describe(
-        'WHAT: Selects which labor agent handles this task — standard (cheap, straightforward) or complex (expensive, harder reasoning).\n' +
-        'WHEN: Always declare explicitly. The parent decides whether this is standard or complex labor.\n' +
-        'DEFAULT: standard (when omitted, routes to the standard agent).\n' +
-        'INTERACTION: The system enforces capability floors — if the task requires web_search and standard lacks it, silently routes to complex.',
-      ),
-    tools: z.enum(['none', 'readonly', 'full']).optional().describe(
-      'WHAT: Controls whether the sub-agent has access to tool APIs (read, write, bash, etc).\n' +
-      'WHEN: Set to none when the task is purely prompt-only (e.g., translation, summarization).\n' +
-      'DEFAULT: full — agent has access to all configured tools.\n' +
-      'INTERACTION: When tools is none, the runner bypasses tool-capability checks even if the agent config declares tools.',
+      'Which agent handles this task. Default: standard (cost-effective, well-scoped work). Set to complex for harder reasoning, ambiguous scope, or security-sensitive work.',
+    ),
+    tools: z.enum(['none', 'readonly', 'no-shell', 'full']).optional().describe(
+      'Sub-agent tool access. Default: full (read, write, shell). Modes: none (prompt-only), readonly (read + grep + glob), no-shell (read + write, no shell), full (everything).',
     ),
     maxTurns: z.number().int().positive().optional().describe(
-      'WHAT: Caps the number of agent loop turns (prompt → model → tool_calls → ...) before termination.\n' +
-      'WHEN: Use to bound execution length for tasks that risk running away (e.g., deep research).\n' +
-      'DEFAULT: 200 — inherited from server-level defaults if not specified.\n' +
-      'INTERACTION: When maxTurns is reached, the task terminates with status max_turns rather than ok.',
+      'Max agent loop turns before termination. Default: 200. Returns status max_turns when hit.',
     ),
     timeoutMs: z.number().int().positive().optional().describe(
-      'WHAT: Wall-clock time limit in milliseconds for the entire task execution.\n' +
-      'WHEN: Use to prevent runaway tasks from consuming budget indefinitely.\n' +
-      'DEFAULT: 600000 (10 minutes) — inherited from server-level defaults if not specified.\n' +
-      'INTERACTION: When timeoutMs is reached, the task terminates with status timeout regardless of progress.',
+      'Wall-clock time limit in ms. Default: 600000 (10 min). Returns status timeout when hit.',
     ),
     cwd: z.string().optional().describe(
-      'WHAT: Working directory that file/shell tools resolve relative to for this task.\n' +
-      'WHEN: Set when tasks run in different directories or you need isolation from the server process cwd.\n' +
-      'DEFAULT: Server process cwd (inherited from the running process environment).\n' +
-      'INTERACTION: sandboxPolicy further constrains what paths are accessible; cwd does not bypass sandbox restrictions.',
+      'Working directory for file/shell tools. Default: server process cwd.',
     ),
     effort: z.enum(['none', 'low', 'medium', 'high']).optional().describe(
-      'WHAT: Controls how much reasoning effort the model applies before responding.\n' +
-      'WHEN: Higher effort costs more but produces better results for complex tasks; none skips extended reasoning.\n' +
-      'DEFAULT: low — minimal reasoning unless the task demands more.\n' +
-      'INTERACTION: effort maps to model-side extended thinking settings; not all providers support all effort levels.',
+      'Reasoning depth. Default: auto-inferred from prompt length and complexity. Set explicitly to force a specific level (none/low/medium/high).',
     ),
     sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe(
-      'WHAT: File-system confinement policy controlling what paths the sub-agent can access.\n' +
-      'WHEN: Set to cwd-only when untrusted prompts could attempt path traversal attacks.\n' +
-      'DEFAULT: cwd-only — agent restricted to cwd and descendants only.\n' +
-      'INTERACTION: sandboxPolicy is enforced before tool execution; cwd-only does not restrict network access.',
+      'Confines file tools (readFile, writeFile, editFile, grep, glob) to the task cwd tree. Default: cwd-only. Shell commands (run_shell) run freely and can access any path. Set to none to allow file tools to access any path too.',
     ),
     requiredCapabilities: z.array(z.string()).optional().describe(
-      'WHAT: List of capability identifiers the assigned agent must possess to handle this task.\n' +
-      'WHEN: Use when a task requires specific abilities like web_search or web_fetch that not all agents have.\n' +
-      'DEFAULT: No required capabilities (any agent can be selected).\n' +
-      'INTERACTION: If no agent satisfies requiredCapabilities, the batch dispatch returns a no_capable_agent error.',
+      'Capabilities the agent must have (e.g., web_search). Default: none required. Returns no_capable_agent error if no agent qualifies.',
     ),
     contextBlockIds: z.array(z.string()).optional().describe(
-      'WHAT: References to content blocks stored via register_context_block. The server resolves ' +
-      'each id, concatenates blocks in order (separated by \'---\'), and prepends them to the ' +
-      'task prompt before dispatch.\n' +
-      'WHEN: Use when multiple tasks share the same large context (specs, files, schemas) — ' +
-      'the content is transmitted once via register_context_block instead of duplicated in every task prompt.\n' +
-      'DEFAULT: No context blocks — prompt is sent as-is.\n' +
-      'INTERACTION: Server resolves each id in order, concatenates content separated by "\\n\\n---\\n\\n", and prepends to prompt before dispatch.',
+      'IDs from register_context_block to prepend to prompt. Use when multiple tasks share large context — transmit once, reference by ID.',
     ),
     expectedCoverage: z.object({
       minSections: z.number().int().positive().optional().describe(
-        'WHAT: Minimum number of output sections the task must produce to be considered complete.\n' +
-        'WHEN: Use when tasks should produce multi-section deliverables (reports, docs with distinct parts).\n' +
-        'DEFAULT: No minimum — not required to pass coverage check.\n' +
-        'INTERACTION: Checked after syntactic completion heuristics; if minSections is set but not met, task may be marked incomplete.',
+        'Minimum output sections for completeness. Sections matched by sectionPattern regex.',
       ),
       sectionPattern: z.string().optional().describe(
-        'WHAT: Regex pattern applied with multiline flag to identify section headings in the output.\n' +
-        'WHEN: Use when output sections must follow a specific heading format (e.g., markdown ## headers).\n' +
-        'DEFAULT: No pattern — section boundaries are inferred only by minSections count.\n' +
-        'INTERACTION: Each match increments the section count toward minSections; used for coverage validation.',
+        'Regex (multiline) for section headings. Each match counts toward minSections.',
       ),
       requiredMarkers: z.array(z.string()).optional().describe(
-        'WHAT: Substrings that must all appear somewhere in the output for coverage to pass.\n' +
-        'WHEN: Use when output must contain specific terms, filenames, or anchors (e.g., "Conclusion", "Usage").\n' +
-        'DEFAULT: No required markers — coverage passes on syntactic completion alone.\n' +
-        'INTERACTION: If any requiredMarkers entry is absent, coverage check fails and task may be marked incomplete.',
+        'Substrings that must all appear in output for completeness.',
       ),
     }).optional().describe(
-      'WHAT: Caller-declared output expectations used for semantic completeness checking beyond syntactic heuristics.\n' +
-      'WHEN: Use when output has enumerable deliverables (sections, keywords, specific values) that the model should produce.\n' +
-      'DEFAULT: No expected coverage — task is judged complete purely on syntactic signals (has output, has terminator).\n' +
-      'INTERACTION: expectedCoverage results are authoritative alongside skipCompletionHeuristic; both must pass for the task to be deemed complete.',
+      'Output completeness expectations. When declared and passing, authoritative over all heuristics. Default: none — syntactic checks only.',
     ),
     skipCompletionHeuristic: z.boolean().optional().describe(
-      'WHAT: Disables the no_terminator and fragment short-output heuristics for this task.\n' +
-      'WHEN: Use for tight-format outputs (single-line verdicts, CSV rows, opaque ids) that break prose heuristics.\n' +
-      'DEFAULT: false — short-output heuristics are active.\n' +
-      'INTERACTION: The empty and thinking_only degeneracy checks still fire independently; expectedCoverage passing remains authoritative when set.',
+      'Trust tight-format outputs as complete (bypasses fragment/no_terminator heuristics). Default: false. Set true for single-line verdicts, CSV, or structured formats. Empty/thinking-only checks always apply.',
     ),
     parentModel: z.string().optional().describe(
-      'WHAT: Identifier for the parent session model used to estimate saved cost when reusing prior context.\n' +
-      'WHEN: Set when you want accurate savedCostUSD figures in batch results and have the parent session model info.\n' +
-      'DEFAULT: No parent model — savedCostUSD will be null in results.\n' +
-      'INTERACTION: Used to look up parent context length for context-length-based cost estimation; influences headline ROI display.',
+      'Parent session model ID for saved-cost estimates. Default: none — savedCostUSD will be null.',
     ),
     maxCostUSD: z.number().nonnegative().optional().describe(
-      'WHAT: Cost ceiling in USD for this task\'s execution. Enforcement: checked before each tool ' +
-      'call — the current LLM response completes, but the next tool call is rejected if it ' +
-      'would exceed the ceiling. The task then returns status \'cost_exceeded\' with partial ' +
-      'output (whatever the agent produced before hitting the ceiling). A small portion of ' +
-      'this budget is reserved for normalization (brief rewriting). Set to 0 to skip ' +
-      'normalization entirely.\n' +
-      'WHEN: Use when you want to cap spend on expensive operations or prevent runaway token usage.\n' +
-      'DEFAULT: No cost ceiling — unlimited spend allowed.\n' +
-      'INTERACTION: When maxCostUSD is reached, the task terminates with status cost_exceeded rather than ok.',
+      'Cost ceiling in USD per task. Default: no limit. Returns status cost_exceeded when hit.',
     ),
     reviewPolicy: z.enum(['full', 'spec_only', 'off']).optional().describe(
-      'WHAT: Quality review policy controlling whether spec and quality review steps run after task completion.\n' +
-      'WHEN: Set to off for fire-and-forget tasks; set to spec_only to skip quality review but keep spec review.\n' +
-      'DEFAULT: full — both spec review and quality review run when configured.\n' +
-      'INTERACTION: reviewPolicy is enforced at the runner level; off skips all review even if reviewPolicy is configured in defaults.',
+      'Review pipeline control. Default: full (spec + quality review). Set to spec_only for spec review alone, or off for direct output with no review.',
     ),
     maxReviewRounds: z.number().int().nonnegative().optional().describe(
-      'WHAT: Maximum number of spec review rework rounds before the loop terminates.\n' +
-      'WHEN: Use to bound iterative refinement cycles for tasks that could otherwise run indefinitely.\n' +
-      'DEFAULT: 2 rework rounds — inherited from server-level defaults if not specified.\n' +
-      'INTERACTION: When maxReviewRounds is exhausted, the task moves to the next step regardless of spec review outcome.',
+      'Max spec review rework rounds. Default: 2. After exhaustion, the task returns its current output and moves to the next pipeline stage.',
     ),
     briefQualityPolicy: z.enum(['normalize', 'strict', 'warn', 'off']).optional().describe(
-      'WHAT: Controls how readiness evaluation handles vague briefs before dispatch.\n' +
-      'WHEN: Set to normalize to auto-enrich vague briefs; strict to refuse them; warn to evaluate and surface warnings; off to skip.\n' +
-      'DEFAULT: warn — readiness evaluates every brief and surfaces warnings, but does not block dispatch.\n' +
-      'INTERACTION: When strict, a vague brief returns status brief_too_vague without spending any tokens. When normalize, the system enriches the brief via a normalization pass before dispatch.',
+      'Vague brief handling. Default: warn (evaluates and surfaces warnings in response). strict: returns status brief_too_vague without running. normalize: rewrites the brief before dispatch. off: dispatches as-is.',
     ),
     testCommand: z.string().optional().describe(
-      'WHAT: Shell command for task-specific verification (e.g., "npx vitest run tests/foo.test.ts").\n' +
-      'WHEN: Set when the task runs in parallel and you want to steer the agent toward a targeted test instead of a full-project build.\n' +
-      'DEFAULT: No test command — agent decides how to verify.\n' +
-      'INTERACTION: When set and the task runs in parallel with others, the command is recommended to the agent in a parallel-safety prompt suffix.',
+      'Shell command for task verification (e.g., "npx vitest run tests/foo.test.ts"). When set and the task runs in parallel, the harness tells the worker to use this command instead of a full-project build.',
     ),
   });
 }
@@ -412,10 +341,9 @@ export function buildMcpServer(
 
   server.tool(
     'delegate_tasks',
-    'Execute one or more tasks in parallel with full control over execution parameters. ' +
-      'Use this when (A) your task doesn\'t match audit_document, review_code, verify_work, or debug_task, ' +
-      'or (B) you need pipeline customization (reviewPolicy, maxReviewRounds, effort, etc.) beyond what ' +
-      'the specialized tools expose.\n\n' +
+    'Dispatch tasks to sub-agents. Minimum: { prompt, agentType }. Everything else has good defaults.\n\n' +
+      'Use specialized tools (audit_document, review_code, verify_work, debug_task) for common patterns — they set optimal defaults. ' +
+      'Use delegate_tasks when you need custom pipeline control or your task doesn\'t match a specialized tool.\n\n' +
       renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
@@ -700,7 +628,7 @@ export function buildMcpServer(
 Three slices are available:
 - \`output\`: The full text output of a specific task (requires taskIndex).
 - \`detail\`: Per-task execution details including toolCalls, filesRead/Written/Listed,
-  escalationLog, review statuses (workerStatus, specReviewStatus,
+  escalationLog, terminationReason, review statuses (specReviewStatus,
   qualityReviewStatus), agents provenance, and implementation/spec/quality reports
   (requires taskIndex).
 - \`telemetry\`: Batch-wide ROI telemetry envelope with headline, timings, batchProgress,
@@ -764,7 +692,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
           directoriesListed: result.directoriesListed ?? [],
           toolCalls: result.toolCalls,
           escalationLog: result.escalationLog,
-          workerStatus: result.workerStatus,
+          terminationReason: result.terminationReason,
           specReviewStatus: result.specReviewStatus,
           qualityReviewStatus: result.qualityReviewStatus,
           agents: result.agents,

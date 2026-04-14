@@ -87,6 +87,11 @@ describe('slim summary envelope size', () => {
       ],
       durationMs: 354_000,
       workerStatus: 'done' as const,
+      terminationReason: {
+        cause: 'finished' as const, turnsUsed: 5, turnsAllowed: 200,
+        hasFileArtifacts: true, usedShell: false,
+        workerSelfAssessment: 'done' as const, wasPromoted: false,
+      },
       specReviewStatus: 'approved' as const,
       qualityReviewStatus: 'approved' as const,
     }));
@@ -110,7 +115,9 @@ describe('slim summary envelope size', () => {
     );
 
     const rawText = result.content[0].text;
-    expect(rawText.length).toBeLessThan(10 * 1024);
+    // v1.3.0: terminationReason object (~150B per task) replaces workerStatus string (~15B).
+    // 11 tasks × ~135B delta ≈ 1.5 KB increase. Budget raised from 10 KB to 12 KB.
+    expect(rawText.length).toBeLessThan(12 * 1024);
 
     const payload = JSON.parse(rawText);
     expect(payload.mode).toBe('summary');
@@ -128,7 +135,7 @@ describe('slim summary envelope size', () => {
     expect(task0._fetchWith).toContain('get_batch_slice');
     expect(task0).not.toHaveProperty('_fetchOutputWith');
     expect(task0).not.toHaveProperty('_fetchDetailWith');
-    expect(task0).toHaveProperty('workerStatus');
+    expect(task0).toHaveProperty('terminationReason');
     expect(task0).toHaveProperty('specReviewStatus');
     expect(task0).toHaveProperty('qualityReviewStatus');
   });

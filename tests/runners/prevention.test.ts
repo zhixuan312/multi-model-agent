@@ -33,20 +33,21 @@ describe('buildSystemPrompt', () => {
     expect(prompt).toContain('edit_file');
   });
 
-  it('forbids write_file for partial edits', () => {
+  it('steers write_file for new files only', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('not write_file');
+    expect(prompt).toContain('write_file');
+    expect(prompt).toContain('edit_file to modify');
   });
 
-  it('forbids run_shell with sed/awk for edits', () => {
+  it('steers file modifications to tracked tools, not shell', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('not run_shell');
-    expect(prompt).toContain('sed/awk');
+    expect(prompt).toContain('edit_file or write_file for all file modifications');
+    expect(prompt).toContain('sed, awk');
   });
 
-  it('requires enough surrounding context for unique match', () => {
+  it('requires enough surrounding context for unique edit match', () => {
     const prompt = buildSystemPrompt();
-    expect(prompt).toContain('unique string match');
+    expect(prompt).toContain('exactly one location');
     expect(prompt).toContain('surrounding context');
   });
 
@@ -54,6 +55,22 @@ describe('buildSystemPrompt', () => {
     const a = buildSystemPrompt();
     const b = buildSystemPrompt();
     expect(a).toBe(b);
+  });
+
+  it('includes shell usage guidance for run_shell', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('run_shell');
+  });
+
+  it('recommends targeted tests over full suites', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('targeted tests');
+  });
+
+  it('restricts package installation and destructive commands to explicit requests', () => {
+    const prompt = buildSystemPrompt();
+    expect(prompt).toContain('Only install packages');
+    expect(prompt).toContain('explicitly requests it');
   });
 });
 
@@ -127,10 +144,9 @@ describe('buildBudgetPressureNudge', () => {
     expect(msg).toContain('1000000');
   });
 
-  it('tells the model to stop exploring and produce a final answer', () => {
+  it('tells the model to produce a final answer', () => {
     const msg = buildBudgetPressureNudge({ inputTokens: 100, softLimit: 200 });
-    expect(msg.toLowerCase()).toContain('stop exploring');
-    expect(msg.toLowerCase()).toContain('final answer');
+    expect(msg.toLowerCase()).toContain('produce your complete final answer');
   });
 
   it('is deterministic for the same inputs', () => {

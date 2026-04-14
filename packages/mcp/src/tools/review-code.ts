@@ -44,7 +44,7 @@ function buildReviewPrompt(
 export function registerReviewCode(server: McpServer, config: MultiModelConfig) {
   server.tool(
     'review_code',
-    'Review code with the full quality pipeline (spec review + quality review). Accepts inline code or file paths \u2014 multiple files are reviewed in parallel. Preset: complex agent, full review. Use this when code needs thorough review. Use delegate_tasks only for custom pipeline config.',
+    'Review code with full quality pipeline. Accepts inline code or file paths (multiple files review in parallel). Preset: complex agent, full review. Use delegate_tasks only for custom config.',
     reviewCodeSchema.shape,
     async (params: ReviewCodeParams) => {
       const validation = validateInput(params.code, params.filePaths);

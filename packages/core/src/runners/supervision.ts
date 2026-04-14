@@ -390,8 +390,8 @@ export function logWatchdogEvent(
 }
 
 /** camelCase tool names (matching tracker.trackToolCall format in definitions.ts)
- *  that indicate file-level artifact production. */
-export const FILE_MUTATING_TOOLS = new Set(['writeFile', 'editFile']);
+ *  that indicate meaningful completed work — file mutations or shell execution. */
+export const COMPLETED_WORK_TOOLS = new Set(['writeFile', 'editFile', 'runShell']);
 
 export function extractToolName(toolCallEntry: string): string {
   const parenIndex = toolCallEntry.indexOf('(');
@@ -399,42 +399,36 @@ export function extractToolName(toolCallEntry: string): string {
 }
 
 export function hasCompletedWork(toolCalls: string[]): boolean {
-  return toolCalls.some(tc => FILE_MUTATING_TOOLS.has(extractToolName(tc)));
+  return toolCalls.some(tc => COMPLETED_WORK_TOOLS.has(extractToolName(tc)));
 }
 
 /**
  * Coordinator for sub-agent output validation.
  *
- * Replaces the runner-side coordination pattern where each runner called
- * `validateCompletion` first and then (optionally) `validateCoverage`. That
- * ordering had a bug: short, correct outputs on tight-format tasks tripped
- * the `no_terminator` heuristic BEFORE the more authoritative coverage
- * check had a chance to run, causing false-positive `incomplete` statuses.
+ * Priority order (most authoritative first):
  *
- * New priority order:
+ *   1. `empty` and `thinking_only` always fail — degeneracy checks.
+ *   2. `expectedCoverage` declared and passes → valid (caller-declared, most trustworthy).
+ *   3. `expectedCoverage` declared and fails → invalid.
+ *   4. `workerStatus: 'done'` + (hasCompletedWork or skipCompletionHeuristic) → valid
+ *      (worker says done AND there's evidence of work or caller opted out).
+ *   5. `workerStatus: 'done'` without work evidence → trust if output passes heuristic.
+ *   6. `workerStatus: 'done_with_concerns'` + hasCompletedWork → valid.
+ *   7. `skipCompletionHeuristic` or `hasCompletedWork` (without workerStatus) → valid.
+ *   8. Fall through to `fragment`/`no_terminator` heuristic (last resort).
  *
- *   1. `empty` and `thinking_only` always fail first — these are "is
- *      there content at all" signals, not "is the content done" signals.
- *   2. If `expectedCoverage` is declared and passes, the output is valid
- *      regardless of short-output heuristics. Coverage is authoritative.
- *   3. If `expectedCoverage` is declared and fails, return the coverage
- *      failure.
- *   4. If `skipCompletionHeuristic` is set, the short-output heuristic is
- *      skipped (only empty / thinking_only fire). Use this for tight-format
- *      tasks that don't declare coverage.
- *   5. Otherwise, fall through to the full `validateCompletion` heuristic
- *      (the existing behavior).
- *
- * The underlying `validateCompletion` and `validateCoverage` functions are
- * NOT modified — this is a pure coordination wrapper.
+ * `needs_context` and `blocked` are never auto-validated.
  */
 export function validateSubAgentOutput(
   text: string,
   opts: {
     expectedCoverage?: TaskSpec['expectedCoverage'];
     skipCompletionHeuristic?: boolean;
+    workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked';
+    hasCompletedWork?: boolean;
   } = {},
 ): ValidationResult {
+  // 1. Degeneracy checks
   const completion = validateCompletion(text);
   if (
     !completion.valid &&
@@ -443,15 +437,33 @@ export function validateSubAgentOutput(
     return completion;
   }
 
+  // 2-3. expectedCoverage — most authoritative when declared
   if (opts.expectedCoverage) {
     const coverage = validateCoverage(text, opts.expectedCoverage);
     if (!coverage.valid) return coverage;
     return { valid: true };
   }
 
-  if (opts.skipCompletionHeuristic) {
+  // 4. workerStatus: 'done' + work evidence → trust it
+  if (opts.workerStatus === 'done' && (opts.hasCompletedWork || opts.skipCompletionHeuristic)) {
     return { valid: true };
   }
 
+  // 5. workerStatus: 'done' without evidence → trust if output passes heuristic
+  if (opts.workerStatus === 'done') {
+    return completion;
+  }
+
+  // 6. done_with_concerns + work evidence → trust it
+  if (opts.workerStatus === 'done_with_concerns' && opts.hasCompletedWork) {
+    return { valid: true };
+  }
+
+  // 7. skipCompletionHeuristic or hasCompletedWork without workerStatus
+  if (opts.skipCompletionHeuristic || opts.hasCompletedWork) {
+    return { valid: true };
+  }
+
+  // 8. Fall through to heuristic
   return completion;
 }

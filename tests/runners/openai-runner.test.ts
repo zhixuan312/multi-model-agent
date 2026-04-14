@@ -169,16 +169,16 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     // It must contain the "final assistant message" discipline line.
     const agentCall = MockAgent.mock.calls[0][0] as { instructions: string };
     expect(agentCall.instructions).toContain('final assistant message');
-    expect(agentCall.instructions).toContain('Anti-pattern');
+    expect(agentCall.instructions).toContain('Tool rules:');
 
     // The user prompt passed to run() is the original prompt with the
     // buildBudgetHint preamble prepended.
     const runCall = mockRun.mock.calls[0];
     const inputArg = runCall[1] as string;
     expect(typeof inputArg).toBe('string');
-    expect(inputArg).toContain('Budget reminder');
+    expect(inputArg).toContain('Budget:');
     expect(inputArg).toContain('original user task');
-    expect(inputArg.indexOf('Budget reminder')).toBeLessThan(inputArg.indexOf('original user task'));
+    expect(inputArg.indexOf('Budget:')).toBeLessThan(inputArg.indexOf('original user task'));
   });
 
   it('populates the scratchpad from result.newItems (multi-part output_text concatenation)', async () => {

@@ -140,8 +140,8 @@ describe('runCodex', () => {
     expect(hostedTools.some((t: any) => t.type === 'web_search')).toBe(true);
   });
 
-  // ─── 5. sandboxPolicy='cwd-only' → no run_shell function tool ────────────────
-  it('sandboxPolicy=cwd-only excludes run_shell from tools', async () => {
+  // ─── 5. sandboxPolicy='cwd-only' + tools='full' → run_shell IS included (B-24) ────
+  it('sandboxPolicy=cwd-only with tools=full includes run_shell', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
     let capturedParams: any;
@@ -161,11 +161,11 @@ describe('runCodex', () => {
       { type: 'codex', model: 'gpt-5-codex' },
       defaults,
     );
-    // run_shell is only added when sandboxPolicy !== 'cwd-only'
+    // B-24: run_shell is now included under cwd-only when toolMode is 'full'
     const functionTools = capturedParams.tools?.filter(
       (t: any) => t.type === 'function' && t.name === 'run_shell',
     ) ?? [];
-    expect(functionTools).toHaveLength(0);
+    expect(functionTools).toHaveLength(1);
   });
 
   // ─── 6. max_turns when maxTurns=1 exhausted in tool-call loop ────────────────

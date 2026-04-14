@@ -25,10 +25,17 @@ describe('createOpenAITools', () => {
     expect(names).toContain('list_files');
   });
 
-  it('full mode with cwd-only sandbox excludes run_shell', () => {
+  it('full mode with cwd-only sandbox includes run_shell', () => {
+    // shell access is controlled by toolMode, not sandboxPolicy
     const tools = createOpenAITools(mockToolImpls(), 'cwd-only', 'full');
     const names = tools.map((t: any) => t.name);
     expect(names).toContain('write_file');
+    expect(names).toContain('run_shell');
+  });
+
+  it('no-shell mode excludes run_shell', () => {
+    const tools = createOpenAITools(mockToolImpls(), 'cwd-only', 'no-shell');
+    const names = tools.map((t: any) => t.name);
     expect(names).not.toContain('run_shell');
   });
 
