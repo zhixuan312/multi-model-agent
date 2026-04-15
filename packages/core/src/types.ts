@@ -161,9 +161,10 @@ export interface MultiModelConfig {
     complex: AgentConfig
   }
   defaults: {
-    maxTurns: number
     timeoutMs: number
+    maxCostUSD: number
     tools: ToolMode
+    sandboxPolicy: SandboxPolicy
     /** Character threshold that triggers auto-switch from 'full' to
      *  'summary' response mode when the caller uses `responseMode: 'auto'`
      *  (the default). Optional — defaults to 65_536 when absent.
