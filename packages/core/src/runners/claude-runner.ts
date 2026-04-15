@@ -32,16 +32,16 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
   hasCompletedWork,
+  MAX_DEGENERATE_RETRIES,
+  STALL_DETECTION_TURNS,
+  detectToolCallLoop,
+  hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 
-/**
- * Hard cap on supervision re-prompts before we give up and salvage. Same as
- * openai-runner; see spec A.2.2.
- */
-const MAX_SUPERVISION_RETRIES = 3;
+
 
 /**
  * Minimal pushable async-iterable queue for feeding user messages to the
@@ -118,9 +118,9 @@ export async function runClaude(
   prompt: string,
   options: RunOptions,
   providerConfig: ProviderConfig,
-  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode },
+  defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? defaults.maxTurns;
+  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -217,7 +217,7 @@ export async function runClaude(
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
-  const budgetHint = buildBudgetHint({ maxTurns });
+  const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
   // --- onInitialRequest (Task 12) ----------------------------------------
@@ -311,7 +311,11 @@ export async function runClaude(
     let output = '';
 
     // --- Supervision / watchdog bookkeeping ---
-    let supervisionRetries = 0;
+    // Monitor model: only count degenerate retries when worker has NO tool calls.
+    let degenerateRetries = 0;
+    let stallTurnCounter = 0;
+    let lastFilesRead = tracker.getReads().length;
+    let lastFilesWritten = tracker.getWrites().length;
     // Initialised to `null` (NOT ''): on the first turn there is no
     // previous degenerate output to compare against, so the same-output
     // early-out must be skipped. See openai-runner regression #5.
@@ -465,8 +469,8 @@ export async function runClaude(
             }
             const reground = buildReGroundingMessage({
               originalPromptExcerpt: prompt,
-              currentTurn: turns,
-              maxTurns,
+              elapsedMs: Date.now() - taskStartMs,
+              timeoutMs,
               toolCallsSoFar: tracker.getToolCalls().length,
               filesReadSoFar: tracker.getReads().length,
             });
@@ -634,7 +638,7 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
-              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
+              reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
             });
@@ -642,22 +646,26 @@ export async function runClaude(
             break;
           }
           lastDegenerateOutput = output;
-          supervisionRetries++;
-          if (supervisionRetries >= MAX_SUPERVISION_RETRIES) {
-            completedResult = buildClaudeIncompleteResult({
-              tracker,
-              scratchpad,
-              providerConfig,
-              sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
-              turns,
-              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
-              durationMs: Date.now() - taskStartMs,
-              parentModel,
-            });
-            messageQueue.close();
-            break;
+          // Only count as degenerate when worker has NO tool calls this turn.
+          // If the worker is still calling tools, it's making progress.
+          if (!hasCompletedWork(tracker.getToolCalls())) {
+            degenerateRetries++;
+            if (degenerateRetries >= MAX_DEGENERATE_RETRIES) {
+              completedResult = buildClaudeIncompleteResult({
+                tracker,
+                scratchpad,
+                providerConfig,
+                sdkCostUSD: costUSD,
+                inputTokens,
+                outputTokens,
+                turns,
+                reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
+                durationMs: Date.now() - taskStartMs,
+                parentModel,
+              });
+              messageQueue.close();
+              break;
+            }
           }
 
           // Push the re-prompt and continue reading the iterator.
@@ -912,7 +920,8 @@ function buildClaudeMaxTurnsResult(
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
     output,
-    status: 'max_turns',
+    status: 'incomplete',
+    errorCode: 'degenerate_exhausted',
     usage: {
       inputTokens,
       outputTokens,

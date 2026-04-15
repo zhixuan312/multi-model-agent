@@ -109,7 +109,7 @@ describe('buildMcpServer', () => {
   it('throws when config has no agents', () => {
     const config: MultiModelConfig = {
       agents: {},
-      defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
+      defaults: { timeoutMs: 600000, tools: 'full' },
     };
     expect(() => buildMcpServer(config)).toThrow(/at least one configured agent/);
   });
@@ -278,88 +278,44 @@ describe('delegate_tasks schema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('accepts valid effort enum values', () => {
-    for (const effort of ['none', 'low', 'medium', 'high'] as const) {
-      const result = taskSchema.safeParse({
-        prompt: 'do thing',
-        agentType: 'standard',
-        effort,
-      });
-      expect(result.success).toBe(true);
-    }
-  });
-
-  it('rejects invalid effort values', () => {
+  it('accepts filePaths', () => {
     const result = taskSchema.safeParse({
       prompt: 'do thing',
+      filePaths: ['a.ts', 'b.ts'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts done (acceptance criteria)', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      done: 'when tests pass',
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts contextBlockIds', () => {
+    const result = taskSchema.safeParse({
+      prompt: 'do thing',
+      contextBlockIds: ['ctx1', 'ctx2'],
+    });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects missing prompt', () => {
+    const result = taskSchema.safeParse({
       agentType: 'standard',
-      effort: 'extreme',
     });
     expect(result.success).toBe(false);
   });
-
-  it('accepts v0.3.0 MCP task fields', () => {
-    const result = taskSchema.safeParse({
-      prompt: 'do thing',
-      agentType: 'standard',
-      expectedCoverage: {
-        minSections: 2,
-        sectionPattern: '^##\\s+',
-        requiredMarkers: ['alpha', 'beta'],
-      },
-      parentModel: 'gpt-5.4',
-    });
-    expect(result.success).toBe(true);
-    if (!result.success) {
-      throw new Error('expected task schema parse to succeed');
-    }
-    expect(result.data.expectedCoverage).toEqual({
-      minSections: 2,
-      sectionPattern: '^##\\s+',
-      requiredMarkers: ['alpha', 'beta'],
-    });
-    expect(result.data.parentModel).toBe('gpt-5.4');
-  });
-
-  it('buildTaskSchema accepts skipCompletionHeuristic', () => {
-    const schema = buildTaskSchema(['standard', 'complex']);
-    const result = schema.safeParse({
-      prompt: 'test',
-      agentType: 'standard',
-      skipCompletionHeuristic: true,
-    });
-    expect(result.success).toBe(true);
-  });
 });
 
-describe('delegate_tasks MCP input contract (v0.3.0)', () => {
-  it('preserves expectedCoverage and parentModel in the registered MCP input schema', async () => {
-    const server = buildMcpServer(sampleConfig());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server as any)._registeredTools;
-    const delegateTool = tools['delegate_tasks'];
-
-    const parsed = delegateTool.inputSchema.parse({
-      tasks: [
-        {
-          prompt: 'do thing',
-          agentType: 'standard',
-          expectedCoverage: {
-            minSections: 2,
-            sectionPattern: '^##\\s+',
-            requiredMarkers: ['alpha', 'beta'],
-          },
-          parentModel: 'gpt-5.4',
-        },
-      ],
-    });
-
-    expect(parsed.tasks[0].expectedCoverage).toEqual({
-      minSections: 2,
-      sectionPattern: '^##\\s+',
-      requiredMarkers: ['alpha', 'beta'],
-    });
-    expect(parsed.tasks[0].parentModel).toBe('gpt-5.4');
+describe('delegate_tasks MCP input contract (v2.0.0)', () => {
+  it('buildTaskSchema only contains the 5 core fields', async () => {
+    const schema = buildTaskSchema(['standard', 'complex']);
+    const shape = schema.shape;
+    const fields = Object.keys(shape);
+    expect(fields).toEqual(['prompt', 'agentType', 'filePaths', 'done', 'contextBlockIds']);
   });
 });
 
@@ -884,10 +840,10 @@ describe('computeBatchProgress (v0.3.0)', () => {
     expect(progress.successPercent).toBe(80.0);
   });
 
-  it('timeout and max_turns count as incompleteTasks, not failedTasks', () => {
+  it('timeout and degenerate_exhausted count as incompleteTasks, not failedTasks', () => {
     const results: RunResult[] = [
       { ...baseMockResult, status: 'ok' },
-      { ...baseMockResult, status: 'max_turns' },
+      { ...baseMockResult, status: 'incomplete', errorCode: 'degenerate_exhausted' },
       { ...baseMockResult, status: 'timeout' },
       { ...baseMockResult, status: 'incomplete' },
     ];
@@ -956,20 +912,9 @@ describe('buildTaskSchema descriptions', () => {
   const EXPECTED_TOP_LEVEL_FIELDS = [
     'prompt',
     'agentType',
-    'tools',
-    'maxTurns',
-    'timeoutMs',
-    'cwd',
-    'effort',
-    'sandboxPolicy',
-    'requiredCapabilities',
+    'filePaths',
+    'done',
     'contextBlockIds',
-    'expectedCoverage',
-    'skipCompletionHeuristic',
-    'parentModel',
-    'maxCostUSD',
-    'reviewPolicy',
-    'maxReviewRounds',
   ];
 
   for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
@@ -981,18 +926,6 @@ describe('buildTaskSchema descriptions', () => {
       expect(desc.length).toBeGreaterThan(10);
     });
   }
-
-  describe('expectedCoverage nested fields', () => {
-    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
-
-    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
-      it(`${innerName} has a non-empty description`, () => {
-        const desc = (innerDef as any).description;
-        expect(desc).toBeTruthy();
-        expect(desc.length).toBeGreaterThan(10);
-      });
-    }
-  });
 });
 
 describe('delegate_tasks headline field (full mode)', () => {
@@ -1038,20 +971,9 @@ describe('buildTaskSchema descriptions', () => {
   const EXPECTED_TOP_LEVEL_FIELDS = [
     'prompt',
     'agentType',
-    'tools',
-    'maxTurns',
-    'timeoutMs',
-    'cwd',
-    'effort',
-    'sandboxPolicy',
-    'requiredCapabilities',
+    'filePaths',
+    'done',
     'contextBlockIds',
-    'expectedCoverage',
-    'skipCompletionHeuristic',
-    'parentModel',
-    'maxCostUSD',
-    'reviewPolicy',
-    'maxReviewRounds',
   ];
 
   for (const fieldName of EXPECTED_TOP_LEVEL_FIELDS) {
@@ -1063,18 +985,6 @@ describe('buildTaskSchema descriptions', () => {
       expect(desc.length).toBeGreaterThan(10);
     });
   }
-
-  describe('expectedCoverage nested fields', () => {
-    const coverageShape = (shape.expectedCoverage as any)._def.innerType.shape;
-
-    for (const [innerName, innerDef] of Object.entries(coverageShape)) {
-      it(`${innerName} has a non-empty description`, () => {
-        const desc = (innerDef as any).description;
-        expect(desc).toBeTruthy();
-        expect(desc.length).toBeGreaterThan(10);
-      });
-    }
-  });
 });
 
 describe('delegate_tasks summary mode — slim shape', () => {

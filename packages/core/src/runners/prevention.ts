@@ -45,37 +45,40 @@ export function buildSystemPrompt(): string {
 }
 
 export interface BuildBudgetHintOptions {
-  maxTurns: number;
+  timeoutMs: number;
+  maxCostUSD?: number;
 }
 
 export function buildBudgetHint(opts: BuildBudgetHintOptions): string {
-  const half = Math.floor(opts.maxTurns / 2);
-  return [
-    `Budget: you have ${opts.maxTurns} tool calls for this task.`,
-    'Batch your investigation using recursive grep over file-by-file reads. Write findings as you go.',
-    `At ${half} calls, start drafting your final answer.`,
-  ].join(' ');
+  const timeMin = Math.round(opts.timeoutMs / 60_000);
+  const parts = [`Budget: you have ${timeMin} minutes for this task.`];
+  if (opts.maxCostUSD !== undefined) {
+    parts.push(`Cost ceiling: $${opts.maxCostUSD}.`);
+  }
+  parts.push('Work efficiently. Write findings as you go.');
+  return parts.join(' ');
 }
 
 export const RE_GROUNDING_INTERVAL_TURNS = 10;
 
 export interface BuildReGroundingMessageOptions {
   originalPromptExcerpt: string;
-  currentTurn: number;
-  maxTurns: number;
+  elapsedMs: number;
+  timeoutMs: number;
   toolCallsSoFar: number;
   filesReadSoFar: number;
 }
 
 export function buildReGroundingMessage(opts: BuildReGroundingMessageOptions): string {
-  const percent = Math.round((opts.currentTurn / opts.maxTurns) * 100);
   const excerpt = opts.originalPromptExcerpt.slice(0, 200);
+  const elapsedMin = Math.round(opts.elapsedMs / 60_000);
+  const totalMin = Math.round(opts.timeoutMs / 60_000);
   return [
     `Reminder: your task is "${excerpt}${opts.originalPromptExcerpt.length > 200 ? '...' : ''}".`,
-    `You are at turn ${opts.currentTurn} of ${opts.maxTurns} (≈ ${percent}% of budget used).`,
-    `Tool calls so far: ${opts.toolCallsSoFar}. Files read: ${opts.filesReadSoFar}.`,
+    `Elapsed: ${elapsedMin} of ${totalMin} minutes.`,
+    `Tool calls: ${opts.toolCallsSoFar}. Files read: ${opts.filesReadSoFar}.`,
     'Start drafting your final answer now.',
-    'Use your remaining budget to fill gaps, then finalize.',
+    'Use your remaining time to fill gaps, then finalize.',
   ].join(' ');
 }
 

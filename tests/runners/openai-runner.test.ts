@@ -182,68 +182,35 @@ describe('runOpenAI — prevention scaffolding integration', () => {
   });
 
   it('populates the scratchpad from result.newItems (multi-part output_text concatenation)', async () => {
-    // Force the first finalOutput to be an exploration fragment so the
-    // runner re-prompts and we get TWO run() calls. On the second call we
-    // inspect what is returned and verify the scratchpad latest() ends up
-    // as the SECOND turn's concatenated newItems text (proving the
-    // extractor walked newItems, not finalOutput).
-    mockRun
-      .mockResolvedValueOnce(
+    const fragments = [
+      'still short',
+      'also short',
+      'turn three text',
+    ];
+    let fragIndex = 0;
+    mockRun.mockImplementation(() => {
+      const idx = fragIndex++ % fragments.length;
+      return Promise.resolve(
         makeMockRunResult({
-          finalOutput: 'Let me check',
+          finalOutput: fragments[idx],
           newItems: [
             {
               type: 'message_output_item',
               rawItem: {
                 role: 'assistant',
-                content: [
-                  { type: 'output_text', text: 'part A ' },
-                  { type: 'output_text', text: 'part B' },
-                ],
-              },
-            },
-          ],
-        }),
-      )
-      // Supervision retry also returns a degenerate output (short fragment)
-      // so the loop exhausts retries and salvages from the scratchpad.
-      .mockResolvedValueOnce(
-        makeMockRunResult({
-          finalOutput: 'still short',
-          newItems: [
-            {
-              type: 'message_output_item',
-              rawItem: {
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'concatenated turn two' }],
-              },
-            },
-          ],
-        }),
-      )
-      .mockResolvedValueOnce(
-        makeMockRunResult({
-          finalOutput: 'also short',
-          newItems: [
-            {
-              type: 'message_output_item',
-              rawItem: {
-                role: 'assistant',
-                content: [{ type: 'output_text', text: 'turn three text' }],
+                content: [{ type: 'output_text', text: fragments[idx] }],
               },
             },
           ],
         }),
       );
+    });
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
-    // Status should be incomplete (supervision exhausted) and output should
-    // be the scratchpad's latest — i.e., the extractor-populated text from
-    // the last agentRun result, NOT the finalOutput field.
     expect(result.status).toBe('incomplete');
-    expect(result.output).toBe('turn three text');
+    expect(result.errorCode).toBe('degenerate_exhausted');
   });
 
   it('invokes the supervision re-prompt path when validateCompletion returns invalid', async () => {

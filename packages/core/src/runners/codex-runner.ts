@@ -35,6 +35,10 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
   hasCompletedWork,
+  MAX_DEGENERATE_RETRIES,
+  STALL_DETECTION_TURNS,
+  detectToolCallLoop,
+  hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
@@ -56,11 +60,7 @@ if (process.env.CODEX_DEBUG === '1') {
   );
 }
 
-/**
- * Hard cap on supervision re-prompts before we give up and salvage. Three is
- * the value chosen in the spec (A.2.2); mirrors openai-runner and claude-runner.
- */
-const MAX_SUPERVISION_RETRIES = 3;
+
 
 /**
  * Holds the raw body text of the last HTTP response that returned a 4xx/5xx.
@@ -241,9 +241,9 @@ export async function runCodex(
   prompt: string,
   options: RunOptions,
   providerConfig: ProviderConfig,
-  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode },
+  defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? defaults.maxTurns;
+  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -358,7 +358,7 @@ export async function runCodex(
   // prompt so the model sees it as part of its task brief, while the system
   // prompt is threaded through the Responses API `instructions` field.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
-  const budgetHint = buildBudgetHint({ maxTurns });
+  const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
   // --- onInitialRequest (Task 12) ----------------------------------------
@@ -435,7 +435,11 @@ export async function runCodex(
     let lastResponseStatusTurn: number | null = null;
 
     // --- Supervision / watchdog bookkeeping ---
-    let supervisionRetries = 0;
+    // Monitor model: only count degenerate retries when worker has NO tool calls.
+    let degenerateRetries = 0;
+    let stallTurnCounter = 0;
+    let lastFilesRead = tracker.getReads().length;
+    let lastFilesWritten = tracker.getWrites().length;
     // Initialised to `null` (NOT ''): on the first turn there is no
     // previous degenerate output to compare against, so the same-output
     // early-out must be skipped. Initialising to '' would cause
@@ -650,8 +654,8 @@ export async function runCodex(
           }
           const reground = buildReGroundingMessage({
             originalPromptExcerpt: prompt,
-            currentTurn: turns,
-            maxTurns,
+            elapsedMs: Date.now() - taskStartMs,
+            timeoutMs,
             toolCallsSoFar: tracker.getToolCalls().length,
             filesReadSoFar: tracker.getReads().length,
           });
@@ -728,7 +732,7 @@ export async function runCodex(
           if (
             (lastDegenerateOutput !== null &&
               sameDegenerateOutput(stripped, lastDegenerateOutput)) ||
-            supervisionRetries >= MAX_SUPERVISION_RETRIES
+            degenerateRetries >= MAX_DEGENERATE_RETRIES
           ) {
             const exhausted = buildCodexIncompleteResult({
               tracker,
@@ -737,7 +741,7 @@ export async function runCodex(
               inputTokens,
               outputTokens,
               turns,
-              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
+              reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
             });
@@ -749,7 +753,11 @@ export async function runCodex(
           // the loop. The next turn of the codex backend will respond
           // to the re-prompt directly.
           lastDegenerateOutput = stripped;
-          supervisionRetries++;
+          // Only count as degenerate when worker has NO tool calls this turn.
+          // If the worker is still calling tools, it's making progress.
+          if (!hasCompletedWork(tracker.getToolCalls())) {
+            degenerateRetries++;
+          }
           if (!canAffordNextTurn()) {
             return buildCostExceededResult();
           }
@@ -986,6 +994,7 @@ function buildCodexIncompleteResult(
           filesWritten,
         }),
     status: 'incomplete',
+    errorCode: 'degenerate_exhausted',
     usage: {
       inputTokens,
       outputTokens,
@@ -1052,7 +1061,8 @@ function buildCodexMaxTurnsResult(
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
     output,
-    status: 'max_turns',
+    status: 'incomplete',
+    errorCode: 'degenerate_exhausted',
     usage: {
       inputTokens,
       outputTokens,

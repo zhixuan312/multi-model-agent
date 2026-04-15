@@ -3,7 +3,7 @@ import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 const defaultConfig: MultiModelConfig = {
-  defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
+  defaults: { timeoutMs: 600000, tools: 'full' },
 };
 
 describe('runTasks', () => {
@@ -33,7 +33,7 @@ describe('runTasks', () => {
       agents: {
         standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     });
 
     expect(results).toHaveLength(2);
@@ -150,7 +150,7 @@ describe('runTasks', () => {
           standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
           complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 600_000, tools: 'full' },
       },
     );
     expect(results[0].status).toBe('brief_too_vague');
@@ -167,7 +167,7 @@ describe('runTasks', () => {
           standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
           complex: { type: 'openai-compatible', model: 'y', baseUrl: 'https://example.invalid/v2' },
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 600_000, tools: 'full' },
       },
     );
     expect(results[0].status).toBe('error');

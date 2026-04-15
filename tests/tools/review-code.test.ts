@@ -14,17 +14,8 @@ describe('review_code schema', () => {
   it('accepts focus array', () => {
     expect(reviewCodeSchema.safeParse({ code: 'x', focus: ['security', 'performance'] }).success).toBe(true);
   });
-  it('accepts outputFormat', () => {
-    expect(reviewCodeSchema.safeParse({ code: 'x', outputFormat: 'json' }).success).toBe(true);
-  });
-  it('accepts common fields', () => {
-    expect(reviewCodeSchema.safeParse({ code: 'x', cwd: '/tmp', tools: 'readonly', contextBlockIds: ['a'] }).success).toBe(true);
-  });
   it('allows both absent (handler validates)', () => {
     expect(reviewCodeSchema.safeParse({}).success).toBe(true);
-  });
-  it('accepts maxCostUSD', () => {
-    expect(reviewCodeSchema.safeParse({ code: 'x', maxCostUSD: 0.50 }).success).toBe(true);
   });
 });
 
@@ -64,14 +55,14 @@ describe('review_code handler', () => {
   it('single-task mode with inline code', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
+    registerReviewCode(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
 
-    const result = await getHandler()({ code: 'function foo() {}', focus: ['security'], cwd: '/project' });
+    const result = await getHandler()({ code: 'function foo() {}', focus: ['security'] });
     const tasks = mockRunTasks.mock.calls[0][0];
     expect(tasks).toHaveLength(1);
     expect(tasks[0].prompt).toContain('function foo() {}');
     expect(tasks[0].prompt).toContain('security');
-    expect(tasks[0].cwd).toBe('/project');
+    expect(tasks[0].cwd).toBe(process.cwd());
     expect(tasks[0].reviewPolicy).toBe('full');
     expect(result.content).toHaveLength(2);
   });
@@ -87,29 +78,5 @@ describe('review_code handler', () => {
     const envelope = JSON.parse(result.content[0].text);
     expect(envelope.mode).toBe('fan_out');
     expect(envelope).not.toHaveProperty('batchId');
-  });
-
-  it('passes outputFormat as formatConstraints', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
-    await getHandler()({ code: 'x', outputFormat: 'json' });
-    expect(mockRunTasks.mock.calls[0][0][0].formatConstraints).toEqual({ outputFormat: 'json' });
-  });
-
-  it('passes maxCostUSD through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
-    await getHandler()({ code: 'x', maxCostUSD: 0.30 });
-    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.30);
-  });
-
-  it('omits maxCostUSD from TaskSpec when not provided', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
-    await getHandler()({ code: 'x' });
-    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

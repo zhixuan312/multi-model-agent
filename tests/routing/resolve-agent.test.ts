@@ -29,7 +29,7 @@ const config: MultiModelConfig = {
       // claude has web_search + web_fetch per profile
     },
   },
-  defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+  defaults: { timeoutMs: 600_000, tools: 'full' },
 };
 
 describe('resolveAgent', () => {
@@ -58,7 +58,7 @@ describe('resolveAgent', () => {
         standard: { type: 'openai-compatible', model: 'local', baseUrl: 'http://local/v1' },
         complex: { type: 'openai-compatible', model: 'local2', baseUrl: 'http://local2/v1' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     expect(() => resolveAgent('standard', ['web_search'], noCapsConfig)).toThrow(/capability_missing/);
   });
@@ -75,7 +75,7 @@ describe('resolveAgent', () => {
         },
         complex: { type: 'claude', model: 'claude-opus-4-6' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const r = resolveAgent('standard', ['web_search'], overrideConfig);
     expect(r.slot).toBe('standard');

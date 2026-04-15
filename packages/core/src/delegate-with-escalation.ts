@@ -10,14 +10,17 @@ import type {
 import { retryableFor } from './error-codes.js';
 import { hasCompletedWork, extractToolName } from './runners/supervision.js';
 
-function statusToCause(status: RunStatus): TerminationReason['cause'] {
-  if (status === 'ok' || status === 'incomplete') return 'finished';
+function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
+  if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';
+  if (status === 'ok') return 'finished';
+  if (status === 'incomplete') return 'incomplete';
   return status;
 }
 
 export interface DelegateOptions {
   explicitlyPinned?: boolean;
   onProgress?: (event: ProgressEvent) => void;
+  escalateToProvider?: Provider;
 }
 
 const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'network_error']);
@@ -143,6 +146,65 @@ export async function delegateWithEscalation(
     }
   }
 
+  // Auto-escalation: if single-provider dispatch failed for escalation-eligible
+  // reasons (degenerate_exhausted, api_error, network_error), retry with complex.
+  const bestResult = attempts[attempts.length - 1].result;
+  const cause = deriveCause(bestResult.status, bestResult.errorCode);
+  const shouldEscalate =
+    !options.explicitlyPinned &&
+    chain.length === 1 &&
+    options.escalateToProvider !== undefined &&
+    (cause === 'degenerate_exhausted' ||
+     cause === 'api_error' ||
+     cause === 'network_error');
+
+  if (shouldEscalate) {
+    const escalationProvider = options.escalateToProvider!;
+    safeSink?.({
+      kind: 'escalation_start',
+      previousProvider: bestResult.status === 'ok' ? 'standard' : chain[0].name,
+      previousReason: `cause=${cause}`,
+      nextProvider: escalationProvider.name,
+    });
+
+    const escalationResult = await escalationProvider.run(task.prompt, {
+      tools: task.tools,
+      maxTurns: task.maxTurns,
+      timeoutMs: task.timeoutMs,
+      cwd: task.cwd,
+      effort: task.effort,
+      sandboxPolicy: task.sandboxPolicy,
+      expectedCoverage: task.expectedCoverage,
+      skipCompletionHeuristic: task.skipCompletionHeuristic,
+      parentModel: task.parentModel,
+      maxCostUSD: task.maxCostUSD,
+      formatConstraints: task.formatConstraints,
+      onProgress: safeSink,
+    });
+
+    const escalationRecord: AttemptRecord = {
+      provider: escalationProvider.name,
+      status: escalationResult.status,
+      turns: escalationResult.turns,
+      inputTokens: escalationResult.usage.inputTokens,
+      outputTokens: escalationResult.usage.outputTokens,
+      costUSD: escalationResult.usage.costUSD,
+      initialPromptLengthChars: 0,
+      initialPromptHash: '',
+      reason: escalationResult.status === 'ok'
+        ? undefined
+        : (escalationResult.error || `status=${escalationResult.status}`),
+    };
+
+    if (escalationResult.status === 'ok') {
+      return {
+        ...escalationResult,
+        escalationLog: [...attempts.map((a) => a.record), escalationRecord],
+      };
+    }
+    attempts.push({ result: escalationResult, record: escalationRecord });
+  }
+
   const realContentAttempts = attempts.filter((a) => !a.result.outputIsDiagnostic);
   const pool = realContentAttempts.length > 0 ? realContentAttempts : attempts;
 
@@ -168,9 +230,8 @@ export async function delegateWithEscalation(
 
   const wasPromoted = finalStatus === 'ok' && baseStatus === 'incomplete';
   const terminationReason: TerminationReason = {
-    cause: statusToCause(finalStatus),
+    cause: deriveCause(finalStatus, best.errorCode),
     turnsUsed: best.turns,
-    turnsAllowed: task.maxTurns ?? 200,
     hasFileArtifacts: best.filesWritten.length > 0,
     usedShell: best.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
     workerSelfAssessment: best.workerStatus ?? null,

@@ -52,8 +52,7 @@ describe('loadConfigFromFile', () => {
 
     expect(config.agents.standard.type).toBe('openai-compatible');
     expect(config.agents.standard.model).toBe('deepseek-r1');
-    expect(config.defaults.maxTurns).toBe(200);
-    expect(config.defaults.timeoutMs).toBe(600000);
+    expect(config.defaults.timeoutMs).toBe(1_800_000);
     expect(config.defaults.tools).toBe('full');
   });
 
@@ -75,15 +74,6 @@ describe('loadConfigFromFile', () => {
     await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects maxTurns <= 0', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      agents: minimalAgentConfig,
-      defaults: { maxTurns: 0 },
-    }));
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
-  });
-
   it('rejects negative timeoutMs', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
@@ -93,26 +83,16 @@ describe('loadConfigFromFile', () => {
     await expect(loadConfigFromFile(configPath)).rejects.toThrow();
   });
 
-  it('rejects non-integer maxTurns', async () => {
-    const configPath = path.join(tmpDir, 'config.json');
-    fs.writeFileSync(configPath, JSON.stringify({
-      agents: minimalAgentConfig,
-      defaults: { maxTurns: 1.5 },
-    }));
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow();
-  });
-
   it('merges user defaults with system defaults', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       agents: minimalAgentConfig,
-      defaults: { maxTurns: 50 },
+      defaults: { timeoutMs: 300_000 },
     }));
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.defaults.maxTurns).toBe(50);
-    expect(config.defaults.timeoutMs).toBe(600000);
+    expect(config.defaults.timeoutMs).toBe(300_000);
     expect(config.defaults.tools).toBe('full');
   });
 

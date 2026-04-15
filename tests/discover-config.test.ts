@@ -33,7 +33,7 @@ describe('discoverConfig precedence', () => {
           standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://x.com' },
           complex: { type: 'claude', model: 'claude-sonnet-4-6' },
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 1_800_000, tools: 'full' },
       }),
     );
 
@@ -64,7 +64,7 @@ describe('discoverConfig precedence', () => {
           standard: { type: 'claude', model: 'claude-sonnet-4-6' },
           complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 1_800_000, tools: 'full' },
       }),
     );
 
@@ -93,7 +93,7 @@ describe('discoverConfig precedence', () => {
           standard: { type: 'codex', model: 'gpt-5-codex' },
           complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 1_800_000, tools: 'full' },
       }),
     );
 
@@ -128,8 +128,7 @@ describe('discoverConfig precedence', () => {
     expect(config.agents).toBeDefined();
     expect(config.agents.standard).toBeDefined();
     expect(config.agents.complex).toBeDefined();
-    expect(config.defaults.maxTurns).toBe(200);
-    expect(config.defaults.timeoutMs).toBe(600_000);
+    expect(config.defaults.timeoutMs).toBe(1_800_000);
     expect(config.defaults.tools).toBe('full');
   });
 });

@@ -66,7 +66,7 @@ describe('runClaude', () => {
   afterEach(() => { vi.clearAllMocks(); });
 
   const providerConfig = { type: 'claude' as const, model: 'claude-sonnet-4-6' };
-  const defaults = { maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const };
+  const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
   // -------------------------------------------------------------------------
   // 1. ok path
@@ -102,7 +102,8 @@ describe('runClaude', () => {
 
     const result = await runClaude('prompt', {}, providerConfig, defaults);
 
-    expect(result.status).toBe('max_turns');
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('degenerate_exhausted');
     expect(result.output).toContain('exceeded max turns');
   });
 
@@ -468,7 +469,8 @@ describe('runClaude', () => {
 
     const result = await runClaude('task', {}, providerConfig, defaults);
 
-    expect(result.status).toBe('max_turns');
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('degenerate_exhausted');
     expect(result.output).toBe('partial findings before budget exhaustion');
   });
 

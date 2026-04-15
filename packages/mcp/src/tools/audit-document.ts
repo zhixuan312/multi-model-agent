@@ -9,7 +9,6 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
-  applyCommonFields,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -18,10 +17,7 @@ export const auditDocumentSchema = z.object({
   auditType: z.union([
     z.enum(['security', 'performance', 'correctness', 'style', 'general']),
     z.array(z.enum(['security', 'performance', 'correctness', 'style'])).min(1),
-  ]).describe('Audit focus. Single string or array of types. "general" = all four categories.'),
-  outputFormat: z.enum(['json', 'markdown']).optional()
-    .describe('Output format. json returns structured findings array.'),
-  agentType: z.enum(['standard', 'complex']).optional(),
+  ]).describe('Audit focus.'),
   ...commonToolFields,
 });
 
@@ -37,12 +33,8 @@ function buildAuditPrompt(
   auditTypeText: string,
   document: string | undefined,
   filePaths: string[] | undefined,
-  outputFormat: string | undefined,
 ): string {
   const parts: string[] = [`Audit for ${auditTypeText} issues.`];
-  if (outputFormat === 'json') {
-    parts.push('Return findings as a JSON array of objects with keys: severity, category, finding, recommendation.');
-  }
   if (document) parts.push(`Document:\n\n${document}`);
   const fileSection = buildFilePathsPrompt(filePaths);
   if (fileSection) parts.push(fileSection);
@@ -61,23 +53,23 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
       }
 
-      const agentType = params.agentType ?? 'complex';
-      const auditTypeText = resolveAuditTypeText(params.auditType);
-      const baseTaskSpec: Partial<TaskSpec> = applyCommonFields(
-        {
-          agentType,
-          reviewPolicy: 'off' as const,
-          ...(params.outputFormat && { formatConstraints: { outputFormat: params.outputFormat } }),
-        },
-        params,
-      );
+      const baseTaskSpec: Partial<TaskSpec> = {
+        agentType: 'complex',
+        reviewPolicy: 'off',
+        tools: config.defaults?.tools ?? 'full',
+        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
+        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
+        cwd: process.cwd(),
+      };
 
       try {
         const mode = resolveDispatchMode(params.document, params.filePaths);
 
         if (mode === 'fan_out') {
           const validPaths = params.filePaths!.filter(p => p.trim().length > 0);
-          const promptTemplate = buildAuditPrompt(auditTypeText, undefined, undefined, params.outputFormat);
+          const auditTypeText = resolveAuditTypeText(params.auditType);
+          const promptTemplate = buildAuditPrompt(auditTypeText, undefined, undefined);
           const tasks: TaskSpec[] = validPaths.map(fp => ({
             ...baseTaskSpec,
             prompt: buildPerFilePrompt(fp, promptTemplate),
@@ -89,7 +81,8 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
         }
 
         // Single-task mode
-        const prompt = buildAuditPrompt(auditTypeText, params.document, params.filePaths, params.outputFormat);
+        const auditTypeText = resolveAuditTypeText(params.auditType);
+        const prompt = buildAuditPrompt(auditTypeText, params.document, params.filePaths);
         const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config);
         const result = results[0];
         return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };

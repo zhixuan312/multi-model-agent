@@ -80,7 +80,7 @@ const sampleConfig = (): MultiModelConfig => ({
     standard: { type: 'openai-compatible', model: 'test-model', baseUrl: 'http://localhost:1234/v1' },
     complex: { type: 'openai-compatible', model: 'test-model-complex', baseUrl: 'http://localhost:1235/v1' },
   },
-  defaults: { maxTurns: 200, timeoutMs: 600000, tools: 'full' },
+  defaults: { timeoutMs: 600000, tools: 'full' },
 });
 
 beforeEach(() => {

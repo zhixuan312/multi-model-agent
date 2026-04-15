@@ -49,7 +49,7 @@ const config: MultiModelConfig = {
     standard: { type: 'openai-compatible', model: 'std', baseUrl: 'https://ex.invalid/v1' },
     complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
   },
-  defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+  defaults: { timeoutMs: 600_000, tools: 'full' },
 };
 
 describe('full reviewed lifecycle', () => {

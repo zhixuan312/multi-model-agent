@@ -9,14 +9,12 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
-  applyCommonFields,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
 export const verifyWorkSchema = z.object({
   work: z.string().optional().describe('Inline work product to verify'),
   checklist: z.array(z.string()).min(1).describe('Verification checklist items (at least 1)'),
-  agentType: z.enum(['standard', 'complex']).optional(),
   ...commonToolFields,
 });
 
@@ -48,11 +46,15 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig) 
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
       }
 
-      const agentType = params.agentType ?? 'standard';
-      const baseTaskSpec: Partial<TaskSpec> = applyCommonFields(
-        { agentType, reviewPolicy: 'spec_only' as const },
-        params,
-      );
+      const baseTaskSpec: Partial<TaskSpec> = {
+        agentType: 'standard',
+        reviewPolicy: 'spec_only',
+        tools: config.defaults?.tools ?? 'full',
+        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
+        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
+        cwd: process.cwd(),
+      };
 
       try {
         const mode = resolveDispatchMode(params.work, params.filePaths);

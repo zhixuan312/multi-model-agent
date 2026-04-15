@@ -46,7 +46,7 @@ describe('runCodex', () => {
     vi.clearAllMocks();
   });
 
-  const defaults = { maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const };
+  const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
   // ─── 1. error when no credentials ────────────────────────────────────
   // createCodexClient is called BEFORE the runner's try/catch, so missing
@@ -168,41 +168,35 @@ describe('runCodex', () => {
     expect(functionTools).toHaveLength(1);
   });
 
-  // ─── 6. max_turns when maxTurns=1 exhausted in tool-call loop ────────────────
-  it('returns max_turns when maxTurns exhausted with tool-call loop', async () => {
+  // ─── 6. incomplete with degenerate_exhausted when supervision loop exhausted ───
+  it('returns incomplete with degenerate_exhausted when supervision retries are exhausted', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
-    // Two turns of tool calls — maxTurns=1 should stop after first turn
-    const streamEvents = [
-      {
-        type: 'response.output_item.added',
-        item: { type: 'function_call', call_id: '1', name: 'read_file', arguments: '{}' },
-      },
-      {
-        type: 'response.output_item.done',
-        item: { type: 'function_call', call_id: '1', name: 'read_file', arguments: '{}' },
-      },
-      {
-        type: 'response.completed',
-        response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
-      },
-    ];
-    mockResponsesCreate.mockReturnValueOnce(
-      (async function* () {
-        for (const e of streamEvents) yield e;
-      })() as any,
-    );
+    // Provide many short text outputs (degenerate) to exhaust MAX_DEGENERATE_RETRIES
+    const fragments = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    let fragIndex = 0;
+    mockResponsesCreate.mockImplementation(() => {
+      const frag = fragments[fragIndex++ % fragments.length];
+      return (async function* () {
+        yield { type: 'response.output_text.delta', delta: frag };
+        yield {
+          type: 'response.completed',
+          response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+        };
+      })();
+    });
 
     const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
     const result = await runCodex(
       'prompt',
-      { maxTurns: 1 },
+      {},
       { type: 'codex', model: 'gpt-5-codex' },
       defaults,
     );
-    expect(result.status).toBe('max_turns');
-    expect(result.turns).toBe(1);
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('degenerate_exhausted');
+    expect(result.turns).toBe(11);
   });
 
   // ─── 7. ok with text output and usage on single-turn response ────────────────
@@ -418,7 +412,7 @@ describe('runCodex', () => {
     expect(capturedParams.instructions).toBe(buildSystemPrompt());
     // The user message is the budget hint + original prompt
     const firstInput = capturedParams.input[0];
-    const budgetHint = buildBudgetHint({ maxTurns: defaults.maxTurns });
+    const budgetHint = buildBudgetHint({ timeoutMs: defaults.timeoutMs });
     expect(firstInput.content).toBe(`${budgetHint}\n\nwhat is the meaning of life`);
   });
 
@@ -475,19 +469,22 @@ describe('runCodex', () => {
   });
 
   // ─── 12. Task 5: supervision exhaustion salvages scratchpad ─────────────────
-  it('returns scratchpad salvage when supervision retries are exhausted', async () => {
+  it('returns incomplete with degenerate_exhausted when supervision retries are exhausted', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
-    // Four identical-pattern degenerate turns: the first seeds
-    // lastDegenerateOutput, retries 1/2/3 exhaust the budget -> incomplete.
-    // Each turn emits a DIFFERENT fragment text so the same-output early-out
-    // doesn't fire; we want to hit MAX_SUPERVISION_RETRIES specifically.
+    // Enough degenerate turns to exhaust MAX_DEGENERATE_RETRIES (10).
     const fragments = [
       'exploring next',
       'next i will',
       'let me look',
       'i should also',
+      'moving on',
+      'checking in',
+      'analyzing',
+      'continuing',
+      'progressing',
+      'final stretch',
     ];
     for (const frag of fragments) {
       mockResponsesCreate.mockImplementationOnce(() => {
@@ -510,8 +507,7 @@ describe('runCodex', () => {
     );
 
     expect(result.status).toBe('incomplete');
-    // Scratchpad salvage returns the MOST RECENT buffered emission.
-    expect(result.output).toBe(fragments[fragments.length - 1]);
+    expect(result.errorCode).toBe('degenerate_exhausted');
   });
 
   // ─── 13. Task 5: watchdog force_salvage at 95% ─────────────────────────────

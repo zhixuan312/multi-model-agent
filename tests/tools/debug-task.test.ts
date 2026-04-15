@@ -8,18 +8,8 @@ describe('debug_task schema', () => {
   it('accepts problem with defaults', () => {
     expect(debugTaskSchema.safeParse({ problem: 'bug' }).success).toBe(true);
   });
-  it('accepts all optional fields', () => {
-    expect(debugTaskSchema.safeParse({
-      problem: 'bug', context: 'ctx', hypothesis: 'hyp',
-      agentType: 'complex', filePaths: ['a.ts'], cwd: '/tmp',
-      contextBlockIds: ['id1'], tools: 'readonly',
-    }).success).toBe(true);
-  });
   it('rejects missing problem', () => {
     expect(debugTaskSchema.safeParse({ context: 'ctx' }).success).toBe(false);
-  });
-  it('accepts maxCostUSD', () => {
-    expect(debugTaskSchema.safeParse({ problem: 'p', maxCostUSD: 0.10 }).success).toBe(true);
   });
 });
 
@@ -94,17 +84,6 @@ describe('debug_task handler', () => {
     expect(prompt).toContain('memory leak in cache');
   });
 
-  it('passes cwd and tools through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
-
-    await getHandler()({ problem: 'bug', cwd: '/app', tools: 'readonly' });
-    const tasks = mockRunTasks.mock.calls[0][0];
-    expect(tasks[0].cwd).toBe('/app');
-    expect(tasks[0].tools).toBe('readonly');
-  });
-
   it('returns metadata block with usage info', async () => {
     mockRunTasks.mockResolvedValue([mockResult({ usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 0.05 } })]);
     const { mockServer, getHandler } = captureTool();
@@ -114,21 +93,5 @@ describe('debug_task handler', () => {
     const meta = JSON.parse(result.content[1].text);
     expect(meta.usage.costUSD).toBe(0.05);
     expect(meta.usage.inputTokens).toBe(500);
-  });
-
-  it('passes maxCostUSD through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
-    await getHandler()({ problem: 'p', maxCostUSD: 0.20 });
-    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.20);
-  });
-
-  it('omits maxCostUSD from TaskSpec when not provided', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
-    await getHandler()({ problem: 'p' });
-    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

@@ -17,12 +17,6 @@ describe('audit_document schema', () => {
   it('accepts general auditType', () => {
     expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'general' }).success).toBe(true);
   });
-  it('accepts outputFormat', () => {
-    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'style', outputFormat: 'json' }).success).toBe(true);
-  });
-  it('accepts common fields', () => {
-    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'correctness', cwd: '/tmp', contextBlockIds: ['abc'], tools: 'readonly', filePaths: ['ref.ts'] }).success).toBe(true);
-  });
   it('rejects invalid auditType', () => {
     expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'invalid' }).success).toBe(false);
   });
@@ -31,12 +25,6 @@ describe('audit_document schema', () => {
   });
   it('allows both absent (handler validates)', () => {
     expect(auditDocumentSchema.safeParse({ auditType: 'security' }).success).toBe(true);
-  });
-  it('accepts maxCostUSD', () => {
-    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'correctness', maxCostUSD: 1.23 }).success).toBe(true);
-  });
-  it('rejects negative maxCostUSD', () => {
-    expect(auditDocumentSchema.safeParse({ document: 'c', auditType: 'correctness', maxCostUSD: -1 }).success).toBe(false);
   });
 });
 
@@ -83,11 +71,11 @@ describe('audit_document handler', () => {
   it('single-task mode: dispatches 1 task with document', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
+    registerAuditDocument(mockServer as any, { defaults: { tools: 'readonly', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
 
     const result = await getHandler()({
       document: 'my doc', auditType: 'correctness',
-      filePaths: ['ref.ts'], cwd: '/tmp', tools: 'readonly',
+      filePaths: ['ref.ts'],
     });
 
     expect(mockRunTasks).toHaveBeenCalledTimes(1);
@@ -95,7 +83,7 @@ describe('audit_document handler', () => {
     expect(tasks).toHaveLength(1);
     expect(tasks[0].prompt).toContain('my doc');
     expect(tasks[0].prompt).toContain('ref.ts');
-    expect(tasks[0].cwd).toBe('/tmp');
+    expect(tasks[0].cwd).toBe(process.cwd());
     expect(tasks[0].tools).toBe('readonly');
     expect(tasks[0].reviewPolicy).toBe('off');
     expect(result.content).toHaveLength(2);
@@ -122,25 +110,7 @@ describe('audit_document handler', () => {
     expect(envelope).not.toHaveProperty('batchId');
   });
 
-  it('passes outputFormat as formatConstraints', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
 
-    await getHandler()({ document: 'doc', auditType: 'style', outputFormat: 'json' });
-    const tasks = mockRunTasks.mock.calls[0][0];
-    expect(tasks[0].formatConstraints).toEqual({ outputFormat: 'json' });
-    expect(tasks[0].prompt).toContain('JSON array');
-  });
-
-  it('passes contextBlockIds through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
-
-    await getHandler()({ document: 'doc', auditType: 'security', contextBlockIds: ['ctx1'] });
-    expect(mockRunTasks.mock.calls[0][0][0].contextBlockIds).toEqual(['ctx1']);
-  });
 
   it('resolves general auditType to all categories', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
@@ -151,19 +121,4 @@ describe('audit_document handler', () => {
     expect(mockRunTasks.mock.calls[0][0][0].prompt).toContain('security, performance, correctness, and style');
   });
 
-  it('passes maxCostUSD through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
-    await getHandler()({ document: 'doc', auditType: 'security', maxCostUSD: 0.42 });
-    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.42);
-  });
-
-  it('omits maxCostUSD from TaskSpec when not provided', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
-    await getHandler()({ document: 'doc', auditType: 'security' });
-    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
-  });
 });

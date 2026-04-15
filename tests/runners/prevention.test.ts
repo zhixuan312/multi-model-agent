@@ -75,19 +75,19 @@ describe('buildSystemPrompt', () => {
 });
 
 describe('buildBudgetHint', () => {
-  it('mentions the maxTurns value', () => {
-    const hint = buildBudgetHint({ maxTurns: 200 });
-    expect(hint).toContain('200');
+  it('mentions the timeout in minutes', () => {
+    const hint = buildBudgetHint({ timeoutMs: 600_000 });
+    expect(hint).toContain('10 minutes');
   });
 
-  it('mentions the half-budget checkpoint', () => {
-    const hint = buildBudgetHint({ maxTurns: 200 });
-    expect(hint).toContain('100');
+  it('mentions the cost ceiling when provided', () => {
+    const hint = buildBudgetHint({ timeoutMs: 600_000, maxCostUSD: 5 });
+    expect(hint).toContain('Cost ceiling: $5');
   });
 
-  it('is deterministic for the same maxTurns', () => {
-    const a = buildBudgetHint({ maxTurns: 50 });
-    const b = buildBudgetHint({ maxTurns: 50 });
+  it('is deterministic for the same inputs', () => {
+    const a = buildBudgetHint({ timeoutMs: 600_000, maxCostUSD: 5 });
+    const b = buildBudgetHint({ timeoutMs: 600_000, maxCostUSD: 5 });
     expect(a).toBe(b);
   });
 });
@@ -97,8 +97,8 @@ describe('buildReGroundingMessage', () => {
     const longPrompt = 'a'.repeat(300);
     const msg = buildReGroundingMessage({
       originalPromptExcerpt: longPrompt,
-      currentTurn: 10,
-      maxTurns: 200,
+      elapsedMs: 300_000,
+      timeoutMs: 600_000,
       toolCallsSoFar: 5,
       filesReadSoFar: 3,
     });
@@ -106,22 +106,22 @@ describe('buildReGroundingMessage', () => {
     expect(msg).toContain('...');
   });
 
-  it('includes the percentage of budget used', () => {
+  it('includes the elapsed and total minutes', () => {
     const msg = buildReGroundingMessage({
       originalPromptExcerpt: 'short',
-      currentTurn: 50,
-      maxTurns: 200,
+      elapsedMs: 300_000,
+      timeoutMs: 600_000,
       toolCallsSoFar: 0,
       filesReadSoFar: 0,
     });
-    expect(msg).toContain('25%');
+    expect(msg).toContain('5 of 10 minutes');
   });
 
   it('is deterministic for the same inputs', () => {
     const args = {
       originalPromptExcerpt: 'audit fate',
-      currentTurn: 10,
-      maxTurns: 200,
+      elapsedMs: 300_000,
+      timeoutMs: 600_000,
       toolCallsSoFar: 5,
       filesReadSoFar: 3,
     };

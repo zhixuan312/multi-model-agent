@@ -8,7 +8,7 @@ describe('renderProviderRoutingMatrix', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const output = renderProviderRoutingMatrix(config);
     expect(output).toContain('standard (claude-sonnet-4-6)');
@@ -21,7 +21,7 @@ describe('renderProviderRoutingMatrix', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const output = renderProviderRoutingMatrix(config);
     expect(output).toContain('How to route a task:');
@@ -34,7 +34,7 @@ describe('renderProviderRoutingMatrix', () => {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
         complex: { type: 'codex', model: 'gpt-5-codex' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const output = renderProviderRoutingMatrix(config);
     expect(output).toContain('standard (claude-sonnet-4-6)');
@@ -46,7 +46,7 @@ describe('renderProviderRoutingMatrix', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const output = renderProviderRoutingMatrix(config);
     expect(output).toContain('best for:');
@@ -57,7 +57,7 @@ describe('renderProviderRoutingMatrix', () => {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
       },
-      defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 600_000, tools: 'full' },
     };
     const output = renderProviderRoutingMatrix(config);
     expect(output).toContain('effort:');
@@ -69,7 +69,7 @@ describe('renderProviderRoutingMatrix — v0.3.0 TOOL_NOTES additions', () => {
     agents: {
       standard: { type: 'claude', model: 'claude-sonnet-4-6' },
     },
-    defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+    defaults: { timeoutMs: 600_000, tools: 'full' },
   };
 
   it('includes response shape paragraph mentioning batchId and mode', () => {

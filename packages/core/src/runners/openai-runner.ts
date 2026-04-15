@@ -63,6 +63,10 @@ import {
   logWatchdogEvent,
   THINKING_DIAGNOSTIC_MARKER,
   hasCompletedWork,
+  MAX_DEGENERATE_RETRIES,
+  STALL_DETECTION_TURNS,
+  detectToolCallLoop,
+  hasNewFileActivity,
 } from './supervision.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
@@ -95,22 +99,15 @@ export function stripThinkingTags(text: string): string {
 export interface OpenAIRunnerOptions {
   client: OpenAI;
   providerConfig: ProviderConfig;
-  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode };
+  defaults: { timeoutMs: number; tools: ToolMode };
 }
 
 /**
- * Hard cap on supervision re-prompts before we give up and salvage. Three is
- * the value chosen in the spec (A.2.2): enough room for the model to recover
- * from a one-off fragment but not so many that a wedged model can burn the
- * budget via repeated re-prompts.
- */
-
-/** Maximum turns for each continuation (reprompt/reground/watchdog-warning) in the
+ * Maximum turns for each continuation (reprompt/reground/watchdog-warning) in the
  * supervision loop. Higher than the old hardcoded 1 so the model can call a tool
- * and reply to the tool result without immediately exhausting the sub-budget. */
+ * and reply to the tool result without immediately exhausting the sub-budget.
+ */
 const SUPERVISION_CONTINUATION_BUDGET = 5;
-
-const MAX_SUPERVISION_RETRIES = 3;
 
 /**
  * Extract every assistant text emission from a single `agentRun(...)` result.
@@ -144,7 +141,7 @@ export async function runOpenAI(
   options: RunOptions,
   runner: OpenAIRunnerOptions,
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? runner.providerConfig.maxTurns ?? runner.defaults.maxTurns;
+  const maxTurns = options.maxTurns ?? runner.providerConfig.maxTurns ?? Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? runner.providerConfig.timeoutMs ?? runner.defaults.timeoutMs;
   const toolMode = options.tools ?? runner.defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -217,7 +214,7 @@ export async function runOpenAI(
   // (prepended to the first user prompt) and buildReGroundingMessage
   // (injected every RE_GROUNDING_INTERVAL_TURNS turns).
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
-  const budgetHint = buildBudgetHint({ maxTurns });
+  const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
   // --- onInitialRequest (Task 12) ----------------------------------------
@@ -348,7 +345,14 @@ export async function runOpenAI(
     try {
       currentResult = await runTurnAndBuffer(promptWithBudgetHint, maxTurns);
 
-      let supervisionRetries = 0;
+      // --- Supervision state: monitor model replaces gatekeeper ---
+      // Only count degenerate retries when worker has NO tool calls in a turn.
+      // If the worker is still making tool calls, it's making progress even
+      // if the output text is degenerate — don't count against budget.
+      let degenerateRetries = 0;
+      let stallTurnCounter = 0;
+      let lastFilesRead = tracker.getReads().length;
+      let lastFilesWritten = tracker.getWrites().length;
       // Continuation-exhausted flag: set when runContinuationTurn catches a
       // MaxTurnsExceededError on a re-prompt or re-ground continuation.
       // The break below lands in the exhausted handler so we don't conflate
@@ -522,12 +526,81 @@ export async function runOpenAI(
         // Track last validation kind so the exhausted handler can report it.
         lastValidationKind = validation.kind;
 
+        // --- Loop detection (advisory) ---
+        // After a turn with tool calls, check for repetitive patterns.
+        // If stuck in a loop, inject re-grounding — don't terminate or count as degenerate.
+        if (detectToolCallLoop(tracker.getToolCalls())) {
+          const reground = buildReGroundingMessage({
+            originalPromptExcerpt: prompt,
+            elapsedMs: Date.now() - taskStartMs,
+            timeoutMs,
+            toolCallsSoFar: tracker.getToolCalls().length,
+            filesReadSoFar: tracker.getReads().length,
+          });
+          emit({
+            kind: 'injection',
+            injectionType: 'reground',
+            turn: currentResult.state.usage.requests,
+            contentLengthChars: reground.length,
+          });
+          if (canAffordNextTurn()) {
+            const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+            if (regroundCont.ok) {
+              currentResult = regroundCont.result;
+              continue;
+            }
+          }
+        }
+
+        // --- Stall detection (advisory) ---
+        // Track consecutive turns without new file activity.
+        // If stalled, inject re-grounding — don't terminate.
+        const currentFilesRead = tracker.getReads().length;
+        const currentFilesWritten = tracker.getWrites().length;
+        const hasActivity = hasNewFileActivity(lastFilesRead, lastFilesWritten, currentFilesRead, currentFilesWritten);
+        if (hasActivity) {
+          stallTurnCounter = 0;
+          lastFilesRead = currentFilesRead;
+          lastFilesWritten = currentFilesWritten;
+        } else {
+          stallTurnCounter++;
+          if (stallTurnCounter >= STALL_DETECTION_TURNS) {
+            const reground = buildReGroundingMessage({
+              originalPromptExcerpt: prompt,
+              elapsedMs: Date.now() - taskStartMs,
+              timeoutMs,
+              toolCallsSoFar: tracker.getToolCalls().length,
+              filesReadSoFar: tracker.getReads().length,
+            });
+            emit({
+              kind: 'injection',
+              injectionType: 'reground',
+              turn: currentResult.state.usage.requests,
+              contentLengthChars: reground.length,
+            });
+            if (canAffordNextTurn()) {
+              const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+              if (regroundCont.ok) {
+                currentResult = regroundCont.result;
+                stallTurnCounter = 0;
+                continue;
+              }
+            }
+          }
+        }
+
         // Degenerate. Apply same-output early-out (only when we have a
         // prior degenerate output to compare against) and retry budget.
+        // Only count as degenerate when worker has NO tool calls in this turn.
         if (lastDegenerateOutput !== null && sameDegenerateOutput(stripped, lastDegenerateOutput)) break;
         lastDegenerateOutput = stripped;
-        supervisionRetries++;
-        if (supervisionRetries >= MAX_SUPERVISION_RETRIES) break;
+        // Only increment degenerate retries when no tool calls were made this turn.
+        // If the worker is still calling tools, it's making progress even if the
+        // output text is incomplete.
+        if (!hasCompletedWork(tracker.getToolCalls())) {
+          degenerateRetries++;
+          if (degenerateRetries >= MAX_DEGENERATE_RETRIES) break;
+        }
 
         // --- Re-prompt the model to recover ---
         const rePrompt = buildRePrompt(validation);
@@ -561,8 +634,8 @@ export async function runOpenAI(
           }
           const reground = buildReGroundingMessage({
             originalPromptExcerpt: prompt,
-            currentTurn: turnsSoFar,
-            maxTurns,
+            elapsedMs: Date.now() - taskStartMs,
+            timeoutMs,
             toolCallsSoFar: tracker.getToolCalls().length,
             filesReadSoFar: tracker.getReads().length,
           });
@@ -591,7 +664,7 @@ export async function runOpenAI(
       // anything; otherwise return the existing incomplete diagnostic.
       const exhaustedReason = supervisionExhausted
         ? `supervision continuation sub-budget exhausted at turn ${currentResult.state.usage.requests}`
-        : `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${lastValidationKind ?? 'unknown'})`;
+        : `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${lastValidationKind ?? 'unknown'})`;
       const exhausted = buildSupervisionExhaustedResult(
         currentResult,
         scratchpad,
@@ -605,7 +678,8 @@ export async function runOpenAI(
       return exhausted;
     } catch (err) {
       if (err instanceof MaxTurnsExceededError) {
-        // max_turns path: prefer scratchpad salvage over the bare diagnostic.
+        // MaxTurnsExceededError from the SDK: map to incomplete with degenerate_exhausted.
+        // Prefer scratchpad salvage over the bare diagnostic.
         // Preserve whatever partial usage we accumulated in the last
         // successful agentRun so the caller sees real numbers, not zeros.
         const filesRead = tracker.getReads();
@@ -618,14 +692,15 @@ export async function runOpenAI(
           partial.outputTokens,
           parentModel,
         );
-        emit({ kind: 'done', status: 'max_turns' });
+        emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
         const turnsAtFailure = currentResult?.state.usage.requests ?? maxTurns;
         return {
           output: hasSalvage
             ? scratchpad.latest()
             : `Agent exceeded max turns (${maxTurns}).`,
-          status: 'max_turns',
+          status: 'incomplete',
+          errorCode: 'degenerate_exhausted',
           error: `agent exhausted user-declared maxTurns limit (${maxTurns}) after ${turnsAtFailure} turns`,
           usage: { ...partial, savedCostUSD },
           turns: turnsAtFailure,
@@ -667,6 +742,7 @@ export async function runOpenAI(
                 filesWritten,
               }),
           status: 'incomplete',
+          errorCode: 'degenerate_exhausted',
           usage: {
             inputTokens: usage.inputTokens,
             outputTokens: usage.outputTokens,
@@ -856,6 +932,7 @@ function buildSupervisionExhaustedResult(
           filesWritten,
         }),
     status: 'incomplete',
+    errorCode: 'degenerate_exhausted',
     usage: {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
