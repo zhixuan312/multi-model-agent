@@ -136,7 +136,6 @@ describe('runTasks', () => {
       capabilities: ['web_search'],
       inputCostPerMTok: 0.55,
       outputCostPerMTok: 2.19,
-      maxTurns: 100,
       timeoutMs: 300_000,
       sandboxPolicy: 'cwd-only',
     };

@@ -243,7 +243,6 @@ export async function runCodex(
   providerConfig: ProviderConfig,
   defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();

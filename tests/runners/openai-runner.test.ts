@@ -144,7 +144,7 @@ const providerConfig = {
   baseUrl: 'http://localhost:9999',
   apiKey: 'test-key',
 };
-const defaults = { maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const };
+const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
 // Minimal OpenAI client stub — the runner just passes it through to the
 // OpenAIChatCompletionsModel, which is itself mocked.

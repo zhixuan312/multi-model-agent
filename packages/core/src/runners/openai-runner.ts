@@ -134,7 +134,6 @@ export async function runOpenAI(
   options: RunOptions,
   runner: OpenAIRunnerOptions,
 ): Promise<RunResult> {
-  const maxTurns = Number.MAX_SAFE_INTEGER; // time/cost bounds are the only effective limits
   const timeoutMs = options.timeoutMs ?? runner.providerConfig.timeoutMs ?? runner.defaults.timeoutMs;
   const toolMode = options.tools ?? runner.defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -301,12 +300,11 @@ export async function runOpenAI(
    */
   const runTurnAndBuffer = async (
     input: string | AgentInputItem[],
-    turnBudget: number,
   ): Promise<AgentRunOutput> => {
     const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;
     emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible' });
     const result = (await agentRun(agent, input, {
-      maxTurns: turnBudget,
+      maxTurns: Number.MAX_SAFE_INTEGER,
       signal: abortController.signal,
     })) as AgentRunOutput;
     const text = stripThinkingTags(extractAssistantText(result.newItems));
@@ -336,7 +334,7 @@ export async function runOpenAI(
 
   const run = async (): Promise<RunResult> => {
     try {
-      currentResult = await runTurnAndBuffer(promptWithBudgetHint, maxTurns);
+      currentResult = await runTurnAndBuffer(promptWithBudgetHint);
 
       // --- Supervision state: monitor model replaces gatekeeper ---
       // Only count degenerate retries when worker has NO tool calls in a turn.
@@ -409,7 +407,7 @@ export async function runOpenAI(
         | { ok: false; cause: MaxTurnsExceededError; label: 'continuation_exhausted'; turnAtFailure: number }
       > {
         try {
-          const result = await runTurnAndBuffer(continueWith(currentResult, instruction), Number.MAX_SAFE_INTEGER);
+          const result = await runTurnAndBuffer(continueWith(currentResult, instruction));
           return { ok: true, result };
         } catch (err) {
           if (err instanceof MaxTurnsExceededError) {

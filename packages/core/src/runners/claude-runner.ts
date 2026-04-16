@@ -120,7 +120,6 @@ export async function runClaude(
   providerConfig: ProviderConfig,
   defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -252,7 +251,7 @@ export async function runClaude(
   // is enforced by assertWithinCwd in tool definitions when sandboxPolicy is 'cwd-only'.
   const queryOptions: Options = {
     model: providerConfig.model,
-    maxTurns,
+    maxTurns: Number.MAX_SAFE_INTEGER,
     cwd,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
