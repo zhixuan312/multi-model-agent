@@ -150,7 +150,7 @@ Implementation and review run on *different* agents — cross-agent review catch
 
 | Tool | Purpose |
 |---|---|
-| `delegate_tasks` | Dispatch tasks in parallel with full control over execution |
+| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds` |
 
 **Specialized presets** — if you use [superpowers](https://github.com/anthropics/claude-code-plugins) for Claude Code, these map directly to your workflow:
 
@@ -188,7 +188,7 @@ Auth:
 
 - Default `sandboxPolicy: "cwd-only"` confines agents to the task's working directory
 - Path traversal and symlinks resolved via `fs.realpath` — escapes are rejected
-- `runShell` disabled under `cwd-only`. Opt in per-task with `sandboxPolicy: "none"`
+- `runShell` is disabled under `cwd-only`. To allow shell access, set the agent or default config `sandboxPolicy` to `none`
 - `readFile` rejects >50 MiB; `writeFile` rejects >100 MiB
 - Never commit API keys — use `apiKeyEnv` and env vars
 
@@ -224,8 +224,8 @@ Full reference: [`docs/claude-code-delegation-rule.md`](./docs/claude-code-deleg
 | Problem | Fix |
 |---|---|
 | `No agents configured` | Create `~/.multi-model/config.json` or pass `--config` |
-| Task never routes | Check `requiredCapabilities` and `agentType` match your config |
-| Shell tasks fail | Set `sandboxPolicy: "none"` on the agent or task |
+| Task never routes | Check `agentType` and your configured providers/capabilities match the task |
+| Shell tasks fail | Set `sandboxPolicy: "none"` on the agent or in defaults config |
 | `openai-compatible` fails | Add `baseUrl` + `apiKey`/`apiKeyEnv` |
 | Client doesn't see changes | Fully quit and reopen the MCP client |
 

@@ -20,19 +20,19 @@ Why: The parent model costs 10-50x more than MCP workers. Every token of labor d
 ```
 # After implementing a task:
 
-DO:   Call MCP review_code(filePaths: [changed files], agentType: 'complex')
+DO:   Call MCP review_code(filePaths: [changed files])
 DON'T: Read the diff yourself and say "looks good"
 DON'T: Spawn a Claude Code Agent subagent to review
 
 # When a spec needs auditing:
 
-DO:   Call MCP audit_document(filePaths: [spec_path], auditType: 'correctness', agentType: 'complex')
+DO:   Call MCP audit_document(filePaths: [spec_path], auditType: 'correctness')
 DON'T: Re-read the spec and list issues yourself
 DON'T: Spawn a Claude Code Agent subagent to audit
 
 # When implementing a plan task:
 
-DO:   Call MCP delegate_tasks with full brief, cwd, sandboxPolicy
+DO:   Call MCP delegate_tasks with full brief as prompt plus any needed filePaths, done, and contextBlockIds
 DON'T: Write the code yourself inline
 DON'T: Spawn a Claude Code Agent subagent to implement
 ```
@@ -52,7 +52,7 @@ Assign `agentType` per task:
 - `standard` — clear spec, worker follows instructions without judgment
 - `complex` — requires reasoning about trade-offs, ambiguous scope, security-sensitive
 
-Set `cwd` (absolute project root) on any dispatch that reads or writes files. Set `sandboxPolicy: 'cwd-only'` unless the task genuinely needs shell access or paths outside the project.
+Use `delegate_tasks` with its public 2.0.0 fields only: `prompt` is required, with optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Working directory, sandbox, tools, timeout, and cost are resolved internally from config.
 
 ## Brief Discipline
 
@@ -78,7 +78,7 @@ When superpowers skills are loaded, execute these triggers automatically. Do not
 
 When a spec file is written to `docs/superpowers/specs/`:
 
-1. Call MCP `audit_document(filePaths: [spec_path], auditType: 'correctness', agentType: 'complex')`.
+1. Call MCP `audit_document(filePaths: [spec_path], auditType: 'correctness')`.
 2. Fix every finding in the spec.
 3. Call MCP `audit_document` again (round 2). Fix every finding.
 4. Call MCP `audit_document` again (round 3). Fix every finding.
@@ -88,7 +88,7 @@ When a spec file is written to `docs/superpowers/specs/`:
 
 When a plan file is written to `docs/superpowers/plans/`:
 
-1. Call MCP `audit_document(filePaths: [plan_path], auditType: 'correctness', agentType: 'complex')`.
+1. Call MCP `audit_document(filePaths: [plan_path], auditType: 'correctness')`.
 2. Fix every finding in the plan.
 3. Call MCP `audit_document` again (round 2). Fix every finding.
 4. Present to user: "Plan audited (2 rounds). Ready to execute?"
@@ -98,12 +98,13 @@ When a plan file is written to `docs/superpowers/plans/`:
 When subagent-driven-development starts, for EACH task:
 
 1. Assign `agentType` per task nature.
-2. Call MCP `delegate_tasks` with full task text as prompt, `cwd`, `sandboxPolicy: 'cwd-only'`. Use `tools: 'full'` for implementation, `tools: 'readonly'` for read-only tasks.
-3. On `ok`/`incomplete` with `workerStatus: 'done'` — proceed to review.
-4. On failure — re-dispatch via MCP `delegate_tasks` with enriched prompt or escalate agentType (standard -> complex).
-5. Call MCP `review_code(filePaths: [changed files], agentType: 'complex')`. Mandatory after every implementation task.
-6. If review finds issues — fix via MCP `delegate_tasks`, then call MCP `review_code` again. Max 2 fix rounds.
-7. Mark task complete. Next task.
+2. Call MCP `delegate_tasks` with the full task text as `prompt`, plus any needed `filePaths`, `done`, and `contextBlockIds`. Use `agentType` only to choose `standard` vs `complex`.
+3. On `ok` — proceed to review.
+4. On `incomplete` + `errorCode: 'degenerate_exhausted'` — proceed to review (worker exhausted budget but may still have made usable progress).
+5. On failure — re-dispatch via MCP `delegate_tasks` with enriched prompt or escalate agentType (standard -> complex).
+6. Call MCP `review_code(filePaths: [changed files])`. Mandatory after every implementation task.
+7. If review finds issues, fix via MCP `delegate_tasks`, then call MCP `review_code` again. Max 2 fix rounds.
+8. Mark task complete. Next task.
 
 After all tasks: `superpowers:finishing-a-development-branch`.
 
@@ -162,9 +163,8 @@ Why: Pulling whole files into parent context wastes expensive tokens on content 
 ### Status handling
 
 - `ok` — read output, proceed
-- `incomplete` + `workerStatus: 'done'` — verify files, proceed
+- `incomplete` + `errorCode: 'degenerate_exhausted'` — worker ran out of budget; verify files, proceed
 - `brief_too_vague` — sharpen the brief (add file paths, scope, acceptance criteria)
-- `max_turns` — tighter brief or escalate agentType (standard -> complex)
 - `timeout` — break into smaller pieces
 - `cost_exceeded` — break into smaller pieces or raise `maxCostUSD`
 - `api_error` / `network_error` / `api_aborted` — retry once, then escalate agentType (standard -> complex)
