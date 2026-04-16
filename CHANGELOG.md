@@ -5,6 +5,27 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-16
+
+### Breaking Changes
+
+- **`maxTurns` removed from config defaults (core).** Time and cost bounds replace turn limits. New defaults: `timeoutMs: 1_800_000` (30 min), `maxCostUSD: 10`.
+- **`status: 'max_turns'` replaced by `'incomplete'` + `errorCode: 'degenerate_exhausted'` (core).** All runners emit structured incomplete statuses instead of a bare `max_turns` status.
+- **TaskSpec stripped to task-signal fields (core).** Removed `maxTurns`, `skipCompletionHeuristic`, and internal fields from public surface. Added `done?: string` (acceptance criteria) and `filePaths?: string[]` (focus scope). `contextBlockIds` promoted to caller-facing.
+- **MCP tool schemas simplified (mcp).** Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) now expose only their domain fields + `filePaths`. Internal config fields (`cwd`, `tools`, `timeoutMs`, etc.) resolved by the harness from config, not caller-supplied. `applyCommonFields` removed.
+
+### Changed
+
+- **Prevention prompts now time/cost-based (core).** `buildBudgetHint` now takes `{ timeoutMs, maxCostUSD? }` instead of `{ maxTurns }`. `buildReGroundingMessage` takes `{ elapsedMs, timeoutMs, toolCallsSoFar, filesReadSoFar }` instead of `{ currentTurn, maxTurns, ... }`.
+- **Supervision rewritten as monitor model (core).** Gatekeeper pattern replaced by monitor pattern. Loop detection and stall detection are advisory (inject re-grounding, don't terminate). `MAX_SUPERVISION_RETRIES` removed; `MAX_DEGENERATE_RETRIES = 10` governs retry budget. Only counts as degenerate when a turn has no tool calls.
+- **`doneCondition` wired to `task.done` (core).** The spec reviewer prompt now shows the caller's acceptance criteria instead of hardcoded `'tsc passes'`. Caller can specify `done: 'all tests pass'` in `delegate_tasks` and it is honored.
+- **`retry_tasks` now re-injects fresh defaults (mcp).** Previously retried tasks ran with raw cached task specs. Now `retry_tasks` applies the same default injection as `delegate_tasks` (`tools`, `timeoutMs`, `maxCostUSD`, `sandboxPolicy`, `cwd`, `reviewPolicy`) so retries get current config values.
+
+### Added
+
+- **`done?: string` on TaskSpec (core, mcp).** Callers can specify acceptance criteria in plain language. The spec reviewer checks against it. Falls back to `'tsc passes'` when not provided.
+- **`filePaths?: string[]` on TaskSpec (core, mcp).** Files the sub-agent should focus on. Used by specialized tools for prompt injection (`buildFilePathsPrompt`) and fan-out dispatch. Not enforced by the generic execution path in v2.0.0.
+
 ## [1.3.0] - 2026-04-15
 
 ### Added

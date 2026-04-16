@@ -204,7 +204,7 @@ async function executeReviewedLifecycle(
   const packet = {
     normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
     scope: normResult?.writeSet ?? [],
-    doneCondition: 'tsc passes',
+    doneCondition: task.done ?? 'tsc passes',
   };
 
   let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);

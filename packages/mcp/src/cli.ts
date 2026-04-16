@@ -244,6 +244,21 @@ export function buildMcpServer(
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
   const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
 
+  function injectDefaults(tasks: TaskSpec[]): TaskSpec[] {
+    return tasks.map(t => ({
+      ...t,
+      agentType: t.agentType as TaskSpec['agentType'],
+      tools: config.defaults.tools,
+      timeoutMs: config.defaults.timeoutMs,
+      maxCostUSD: config.defaults.maxCostUSD,
+      sandboxPolicy: config.defaults.sandboxPolicy,
+      cwd: process.cwd(),
+      reviewPolicy: 'full',
+      briefQualityPolicy: 'warn',
+      effort: undefined,
+    }));
+  }
+
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
@@ -382,23 +397,11 @@ export function buildMcpServer(
       // so the returned batchId is valid even if the dispatch itself
       // throws (so callers can still retry the specific tasks that
       // produced errors). The cache stores the raw TaskSpec[] — NOT the
-      // expanded forms — because `retry_tasks` will push the same specs
-      // through `runTasks` again, which re-expands against the current
-      // (possibly updated) context-block store.
+      // expanded forms — because `retry_tasks` re-injects fresh defaults
+      // from the current config each time it runs.
       const batchId = rememberBatch(tasks as TaskSpec[]);
 
-      const resolvedTasks: TaskSpec[] = tasks.map(t => ({
-        ...t,
-        agentType: t.agentType as TaskSpec['agentType'],
-        tools: config.defaults.tools,
-        timeoutMs: config.defaults.timeoutMs,
-        maxCostUSD: config.defaults.maxCostUSD,
-        sandboxPolicy: config.defaults.sandboxPolicy,
-        cwd: process.cwd(),
-        reviewPolicy: 'full',
-        briefQualityPolicy: 'warn',
-        effort: undefined,
-      }));
+      const resolvedTasks = injectDefaults(tasks as TaskSpec[]);
 
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
@@ -535,7 +538,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasksImpl(subset, config, {
+        results = await runTasksImpl(injectDefaults(subset), config, {
           runtime: { contextBlockStore },
         });
       } finally {
