@@ -20,7 +20,6 @@ export interface AgentConfig {
   capabilities?: AgentCapability[]
   inputCostPerMTok?: number
   outputCostPerMTok?: number
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   inputTokenSoftLimit?: number
@@ -73,8 +72,6 @@ export interface TaskSpec {
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
   formatConstraints?: FormatConstraints
-  /** @deprecated v2.0.0 — no longer exposed to callers. Kept for internal harness use during migration. */
-  maxTurns?: number
   skipCompletionHeuristic?: boolean
   expectedCoverage?: {
     minSections?: number
@@ -91,7 +88,6 @@ export interface CodexProviderConfig {
   type: 'codex'
   model: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
@@ -110,7 +106,6 @@ export interface ClaudeProviderConfig {
   type: 'claude'
   model: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
@@ -132,7 +127,6 @@ export interface OpenAICompatibleProviderConfig {
   apiKey?: string
   apiKeyEnv?: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: 'web_search'[]
@@ -337,7 +331,6 @@ export interface Provider {
 
 export interface RunOptions {
   tools?: ToolMode
-  maxTurns?: number
   timeoutMs?: number
   cwd?: string
   effort?: Effort

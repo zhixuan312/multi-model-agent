@@ -352,11 +352,10 @@ export async function runCodex(
 
   // --- Prevention layer: system prompt + budget hint ---
   //
-  // buildSystemPrompt() is deliberately static and parameter-free (same
-  // decision as openai-runner and claude-runner: Task 1 review rejected
-  // provider/maxTurns options). The budget hint is prepended to the user
-  // prompt so the model sees it as part of its task brief, while the system
-  // prompt is threaded through the Responses API `instructions` field.
+  // buildSystemPrompt() is deliberately static and parameter-free. The budget
+  // hint is prepended to the user prompt so the model sees it as part of its
+  // task brief, while the system prompt is threaded through the Responses API
+  // `instructions` field.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
@@ -800,22 +799,21 @@ export async function runCodex(
         }
       }
 
-      // Max turns exhausted — salvage any buffered text.
-      const maxTurnsResult = buildCodexMaxTurnsResult({
+      // Loop exited without producing a clean final answer — salvage.
+      const incompleteResult = buildCodexMaxTurnsExitResult({
         tracker,
         scratchpad,
         providerConfig,
         inputTokens,
         outputTokens,
         turns,
-        maxTurns,
         lastOutput: output,
-        reason: `hand-rolled loop exited after completing ${turns} of ${maxTurns} user-declared turns without producing a clean final answer`,
+        reason: `loop exited after ${turns} turns without producing a clean final answer`,
         durationMs: Date.now() - taskStartMs,
         parentModel,
       });
-      emit({ kind: 'done', status: maxTurnsResult.status });
-      return maxTurnsResult;
+      emit({ kind: 'done', status: incompleteResult.status });
+      return incompleteResult;
     } catch (err) {
       // OpenAI SDK's APIError carries status/body/headers — surface them
       // since the Codex backend returns 400 with no body on shape mismatches.
@@ -1044,18 +1042,14 @@ function buildCodexForceSalvageResult(
   };
 }
 
-function buildCodexMaxTurnsResult(
-  args: CodexResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
+function buildCodexMaxTurnsExitResult(
+  args: CodexResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
+  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
-  // Note: `lastOutput` here is the model's final text for the max-turns
-  // boundary — real model content, not a diagnostic template. Only the
-  // `Agent exceeded max turns…` fallback (empty scratchpad AND empty
-  // lastOutput) is a diagnostic.
   const output = hasSalvage
     ? scratchpad.latest()
-    : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
+    : (lastOutput || `Agent exhausted time or cost budget.`);
   const outputIsDiagnostic = !hasSalvage && !lastOutput;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);

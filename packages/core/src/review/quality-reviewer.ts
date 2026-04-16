@@ -31,7 +31,6 @@ export async function runQualityReview(
         prompt: buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog),
         agentType: reviewerSlot,
         briefQualityPolicy: 'off',
-        maxTurns: 20,
         timeoutMs: 120_000,
       },
       [reviewerProvider],

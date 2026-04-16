@@ -134,7 +134,7 @@ export async function runOpenAI(
   options: RunOptions,
   runner: OpenAIRunnerOptions,
 ): Promise<RunResult> {
-  const maxTurns = Number.MAX_SAFE_INTEGER;
+  const maxTurns = Number.MAX_SAFE_INTEGER; // time/cost bounds are the only effective limits
   const timeoutMs = options.timeoutMs ?? runner.providerConfig.timeoutMs ?? runner.defaults.timeoutMs;
   const toolMode = options.tools ?? runner.defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -201,11 +201,11 @@ export async function runOpenAI(
   // --- Prevention layer: system prompt + budget hint ---
   //
   // buildSystemPrompt() is deliberately static and parameter-free. The Task 1
-  // review rejected speculative `providerLabel` / `maxTurns` parameters — the
-  // system prompt is generic ~400 tokens of discipline that applies to every
-  // provider. Per-turn budget information is threaded through buildBudgetHint
-  // (prepended to the first user prompt) and buildReGroundingMessage
-  // (injected every RE_GROUNDING_INTERVAL_TURNS turns).
+  // review rejected speculative `providerLabel` parameters — the system prompt
+  // is generic ~400 tokens of discipline that applies to every provider.
+  // Budget information is threaded through buildBudgetHint (prepended to the
+  // first user prompt) and buildReGroundingMessage (injected every
+  // RE_GROUNDING_INTERVAL_TURNS turns).
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
@@ -685,14 +685,14 @@ export async function runOpenAI(
         );
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
-        const turnsAtFailure = currentResult?.state.usage.requests ?? maxTurns;
+        const turnsAtFailure = currentResult?.state.usage.requests ?? 0;
         return {
           output: hasSalvage
             ? scratchpad.latest()
-            : `Agent exceeded max turns (${maxTurns}).`,
+            : `Agent exceeded time or cost limits.`,
           status: 'incomplete',
           errorCode: 'degenerate_exhausted',
-          error: `agent exhausted user-declared maxTurns limit (${maxTurns}) after ${turnsAtFailure} turns`,
+          error: `agent exhausted time/cost budget after ${turnsAtFailure} turns`,
           usage: { ...partial, savedCostUSD },
           turns: turnsAtFailure,
           filesRead,
@@ -850,7 +850,7 @@ export async function runOpenAI(
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
         usage: { ...partial, savedCostUSD },
-        turns: currentResult?.state.usage.requests ?? maxTurns,
+        turns: currentResult?.state.usage.requests ?? 0,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,

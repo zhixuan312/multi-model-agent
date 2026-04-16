@@ -208,9 +208,8 @@ export async function runClaude(
 
   // --- Prevention layer: system prompt + budget hint ---
   //
-  // buildSystemPrompt() is deliberately static and parameter-free (same
-  // decision as openai-runner: Task 1 review rejected provider/maxTurns
-  // options). We append our discipline rules onto the `claude_code` preset
+  // buildSystemPrompt() is deliberately static and parameter-free. We append
+  // our discipline rules onto the `claude_code` preset
   // rather than REPLACING the default system prompt, because replacing it
   // strips the SDK's tool-usage guidance. See
   // node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1460-1465 for the
@@ -577,9 +576,9 @@ export async function runClaude(
           }
 
           // --- Max-turns: don't supervise a max-turns termination,
-          // build the max_turns result directly and exit. ---
+          // build the incomplete result directly and exit. ---
           if (hitMaxTurns) {
-            completedResult = buildClaudeMaxTurnsResult({
+            completedResult = buildClaudeMaxTurnsExitResult({
               tracker,
               scratchpad,
               providerConfig,
@@ -587,9 +586,8 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
-              maxTurns,
               lastOutput: output,
-              reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns (user-declared maxTurns: ${maxTurns})`,
+              reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
             });
@@ -902,19 +900,14 @@ function buildClaudeForceSalvageResult(
   };
 }
 
-function buildClaudeMaxTurnsResult(
-  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
+function buildClaudeMaxTurnsExitResult(
+  args: ClaudeResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
-  // Note: `lastOutput` here is the model's last streamed text before the
-  // max-turns boundary — NOT a diagnostic template. If the scratchpad has
-  // nothing but `lastOutput` is non-empty, that's still real model content,
-  // so outputIsDiagnostic is false. Only the `Agent exceeded max turns…`
-  // fallback (empty scratchpad AND empty lastOutput) is a diagnostic.
   const output = hasSalvage
     ? scratchpad.latest()
-    : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
+    : (lastOutput || `Agent exhausted time or cost budget.`);
   const outputIsDiagnostic = !hasSalvage && !lastOutput;
   const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);

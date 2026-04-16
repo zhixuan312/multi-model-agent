@@ -83,7 +83,6 @@ export async function delegateWithEscalation(
 
       result = await provider.run(task.prompt, {
         tools: task.tools,
-        maxTurns: task.maxTurns,
         timeoutMs: task.timeoutMs,
         cwd: task.cwd,
         effort: task.effort,
@@ -169,7 +168,6 @@ export async function delegateWithEscalation(
 
     const escalationResult = await escalationProvider.run(task.prompt, {
       tools: task.tools,
-      maxTurns: task.maxTurns,
       timeoutMs: task.timeoutMs,
       cwd: task.cwd,
       effort: task.effort,
