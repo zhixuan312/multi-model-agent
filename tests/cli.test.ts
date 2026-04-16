@@ -129,6 +129,8 @@ describe('delegate_tasks tool description', () => {
     expect(delegate.description).toContain('Available agents');
     expect(delegate.description).toContain('standard');
     expect(delegate.description).toContain('complex');
+    expect(delegate.description).toContain('Set filePaths whenever the task targets specific files');
+    expect(delegate.description).toContain('Set done whenever you have explicit acceptance criteria (required)');
   });
 });
 

@@ -52,7 +52,7 @@ Assign `agentType` per task:
 - `standard` — clear spec, worker follows instructions without judgment
 - `complex` — requires reasoning about trade-offs, ambiguous scope, security-sensitive
 
-Use `delegate_tasks` with its public 2.0.0 fields only: `prompt` is required, with optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Working directory, sandbox, tools, timeout, and cost are resolved internally from config.
+Use `delegate_tasks` with its public 2.0.0 fields only: `prompt` is required, with optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Set `filePaths` whenever the task targets concrete files, and set `done` whenever you have acceptance criteria (required). Do not invent extra fields such as `inputs` or `done_condition`. Working directory, sandbox, tools, timeout, and cost are resolved internally from config.
 
 ## Brief Discipline
 

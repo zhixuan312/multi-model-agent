@@ -178,4 +178,22 @@ describe('evaluateReadiness policy table', () => {
   it('defaults to normalize when policy is undefined', () => {
     expect(evaluateReadiness(acceptableBrief, undefined).action).toBe('normalize');
   });
+  it('treats TaskSpec.filePaths as satisfying the inputs pillar', () => {
+    const r = evaluateReadiness({
+      prompt: 'Summarize the architecture.',
+      agentType: 'standard',
+      filePaths: ['packages/core/src/run-tasks.ts'],
+      done: 'Return a concise summary.',
+    }, 'normalize');
+    expect(r.missingPillars).not.toContain('inputs');
+  });
+  it('treats TaskSpec.done as satisfying the done_condition pillar', () => {
+    const r = evaluateReadiness({
+      prompt: 'Summarize the architecture.',
+      agentType: 'standard',
+      filePaths: ['packages/core/src/run-tasks.ts'],
+      done: 'Return a concise summary.',
+    }, 'normalize');
+    expect(r.missingPillars).not.toContain('done_condition');
+  });
 });
