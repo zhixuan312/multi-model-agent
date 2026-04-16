@@ -25,7 +25,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
     "standard": { "type": "codex", "model": "codex-mini-latest" },
     "complex": { "type": "claude", "model": "claude-sonnet-4-20250514" }
   },
-  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
 EOF
 ```
@@ -49,7 +49,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
       "apiKeyEnv": "OPENAI_API_KEY"
     }
   },
-  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
 EOF
 ```

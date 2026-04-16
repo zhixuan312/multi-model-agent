@@ -42,7 +42,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
     "standard": { "type": "codex", "model": "codex-mini-latest" },
     "complex": { "type": "claude", "model": "claude-sonnet-4-20250514" }
   },
-  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
 EOF
 ```
@@ -66,7 +66,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
       "apiKeyEnv": "OPENAI_API_KEY"
     }
   },
-  "defaults": { "maxTurns": 200, "timeoutMs": 600000, "tools": "full" }
+  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
 EOF
 ```
@@ -159,7 +159,7 @@ Implementation and review run on *different* agents — cross-agent review catch
 | `audit_document` | Spec auditing after brainstorming/planning | Complex agent, no review pipeline. Parallel file audit. |
 | `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. |
 | `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. |
-| `debug_task` | Systematic debugging | Complex agent, 1 review round. Hypothesis-driven investigation. |
+| `debug_task` | Systematic debugging | Complex agent, full spec + quality review. Hypothesis-driven investigation. |
 
 Not using superpowers? These tools work standalone — they're just opinionated defaults over `delegate_tasks` for common patterns.
 
@@ -200,7 +200,7 @@ Auth:
 
 Pin a version for reproducibility:
 ```bash
-npx -y @zhixuan92/multi-model-agent-mcp@1.0.0 serve
+npx -y @zhixuan92/multi-model-agent-mcp@2.0.0 serve
 ```
 
 </details>

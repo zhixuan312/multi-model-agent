@@ -45,10 +45,8 @@ for (const r of results) {
 |---|---|
 | `./config/schema` | `parseConfig`, `multiModelConfigSchema` |
 | `./config/load` | `loadConfigFromFile` |
-| `./routing/select-provider-for-task` | Routing decision |
-| `./routing/get-provider-eligibility` | Per-provider eligibility with reasons |
-| `./routing/capabilities` | Base provider capability table |
-| `./routing/model-profiles` | Cost/tier defaults per model |
+| `./routing/resolve-agent` | `resolveAgent` — resolves agent type to provider |
+| `./routing/model-profiles` | Model cost/tier profiles |
 | `./provider` | `createProvider` factory |
 | `./run-tasks` | `runTasks` parallel dispatcher |
 | `./types` | All shared types |
