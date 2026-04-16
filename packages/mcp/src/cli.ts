@@ -176,7 +176,7 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
     contextBlockIds: z.array(z.string()).optional().describe(
       'IDs from register_context_block to prepend to prompt.',
     ),
-  });
+  }).strict();
 }
 
 /**

@@ -103,13 +103,6 @@ export interface OpenAIRunnerOptions {
 }
 
 /**
- * Maximum turns for each continuation (reprompt/reground/watchdog-warning) in the
- * supervision loop. Higher than the old hardcoded 1 so the model can call a tool
- * and reply to the tool result without immediately exhausting the sub-budget.
- */
-const SUPERVISION_CONTINUATION_BUDGET = 5;
-
-/**
  * Extract every assistant text emission from a single `agentRun(...)` result.
  * See the SDK introspection finding in supervision.ts: `result.newItems` is a
  * discriminated union and entries of type `"message_output_item"` wrap an
@@ -141,7 +134,7 @@ export async function runOpenAI(
   options: RunOptions,
   runner: OpenAIRunnerOptions,
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? runner.providerConfig.maxTurns ?? Number.MAX_SAFE_INTEGER;
+  const maxTurns = Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? runner.providerConfig.timeoutMs ?? runner.defaults.timeoutMs;
   const toolMode = options.tools ?? runner.defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -356,7 +349,7 @@ export async function runOpenAI(
       // Continuation-exhausted flag: set when runContinuationTurn catches a
       // MaxTurnsExceededError on a re-prompt or re-ground continuation.
       // The break below lands in the exhausted handler so we don't conflate
-      // a 5-turn sub-budget exhaustion with the user-declared maxTurns limit.
+      // a continuation-exhaustion with the user-declared limits.
       let supervisionExhausted = false;
       // Initialized to `null` (NOT ''): on the first turn there is no
       // previous degenerate output to compare against, so the
@@ -404,21 +397,19 @@ export async function runOpenAI(
       }
 
       /**
-       * Wraps a continuation turn (re-prompt or re-ground) that uses a small
-       * fixed budget. Catches MaxTurnsExceededError from the SDK and returns a
-       * discriminated union so callers can handle exhaustion without conflating it
-       * with the user-declared maxTurns limit.
+       * Wraps a continuation turn (re-prompt or re-ground). Time and cost bounds
+       * are the only effective limits; no turn-count sub-budget is imposed.
+       * Catches MaxTurnsExceededError from the SDK as a safety net.
        */
       async function runContinuationTurn(
         currentResult: AgentRunOutput,
         instruction: string,
-        budget: number,
       ): Promise<
         | { ok: true; result: AgentRunOutput }
         | { ok: false; cause: MaxTurnsExceededError; label: 'continuation_exhausted'; turnAtFailure: number }
       > {
         try {
-          const result = await runTurnAndBuffer(continueWith(currentResult, instruction), budget);
+          const result = await runTurnAndBuffer(continueWith(currentResult, instruction), Number.MAX_SAFE_INTEGER);
           return { ok: true, result };
         } catch (err) {
           if (err instanceof MaxTurnsExceededError) {
@@ -501,7 +492,7 @@ export async function runOpenAI(
             emit({ kind: 'done', status: costExceeded.status });
             return costExceeded;
           }
-          const warningCont = await runContinuationTurn(currentResult, warning, SUPERVISION_CONTINUATION_BUDGET);
+          const warningCont = await runContinuationTurn(currentResult, warning);
           if (!warningCont.ok) {
             supervisionExhausted = true;
             break;
@@ -544,7 +535,7 @@ export async function runOpenAI(
             contentLengthChars: reground.length,
           });
           if (canAffordNextTurn()) {
-            const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+              const regroundCont = await runContinuationTurn(currentResult, reground);
             if (regroundCont.ok) {
               currentResult = regroundCont.result;
               continue;
@@ -579,7 +570,7 @@ export async function runOpenAI(
               contentLengthChars: reground.length,
             });
             if (canAffordNextTurn()) {
-              const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+            const regroundCont = await runContinuationTurn(currentResult, reground);
               if (regroundCont.ok) {
                 currentResult = regroundCont.result;
                 stallTurnCounter = 0;
@@ -617,7 +608,7 @@ export async function runOpenAI(
           emit({ kind: 'done', status: costExceeded.status });
           return costExceeded;
         }
-        const rePromptCont = await runContinuationTurn(currentResult, rePrompt, SUPERVISION_CONTINUATION_BUDGET);
+        const rePromptCont = await runContinuationTurn(currentResult, rePrompt);
         if (!rePromptCont.ok) {
           supervisionExhausted = true;
           break;
@@ -650,7 +641,7 @@ export async function runOpenAI(
             emit({ kind: 'done', status: costExceeded.status });
             return costExceeded;
           }
-          const regroundCont = await runContinuationTurn(currentResult, reground, SUPERVISION_CONTINUATION_BUDGET);
+          const regroundCont = await runContinuationTurn(currentResult, reground);
           if (!regroundCont.ok) {
             supervisionExhausted = true;
             break;

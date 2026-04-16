@@ -129,13 +129,20 @@ async function executeReviewedLifecycle(
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
 
+  let escalationProvider: Provider | undefined;
+  try {
+    escalationProvider = createProvider(otherSlot, config);
+  } catch {
+    // Other slot not configured — auto-escalation not available
+  }
+
   // done is included in task.prompt below so the worker sees it as a goal.
   // The rework loop (below) then builds from task.prompt, so done is
   // implicitly preserved across all subsequent rounds.
   const implResult = await delegateWithEscalation(
     withDoneCondition(task),
     [resolved.provider],
-    { explicitlyPinned: true, onProgress },
+    { explicitlyPinned: false, escalateToProvider: escalationProvider, onProgress },
   );
 
   const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;

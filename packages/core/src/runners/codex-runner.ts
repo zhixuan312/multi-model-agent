@@ -243,7 +243,7 @@ export async function runCodex(
   providerConfig: ProviderConfig,
   defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? Number.MAX_SAFE_INTEGER;
+  const maxTurns = Number.MAX_SAFE_INTEGER;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -453,7 +453,7 @@ export async function runCodex(
     let lastWarnedInputTokens = -1;
 
     try {
-      while (turns < maxTurns) {
+      while (true) {
         // Track tokens at start of turn for cost accounting
         const tokensAtTurnStart = inputTokens;
         const outputTokensAtTurnStart = outputTokens;
