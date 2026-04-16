@@ -18,13 +18,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Prevention prompts now time/cost-based (core).** `buildBudgetHint` now takes `{ timeoutMs, maxCostUSD? }` instead of `{ maxTurns }`. `buildReGroundingMessage` takes `{ elapsedMs, timeoutMs, toolCallsSoFar, filesReadSoFar }` instead of `{ currentTurn, maxTurns, ... }`.
 - **Supervision rewritten as monitor model (core).** Gatekeeper pattern replaced by monitor pattern. Loop detection and stall detection are advisory (inject re-grounding, don't terminate). `MAX_SUPERVISION_RETRIES` removed; `MAX_DEGENERATE_RETRIES = 10` governs retry budget. Only counts as degenerate when a turn has no tool calls.
-- **`doneCondition` wired to `task.done` (core).** The spec reviewer prompt now shows the caller's acceptance criteria instead of hardcoded `'tsc passes'`. Caller can specify `done: 'all tests pass'` in `delegate_tasks` and it is honored.
+- **`doneCondition` wired to `task.done` (core).** The spec reviewer prompt now shows the caller's acceptance criteria instead of hardcoded `'tsc passes'`. The worker's initial prompt also receives `task.done` as `## Success Criteria` so the worker itself is guided by the caller's acceptance criteria.
+- **`briefQualityPolicy` transparent default is `normalize` (core).** Vague briefs are auto-normalized rather than surfaced with a warning. Previously defaulted to `'warn'` which surfaced vague briefs instead of normalizing them.
+- **`review_rounds` transparent default is plateau detection (core).** Review continues until the reviewer approves, the same findings appear in two consecutive rounds, or the safety limit is reached. Previously hard-capped at `maxReviewRounds ?? 2` which was arbitrary.
+- **`filePaths` is a soft completion signal (core).** Review is no longer skipped when `filesWritten` is empty. The harness tracks whether the worker read or wrote any `task.filePaths` and exposes it as `filePathsSkipped` in the result. Previously the review was skipped entirely when no files were written.
 - **`retry_tasks` now re-injects fresh defaults (mcp).** Previously retried tasks ran with raw cached task specs. Now `retry_tasks` applies the same default injection as `delegate_tasks` (`tools`, `timeoutMs`, `maxCostUSD`, `sandboxPolicy`, `cwd`, `reviewPolicy`) so retries get current config values.
 
 ### Added
 
-- **`done?: string` on TaskSpec (core, mcp).** Callers can specify acceptance criteria in plain language. The spec reviewer checks against it. Falls back to `'tsc passes'` when not provided.
-- **`filePaths?: string[]` on TaskSpec (core, mcp).** Files the sub-agent should focus on. Used by specialized tools for prompt injection (`buildFilePathsPrompt`) and fan-out dispatch. Not enforced by the generic execution path in v2.0.0.
+- **`done?: string` on TaskSpec (core, mcp).** Callers can specify acceptance criteria in plain language. Included in the worker's prompt as `## Success Criteria` and passed to the spec reviewer as `doneCondition`. Falls back to `'tsc passes'` when not provided.
+- **`filePaths?: string[]` on TaskSpec (core, mcp).** Files the sub-agent should focus on. Used by specialized tools for prompt injection (`buildFilePathsPrompt`) and fan-out dispatch. The generic execution path tracks whether the worker interacted with these files as a soft completion concern (`filePathsSkipped` on `RunResult`).
 
 ## [1.3.0] - 2026-04-15
 
