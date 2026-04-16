@@ -254,7 +254,6 @@ export function buildMcpServer(
       sandboxPolicy: config.defaults.sandboxPolicy,
       cwd: process.cwd(),
       reviewPolicy: 'full',
-      briefQualityPolicy: 'warn',
       effort: undefined,
     }));
   }

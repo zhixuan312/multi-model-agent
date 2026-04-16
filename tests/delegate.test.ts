@@ -37,7 +37,8 @@ describe('runTasks', () => {
     });
 
     expect(results).toHaveLength(2);
-    expect(results[0].status).toBe('error');
+    // 'normalize' policy: vague brief is refused as brief_too_vague, not error
+    expect(results[0].status).toBe('brief_too_vague');
     expect(results[1].status).toBe('error');
     expect(results[1].error).toContain('capability_missing');
   });

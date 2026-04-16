@@ -244,6 +244,9 @@ export interface RunResult {
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
   /** Spec review outcome. */
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
+  /** Internal: true when task.filePaths was specified but the worker never
+   *  read or wrote any of them — a soft completion concern. */
+  filePathsSkipped?: boolean
   /** Quality review outcome. */
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
   /** Aggregated structured report from the reviewed execution loop. */
