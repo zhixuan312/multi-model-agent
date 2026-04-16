@@ -47,6 +47,16 @@ export function hasDoneConditionPillar(prompt: string): boolean {
   return false;
 }
 
+function hasTaskInputsPillar(task: Pick<TaskSpec, 'prompt' | 'filePaths'>): boolean {
+  if (hasInputsPillar(task.prompt)) return true;
+  return Array.isArray(task.filePaths) && task.filePaths.some((p) => p.trim().length > 0);
+}
+
+function hasTaskDoneConditionPillar(task: Pick<TaskSpec, 'prompt' | 'done'>): boolean {
+  if (hasDoneConditionPillar(task.prompt)) return true;
+  return typeof task.done === 'string' && task.done.trim().length > 0;
+}
+
 export function hasOutputContractPillar(prompt: string, disableStructuredReport?: boolean): boolean {
   if (!disableStructuredReport) return true;
   // Has explicit format instructions
@@ -86,7 +96,7 @@ export function detectReasonableLength(prompt: string): boolean {
   return prompt.length >= 50 && prompt.length <= 500;
 }
 
-export function evaluateReadiness(task: { prompt: string; briefQualityPolicy?: BriefQualityPolicy }, mode?: BriefQualityPolicy): ReadinessResult {
+export function evaluateReadiness(task: TaskSpec, mode?: BriefQualityPolicy): ReadinessResult {
   const policy = mode ?? task.briefQualityPolicy ?? 'normalize';
   
   if (policy === 'off') {
@@ -95,8 +105,8 @@ export function evaluateReadiness(task: { prompt: string; briefQualityPolicy?: B
 
   const missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[] = [];
   if (!hasScopePillar(task.prompt)) missingPillars.push('scope');
-  if (!hasInputsPillar(task.prompt)) missingPillars.push('inputs');
-  if (!hasDoneConditionPillar(task.prompt)) missingPillars.push('done_condition');
+  if (!hasTaskInputsPillar(task)) missingPillars.push('inputs');
+  if (!hasTaskDoneConditionPillar(task)) missingPillars.push('done_condition');
   if (!hasOutputContractPillar(task.prompt, false)) missingPillars.push('output_contract');
 
   const layer2Warnings: BriefQualityWarning[] = [];

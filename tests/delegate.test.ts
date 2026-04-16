@@ -159,6 +159,28 @@ describe('runTasks', () => {
     expect(results[0].briefQualityWarnings?.length).toBeGreaterThan(0);
   });
 
+  it('does not refuse a task when filePaths and done are provided outside the prompt', async () => {
+    const results = await runTasks(
+      [{
+        prompt: 'Summarize the architecture.',
+        agentType: 'standard',
+        briefQualityPolicy: 'normalize',
+        filePaths: ['packages/core/src/run-tasks.ts'],
+        done: 'Return a concise summary.',
+        requiredCapabilities: ['web_search'],
+      }],
+      {
+        agents: {
+          standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+          complex: { type: 'openai-compatible', model: 'y', baseUrl: 'https://example.invalid/v2' },
+        },
+        defaults: { timeoutMs: 600_000, tools: 'full' },
+      },
+    );
+    expect(results[0].status).toBe('error');
+    expect(results[0].errorCode).toBe('capability_missing');
+  });
+
   it('1.0.0 runTasks sets errorCode on capability_missing', async () => {
     const results = await runTasks(
       [{ prompt: 'task', agentType: 'standard', requiredCapabilities: ['web_search'] }],

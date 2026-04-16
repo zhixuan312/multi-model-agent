@@ -77,7 +77,7 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 
 | Tool | What it does |
 |---|---|
-| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds` |
+| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Set `filePaths` for file-scoped work and `done` for acceptance criteria (required); do not invent extra fields. |
 | `audit_document` | Audit docs/files for issues — parallel per file |
 | `review_code` | Code review with spec + quality pipeline — parallel per file |
 | `verify_work` | Verify work against a checklist — parallel per file |

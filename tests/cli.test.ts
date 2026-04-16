@@ -129,6 +129,8 @@ describe('delegate_tasks tool description', () => {
     expect(delegate.description).toContain('Available agents');
     expect(delegate.description).toContain('standard');
     expect(delegate.description).toContain('complex');
+    expect(delegate.description).toContain('Prefer setting filePaths');
+    expect(delegate.description).toContain('prefer setting done');
   });
 });
 
