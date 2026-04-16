@@ -36,7 +36,7 @@ Three agent types are supported — use whichever matches your setup:
 **If you have Claude Code and/or Codex** — zero API keys needed:
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 {
   "agents": {
     "standard": { "type": "codex", "model": "codex-mini-latest" },
@@ -44,12 +44,13 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
   },
   "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
+EOF
 ```
 
 **If you prefer OpenAI-compatible endpoints:**
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 {
   "agents": {
     "standard": {
@@ -67,6 +68,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
   },
   "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
+EOF
 ```
 
 Mix and match freely — e.g., `claude` for complex + `openai-compatible` for standard.

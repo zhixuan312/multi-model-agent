@@ -19,7 +19,7 @@ Requires Node >= 22 and a config file at `~/.multi-model/config.json`.
 **Example — Claude + Codex (no API keys):**
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 {
   "agents": {
     "standard": { "type": "codex", "model": "codex-mini-latest" },
@@ -27,12 +27,13 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
   },
   "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
+EOF
 ```
 
 **Example — OpenAI-compatible endpoints (API keys required):**
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
 {
   "agents": {
     "standard": {
@@ -50,6 +51,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json
   },
   "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
 }
+EOF
 ```
 
 Mix and match freely — e.g., `claude` for complex + `openai-compatible` for standard.
