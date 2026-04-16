@@ -162,70 +162,21 @@ export const SERVER_VERSION = pkg.version;
 export function buildTaskSchema(availableAgents: [string, ...string[]]) {
   return z.object({
     prompt: z.string().describe(
-      'The task instruction. Required. Concatenated with context blocks (if contextBlockIds set) before dispatch.',
+      'The task instruction. Required.',
     ),
     agentType: z.enum(availableAgents).optional().describe(
-      'Which agent handles this task. Default: standard (cost-effective, well-scoped work). Set to complex for harder reasoning, ambiguous scope, or security-sensitive work.',
+      'How hard the task is. Default: standard (cost-effective). Set to complex for harder reasoning or ambiguous scope.',
     ),
-    tools: z.enum(['none', 'readonly', 'no-shell', 'full']).optional().describe(
-      'Sub-agent tool access. Default: full (read, write, shell). Modes: none (prompt-only), readonly (read + grep + glob), no-shell (read + write, no shell), full (everything).',
+    filePaths: z.array(z.string()).optional().describe(
+      'Files the sub-agent should focus on. Existing files are pre-verified. Non-existent paths are treated as output targets.',
     ),
-    maxTurns: z.number().int().positive().optional().describe(
-      'Max agent loop turns before termination. Default: 200. Returns status max_turns when hit.',
-    ),
-    timeoutMs: z.number().int().positive().optional().describe(
-      'Wall-clock time limit in ms. Default: 600000 (10 min). Returns status timeout when hit.',
-    ),
-    cwd: z.string().optional().describe(
-      'Working directory for file/shell tools. Default: server process cwd.',
-    ),
-    effort: z.enum(['none', 'low', 'medium', 'high']).optional().describe(
-      'Reasoning depth. Default: auto-inferred from prompt length and complexity. Set explicitly to force a specific level (none/low/medium/high).',
-    ),
-    sandboxPolicy: z.enum(['none', 'cwd-only']).optional().describe(
-      'Confines file tools (readFile, writeFile, editFile, grep, glob) to the task cwd tree. Default: cwd-only. Shell commands (run_shell) run freely and can access any path. Set to none to allow file tools to access any path too.',
-    ),
-    requiredCapabilities: z.array(z.string()).optional().describe(
-      'Capabilities the agent must have (e.g., web_search). Default: none required. Returns no_capable_agent error if no agent qualifies.',
+    done: z.string().optional().describe(
+      'Acceptance criteria in plain language. The worker works toward this goal. The reviewer verifies it.',
     ),
     contextBlockIds: z.array(z.string()).optional().describe(
-      'IDs from register_context_block to prepend to prompt. Use when multiple tasks share large context — transmit once, reference by ID.',
+      'IDs from register_context_block to prepend to prompt.',
     ),
-    expectedCoverage: z.object({
-      minSections: z.number().int().positive().optional().describe(
-        'Minimum output sections for completeness. Sections matched by sectionPattern regex.',
-      ),
-      sectionPattern: z.string().optional().describe(
-        'Regex (multiline) for section headings. Each match counts toward minSections.',
-      ),
-      requiredMarkers: z.array(z.string()).optional().describe(
-        'Substrings that must all appear in output for completeness.',
-      ),
-    }).optional().describe(
-      'Output completeness expectations. When declared and passing, authoritative over all heuristics. Default: none — syntactic checks only.',
-    ),
-    skipCompletionHeuristic: z.boolean().optional().describe(
-      'Trust tight-format outputs as complete (bypasses fragment/no_terminator heuristics). Default: false. Set true for single-line verdicts, CSV, or structured formats. Empty/thinking-only checks always apply.',
-    ),
-    parentModel: z.string().optional().describe(
-      'Parent session model ID for saved-cost estimates. Default: none — savedCostUSD will be null.',
-    ),
-    maxCostUSD: z.number().nonnegative().optional().describe(
-      'Cost ceiling in USD per task. Default: no limit. Returns status cost_exceeded when hit.',
-    ),
-    reviewPolicy: z.enum(['full', 'spec_only', 'off']).optional().describe(
-      'Review pipeline control. Default: full (spec + quality review). Set to spec_only for spec review alone, or off for direct output with no review.',
-    ),
-    maxReviewRounds: z.number().int().nonnegative().optional().describe(
-      'Max spec review rework rounds. Default: 2. After exhaustion, the task returns its current output and moves to the next pipeline stage.',
-    ),
-    briefQualityPolicy: z.enum(['normalize', 'strict', 'warn', 'off']).optional().describe(
-      'Vague brief handling. Default: warn (evaluates and surfaces warnings in response). strict: returns status brief_too_vague without running. normalize: rewrites the brief before dispatch. off: dispatches as-is.',
-    ),
-    testCommand: z.string().optional().describe(
-      'Shell command for task verification (e.g., "npx vitest run tests/foo.test.ts"). When set and the task runs in parallel, the harness tells the worker to use this command instead of a full-project build.',
-    ),
-  });
+  }).strict();
 }
 
 /**
@@ -293,6 +244,20 @@ export function buildMcpServer(
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
   const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
 
+  function injectDefaults(tasks: TaskSpec[]): TaskSpec[] {
+    return tasks.map(t => ({
+      ...t,
+      agentType: t.agentType as TaskSpec['agentType'],
+      tools: config.defaults.tools,
+      timeoutMs: config.defaults.timeoutMs,
+      maxCostUSD: config.defaults.maxCostUSD,
+      sandboxPolicy: config.defaults.sandboxPolicy,
+      cwd: process.cwd(),
+      reviewPolicy: 'full',
+      effort: undefined,
+    }));
+  }
+
   const server = new McpServer({
     name: SERVER_NAME,
     version: SERVER_VERSION,
@@ -341,9 +306,9 @@ export function buildMcpServer(
 
   server.tool(
     'delegate_tasks',
-    'Dispatch tasks to sub-agents. Minimum: { prompt, agentType }. Everything else has good defaults.\n\n' +
-      'Use specialized tools (audit_document, review_code, verify_work, debug_task) for common patterns — they set optimal defaults. ' +
-      'Use delegate_tasks when you need custom pipeline control or your task doesn\'t match a specialized tool.\n\n' +
+    'Dispatch tasks to sub-agents. Minimum: { prompt }. Everything else has good defaults.\n\n' +
+      'Use specialized tools (audit_document, review_code, verify_work, debug_task) for common patterns. ' +
+      'Use delegate_tasks for custom work.\n\n' +
       renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
@@ -431,15 +396,16 @@ export function buildMcpServer(
       // so the returned batchId is valid even if the dispatch itself
       // throws (so callers can still retry the specific tasks that
       // produced errors). The cache stores the raw TaskSpec[] — NOT the
-      // expanded forms — because `retry_tasks` will push the same specs
-      // through `runTasks` again, which re-expands against the current
-      // (possibly updated) context-block store.
+      // expanded forms — because `retry_tasks` re-injects fresh defaults
+      // from the current config each time it runs.
       const batchId = rememberBatch(tasks as TaskSpec[]);
+
+      const resolvedTasks = injectDefaults(tasks as TaskSpec[]);
 
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasksImpl(tasks as TaskSpec[], config, {
+        results = await runTasksImpl(resolvedTasks, config, {
           onProgress: sendProgress,
           runtime: { contextBlockStore },
         });
@@ -571,7 +537,7 @@ export function buildMcpServer(
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
       try {
-        results = await runTasksImpl(subset, config, {
+        results = await runTasksImpl(injectDefaults(subset), config, {
           runtime: { contextBlockStore },
         });
       } finally {

@@ -169,7 +169,7 @@ describe('cross-runner parity — progress event sequence', () => {
           baseUrl: 'http://localhost:9999',
           apiKey: 'test-key',
         },
-        defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+        defaults: { timeoutMs: 600_000, tools: 'full' },
       },
     );
     return { runner: 'openai', eventKinds: events.map((e) => e.kind), status: result.status };
@@ -188,7 +188,7 @@ describe('cross-runner parity — progress event sequence', () => {
       'prompt',
       { onProgress: (e) => events.push(e) },
       { type: 'claude', model: 'claude-sonnet-4-6' },
-      { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      { timeoutMs: 600_000, tools: 'full' },
     );
     return { runner: 'claude', eventKinds: events.map((e) => e.kind), status: result.status };
   }
@@ -211,7 +211,7 @@ describe('cross-runner parity — progress event sequence', () => {
       'prompt',
       { onProgress: (e) => events.push(e) },
       { type: 'codex', model: 'gpt-5-codex' },
-      { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+      { timeoutMs: 600_000, tools: 'full' },
     );
     return { runner: 'codex', eventKinds: events.map((e) => e.kind), status: result.status };
   }

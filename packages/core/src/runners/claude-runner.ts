@@ -32,16 +32,16 @@ import {
   checkWatchdogThreshold,
   logWatchdogEvent,
   hasCompletedWork,
+  MAX_DEGENERATE_RETRIES,
+  STALL_DETECTION_TURNS,
+  detectToolCallLoop,
+  hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 
-/**
- * Hard cap on supervision re-prompts before we give up and salvage. Same as
- * openai-runner; see spec A.2.2.
- */
-const MAX_SUPERVISION_RETRIES = 3;
+
 
 /**
  * Minimal pushable async-iterable queue for feeding user messages to the
@@ -118,9 +118,8 @@ export async function runClaude(
   prompt: string,
   options: RunOptions,
   providerConfig: ProviderConfig,
-  defaults: { maxTurns: number; timeoutMs: number; tools: ToolMode },
+  defaults: { timeoutMs: number; tools: ToolMode },
 ): Promise<RunResult> {
-  const maxTurns = options.maxTurns ?? providerConfig.maxTurns ?? defaults.maxTurns;
   const timeoutMs = options.timeoutMs ?? providerConfig.timeoutMs ?? defaults.timeoutMs;
   const toolMode = options.tools ?? defaults.tools;
   const cwd = options.cwd ?? process.cwd();
@@ -208,16 +207,15 @@ export async function runClaude(
 
   // --- Prevention layer: system prompt + budget hint ---
   //
-  // buildSystemPrompt() is deliberately static and parameter-free (same
-  // decision as openai-runner: Task 1 review rejected provider/maxTurns
-  // options). We append our discipline rules onto the `claude_code` preset
+  // buildSystemPrompt() is deliberately static and parameter-free. We append
+  // our discipline rules onto the `claude_code` preset
   // rather than REPLACING the default system prompt, because replacing it
   // strips the SDK's tool-usage guidance. See
   // node_modules/@anthropic-ai/claude-agent-sdk/sdk.d.ts L1460-1465 for the
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
-  const budgetHint = buildBudgetHint({ maxTurns });
+  const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
   // --- onInitialRequest (Task 12) ----------------------------------------
@@ -253,7 +251,7 @@ export async function runClaude(
   // is enforced by assertWithinCwd in tool definitions when sandboxPolicy is 'cwd-only'.
   const queryOptions: Options = {
     model: providerConfig.model,
-    maxTurns,
+    maxTurns: Number.MAX_SAFE_INTEGER,
     cwd,
     permissionMode: 'bypassPermissions',
     allowDangerouslySkipPermissions: true,
@@ -311,7 +309,11 @@ export async function runClaude(
     let output = '';
 
     // --- Supervision / watchdog bookkeeping ---
-    let supervisionRetries = 0;
+    // Monitor model: only count degenerate retries when worker has NO tool calls.
+    let degenerateRetries = 0;
+    let stallTurnCounter = 0;
+    let lastFilesRead = tracker.getReads().length;
+    let lastFilesWritten = tracker.getWrites().length;
     // Initialised to `null` (NOT ''): on the first turn there is no
     // previous degenerate output to compare against, so the same-output
     // early-out must be skipped. See openai-runner regression #5.
@@ -465,8 +467,8 @@ export async function runClaude(
             }
             const reground = buildReGroundingMessage({
               originalPromptExcerpt: prompt,
-              currentTurn: turns,
-              maxTurns,
+              elapsedMs: Date.now() - taskStartMs,
+              timeoutMs,
               toolCallsSoFar: tracker.getToolCalls().length,
               filesReadSoFar: tracker.getReads().length,
             });
@@ -573,9 +575,9 @@ export async function runClaude(
           }
 
           // --- Max-turns: don't supervise a max-turns termination,
-          // build the max_turns result directly and exit. ---
+          // build the incomplete result directly and exit. ---
           if (hitMaxTurns) {
-            completedResult = buildClaudeMaxTurnsResult({
+            completedResult = buildClaudeMaxTurnsExitResult({
               tracker,
               scratchpad,
               providerConfig,
@@ -583,9 +585,8 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
-              maxTurns,
               lastOutput: output,
-              reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns (user-declared maxTurns: ${maxTurns})`,
+              reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
             });
@@ -634,7 +635,7 @@ export async function runClaude(
               inputTokens,
               outputTokens,
               turns,
-              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
+              reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
               parentModel,
             });
@@ -642,22 +643,26 @@ export async function runClaude(
             break;
           }
           lastDegenerateOutput = output;
-          supervisionRetries++;
-          if (supervisionRetries >= MAX_SUPERVISION_RETRIES) {
-            completedResult = buildClaudeIncompleteResult({
-              tracker,
-              scratchpad,
-              providerConfig,
-              sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
-              turns,
-              reason: `supervision loop exhausted after ${supervisionRetries} re-prompts (last kind: ${validation.kind ?? 'unknown'})`,
-              durationMs: Date.now() - taskStartMs,
-              parentModel,
-            });
-            messageQueue.close();
-            break;
+          // Only count as degenerate when worker has NO tool calls this turn.
+          // If the worker is still calling tools, it's making progress.
+          if (!hasCompletedWork(tracker.getToolCalls())) {
+            degenerateRetries++;
+            if (degenerateRetries >= MAX_DEGENERATE_RETRIES) {
+              completedResult = buildClaudeIncompleteResult({
+                tracker,
+                scratchpad,
+                providerConfig,
+                sdkCostUSD: costUSD,
+                inputTokens,
+                outputTokens,
+                turns,
+                reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
+                durationMs: Date.now() - taskStartMs,
+                parentModel,
+              });
+              messageQueue.close();
+              break;
+            }
           }
 
           // Push the re-prompt and continue reading the iterator.
@@ -894,25 +899,21 @@ function buildClaudeForceSalvageResult(
   };
 }
 
-function buildClaudeMaxTurnsResult(
-  args: ClaudeResultCommonArgs & { maxTurns: number; lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
+function buildClaudeMaxTurnsExitResult(
+  args: ClaudeResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, maxTurns, lastOutput, reason, durationMs, parentModel } = args;
+  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, lastOutput, reason, durationMs, parentModel } = args;
   const hasSalvage = !scratchpad.isEmpty();
-  // Note: `lastOutput` here is the model's last streamed text before the
-  // max-turns boundary — NOT a diagnostic template. If the scratchpad has
-  // nothing but `lastOutput` is non-empty, that's still real model content,
-  // so outputIsDiagnostic is false. Only the `Agent exceeded max turns…`
-  // fallback (empty scratchpad AND empty lastOutput) is a diagnostic.
   const output = hasSalvage
     ? scratchpad.latest()
-    : (lastOutput || `Agent exceeded max turns (${maxTurns}).`);
+    : (lastOutput || `Agent exhausted time or cost budget.`);
   const outputIsDiagnostic = !hasSalvage && !lastOutput;
   const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
   const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
   return {
     output,
-    status: 'max_turns',
+    status: 'incomplete',
+    errorCode: 'degenerate_exhausted',
     usage: {
       inputTokens,
       outputTokens,

@@ -9,15 +9,12 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
-  applyCommonFields,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
 export const reviewCodeSchema = z.object({
   code: z.string().optional().describe('Inline code to review'),
   focus: z.array(z.enum(['security', 'performance', 'correctness', 'style'])).optional(),
-  outputFormat: z.enum(['json', 'markdown']).optional(),
-  agentType: z.enum(['standard', 'complex']).optional(),
   ...commonToolFields,
 });
 
@@ -27,16 +24,12 @@ function buildReviewPrompt(
   code: string | undefined,
   filePaths: string[] | undefined,
   focus: string[] | undefined,
-  outputFormat: string | undefined,
 ): string {
   const parts: string[] = ['Review this code:'];
   if (code) parts.push(`\`\`\`\n${code}\n\`\`\``);
   const fileSection = buildFilePathsPrompt(filePaths);
   if (fileSection) parts.push(fileSection);
   if (focus && focus.length > 0) parts.push(`Focus areas: ${focus.join(', ')}.`);
-  if (outputFormat === 'json') {
-    parts.push('Return findings as a JSON array of objects with keys: severity, category, file, line, finding, recommendation.');
-  }
   parts.push('Provide a structured review with findings and recommendations.');
   return parts.join('\n\n');
 }
@@ -52,22 +45,22 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig) 
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
       }
 
-      const agentType = params.agentType ?? 'complex';
-      const baseTaskSpec: Partial<TaskSpec> = applyCommonFields(
-        {
-          agentType,
-          reviewPolicy: 'full' as const,
-          ...(params.outputFormat && { formatConstraints: { outputFormat: params.outputFormat } }),
-        },
-        params,
-      );
+      const baseTaskSpec: Partial<TaskSpec> = {
+        agentType: 'complex',
+        reviewPolicy: 'full',
+        tools: config.defaults?.tools ?? 'full',
+        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
+        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
+        cwd: process.cwd(),
+      };
 
       try {
         const mode = resolveDispatchMode(params.code, params.filePaths);
 
         if (mode === 'fan_out') {
           const validPaths = params.filePaths!.filter(p => p.trim().length > 0);
-          const promptTemplate = buildReviewPrompt(undefined, undefined, params.focus, params.outputFormat);
+          const promptTemplate = buildReviewPrompt(undefined, undefined, params.focus);
           const tasks: TaskSpec[] = validPaths.map(fp => ({
             ...baseTaskSpec,
             prompt: buildPerFilePrompt(fp, promptTemplate),
@@ -78,7 +71,7 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig) 
           return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs)] };
         }
 
-        const prompt = buildReviewPrompt(params.code, params.filePaths, params.focus, params.outputFormat);
+        const prompt = buildReviewPrompt(params.code, params.filePaths, params.focus);
         const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config);
         const result = results[0];
         return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };

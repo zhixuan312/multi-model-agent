@@ -22,7 +22,7 @@ export function computeBatchProgress(results: RunResult[]): BatchProgress {
   const totalTasks = results.length;
   const completedTasks = results.filter((r) => r.status === 'ok').length;
   const incompleteTasks = results.filter(
-    (r) => r.status === 'incomplete' || r.status === 'max_turns' || r.status === 'timeout',
+    (r) => r.status === 'incomplete' || r.status === 'timeout',
   ).length;
   const failedTasks = results.filter(
     (r) =>

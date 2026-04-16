@@ -4,7 +4,6 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
-  applyCommonFields,
   validateInput,
 } from '../../packages/mcp/src/tools/shared.js';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
@@ -136,24 +135,3 @@ describe('buildMetadataBlock', () => {
   });
 });
 
-describe('applyCommonFields', () => {
-  it('merges cwd, contextBlockIds, tools into taskSpec', () => {
-    const result = applyCommonFields({}, { cwd: '/tmp', contextBlockIds: ['abc'], tools: 'readonly' });
-    expect(result.cwd).toBe('/tmp');
-    expect(result.contextBlockIds).toEqual(['abc']);
-    expect(result.tools).toBe('readonly');
-  });
-  it('omits undefined fields', () => {
-    const result = applyCommonFields({ prompt: 'test' }, {});
-    expect(result).toEqual({ prompt: 'test' });
-    expect('cwd' in result).toBe(false);
-  });
-  it('merges maxCostUSD into taskSpec', () => {
-    const result = applyCommonFields({}, { maxCostUSD: 0.50 });
-    expect(result.maxCostUSD).toBe(0.50);
-  });
-  it('omits maxCostUSD when undefined', () => {
-    const result = applyCommonFields({}, {});
-    expect('maxCostUSD' in result).toBe(false);
-  });
-});

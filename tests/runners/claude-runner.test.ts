@@ -66,7 +66,7 @@ describe('runClaude', () => {
   afterEach(() => { vi.clearAllMocks(); });
 
   const providerConfig = { type: 'claude' as const, model: 'claude-sonnet-4-6' };
-  const defaults = { maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const };
+  const defaults = { timeoutMs: 600_000, tools: 'full' as const };
 
   // -------------------------------------------------------------------------
   // 1. ok path
@@ -88,22 +88,21 @@ describe('runClaude', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 2. max_turns path
+  // 2. error_max_turns from SDK
   // -------------------------------------------------------------------------
-  it('returns status max_turns when query yields a result message with subtype error_max_turns', async () => {
+  it('returns status incomplete with degenerate_exhausted when SDK fires error_max_turns', async () => {
     const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
     (query as ReturnType<typeof vi.fn>).mockReturnValueOnce((async function* () {
       yield { type: 'assistant', message: { role: 'assistant', content: [] }, parent_tool_use_id: null };
-      // Empty result string lets the runner fall back to its
-      // synthesized "Agent exceeded max turns (N)." output.
       yield resultMsg({ result: '', subtype: 'error_max_turns' });
     })());
 
     const result = await runClaude('prompt', {}, providerConfig, defaults);
 
-    expect(result.status).toBe('max_turns');
-    expect(result.output).toContain('exceeded max turns');
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('degenerate_exhausted');
+    expect(result.output).toContain('Agent exhausted time or cost budget.');
   });
 
   // -------------------------------------------------------------------------
@@ -468,7 +467,8 @@ describe('runClaude', () => {
 
     const result = await runClaude('task', {}, providerConfig, defaults);
 
-    expect(result.status).toBe('max_turns');
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('degenerate_exhausted');
     expect(result.output).toBe('partial findings before budget exhaustion');
   });
 

@@ -20,7 +20,6 @@ export interface AgentConfig {
   capabilities?: AgentCapability[]
   inputCostPerMTok?: number
   outputCostPerMTok?: number
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   inputTokenSoftLimit?: number
@@ -31,7 +30,6 @@ export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type RunStatus =
   | 'ok'
   | 'incomplete'
-  | 'max_turns'
   | 'timeout'
   | 'api_aborted'
   | 'api_error'
@@ -48,53 +46,39 @@ export interface FormatConstraints {
 }
 
 export interface TaskSpec {
+  /** The task instruction. Required. */
   prompt: string
+  /** How hard the task is. Default: standard. */
   agentType?: AgentType
-  requiredCapabilities?: AgentCapability[]
+  /** Files the sub-agent should focus on. Existing files are pre-verified;
+   *  non-existent paths are treated as intended output targets. */
+  filePaths?: string[]
+  /** Acceptance criteria in plain language. The worker reads it as a goal.
+   *  The spec reviewer checks whether the output satisfies it. */
+  done?: string
+  /** Context block IDs to prepend to prompt. */
+  contextBlockIds?: string[]
+
+  // --- Internal fields set by the harness, not by callers ---
+  /** Resolved from config. Callers never set these directly. */
   tools?: ToolMode
-  maxTurns?: number
   timeoutMs?: number
   cwd?: string
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
-  /** Optional context block ids to expand into the prompt before dispatch.
-   *  Each id is resolved against `RunTasksRuntime.contextBlockStore` in
-   *  order and its content is prepended to `prompt` separated by
-   *  '\n\n---\n\n'. The field is stripped from the task that reaches the
-   *  provider so runners never see it. See `expandContextBlocks`. */
-  contextBlockIds?: string[]
-  /** Optional caller-declared output expectations. When supplied, the
-   *  supervision layer can validate the output for enumerable deliverables
-   *  after syntactic completion checks pass. */
+  maxCostUSD?: number
+  reviewPolicy?: 'full' | 'spec_only' | 'off'
+  maxReviewRounds?: number
+  briefQualityPolicy?: BriefQualityPolicy
+  parentModel?: string
+  formatConstraints?: FormatConstraints
+  skipCompletionHeuristic?: boolean
   expectedCoverage?: {
-    /** Minimum section count. A section is a line matching `sectionPattern`. */
     minSections?: number
-    /** Regex for section headings. Applied with the multiline flag. */
     sectionPattern?: string
-    /** Substrings that must all appear somewhere in the output. */
     requiredMarkers?: string[]
   }
-  /** Opt-out: when true, the runner skips the `no_terminator` and `fragment`
-   *  short-output heuristics for this task. Use for tight-format outputs
-   *  (single-line verdicts, CSV rows, opaque identifiers) that don't follow
-   *  prose conventions. The `empty` and `thinking_only` degeneracy checks
-   *  still fire independently. If `expectedCoverage` is also declared and
-   *  passes, coverage is authoritative — you don't need this flag. */
-  skipCompletionHeuristic?: boolean
-  /** Optional hint about the parent session's model for saved-cost estimates. */
-  parentModel?: string
-  /** Brief quality policy for readiness evaluation. */
-  briefQualityPolicy?: BriefQualityPolicy
-  /** Optional budget for normalization. */
-  maxCostUSD?: number
-  /** Review policy for the execution loop. */
-  reviewPolicy?: 'full' | 'spec_only' | 'off'
-  /** Maximum number of spec review rework rounds. Defaults to 2. */
-  maxReviewRounds?: number
-  /** Optional format constraints for input/output. */
-  formatConstraints?: FormatConstraints
-  /** Optional shell command for task-specific verification. Injected into
-   *  parallel-safety prompt suffix when present. */
+  requiredCapabilities?: AgentCapability[]
   testCommand?: string
 }
 
@@ -104,7 +88,6 @@ export interface CodexProviderConfig {
   type: 'codex'
   model: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
@@ -123,7 +106,6 @@ export interface ClaudeProviderConfig {
   type: 'claude'
   model: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]
@@ -145,7 +127,6 @@ export interface OpenAICompatibleProviderConfig {
   apiKey?: string
   apiKeyEnv?: string
   effort?: Effort
-  maxTurns?: number
   timeoutMs?: number
   sandboxPolicy?: SandboxPolicy
   hostedTools?: 'web_search'[]
@@ -174,9 +155,10 @@ export interface MultiModelConfig {
     complex: AgentConfig
   }
   defaults: {
-    maxTurns: number
     timeoutMs: number
+    maxCostUSD: number
     tools: ToolMode
+    sandboxPolicy: SandboxPolicy
     /** Character threshold that triggers auto-switch from 'full' to
      *  'summary' response mode when the caller uses `responseMode: 'auto'`
      *  (the default). Optional — defaults to 65_536 when absent.
@@ -199,10 +181,9 @@ export interface TokenUsage {
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'max_turns' | 'timeout' | 'cost_exceeded'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'degenerate_exhausted'
        | 'api_error' | 'network_error' | 'api_aborted' | 'brief_too_vague' | 'error'
   turnsUsed: number
-  turnsAllowed: number
   hasFileArtifacts: boolean
   usedShell: boolean
   workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | null
@@ -257,6 +238,9 @@ export interface RunResult {
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
   /** Spec review outcome. */
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
+  /** Internal: true when task.filePaths was specified but the worker never
+   *  read or wrote any of them — a soft completion concern. */
+  filePathsSkipped?: boolean
   /** Quality review outcome. */
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
   /** Aggregated structured report from the reviewed execution loop. */
@@ -347,7 +331,6 @@ export interface Provider {
 
 export interface RunOptions {
   tools?: ToolMode
-  maxTurns?: number
   timeoutMs?: number
   cwd?: string
   effort?: Effort

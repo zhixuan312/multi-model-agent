@@ -22,7 +22,6 @@ const baseAgentFields = {
   effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
-  maxTurns: z.number().int().positive().optional(),
   timeoutMs: z.number().int().positive().optional(),
   sandboxPolicy: sandboxPolicySchema,
   inputTokenSoftLimit: z.number().int().positive().optional(),
@@ -58,11 +57,17 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 // === MultiModelConfig schema ===
 
 const defaultsSchema = z.object({
-  maxTurns: z.number().int().positive().default(200),
-  timeoutMs: z.number().int().positive().default(600_000),
+  timeoutMs: z.number().int().positive().default(1_800_000),
+  maxCostUSD: z.number().nonnegative().default(10),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
+  sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
-}).default(() => ({ maxTurns: 200, timeoutMs: 600_000, tools: 'full' as const }));
+}).default(() => ({
+  timeoutMs: 1_800_000,
+  maxCostUSD: 10,
+  tools: 'full' as const,
+  sandboxPolicy: 'cwd-only' as const,
+}));
 
 export const multiModelConfigSchema = z.object({
   agents: z.object({

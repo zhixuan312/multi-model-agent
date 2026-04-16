@@ -28,7 +28,6 @@ export async function runSpecReview(
         prompt,
         agentType: reviewerSlot,
         briefQualityPolicy: 'off',
-        maxTurns: 20,
         timeoutMs: 120_000,
       },
       [reviewerProvider],

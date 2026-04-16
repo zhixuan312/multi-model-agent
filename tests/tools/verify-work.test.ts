@@ -17,14 +17,8 @@ describe('verify_work schema', () => {
   it('rejects missing checklist', () => {
     expect(verifyWorkSchema.safeParse({ work: 'done' }).success).toBe(false);
   });
-  it('accepts common fields', () => {
-    expect(verifyWorkSchema.safeParse({ work: 'x', checklist: ['c'], cwd: '/tmp', tools: 'readonly' }).success).toBe(true);
-  });
   it('allows both work and filePaths absent (handler validates)', () => {
     expect(verifyWorkSchema.safeParse({ checklist: ['c'] }).success).toBe(true);
-  });
-  it('accepts maxCostUSD', () => {
-    expect(verifyWorkSchema.safeParse({ work: 'w', checklist: ['a'], maxCostUSD: 2.00 }).success).toBe(true);
   });
 });
 
@@ -64,15 +58,15 @@ describe('verify_work handler', () => {
   it('single-task mode with inline work', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, {} as any);
+    registerVerifyWork(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
 
-    const result = await getHandler()({ work: 'implemented feature X', checklist: ['has tests', 'handles errors'], cwd: '/proj' });
+    const result = await getHandler()({ work: 'implemented feature X', checklist: ['has tests', 'handles errors'] });
     const tasks = mockRunTasks.mock.calls[0][0];
     expect(tasks).toHaveLength(1);
     expect(tasks[0].prompt).toContain('implemented feature X');
     expect(tasks[0].prompt).toContain('1. has tests');
     expect(tasks[0].prompt).toContain('2. handles errors');
-    expect(tasks[0].cwd).toBe('/proj');
+    expect(tasks[0].cwd).toBe(process.cwd());
     expect(tasks[0].reviewPolicy).toBe('spec_only');
     expect(tasks[0].agentType).toBe('standard');
     expect(result.content).toHaveLength(2);
@@ -92,21 +86,5 @@ describe('verify_work handler', () => {
     expect(tasks[1].prompt).toContain('1. compiles');
     const envelope = JSON.parse(result.content[0].text);
     expect(envelope.mode).toBe('fan_out');
-  });
-
-  it('passes maxCostUSD through to TaskSpec', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, {} as any);
-    await getHandler()({ work: 'w', checklist: ['a'], maxCostUSD: 0.15 });
-    expect(mockRunTasks.mock.calls[0][0][0].maxCostUSD).toBe(0.15);
-  });
-
-  it('omits maxCostUSD from TaskSpec when not provided', async () => {
-    mockRunTasks.mockResolvedValue([mockResult()]);
-    const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, {} as any);
-    await getHandler()({ work: 'w', checklist: ['a'] });
-    expect('maxCostUSD' in mockRunTasks.mock.calls[0][0][0]).toBe(false);
   });
 });

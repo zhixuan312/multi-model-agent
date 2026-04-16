@@ -15,7 +15,7 @@ const config: MultiModelConfig = {
       model: 'claude-opus-4-6',
     },
   },
-  defaults: { maxTurns: 200, timeoutMs: 600_000, tools: 'full' },
+  defaults: { timeoutMs: 600_000, tools: 'full' },
 };
 
 describe('createProvider (1.0.0)', () => {

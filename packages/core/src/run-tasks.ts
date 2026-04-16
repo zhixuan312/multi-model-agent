@@ -53,13 +53,18 @@ type ResolvedTask =
   | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } }
   | { task: TaskSpec; error: string; errorCode: string };
 
+function withDoneCondition(task: TaskSpec): TaskSpec {
+  if (!task.done) return task;
+  return { ...task, prompt: `${task.prompt}\n\n## Success Criteria\n${task.done}` };
+}
+
 async function executeTask(
   resolved: Exclude<ResolvedTask, { error: string }>,
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<RunResult> {
   try {
     return await delegateWithEscalation(
-      resolved.task,
+      withDoneCondition(resolved.task),
       [resolved.resolved.provider],
       { explicitlyPinned: true, onProgress },
     );
@@ -122,35 +127,36 @@ async function executeReviewedLifecycle(
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
-  const maxRounds = task.maxReviewRounds ?? 2;
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
 
+  let escalationProvider: Provider | undefined;
+  try {
+    escalationProvider = createProvider(otherSlot, config);
+  } catch {
+    // Other slot not configured — auto-escalation not available
+  }
+
+  // done is included in task.prompt below so the worker sees it as a goal.
+  // The rework loop (below) then builds from task.prompt, so done is
+  // implicitly preserved across all subsequent rounds.
   const implResult = await delegateWithEscalation(
-    task,
+    withDoneCondition(task),
     [resolved.provider],
-    { explicitlyPinned: true, onProgress },
+    { explicitlyPinned: false, escalateToProvider: escalationProvider, onProgress },
   );
 
   const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
   const workerStatus = extractWorkerStatus(implReport);
 
-  // C6a: Skip review when there are no file artifacts to review
-  const hasWorkProduct = implResult.filesWritten.length > 0;
-  if (!hasWorkProduct) {
-    return {
-      ...implResult,
-      workerStatus,
-      specReviewStatus: 'skipped',
-      qualityReviewStatus: 'skipped',
-      agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-        implementer: resolved.slot,
-        specReviewer: 'skipped',
-        qualityReviewer: 'skipped',
-      },
-      implementationReport: implReport,
-    };
-  }
+  // C6a: filePaths interaction is a soft completion signal — review always runs.
+  // If task.filePaths was provided, track whether the worker read or wrote any
+  // of those paths as a completion concern (informational only).
+  const filePathsInteracted = task.filePaths && task.filePaths.length > 0
+    ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
+        task.filePaths!.some(fp => f === fp || f.endsWith('/' + fp) || f.endsWith(fp)),
+      )
+    : true;
+  const filePathsSkipped = !filePathsInteracted;
 
   if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
     return {
@@ -204,7 +210,7 @@ async function executeReviewedLifecycle(
   const packet = {
     normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
     scope: normResult?.writeSet ?? [],
-    doneCondition: 'tsc passes',
+    doneCondition: task.done ?? 'tsc passes',
   };
 
   let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
@@ -224,12 +230,19 @@ async function executeReviewedLifecycle(
   let specStatus = specResult.status;
   let specReport = specResult.report;
 
-  if (specStatus === 'changes_required' && maxRounds > 0) {
-    for (let round = 0; round < maxRounds; round++) {
-      const reworkPrompt = `${task.prompt}\n\n## Spec Review Feedback (round ${round + 1}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`;
+  if (specStatus === 'changes_required') {
+    let prevSpecFindings: string[] = [];
+    let round = 0;
+    while (true) {
+      round++;
+      const feedback = specResult.findings.length > 0
+        ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
+        : '';
+      const reworkPrompt = `${task.prompt}${feedback}`;
+      const reworkTask = withDoneCondition({ ...task, prompt: reworkPrompt });
 
       const reworkResult = await delegateWithEscalation(
-        { ...task, prompt: reworkPrompt },
+        reworkTask,
         [resolved.provider],
         { explicitlyPinned: true, onProgress },
       );
@@ -253,6 +266,16 @@ async function executeReviewedLifecycle(
       specReport = specResult.report;
 
       if (specStatus === 'approved') break;
+
+      // Plateau detection: stop when same findings appear in two consecutive rounds.
+      const currentFindings = [...specResult.findings].sort().join('\0');
+      const prevFindings = prevSpecFindings.sort().join('\0');
+      if (currentFindings === prevFindings && currentFindings !== '') break;
+
+      prevSpecFindings = specResult.findings;
+
+      // Absolute safety: don't exceed 10 rework rounds regardless.
+      if (round >= (task.maxReviewRounds ?? 10)) break;
     }
   }
 
@@ -267,12 +290,19 @@ async function executeReviewedLifecycle(
       finalImplResult.filesWritten,
     );
 
-    if (qualityResult.status === 'changes_required' && maxRounds > 0) {
-      for (let round = 0; round < maxRounds; round++) {
-        const reworkPrompt = `${task.prompt}\n\n## Quality Review Feedback (round ${round + 1}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`;
+    if (qualityResult.status === 'changes_required') {
+      let prevQualityFindings: string[] = [];
+      let round = 0;
+      while (true) {
+        round++;
+        const feedback = qualityResult.findings.length > 0
+          ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
+          : '';
+        const reworkPrompt = `${task.prompt}${feedback}`;
+        const reworkTask = withDoneCondition({ ...task, prompt: reworkPrompt });
 
         const reworkResult = await delegateWithEscalation(
-          { ...task, prompt: reworkPrompt },
+          reworkTask,
           [resolved.provider],
           { explicitlyPinned: true, onProgress },
         );
@@ -293,6 +323,14 @@ async function executeReviewedLifecycle(
         );
 
         if (qualityResult.status === 'approved') break;
+
+        const currentFindings = [...qualityResult.findings].sort().join('\0');
+        const prevFindings = prevQualityFindings.sort().join('\0');
+        if (currentFindings === prevFindings && currentFindings !== '') break;
+
+        prevQualityFindings = qualityResult.findings;
+
+        if (round >= (task.maxReviewRounds ?? 10)) break;
       }
     }
   }
@@ -316,6 +354,7 @@ async function executeReviewedLifecycle(
     implementationReport: finalImplReport,
     specReviewReport: specReport,
     qualityReviewReport: qualityResult.report,
+    filePathsSkipped,
     agents: {
       normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
       implementer: resolved.slot,
@@ -343,7 +382,7 @@ export async function runTasks(
   const readinessResults = expandedTasks.map((entry) => {
     if ('error' in entry) return undefined;
     const task = entry as TaskSpec;
-    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
+    return evaluateReadiness(task, task.briefQualityPolicy ?? 'normalize');
   });
 
   const refusedResults = expandedTasks.map((entry, idx) => {

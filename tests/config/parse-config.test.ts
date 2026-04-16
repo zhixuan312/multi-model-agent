@@ -16,8 +16,7 @@ describe('parseConfig', () => {
       },
     });
     expect(result.agents.standard.model).toBe('test-model');
-    expect(result.defaults.maxTurns).toBe(200);
-    expect(result.defaults.timeoutMs).toBe(600_000);
+    expect(result.defaults.timeoutMs).toBe(1_800_000);
     expect(result.defaults.tools).toBe('full');
   });
 
@@ -27,11 +26,10 @@ describe('parseConfig', () => {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
         complex: { type: 'openai-compatible', model: 'gpt-5', baseUrl: 'https://api.example.com' },
       },
-      defaults: { maxTurns: 50, timeoutMs: 120_000, tools: 'none' },
+      defaults: { timeoutMs: 120_000, tools: 'none' },
     };
     const result = parseConfig(input);
     expect(result.agents.complex.model).toBe('gpt-5');
-    expect(result.defaults.maxTurns).toBe(50);
     expect(result.defaults.tools).toBe('none');
   });
 
@@ -41,16 +39,6 @@ describe('parseConfig', () => {
         standard: { type: 'unknown', model: 'x' } as any,
         complex: minimalAgentConfig,
       },
-    })).toThrow();
-  });
-
-  it('throws on negative maxTurns in defaults', () => {
-    expect(() => parseConfig({
-      agents: {
-        standard: minimalAgentConfig,
-        complex: minimalAgentConfig,
-      },
-      defaults: { maxTurns: -1, timeoutMs: 600_000, tools: 'full' },
     })).toThrow();
   });
 
@@ -78,17 +66,7 @@ describe('parseConfig', () => {
         standard: minimalAgentConfig,
         complex: minimalAgentConfig,
       },
-      defaults: { maxTurns: 200, timeoutMs: 1.5, tools: 'full' },
-    })).toThrow();
-  });
-
-  it('throws on zero maxTurns', () => {
-    expect(() => parseConfig({
-      agents: {
-        standard: minimalAgentConfig,
-        complex: minimalAgentConfig,
-      },
-      defaults: { maxTurns: 0, timeoutMs: 600_000, tools: 'full' },
+      defaults: { timeoutMs: 1.5, tools: 'full' },
     })).toThrow();
   });
 

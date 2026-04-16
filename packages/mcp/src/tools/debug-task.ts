@@ -6,14 +6,12 @@ import {
   commonToolFields,
   buildMetadataBlock,
   buildFilePathsPrompt,
-  applyCommonFields,
 } from './shared.js';
 
 export const debugTaskSchema = z.object({
-  problem: z.string().describe('Description of the problem to debug'),
-  context: z.string().optional().describe('Additional context about the problem'),
-  hypothesis: z.string().optional().describe('Initial hypothesis about the cause'),
-  agentType: z.enum(['standard', 'complex']).optional(),
+  problem: z.string().describe('What is broken'),
+  context: z.string().optional().describe('Background'),
+  hypothesis: z.string().optional().describe('Initial theory'),
   ...commonToolFields,
 });
 
@@ -25,7 +23,6 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
     'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
     debugTaskSchema.shape,
     async (params: DebugTaskParams) => {
-      const agentType = params.agentType ?? 'complex';
       const parts: string[] = [`Debug this problem:\n\n${params.problem}`];
       if (params.context) parts.push(`Context: ${params.context}`);
       if (params.hypothesis) parts.push(`Initial hypothesis: ${params.hypothesis}`);
@@ -34,10 +31,16 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
       parts.push('Use hypothesis-driven debugging: identify root cause, propose fix, verify.');
       const prompt = parts.join('\n\n');
 
-      const taskSpec: Partial<TaskSpec> = applyCommonFields(
-        { agentType, reviewPolicy: 'full' as const, maxReviewRounds: 1 },
-        params,
-      );
+      const taskSpec: Partial<TaskSpec> = {
+        agentType: 'complex',
+        reviewPolicy: 'full',
+        maxReviewRounds: 1,
+        tools: config.defaults?.tools ?? 'full',
+        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
+        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
+        cwd: process.cwd(),
+      };
 
       try {
         const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config);

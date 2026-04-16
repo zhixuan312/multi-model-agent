@@ -5,6 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.0] - 2026-04-16
+
+### Breaking Changes
+
+- **`maxTurns` removed from config defaults (core).** Time and cost bounds replace turn limits. New defaults: `timeoutMs: 1_800_000` (30 min), `maxCostUSD: 10`.
+- **`status: 'max_turns'` replaced by `'incomplete'` + `errorCode: 'degenerate_exhausted'` (core).** All runners emit structured incomplete statuses instead of a bare `max_turns` status.
+- **TaskSpec stripped to task-signal fields (core).** Removed `maxTurns`, `skipCompletionHeuristic`, and internal fields from public surface. Added `done?: string` (acceptance criteria) and `filePaths?: string[]` (focus scope). `contextBlockIds` promoted to caller-facing.
+- **MCP tool schemas simplified (mcp).** Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) now expose only their domain fields + `filePaths`. Internal config fields (`cwd`, `tools`, `timeoutMs`, etc.) resolved by the harness from config, not caller-supplied. `applyCommonFields` removed.
+
+### Changed
+
+- **Prevention prompts now time/cost-based (core).** `buildBudgetHint` now takes `{ timeoutMs, maxCostUSD? }` instead of `{ maxTurns }`. `buildReGroundingMessage` takes `{ elapsedMs, timeoutMs, toolCallsSoFar, filesReadSoFar }` instead of `{ currentTurn, maxTurns, ... }`.
+- **Supervision rewritten as monitor model (core).** Gatekeeper pattern replaced by monitor pattern. Loop detection and stall detection are advisory (inject re-grounding, don't terminate). `MAX_SUPERVISION_RETRIES` removed; `MAX_DEGENERATE_RETRIES = 10` governs retry budget. Only counts as degenerate when a turn has no tool calls.
+- **`doneCondition` wired to `task.done` (core).** The spec reviewer prompt now shows the caller's acceptance criteria instead of hardcoded `'tsc passes'`. The worker's initial prompt also receives `task.done` as `## Success Criteria` so the worker itself is guided by the caller's acceptance criteria.
+- **`briefQualityPolicy` transparent default is `normalize` (core).** Vague briefs are auto-normalized rather than surfaced with a warning. Previously defaulted to `'warn'` which surfaced vague briefs instead of normalizing them.
+- **`review_rounds` transparent default is plateau detection (core).** Review continues until the reviewer approves, the same findings appear in two consecutive rounds, or the safety limit is reached. Previously hard-capped at `maxReviewRounds ?? 2` which was arbitrary.
+- **`filePaths` is a soft completion signal (core).** Review is no longer skipped when `filesWritten` is empty. The harness tracks whether the worker read or wrote any `task.filePaths` and exposes it as `filePathsSkipped` in the result. Previously the review was skipped entirely when no files were written.
+- **`retry_tasks` now re-injects fresh defaults (mcp).** Previously retried tasks ran with raw cached task specs. Now `retry_tasks` applies the same default injection as `delegate_tasks` (`tools`, `timeoutMs`, `maxCostUSD`, `sandboxPolicy`, `cwd`, `reviewPolicy`) so retries get current config values.
+
+### Added
+
+- **`done?: string` on TaskSpec (core, mcp).** Callers can specify acceptance criteria in plain language. Included in the worker's prompt as `## Success Criteria` and passed to the spec reviewer as `doneCondition`. Falls back to `'tsc passes'` when not provided.
+- **`filePaths?: string[]` on TaskSpec (core, mcp).** Files the sub-agent should focus on. Used by specialized tools for prompt injection (`buildFilePathsPrompt`) and fan-out dispatch. The generic execution path tracks whether the worker interacted with these files as a soft completion concern (`filePathsSkipped` on `RunResult`).
+
 ## [1.3.0] - 2026-04-15
 
 ### Added
@@ -243,7 +267,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.3.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.0...HEAD
+[2.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.3.0...mcp-v2.0.0
 [1.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...mcp-v1.3.0
 [1.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.0...mcp-v1.2.1
 [1.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.1.0...mcp-v1.2.0
