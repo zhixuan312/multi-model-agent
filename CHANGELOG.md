@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] - 2026-04-16
+
+### Fixed
+
+- **`delegate_tasks` `done` field guidance corrected (core, mcp, docs).** The `done` field is a required acceptance-criteria signal, not a "prefer" hint — the readiness checker treats `TaskSpec.done` as satisfying the `done_condition` pillar. Three doc locations corrected: `packages/mcp/src/cli.ts:310` description, `packages/mcp/README.md:80` table entry, and `docs/claude-code-delegation-rule.md:55`.
+
 ## [2.0.0] - 2026-04-16
 
 ### Breaking Changes
@@ -267,7 +273,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.1...HEAD
+[2.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.0...mcp-v2.0.1
 [2.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.3.0...mcp-v2.0.0
 [1.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...mcp-v1.3.0
 [1.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.0...mcp-v1.2.1
