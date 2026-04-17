@@ -165,6 +165,9 @@ export interface MultiModelConfig {
      *  Env var and buildMcpServer option can override at higher precedence. */
     largeResponseThresholdChars?: number
   }
+  clarifications?: {
+    maxRoundsPerDraft?: number
+  }
 }
 
 // === Result ===

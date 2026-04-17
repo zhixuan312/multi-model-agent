@@ -193,7 +193,8 @@ describe('context-block + retry_tasks tools', () => {
         {
           tasks: [
             {
-              prompt: label,
+              prompt: `Implement the ${label} feature with full test coverage`,
+              done: 'Tests pass',
             },
           ],
         },
@@ -246,7 +247,7 @@ describe('delegate_tasks schema — contextBlockIds', () => {
 
   it('accepts a task with contextBlockIds', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       agentType: 'standard',
       contextBlockIds: ['a', 'b'],
     });
@@ -255,7 +256,7 @@ describe('delegate_tasks schema — contextBlockIds', () => {
 
   it('accepts a task with no contextBlockIds (optional)', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       agentType: 'standard',
     });
     expect(result.success).toBe(true);
@@ -267,7 +268,7 @@ describe('delegate_tasks schema', () => {
 
   it('accepts a task with agentType', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       agentType: 'standard',
     });
     expect(result.success).toBe(true);
@@ -275,14 +276,14 @@ describe('delegate_tasks schema', () => {
 
   it('accepts a task with no agentType (auto-select)', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
     });
     expect(result.success).toBe(true);
   });
 
   it('accepts filePaths', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       filePaths: ['a.ts', 'b.ts'],
     });
     expect(result.success).toBe(true);
@@ -290,7 +291,7 @@ describe('delegate_tasks schema', () => {
 
   it('accepts done (acceptance criteria)', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       done: 'when tests pass',
     });
     expect(result.success).toBe(true);
@@ -298,7 +299,7 @@ describe('delegate_tasks schema', () => {
 
   it('accepts contextBlockIds', () => {
     const result = taskSchema.safeParse({
-      prompt: 'do thing',
+      prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
       contextBlockIds: ['ctx1', 'ctx2'],
     });
     expect(result.success).toBe(true);
@@ -381,7 +382,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
       {
         tasks: [
           {
-            prompt: 'do thing',
+            prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
           },
         ],
         ...(responseMode && { responseMode }),
@@ -499,7 +500,7 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
   it('summary mode result has correct shape', async () => {
     const server = buildMcpServer(sampleConfig());
     const payload = await dispatchOne(server, 'summary');
-    expect(payload.schemaVersion).toBe('1.0.0');
+    expect(payload.schemaVersion).toBe('2.1.0');
     const result = payload.results[0];
     expect(result.taskIndex).toBe(0);
     expect(result.outputLength).toBeDefined();
@@ -544,7 +545,7 @@ describe('get_batch_slice tool', () => {
     ]);
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
+      { tasks: [{ prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
@@ -571,7 +572,7 @@ describe('get_batch_slice tool', () => {
     const sliceTool = tools['get_batch_slice'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'do thing', agentType: 'standard' as const }] },
+      { tasks: [{ prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass', agentType: 'standard' as const }] },
       {},
     );
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
@@ -592,7 +593,7 @@ describe('get_batch_slice tool', () => {
     const batchIds: string[] = [];
     for (let i = 0; i < 100; i++) {
       const res = await delegateTool.handler(
-        { tasks: [{ prompt: `batch-${i}`, agentType: 'standard' as const }] },
+        { tasks: [{ prompt: `Implement batch feature ${i} with full coverage`, done: 'Tests pass', agentType: 'standard' as const }] },
         {},
       );
       batchIds.push(JSON.parse(res.content[0].text).batchId);
@@ -603,7 +604,7 @@ describe('get_batch_slice tool', () => {
 
     // Dispatch 1 more batch — this should evict the oldest-not-touched (batch[1])
     await delegateTool.handler(
-      { tasks: [{ prompt: 'new-batch', agentType: 'standard' as const }] },
+      { tasks: [{ prompt: 'Implement new batch feature with coverage', done: 'Tests pass', agentType: 'standard' as const }] },
       {},
     );
 
@@ -636,9 +637,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', agentType: 'standard' as const },
-          { prompt: 'task-1', agentType: 'standard' as const },
-          { prompt: 'task-2', agentType: 'standard' as const },
+          { prompt: 'Implement task zero with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+          { prompt: 'Implement task one with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+          { prompt: 'Implement task two with full coverage', done: 'Tests pass', agentType: 'standard' as const },
         ],
       },
       {},
@@ -667,9 +668,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'task-0', agentType: 'standard' as const },
-          { prompt: 'task-1', agentType: 'standard' as const },
-          { prompt: 'task-2', agentType: 'standard' as const },
+          { prompt: 'Implement task zero with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+          { prompt: 'Implement task one with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+          { prompt: 'Implement task two with full coverage', done: 'Tests pass', agentType: 'standard' as const },
         ],
       },
       {},
@@ -704,7 +705,7 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const retryTool = tools['retry_tasks'];
 
     const dispatchRes = await delegateTool.handler(
-      { tasks: [{ prompt: 'task-0', agentType: 'standard' as const }] },
+      { tasks: [{ prompt: 'Implement task zero with full coverage', done: 'Tests pass', agentType: 'standard' as const }] },
       {},
     );
     const batchId = JSON.parse(dispatchRes.content[0].text).batchId;
@@ -724,9 +725,9 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchRes = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't0', agentType: 'standard' as const },
-          { prompt: 't1', agentType: 'standard' as const },
-          { prompt: 't2', agentType: 'standard' as const },
+          { prompt: 'Implement feature zero with full coverage', done: 'Done', agentType: 'standard' as const },
+          { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const },
+          { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const },
         ],
       },
       {},
@@ -941,11 +942,13 @@ describe('delegate_tasks headline field (full mode)', () => {
       {
         tasks: [
           {
-            prompt: 't1',
+            prompt: 'Implement feature one with full coverage',
+            done: 'Tests pass',
             parentModel: 'claude-opus-4-6',
           },
           {
-            prompt: 't2',
+            prompt: 'Implement feature two with full coverage',
+            done: 'Tests pass',
             parentModel: 'claude-opus-4-6',
           },
         ],
@@ -1064,8 +1067,8 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const result = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 't1', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
-          { prompt: 't2', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+          { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+          { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
         ],
         ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
       },
@@ -1078,7 +1081,7 @@ describe('delegate_tasks summary mode — slim shape', () => {
     const payload = await dispatchRichBatch({ responseMode: 'summary' });
 
     expect(payload.mode).toBe('summary');
-    expect(payload.schemaVersion).toBe('1.0.0');
+    expect(payload.schemaVersion).toBe('2.1.0');
     expect(payload.results).toHaveLength(2);
 
     const task0 = payload.results[0];

@@ -105,7 +105,8 @@ describe('slim summary envelope size', () => {
     const result = await delegateTool.handler(
       {
         tasks: Array.from({ length: 11 }, (_, i) => ({
-          prompt: `task ${i}`,
+          prompt: `Implement task ${i} with standard configuration for the test suite`,
+          done: `Task ${i} completed successfully`,
           agentType: 'standard' as const,
           parentModel: 'claude-opus-4-6',
         })),
@@ -121,7 +122,7 @@ describe('slim summary envelope size', () => {
 
     const payload = JSON.parse(rawText);
     expect(payload.mode).toBe('summary');
-    expect(payload.schemaVersion).toBe('1.0.0');
+    expect(payload.schemaVersion).toBe('2.1.0');
     expect(payload.results).toHaveLength(11);
     expect(payload.headline).toContain('11 tasks');
 

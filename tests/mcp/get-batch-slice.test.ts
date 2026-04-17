@@ -110,8 +110,8 @@ async function callTool(server: any, toolName: string, input: unknown): Promise<
 async function dispatchFixtureBatch(server: any): Promise<string> {
   const response = await callTool(server, 'delegate_tasks', {
     tasks: [
-      { prompt: 't1', agentType: 'standard' as const },
-      { prompt: 't2', agentType: 'standard' as const },
+      { prompt: 'Implement feature one with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
+      { prompt: 'Implement feature two with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
     ],
   });
   return response.batchId;
@@ -190,8 +190,8 @@ describe('get_batch_slice tool', () => {
     const server = await makeServer();
     const dispatch = await callTool(server, 'delegate_tasks', {
       tasks: [
-        { prompt: 't1', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
-        { prompt: 't2', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+        { prompt: 'Implement feature one with full test coverage', done: 'Tests pass', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+        { prompt: 'Implement feature two with full test coverage', done: 'Tests pass', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
       ],
     });
 
@@ -241,8 +241,8 @@ describe('get_batch_slice tool', () => {
     const server = await makeServer();
     const dispatch = await callTool(server, 'delegate_tasks', {
       tasks: [
-        { prompt: 't1', agentType: 'standard' as const },
-        { prompt: 't2', agentType: 'standard' as const },
+        { prompt: 'Implement feature one with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
+        { prompt: 'Implement feature two with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
       ],
     });
 
