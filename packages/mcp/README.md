@@ -78,10 +78,10 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 | Tool | What it does |
 |---|---|
 | `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. The MCP interprets your request and infers missing details — if confused, it returns a proposed interpretation for confirmation. |
-| `audit_document` | Audit docs/files for issues — parallel per file |
-| `review_code` | Code review with spec + quality pipeline — parallel per file |
-| `verify_work` | Verify work against a checklist — parallel per file |
-| `debug_task` | Hypothesis-driven debugging with file context |
+| `audit_document` | Audit docs/files for issues — parallel per file. Accepts `contextBlockIds` for delta audits (round 2+). |
+| `review_code` | Code review with spec + quality pipeline — parallel per file. Accepts `contextBlockIds` for diff-scoped/delta reviews. |
+| `verify_work` | Verify work against a checklist — parallel per file. Accepts `contextBlockIds` for shared context. |
+| `debug_task` | Hypothesis-driven debugging with file context. Accepts `contextBlockIds` for shared context. |
 | `register_context_block` | Store reusable context for later tasks |
 | `retry_tasks` | Re-run specific tasks from a previous batch |
 | `get_batch_slice` | Fetch output or telemetry from a previous batch |
