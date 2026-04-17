@@ -173,8 +173,8 @@ describe('runCodex', () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
-    // Provide many short text outputs (degenerate) to exhaust MAX_DEGENERATE_RETRIES
-    const fragments = ['a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j'];
+    // Provide many short text outputs (degenerate) to exhaust MAX_DEGENERATE_RETRIES (3)
+    const fragments = ['a', 'b', 'c', 'd'];
     let fragIndex = 0;
     mockResponsesCreate.mockImplementation(() => {
       const frag = fragments[fragIndex++ % fragments.length];
@@ -196,7 +196,7 @@ describe('runCodex', () => {
     );
     expect(result.status).toBe('incomplete');
     expect(result.errorCode).toBe('degenerate_exhausted');
-    expect(result.turns).toBe(11);
+    expect(result.turns).toBe(4);
   });
 
   // ─── 7. ok with text output and usage on single-turn response ────────────────
@@ -473,18 +473,14 @@ describe('runCodex', () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
-    // Enough degenerate turns to exhaust MAX_DEGENERATE_RETRIES (10).
+    // Enough degenerate turns to exhaust MAX_DEGENERATE_RETRIES (3).
+    // Each fragment must trigger fragment detection: either ends with fragment
+    // punctuation (: , …) or contains a continuation phrase.
     const fragments = [
-      'exploring next',
-      'next i will',
-      'let me look',
-      'i should also',
-      'moving on',
-      'checking in',
-      'analyzing',
-      'continuing',
-      'progressing',
-      'final stretch',
+      'let me look at this:',
+      'next i will check:',
+      'let me read more,',
+      'i should also check:',
     ];
     for (const frag of fragments) {
       mockResponsesCreate.mockImplementationOnce(() => {

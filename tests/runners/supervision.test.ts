@@ -68,8 +68,13 @@ describe('validateCompletion — fragment ending detection', () => {
 });
 
 describe('validateCompletion — no terminator detection', () => {
-  it('detects short text with no terminal punctuation and no markdown', () => {
+  it('text >= 10 chars without terminal punctuation is now valid (auto-accepted by length)', () => {
     const result = validateCompletion('this is some text without a proper end');
+    expect(result.valid).toBe(true);
+  });
+
+  it('very short text (< 10 chars) without terminal punctuation is no_terminator', () => {
+    const result = validateCompletion('hmm okay');
     expect(result.valid).toBe(false);
     expect(result.kind).toBe('no_terminator');
   });
@@ -226,7 +231,7 @@ describe('buildRePrompt — fragment', () => {
 
 describe('buildRePrompt — no_terminator', () => {
   it('produces a re-prompt that nudges toward a complete answer', () => {
-    const result = validateCompletion('this is some text without a proper end');
+    const result = validateCompletion('hmm okay');
     const prompt = buildRePrompt(result);
     expect(prompt).toContain('mid-thought');
   });
@@ -447,13 +452,12 @@ describe('validateSubAgentOutput (coordinator)', () => {
     expect(result.kind).toBeUndefined();
   });
 
-  it('default (no opts) matches validateCompletion — no_terminator for short terminator-less output', () => {
+  it('default (no opts) matches validateCompletion — short terminator-less output is now valid (>= 10 chars)', () => {
     const text = 'verdict: pass';
     const coord = validateSubAgentOutput(text);
     const direct = validateCompletion(text);
     expect(coord).toEqual(direct);
-    expect(coord.valid).toBe(false);
-    expect(coord.kind).toBe('no_terminator');
+    expect(coord.valid).toBe(true);
   });
 
   it('default (no opts) matches validateCompletion — long prose is valid', () => {

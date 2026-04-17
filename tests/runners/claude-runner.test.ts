@@ -327,16 +327,18 @@ describe('runClaude', () => {
     // MAX_SUPERVISION_RETRIES (3) the loop bails and salvages from the
     // scratchpad. The salvage must return the LAST assistant text we saw,
     // proving the scratchpad was populated on every assistant message.
+    // Each result must trigger fragment detection (continuation phrase or
+    // fragment punctuation) so supervision treats them as degenerate.
     (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
       (async function* () {
         yield assistantMsg('turn one scratch text');
-        yield resultMsg({ result: 'Let me check' });
+        yield resultMsg({ result: 'let me check this:' });
         yield assistantMsg('turn two scratch text');
-        yield resultMsg({ result: 'still short' });
+        yield resultMsg({ result: 'next i will look:' });
         yield assistantMsg('turn three scratch text');
-        yield resultMsg({ result: 'also short' });
+        yield resultMsg({ result: 'let me read more,' });
         yield assistantMsg('turn four scratch text');
-        yield resultMsg({ result: 'also also short' });
+        yield resultMsg({ result: 'i should also check:' });
       })(),
     );
 

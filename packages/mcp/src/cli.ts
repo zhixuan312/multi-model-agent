@@ -43,7 +43,12 @@ import { registerConfirmClarifications } from './tools/confirm-clarifications.js
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
 
 export const SERVER_NAME = 'multi-model-agent';
+export const ASSISTANT_MODEL_NAME = 'GPT-5';
 const DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS = 65_536;
+
+export function buildCliGreeting(): string {
+  return `Hi! I'm ${ASSISTANT_MODEL_NAME}, your friendly multi-model agent assistant.`;
+}
 
 function parsePositiveInt(s: string | undefined): number | undefined {
   if (!s) return undefined;

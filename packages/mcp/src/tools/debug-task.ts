@@ -13,6 +13,10 @@ export const debugTaskSchema = z.object({
   context: z.string().optional().describe('Background'),
   hypothesis: z.string().optional().describe('Initial theory'),
   ...commonToolFields,
+}).extend({
+  filePaths: commonToolFields.filePaths.describe(
+    'Files the sub-agent should focus on. For debug_task, all provided files are investigated together in a single task.',
+  ),
 });
 
 export type DebugTaskParams = z.infer<typeof debugTaskSchema>;
@@ -34,6 +38,8 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
       const taskSpec: Partial<TaskSpec> = {
         agentType: 'complex',
         reviewPolicy: 'full',
+        briefQualityPolicy: 'off',
+        done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
         maxReviewRounds: 1,
         tools: config.defaults?.tools ?? 'full',
         timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,

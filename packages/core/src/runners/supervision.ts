@@ -97,7 +97,7 @@ export function validateCoverage(
   return { valid: true };
 }
 
-const DEFAULT_MIN_LENGTH = 200;
+const DEFAULT_MIN_LENGTH = 10;
 
 /** Tail window (chars) inspected by `endsWithContinuation` for continuation phrases. */
 const CONTINUATION_TAIL_WINDOW = 80;
@@ -156,11 +156,22 @@ function endsWithTerminalPunctuation(text: string): boolean {
   return TERMINAL_PUNCTUATION.includes(last);
 }
 
-// Detector order is most-specific-first: empty → thinking_only → long-enough →
-// markdown → fragment → no_terminator. Markdown precedes fragment so that
-// `Here:\n\`\`\`...\`\`\`` passes as a valid short response; fragment precedes
-// no_terminator because the fragment re-prompt (which quotes the continuation
-// phrase back at the model) is more actionable than the generic no-terminator one.
+// Detector order:
+//   empty → thinking_only → fragment (always, up to FRAGMENT_MAX_LENGTH) →
+//   long-enough → markdown → no_terminator.
+//
+// Fragment detection runs BEFORE the length auto-accept because "let me check..."
+// and "Here is what I found:" are real mid-work stalls regardless of length.
+// But we cap it at FRAGMENT_MAX_LENGTH so a 500-char response that happens to
+// contain "let me" deep inside isn't falsely rejected.
+//
+// The no_terminator check only fires for very short responses (< DEFAULT_MIN_LENGTH)
+// since it's low-value — most short complete answers end with punctuation naturally.
+
+/** Fragment detection applies to text under this length. Above it, continuation
+ *  phrases in the tail are likely part of a valid longer response. */
+const FRAGMENT_MAX_LENGTH = 120;
+
 export function validateCompletion(
   text: string,
   opts: ValidateCompletionOptions = {},
@@ -181,33 +192,36 @@ export function validateCompletion(
   const trimmed = text.trim();
   const tail = trimmed.slice(-CONTINUATION_TAIL_WINDOW);
 
+  // Fragment detection: catches real mid-work stalls ("let me check...",
+  // "Here is what I found:") regardless of length, up to FRAGMENT_MAX_LENGTH.
+  // Above that cap, continuation phrases are likely part of a valid response.
+  if (trimmed.length < FRAGMENT_MAX_LENGTH) {
+    if (endsWithFragmentPunctuation(trimmed) || endsWithContinuation(tail)) {
+      return {
+        valid: false,
+        kind: 'fragment',
+        reason: 'response ends like an exploration fragment',
+        tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
+      };
+    }
+  }
+
   // Long enough → trust the response.
   if (trimmed.length >= minLength) {
     return { valid: true };
   }
 
-  // Short responses are valid only if they look complete (terminal punctuation
-  // or markdown structure). Without that, they're either fragments or
-  // unterminated.
-  const hasMarkdown = hasMarkdownStructure(trimmed);
-  if (hasMarkdown) {
+  // Very short responses (< minLength, currently 10 chars): valid only with
+  // markdown structure or terminal punctuation.
+  if (hasMarkdownStructure(trimmed)) {
     return { valid: true };
-  }
-
-  if (endsWithFragmentPunctuation(trimmed) || endsWithContinuation(tail)) {
-    return {
-      valid: false,
-      kind: 'fragment',
-      reason: 'response is short and ends like an exploration fragment',
-      tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
-    };
   }
 
   if (!endsWithTerminalPunctuation(trimmed)) {
     return {
       valid: false,
       kind: 'no_terminator',
-      reason: 'response is short and has no terminal punctuation or markdown structure',
+      reason: 'response is very short and has no terminal punctuation or markdown structure',
       tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
     };
   }
@@ -394,8 +408,10 @@ export function logWatchdogEvent(
 export const COMPLETED_WORK_TOOLS = new Set(['writeFile', 'editFile', 'runShell']);
 
 /** Maximum consecutive degenerate outputs (empty/thinking-only) before giving up.
- *  Only counted when the worker has NO recent tool calls. Generous — time/cost are the real bounds. */
-export const MAX_DEGENERATE_RETRIES = 10;
+ *  Only counted when the worker has NO recent tool calls. Kept low: if the model
+ *  can't produce a valid answer in 3 tries, more retries just burn API round-trips
+ *  (each ~30-60s on codex). Time/cost are the real bounds. */
+export const MAX_DEGENERATE_RETRIES = 3;
 
 /** Number of consecutive turns with no new file interactions before injecting a stall warning. */
 export const STALL_DETECTION_TURNS = 5;

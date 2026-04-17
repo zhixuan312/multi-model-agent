@@ -20,6 +20,20 @@ export const reviewCodeSchema = z.object({
 
 export type ReviewCodeParams = z.infer<typeof reviewCodeSchema>;
 
+const REVIEW_DONE_CONDITIONS: Record<string, string> = {
+  security: 'Identify security vulnerabilities with severity, location, and remediation.',
+  performance: 'Identify performance issues with impact level, location, and fix recommendation.',
+  correctness: 'Identify logic errors, edge cases, and contract violations with severity and location.',
+  style: 'Identify style issues, naming inconsistencies, and dead code with location and fix.',
+};
+
+function resolveReviewDoneCondition(focus: string[] | undefined): string {
+  if (!focus || focus.length === 0) {
+    return 'Review code for correctness, security, performance, and style. Each finding has category, severity, location, and recommendation.';
+  }
+  return focus.map(f => REVIEW_DONE_CONDITIONS[f] ?? '').filter(Boolean).join(' ');
+}
+
 function buildReviewPrompt(
   code: string | undefined,
   filePaths: string[] | undefined,
@@ -48,6 +62,8 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig) 
       const baseTaskSpec: Partial<TaskSpec> = {
         agentType: 'complex',
         reviewPolicy: 'full',
+        briefQualityPolicy: 'off',
+        done: resolveReviewDoneCondition(params.focus),
         tools: config.defaults?.tools ?? 'full',
         timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
         maxCostUSD: config.defaults?.maxCostUSD ?? 10,

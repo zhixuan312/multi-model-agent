@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, computeTimings, computeBatchProgress, computeAggregateCost } from '../packages/mcp/src/cli.js';
+import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost } from '../packages/mcp/src/cli.js';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 // Mock runTasks so the `delegate_tasks` handler returns fast without
