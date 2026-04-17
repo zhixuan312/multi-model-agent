@@ -1,7 +1,9 @@
 import { z } from 'zod';
-import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { RunResult, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { ProgressEvent } from '@zhixuan92/multi-model-agent-core';
 import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { composeHeadline } from '../headline.js';
+import { computeTimings, computeBatchProgress, computeAggregateCost } from './batch-response.js';
 
 export const commonToolFields = {
   filePaths: z.array(z.string()).optional()
@@ -38,10 +40,16 @@ export function resolveDispatchMode(
   return 'single';
 }
 
-export function buildMetadataBlock(result: RunResult): { type: 'text'; text: string } {
+export function buildMetadataBlock(result: RunResult, parentModel?: string): { type: 'text'; text: string } {
+  const timings = computeTimings(result.durationMs ?? 0, [result]);
+  const batchProgress = computeBatchProgress([result]);
+  const aggregateCost = computeAggregateCost([result]);
+  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
+
   return {
     type: 'text' as const,
     text: JSON.stringify({
+      headline,
       status: result.status,
       terminationReason: result.terminationReason,
       specReviewStatus: result.specReviewStatus,
@@ -52,6 +60,7 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
         costUSD: result.usage.costUSD,
+        savedCostUSD: result.usage.savedCostUSD,
       },
       turns: result.turns,
       durationMs: result.durationMs,
@@ -64,6 +73,10 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
       models: result.models,
     }, null, 2),
   };
+}
+
+export function resolveParentModel(config: MultiModelConfig): string | undefined {
+  return process.env.PARENT_MODEL_NAME || config.defaults?.parentModel || undefined;
 }
 
 export function buildFilePathsPrompt(filePaths?: string[]): string {

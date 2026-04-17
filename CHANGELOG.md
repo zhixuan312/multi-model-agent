@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.2] - 2026-04-17
+
+### Fixed
+
+- **Headline with saved cost in specialized tools (mcp).** `audit_document`, `review_code`, `verify_work`, and `debug_task` were missing the headline and `savedCostUSD` in their single-task and fan-out responses. Only `delegate_tasks` included them. All response paths now compose a headline via `composeHeadline` and include `savedCostUSD` in usage metadata, matching the `delegate_tasks` behavior.
+
 ## [2.4.1] - 2026-04-17
 
 ### Added
@@ -347,7 +353,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.2...HEAD
+[2.4.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.1...mcp-v2.4.2
 [2.4.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...mcp-v2.4.1
 [2.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.3.0...mcp-v2.4.0
 [2.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.2.0...mcp-v2.3.0

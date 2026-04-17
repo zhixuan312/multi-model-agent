@@ -5,6 +5,7 @@ import type {
   BatchProgress,
   BatchAggregateCost,
 } from '@zhixuan92/multi-model-agent-core';
+import { composeHeadline } from '../headline.js';
 
 /**
  * Compute per-batch timing metrics.
@@ -65,16 +66,19 @@ export function buildFanOutResponse(
   results: RunResult[],
   tasks: TaskSpec[],
   wallClockMs: number,
+  parentModel?: string,
 ): { type: 'text'; text: string } {
   const timings = computeTimings(wallClockMs, results);
   const batchProgress = computeBatchProgress(results);
   const aggregateCost = computeAggregateCost(results);
+  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
 
   return {
     type: 'text' as const,
     text: JSON.stringify({
       schemaVersion: '1.0.0',
       mode: 'fan_out',
+      headline,
       timings,
       batchProgress,
       aggregateCost,

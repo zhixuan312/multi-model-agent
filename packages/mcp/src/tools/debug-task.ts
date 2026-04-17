@@ -7,6 +7,7 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildRunTasksOptions,
+  resolveParentModel,
 } from './shared.js';
 
 export const debugTaskSchema = z.object({
@@ -51,11 +52,12 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, c
         contextBlockIds: params.contextBlockIds,
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
+      const parentModel = resolveParentModel(config);
 
       try {
         const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };
+        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel)] };
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

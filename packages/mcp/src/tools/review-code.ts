@@ -10,6 +10,7 @@ import {
   buildFilePathsPrompt,
   buildPerFilePrompt,
   buildRunTasksOptions,
+  resolveParentModel,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -93,6 +94,7 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig, 
         contextBlockIds: params.contextBlockIds,
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
+      const parentModel = resolveParentModel(config);
 
       try {
         const mode = resolveDispatchMode(params.code, params.filePaths);
@@ -107,13 +109,13 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig, 
 
           const startMs = Date.now();
           const results = await runTasks(tasks, config, { ...runOptions, runtime });
-          return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs)] };
+          return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel)] };
         }
 
         const prompt = buildReviewPrompt(params.code, params.filePaths, params.focus, hasContextBlocks);
         const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };
+        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel)] };
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
