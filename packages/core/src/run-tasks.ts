@@ -18,6 +18,7 @@ import { evaluateReadiness } from './readiness/readiness.js';
 import { normalizeBrief } from './readiness/normalize-brief.js';
 import { runSpecReview } from './review/spec-reviewer.js';
 import { runQualityReview } from './review/quality-reviewer.js';
+import type { QualityReviewResult } from './review/quality-reviewer.js';
 import { aggregateResult } from './review/aggregate-result.js';
 import type { ParsedStructuredReport } from './reporting/structured-report.js';
 import { parseStructuredReport } from './reporting/structured-report.js';
@@ -194,6 +195,8 @@ async function executeReviewedLifecycle(
       workerStatus,
       specReviewStatus: 'skipped',
       qualityReviewStatus: 'skipped',
+      specReviewReason: 'skipped: worker reported ' + workerStatus,
+      qualityReviewReason: 'skipped: worker reported ' + workerStatus,
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
@@ -209,6 +212,8 @@ async function executeReviewedLifecycle(
       workerStatus,
       specReviewStatus: 'skipped',
       qualityReviewStatus: 'skipped',
+      specReviewReason: 'skipped: reviewPolicy is off',
+      qualityReviewReason: 'skipped: reviewPolicy is off',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
@@ -228,6 +233,8 @@ async function executeReviewedLifecycle(
       workerStatus,
       specReviewStatus: 'skipped',
       qualityReviewStatus: 'skipped',
+      specReviewReason: 'skipped: no review agent configured',
+      qualityReviewReason: 'skipped: no review agent configured',
       agents: {
         normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
@@ -309,7 +316,7 @@ async function executeReviewedLifecycle(
     }
   }
 
-  let qualityResult: { status: 'approved' | 'changes_required' | 'skipped' | 'error'; report?: import('./reporting/structured-report.js').ParsedStructuredReport; findings: string[] } = { status: 'skipped', report: undefined, findings: [] };
+  let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
   if (reviewPolicy === 'full') {
     qualityResult = await runQualityReview(
       otherProvider,
@@ -380,6 +387,8 @@ async function executeReviewedLifecycle(
     workerStatus,
     specReviewStatus: specStatus,
     qualityReviewStatus: qualityResult.status,
+    specReviewReason: specResult.errorReason,
+    qualityReviewReason: qualityResult.errorReason,
     structuredReport: aggregated,
     implementationReport: finalImplReport,
     specReviewReport: specReport,

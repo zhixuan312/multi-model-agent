@@ -42,6 +42,8 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
       terminationReason: result.terminationReason,
       specReviewStatus: result.specReviewStatus,
       qualityReviewStatus: result.qualityReviewStatus,
+      specReviewReason: result.specReviewReason,
+      qualityReviewReason: result.qualityReviewReason,
       usage: {
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
