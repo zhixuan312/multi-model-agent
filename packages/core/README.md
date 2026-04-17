@@ -48,7 +48,8 @@ for (const r of results) {
 | `./routing/resolve-agent` | `resolveAgent` — resolves agent type to provider |
 | `./routing/model-profiles` | Model cost/tier profiles |
 | `./provider` | `createProvider` factory |
-| `./run-tasks` | `runTasks` parallel dispatcher |
+| `./run-tasks` | `runTasks` parallel dispatcher, `RunTasksOptions` |
+| `./heartbeat` | `HeartbeatTimer` — periodic progress heartbeat emitter |
 | `./types` | All shared types |
 | `./intake/pipeline` | `runIntakePipeline` — compile → infer → classify → resolve |
 | `./intake/types` | `DraftTask`, `Source`, `IntakeResult`, `ClarificationEntry` |
