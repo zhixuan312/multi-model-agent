@@ -158,6 +158,36 @@ async function executeReviewedLifecycle(
     : true;
   const filePathsSkipped = !filePathsInteracted;
 
+  // Skip review entirely when the implementer produced no reviewable file artifacts.
+  // This avoids sending the reviewer an empty packet that always fails to parse.
+  if (implResult.filesWritten.length === 0) {
+    const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+    return {
+      ...implResult,
+      workerStatus,
+      specReviewStatus: 'not_applicable',
+      qualityReviewStatus: 'not_applicable',
+      specReviewReason: 'task produced no file artifacts to review',
+      qualityReviewReason: 'task produced no file artifacts to review',
+      implementationReport: effectiveImplReport,
+      structuredReport: {
+        summary: '[No artifacts] task produced no file artifacts to review',
+        filesChanged: effectiveImplReport.filesChanged,
+        normalizationDecisions: effectiveImplReport.normalizationDecisions,
+        validationsRun: effectiveImplReport.validationsRun,
+        deviationsFromBrief: effectiveImplReport.deviationsFromBrief,
+        unresolved: effectiveImplReport.unresolved,
+      },
+      filePathsSkipped,
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: 'not_applicable',
+        qualityReviewer: 'not_applicable',
+      },
+    };
+  }
+
   if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
     return {
       ...implResult,

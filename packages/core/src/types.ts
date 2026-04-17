@@ -240,20 +240,24 @@ export interface RunResult {
    *  to build terminationReason. NOT exposed in MCP responses — use terminationReason.workerSelfAssessment. */
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
   /** Spec review outcome. */
-  specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
+  specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
+  /** Why spec review returned its status. Present for 'error', 'skipped', and 'not_applicable'. */
+  specReviewReason?: string
   /** Internal: true when task.filePaths was specified but the worker never
    *  read or wrote any of them — a soft completion concern. */
   filePathsSkipped?: boolean
   /** Quality review outcome. */
-  qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error'
+  qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
+  /** Why quality review returned its status. Present for 'error', 'skipped', and 'not_applicable'. */
+  qualityReviewReason?: string
   /** Aggregated structured report from the reviewed execution loop. */
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   /** Which agent ran in each role. */
   agents?: {
     normalizer: 'standard' | 'complex' | 'skipped'
     implementer: 'standard' | 'complex' | 'not_run'
-    specReviewer: 'standard' | 'complex' | 'skipped'
-    qualityReviewer: 'standard' | 'complex' | 'skipped'
+    specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+    qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
   }
   /** The implementer's structured report. */
   implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
