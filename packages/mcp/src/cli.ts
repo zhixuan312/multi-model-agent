@@ -69,6 +69,7 @@ function buildFullResponse(
     timings: BatchTimings;
     batchProgress: BatchProgress;
     aggregateCost: BatchAggregateCost;
+    parentModel?: string;
   },
 ) {
   return {
@@ -79,7 +80,7 @@ function buildFullResponse(
       timings: aggregates.timings,
       batchProgress: aggregates.batchProgress,
       aggregateCost: aggregates.aggregateCost,
-      taskSpecs: tasks,
+      parentModel: aggregates.parentModel,
     }),
     timings: aggregates.timings,
     batchProgress: aggregates.batchProgress,
@@ -122,6 +123,7 @@ function buildSummaryResponse(
     timings: BatchTimings;
     batchProgress: BatchProgress;
     aggregateCost: BatchAggregateCost;
+    parentModel?: string;
   },
 ) {
   return {
@@ -132,7 +134,7 @@ function buildSummaryResponse(
       timings: opts.timings,
       batchProgress: opts.batchProgress,
       aggregateCost: opts.aggregateCost,
-      taskSpecs: tasks,
+      parentModel: opts.parentModel,
     }),
     ...(opts.autoEscaped && {
       note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_batch_slice({ batchId, slice: 'output', taskIndex }) to fetch individual task outputs, or get_batch_slice({ batchId, slice: 'detail', taskIndex }) for per-task metadata.`,
@@ -257,6 +259,10 @@ export function buildMcpServer(
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
   const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
 
+  // Resolve parentModel once: env var > config > undefined
+  const resolvedParentModel =
+    process.env.PARENT_MODEL_NAME || config.defaults.parentModel || undefined;
+
   function injectDefaults(tasks: TaskSpec[]): TaskSpec[] {
     return tasks.map(t => ({
       ...t,
@@ -268,6 +274,7 @@ export function buildMcpServer(
       cwd: process.cwd(),
       reviewPolicy: 'full',
       effort: undefined,
+      parentModel: resolvedParentModel,
     }));
   }
 
@@ -423,7 +430,7 @@ export function buildMcpServer(
 
       const baseResponse =
         effectiveMode === 'full'
-          ? buildFullResponse(batchId, responseTasks, results, { timings, batchProgress, aggregateCost })
+          ? buildFullResponse(batchId, responseTasks, results, { timings, batchProgress, aggregateCost, parentModel: resolvedParentModel })
           : buildSummaryResponse(batchId, responseTasks, results, {
               autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
               totalOutputChars,
@@ -431,6 +438,7 @@ export function buildMcpServer(
               timings,
               batchProgress,
               aggregateCost,
+              parentModel: resolvedParentModel,
             });
 
       // Merge intake fields into the response
@@ -571,7 +579,7 @@ export function buildMcpServer(
       const response =
         effectiveMode === 'full'
           ? {
-              ...buildFullResponse(retryBatchId, subset, results, { timings, batchProgress, aggregateCost }),
+              ...buildFullResponse(retryBatchId, subset, results, { timings, batchProgress, aggregateCost, parentModel: resolvedParentModel }),
               originalBatchId: batchId,
               originalIndices: taskIndices,
             }
@@ -583,6 +591,7 @@ export function buildMcpServer(
                 timings,
                 batchProgress,
                 aggregateCost,
+                parentModel: resolvedParentModel,
               }),
               originalBatchId: batchId,
               originalIndices: taskIndices,
@@ -694,7 +703,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
         timings,
         batchProgress,
         aggregateCost,
-        taskSpecs: batch.tasks,
+        parentModel: resolvedParentModel,
       });
 
       const envelope = {

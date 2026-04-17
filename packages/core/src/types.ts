@@ -164,6 +164,9 @@ export interface MultiModelConfig {
      *  (the default). Optional — defaults to 65_536 when absent.
      *  Env var and buildMcpServer option can override at higher precedence. */
     largeResponseThresholdChars?: number
+    /** Model name of the parent session (e.g. 'claude-opus-4-6'). When set,
+     *  each task's `savedCostUSD` is computed against this model's rates. */
+    parentModel?: string
   }
   clarifications?: {
     maxRoundsPerDraft?: number

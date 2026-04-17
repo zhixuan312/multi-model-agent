@@ -1105,14 +1105,18 @@ describe('delegate_tasks summary mode — slim shape', () => {
       },
     );
 
-    const server = buildMcpServer(sampleConfig());
+    const config: MultiModelConfig = {
+      ...sampleConfig(),
+      defaults: { ...sampleConfig().defaults, parentModel: 'claude-opus-4-6' },
+    };
+    const server = buildMcpServer(config);
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const delegateTool = (server as any)._registeredTools['delegate_tasks'];
     const result = await delegateTool.handler(
       {
         tasks: [
-          { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
-          { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
+          { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const },
+          { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const },
         ],
         ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
       },
