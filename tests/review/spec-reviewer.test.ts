@@ -43,9 +43,28 @@ describe('runSpecReview', () => {
     expect(r.findings.length).toBeGreaterThan(0);
   });
 
-  it('returns error on reviewer dispatch failure', async () => {
+  it('returns error with reason when reviewer dispatch fails', async () => {
     const p = mockProvider('timed out', 'timeout');
     const r = await runSpecReview(p, packet, implReport, {}, []);
     expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('review agent returned status: timeout');
+  });
+
+  it('returns error with reason when reviewer output has no structured summary', async () => {
+    const p = mockProvider('The implementation looks fine to me, approved.');
+    const r = await runSpecReview(p, packet, implReport, {}, []);
+    expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('reviewer output missing ## Summary section');
+  });
+
+  it('returns error with reason when reviewer throws', async () => {
+    const p: Provider = {
+      name: 'complex',
+      config: { type: 'claude', model: 'claude-opus-4-6' } as any,
+      run: vi.fn(async () => { throw new Error('connection refused'); }),
+    };
+    const r = await runSpecReview(p, packet, implReport, {}, []);
+    expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('review agent threw: connection refused');
   });
 });

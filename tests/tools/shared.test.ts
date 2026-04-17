@@ -133,5 +133,34 @@ describe('buildMetadataBlock', () => {
     expect(parsed.escalationLog).toEqual([]);
     expect(parsed).not.toHaveProperty('agents');
   });
+
+  it('serializes populated specReviewReason and qualityReviewReason', () => {
+    const r = {
+      output: 'test', status: 'ok' as const,
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+      turns: 3, durationMs: 5000,
+      filesRead: [], filesWritten: [], directoriesListed: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      workerStatus: 'done' as const,
+      specReviewStatus: 'error' as const,
+      specReviewReason: 'review agent threw: connection refused',
+      qualityReviewStatus: 'skipped' as const,
+      qualityReviewReason: 'no files written by implementer',
+      agents: {
+        normalizer: 'standard' as const,
+        implementer: 'standard' as const,
+        specReviewer: 'complex' as const,
+        qualityReviewer: 'skipped' as const,
+      },
+    } satisfies RunResult;
+    const block = buildMetadataBlock(r);
+    const parsed = JSON.parse(block.text);
+    expect(parsed.specReviewStatus).toBe('error');
+    expect(parsed.specReviewReason).toBe('review agent threw: connection refused');
+    expect(parsed.qualityReviewStatus).toBe('skipped');
+    expect(parsed.qualityReviewReason).toBe('no files written by implementer');
+  });
 });
 

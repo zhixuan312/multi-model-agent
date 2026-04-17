@@ -9,6 +9,7 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
+  buildRunTasksOptions,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -63,7 +64,8 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
     'audit_document',
     'Audit documents for issues. Accepts inline content or file paths (multiple files audit in parallel). Preset: complex agent, no review. Use delegate_tasks only for custom config.',
     auditDocumentSchema.shape,
-    async (params: AuditDocumentParams) => {
+    async (params: AuditDocumentParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra);
       const validation = validateInput(params.document, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };

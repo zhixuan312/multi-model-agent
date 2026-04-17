@@ -8,6 +8,7 @@ export interface QualityReviewResult {
   status: 'approved' | 'changes_required' | 'skipped' | 'error';
   report?: ParsedStructuredReport;
   findings: string[];
+  errorReason?: string;
 }
 
 export async function runQualityReview(
@@ -19,7 +20,7 @@ export async function runQualityReview(
   filesWritten: string[],
 ): Promise<QualityReviewResult> {
   if (filesWritten.length === 0) {
-    return { status: 'skipped', findings: [] };
+    return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 
   let result;
@@ -36,17 +37,17 @@ export async function runQualityReview(
       [reviewerProvider],
       { explicitlyPinned: true },
     );
-  } catch {
-    return { status: 'error', findings: [] };
+  } catch (err) {
+    return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   if (result.status !== 'ok') {
-    return { status: 'error', findings: [] };
+    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 
   const report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'error', findings: [] };
+    return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section' };
   }
 
   const summaryLower = report.summary.toLowerCase();

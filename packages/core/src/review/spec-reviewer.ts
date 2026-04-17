@@ -8,6 +8,7 @@ export interface SpecReviewResult {
   status: 'approved' | 'changes_required' | 'error';
   report?: ParsedStructuredReport;
   findings: string[];
+  errorReason?: string;
 }
 
 export async function runSpecReview(
@@ -33,17 +34,17 @@ export async function runSpecReview(
       [reviewerProvider],
       { explicitlyPinned: true },
     );
-  } catch {
-    return { status: 'error', findings: [] };
+  } catch (err) {
+    return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
   }
 
   if (result.status !== 'ok') {
-    return { status: 'error', findings: [] };
+    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 
   const report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'error', findings: [] };
+    return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section' };
   }
 
   const summaryLower = report.summary.toLowerCase();

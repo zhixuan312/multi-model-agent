@@ -63,6 +63,8 @@ describe('full reviewed lifecycle', () => {
     expect(results[0].workerStatus).toBe('done');
     expect(results[0].specReviewStatus).toBe('approved');
     expect(results[0].qualityReviewStatus).toBe('approved');
+    expect(results[0].specReviewReason).toBeUndefined();
+    expect(results[0].qualityReviewReason).toBeUndefined();
     expect(results[0].agents?.implementer).toBe('standard');
     expect(results[0].agents?.specReviewer).toBe('complex');
     expect(results[0].agents?.qualityReviewer).toBe('complex');
@@ -79,6 +81,8 @@ describe('full reviewed lifecycle', () => {
     );
     expect(results[0].specReviewStatus).toBe('skipped');
     expect(results[0].qualityReviewStatus).toBe('skipped');
+    expect(results[0].specReviewReason).toBe('skipped: reviewPolicy is off');
+    expect(results[0].qualityReviewReason).toBe('skipped: reviewPolicy is off');
   });
 
   it('reviewPolicy=spec_only skips quality review', async () => {

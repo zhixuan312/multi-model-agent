@@ -370,6 +370,51 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
     delete process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS;
   });
 
+  it('full-mode response includes specReviewReason and qualityReviewReason when populated', async () => {
+    stubRunTasks.mockResolvedValueOnce([
+      {
+        output: 'done',
+        status: 'ok' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        specReviewStatus: 'error' as const,
+        specReviewReason: 'review agent returned status: timeout',
+        qualityReviewStatus: 'skipped' as const,
+        qualityReviewReason: 'no files written by implementer',
+        agents: {
+          normalizer: 'standard' as const,
+          implementer: 'standard' as const,
+          specReviewer: 'complex' as const,
+          qualityReviewer: 'skipped' as const,
+        },
+      },
+    ]);
+
+    const server = buildMcpServer(sampleConfig());
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const delegateTool = tools['delegate_tasks'];
+    const res = await delegateTool.handler(
+      {
+        tasks: [{ prompt: 'Do the thing', done: 'Done', agentType: 'standard' as const }],
+        responseMode: 'full',
+      },
+      {},
+    );
+    const payload = JSON.parse(res.content[0].text);
+
+    expect(payload.mode).toBe('full');
+    expect(payload.results[0].specReviewStatus).toBe('error');
+    expect(payload.results[0].specReviewReason).toBe('review agent returned status: timeout');
+    expect(payload.results[0].qualityReviewStatus).toBe('skipped');
+    expect(payload.results[0].qualityReviewReason).toBe('no files written by implementer');
+  });
+
   // Helper to dispatch a single task and parse the response
   const dispatchOne = async (
     server: ReturnType<typeof buildMcpServer>,

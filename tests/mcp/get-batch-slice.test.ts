@@ -138,6 +138,52 @@ describe('get_batch_slice tool', () => {
     expect(r1.output).toBe('output for task 1');
   });
 
+  it('slice=detail returns specReviewReason and qualityReviewReason when present', async () => {
+    // Override the mock so the returned result has populated reasons
+    const { runTasks: orig } = await vi.importActual<typeof import('@zhixuan92/multi-model-agent-core/run-tasks')>(
+      '@zhixuan92/multi-model-agent-core/run-tasks',
+    );
+    const overridden = vi.fn(async (tasks: { prompt: string }[]) =>
+      tasks.map(() => ({
+        output: 'output',
+        status: 'ok' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: ['src/a.ts'],
+        directoriesListed: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        durationMs: 500,
+        specReviewStatus: 'error' as const,
+        specReviewReason: 'review agent threw: connection refused',
+        qualityReviewStatus: 'skipped' as const,
+        qualityReviewReason: 'no files written by implementer',
+        agents: {
+          normalizer: 'standard' as const,
+          implementer: 'standard' as const,
+          specReviewer: 'standard' as const,
+          qualityReviewer: 'skipped' as const,
+        },
+      })),
+    );
+
+    const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
+    const server = buildMcpServer(sampleConfig(), { _testRunTasksOverride: overridden });
+
+    // dispatch with the overridden stub
+    const response = await callTool(server, 'delegate_tasks', {
+      tasks: [{ prompt: 'Do the thing', done: 'Done', agentType: 'standard' as const }],
+    });
+    const batchId = response.batchId;
+
+    const detail = await callTool(server, 'get_batch_slice', { batchId, slice: 'detail', taskIndex: 0 });
+
+    expect(detail.specReviewReason).toBe('review agent threw: connection refused');
+    expect(detail.qualityReviewReason).toBe('no files written by implementer');
+  });
+
   it('slice=detail returns per-task detail with review statuses and agents', async () => {
     const server = await makeServer();
     const batchId = await dispatchFixtureBatch(server);
@@ -159,7 +205,9 @@ describe('get_batch_slice tool', () => {
     expect(detail.escalationLog[0].provider).toBe('mock');
     expect(detail.terminationReason?.workerSelfAssessment).toBe('done');
     expect(detail.specReviewStatus).toBe('approved');
+    expect(detail.specReviewReason).toBeUndefined();
     expect(detail.qualityReviewStatus).toBe('approved');
+    expect(detail.qualityReviewReason).toBeUndefined();
     expect(detail.agents).toEqual({
       normalizer: 'standard',
       implementer: 'standard',
