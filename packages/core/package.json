@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "2.3.0",
+  "version": "2.4.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -67,14 +67,6 @@
     "./readiness/readiness": {
       "types": "./dist/readiness/readiness.d.ts",
       "import": "./dist/readiness/readiness.js"
-    },
-    "./readiness/normalization-budget": {
-      "types": "./dist/readiness/normalization-budget.d.ts",
-      "import": "./dist/readiness/normalization-budget.js"
-    },
-    "./readiness/normalize-brief": {
-      "types": "./dist/readiness/normalize-brief.d.ts",
-      "import": "./dist/readiness/normalize-brief.js"
     },
     "./reporting/structured-report": {
       "types": "./dist/reporting/structured-report.d.ts",
