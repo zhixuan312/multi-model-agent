@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.0] - 2026-04-17
+
+### Added
+
+- **Delta audit mode (mcp).** `audit_document` automatically switches to delta mode when `contextBlockIds` is present — performs a full audit, verifies which prior findings were fixed, omits fixed findings from output, and ends with a fixed-findings summary.
+- **Delta review mode (mcp).** `review_code` automatically switches to delta mode when `contextBlockIds` is present — same pattern as delta audit.
+- **Context blocks in specialized tools (mcp).** All four preset tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) now accept `contextBlockIds` directly, with the context block store threaded from the MCP server. No need to drop to `delegate_tasks` for context-aware workflows.
+- **Model name in response (core, mcp).** New `models` field on `RunResult` with actual model names (e.g. `"MiniMax-M2.7"`) for `implementer`, `specReviewer`, `qualityReviewer`. Surfaced in full response, summary detail slice, fan-out response, and preset metadata blocks.
+
+### Changed
+
+- **Heartbeat elapsed format (core).** `elapsedMs: number` replaced with `elapsed: string` — human-readable format (`"50s"`, `"1m 30s"`) with 0 decimal places.
+- **Default `briefQualityPolicy` changed from `'normalize'` to `'warn'` (core).** The `'normalize'` policy value is removed entirely since the normalizer was dead code.
+
+### Removed
+
+- **Normalizer (core).** Deleted `normalize-brief.ts`, `normalization-budget.ts`, and all threading: `normResult` parameter, `normalizationDecisions` field from structured reports, `normalizedPrompt` renamed to `prompt` in reviewer packets, `agents.normalizer` removed from response, `'normalize'` removed from `BriefQualityPolicy` and `ReadinessResult.action`.
+
 ## [2.3.0] - 2026-04-17
 
 ### Added
@@ -317,7 +335,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.3.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...HEAD
+[2.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.3.0...mcp-v2.4.0
 [2.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.2.0...mcp-v2.3.0
 [2.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.1...mcp-v2.2.0
 [2.1.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.0...mcp-v2.1.1
