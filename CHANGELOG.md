@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.1] - 2026-04-17
+
+### Added
+
+- **Saved-cost headline (mcp).** When `parentModel` is set in config defaults, the headline shows `$Y saved vs model (Zx ROI)` instead of `$X actual`. Without `parentModel`, the headline shows `$X actual` as before. `parentModel` is a single server-level config field (env var `PARENT_MODEL_NAME` or `defaults.parentModel`), not per-task.
+- **12-provider model profiles (core).** Expanded from 5 flat entries to 30 profiles across Anthropic, OpenAI, Google, xAI, Mistral, DeepSeek, Meta, Alibaba, Zhipu, Moonshot, Cohere, and MiniMax. Hierarchical prefix matching with inheritance — child profiles only override what changes from their parent.
+
+### Changed
+
+- **Model profiles JSON redesigned (core).** Restructured from flat array to provider groups with shared defaults, prefix inheritance, short field names (`input`/`output`/`cost`), and a `naming` field documenting each provider's model ID convention. The loader resolves inheritance at startup and validates every resolved profile against the existing Zod schema.
+- **Headline simplified to one parent model (mcp).** Removed per-task `parentModel` and mixed-baselines logic. The headline now derives `parentModel` from server config, not from individual task specs.
+
 ## [2.4.0] - 2026-04-17
 
 ### Added
@@ -335,7 +347,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.1...HEAD
+[2.4.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...mcp-v2.4.1
 [2.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.3.0...mcp-v2.4.0
 [2.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.2.0...mcp-v2.3.0
 [2.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.1...mcp-v2.2.0
