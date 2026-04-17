@@ -53,6 +53,7 @@ export { createProvider } from './provider.js';
 
 // Run tasks
 export { runTasks } from './run-tasks.js';
+export type { RunTasksOptions } from './run-tasks.js';
 
 // Readiness
 export {

@@ -722,8 +722,8 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     server,
     config,
     clarificationStore,
-    runTasksImpl as unknown as (tasks: unknown[], config: MultiModelConfig, options: unknown) => Promise<unknown[]>,
-    rememberBatch as (tasks: unknown[]) => string,
+    runTasksImpl,
+    rememberBatch,
   );
 
   return server;
