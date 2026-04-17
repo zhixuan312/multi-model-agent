@@ -13,7 +13,7 @@ export interface SpecReviewResult {
 
 export async function runSpecReview(
   reviewerProvider: Provider,
-  packet: { normalizedPrompt: string; scope: string[]; doneCondition: string },
+  packet: { prompt: string; scope: string[]; doneCondition: string },
   implReport: ParsedStructuredReport,
   fileContents: Record<string, string>,
   toolCallLog: string[],

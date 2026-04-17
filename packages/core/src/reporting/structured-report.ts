@@ -5,9 +5,6 @@ One-line summary of what was done.
 ## Files changed
 List of files modified, added, or deleted.
 
-## Normalization decisions
-Any brief normalization decisions made during execution.
-
 ## Validations run
 Checks performed to verify correctness (e.g., "tsc passes", "tests pass").
 
@@ -26,7 +23,6 @@ export interface FileChange {
 export interface ParsedStructuredReport {
   summary: string | null;
   filesChanged: FileChange[];
-  normalizationDecisions: string[][];
   validationsRun: Array<{ command: string; result: string }>;
   deviationsFromBrief: string[];
   unresolved: string[];
@@ -37,7 +33,6 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
     return {
       summary: null,
       filesChanged: [],
-      normalizationDecisions: [],
       validationsRun: [],
       deviationsFromBrief: [],
       unresolved: [],
@@ -49,7 +44,6 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
   return {
     summary: sections['summary']?.[0] ?? null,
     filesChanged: parseFilesChanged(sections['files changed']),
-    normalizationDecisions: parseNormalizationDecisions(sections['normalization decisions']),
     validationsRun: parseValidationsRun(sections['validations run']),
     deviationsFromBrief: sections['deviations from brief'] ?? [],
     unresolved: sections['unresolved'] ?? [],
@@ -78,13 +72,6 @@ function extractSections(output: string): Record<string, string[]> {
   return sections;
 }
 
-function parseListSection(lines: string[] | undefined): string[] {
-  if (!lines) return [];
-  return lines
-    .map(l => l.replace(/^[-*]\s*/, '').trim())
-    .filter(l => l && !l.startsWith('#'));
-}
-
 function parseFilesChanged(lines: string[] | undefined): FileChange[] {
   if (!lines) return [];
   return lines
@@ -109,10 +96,3 @@ function parseValidationsRun(lines: string[] | undefined): Array<{ command: stri
     });
 }
 
-function parseNormalizationDecisions(lines: string[] | undefined): string[][] {
-  if (!lines) return [];
-  return lines
-    .map(l => l.replace(/^[-*]\s*/, '').trim())
-    .filter(l => l.includes('→'))
-    .map(l => [l]);
-}

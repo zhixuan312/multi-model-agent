@@ -16,14 +16,12 @@ import { HeartbeatTimer } from './heartbeat.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';
-import { normalizeBrief } from './readiness/normalize-brief.js';
 import { runSpecReview } from './review/spec-reviewer.js';
 import { runQualityReview } from './review/quality-reviewer.js';
 import type { QualityReviewResult } from './review/quality-reviewer.js';
 import { aggregateResult } from './review/aggregate-result.js';
 import type { ParsedStructuredReport } from './reporting/structured-report.js';
 import { parseStructuredReport } from './reporting/structured-report.js';
-import type { NormalizationResult } from './readiness/normalize-brief.js';
 import fs from 'fs/promises';
 
 export type RunTasksProgressCallback = (
@@ -114,7 +112,6 @@ function buildFallbackImplReport(result: RunResult): ParsedStructuredReport {
   return {
     summary: result.output.substring(0, 200),
     filesChanged: result.filesWritten.map(f => ({ path: f, summary: 'updated' })),
-    normalizationDecisions: [],
     validationsRun: [],
     deviationsFromBrief: [],
     unresolved: [],
@@ -125,7 +122,6 @@ async function executeReviewedLifecycle(
   task: TaskSpec,
   resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
   config: MultiModelConfig,
-  normResult: NormalizationResult | undefined,
   onProgress?: (event: ProgressEvent) => void,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
@@ -142,6 +138,8 @@ async function executeReviewedLifecycle(
     ? new HeartbeatTimer(onProgress)
     : undefined;
   heartbeat?.start('implementing');
+
+  const implModel = resolved.provider.config.model;
 
   const wrappedOnProgress = onProgress
     ? (event: ProgressEvent) => {
@@ -188,17 +186,20 @@ async function executeReviewedLifecycle(
         structuredReport: {
           summary: '[No artifacts] task produced no file artifacts to review',
           filesChanged: effectiveImplReport.filesChanged,
-          normalizationDecisions: effectiveImplReport.normalizationDecisions,
           validationsRun: effectiveImplReport.validationsRun,
           deviationsFromBrief: effectiveImplReport.deviationsFromBrief,
           unresolved: effectiveImplReport.unresolved,
         },
         filePathsSkipped,
         agents: {
-          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
           implementer: resolved.slot,
           specReviewer: 'not_applicable',
           qualityReviewer: 'not_applicable',
+        },
+        models: {
+          implementer: implModel,
+          specReviewer: null,
+          qualityReviewer: null,
         },
       };
     }
@@ -212,10 +213,14 @@ async function executeReviewedLifecycle(
         specReviewReason: 'skipped: worker reported ' + workerStatus,
         qualityReviewReason: 'skipped: worker reported ' + workerStatus,
         agents: {
-          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
           implementer: resolved.slot,
           specReviewer: 'skipped',
           qualityReviewer: 'skipped',
+        },
+        models: {
+          implementer: implModel,
+          specReviewer: null,
+          qualityReviewer: null,
         },
       };
     }
@@ -229,10 +234,14 @@ async function executeReviewedLifecycle(
         specReviewReason: 'skipped: reviewPolicy is off',
         qualityReviewReason: 'skipped: reviewPolicy is off',
         agents: {
-          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
           implementer: resolved.slot,
           specReviewer: 'skipped',
           qualityReviewer: 'skipped',
+        },
+        models: {
+          implementer: implModel,
+          specReviewer: null,
+          qualityReviewer: null,
         },
         implementationReport: implReport,
       };
@@ -250,17 +259,23 @@ async function executeReviewedLifecycle(
         specReviewReason: 'skipped: no review agent configured',
         qualityReviewReason: 'skipped: no review agent configured',
         agents: {
-          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
           implementer: resolved.slot,
           specReviewer: 'skipped',
           qualityReviewer: 'skipped',
         },
+        models: {
+          implementer: implModel,
+          specReviewer: null,
+          qualityReviewer: null,
+        },
       };
     }
 
+    const reviewModel = otherProvider.config.model;
+
     const packet = {
-      normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
-      scope: normResult?.writeSet ?? [],
+      prompt: task.prompt,
+      scope: task.filePaths ?? [],
       doneCondition: task.done ?? 'tsc passes',
     };
 
@@ -411,10 +426,14 @@ async function executeReviewedLifecycle(
       qualityReviewReport: qualityResult.report,
       filePathsSkipped,
       agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
         implementer: resolved.slot,
         specReviewer: otherSlot,
         qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
+      },
+      models: {
+        implementer: implModel,
+        specReviewer: reviewModel,
+        qualityReviewer: reviewPolicy === 'full' ? reviewModel : null,
       },
     };
   } finally {
@@ -443,7 +462,7 @@ export async function runTasks(
     if (task.briefQualityPolicy === 'off') {
       return { action: 'ignored' as const, missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
     }
-    return evaluateReadiness(task, task.briefQualityPolicy ?? 'normalize');
+    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
   });
 
   const refusedResults = expandedTasks.map((entry, idx) => {
@@ -469,32 +488,7 @@ export async function runTasks(
     return undefined;
   });
 
-  const normalizationResults = await Promise.all(
-    expandedTasks.map(async (entry) => {
-      if ('error' in entry) return undefined;
-      const normResult = {
-        normalizedPrompt: (entry as TaskSpec).prompt,
-        decisions: [],
-        writeSet: (entry as TaskSpec).filePaths ?? [],
-        verificationPlan: [],
-        unresolved: [],
-        spentCostUSD: 0,
-        skipped: true,
-      };
-      return normResult;
-    }),
-  );
-
-  const effectiveTasks: (TaskSpec | { error: string })[] = expandedTasks.map((entry, idx) => {
-    if ('error' in entry) return entry;
-    const norm = normalizationResults[idx];
-    if (norm && !norm.skipped) {
-      return { ...(entry as TaskSpec), prompt: norm.normalizedPrompt };
-    }
-    return entry;
-  });
-
-  const resolved: ResolvedTask[] = effectiveTasks.map((entry, idx): ResolvedTask => {
+  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
     if ('error' in entry) {
       return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
     }
@@ -553,13 +547,12 @@ export async function runTasks(
       if (refused) {
         return Promise.resolve(refused);
       }
-      const normResult = normalizationResults[index];
       const taskProgress = options.onProgress
         ? (event: ProgressEvent) => options.onProgress!(index, event)
         : undefined;
 
       const readiness = readinessResults[index];
-      return executeReviewedLifecycle(r.task, r.resolved, config, normResult, taskProgress).then(
+      return executeReviewedLifecycle(r.task, r.resolved, config, taskProgress).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };

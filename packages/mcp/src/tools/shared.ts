@@ -6,6 +6,8 @@ import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-task
 export const commonToolFields = {
   filePaths: z.array(z.string()).optional()
     .describe('Files the sub-agent should focus on. Multiple files are processed in parallel.'),
+  contextBlockIds: z.array(z.string()).optional()
+    .describe('IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.'),
 };
 
 function hasContent(value: string | undefined): boolean {
@@ -59,6 +61,7 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
       toolCalls: result.toolCalls,
       escalationLog: result.escalationLog,
       agents: result.agents,
+      models: result.models,
     }, null, 2),
   };
 }

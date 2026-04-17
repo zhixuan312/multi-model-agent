@@ -1,7 +1,7 @@
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 
 interface ReviewerPacketInput {
-  normalizedPrompt: string;
+  prompt: string;
   scope: string[];
   doneCondition: string;
 }
@@ -16,7 +16,7 @@ export function buildSpecReviewPrompt(
     'You are a spec compliance reviewer. Check whether the implementer satisfied the task exactly.',
     '',
     '## Execution Packet (what was asked)',
-    packet.normalizedPrompt,
+    packet.prompt,
     `Scope: ${packet.scope.join(', ')}`,
     `Done condition: ${packet.doneCondition}`,
     '',
@@ -52,7 +52,7 @@ export function buildQualityReviewPrompt(
     'You are a code quality reviewer. Check whether the implementation is sound, safe, and maintainable.',
     '',
     '## Execution Packet',
-    packet.normalizedPrompt,
+    packet.prompt,
     '',
     '## Implementer Structured Report',
     `Summary: ${implReport.summary ?? 'N/A'}`,

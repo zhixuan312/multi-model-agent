@@ -5,7 +5,6 @@ import type { ParsedStructuredReport } from '@zhixuan92/multi-model-agent-core';
 const implReport: ParsedStructuredReport = {
   summary: 'Swapped auth to JWT.',
   filesChanged: [{ path: 'src/auth.ts', summary: 'JWT impl' }],
-  normalizationDecisions: [['Resolved users.ts pattern']],
   validationsRun: [{ command: 'tsc', result: 'passed' }],
   deviationsFromBrief: [],
   unresolved: [],
@@ -14,7 +13,6 @@ const implReport: ParsedStructuredReport = {
 const specReport: ParsedStructuredReport = {
   summary: 'approved',
   filesChanged: [],
-  normalizationDecisions: [],
   validationsRun: [{ command: 'scope check', result: 'passed' }],
   deviationsFromBrief: [],
   unresolved: [],
@@ -23,7 +21,6 @@ const specReport: ParsedStructuredReport = {
 const qualityReport: ParsedStructuredReport = {
   summary: 'approved',
   filesChanged: [],
-  normalizationDecisions: [],
   validationsRun: [{ command: 'null safety check', result: 'passed' }],
   deviationsFromBrief: [],
   unresolved: [],
@@ -36,7 +33,6 @@ describe('aggregateResult', () => {
     expect(r.summary).toContain('Swapped auth to JWT');
     expect(r.filesChanged).toHaveLength(1);
     expect(r.validationsRun).toHaveLength(3);
-    expect(r.normalizationDecisions).toHaveLength(1);
   });
 
   it('prefixes with [Spec review exhausted] when spec exhausted', () => {

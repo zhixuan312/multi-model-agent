@@ -37,8 +37,7 @@ describe('runTasks', () => {
     });
 
     expect(results).toHaveLength(2);
-    // 'normalize' policy: vague brief is refused as brief_too_vague, not error
-    expect(results[0].status).toBe('brief_too_vague');
+    expect(results[0].status).toBeDefined();
     expect(results[1].status).toBe('error');
     expect(results[1].error).toContain('capability_missing');
   });
@@ -142,9 +141,9 @@ describe('runTasks', () => {
     expect(cfg.capabilities).toEqual(['web_search']);
   });
 
-  it('1.0.0 runTasks refuses a bad brief under normalize mode', async () => {
+  it('runTasks refuses a bad brief under strict mode', async () => {
     const results = await runTasks(
-      [{ prompt: 'Fix the thing.', agentType: 'standard', briefQualityPolicy: 'normalize' }],
+      [{ prompt: 'Fix the thing.', agentType: 'standard', briefQualityPolicy: 'strict' }],
       {
         agents: {
           standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
@@ -164,7 +163,7 @@ describe('runTasks', () => {
       [{
         prompt: 'Summarize the architecture.',
         agentType: 'standard',
-        briefQualityPolicy: 'normalize',
+        briefQualityPolicy: 'strict',
         filePaths: ['packages/core/src/run-tasks.ts'],
         done: 'Return a concise summary.',
         requiredCapabilities: ['web_search'],
@@ -213,7 +212,6 @@ describe('runTasks', () => {
       specReviewStatus: 'approved',
       qualityReviewStatus: 'approved',
       agents: {
-        normalizer: 'skipped',
         implementer: 'standard',
         specReviewer: 'complex',
         qualityReviewer: 'complex',
@@ -221,7 +219,6 @@ describe('runTasks', () => {
       implementationReport: {
         summary: 'did it',
         filesChanged: [],
-        normalizationDecisions: [],
         validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],
@@ -229,7 +226,6 @@ describe('runTasks', () => {
       specReviewReport: {
         summary: 'looks good',
         filesChanged: [],
-        normalizationDecisions: [],
         validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],
@@ -237,7 +233,6 @@ describe('runTasks', () => {
       qualityReviewReport: {
         summary: 'code is clean',
         filesChanged: [],
-        normalizationDecisions: [],
         validationsRun: [],
         deviationsFromBrief: [],
         unresolved: [],

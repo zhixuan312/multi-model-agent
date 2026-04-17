@@ -47,7 +47,6 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
           specReviewStatus: 'approved' as const,
           qualityReviewStatus: 'approved' as const,
           agents: {
-            normalizer: 'standard' as const,
             implementer: 'standard' as const,
             specReviewer: 'standard' as const,
             qualityReviewer: 'standard' as const,
@@ -161,7 +160,6 @@ describe('get_batch_slice tool', () => {
         qualityReviewStatus: 'skipped' as const,
         qualityReviewReason: 'no files written by implementer',
         agents: {
-          normalizer: 'standard' as const,
           implementer: 'standard' as const,
           specReviewer: 'standard' as const,
           qualityReviewer: 'skipped' as const,
@@ -209,7 +207,6 @@ describe('get_batch_slice tool', () => {
     expect(detail.qualityReviewStatus).toBe('approved');
     expect(detail.qualityReviewReason).toBeUndefined();
     expect(detail.agents).toEqual({
-      normalizer: 'standard',
       implementer: 'standard',
       specReviewer: 'standard',
       qualityReviewer: 'standard',

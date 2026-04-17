@@ -48,12 +48,26 @@ Escalation, statuses, streaming, and batch helpers:
   Use 'retry_tasks' with that batchId + a list of 0-based task
   indices to re-run just the failing subset without re-transmitting
   the original briefs. Cache is 30-minute TTL, 100-batch LRU.
-- Long shared context: 'register_context_block' stores a blob of
-  text on the server and returns an id. Pass that id in
-  'contextBlockIds' on any task (alongside 'prompt') and the server
-  prepends the blob to the prompt before dispatch — so long briefs
-  shared across multiple tasks are sent to the parent session only
-  once.
+- Context blocks (register_context_block + contextBlockIds):
+  'register_context_block' stores text on the server and returns an id.
+  Pass that id in 'contextBlockIds' on any delegate_tasks task and the
+  server prepends the content to the prompt before dispatch.
+
+  Common patterns:
+  • Delta audit: Register the prior audit report as a context block.
+    In the prompt, instruct: "Only report NEW findings not in the
+    prior report, findings NOT fixed, and confirm which were fixed."
+    This avoids a full re-audit and cuts cost in half on rounds 2+.
+  • Diff-scoped review: Register the git diff as a context block.
+    In the prompt, instruct: "Review only the changes in the diff,
+    not the entire file." This focuses the reviewer on what changed.
+  • Shared spec across tasks: Register a spec/plan once, reference
+    it from multiple parallel tasks that all need the same context.
+    3 tasks × 25K tokens = 75K transmitted; with a context block,
+    25K stored once + 3 × reference ≈ 25K total.
+  • Multi-round verification: Register a checklist of findings, then
+    dispatch a verify_work-style task via delegate_tasks to check
+    each finding was addressed — cheaper than a full re-audit.
 
 RESPONSE SHAPE (v1.0+): Every delegate_tasks response includes a top-level
 batchId, mode ('full' or 'summary'), timings ({wallClockMs, sumOfTaskMs,

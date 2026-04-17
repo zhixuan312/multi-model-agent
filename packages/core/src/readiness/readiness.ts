@@ -97,7 +97,7 @@ export function detectReasonableLength(prompt: string): boolean {
 }
 
 export function evaluateReadiness(task: TaskSpec, mode?: BriefQualityPolicy): ReadinessResult {
-  const policy = mode ?? task.briefQualityPolicy ?? 'normalize';
+  const policy = mode ?? task.briefQualityPolicy ?? 'warn';
   
   if (policy === 'off') {
     return { action: 'ignored', missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
@@ -128,12 +128,8 @@ export function evaluateReadiness(task: TaskSpec, mode?: BriefQualityPolicy): Re
   if (task.prompt.length > 500) briefQualityWarnings.push('huge_brief');
 
   let action: ReadinessResult['action'] = 'warn';
-  
-  if (policy === 'normalize') {
-    if (missingPillars.length > 0) action = 'refuse';
-    else if (layer2Warnings.length > 0) action = 'normalize';
-    else action = 'warn';
-  } else if (policy === 'strict') {
+
+  if (policy === 'strict') {
     if (missingPillars.length > 0) action = 'refuse';
     else action = 'warn';
   } else if (policy === 'warn') {

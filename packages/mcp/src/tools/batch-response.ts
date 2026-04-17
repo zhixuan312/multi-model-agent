@@ -94,6 +94,7 @@ export function buildFanOutResponse(
         specReviewStatus: r.specReviewStatus,
         qualityReviewStatus: r.qualityReviewStatus,
         agents: r.agents,
+        models: r.models,
         ...(r.error && { error: r.error }),
       })),
     }, null, 2),

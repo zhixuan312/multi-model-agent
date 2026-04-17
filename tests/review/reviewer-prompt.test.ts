@@ -3,7 +3,7 @@ import { buildSpecReviewPrompt, buildQualityReviewPrompt } from '@zhixuan92/mult
 import type { ParsedStructuredReport } from '@zhixuan92/multi-model-agent-core';
 
 const packet = {
-  normalizedPrompt: 'Update auth to use JWT. Done when tsc passes.',
+  prompt: 'Update auth to use JWT. Done when tsc passes.',
   scope: ['src/auth/middleware.ts'],
   doneCondition: 'tsc passes',
 };
@@ -11,7 +11,6 @@ const packet = {
 const implReport: ParsedStructuredReport = {
   summary: 'Swapped cookies for JWT.',
   filesChanged: [{ path: 'src/auth/middleware.ts', summary: 'JWT implementation' }],
-  normalizationDecisions: [],
   validationsRun: [{ command: 'tsc', result: 'passed' }],
   deviationsFromBrief: [],
   unresolved: [],

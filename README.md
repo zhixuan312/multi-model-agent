@@ -156,10 +156,10 @@ The intake pipeline interprets your request, infers missing details, and either 
 
 | Tool | Workflow match | Preset |
 |---|---|---|
-| `audit_document` | Spec auditing after brainstorming/planning | Complex agent, no review pipeline. Parallel file audit. |
-| `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. |
-| `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. |
-| `debug_task` | Systematic debugging | Complex agent, full spec + quality review. Hypothesis-driven investigation. |
+| `audit_document` | Spec auditing after brainstorming/planning | Complex agent, no review pipeline. Parallel file audit. Accepts `contextBlockIds` for delta mode (round 2+). |
+| `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. Accepts `contextBlockIds` for diff-scoped/delta mode. |
+| `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. Accepts `contextBlockIds` for shared context. |
+| `debug_task` | Systematic debugging | Complex agent, full spec + quality review. Hypothesis-driven investigation. Accepts `contextBlockIds` for shared context. |
 
 Not using superpowers? These tools work standalone — they're just opinionated defaults over `delegate_tasks` for common patterns.
 
@@ -201,7 +201,7 @@ Auth:
 
 Pin a version for reproducibility:
 ```bash
-npx -y @zhixuan92/multi-model-agent-mcp@2.1.0 serve
+npx -y @zhixuan92/multi-model-agent-mcp@2.4.0 serve
 ```
 
 </details>
