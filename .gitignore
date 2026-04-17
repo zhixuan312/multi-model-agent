@@ -16,3 +16,4 @@ coverage/
 .idea/
 *.swp
 *.swo
+.worktrees/
