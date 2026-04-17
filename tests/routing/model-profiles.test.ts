@@ -33,8 +33,8 @@ describe('findModelProfile', () => {
     const profile = findModelProfile('gpt-5-codex');
     expect(profile.inputCostPerMTok).toBe(2.5);
     expect(profile.outputCostPerMTok).toBe(15);
-    expect(profile.rateSource).toBe('https://openai.com/api/pricing/');
-    expect(profile.rateLookupDate).toBe('2026-04-11');
+    expect(profile.rateSource).toBe('https://developers.openai.com/api/docs/pricing');
+    expect(profile.rateLookupDate).toBe('2026-04-17');
   });
 
   it('exposes pricing metadata for MiniMax-M2 family profiles', () => {
@@ -42,7 +42,7 @@ describe('findModelProfile', () => {
     expect(profile.inputCostPerMTok).toBe(0.3);
     expect(profile.outputCostPerMTok).toBe(1.2);
     expect(profile.rateSource).toBe('https://platform.minimax.io/docs/guides/pricing-paygo');
-    expect(profile.rateLookupDate).toBe('2026-04-11');
+    expect(profile.rateLookupDate).toBe('2026-04-17');
   });
 
   it('matches claude-haiku family by prefix', () => {
@@ -59,7 +59,7 @@ describe('findModelProfile', () => {
   });
 
   it('falls back to default profile for unknown models', () => {
-    const profile = findModelProfile('llama-3-70b');
+    const profile = findModelProfile('totally-unknown-model-xyz');
     expect(profile.tier).toBe('standard');
     expect(profile.defaultCost).toBe('medium');
     expect(profile.bestFor).toMatch(/unprofiled/);
@@ -101,7 +101,7 @@ describe('findModelProfile', () => {
     });
 
     it('falls back to 100_000 for unprofiled models (conservative default)', () => {
-      expect(findModelProfile('llama-3-70b').inputTokenSoftLimit).toBe(100_000);
+      expect(findModelProfile('totally-unknown-model-xyz').inputTokenSoftLimit).toBe(100_000);
     });
 
     it('uses the claude-haiku family profile when present', () => {
@@ -194,8 +194,11 @@ describe('findModelProfile', () => {
     it('falls back to default for non-canonical forms that lack the family prefix', () => {
       // Without 'claude-' prefix, not a match
       expect(findModelProfile('opus-4-6').bestFor).toMatch(/unprofiled/);
-      // Dot separator instead of hyphen between 'gpt' and '5'
-      expect(findModelProfile('gpt.5.3').bestFor).toMatch(/unprofiled/);
+    });
+
+    it('matches gpt catch-all for non-standard gpt separators', () => {
+      // gpt.5.3 starts with 'gpt' so it hits the gpt catch-all
+      expect(findModelProfile('gpt.5.3').bestFor).toMatch(/GPT family/);
     });
   });
 });

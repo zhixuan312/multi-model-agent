@@ -66,10 +66,12 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
       "apiKeyEnv": "OPENAI_API_KEY"
     }
   },
-  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
+  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full", "parentModel": "claude-opus-4-6" }
 }
 EOF
 ```
+
+> **`parentModel`** (optional): When set, headlines show `$Y saved vs model (Zx ROI)`. When omitted, headlines show `$X actual`.
 
 Mix and match freely — e.g., `claude` for complex + `openai-compatible` for standard.
 
@@ -201,7 +203,7 @@ Auth:
 
 Pin a version for reproducibility:
 ```bash
-npx -y @zhixuan92/multi-model-agent-mcp@2.4.0 serve
+npx -y @zhixuan92/multi-model-agent-mcp@<version> serve
 ```
 
 </details>

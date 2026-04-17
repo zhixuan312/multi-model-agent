@@ -5,7 +5,7 @@ import type { ProviderConfig } from '../packages/core/src/types.js';
 describe('computeCostUSD', () => {
   const baseConfig: ProviderConfig = {
     type: 'codex',
-    model: 'llama-3-70b',
+    model: 'totally-unknown-model-xyz',
   };
 
   it('returns null when neither rate is configured', () => {
@@ -109,7 +109,7 @@ describe('computeSavedCostUSD', () => {
   });
 
   it('returns null when the parent profile is unknown', () => {
-    expect(computeSavedCostUSD(1, 1_000, 1_000, 'llama-3-70b')).toBeNull();
+    expect(computeSavedCostUSD(1, 1_000, 1_000, 'totally-unknown-model-xyz')).toBeNull();
   });
 
   it('computes savings against a cheaper parent profile', () => {

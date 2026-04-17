@@ -62,6 +62,7 @@ const defaultsSchema = z.object({
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
+  parentModel: z.string().min(1).optional(),
 }).default(() => ({
   timeoutMs: 1_800_000,
   maxCostUSD: 10,
