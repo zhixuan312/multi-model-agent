@@ -9,6 +9,7 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
+  buildRunTasksOptions,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -53,7 +54,8 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig) 
     'review_code',
     'Review code with full quality pipeline. Accepts inline code or file paths (multiple files review in parallel). Preset: complex agent, full review. Use delegate_tasks only for custom config.',
     reviewCodeSchema.shape,
-    async (params: ReviewCodeParams) => {
+    async (params: ReviewCodeParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra);
       const validation = validateInput(params.code, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };

@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import type { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
 import type { ConfirmationEntry } from '@zhixuan92/multi-model-agent-core/intake/types';
 import { processConfirmations } from '@zhixuan92/multi-model-agent-core/intake/confirm';
@@ -24,8 +25,8 @@ export function registerConfirmClarifications(
   server: McpServer,
   config: MultiModelConfig,
   clarificationStore: ClarificationStore,
-  runTasksImpl: (tasks: unknown[], config: MultiModelConfig, options: unknown) => Promise<unknown[]>,
-  rememberBatch: (tasks: unknown[]) => string,
+  runTasksImpl: (tasks: TaskSpec[], config: MultiModelConfig, options?: RunTasksOptions) => Promise<RunResult[]>,
+  rememberBatch: (tasks: TaskSpec[]) => string,
 ): void {
   server.tool(
     'confirm_clarifications',
@@ -69,7 +70,7 @@ export function registerConfirmClarifications(
           : [],
       );
 
-      let results: unknown[] = [];
+      let results: RunResult[] = [];
       if (intakeResult.ready.length > 0) {
         results = await runTasksImpl(
           intakeResult.ready.map(r => r.task),

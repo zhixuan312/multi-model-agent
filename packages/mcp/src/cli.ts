@@ -99,6 +99,8 @@ function buildFullResponse(
       terminationReason: r.terminationReason,
       specReviewStatus: r.specReviewStatus,
       qualityReviewStatus: r.qualityReviewStatus,
+      specReviewReason: r.specReviewReason,
+      qualityReviewReason: r.qualityReviewReason,
       agents: r.agents,
       implementationReport: r.implementationReport,
       specReviewReport: r.specReviewReport,
@@ -657,6 +659,8 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
           terminationReason: result.terminationReason,
           specReviewStatus: result.specReviewStatus,
           qualityReviewStatus: result.qualityReviewStatus,
+          specReviewReason: result.specReviewReason,
+          qualityReviewReason: result.qualityReviewReason,
           agents: result.agents,
           implementationReport: result.implementationReport,
           specReviewReport: result.specReviewReport,
@@ -718,8 +722,8 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     server,
     config,
     clarificationStore,
-    runTasksImpl as unknown as (tasks: unknown[], config: MultiModelConfig, options: unknown) => Promise<unknown[]>,
-    rememberBatch as (tasks: unknown[]) => string,
+    runTasksImpl,
+    rememberBatch,
   );
 
   return server;

@@ -1,5 +1,7 @@
 import { z } from 'zod';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { ProgressEvent } from '@zhixuan92/multi-model-agent-core';
+import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
 
 export const commonToolFields = {
   filePaths: z.array(z.string()).optional()
@@ -42,6 +44,8 @@ export function buildMetadataBlock(result: RunResult): { type: 'text'; text: str
       terminationReason: result.terminationReason,
       specReviewStatus: result.specReviewStatus,
       qualityReviewStatus: result.qualityReviewStatus,
+      specReviewReason: result.specReviewReason,
+      qualityReviewReason: result.qualityReviewReason,
       usage: {
         inputTokens: result.usage.inputTokens,
         outputTokens: result.usage.outputTokens,
@@ -66,4 +70,31 @@ export function buildFilePathsPrompt(filePaths?: string[]): string {
 
 export function buildPerFilePrompt(filePath: string, promptTemplate: string): string {
   return `${promptTemplate}\n\nRead and analyze this file:\n- ${filePath}`;
+}
+
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export function buildRunTasksOptions(extra?: { _meta?: Record<string, unknown>; sendNotification: (...args: any[]) => Promise<void> }): RunTasksOptions {
+  if (!extra) return {};
+  const rawToken = extra._meta?.progressToken;
+  const progressToken: string | number | undefined =
+    typeof rawToken === 'string' || typeof rawToken === 'number'
+      ? rawToken
+      : undefined;
+  let progressCounter = 0;
+
+  if (progressToken === undefined) return {};
+
+  return {
+    onProgress: (_taskIndex: number, event: ProgressEvent) => {
+      progressCounter += 1;
+      extra.sendNotification({
+        method: 'notifications/progress',
+        params: {
+          progressToken,
+          progress: progressCounter,
+          message: JSON.stringify({ taskIndex: _taskIndex, event }),
+        },
+      }).catch(() => { /* ignore */ });
+    },
+  };
 }

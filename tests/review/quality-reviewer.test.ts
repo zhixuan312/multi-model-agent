@@ -2,12 +2,12 @@ import { describe, it, expect, vi } from 'vitest';
 import { runQualityReview } from '@zhixuan92/multi-model-agent-core/review/quality-reviewer';
 import type { Provider, ParsedStructuredReport, RunResult } from '@zhixuan92/multi-model-agent-core';
 
-function mockProvider(output: string): Provider {
+function mockProvider(output: string, status: 'ok' | 'timeout' = 'ok'): Provider {
   return {
     name: 'complex',
     config: { type: 'claude', model: 'claude-opus-4-6' } as any,
     run: vi.fn(async (): Promise<RunResult> => ({
-      output, status: 'ok',
+      output, status,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
       turns: 1, filesRead: [], filesWritten: [], toolCalls: [],
       outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
@@ -43,6 +43,32 @@ describe('runQualityReview', () => {
     const p = mockProvider('should not be called');
     const r = await runQualityReview(p, packet, implReport, {}, [], []);
     expect(r.status).toBe('skipped');
+    expect(r.errorReason).toBe('no files written by implementer');
     expect((p.run as any).mock.calls.length).toBe(0);
+  });
+
+  it('returns error with reason when reviewer dispatch fails', async () => {
+    const p = mockProvider('timed out', 'timeout');
+    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
+    expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('review agent returned status: timeout');
+  });
+
+  it('returns error with reason when reviewer output has no structured summary', async () => {
+    const p = mockProvider('The implementation looks fine to me, approved.');
+    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
+    expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('reviewer output missing ## Summary section');
+  });
+
+  it('returns error with reason when reviewer throws', async () => {
+    const p: Provider = {
+      name: 'complex',
+      config: { type: 'claude', model: 'claude-opus-4-6' } as any,
+      run: vi.fn(async () => { throw new Error('connection refused'); }),
+    };
+    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
+    expect(r.status).toBe('error');
+    expect(r.errorReason).toBe('review agent threw: connection refused');
   });
 });
