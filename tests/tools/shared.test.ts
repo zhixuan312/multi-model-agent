@@ -149,7 +149,6 @@ describe('buildMetadataBlock', () => {
       qualityReviewStatus: 'skipped' as const,
       qualityReviewReason: 'no files written by implementer',
       agents: {
-        normalizer: 'standard' as const,
         implementer: 'standard' as const,
         specReviewer: 'complex' as const,
         qualityReviewer: 'skipped' as const,

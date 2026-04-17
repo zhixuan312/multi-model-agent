@@ -21,7 +21,7 @@ describe('HeartbeatTimer', () => {
       phase: 'implementing',
       turnsCompleted: 0,
     });
-    expect(events[0].elapsedMs).toBeGreaterThanOrEqual(5000);
+    expect(events[0].elapsed).toBe('5s');
 
     vi.advanceTimersByTime(5000);
     expect(events).toHaveLength(2);
@@ -41,6 +41,29 @@ describe('HeartbeatTimer', () => {
 
     vi.advanceTimersByTime(5000);
     expect(events[0].turnsCompleted).toBe(2);
+    hb.stop();
+  });
+
+  it('formats elapsed as minutes and seconds at 60+', () => {
+    vi.useFakeTimers();
+    const events: any[] = [];
+    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 90_000 });
+    hb.start('implementing');
+
+    vi.advanceTimersByTime(90_000);
+    expect(events[0].elapsed).toBe('1m 30s');
+    hb.stop();
+  });
+
+  it('does not produce "Xm 60s" at minute boundaries', () => {
+    vi.useFakeTimers();
+    const events: any[] = [];
+    // 119500ms = 119.5s → rounds to 120s = 2m 0s, not 1m 60s
+    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 119_500 });
+    hb.start('implementing');
+
+    vi.advanceTimersByTime(119_500);
+    expect(events[0].elapsed).toBe('2m 0s');
     hb.stop();
   });
 

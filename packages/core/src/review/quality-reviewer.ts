@@ -13,7 +13,7 @@ export interface QualityReviewResult {
 
 export async function runQualityReview(
   reviewerProvider: Provider,
-  packet: { normalizedPrompt: string; scope: string[]; doneCondition: string },
+  packet: { prompt: string; scope: string[]; doneCondition: string },
   implReport: ParsedStructuredReport,
   fileContents: Record<string, string>,
   toolCallLog: string[],

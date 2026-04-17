@@ -15,11 +15,10 @@ function mockProvider(output: string, status: 'ok' | 'timeout' = 'ok'): Provider
   };
 }
 
-const packet = { normalizedPrompt: 'do X', scope: ['src/a.ts'], doneCondition: 'tsc passes' };
+const packet = { prompt: 'do X', scope: ['src/a.ts'], doneCondition: 'tsc passes' };
 const implReport: ParsedStructuredReport = {
   summary: 'did it',
   filesChanged: [{ path: 'src/a.ts', summary: 'updated' }],
-  normalizationDecisions: [],
   validationsRun: [],
   deviationsFromBrief: [],
   unresolved: [],

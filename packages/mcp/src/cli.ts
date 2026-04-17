@@ -102,6 +102,7 @@ function buildFullResponse(
       specReviewReason: r.specReviewReason,
       qualityReviewReason: r.qualityReviewReason,
       agents: r.agents,
+      models: r.models,
       implementationReport: r.implementationReport,
       specReviewReport: r.specReviewReport,
       qualityReviewReport: r.qualityReviewReport,
@@ -456,6 +457,16 @@ export function buildMcpServer(
       '- You\'re dispatching 3+ tasks that all need the same file or spec as context\n' +
       '- You\'re doing multiple rounds of review/audit on the same document\n' +
       '- Your shared context is >2K tokens (below that, duplication cost is negligible)\n\n' +
+      'Common patterns:\n' +
+      '  Delta audit — Register round 1\'s audit report, then dispatch round 2 via\n' +
+      '  delegate_tasks with contextBlockIds + a prompt like "Only report new findings\n' +
+      '  not in the prior report, findings not fixed, and confirm which were fixed."\n' +
+      '  This cuts audit cost roughly in half on subsequent rounds.\n\n' +
+      '  Diff-scoped review — Register the git diff output, then dispatch review via\n' +
+      '  delegate_tasks with contextBlockIds + a prompt like "Review only the changes\n' +
+      '  in the diff, not the entire file." Focuses the reviewer on what changed.\n\n' +
+      '  Shared spec — Register a spec/plan once, reference it from multiple parallel\n' +
+      '  tasks. 3 tasks × 25K tokens = 75K transmitted; with a context block, ~25K total.\n\n' +
       'Example workflow:\n' +
       '  1. register_context_block({ content: <spec file contents> })  -> { id: "abc123" }\n' +
       '  2. delegate_tasks({ tasks: [\n' +
@@ -464,8 +475,6 @@ export function buildMcpServer(
       '       { prompt: "Review section 3", contextBlockIds: ["abc123"] }\n' +
       '     ]})\n' +
       '  -> The spec is transmitted once to the server, not three times.\n\n' +
-      'Without context blocks: 3 tasks x 25K tokens = 75K input tokens transmitted.\n' +
-      'With context blocks: 25K stored once + 3 x reference = ~25K total.\n\n' +
       'Blocks live in an in-memory store with a 30-minute TTL and 100-entry LRU cap.\n' +
       'If a block expires before use, delegate_tasks returns an error identifying the missing id.',
     {
@@ -662,6 +671,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
           specReviewReason: result.specReviewReason,
           qualityReviewReason: result.qualityReviewReason,
           agents: result.agents,
+          models: result.models,
           implementationReport: result.implementationReport,
           specReviewReport: result.specReviewReport,
           qualityReviewReport: result.qualityReviewReport,
@@ -713,10 +723,10 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
-  registerAuditDocument(server, config);
-  registerDebugTask(server, config);
-  registerReviewCode(server, config);
-  registerVerifyWork(server, config);
+  registerAuditDocument(server, config, contextBlockStore);
+  registerDebugTask(server, config, contextBlockStore);
+  registerReviewCode(server, config, contextBlockStore);
+  registerVerifyWork(server, config, contextBlockStore);
 
   registerConfirmClarifications(
     server,

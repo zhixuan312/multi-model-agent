@@ -254,10 +254,15 @@ export interface RunResult {
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   /** Which agent ran in each role. */
   agents?: {
-    normalizer: 'standard' | 'complex' | 'skipped'
     implementer: 'standard' | 'complex' | 'not_run'
     specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
     qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+  }
+  /** Actual model name used in each role. */
+  models?: {
+    implementer: string
+    specReviewer: string | null
+    qualityReviewer: string | null
   }
   /** The implementer's structured report. */
   implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
@@ -445,7 +450,7 @@ export type ProgressEvent =
       nextProvider: string
     }
   | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
-  | { kind: 'heartbeat'; elapsedMs: number; turnsCompleted: number; phase: 'implementing' | 'reviewing' }
+  | { kind: 'heartbeat'; elapsed: string; turnsCompleted: number; phase: 'implementing' | 'reviewing' }
   | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===
@@ -485,10 +490,10 @@ export type BriefQualityWarning =
   | 'tiny_brief'
   | 'huge_brief';
 
-export type BriefQualityPolicy = 'normalize' | 'strict' | 'warn' | 'off' | undefined;
+export type BriefQualityPolicy = 'strict' | 'warn' | 'off' | undefined;
 
 export interface ReadinessResult {
-  action: 'refuse' | 'normalize' | 'warn' | 'ignored'
+  action: 'refuse' | 'warn' | 'ignored'
   missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[]
   layer2Warnings: BriefQualityWarning[]
   layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[]

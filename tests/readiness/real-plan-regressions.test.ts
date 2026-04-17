@@ -8,8 +8,8 @@ describe('real-plan regressions', () => {
       prompt: 'Update auth middleware at src/auth/middleware.ts. Follow the same pattern as users.ts. Done when tsc passes.',
       agentType: 'standard',
     };
-    const r = evaluateReadiness(task, 'normalize');
-    expect(r.action).toBe('normalize');
+    const r = evaluateReadiness(task, 'warn');
+    expect(r.action).toBe('warn');
     expect(r.layer2Warnings).toContain('outsourced_discovery');
   });
 
@@ -18,7 +18,7 @@ describe('real-plan regressions', () => {
       prompt: 'Extract logic in src/stats.ts lines 98-386 into a helper. Done when tsc passes.',
       agentType: 'standard',
     };
-    expect(evaluateReadiness(task, 'normalize').layer2Warnings).toContain('brittle_line_anchors');
+    expect(evaluateReadiness(task, 'warn').layer2Warnings).toContain('brittle_line_anchors');
   });
 
   it('mixed environment actions triggers mixed_environment_actions', () => {
@@ -26,7 +26,7 @@ describe('real-plan regressions', () => {
       prompt: 'Update src/version.ts to 1.0.0. Then commit and push. Done when tsc passes.',
       agentType: 'standard',
     };
-    expect(evaluateReadiness(task, 'normalize').layer2Warnings).toContain('mixed_environment_actions');
+    expect(evaluateReadiness(task, 'warn').layer2Warnings).toContain('mixed_environment_actions');
   });
 
   it('ideal fully-closed brief has zero Layer 2 warnings', () => {
@@ -34,7 +34,7 @@ describe('real-plan regressions', () => {
       prompt: 'Update `src/auth/middleware.ts` to use `jsonwebtoken`. Import `verifyToken` from `src/auth/jwt-utils.ts`. Do not modify `src/auth/jwt-utils.ts`. Done when tsc passes.',
       agentType: 'complex',
     };
-    const r = evaluateReadiness(task, 'normalize');
+    const r = evaluateReadiness(task, 'warn');
     expect(r.layer2Warnings).toEqual([]);
     expect(r.action).toBe('warn');
   });

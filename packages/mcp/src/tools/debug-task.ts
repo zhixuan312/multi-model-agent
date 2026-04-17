@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -22,7 +22,7 @@ export const debugTaskSchema = z.object({
 
 export type DebugTaskParams = z.infer<typeof debugTaskSchema>;
 
-export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
+export function registerDebugTask(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'debug_task',
     'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
@@ -48,10 +48,12 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig) {
         maxCostUSD: config.defaults?.maxCostUSD ?? 10,
         sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
         cwd: process.cwd(),
+        contextBlockIds: params.contextBlockIds,
       };
+      const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
       try {
-        const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config);
+        const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
         return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };
       } catch (err) {

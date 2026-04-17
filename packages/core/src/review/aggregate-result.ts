@@ -20,7 +20,6 @@ export function aggregateResult(
       ...implReport.filesChanged,
       ...(qualityReport?.filesChanged ?? []),
     ],
-    normalizationDecisions: implReport.normalizationDecisions,
     validationsRun: [
       ...implReport.validationsRun,
       ...(specReport?.validationsRun ?? []),

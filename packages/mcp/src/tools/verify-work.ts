@@ -1,6 +1,6 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -36,7 +36,7 @@ function buildVerifyPrompt(
   return parts.join('\n\n');
 }
 
-export function registerVerifyWork(server: McpServer, config: MultiModelConfig) {
+export function registerVerifyWork(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'verify_work',
     'Verify work against a checklist with pass/fail evidence. Accepts inline description or file paths (multiple files verified in parallel). Preset: standard agent, spec review only.',
@@ -58,7 +58,9 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig) 
         maxCostUSD: config.defaults?.maxCostUSD ?? 10,
         sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
         cwd: process.cwd(),
+        contextBlockIds: params.contextBlockIds,
       };
+      const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
       try {
         const mode = resolveDispatchMode(params.work, params.filePaths);
@@ -72,12 +74,12 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig) 
           } as TaskSpec));
 
           const startMs = Date.now();
-          const results = await runTasks(tasks, config);
+          const results = await runTasks(tasks, config, { ...runOptions, runtime });
           return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs)] };
         }
 
         const prompt = buildVerifyPrompt(params.work, params.filePaths, params.checklist);
-        const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config);
+        const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
         return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result)] };
       } catch (err) {

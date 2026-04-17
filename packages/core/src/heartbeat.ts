@@ -1,5 +1,13 @@
 import type { ProgressEvent } from './types.js';
 
+function formatElapsed(ms: number): string {
+  const rounded = Math.round(ms / 1000);
+  if (rounded < 60) return `${rounded}s`;
+  const minutes = Math.floor(rounded / 60);
+  const seconds = rounded % 60;
+  return `${minutes}m ${seconds}s`;
+}
+
 export interface HeartbeatTimerOptions {
   intervalMs?: number;
 }
@@ -28,7 +36,7 @@ export class HeartbeatTimer {
     this.timer = setInterval(() => {
       this.onProgress({
         kind: 'heartbeat',
-        elapsedMs: Date.now() - this.startTime,
+        elapsed: formatElapsed(Date.now() - this.startTime),
         turnsCompleted: this.turns,
         phase: this.phase,
       });

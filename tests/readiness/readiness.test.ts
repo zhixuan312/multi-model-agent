@@ -149,11 +149,6 @@ const idealBrief: TaskSpec = {
 };
 
 describe('evaluateReadiness policy table', () => {
-  it('normalize mode refuses a bad brief', () => {
-    const r = evaluateReadiness(badBrief, 'normalize');
-    expect(r.action).toBe('refuse');
-    expect(r.missingPillars.length).toBeGreaterThan(0);
-  });
   it('strict mode refuses a bad brief', () => {
     expect(evaluateReadiness(badBrief, 'strict').action).toBe('refuse');
   });
@@ -165,18 +160,8 @@ describe('evaluateReadiness policy table', () => {
   it('off mode returns ignored', () => {
     expect(evaluateReadiness(badBrief, 'off').action).toBe('ignored');
   });
-  it('normalize mode triggers normalization on Layer 2 hit', () => {
-    const r = evaluateReadiness(acceptableBrief, 'normalize');
-    expect(r.action).toBe('normalize');
-    expect(r.layer2Warnings.length).toBeGreaterThan(0);
-  });
-  it('normalize mode passes ideal brief (no Layer 2 warnings)', () => {
-    const r = evaluateReadiness(idealBrief, 'normalize');
-    expect(r.action).toBe('warn');
-    expect(r.layer2Warnings).toEqual([]);
-  });
-  it('defaults to normalize when policy is undefined', () => {
-    expect(evaluateReadiness(acceptableBrief, undefined).action).toBe('normalize');
+  it('defaults to warn when policy is undefined', () => {
+    expect(evaluateReadiness(acceptableBrief, undefined).action).toBe('warn');
   });
   it('treats TaskSpec.filePaths as satisfying the inputs pillar', () => {
     const r = evaluateReadiness({
@@ -184,7 +169,7 @@ describe('evaluateReadiness policy table', () => {
       agentType: 'standard',
       filePaths: ['packages/core/src/run-tasks.ts'],
       done: 'Return a concise summary.',
-    }, 'normalize');
+    }, 'warn');
     expect(r.missingPillars).not.toContain('inputs');
   });
   it('treats TaskSpec.done as satisfying the done_condition pillar', () => {
@@ -193,7 +178,7 @@ describe('evaluateReadiness policy table', () => {
       agentType: 'standard',
       filePaths: ['packages/core/src/run-tasks.ts'],
       done: 'Return a concise summary.',
-    }, 'normalize');
+    }, 'warn');
     expect(r.missingPillars).not.toContain('done_condition');
   });
 });
