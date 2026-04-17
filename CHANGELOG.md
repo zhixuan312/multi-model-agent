@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.1.0] - 2026-04-17
+
+### Added
+
+- **Intake clarification pipeline (core, mcp).** Universal interpret-and-confirm pipeline across all MCP routes. The MCP compiles every request into a `DraftTask`, attempts to interpret it into a concrete execution plan, and either executes immediately or returns a proposed interpretation for the caller to confirm. Iterative — drafts bounce back until the MCP is confident enough to commit.
+- **`confirm_clarifications` MCP tool (mcp).** New route for resuming clarification sets. Accepts edited drafts with replace-whole semantics, re-evaluates through the intake pipeline, executes ready drafts, and bounces back unclear ones. Supports partial confirmation, round tracking, duplicate-reason detection, and 6 distinct error codes.
+- **Route compilers (core).** Five route-specific compilers (`compileDelegateTasks`, `compileReviewCode`, `compileDebugTask`, `compileVerifyWork`, `compileAuditDocument`) that produce `DraftTask[]` with output-contract clauses, fan-out for multi-file routes, and source preservation.
+- **Classification heuristic (core).** Deterministic classifier with three outcomes: `ready`, `needs_confirmation`, `unrecoverable`. Preset routes get content-quality checks (not structural checks). Confirmed drafts skip ambiguity criteria.
+- **Clarification store (core).** In-memory TTL/LRU store for clarification sets with eager cleanup, round tracking, and per-draft lifecycle management.
+- **`intakeProgress` on batch responses (mcp).** New field on all `delegate_tasks` responses showing `totalDrafts`, `readyDrafts`, `clarificationDrafts`, `hardErrorDrafts`, `executedDrafts`.
+- **`clarifications` array on batch responses (mcp).** When tasks need confirmation, the response includes proposed interpretations with assumptions and questions.
+
+### Changed
+
+- **`schemaVersion` bumped to `2.1.0` (mcp).** All `delegate_tasks` responses now include `intakeProgress`. Responses with unclear tasks include `clarifications` and `clarificationId`.
+- **Legacy normalizer removed (core).** The model-based `normalizeBrief()` call is replaced by a passthrough stub. Write-set derived from `filePaths`. The model call is fully removed; only the `NormalizationResult` shape remains for the review pipeline.
+- **Readiness reduced to invariant check (core).** Tasks from the intake pipeline (`briefQualityPolicy: 'off'`) skip readiness entirely. Legacy readiness runs only for non-intake code paths during migration.
+
 ## [2.0.1] - 2026-04-16
 
 ### Fixed
@@ -273,7 +291,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.0...HEAD
+[2.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.1...mcp-v2.1.0
 [2.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.0...mcp-v2.0.1
 [2.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.3.0...mcp-v2.0.0
 [1.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v1.2.1...mcp-v1.3.0
