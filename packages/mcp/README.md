@@ -1,6 +1,6 @@
 # @zhixuan92/multi-model-agent-mcp
 
-**MCP server for multi-model-agent.** Your AI assistant gets 8 tools for delegating work to cheaper agents — parallel execution, cross-agent review, 90% cost savings.
+**MCP server for multi-model-agent.** Your AI assistant gets 9 tools for delegating work to cheaper agents — parallel execution, cross-agent review, 90% cost savings.
 
 Works with Claude Code, Codex CLI, Cursor, Gemini CLI, and Claude Desktop.
 
@@ -77,7 +77,7 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 
 | Tool | What it does |
 |---|---|
-| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Set `filePaths` for file-scoped work and `done` for acceptance criteria (required); do not invent extra fields. |
+| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. The MCP interprets your request and infers missing details — if confused, it returns a proposed interpretation for confirmation. |
 | `audit_document` | Audit docs/files for issues — parallel per file |
 | `review_code` | Code review with spec + quality pipeline — parallel per file |
 | `verify_work` | Verify work against a checklist — parallel per file |
@@ -85,6 +85,7 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 | `register_context_block` | Store reusable context for later tasks |
 | `retry_tasks` | Re-run specific tasks from a previous batch |
 | `get_batch_slice` | Fetch output or telemetry from a previous batch |
+| `confirm_clarifications` | Resume a clarification set by confirming or editing proposed interpretations |
 
 ## Setup & Configuration
 
