@@ -60,6 +60,42 @@ describe('debug_task handler', () => {
     expect(result.content[0].text).toBe('debug output');
   });
 
+  it('propagates parentModel from config into task spec', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    await getHandler()({ problem: 'bug' });
+    const tasks = mockRunTasks.mock.calls[0][0];
+    expect(tasks[0].parentModel).toBe('claude-opus-4-6');
+  });
+
+  it('headline reflects saved cost when parentModel is configured', async () => {
+    mockRunTasks.mockResolvedValue([mockResult({
+      usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
+    })]);
+    const { mockServer, getHandler } = captureTool();
+    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    const result = await getHandler()({ problem: 'bug' });
+    const meta = JSON.parse(result.content[1].text);
+    expect(meta.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(meta.headline).not.toContain('$0.00 saved');
+  });
+
+  it('headline shows actual cost when parentModel is absent', async () => {
+    mockRunTasks.mockResolvedValue([mockResult({
+      usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
+    })]);
+    const { mockServer, getHandler } = captureTool();
+    registerDebugTask(mockServer as any, { defaults: {} } as any);
+
+    const result = await getHandler()({ problem: 'bug' });
+    const meta = JSON.parse(result.content[1].text);
+    expect(meta.headline).toContain('$0.10 actual');
+    expect(meta.headline).not.toContain('saved vs');
+  });
+
   it('uses correct preset: complex, full review, 1 round', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();

@@ -60,9 +60,10 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig, 
         sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
         cwd: process.cwd(),
         contextBlockIds: params.contextBlockIds,
+        parentModel: resolveParentModel(config),
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
-      const parentModel = resolveParentModel(config);
+      const parentModel = baseTaskSpec.parentModel;
 
       try {
         const mode = resolveDispatchMode(params.work, params.filePaths);
