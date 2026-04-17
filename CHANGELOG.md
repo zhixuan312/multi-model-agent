@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.2.0] - 2026-04-17
+
+### Changed
+
+- **Supervision thresholds relaxed (core).** `DEFAULT_MIN_LENGTH` reduced from 200 to 10, `MAX_DEGENERATE_RETRIES` from 10 to 3. Fragment detection restructured to run before the length auto-accept (capped at 120 chars) so real mid-work stalls are still caught while valid short responses pass immediately. Eliminates multi-minute hangs on simple tasks like greetings.
+- **Preset tools bypass readiness and carry done conditions (mcp).** All four preset tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) now set `briefQualityPolicy: 'off'` so the readiness layer never refuses internally-constructed briefs. Each tool also carries a purpose-specific `done` condition derived from its parameters (e.g., audit type, review focus, checklist length) so the worker has clear success criteria.
+
 ## [2.1.1] - 2026-04-17
 
 ### Changed
@@ -298,7 +305,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.2.0...HEAD
+[2.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.1...mcp-v2.2.0
 [2.1.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.1.0...mcp-v2.1.1
 [2.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.1...mcp-v2.1.0
 [2.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.0.0...mcp-v2.0.1
