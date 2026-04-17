@@ -35,13 +35,138 @@ const DEFAULT_PROFILE: ModelProfile = {
   capabilities: [],
 };
 
-// Validate and sort once at module load — longest prefix wins
-const PROFILE_ENTRIES: ModelProfile[] = (() => {
-  const parsed = z.array(modelProfileSchema).safeParse(profileData);
-  if (!parsed.success) {
-    throw new Error(`model-profiles.json is invalid: ${parsed.error.message}`);
+// === Hierarchical JSON schema (short field names for human readability) ===
+
+const profileEntrySchema = z.object({
+  prefix: z.string().min(1),
+  tier: tierSchema.optional(),
+  cost: costTierSchema.optional(),           // short for defaultCost
+  bestFor: z.string().min(1).optional(),
+  avoidFor: z.string().optional(),
+  notes: z.string().optional(),
+  supportsEffort: z.boolean().optional(),
+  input: z.number().finite().nonnegative().optional(),   // short for inputCostPerMTok
+  output: z.number().finite().nonnegative().optional(),  // short for outputCostPerMTok
+  inputTokenSoftLimit: z.number().int().positive().optional(),
+  capabilities: z.array(z.enum(['web_search', 'web_fetch'])).optional(),
+});
+
+const providerGroupSchema = z.object({
+  provider: z.string().min(1),
+  naming: z.string().min(1),
+  rateSource: z.string().min(1),
+  rateLookupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/),
+  defaults: z.object({
+    supportsEffort: z.boolean(),
+    inputTokenSoftLimit: z.number().int().positive(),
+    capabilities: z.array(z.enum(['web_search', 'web_fetch'])),
+  }),
+  profiles: z.array(profileEntrySchema).min(1),
+});
+
+type ProfileEntry = z.infer<typeof profileEntrySchema>;
+
+/**
+ * Find the longest prefix in `resolved` that is a strict prefix of `prefix`.
+ * This gives us the parent profile to inherit from.
+ */
+function findParentProfile(prefix: string, resolved: Map<string, ModelProfile>): ModelProfile | undefined {
+  let best: ModelProfile | undefined;
+  let bestLen = 0;
+  for (const [key, profile] of resolved) {
+    if (key.length < prefix.length && prefix.toLowerCase().startsWith(key.toLowerCase()) && key.length > bestLen) {
+      best = profile;
+      bestLen = key.length;
+    }
   }
-  return parsed.data.sort((a, b) => b.prefix.length - a.prefix.length);
+  return best;
+}
+
+/**
+ * Resolve a profile entry by merging: provider defaults → parent profile → entry overrides.
+ * Short JSON field names (input/output/cost) are mapped to canonical long names.
+ */
+function resolveEntry(
+  entry: ProfileEntry,
+  providerDefaults: { supportsEffort: boolean; inputTokenSoftLimit: number; capabilities: ('web_search' | 'web_fetch')[] },
+  providerMeta: { rateSource: string; rateLookupDate: string },
+  resolved: Map<string, ModelProfile>,
+): ModelProfile {
+  const parent = findParentProfile(entry.prefix, resolved);
+
+  // Start with provider defaults
+  const result: ModelProfile = {
+    prefix: entry.prefix,
+    tier: 'standard',
+    defaultCost: 'medium',
+    bestFor: 'general tasks',
+    supportsEffort: providerDefaults.supportsEffort,
+    inputTokenSoftLimit: providerDefaults.inputTokenSoftLimit,
+    capabilities: [...providerDefaults.capabilities],
+    rateSource: providerMeta.rateSource,
+    rateLookupDate: providerMeta.rateLookupDate,
+  };
+
+  // Layer parent profile
+  if (parent) {
+    result.tier = parent.tier;
+    result.defaultCost = parent.defaultCost;
+    result.bestFor = parent.bestFor;
+    if (parent.avoidFor !== undefined) result.avoidFor = parent.avoidFor;
+    result.supportsEffort = parent.supportsEffort;
+    if (parent.inputCostPerMTok !== undefined) result.inputCostPerMTok = parent.inputCostPerMTok;
+    if (parent.outputCostPerMTok !== undefined) result.outputCostPerMTok = parent.outputCostPerMTok;
+    result.inputTokenSoftLimit = parent.inputTokenSoftLimit;
+    result.capabilities = [...parent.capabilities];
+  }
+
+  // Layer entry overrides (short names → long names)
+  if (entry.tier !== undefined) result.tier = entry.tier;
+  if (entry.cost !== undefined) result.defaultCost = entry.cost;
+  if (entry.bestFor !== undefined) result.bestFor = entry.bestFor;
+  if (entry.avoidFor !== undefined) result.avoidFor = entry.avoidFor;
+  if (entry.notes !== undefined) result.notes = entry.notes;
+  if (entry.supportsEffort !== undefined) result.supportsEffort = entry.supportsEffort;
+  if (entry.input !== undefined) result.inputCostPerMTok = entry.input;
+  if (entry.output !== undefined) result.outputCostPerMTok = entry.output;
+  if (entry.inputTokenSoftLimit !== undefined) result.inputTokenSoftLimit = entry.inputTokenSoftLimit;
+  if (entry.capabilities !== undefined) result.capabilities = [...entry.capabilities];
+
+  return result;
+}
+
+// Validate, resolve inheritance, and sort once at module load — longest prefix wins
+const PROFILE_ENTRIES: ModelProfile[] = (() => {
+  const groups = z.array(providerGroupSchema).safeParse(profileData);
+  if (!groups.success) {
+    throw new Error(`model-profiles.json is invalid: ${groups.error.message}`);
+  }
+
+  const resolved = new Map<string, ModelProfile>();
+
+  for (const group of groups.data) {
+    // Sort by prefix length (shortest first) so parents resolve before children
+    const sorted = [...group.profiles].sort((a, b) => a.prefix.length - b.prefix.length);
+
+    for (const entry of sorted) {
+      const profile = resolveEntry(
+        entry,
+        group.defaults,
+        { rateSource: group.rateSource, rateLookupDate: group.rateLookupDate },
+        resolved,
+      );
+
+      const valid = modelProfileSchema.safeParse(profile);
+      if (!valid.success) {
+        throw new Error(`model-profiles.json: resolved profile "${entry.prefix}" is invalid: ${valid.error.message}`);
+      }
+
+      resolved.set(entry.prefix, valid.data);
+    }
+  }
+
+  // Return sorted by prefix length descending (longest prefix wins on lookup)
+  return [...resolved.values()].sort((a, b) => b.prefix.length - a.prefix.length);
 })();
 
 export function findModelProfile(modelId: string): ModelProfile {
