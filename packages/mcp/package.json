@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-mcp",
-  "version": "2.4.0",
+  "version": "2.4.1",
   "type": "module",
   "license": "MIT",
   "description": "MCP server for multi-model-agent. Exposes a delegate_tasks tool that routes work to Claude, Codex, or OpenAI-compatible sub-agents based on capability, quality tier, and cost.",
