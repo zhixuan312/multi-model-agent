@@ -73,3 +73,40 @@ export {
 export { resolveAgent } from './routing/resolve-agent.js';
 export type { ResolvedAgent } from './routing/resolve-agent.js';
 export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
+
+// Intake pipeline
+export { compileDelegateTasks } from './intake/compilers/delegate.js';
+export { compileReviewCode } from './intake/compilers/review.js';
+export { compileDebugTask } from './intake/compilers/debug.js';
+export { compileVerifyWork } from './intake/compilers/verify.js';
+export { compileAuditDocument } from './intake/compilers/audit.js';
+export { runIntakePipeline } from './intake/pipeline.js';
+export { classifyDraft } from './intake/classify.js';
+export { inferMissingFields } from './intake/infer.js';
+export { resolveDraft } from './intake/resolve.js';
+export { ClarificationStore } from './intake/clarification-store.js';
+export { processConfirmations } from './intake/confirm.js';
+export { getMaxRoundsPerDraft } from './intake/feature-flag.js';
+export { validateSource } from './intake/source-schema.js';
+export type {
+  DraftTask,
+  SourceRoute,
+  AnySource,
+  DelegateSource,
+  ReviewSource,
+  DebugSource,
+  VerifySource,
+  AuditSource,
+  StoredDraft,
+  ClarificationSet,
+  ConfirmationEntry,
+  ConfirmDraftError,
+  ConfirmResult,
+  ClassificationResult,
+  ClarificationEntry,
+  HardError,
+  IntakeProgress,
+  ReadyDraft,
+  IntakeResult,
+} from './intake/types.js';
+export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';

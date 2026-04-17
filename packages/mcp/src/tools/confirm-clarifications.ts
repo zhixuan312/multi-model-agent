@@ -1,0 +1,135 @@
+import { z } from 'zod';
+import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
+import type { ConfirmationEntry } from '@zhixuan92/multi-model-agent-core/intake/types';
+import { processConfirmations } from '@zhixuan92/multi-model-agent-core/intake/confirm';
+import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
+import { getMaxRoundsPerDraft } from '@zhixuan92/multi-model-agent-core/intake/feature-flag';
+import { buildClarificationAwareResponse } from '../clarification-response.js';
+
+export const confirmClarificationsSchema = z.object({
+  clarificationId: z.string().describe('ID of the clarification set to resume'),
+  confirmations: z.record(
+    z.string(),
+    z.object({
+      prompt: z.string().describe('Confirmed prompt (required)'),
+      filePaths: z.array(z.string()).optional().describe('Confirmed file scope'),
+      done: z.string().optional().describe('Confirmed done condition'),
+    }),
+  ).describe('Confirmation entries keyed by draftId'),
+});
+
+export function registerConfirmClarifications(
+  server: McpServer,
+  config: MultiModelConfig,
+  clarificationStore: ClarificationStore,
+  runTasksImpl: (tasks: unknown[], config: MultiModelConfig, options: unknown) => Promise<unknown[]>,
+  rememberBatch: (tasks: unknown[]) => string,
+): void {
+  server.tool(
+    'confirm_clarifications',
+    'Resume a clarification set by confirming or editing drafted tasks',
+    confirmClarificationsSchema.shape,
+    async (params: z.infer<typeof confirmClarificationsSchema>) => {
+      const confirmations = new Map<string, ConfirmationEntry>(
+        Object.entries(params.confirmations),
+      );
+
+      const maxRounds = getMaxRoundsPerDraft(config);
+
+      const confirmResult = processConfirmations(
+        clarificationStore,
+        params.clarificationId,
+        confirmations,
+        { maxRounds },
+      );
+
+      if (confirmResult.errors.some(e => e.errorCode === 'clarification_not_found')) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: JSON.stringify({
+              error: confirmResult.errors[0].message,
+              errorCode: 'clarification_not_found',
+            }),
+          }],
+          isError: true,
+        };
+      }
+
+      const set = clarificationStore.get(params.clarificationId);
+      const originalBatchId = set?.originalBatchId ?? '';
+
+      const intakeResult = runIntakePipeline(confirmResult.confirmedDrafts, config);
+
+      const newBatchId = rememberBatch(
+        intakeResult.ready.length > 0
+          ? intakeResult.ready.map(r => r.task)
+          : [],
+      );
+
+      let results: unknown[] = [];
+      if (intakeResult.ready.length > 0) {
+        results = await runTasksImpl(
+          intakeResult.ready.map(r => r.task),
+          config,
+          {},
+        );
+        for (const r of intakeResult.ready) {
+          clarificationStore.markExecuted(params.clarificationId, r.draftId);
+        }
+      }
+
+      for (const c of intakeResult.clarifications) {
+        const storedSet = clarificationStore.get(params.clarificationId);
+        const stored = storedSet?.drafts.get(c.draftId);
+        if (stored?.previousReasons) {
+          const prevSorted = [...stored.previousReasons].sort().join('|');
+          const newSorted = [...(c.questions || [])].sort().join('|');
+          if (prevSorted === newSorted) {
+            confirmResult.errors.push({
+              draftId: c.draftId,
+              errorCode: 'draft_refused',
+              message: `Draft '${c.draftId}' bounced with identical reasons across rounds — unresolvable.`,
+            });
+            clarificationStore.removeDraft(params.clarificationId, c.draftId);
+            intakeResult.clarifications = intakeResult.clarifications.filter(x => x.draftId !== c.draftId);
+            continue;
+          }
+        }
+        if (stored) {
+          stored.previousReasons = c.questions || [];
+        }
+        clarificationStore.incrementRound(params.clarificationId, c.draftId);
+      }
+
+      clarificationStore.touchForConfirm(params.clarificationId);
+
+      intakeResult.intakeProgress.executedDrafts = intakeResult.ready.length;
+
+      clarificationStore.cleanupIfResolved(params.clarificationId);
+
+      const response = buildClarificationAwareResponse({
+        batchId: newBatchId,
+        results,
+        clarifications: intakeResult.clarifications,
+        intakeProgress: intakeResult.intakeProgress,
+        clarificationId: intakeResult.clarifications.length > 0 ? params.clarificationId : undefined,
+        originalBatchId,
+      });
+
+      const responseObj = {
+        ...response,
+        ...(confirmResult.errors.length > 0 ? { confirmationErrors: confirmResult.errors } : {}),
+      };
+
+      return {
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify(responseObj, null, 2),
+        }],
+      };
+    },
+  );
+}

@@ -382,6 +382,9 @@ export async function runTasks(
   const readinessResults = expandedTasks.map((entry) => {
     if ('error' in entry) return undefined;
     const task = entry as TaskSpec;
+    if (task.briefQualityPolicy === 'off') {
+      return { action: 'ignored' as const, missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
+    }
     return evaluateReadiness(task, task.briefQualityPolicy ?? 'normalize');
   });
 
@@ -409,11 +412,18 @@ export async function runTasks(
   });
 
   const normalizationResults = await Promise.all(
-    expandedTasks.map(async (entry, idx) => {
+    expandedTasks.map(async (entry) => {
       if ('error' in entry) return undefined;
-      const readiness = readinessResults[idx];
-      if (!readiness || readiness.action !== 'normalize') return undefined;
-      return await normalizeBrief(entry as TaskSpec, config);
+      const normResult = {
+        normalizedPrompt: (entry as TaskSpec).prompt,
+        decisions: [],
+        writeSet: (entry as TaskSpec).filePaths ?? [],
+        verificationPlan: [],
+        unresolved: [],
+        spentCostUSD: 0,
+        skipped: true,
+      };
+      return normResult;
     }),
   );
 

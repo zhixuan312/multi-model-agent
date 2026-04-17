@@ -103,6 +103,66 @@
     "./tools/call-cache": {
       "types": "./dist/tools/call-cache.d.ts",
       "import": "./dist/tools/call-cache.js"
+    },
+    "./intake/types": {
+      "types": "./dist/intake/types.d.ts",
+      "import": "./dist/intake/types.js"
+    },
+    "./intake/compilers/delegate": {
+      "types": "./dist/intake/compilers/delegate.d.ts",
+      "import": "./dist/intake/compilers/delegate.js"
+    },
+    "./intake/compilers/review": {
+      "types": "./dist/intake/compilers/review.d.ts",
+      "import": "./dist/intake/compilers/review.js"
+    },
+    "./intake/compilers/debug": {
+      "types": "./dist/intake/compilers/debug.d.ts",
+      "import": "./dist/intake/compilers/debug.js"
+    },
+    "./intake/compilers/verify": {
+      "types": "./dist/intake/compilers/verify.d.ts",
+      "import": "./dist/intake/compilers/verify.js"
+    },
+    "./intake/compilers/audit": {
+      "types": "./dist/intake/compilers/audit.d.ts",
+      "import": "./dist/intake/compilers/audit.js"
+    },
+    "./intake/pipeline": {
+      "types": "./dist/intake/pipeline.d.ts",
+      "import": "./dist/intake/pipeline.js"
+    },
+    "./intake/classify": {
+      "types": "./dist/intake/classify.d.ts",
+      "import": "./dist/intake/classify.js"
+    },
+    "./intake/infer": {
+      "types": "./dist/intake/infer.d.ts",
+      "import": "./dist/intake/infer.js"
+    },
+    "./intake/resolve": {
+      "types": "./dist/intake/resolve.d.ts",
+      "import": "./dist/intake/resolve.js"
+    },
+    "./intake/clarification-store": {
+      "types": "./dist/intake/clarification-store.d.ts",
+      "import": "./dist/intake/clarification-store.js"
+    },
+    "./intake/confirm": {
+      "types": "./dist/intake/confirm.d.ts",
+      "import": "./dist/intake/confirm.js"
+    },
+    "./intake/feature-flag": {
+      "types": "./dist/intake/feature-flag.d.ts",
+      "import": "./dist/intake/feature-flag.js"
+    },
+    "./intake/source-schema": {
+      "types": "./dist/intake/source-schema.d.ts",
+      "import": "./dist/intake/source-schema.js"
+    },
+    "./intake/draft-id": {
+      "types": "./dist/intake/draft-id.d.ts",
+      "import": "./dist/intake/draft-id.js"
     }
   },
   "scripts": {

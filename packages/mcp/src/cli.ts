@@ -34,6 +34,11 @@ import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
 import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
+import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
+import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
+import { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
+import { buildClarificationAwareResponse } from './clarification-response.js';
+import { registerConfirmClarifications } from './tools/confirm-clarifications.js';
 
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
 
@@ -268,6 +273,9 @@ export function buildMcpServer(
   // followed by multiple `delegate_tasks` with `contextBlockIds` works.
   const contextBlockStore = new InMemoryContextBlockStore();
 
+  // Clarification store for intake clarification flow
+  const clarificationStore = new ClarificationStore();
+
   // Per-server batch cache for `retry_tasks`. See the LRU comment block
   // above for eviction semantics.
   const batchCache = new Map<string, {
@@ -323,104 +331,66 @@ export function buildMcpServer(
       ),
     },
     async ({ tasks, responseMode = 'auto' }, extra) => {
-      // --- OQ#6 resolution: MCP SDK progress notification API ---
-      //
-      // The @modelcontextprotocol/sdk >= 1.x exposes progress notifications
-      // on the tool-handler `extra` argument: the second parameter of the
-      // tool callback is `RequestHandlerExtra<ServerRequest, ServerNotification>`
-      // (see node_modules/@modelcontextprotocol/sdk/dist/esm/shared/protocol.d.ts
-      // line 173, and server/mcp.d.ts line 250 for `BaseToolCallback`).
-      //
-      // That type carries two things we need:
-      //   1. `extra._meta.progressToken?: string | number` — present iff the
-      //      client opted in by sending `_meta.progressToken` with its
-      //      `tools/call` request (MCP spec: notifications/progress).
-      //   2. `extra.sendNotification(notification)` — a request-scoped sender
-      //      that emits `ServerNotification`s correlated with this call.
-      //      `ServerNotification` is a union that includes
-      //      `ProgressNotificationSchema` with method `"notifications/progress"`
-      //      and params `{ progressToken, progress, total?, message? }`
-      //      (types.d.ts line 954).
-      //
-      // So the bridge is: for each `ProgressEvent` we receive from core, if
-      // the client supplied a `progressToken`, emit one `notifications/progress`
-      // message whose `message` field is a JSON-encoded envelope. This is an
-      // opt-in channel — clients that don't send `progressToken` get zero
-      // notifications, preserving behavior for pre-streaming callers.
-      //
-      // Envelope schema (stable, documented here so clients can parse it):
-      //
-      //     params: {
-      //       progressToken,                // echoed from the request _meta
-      //       progress: <monotonic counter>,// ordinal of this event (1-based)
-      //       message: JSON.stringify({
-      //         taskIndex: <number>,        // index in the original `tasks` array
-      //         event: <ProgressEvent>,     // full ProgressEvent union member
-      //       }),
-      //     }
-      //
-      // `total` is intentionally omitted: we don't know the final event count
-      // in advance. Runners emit events in Tasks 9-11; this commit is plumbing
-      // only and `escalation_start` (emitted by delegateWithEscalation itself)
-      // is the sole observable event in practice.
-      // Runtime guard instead of a raw cast: _meta is typed broadly at the
-      // SDK layer, and a bad client could in principle send a progressToken
-      // of any JSON type. Only `string` / `number` are valid per MCP spec.
       const rawToken = extra._meta?.progressToken;
       const progressToken: string | number | undefined =
         typeof rawToken === 'string' || typeof rawToken === 'number'
           ? rawToken
           : undefined;
-
       let progressCounter = 0;
       const sendProgress = progressToken !== undefined
         ? (taskIndex: number, event: ProgressEvent) => {
             progressCounter += 1;
-            // Fire-and-forget. We swallow rejections so a broken transport
-            // never corrupts the in-flight tool run — worst case the client
-            // misses a progress tick but still gets the final tool result.
-            extra
-              .sendNotification({
-                method: 'notifications/progress',
-                params: {
-                  progressToken,
-                  progress: progressCounter,
-                  message: JSON.stringify({ taskIndex, event }),
-                },
-              })
-              .catch(() => {
-                /* ignore — progress is best-effort */
-              });
+            extra.sendNotification({
+              method: 'notifications/progress',
+              params: {
+                progressToken,
+                progress: progressCounter,
+                message: JSON.stringify({ taskIndex, event }),
+              },
+            }).catch(() => { /* ignore */ });
           }
         : undefined;
 
-      // Stash the original task specs in the batch cache BEFORE dispatch
-      // so the returned batchId is valid even if the dispatch itself
-      // throws (so callers can still retry the specific tasks that
-      // produced errors). The cache stores the raw TaskSpec[] — NOT the
-      // expanded forms — because `retry_tasks` re-injects fresh defaults
-      // from the current config each time it runs.
-      const batchId = rememberBatch(tasks as TaskSpec[]);
+      // Intake pipeline: compile → infer → classify → resolve
+      const requestId = randomUUID();
+      const drafts = compileDelegateTasks(tasks as { prompt: string; done?: string; filePaths?: string[]; agentType?: string; contextBlockIds?: string[] }[], requestId);
+      const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
 
-      const resolvedTasks = injectDefaults(tasks as TaskSpec[]);
+      // Execute ready tasks through normal dispatch
+      let results: RunResult[] = [];
+      const readySpecs = intakeResult.ready.map(r => r.task);
+      const batchId = rememberBatch(readySpecs.length > 0 ? readySpecs : (tasks as TaskSpec[]));
 
       const batchStartMs = Date.now();
-      let results: RunResult[] = [];
       try {
-        results = await runTasksImpl(resolvedTasks, config, {
-          onProgress: sendProgress,
-          runtime: { contextBlockStore },
-        });
+        if (readySpecs.length > 0) {
+          const resolvedTasks = injectDefaults(readySpecs);
+          results = await runTasksImpl(resolvedTasks, config, {
+            onProgress: sendProgress,
+            runtime: { contextBlockStore },
+          });
+          intakeResult.intakeProgress.executedDrafts = results.length;
+        }
       } finally {
-        // Always attach `results ?? []` so a mid-flight throw does not leave
-        // a dangling batchCache entry that `get_batch_slice` can't distinguish
-        // from "dispatch still in progress". Per spec §3.5 / §3.9 item 3.
+        // Always attach results so get_batch_slice/retry_tasks can find the batch
         const batchEntry = batchCache.get(batchId);
         if (batchEntry) batchEntry.results = results;
       }
       const wallClockMs = Date.now() - batchStartMs;
 
-      // Determine effective response mode based on the configurable threshold
+      // Create clarification set if needed
+      let clarificationId: string | undefined;
+      if (intakeResult.clarifications.length > 0) {
+        const storedDrafts = intakeResult.clarifications.map(c => ({
+          draft: drafts.find(d => d.draftId === c.draftId)!,
+          taskIndex: c.taskIndex,
+          roundCount: 0,
+        }));
+        clarificationId = clarificationStore.create(storedDrafts, batchId);
+      }
+
+      // Build response using existing envelope (timings, batchProgress, aggregateCost)
+      // plus intake-specific fields (clarifications, intakeProgress)
       const totalOutputChars = results.reduce((sum, r) => sum + r.output.length, 0);
       const effectiveMode: 'full' | 'summary' =
         responseMode === 'full'
@@ -435,10 +405,18 @@ export function buildMcpServer(
       const batchProgress = computeBatchProgress(results);
       const aggregateCost = computeAggregateCost(results);
 
-      const response =
+      // Use original tasks (not readySpecs) for response building so parentModel
+      // and other caller-provided fields are available for headline computation
+      const responseTasks = intakeResult.ready.map((r, i) => ({
+        ...readySpecs[i],
+        ...(tasks as TaskSpec[])[r.taskIndex],
+        prompt: readySpecs[i].prompt, // keep the resolved prompt
+      }));
+
+      const baseResponse =
         effectiveMode === 'full'
-          ? buildFullResponse(batchId, tasks as TaskSpec[], results, { timings, batchProgress, aggregateCost })
-          : buildSummaryResponse(batchId, tasks as TaskSpec[], results, {
+          ? buildFullResponse(batchId, responseTasks, results, { timings, batchProgress, aggregateCost })
+          : buildSummaryResponse(batchId, responseTasks, results, {
               autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
               totalOutputChars,
               threshold: resolvedThreshold,
@@ -446,6 +424,17 @@ export function buildMcpServer(
               batchProgress,
               aggregateCost,
             });
+
+      // Merge intake fields into the response
+      const response = {
+        ...baseResponse,
+        schemaVersion: '2.1.0',
+        intakeProgress: intakeResult.intakeProgress,
+        ...(intakeResult.clarifications.length > 0 && {
+          clarifications: intakeResult.clarifications,
+        }),
+        ...(clarificationId && { clarificationId }),
+      };
 
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
@@ -719,6 +708,14 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
   registerDebugTask(server, config);
   registerReviewCode(server, config);
   registerVerifyWork(server, config);
+
+  registerConfirmClarifications(
+    server,
+    config,
+    clarificationStore,
+    runTasksImpl as unknown as (tasks: unknown[], config: MultiModelConfig, options: unknown) => Promise<unknown[]>,
+    rememberBatch as (tasks: unknown[]) => string,
+  );
 
   return server;
 }
