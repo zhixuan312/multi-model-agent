@@ -1169,7 +1169,7 @@ describe('delegate_tasks summary mode — slim shape', () => {
     expect(payload).toHaveProperty('aggregateCost');
     expect(typeof payload.headline).toBe('string');
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
-    expect(payload.headline).toContain('$0.02 actual');
+    expect(payload.headline).not.toContain('actual');
     expect(payload.headline).toContain('$0.10 saved vs claude-opus-4-6');
     expect(payload.headline).toContain('ROI');
   });

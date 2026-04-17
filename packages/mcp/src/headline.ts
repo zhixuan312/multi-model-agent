@@ -67,7 +67,7 @@ export function composeHeadline(input: ComposeHeadlineInput): string {
     parts.push(`saved ~${formatDuration(timings.estimatedParallelSavingsMs)} vs serial`);
   }
 
-  // Cost clause: with parentModel show savings + ROI, without show actual only.
+  // Cost clause: with parentModel show saved + ROI, without show actual only.
   if (!parentModel) {
     parts.push(`${formatCurrency(aggregateCost.totalActualCostUSD)} actual`);
   } else {
@@ -75,7 +75,7 @@ export function composeHeadline(input: ComposeHeadlineInput): string {
       (aggregateCost.totalActualCostUSD + aggregateCost.totalSavedCostUSD) /
       aggregateCost.totalActualCostUSD;
     parts.push(
-      `${formatCurrency(aggregateCost.totalActualCostUSD)} actual / ${formatCurrency(aggregateCost.totalSavedCostUSD)} saved vs ${parentModel} (${ratio.toFixed(1)}x ROI)`,
+      `${formatCurrency(aggregateCost.totalSavedCostUSD)} saved vs ${parentModel} (${ratio.toFixed(1)}x ROI)`,
     );
   }
 

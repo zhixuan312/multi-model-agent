@@ -26,7 +26,7 @@ describe('composeHeadline', () => {
     };
 
     expect(composeHeadline({ timings, batchProgress, aggregateCost, parentModel: 'claude-opus-4-6' })).toBe(
-      '11 tasks, 5/11 ok (45.5%), wall 5m 54s, saved ~18m 31s vs serial, $1.37 actual / $8.91 saved vs claude-opus-4-6 (7.5x ROI)',
+      '11 tasks, 5/11 ok (45.5%), wall 5m 54s, saved ~18m 31s vs serial, $8.91 saved vs claude-opus-4-6 (7.5x ROI)',
     );
   });
 
@@ -72,7 +72,7 @@ describe('composeHeadline', () => {
     };
 
     expect(composeHeadline({ timings, batchProgress, aggregateCost, parentModel: 'claude-opus-4-6' })).toBe(
-      '5 tasks, 0/5 ok (0.0%), wall 12s, saved ~35s vs serial, $0.05 actual / $0.00 saved vs claude-opus-4-6 (1.0x ROI)',
+      '5 tasks, 0/5 ok (0.0%), wall 12s, saved ~35s vs serial, $0.00 saved vs claude-opus-4-6 (1.0x ROI)',
     );
   });
 
@@ -95,7 +95,7 @@ describe('composeHeadline', () => {
     };
 
     expect(composeHeadline({ timings, batchProgress, aggregateCost, parentModel: 'claude-opus-4-6' })).toBe(
-      '30 tasks, 28/30 ok (93.3%), wall 1h 12m, saved ~2h 45m vs serial, $18.05 actual / $34.73 saved vs claude-opus-4-6 (2.9x ROI)',
+      '30 tasks, 28/30 ok (93.3%), wall 1h 12m, saved ~2h 45m vs serial, $34.73 saved vs claude-opus-4-6 (2.9x ROI)',
     );
   });
 
@@ -164,7 +164,7 @@ describe('composeHeadline', () => {
     };
 
     expect(composeHeadline({ timings, batchProgress, aggregateCost, parentModel: 'claude-opus-4-6' })).toBe(
-      '1 tasks, 1/1 ok (100.0%), wall 10s, $0.50 actual / $3.20 saved vs claude-opus-4-6 (7.4x ROI)',
+      '1 tasks, 1/1 ok (100.0%), wall 10s, $3.20 saved vs claude-opus-4-6 (7.4x ROI)',
     );
   });
 });
