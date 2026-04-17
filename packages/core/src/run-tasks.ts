@@ -12,6 +12,7 @@ import type {
 import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
+import { HeartbeatTimer } from './heartbeat.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';
@@ -137,203 +138,158 @@ async function executeReviewedLifecycle(
     // Other slot not configured — auto-escalation not available
   }
 
-  // done is included in task.prompt below so the worker sees it as a goal.
-  // The rework loop (below) then builds from task.prompt, so done is
-  // implicitly preserved across all subsequent rounds.
-  const implResult = await delegateWithEscalation(
-    withDoneCondition(task),
-    [resolved.provider],
-    { explicitlyPinned: false, escalateToProvider: escalationProvider, onProgress },
-  );
+  const heartbeat = onProgress
+    ? new HeartbeatTimer(onProgress)
+    : undefined;
+  heartbeat?.start('implementing');
 
-  const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
-  const workerStatus = extractWorkerStatus(implReport);
+  const wrappedOnProgress = onProgress
+    ? (event: ProgressEvent) => {
+        if (event.kind === 'turn_complete') heartbeat?.incrementTurns();
+        onProgress(event);
+      }
+    : undefined;
 
-  // C6a: filePaths interaction is a soft completion signal — review always runs.
-  // If task.filePaths was provided, track whether the worker read or wrote any
-  // of those paths as a completion concern (informational only).
-  const filePathsInteracted = task.filePaths && task.filePaths.length > 0
-    ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
-        task.filePaths!.some(fp => f === fp || f.endsWith('/' + fp) || f.endsWith(fp)),
-      )
-    : true;
-  const filePathsSkipped = !filePathsInteracted;
-
-  // Skip review entirely when the implementer produced no reviewable file artifacts.
-  // This avoids sending the reviewer an empty packet that always fails to parse.
-  if (implResult.filesWritten.length === 0) {
-    const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
-    return {
-      ...implResult,
-      workerStatus,
-      specReviewStatus: 'not_applicable',
-      qualityReviewStatus: 'not_applicable',
-      specReviewReason: 'task produced no file artifacts to review',
-      qualityReviewReason: 'task produced no file artifacts to review',
-      implementationReport: effectiveImplReport,
-      structuredReport: {
-        summary: '[No artifacts] task produced no file artifacts to review',
-        filesChanged: effectiveImplReport.filesChanged,
-        normalizationDecisions: effectiveImplReport.normalizationDecisions,
-        validationsRun: effectiveImplReport.validationsRun,
-        deviationsFromBrief: effectiveImplReport.deviationsFromBrief,
-        unresolved: effectiveImplReport.unresolved,
-      },
-      filePathsSkipped,
-      agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-        implementer: resolved.slot,
-        specReviewer: 'not_applicable',
-        qualityReviewer: 'not_applicable',
-      },
-    };
-  }
-
-  if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
-    return {
-      ...implResult,
-      workerStatus,
-      specReviewStatus: 'skipped',
-      qualityReviewStatus: 'skipped',
-      specReviewReason: 'skipped: worker reported ' + workerStatus,
-      qualityReviewReason: 'skipped: worker reported ' + workerStatus,
-      agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-        implementer: resolved.slot,
-        specReviewer: 'skipped',
-        qualityReviewer: 'skipped',
-      },
-    };
-  }
-
-  if (reviewPolicy === 'off') {
-    return {
-      ...implResult,
-      workerStatus,
-      specReviewStatus: 'skipped',
-      qualityReviewStatus: 'skipped',
-      specReviewReason: 'skipped: reviewPolicy is off',
-      qualityReviewReason: 'skipped: reviewPolicy is off',
-      agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-        implementer: resolved.slot,
-        specReviewer: 'skipped',
-        qualityReviewer: 'skipped',
-      },
-      implementationReport: implReport,
-    };
-  }
-
-  let otherProvider: Provider;
   try {
-    otherProvider = createProvider(otherSlot, config);
-  } catch {
-    return {
-      ...implResult,
-      workerStatus,
-      specReviewStatus: 'skipped',
-      qualityReviewStatus: 'skipped',
-      specReviewReason: 'skipped: no review agent configured',
-      qualityReviewReason: 'skipped: no review agent configured',
-      agents: {
-        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-        implementer: resolved.slot,
-        specReviewer: 'skipped',
-        qualityReviewer: 'skipped',
-      },
-    };
-  }
-
-  const packet = {
-    normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
-    scope: normResult?.writeSet ?? [],
-    doneCondition: task.done ?? 'tsc passes',
-  };
-
-  let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
-
-  const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
-
-  let specResult = await runSpecReview(
-    otherProvider,
-    packet,
-    effectiveImplReport,
-    fileContents,
-    implResult.toolCalls,
-  );
-
-  let finalImplResult = implResult;
-  let finalImplReport = effectiveImplReport;
-  let specStatus = specResult.status;
-  let specReport = specResult.report;
-
-  if (specStatus === 'changes_required') {
-    let prevSpecFindings: string[] = [];
-    let round = 0;
-    while (true) {
-      round++;
-      const feedback = specResult.findings.length > 0
-        ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
-        : '';
-      const reworkPrompt = `${task.prompt}${feedback}`;
-      const reworkTask = withDoneCondition({ ...task, prompt: reworkPrompt });
-
-      const reworkResult = await delegateWithEscalation(
-        reworkTask,
-        [resolved.provider],
-        { explicitlyPinned: true, onProgress },
-      );
-
-      finalImplResult = reworkResult;
-      const reworkReport = parseStructuredReport(reworkResult.output);
-      finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
-
-      const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
-      fileContents = reworkContents;
-
-      specResult = await runSpecReview(
-        otherProvider,
-        packet,
-        finalImplReport,
-        reworkContents,
-        reworkResult.toolCalls,
-      );
-
-      specStatus = specResult.status;
-      specReport = specResult.report;
-
-      if (specStatus === 'approved') break;
-
-      // Plateau detection: stop when same findings appear in two consecutive rounds.
-      const currentFindings = [...specResult.findings].sort().join('\0');
-      const prevFindings = prevSpecFindings.sort().join('\0');
-      if (currentFindings === prevFindings && currentFindings !== '') break;
-
-      prevSpecFindings = specResult.findings;
-
-      // Absolute safety: don't exceed 10 rework rounds regardless.
-      if (round >= (task.maxReviewRounds ?? 10)) break;
-    }
-  }
-
-  let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
-  if (reviewPolicy === 'full') {
-    qualityResult = await runQualityReview(
-      otherProvider,
-      packet,
-      specReport ?? finalImplReport,
-      fileContents,
-      finalImplResult.toolCalls,
-      finalImplResult.filesWritten,
+    // done is included in task.prompt below so the worker sees it as a goal.
+    // The rework loop (below) then builds from task.prompt, so done is
+    // implicitly preserved across all subsequent rounds.
+    const implResult = await delegateWithEscalation(
+      withDoneCondition(task),
+      [resolved.provider],
+      { explicitlyPinned: false, escalateToProvider: escalationProvider, onProgress: wrappedOnProgress },
     );
 
-    if (qualityResult.status === 'changes_required') {
-      let prevQualityFindings: string[] = [];
+    const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
+    const workerStatus = extractWorkerStatus(implReport);
+
+    // C6a: filePaths interaction is a soft completion signal — review always runs.
+    // If task.filePaths was provided, track whether the worker read or wrote any
+    // of those paths as a completion concern (informational only).
+    const filePathsInteracted = task.filePaths && task.filePaths.length > 0
+      ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
+          task.filePaths!.some(fp => f === fp || f.endsWith('/' + fp) || f.endsWith(fp)),
+        )
+      : true;
+    const filePathsSkipped = !filePathsInteracted;
+
+    // Skip review entirely when the implementer produced no reviewable file artifacts.
+    // This avoids sending the reviewer an empty packet that always fails to parse.
+    if (implResult.filesWritten.length === 0) {
+      const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+      return {
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'not_applicable',
+        qualityReviewStatus: 'not_applicable',
+        specReviewReason: 'task produced no file artifacts to review',
+        qualityReviewReason: 'task produced no file artifacts to review',
+        implementationReport: effectiveImplReport,
+        structuredReport: {
+          summary: '[No artifacts] task produced no file artifacts to review',
+          filesChanged: effectiveImplReport.filesChanged,
+          normalizationDecisions: effectiveImplReport.normalizationDecisions,
+          validationsRun: effectiveImplReport.validationsRun,
+          deviationsFromBrief: effectiveImplReport.deviationsFromBrief,
+          unresolved: effectiveImplReport.unresolved,
+        },
+        filePathsSkipped,
+        agents: {
+          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+          implementer: resolved.slot,
+          specReviewer: 'not_applicable',
+          qualityReviewer: 'not_applicable',
+        },
+      };
+    }
+
+    if (workerStatus === 'needs_context' || workerStatus === 'blocked') {
+      return {
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'skipped',
+        qualityReviewStatus: 'skipped',
+        specReviewReason: 'skipped: worker reported ' + workerStatus,
+        qualityReviewReason: 'skipped: worker reported ' + workerStatus,
+        agents: {
+          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+          implementer: resolved.slot,
+          specReviewer: 'skipped',
+          qualityReviewer: 'skipped',
+        },
+      };
+    }
+
+    if (reviewPolicy === 'off') {
+      return {
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'skipped',
+        qualityReviewStatus: 'skipped',
+        specReviewReason: 'skipped: reviewPolicy is off',
+        qualityReviewReason: 'skipped: reviewPolicy is off',
+        agents: {
+          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+          implementer: resolved.slot,
+          specReviewer: 'skipped',
+          qualityReviewer: 'skipped',
+        },
+        implementationReport: implReport,
+      };
+    }
+
+    let otherProvider: Provider;
+    try {
+      otherProvider = createProvider(otherSlot, config);
+    } catch {
+      return {
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'skipped',
+        qualityReviewStatus: 'skipped',
+        specReviewReason: 'skipped: no review agent configured',
+        qualityReviewReason: 'skipped: no review agent configured',
+        agents: {
+          normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+          implementer: resolved.slot,
+          specReviewer: 'skipped',
+          qualityReviewer: 'skipped',
+        },
+      };
+    }
+
+    const packet = {
+      normalizedPrompt: normResult?.normalizedPrompt ?? task.prompt,
+      scope: normResult?.writeSet ?? [],
+      doneCondition: task.done ?? 'tsc passes',
+    };
+
+    let fileContents = await readImplementerFileContents(implResult.filesWritten, task.cwd);
+
+    const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+
+    heartbeat?.setPhase('reviewing');
+
+    let specResult = await runSpecReview(
+      otherProvider,
+      packet,
+      effectiveImplReport,
+      fileContents,
+      implResult.toolCalls,
+    );
+
+    let finalImplResult = implResult;
+    let finalImplReport = effectiveImplReport;
+    let specStatus = specResult.status;
+    let specReport = specResult.report;
+
+    if (specStatus === 'changes_required') {
+      let prevSpecFindings: string[] = [];
       let round = 0;
       while (true) {
         round++;
-        const feedback = qualityResult.findings.length > 0
-          ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
+        const feedback = specResult.findings.length > 0
+          ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
           : '';
         const reworkPrompt = `${task.prompt}${feedback}`;
         const reworkTask = withDoneCondition({ ...task, prompt: reworkPrompt });
@@ -341,7 +297,7 @@ async function executeReviewedLifecycle(
         const reworkResult = await delegateWithEscalation(
           reworkTask,
           [resolved.provider],
-          { explicitlyPinned: true, onProgress },
+          { explicitlyPinned: true, onProgress: wrappedOnProgress },
         );
 
         finalImplResult = reworkResult;
@@ -349,58 +305,121 @@ async function executeReviewedLifecycle(
         finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
 
         const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+        fileContents = reworkContents;
 
-        qualityResult = await runQualityReview(
+        specResult = await runSpecReview(
           otherProvider,
           packet,
           finalImplReport,
           reworkContents,
           reworkResult.toolCalls,
-          reworkResult.filesWritten,
         );
 
-        if (qualityResult.status === 'approved') break;
+        specStatus = specResult.status;
+        specReport = specResult.report;
 
-        const currentFindings = [...qualityResult.findings].sort().join('\0');
-        const prevFindings = prevQualityFindings.sort().join('\0');
+        if (specStatus === 'approved') break;
+
+        // Plateau detection: stop when same findings appear in two consecutive rounds.
+        const currentFindings = [...specResult.findings].sort().join('\0');
+        const prevFindings = prevSpecFindings.sort().join('\0');
         if (currentFindings === prevFindings && currentFindings !== '') break;
 
-        prevQualityFindings = qualityResult.findings;
+        prevSpecFindings = specResult.findings;
 
+        // Absolute safety: don't exceed 10 rework rounds regardless.
         if (round >= (task.maxReviewRounds ?? 10)) break;
       }
     }
+
+    let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
+    if (reviewPolicy === 'full') {
+      qualityResult = await runQualityReview(
+        otherProvider,
+        packet,
+        specReport ?? finalImplReport,
+        fileContents,
+        finalImplResult.toolCalls,
+        finalImplResult.filesWritten,
+      );
+
+      if (qualityResult.status === 'changes_required') {
+        let prevQualityFindings: string[] = [];
+        let round = 0;
+        while (true) {
+          round++;
+          const feedback = qualityResult.findings.length > 0
+            ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
+            : '';
+          const reworkPrompt = `${task.prompt}${feedback}`;
+          const reworkTask = withDoneCondition({ ...task, prompt: reworkPrompt });
+
+          const reworkResult = await delegateWithEscalation(
+            reworkTask,
+            [resolved.provider],
+            { explicitlyPinned: true, onProgress: wrappedOnProgress },
+          );
+
+          finalImplResult = reworkResult;
+          const reworkReport = parseStructuredReport(reworkResult.output);
+          finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
+
+          const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
+
+          qualityResult = await runQualityReview(
+            otherProvider,
+            packet,
+            finalImplReport,
+            reworkContents,
+            reworkResult.toolCalls,
+            reworkResult.filesWritten,
+          );
+
+          if (qualityResult.status === 'approved') break;
+
+          const currentFindings = [...qualityResult.findings].sort().join('\0');
+          const prevFindings = prevQualityFindings.sort().join('\0');
+          if (currentFindings === prevFindings && currentFindings !== '') break;
+
+          prevQualityFindings = qualityResult.findings;
+
+          if (round >= (task.maxReviewRounds ?? 10)) break;
+        }
+      }
+    }
+
+    const finalReport = specReport ?? finalImplReport;
+
+    const aggregated = aggregateResult(
+      finalReport,
+      specReport,
+      qualityResult.report,
+      specStatus,
+      qualityResult.status,
+    );
+
+    return {
+      ...finalImplResult,
+      workerStatus,
+      specReviewStatus: specStatus,
+      qualityReviewStatus: qualityResult.status,
+      specReviewReason: specResult.errorReason,
+      qualityReviewReason: qualityResult.errorReason,
+      structuredReport: aggregated,
+      implementationReport: finalImplReport,
+      specReviewReport: specReport,
+      qualityReviewReport: qualityResult.report,
+      filePathsSkipped,
+      agents: {
+        normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
+        implementer: resolved.slot,
+        specReviewer: otherSlot,
+        qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
+      },
+    };
+  } finally {
+    heartbeat?.stop();
   }
-
-  const finalReport = specReport ?? finalImplReport;
-
-  const aggregated = aggregateResult(
-    finalReport,
-    specReport,
-    qualityResult.report,
-    specStatus,
-    qualityResult.status,
-  );
-
-  return {
-    ...finalImplResult,
-    workerStatus,
-    specReviewStatus: specStatus,
-    qualityReviewStatus: qualityResult.status,
-    specReviewReason: specResult.errorReason,
-    qualityReviewReason: qualityResult.errorReason,
-    structuredReport: aggregated,
-    implementationReport: finalImplReport,
-    specReviewReport: specReport,
-    qualityReviewReport: qualityResult.report,
-    filePathsSkipped,
-    agents: {
-      normalizer: normResult && !normResult.skipped ? resolved.slot : 'skipped',
-      implementer: resolved.slot,
-      specReviewer: otherSlot,
-      qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
-    },
-  };
 }
 
 export async function runTasks(

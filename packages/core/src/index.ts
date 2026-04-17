@@ -55,6 +55,10 @@ export { createProvider } from './provider.js';
 export { runTasks } from './run-tasks.js';
 export type { RunTasksOptions } from './run-tasks.js';
 
+// Heartbeat
+export { HeartbeatTimer } from './heartbeat.js';
+export type { HeartbeatTimerOptions } from './heartbeat.js';
+
 // Readiness
 export {
   evaluateReadiness,

@@ -9,6 +9,7 @@ import {
   buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
+  buildRunTasksOptions,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -40,7 +41,8 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig) 
     'verify_work',
     'Verify work against a checklist with pass/fail evidence. Accepts inline description or file paths (multiple files verified in parallel). Preset: standard agent, spec review only.',
     verifyWorkSchema.shape,
-    async (params: VerifyWorkParams) => {
+    async (params: VerifyWorkParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra);
       const validation = validateInput(params.work, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };

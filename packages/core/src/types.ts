@@ -445,6 +445,7 @@ export type ProgressEvent =
       nextProvider: string
     }
   | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
+  | { kind: 'heartbeat'; elapsedMs: number; turnsCompleted: number; phase: 'implementing' | 'reviewing' }
   | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===

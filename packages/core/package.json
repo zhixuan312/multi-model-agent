@@ -56,6 +56,10 @@
       "types": "./dist/run-tasks.d.ts",
       "import": "./dist/run-tasks.js"
     },
+    "./heartbeat": {
+      "types": "./dist/heartbeat.d.ts",
+      "import": "./dist/heartbeat.js"
+    },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
