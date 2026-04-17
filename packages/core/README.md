@@ -50,6 +50,12 @@ for (const r of results) {
 | `./provider` | `createProvider` factory |
 | `./run-tasks` | `runTasks` parallel dispatcher |
 | `./types` | All shared types |
+| `./intake/pipeline` | `runIntakePipeline` — compile → infer → classify → resolve |
+| `./intake/types` | `DraftTask`, `Source`, `IntakeResult`, `ClarificationEntry` |
+| `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
+| `./intake/confirm` | `processConfirmations` — clarification resume processing |
+| `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit` |
 
 ## Full documentation
 

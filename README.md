@@ -123,7 +123,7 @@ Add API key env vars only if using `openai-compatible` agents.
 claude mcp list   # should show multi-model-agent
 ```
 
-Your AI assistant now has 8 tools. Ask it to delegate work — it knows when to use them.
+Your AI assistant now has 9 tools. Ask it to delegate work — it knows when to use them.
 
 ## How It Works
 
@@ -139,10 +139,10 @@ Your own model (whatever you're talking to) stays on architecture, design, and d
 Every task goes through a reviewed lifecycle:
 
 ```
-Brief → Readiness check → Implement → Spec review → Quality review → Report
+Compile → Classify → Resolve → Implement → Spec review → Quality review → Report
 ```
 
-Implementation and review run on *different* agents — cross-agent review catches what self-review can't.
+The intake pipeline interprets your request, infers missing details, and either executes immediately or asks for confirmation when confused. Implementation and review run on *different* agents — cross-agent review catches what self-review can't.
 
 ## Tools
 
@@ -170,6 +170,7 @@ Not using superpowers? These tools work standalone — they're just opinionated 
 | `register_context_block` | Store reusable context (long briefs, reference docs) |
 | `retry_tasks` | Re-run specific tasks from a previous batch |
 | `get_batch_slice` | Fetch output or telemetry from a previous batch |
+| `confirm_clarifications` | Resume a clarification set by confirming or editing the MCP's proposed interpretation |
 
 <details><summary><strong>Configuration</strong></summary>
 
@@ -200,7 +201,7 @@ Auth:
 
 Pin a version for reproducibility:
 ```bash
-npx -y @zhixuan92/multi-model-agent-mcp@2.0.0 serve
+npx -y @zhixuan92/multi-model-agent-mcp@2.1.0 serve
 ```
 
 </details>
