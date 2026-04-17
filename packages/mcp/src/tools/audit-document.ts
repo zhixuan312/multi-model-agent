@@ -29,6 +29,22 @@ function resolveAuditTypeText(auditType: AuditDocumentParams['auditType']): stri
   return auditType;
 }
 
+const AUDIT_DONE_CONDITIONS: Record<string, string> = {
+  security: 'Identify all security vulnerabilities (injection, auth bypass, data exposure, OWASP top 10). Each finding has severity (critical/high/medium/low), location, and remediation.',
+  performance: 'Identify all performance issues (O(n²) loops, unnecessary allocations, missing caching, blocking I/O). Each finding has impact level, location, and fix recommendation.',
+  correctness: 'Identify all logic errors, off-by-one bugs, unhandled edge cases, type mismatches, and contract violations. Each finding has severity, location, and correct behavior.',
+  style: 'Identify all style issues (naming, formatting, dead code, inconsistent patterns). Each finding has location and recommended fix.',
+  general: 'Identify issues across security, performance, correctness, and style. Each finding has category, severity, location, and remediation.',
+};
+
+function resolveAuditDoneCondition(auditType: AuditDocumentParams['auditType']): string {
+  if (auditType === 'general') return AUDIT_DONE_CONDITIONS.general;
+  if (Array.isArray(auditType)) {
+    return auditType.map(t => AUDIT_DONE_CONDITIONS[t]).join(' ');
+  }
+  return AUDIT_DONE_CONDITIONS[auditType] ?? AUDIT_DONE_CONDITIONS.general;
+}
+
 function buildAuditPrompt(
   auditTypeText: string,
   document: string | undefined,
@@ -56,6 +72,8 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
       const baseTaskSpec: Partial<TaskSpec> = {
         agentType: 'complex',
         reviewPolicy: 'off',
+        briefQualityPolicy: 'off',
+        done: resolveAuditDoneCondition(params.auditType),
         tools: config.defaults?.tools ?? 'full',
         timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
         maxCostUSD: config.defaults?.maxCostUSD ?? 10,

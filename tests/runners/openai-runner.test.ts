@@ -182,10 +182,12 @@ describe('runOpenAI — prevention scaffolding integration', () => {
   });
 
   it('populates the scratchpad from result.newItems (multi-part output_text concatenation)', async () => {
+    // Each fragment must trigger fragment detection (continuation phrase or
+    // fragment punctuation) so supervision treats them as degenerate.
     const fragments = [
-      'still short',
-      'also short',
-      'turn three text',
+      'let me check this:',
+      'next i will look:',
+      'let me read more,',
     ];
     let fragIndex = 0;
     mockRun.mockImplementation(() => {

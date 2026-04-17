@@ -49,6 +49,8 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig) 
       const baseTaskSpec: Partial<TaskSpec> = {
         agentType: 'standard',
         reviewPolicy: 'spec_only',
+        briefQualityPolicy: 'off',
+        done: `Every checklist item (${params.checklist.length} total) has a pass/fail verdict with supporting evidence from the code.`,
         tools: config.defaults?.tools ?? 'full',
         timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
         maxCostUSD: config.defaults?.maxCostUSD ?? 10,

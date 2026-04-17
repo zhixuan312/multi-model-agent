@@ -12,7 +12,7 @@ import type { ProgressEvent } from '../../packages/core/src/types.js';
 // spec success criteria.
 //
 // Scenario: one assistant turn, one text emission of VALID_FINAL_OUTPUT
-// (>= 200 chars + terminal punctuation so validateCompletion accepts it),
+// (>= 10 chars so validateCompletion auto-accepts it by length),
 // termination as status='ok'. No tool calls, no supervision retries, no
 // watchdog trips. This is the minimum viable "end-to-end one-turn run".
 //
@@ -33,9 +33,9 @@ import type { ProgressEvent } from '../../packages/core/src/types.js';
 // different order — fix the RUNNER, not the test.
 // -----------------------------------------------------------------------------
 
-/** Shared ≥200-char text with terminal punctuation. */
+/** Shared ≥10-char text that passes the validateCompletion minimum-length heuristic. */
 const VALID_FINAL_OUTPUT =
-  'This is a complete sub-agent answer that is long enough to pass the validateCompletion minimum-length heuristic without any additional structural hints because it carries more than 200 characters of plain text content.';
+  'This is a complete sub-agent answer that passes the validateCompletion minimum-length heuristic.';
 
 // ---- openai mocks -----------------------------------------------------------
 
