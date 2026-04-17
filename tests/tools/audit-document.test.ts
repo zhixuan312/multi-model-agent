@@ -112,6 +112,68 @@ describe('audit_document handler', () => {
 
 
 
+  it('propagates parentModel from config into task spec (single-task)', async () => {
+    mockRunTasks.mockResolvedValue([mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    await getHandler()({ document: 'doc', auditType: 'correctness' });
+    const tasks = mockRunTasks.mock.calls[0][0];
+    expect(tasks[0].parentModel).toBe('claude-opus-4-6');
+  });
+
+  it('propagates parentModel from config into task spec (fan-out)', async () => {
+    mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    await getHandler()({ auditType: 'security', filePaths: ['a.ts', 'b.ts'] });
+    const tasks = mockRunTasks.mock.calls[0][0];
+    expect(tasks[0].parentModel).toBe('claude-opus-4-6');
+    expect(tasks[1].parentModel).toBe('claude-opus-4-6');
+  });
+
+  it('headline reflects saved cost when parentModel is configured (single-task)', async () => {
+    mockRunTasks.mockResolvedValue([mockResult({
+      usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
+    })]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
+    const meta = JSON.parse(result.content[1].text);
+    expect(meta.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(meta.headline).toContain('1.8x ROI');
+    expect(meta.headline).not.toContain('$0.00 saved');
+  });
+
+  it('headline reflects saved cost when parentModel is configured (fan-out)', async () => {
+    mockRunTasks.mockResolvedValue([
+      mockResult({ usage: { inputTokens: 5000, outputTokens: 1000, totalTokens: 6000, costUSD: 0.05, savedCostUSD: 0.04 } }),
+      mockResult({ usage: { inputTokens: 5000, outputTokens: 1000, totalTokens: 6000, costUSD: 0.05, savedCostUSD: 0.04 } }),
+    ]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+
+    const result = await getHandler()({ auditType: 'security', filePaths: ['a.ts', 'b.ts'] });
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(envelope.headline).not.toContain('$0.00 saved');
+  });
+
+  it('headline shows actual cost when parentModel is absent', async () => {
+    mockRunTasks.mockResolvedValue([mockResult({
+      usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
+    })]);
+    const { mockServer, getHandler } = captureTool();
+    registerAuditDocument(mockServer as any, { defaults: {} } as any);
+
+    const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
+    const meta = JSON.parse(result.content[1].text);
+    expect(meta.headline).toContain('$0.10 actual');
+    expect(meta.headline).not.toContain('saved vs');
+  });
+
   it('resolves general auditType to all categories', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();

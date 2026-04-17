@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.3] - 2026-04-17
+
+### Fixed
+
+- **Saved-cost calculation in specialized tools (mcp).** `audit_document`, `review_code`, `verify_work`, and `debug_task` resolved `parentModel` from config but never set it on the `TaskSpec` passed to the runner. The runner returned `savedCostUSD: null`, causing headlines to display `$0.00 saved` despite actual cost savings. All four tools now propagate `parentModel` into the task spec.
+
+### Added
+
+- **parentModel propagation tests (mcp).** 18 new tests across the four specialized tools covering `parentModel` flow into task specs, headline saved-cost display (single-task and fan-out), and headline actual-cost fallback when `parentModel` is absent.
+
 ## [2.4.2] - 2026-04-17
 
 ### Fixed
@@ -353,7 +363,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.3...HEAD
+[2.4.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.2...mcp-v2.4.3
 [2.4.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.1...mcp-v2.4.2
 [2.4.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...mcp-v2.4.1
 [2.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.3.0...mcp-v2.4.0

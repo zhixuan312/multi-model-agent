@@ -104,9 +104,10 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
         sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
         cwd: process.cwd(),
         contextBlockIds: params.contextBlockIds,
+        parentModel: resolveParentModel(config),
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
-      const parentModel = resolveParentModel(config);
+      const parentModel = baseTaskSpec.parentModel;
 
       try {
         const mode = resolveDispatchMode(params.document, params.filePaths);
