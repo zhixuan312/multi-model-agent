@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import type { RunResult, MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { RunResult, MultiModelConfig, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import type { ProgressEvent } from '@zhixuan92/multi-model-agent-core';
 import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import { composeHeadline } from '../headline.js';
@@ -40,7 +40,24 @@ export function resolveDispatchMode(
   return 'single';
 }
 
-export function buildMetadataBlock(result: RunResult, parentModel?: string): { type: 'text'; text: string } {
+/**
+ * Auto-register task output(s) as a context block so callers can reference
+ * the result in follow-up calls (e.g. round 2 of an audit) without manually
+ * calling register_context_block. Diagnostic outputs are excluded.
+ */
+export function autoRegisterContextBlock(
+  results: RunResult[],
+  store: ContextBlockStore | undefined,
+): string | undefined {
+  if (!store) return undefined;
+  const usable = results.filter(r => !r.outputIsDiagnostic && r.output.trim().length > 0);
+  if (usable.length === 0) return undefined;
+  const combined = usable.map(r => r.output).join('\n\n---\n\n');
+  const { id } = store.register(combined);
+  return id;
+}
+
+export function buildMetadataBlock(result: RunResult, parentModel?: string, contextBlockId?: string): { type: 'text'; text: string } {
   const timings = computeTimings(result.durationMs ?? 0, [result]);
   const batchProgress = computeBatchProgress([result]);
   const aggregateCost = computeAggregateCost([result]);
@@ -50,6 +67,7 @@ export function buildMetadataBlock(result: RunResult, parentModel?: string): { t
     type: 'text' as const,
     text: JSON.stringify({
       headline,
+      ...(contextBlockId && { contextBlockId }),
       status: result.status,
       terminationReason: result.terminationReason,
       specReviewStatus: result.specReviewStatus,

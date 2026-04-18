@@ -67,6 +67,7 @@ export function buildFanOutResponse(
   tasks: TaskSpec[],
   wallClockMs: number,
   parentModel?: string,
+  contextBlockId?: string,
 ): { type: 'text'; text: string } {
   const timings = computeTimings(wallClockMs, results);
   const batchProgress = computeBatchProgress(results);
@@ -79,6 +80,7 @@ export function buildFanOutResponse(
       schemaVersion: '1.0.0',
       mode: 'fan_out',
       headline,
+      ...(contextBlockId && { contextBlockId }),
       timings,
       batchProgress,
       aggregateCost,

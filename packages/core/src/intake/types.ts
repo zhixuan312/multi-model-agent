@@ -1,13 +1,14 @@
 import type { TaskSpec } from '../types.js';
 
-export type SourceRoute = 'delegate_tasks' | 'review_code' | 'debug_task' | 'verify_work' | 'audit_document';
+export type SourceRoute = 'delegate_tasks' | 'review_code' | 'debug_task' | 'verify_work' | 'audit_document' | 'execute_plan';
 
 export type DelegateSource = { route: 'delegate_tasks'; originalInput: Record<string, unknown> };
 export type ReviewSource = { route: 'review_code'; originalInput: Record<string, unknown>; code?: string; inlineContent?: string; focus?: string[] };
 export type DebugSource = { route: 'debug_task'; originalInput: Record<string, unknown>; problem: string; context?: string; hypothesis?: string };
 export type VerifySource = { route: 'verify_work'; originalInput: Record<string, unknown>; checklist: string[]; work?: string };
 export type AuditSource = { route: 'audit_document'; originalInput: Record<string, unknown>; document?: string; auditType?: string };
-export type AnySource = DelegateSource | ReviewSource | DebugSource | VerifySource | AuditSource;
+export type ExecutePlanSource = { route: 'execute_plan'; originalInput: Record<string, unknown>; filePaths: string[]; task: string };
+export type AnySource = DelegateSource | ReviewSource | DebugSource | VerifySource | AuditSource | ExecutePlanSource;
 
 export interface DraftTask {
   draftId: string;

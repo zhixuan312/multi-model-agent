@@ -128,7 +128,7 @@ Add API key env vars only if using `openai-compatible` agents.
 claude mcp list   # should show multi-model-agent
 ```
 
-Your AI assistant now has 9 tools. Ask it to delegate work — it knows when to use them.
+Your AI assistant now has 10 tools. Ask it to delegate work — it knows when to use them.
 
 ## How It Works
 
@@ -165,6 +165,7 @@ The intake pipeline interprets your request, infers missing details, and either 
 | `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. Accepts `contextBlockIds` for diff-scoped/delta mode. |
 | `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. Accepts `contextBlockIds` for shared context. |
 | `debug_task` | Systematic debugging | Complex agent, full spec + quality review. Hypothesis-driven investigation. Accepts `contextBlockIds` for shared context. |
+| `execute_plan` | Plan task execution via subagent-driven-development | Standard agent, full review. Worker reads plan files, finds matching task by descriptor, implements it. |
 
 Not using superpowers? These tools work standalone — they're just opinionated defaults over `delegate_tasks` for common patterns.
 

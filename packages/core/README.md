@@ -56,7 +56,7 @@ for (const r of results) {
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
-| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit` |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan` |
 
 ## Full documentation
 

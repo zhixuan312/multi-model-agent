@@ -85,6 +85,8 @@ export { compileReviewCode } from './intake/compilers/review.js';
 export { compileDebugTask } from './intake/compilers/debug.js';
 export { compileVerifyWork } from './intake/compilers/verify.js';
 export { compileAuditDocument } from './intake/compilers/audit.js';
+export { compileExecutePlan } from './intake/compilers/execute-plan.js';
+export type { ExecutePlanInput } from './intake/compilers/execute-plan.js';
 export { runIntakePipeline } from './intake/pipeline.js';
 export { classifyDraft } from './intake/classify.js';
 export { inferMissingFields } from './intake/infer.js';
@@ -102,6 +104,7 @@ export type {
   DebugSource,
   VerifySource,
   AuditSource,
+  ExecutePlanSource,
   StoredDraft,
   ClarificationSet,
   ConfirmationEntry,

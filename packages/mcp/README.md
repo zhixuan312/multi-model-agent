@@ -1,6 +1,6 @@
 # @zhixuan92/multi-model-agent-mcp
 
-**MCP server for multi-model-agent.** Your AI assistant gets 9 tools for delegating work to cheaper agents — parallel execution, cross-agent review, 90% cost savings.
+**MCP server for multi-model-agent.** Your AI assistant gets 10 tools for delegating work to cheaper agents — parallel execution, cross-agent review, 90% cost savings.
 
 Works with Claude Code, Codex CLI, Cursor, Gemini CLI, and Claude Desktop.
 
@@ -84,6 +84,7 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 | `review_code` | Code review with spec + quality pipeline — parallel per file. Accepts `contextBlockIds` for diff-scoped/delta reviews. |
 | `verify_work` | Verify work against a checklist — parallel per file. Accepts `contextBlockIds` for shared context. |
 | `debug_task` | Hypothesis-driven debugging with file context. Accepts `contextBlockIds` for shared context. |
+| `execute_plan` | Execute tasks from a plan document — worker reads plan files, finds matching task by descriptor, implements it. Multiple tasks run in parallel. |
 | `register_context_block` | Store reusable context for later tasks |
 | `retry_tasks` | Re-run specific tasks from a previous batch |
 | `get_batch_slice` | Fetch output or telemetry from a previous batch |
