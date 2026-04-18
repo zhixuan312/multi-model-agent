@@ -330,11 +330,12 @@ export function buildMcpServer(
 
   server.tool(
     'delegate_tasks',
-    'Dispatch tasks to sub-agents. Minimum: { prompt }. Everything else has good defaults.\n\n' +
+    'General-purpose task dispatch — use only when no specialized route fits. ' +
+      'Try specialized tools first: audit_document (auditing), review_code (reviewing), verify_work (verifying), debug_task (debugging), execute_plan (implementing from a written plan/spec file on disk). ' +
+      'Use delegate_tasks for ad-hoc implementation, research, or any work that has no plan file and no specialized route.\n\n' +
+      'Minimum: { prompt }. Everything else has good defaults. ' +
       'Set filePaths whenever the task targets specific files. Set done whenever you have explicit acceptance criteria (required). ' +
       'Do not invent extra fields such as inputs or done_condition; put extra context in prompt and use only the public schema fields.\n\n' +
-      'Use specialized tools (audit_document, review_code, verify_work, debug_task, execute_plan) for common patterns. ' +
-      'Use delegate_tasks for custom work.\n\n' +
       renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
