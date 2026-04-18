@@ -1,5 +1,8 @@
 # multi-model-agent
 
+[![npm: core](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-core?label=core)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-core)
+[![npm: mcp](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-mcp?label=mcp)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-mcp)
+
 Delegate the labor, keep the judgment. Your expensive model stays on architecture — mechanical work runs on a fleet of cheaper agents, in parallel, for 90% less.
 
 An MCP server for Claude Code, Codex CLI, Cursor, Gemini CLI, and Claude Desktop. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
