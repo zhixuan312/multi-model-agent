@@ -21,13 +21,15 @@ export const executePlanSchema = z.object({
       { message: 'Duplicate task descriptors are not allowed' },
     )
     .describe('Descriptive task strings matching plan headings, e.g. "1. Setup database schema". Multiple = parallel.'),
+  context: z.string().optional()
+    .describe('Short additional context the plan does not contain, e.g. "Tasks 1-16 are done, files already exist". Injected into the worker prompt.'),
   ...commonToolFields,
 });
 
 export type ExecutePlanParams = z.infer<typeof executePlanSchema>;
 
-function buildExecutePlanPrompt(fileContents: string, task: string): string {
-  return [
+function buildExecutePlanPrompt(fileContents: string, task: string, context?: string): string {
+  const parts = [
     'Below are the plan and/or spec documents for this project:',
     '',
     '---',
@@ -37,18 +39,24 @@ function buildExecutePlanPrompt(fileContents: string, task: string): string {
     'Execute the following task from the documents above:',
     '',
     `Requested task: "${task}"`,
+  ];
+  if (context) {
+    parts.push('', `Additional context: ${context}`);
+  }
+  parts.push(
     '',
     'Find this task in the plan/spec documents above (not in any preceding context blocks),',
     'understand its requirements, and implement it fully.',
     'Follow any acceptance criteria, file paths, and constraints specified in the plan.',
     'If you cannot find a unique matching task, report that no match was found and do not implement anything.',
-  ].join('\n');
+  );
+  return parts.join('\n');
 }
 
 export function registerExecutePlan(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'execute_plan',
-    'Execute tasks from a plan document. Pass task descriptors and plan/spec file paths \u2014 the worker reads the plan, finds the matching task, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review.',
+    'Execute tasks from a written plan/spec file. Pass task descriptors and file paths — the worker reads the plan, finds the matching task, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review. Use this when a plan file exists on disk; use delegate_tasks instead when context is inline/ad-hoc with no plan file. Returns contextBlockId in metadata for follow-up calls.',
     executePlanSchema.shape,
     async (params: ExecutePlanParams, extra) => {
       const runOptions = buildRunTasksOptions(extra);
@@ -98,7 +106,7 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
       try {
         const tasks: TaskSpec[] = params.tasks.map(task => ({
           ...baseTaskSpec,
-          prompt: buildExecutePlanPrompt(fileContents, task),
+          prompt: buildExecutePlanPrompt(fileContents, task, params.context),
         } as TaskSpec));
 
         if (tasks.length === 1) {
