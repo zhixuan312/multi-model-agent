@@ -124,6 +124,10 @@
       "types": "./dist/intake/compilers/audit.d.ts",
       "import": "./dist/intake/compilers/audit.js"
     },
+    "./intake/compilers/execute-plan": {
+      "types": "./dist/intake/compilers/execute-plan.d.ts",
+      "import": "./dist/intake/compilers/execute-plan.js"
+    },
     "./intake/pipeline": {
       "types": "./dist/intake/pipeline.d.ts",
       "import": "./dist/intake/pipeline.js"
