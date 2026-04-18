@@ -11,7 +11,7 @@ When this document names an MCP tool, call that MCP tool. No exceptions.
 Why: The parent model costs 10-50x more than MCP workers. Every token of labor done inline wastes budget. Self-checks feel productive but bypass the cost model entirely.
 
 1. **Always call the named MCP tool.** Your inline file reads are judgment input, not the audit/review/verification itself.
-2. **Always use MCP `delegate_tasks` for labor.** The Claude Code `Agent` tool runs on the parent model at parent-model cost. Route implementation, auditing, reviewing, verifying, and debugging through MCP.
+2. **Always use MCP tools for labor.** The Claude Code `Agent` tool runs on the parent model at parent-model cost. Route implementation through `execute_plan` (plan tasks) or `delegate_tasks` (everything else). Route auditing, reviewing, verifying, and debugging through their specialized tools.
 3. **Always complete the full pipeline.** "I'll just do a quick check myself" followed by skipping the MCP call is a violation. The MCP call is the check.
 4. **Pipeline steps are non-negotiable.** Every numbered step in the Superpowers Auto-Pipeline that names an MCP tool requires that exact MCP tool call.
 
@@ -32,7 +32,7 @@ DON'T: Spawn a Claude Code Agent subagent to audit
 
 # When implementing a plan task:
 
-DO:   Call MCP delegate_tasks with the task brief as prompt
+DO:   Call MCP execute_plan with task descriptors and plan file paths
 DON'T: Write the code yourself inline
 DON'T: Spawn a Claude Code Agent subagent to implement
 ```
@@ -47,9 +47,12 @@ The MCP exposes specialized tools for common patterns and a general-purpose disp
 | Review code for quality/security | `review_code` |
 | Verify work against a checklist | `verify_work` |
 | Debug a bug or failure | `debug_task` |
-| General implementation, research, or any other labor | `delegate_tasks` |
+| Implement a task that has a written plan/spec file on disk | `execute_plan` |
+| No plan file, no specialized route fits — general-purpose labor | `delegate_tasks` |
 
-Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`) require less input than `delegate_tasks` because the route structure provides context the MCP would otherwise need from you. Use them when the task fits — they're not optional alternatives, they're the right tool for the job.
+Specialized tools (`audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) require less input than `delegate_tasks` because the route structure provides context the MCP would otherwise need from you. Always try a specialized route first. Use `delegate_tasks` only when none of them fit.
+
+`execute_plan` accepts `tasks` (descriptive strings matching plan headings), `filePaths` (plan/spec files the worker reads), and optional `context` (short additional info the plan doesn't contain, e.g. "Tasks 1-16 are done, files already exist"). Keep task descriptors short — the plan already has the details.
 
 `delegate_tasks` accepts `prompt` (required) with optional `agentType`, `filePaths`, `done`, and `contextBlockIds`. Everything else (working directory, sandbox, tools, timeout, cost) is resolved internally from config.
 
@@ -74,7 +77,7 @@ What the MCP handles:
 
 ## Parallelism
 
-Bundle independent tasks in one `delegate_tasks` call. Never dispatch two tasks that write to the same files in parallel.
+Bundle independent tasks in one `execute_plan` or `delegate_tasks` call. Never dispatch two tasks that write to the same files in parallel.
 
 ## Context Reuse
 
@@ -109,10 +112,10 @@ When a plan file is written to `docs/superpowers/plans/`:
 
 When subagent-driven-development starts, for EACH task:
 
-1. Call MCP `delegate_tasks` with the full task text as `prompt`, plus any needed `filePaths`, `done`, and `contextBlockIds`.
+1. If a written plan/spec file exists: call MCP `execute_plan` with task descriptors, plan file paths (via `filePaths`), optional `context`, and any needed `contextBlockIds`. If no plan file exists (ad-hoc task, inline context): call MCP `delegate_tasks` with the full task text as `prompt`.
 2. On `ok` — proceed to review.
 3. On `incomplete` — proceed to review (worker may still have made usable progress).
-4. On failure — re-dispatch via MCP `delegate_tasks` with enriched prompt or escalate agentType (standard -> complex).
+4. On failure — re-dispatch via MCP `execute_plan` or `delegate_tasks` with enriched prompt or escalate agentType (standard -> complex).
 5. If the MCP returns clarifications — review the proposed interpretation, confirm or edit via `confirm_clarifications`, then proceed once executed.
 6. Call MCP `review_code(filePaths: [changed files])`. Mandatory after every implementation task.
 7. If review finds issues, fix via MCP `delegate_tasks`, then call MCP `review_code` again. Max 2 fix rounds.
