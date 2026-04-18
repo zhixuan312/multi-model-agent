@@ -7,6 +7,7 @@ export const OUTPUT_CONTRACT_CLAUSES: Partial<Record<SourceRoute, string>> = {
   debug_task: 'Use hypothesis-driven debugging: identify root cause, propose fix, verify.',
   verify_work: 'For each checklist item, indicate pass/fail and provide evidence.',
   audit_document: 'Provide a structured audit report with findings and severity.',
+  execute_plan: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
 };
 
 export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
@@ -15,6 +16,7 @@ export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
   debug_task: { agentType: 'complex', reviewPolicy: 'full', maxReviewRounds: 1 },
   verify_work: { agentType: 'standard', reviewPolicy: 'spec_only' },
   audit_document: { agentType: 'complex', reviewPolicy: 'off' },
+  execute_plan: { agentType: 'standard', reviewPolicy: 'full' },
 };
 
 export function resolveDraft(
