@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.4.4] - 2026-04-18
+
+### Added
+
+- **`execute_plan` specialized route (core, mcp).** New MCP tool that accepts task descriptors and plan/spec file paths — the worker reads the plan, finds the matching task heading, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review. Includes `ExecutePlanSource` type, route defaults, output contract, compiler with 8 tests, and full MCP tool handler.
+- **Context block auto-registration (mcp).** All five specialized routes (`audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) now auto-register their output as a context block after execution and return the `contextBlockId` in metadata. Callers pass this ID directly as `contextBlockIds` in follow-up calls (e.g., round 2 of an audit) without calling `register_context_block` — eliminates redundant parent token spend on re-transmitting full output text.
+
 ## [2.4.3] - 2026-04-17
 
 ### Fixed
@@ -363,7 +370,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.3...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.4...HEAD
+[2.4.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.3...mcp-v2.4.4
 [2.4.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.2...mcp-v2.4.3
 [2.4.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.1...mcp-v2.4.2
 [2.4.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.0...mcp-v2.4.1
