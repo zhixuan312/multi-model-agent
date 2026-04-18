@@ -102,6 +102,7 @@ export type {
   DebugSource,
   VerifySource,
   AuditSource,
+  ExecutePlanSource,
   StoredDraft,
   ClarificationSet,
   ConfirmationEntry,
