@@ -8,6 +8,7 @@ import {
   buildFilePathsPrompt,
   buildRunTasksOptions,
   resolveParentModel,
+  autoRegisterContextBlock,
 } from './shared.js';
 
 export const debugTaskSchema = z.object({
@@ -58,7 +59,8 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, c
       try {
         const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel)] };
+        const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

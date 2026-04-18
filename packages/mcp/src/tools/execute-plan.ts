@@ -8,6 +8,7 @@ import {
   buildMetadataBlock,
   buildRunTasksOptions,
   resolveParentModel,
+  autoRegisterContextBlock,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -106,13 +107,15 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
           if (!result) {
             return { content: [{ type: 'text' as const, text: 'Error: task produced no result' }], isError: true };
           }
-          return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel)] };
+          const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+          return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
         }
 
         // Multiple tasks = fan out (parallel)
         const startMs = Date.now();
         const results = await runTasks(tasks, config, { ...runOptions, runtime });
-        return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel)] };
+        const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+        return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel, ctxId)] };
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

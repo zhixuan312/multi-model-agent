@@ -11,6 +11,7 @@ import {
   buildPerFilePrompt,
   buildRunTasksOptions,
   resolveParentModel,
+  autoRegisterContextBlock,
 } from './shared.js';
 import { buildFanOutResponse } from './batch-response.js';
 
@@ -78,13 +79,15 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig, 
 
           const startMs = Date.now();
           const results = await runTasks(tasks, config, { ...runOptions, runtime });
-          return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel)] };
+          const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+          return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel, ctxId)] };
         }
 
         const prompt = buildVerifyPrompt(params.work, params.filePaths, params.checklist);
         const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
         const result = results[0];
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel)] };
+        const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
