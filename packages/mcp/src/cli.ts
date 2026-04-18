@@ -32,6 +32,7 @@ import {
 } from './tools/batch-response.js';
 import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
+import { registerExecutePlan } from './tools/execute-plan.js';
 import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
 import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
@@ -332,7 +333,7 @@ export function buildMcpServer(
     'Dispatch tasks to sub-agents. Minimum: { prompt }. Everything else has good defaults.\n\n' +
       'Set filePaths whenever the task targets specific files. Set done whenever you have explicit acceptance criteria (required). ' +
       'Do not invent extra fields such as inputs or done_condition; put extra context in prompt and use only the public schema fields.\n\n' +
-      'Use specialized tools (audit_document, review_code, verify_work, debug_task) for common patterns. ' +
+      'Use specialized tools (audit_document, review_code, verify_work, debug_task, execute_plan) for common patterns. ' +
       'Use delegate_tasks for custom work.\n\n' +
       renderProviderRoutingMatrix(config),
     {
@@ -734,6 +735,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
 
   registerAuditDocument(server, config, contextBlockStore);
   registerDebugTask(server, config, contextBlockStore);
+  registerExecutePlan(server, config, contextBlockStore);
   registerReviewCode(server, config, contextBlockStore);
   registerVerifyWork(server, config, contextBlockStore);
 
