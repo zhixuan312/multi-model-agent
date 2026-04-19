@@ -169,6 +169,10 @@ Run `npm test`, `npm run build`, `git` via Bash. Shell output from delegated wor
 
 TDD pattern: dispatch edit via MCP `delegate_tasks`, run test yourself, feed failures into follow-up dispatch.
 
+### Worktree limitation
+
+MCP workers always operate in the project root directory. Git worktree isolation does not extend to delegated workers. Keep worktree-aware commands (git add, git commit) in the parent session.
+
 ### Code reading
 
 Dispatch survey to standard agent ("summarize data flow in these files"), read only the flagged lines yourself.
@@ -182,6 +186,10 @@ Why: Pulling whole files into parent context wastes expensive tokens on content 
 - `clarifications` present — the MCP needs your input. Review the proposed interpretation, confirm or edit via `confirm_clarifications`. Do NOT re-dispatch from scratch.
 - `timeout` / `cost_exceeded` — break into smaller pieces
 - `api_error` / `network_error` — retry once, then escalate agentType (standard -> complex)
+
+### Over-delivery review
+
+When a worker's `filesWritten` contains files beyond the task's expected scope, dispatch targeted `review_code` for the extra files. The platform does not constrain over-delivery — but unreviewed work is unverified work.
 
 ### MCP server outage
 

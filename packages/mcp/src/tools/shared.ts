@@ -126,7 +126,7 @@ export function buildRunTasksOptions(extra?: { _meta?: Record<string, unknown>; 
         params: {
           progressToken,
           progress: progressCounter,
-          message: JSON.stringify({ taskIndex: _taskIndex, event }),
+          message: `[task ${_taskIndex}] ${event.headline}`,
         },
       }).catch(() => { /* ignore */ });
     },
