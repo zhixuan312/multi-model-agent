@@ -453,7 +453,22 @@ export type ProgressEvent =
       nextProvider: string
     }
   | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
-  | { kind: 'heartbeat'; elapsed: string; turnsCompleted: number; phase: 'implementing' | 'reviewing' }
+  | {
+      kind: 'heartbeat'
+      elapsed: string
+      stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
+      stageIndex: number
+      stageCount: number
+      reviewRound?: number
+      maxReviewRounds?: number
+      progress: {
+        filesRead: number
+        filesWritten: number
+        toolCalls: number
+        stalled: boolean
+      }
+      headline: string
+    }
   | { kind: 'done'; status: RunStatus }
 
 // === Routing / Eligibility ===
