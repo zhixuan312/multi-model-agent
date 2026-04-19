@@ -144,10 +144,10 @@ Your own model (whatever you're talking to) stays on architecture, design, and d
 Every task goes through a reviewed lifecycle:
 
 ```
-Compile → Classify → Resolve → Implement → Spec review → Quality review → Report
+Compile → Classify → Resolve → Implement → Auto-commit → Spec review → Quality review → Verify artifacts → Report
 ```
 
-The intake pipeline interprets your request, infers missing details, and either executes immediately or asks for confirmation when confused. Implementation and review run on *different* agents — cross-agent review catches what self-review can't.
+The intake pipeline interprets your request, infers missing details, and either executes immediately or asks for confirmation when confused. Implementation and review run on *different* agents — cross-agent review catches what self-review can't. File changes are auto-committed after each worker round, and output targets are verified to exist before reporting success.
 
 ## Tools
 

@@ -172,6 +172,7 @@ export function buildMcpServer(
       reviewPolicy: 'full',
       effort: undefined,
       parentModel: resolvedParentModel,
+      autoCommit: true,
     }));
   }
 

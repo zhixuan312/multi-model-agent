@@ -25,6 +25,8 @@ import type { QualityReviewResult } from './review/quality-reviewer.js';
 import { aggregateResult } from './review/aggregate-result.js';
 import type { ParsedStructuredReport } from './reporting/structured-report.js';
 import { parseStructuredReport } from './reporting/structured-report.js';
+import { autoCommitFiles } from './auto-commit.js';
+import { partitionFilePaths, checkOutputTargets } from './file-artifact-check.js';
 import fs from 'fs/promises';
 
 const PLAN_CONTEXT_MAX_CHARS = 10_000;
@@ -41,7 +43,6 @@ export async function extractPlanSection(
       const resolved = filePath.startsWith('/') ? filePath : `${basePath}/${filePath}`;
       const content = await fs.readFile(resolved, 'utf-8');
 
-      // Find the heading that matches the task descriptor
       const lines = content.split('\n');
       let startIndex = -1;
       let headingLevel = 0;
@@ -55,9 +56,8 @@ export async function extractPlanSection(
         }
       }
 
-      if (startIndex === -1) continue; // Try next file
+      if (startIndex === -1) continue;
 
-      // Extract until next same-level or higher-level heading
       let endIndex = lines.length;
       for (let i = startIndex + 1; i < lines.length; i++) {
         const match = lines[i].match(/^(#{1,6})\s/);
@@ -73,7 +73,6 @@ export async function extractPlanSection(
       }
       return section;
     } catch {
-      // File not readable — try next, or fall through to undefined
       if (process.env.MULTI_MODEL_DEBUG === '1') {
         console.error(`[multi-model-agent] plan file not readable: ${filePath}`);
       }
@@ -187,6 +186,10 @@ async function executeReviewedLifecycle(
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
 
+  // Partition filePaths into output targets before the worker runs.
+  // Output targets are paths that do not yet exist on disk.
+  const { outputTargets } = partitionFilePaths(task.filePaths, task.cwd ?? process.cwd());
+
   let escalationProvider: Provider | undefined;
   try {
     escalationProvider = createProvider(otherSlot, config);
@@ -222,7 +225,6 @@ async function executeReviewedLifecycle(
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
         }
         if (event.kind === 'turn_complete') {
-          // Update cost from cumulative tokens
           const costUSD = computeCostUSD(
             event.cumulativeInputTokens,
             event.cumulativeOutputTokens,
@@ -239,10 +241,11 @@ async function executeReviewedLifecycle(
       }
     : undefined;
 
+  // Track auto-commit state across all rounds
+  let commitSha: string | undefined;
+  let commitError: string | undefined;
+
   try {
-    // done is included in task.prompt below so the worker sees it as a goal.
-    // The rework loop (below) then builds from task.prompt, so done is
-    // implicitly preserved across all subsequent rounds.
     const implResult = await delegateWithEscalation(
       withDoneCondition(task),
       [resolved.provider],
@@ -252,9 +255,17 @@ async function executeReviewedLifecycle(
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
     const workerStatus = extractWorkerStatus(implReport);
 
-    // C6a: filePaths interaction is a soft completion signal — review always runs.
-    // If task.filePaths was provided, track whether the worker read or wrote any
-    // of those paths as a completion concern (informational only).
+    // Auto-commit: commit the worker's file changes
+    if (task.autoCommit && implResult.status === 'ok' && implResult.filesWritten.length > 0) {
+      const commitResult = autoCommitFiles(
+        implResult.filesWritten,
+        implReport?.summary ?? undefined,
+        task.cwd ?? process.cwd(),
+      );
+      commitSha = commitResult.sha;
+      commitError = commitResult.error;
+    }
+
     const filePathsInteracted = task.filePaths && task.filePaths.length > 0
       ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
           task.filePaths!.some(fp => f === fp || f.endsWith('/' + fp) || f.endsWith(fp)),
@@ -262,13 +273,17 @@ async function executeReviewedLifecycle(
       : true;
     const filePathsSkipped = !filePathsInteracted;
 
-    // Skip review entirely when the implementer produced no reviewable file artifacts.
-    // This avoids sending the reviewer an empty packet that always fails to parse.
     if (implResult.filesWritten.length === 0) {
       heartbeat?.updateStageCount(1);
       const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
+      const earlyFileArtifactsMissing = implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined;
+      const earlyStatus: RunStatus =
+        implResult.status === 'ok' && earlyFileArtifactsMissing
+          ? 'incomplete'
+          : implResult.status;
       return {
         ...implResult,
+        status: earlyStatus,
         workerStatus,
         specReviewStatus: 'not_applicable',
         qualityReviewStatus: 'not_applicable',
@@ -293,6 +308,9 @@ async function executeReviewedLifecycle(
           specReviewer: null,
           qualityReviewer: null,
         },
+        fileArtifactsMissing: earlyFileArtifactsMissing,
+        commitSha,
+        commitError,
       };
     }
 
@@ -314,6 +332,9 @@ async function executeReviewedLifecycle(
           specReviewer: null,
           qualityReviewer: null,
         },
+        fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        commitSha,
+        commitError,
       };
     }
 
@@ -336,6 +357,9 @@ async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         implementationReport: implReport,
+        fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        commitSha,
+        commitError,
       };
     }
 
@@ -360,6 +384,9 @@ async function executeReviewedLifecycle(
           specReviewer: null,
           qualityReviewer: null,
         },
+        fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        commitSha,
+        commitError,
       };
     }
 
@@ -415,6 +442,18 @@ async function executeReviewedLifecycle(
           { explicitlyPinned: true, onProgress: wrappedOnProgress },
         );
 
+        // Auto-commit rework changes
+        if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
+          const reworkReport = parseStructuredReport(reworkResult.output);
+          const reworkCommit = autoCommitFiles(
+            reworkResult.filesWritten,
+            reworkReport.summary ?? undefined,
+            task.cwd ?? process.cwd(),
+          );
+          if (reworkCommit.sha) commitSha = reworkCommit.sha;
+          if (reworkCommit.error) commitError = reworkCommit.error;
+        }
+
         finalImplResult = reworkResult;
         const reworkReport = parseStructuredReport(reworkResult.output);
         finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
@@ -440,14 +479,12 @@ async function executeReviewedLifecycle(
 
         if (specStatus === 'approved') break;
 
-        // Plateau detection: stop when same findings appear in two consecutive rounds.
         const currentFindings = [...specResult.findings].sort().join('\0');
         const prevFindings = prevSpecFindings.sort().join('\0');
         if (currentFindings === prevFindings && currentFindings !== '') break;
 
         prevSpecFindings = specResult.findings;
 
-        // Absolute safety: don't exceed 10 rework rounds regardless.
         if (round >= (task.maxReviewRounds ?? 5)) break;
       }
     }
@@ -487,6 +524,18 @@ async function executeReviewedLifecycle(
             [resolved.provider],
             { explicitlyPinned: true, onProgress: wrappedOnProgress },
           );
+
+          // Auto-commit rework changes
+          if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
+            const reworkReport = parseStructuredReport(reworkResult.output);
+            const reworkCommit = autoCommitFiles(
+              reworkResult.filesWritten,
+              reworkReport.summary ?? undefined,
+              task.cwd ?? process.cwd(),
+            );
+            if (reworkCommit.sha) commitSha = reworkCommit.sha;
+            if (reworkCommit.error) commitError = reworkCommit.error;
+          }
 
           finalImplResult = reworkResult;
           const reworkReport = parseStructuredReport(reworkResult.output);
@@ -530,13 +579,22 @@ async function executeReviewedLifecycle(
       qualityResult.status,
     );
 
-    // Status downgrade: review verdicts are authoritative.
-    // If review exhausted without approval, downgrade ok → incomplete.
+    // File artifact verification: check whether output targets exist on disk after all work.
+    // Only applies when status is ok; non-ok statuses skip verification entirely.
+    const fileArtifactsMissing =
+      finalImplResult.status === 'ok' && outputTargets.length > 0
+        ? checkOutputTargets(outputTargets)
+        : undefined;
+
+    // Status downgrade: review verdicts are authoritative. File artifact verification
+    // is also authoritative — missing output targets downgrade ok → incomplete.
     const finalStatus: RunStatus =
       finalImplResult.status === 'ok' &&
       (specStatus === 'changes_required' || qualityResult.status === 'changes_required')
         ? 'incomplete'
-        : finalImplResult.status;
+        : finalImplResult.status === 'ok' && fileArtifactsMissing
+          ? 'incomplete'
+          : finalImplResult.status;
 
     return {
       ...finalImplResult,
@@ -561,6 +619,9 @@ async function executeReviewedLifecycle(
         specReviewer: reviewModel,
         qualityReviewer: reviewPolicy === 'full' ? reviewModel : null,
       },
+      fileArtifactsMissing,
+      commitSha,
+      commitError,
     };
   } finally {
     heartbeat?.stop();
@@ -636,7 +697,6 @@ export async function runTasks(
     }
   });
 
-  // C5: Apply effort default when not explicitly set
   for (const r of resolved) {
     if ('error' in r) continue;
     if (r.task.effort === undefined) {
@@ -647,7 +707,6 @@ export async function runTasks(
     }
   }
 
-  // C3: Inject parallel-safety suffix when dispatching 2+ tasks
   if (resolved.length > 1) {
     const PARALLEL_SAFETY_SUFFIX =
       '\n\nYou are running in parallel with other tasks. ' +

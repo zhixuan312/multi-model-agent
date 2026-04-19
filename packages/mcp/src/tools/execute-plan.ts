@@ -99,6 +99,7 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
         cwd: process.cwd(),
         contextBlockIds: params.contextBlockIds,
         parentModel: resolveParentModel(config),
+        autoCommit: true,
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
       const parentModel = baseTaskSpec.parentModel;

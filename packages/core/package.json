@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "2.7.1",
+  "version": "2.7.2",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -163,6 +163,14 @@
     "./intake/draft-id": {
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
+    },
+    "./auto-commit": {
+      "types": "./dist/auto-commit.d.ts",
+      "import": "./dist/auto-commit.js"
+    },
+    "./file-artifact-check": {
+      "types": "./dist/file-artifact-check.d.ts",
+      "import": "./dist/file-artifact-check.js"
     }
   },
   "scripts": {

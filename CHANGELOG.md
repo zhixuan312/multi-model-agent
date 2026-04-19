@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.2] - 2026-04-20
+
+### Added
+
+- **File artifact verification (core).** Tasks with `filePaths` containing non-existent paths (output targets) now verify those files exist after all work completes. If any output target is still missing, `status` downgrades from `ok` to `incomplete` and `fileArtifactsMissing` is set to `true`. Uses exact normalized path comparison via `fs.existsSync` against the final state (post-rework, post-commit).
+- **Auto-commit (core).** New `autoCommit` field on `TaskSpec`. When true, the platform commits `filesWritten` via git after the worker finishes (and after each rework round). Commit message is derived from the worker's structured report summary. Uses `execFileSync` with argument arrays for shell safety. "Nothing to commit" is treated as a benign no-op. Commit SHA and any error are returned in `commitSha`/`commitError` on `RunResult`.
+- **Preset auto-commit (mcp).** `delegate_tasks`, `execute_plan`, `debug_task`, and `retry_tasks` now set `autoCommit: true` by default. Read-only tools (`audit_document`, `review_code`, `verify_work`) do not.
+
+### Changed
+
+- **Delegation rule updated.** Plan auditing now routes through `review_code` (with plan + referenced source files) instead of `audit_document`, giving the auditor codebase access to validate type/function assumptions. Positive language throughout, rationale added for all rules, response handling reformatted as a table.
+
 ## [2.7.1] - 2026-04-19
 
 ### Fixed
@@ -438,7 +450,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.2...HEAD
+[2.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.1...mcp-v2.7.2
 [2.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.0...mcp-v2.7.1
 [2.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.1...mcp-v2.7.0
 [2.6.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...mcp-v2.6.1
