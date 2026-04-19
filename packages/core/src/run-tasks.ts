@@ -134,16 +134,31 @@ async function executeReviewedLifecycle(
     // Other slot not configured — auto-escalation not available
   }
 
+  const stageCount = reviewPolicy === 'off' ? 1 : 5;
   const heartbeat = onProgress
     ? new HeartbeatTimer(onProgress)
     : undefined;
-  heartbeat?.start('implementing');
+  heartbeat?.start(stageCount);
 
   const implModel = resolved.provider.config.model;
 
+  const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
   const wrappedOnProgress = onProgress
     ? (event: ProgressEvent) => {
-        if (event.kind === 'turn_complete') heartbeat?.incrementTurns();
+        if (event.kind === 'tool_call') {
+          heartbeat?.setInFlight(true);
+          progressCounters.toolCalls++;
+          const name = event.toolSummary.split('(')[0];
+          if (name === 'readFile' || name === 'grep' || name === 'glob' || name === 'listFiles') {
+            progressCounters.filesRead++;
+          } else if (name === 'writeFile' || name === 'editFile') {
+            progressCounters.filesWritten++;
+          }
+          heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
+        }
+        if (event.kind === 'turn_complete') {
+          heartbeat?.setInFlight(false);
+        }
         onProgress(event);
       }
     : undefined;
@@ -173,6 +188,7 @@ async function executeReviewedLifecycle(
 
     // Skip review entirely when the implementer produced no reviewable file artifacts.
     // This avoids sending the reviewer an empty packet that always fails to parse.
+    heartbeat?.updateStageCount(1);
     if (implResult.filesWritten.length === 0) {
       const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
       return {
@@ -283,7 +299,7 @@ async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
-    heartbeat?.setPhase('reviewing');
+    heartbeat?.setStage('spec_review', 2, 1, task.maxReviewRounds);
 
     let specResult = await runSpecReview(
       otherProvider,
@@ -303,6 +319,7 @@ async function executeReviewedLifecycle(
       let round = 0;
       while (true) {
         round++;
+        heartbeat?.setStage('spec_rework', 3, round, task.maxReviewRounds ?? 10);
         const feedback = specResult.findings.length > 0
           ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
           : '';
@@ -322,6 +339,7 @@ async function executeReviewedLifecycle(
         const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
         fileContents = reworkContents;
 
+        heartbeat?.setStage('spec_review', 2, round + 1, task.maxReviewRounds ?? 10);
         specResult = await runSpecReview(
           otherProvider,
           packet,
@@ -349,6 +367,7 @@ async function executeReviewedLifecycle(
 
     let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
     if (reviewPolicy === 'full') {
+      heartbeat?.setStage('quality_review', 4, 1, task.maxReviewRounds ?? 10);
       qualityResult = await runQualityReview(
         otherProvider,
         packet,
@@ -363,6 +382,7 @@ async function executeReviewedLifecycle(
         let round = 0;
         while (true) {
           round++;
+          heartbeat?.setStage('quality_rework', 5, round, task.maxReviewRounds ?? 10);
           const feedback = qualityResult.findings.length > 0
             ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
             : '';
@@ -381,6 +401,7 @@ async function executeReviewedLifecycle(
 
           const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
 
+          heartbeat?.setStage('quality_review', 4, round + 1, task.maxReviewRounds ?? 10);
           qualityResult = await runQualityReview(
             otherProvider,
             packet,
