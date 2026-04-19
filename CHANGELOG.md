@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.1] - 2026-04-19
+
+### Fixed
+
+- **Heartbeat progress notifications (mcp).** MCP progress notifications now send the human-readable `headline` string (e.g., `[1/5] Implementing (gpt-5.4) — 15s, 3 read, 0 written, 6 tool calls`) instead of a raw JSON dump of the full `ProgressEvent`. Clients that truncate the `message` field now display useful status instead of cut-off JSON.
+
 ## [2.6.0] - 2026-04-19
 
 ### Added
@@ -395,7 +401,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.1...HEAD
+[2.6.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...mcp-v2.6.1
 [2.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.5.0...mcp-v2.6.0
 [2.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.4...mcp-v2.5.0
 [2.4.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.3...mcp-v2.4.4
