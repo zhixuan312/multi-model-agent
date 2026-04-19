@@ -43,6 +43,13 @@ describe('buildSpecReviewPrompt', () => {
     expect(p).toContain('approved');
     expect(p).toContain('changes_required');
   });
+
+  it('includes completeness instruction for partial edit detection', () => {
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog);
+    expect(p).toContain('Completeness:');
+    expect(p).toContain('positive evidence of omission');
+    expect(p).toContain('changes_required');
+  });
 });
 
 describe('buildSpecReviewPrompt with planContext', () => {

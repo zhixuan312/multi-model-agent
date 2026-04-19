@@ -1,6 +1,7 @@
 import type {
   Provider,
   RunResult,
+  RunStatus,
   TaskSpec,
   MultiModelConfig,
   InternalRunnerEvent,
@@ -529,8 +530,17 @@ async function executeReviewedLifecycle(
       qualityResult.status,
     );
 
+    // Status downgrade: review verdicts are authoritative.
+    // If review exhausted without approval, downgrade ok → incomplete.
+    const finalStatus: RunStatus =
+      finalImplResult.status === 'ok' &&
+      (specStatus === 'changes_required' || qualityResult.status === 'changes_required')
+        ? 'incomplete'
+        : finalImplResult.status;
+
     return {
       ...finalImplResult,
+      status: finalStatus,
       workerStatus,
       specReviewStatus: specStatus,
       qualityReviewStatus: qualityResult.status,
