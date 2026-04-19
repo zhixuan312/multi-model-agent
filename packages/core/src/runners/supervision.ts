@@ -471,6 +471,7 @@ export function validateSubAgentOutput(
     skipCompletionHeuristic?: boolean;
     workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked';
     hasCompletedWork?: boolean;
+    hasFileArtifacts?: boolean;
   } = {},
 ): ValidationResult {
   // 1. Degeneracy checks
@@ -490,7 +491,7 @@ export function validateSubAgentOutput(
   }
 
   // 4. workerStatus: 'done' + work evidence → trust it
-  if (opts.workerStatus === 'done' && (opts.hasCompletedWork || opts.skipCompletionHeuristic)) {
+  if (opts.workerStatus === 'done' && (opts.hasCompletedWork || opts.hasFileArtifacts || opts.skipCompletionHeuristic)) {
     return { valid: true };
   }
 
@@ -500,7 +501,7 @@ export function validateSubAgentOutput(
   }
 
   // 6. done_with_concerns + work evidence → trust it
-  if (opts.workerStatus === 'done_with_concerns' && opts.hasCompletedWork) {
+  if (opts.workerStatus === 'done_with_concerns' && (opts.hasCompletedWork || opts.hasFileArtifacts)) {
     return { valid: true };
   }
 
