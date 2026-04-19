@@ -27,6 +27,7 @@ export type {
   RunOptions,
   RunTasksRuntime,
   ProgressEvent,
+  InternalRunnerEvent,
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
@@ -57,7 +58,7 @@ export type { RunTasksOptions } from './run-tasks.js';
 
 // Heartbeat
 export { HeartbeatTimer } from './heartbeat.js';
-export type { HeartbeatTimerOptions } from './heartbeat.js';
+export type { HeartbeatTimerOptions, HeartbeatStage, TransitionFields } from './heartbeat.js';
 
 // Readiness
 export {

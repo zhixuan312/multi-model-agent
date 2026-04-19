@@ -136,8 +136,8 @@ describe('delegateWithEscalation retry', () => {
   });
 
   it('emits retry progress events', async () => {
-    const events: ProgressEvent[] = [];
-    const onProgress = (e: ProgressEvent) => { events.push(e); };
+    const events: InternalRunnerEvent[] = [];
+    const onProgress = (e: InternalRunnerEvent) => { events.push(e); };
 
     const provider = sequenceProvider([
       makeMockResult('api_error', 'fail 1'),

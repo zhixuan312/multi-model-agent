@@ -15,7 +15,7 @@ import {
   type RunResult,
   type RunOptions,
   type ProviderConfig,
-  type ProgressEvent,
+  type InternalRunnerEvent,
   type ToolMode,
 } from '../types.js';
 import { injectionTypeFor } from './injection-type.js';
@@ -153,7 +153,7 @@ export async function runOpenAI(
   // upstream and cannot corrupt this loop. We do not need to wrap it
   // again here.
   const onProgress = options.onProgress;
-  const emit = (event: ProgressEvent): void => {
+  const emit = (event: InternalRunnerEvent): void => {
     if (onProgress) onProgress(event);
   };
 

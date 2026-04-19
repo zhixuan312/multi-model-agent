@@ -369,12 +369,10 @@ export interface RunOptions {
    *  passes, coverage is authoritative — you don't need this flag. */
   skipCompletionHeuristic?: boolean
   /** Optional callback invoked by runners and the escalation orchestrator to
-   *  stream in-flight progress events. See `ProgressEvent` for the full set
-   *  of variants. Runners receive this via `provider.run(..., { onProgress })`
-   *  and call it synchronously from their loop; the callback MUST NOT throw
-   *  and should return quickly. Wired in Task 8 (interface + plumbing);
-   *  runners emit events in Tasks 9-11. */
-  onProgress?: (event: ProgressEvent) => void
+   *  stream in-flight internal progress events. These are `InternalRunnerEvent`
+   *  variants — the runner-to-orchestrator telemetry channel. They are NEVER
+   *  forwarded to the parent. HeartbeatTimer is the sole parent emitter. */
+  onProgress?: (event: InternalRunnerEvent) => void
   /** Called exactly once per attempt, when the runner has assembled the
    *  canonical orchestrator-side initial brief — the string
    *  `${buildSystemPrompt()}\n\n${buildBudgetHint(...)}\n\n${prompt}`,
@@ -417,16 +415,14 @@ export interface RunTasksRuntime {
 }
 
 /**
- * In-flight progress signal emitted by runners and the escalation
- * orchestrator. Consumers (today: the MCP cli bridge) translate these into
- * transport-level notifications so callers can observe a sub-agent's work
- * without polling. One `ProgressEvent` per meaningful state transition.
+ * Internal progress events emitted by runners and the escalation orchestrator.
+ * These flow from runners → run-tasks.ts (intercepted for live counter updates)
+ * but are NEVER forwarded to the parent. HeartbeatTimer is the sole parent emitter.
  *
- * Variants mirror spec Part B.1. Runner emission lives in Tasks 9-11; the
- * escalation `escalation_start` hop is emitted by `delegateWithEscalation`
- * itself in Task 8.
+ * Runners emit these via `onProgress`. `delegateWithEscalation` also emits
+ * `escalation_start` and `retry` variants here.
  */
-export type ProgressEvent =
+export type InternalRunnerEvent =
   | { kind: 'turn_start'; turn: number; provider: string }
   | { kind: 'tool_call'; turn: number; toolSummary: string }
   | { kind: 'text_emission'; turn: number; chars: number; preview: string }
@@ -456,23 +452,34 @@ export type ProgressEvent =
       nextProvider: string
     }
   | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
-  | {
-      kind: 'heartbeat'
-      elapsed: string
-      stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
-      stageIndex: number
-      stageCount: number
-      reviewRound?: number
-      maxReviewRounds?: number
-      progress: {
-        filesRead: number
-        filesWritten: number
-        toolCalls: number
-        stalled: boolean
-      }
-      headline: string
-    }
   | { kind: 'done'; status: RunStatus }
+
+/**
+ * Single progress event shape emitted by HeartbeatTimer during task execution.
+ * All progress notifications use this one shape — no discriminated union.
+ * Emitted on timer ticks (every 5s), significant transitions (stage/provider change),
+ * and once with `final: true` on completion.
+ */
+export type ProgressEvent = {
+  kind: 'heartbeat'
+  elapsed: string
+  provider: string
+  stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
+  stageIndex: number
+  stageCount: number
+  reviewRound?: number
+  maxReviewRounds?: number
+  progress: {
+    filesRead: number
+    filesWritten: number
+    toolCalls: number
+    stalled: boolean
+  }
+  costUSD: number | null
+  savedCostUSD: number | null
+  final: boolean
+  headline: string
+}
 
 // === Routing / Eligibility ===
 

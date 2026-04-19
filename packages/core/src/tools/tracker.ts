@@ -25,7 +25,7 @@ export class FileTracker {
   /**
    * @param onToolCall Optional callback invoked synchronously after every
    *   `trackToolCall(...)`. Used by runners (Task 9+) to stream tool
-   *   invocations out as `ProgressEvent`s in real time. The callback must
+   *   invocations out as `InternalRunnerEvent`s in real time. The callback must
    *   not throw; the runner wraps it in `safeSink` before passing it in.
    */
   constructor(onToolCall?: (summary: string) => void) {

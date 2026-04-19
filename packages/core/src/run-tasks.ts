@@ -3,12 +3,14 @@ import type {
   RunResult,
   TaskSpec,
   MultiModelConfig,
+  InternalRunnerEvent,
   ProgressEvent,
   RunTasksRuntime,
   AgentType,
   AgentCapability,
   BriefQualityWarning,
 } from './types.js';
+import { computeCostUSD, computeSavedCostUSD } from './types.js';
 import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
@@ -116,7 +118,7 @@ function withDoneCondition(task: TaskSpec): TaskSpec {
 
 async function executeTask(
   resolved: Exclude<ResolvedTask, { error: string }>,
-  onProgress?: (event: ProgressEvent) => void,
+  onProgress?: (event: InternalRunnerEvent) => void,
 ): Promise<RunResult> {
   try {
     return await delegateWithEscalation(
@@ -178,7 +180,8 @@ async function executeReviewedLifecycle(
   task: TaskSpec,
   resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
   config: MultiModelConfig,
-  onProgress?: (event: ProgressEvent) => void,
+  taskIndex: number,
+  onProgress?: RunTasksProgressCallback,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -190,9 +193,15 @@ async function executeReviewedLifecycle(
     // Other slot not configured — auto-escalation not available
   }
 
-  const stageCount = reviewPolicy === 'off' ? 1 : 5;
+  const stageCount =
+    reviewPolicy === 'off' ? 1 :
+    reviewPolicy === 'spec_only' ? 3 :
+    5;
   const heartbeat = onProgress
-    ? new HeartbeatTimer(onProgress)
+    ? new HeartbeatTimer(
+        (event) => onProgress(taskIndex, event),
+        { provider: resolved.provider.config.model, parentModel: task.parentModel },
+      )
     : undefined;
   heartbeat?.start(stageCount);
 
@@ -200,7 +209,7 @@ async function executeReviewedLifecycle(
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
   const wrappedOnProgress = onProgress
-    ? (event: ProgressEvent) => {
+    ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
           heartbeat?.setInFlight(true);
           progressCounters.toolCalls++;
@@ -214,8 +223,20 @@ async function executeReviewedLifecycle(
         }
         if (event.kind === 'turn_complete') {
           heartbeat?.setInFlight(false);
+          // Update cost from cumulative tokens
+          const costUSD = computeCostUSD(
+            event.cumulativeInputTokens,
+            event.cumulativeOutputTokens,
+            resolved.provider.config,
+          );
+          const savedCostUSD = computeSavedCostUSD(
+            costUSD,
+            event.cumulativeInputTokens,
+            event.cumulativeOutputTokens,
+            task.parentModel,
+          );
+          heartbeat?.updateCost(costUSD, savedCostUSD);
         }
-        onProgress(event);
       }
     : undefined;
 
@@ -244,8 +265,8 @@ async function executeReviewedLifecycle(
 
     // Skip review entirely when the implementer produced no reviewable file artifacts.
     // This avoids sending the reviewer an empty packet that always fails to parse.
-    heartbeat?.updateStageCount(1);
     if (implResult.filesWritten.length === 0) {
+      heartbeat?.updateStageCount(1);
       const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
       return {
         ...implResult,
@@ -355,7 +376,10 @@ async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
-    heartbeat?.setStage('spec_review', 2, 1, task.maxReviewRounds);
+    heartbeat?.transition({
+      stage: 'spec_review', stageIndex: 2,
+      reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+    });
 
     let specResult = await runSpecReview(
       otherProvider,
@@ -376,7 +400,10 @@ async function executeReviewedLifecycle(
       let round = 0;
       while (true) {
         round++;
-        heartbeat?.setStage('spec_rework', 3, round, task.maxReviewRounds ?? 10);
+        heartbeat?.transition({
+          stage: 'spec_rework', stageIndex: 3,
+          reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 10,
+        });
         const feedback = specResult.findings.length > 0
           ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
           : '';
@@ -396,7 +423,10 @@ async function executeReviewedLifecycle(
         const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
         fileContents = reworkContents;
 
-        heartbeat?.setStage('spec_review', 2, round + 1, task.maxReviewRounds ?? 10);
+        heartbeat?.transition({
+          stage: 'spec_review', stageIndex: 2,
+          reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+        });
         specResult = await runSpecReview(
           otherProvider,
           packet,
@@ -425,7 +455,10 @@ async function executeReviewedLifecycle(
 
     let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
     if (reviewPolicy === 'full') {
-      heartbeat?.setStage('quality_review', 4, 1, task.maxReviewRounds ?? 10);
+      heartbeat?.transition({
+        stage: 'quality_review', stageIndex: 4,
+        reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+      });
       qualityResult = await runQualityReview(
         otherProvider,
         packet,
@@ -440,7 +473,10 @@ async function executeReviewedLifecycle(
         let round = 0;
         while (true) {
           round++;
-          heartbeat?.setStage('quality_rework', 5, round, task.maxReviewRounds ?? 10);
+          heartbeat?.transition({
+            stage: 'quality_rework', stageIndex: 5,
+            reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 10,
+          });
           const feedback = qualityResult.findings.length > 0
             ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
             : '';
@@ -459,7 +495,10 @@ async function executeReviewedLifecycle(
 
           const reworkContents = await readImplementerFileContents(reworkResult.filesWritten, task.cwd);
 
-          heartbeat?.setStage('quality_review', 4, round + 1, task.maxReviewRounds ?? 10);
+          heartbeat?.transition({
+            stage: 'quality_review', stageIndex: 4,
+            reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+          });
           qualityResult = await runQualityReview(
             otherProvider,
             packet,
@@ -626,12 +665,8 @@ export async function runTasks(
       if (refused) {
         return Promise.resolve(refused);
       }
-      const taskProgress = options.onProgress
-        ? (event: ProgressEvent) => options.onProgress!(index, event)
-        : undefined;
-
       const readiness = readinessResults[index];
-      return executeReviewedLifecycle(r.task, r.resolved, config, taskProgress).then(
+      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
