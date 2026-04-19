@@ -163,6 +163,10 @@
     "./intake/draft-id": {
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
+    },
+    "./auto-commit": {
+      "types": "./dist/auto-commit.d.ts",
+      "import": "./dist/auto-commit.js"
     }
   },
   "scripts": {
