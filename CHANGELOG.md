@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.6.0] - 2026-04-19
+
+### Added
+
+- **Progress event consolidation (core).** The 9-variant `ProgressEvent` discriminated union is replaced by a single heartbeat shape. The old union is renamed to `InternalRunnerEvent` for internal runner-to-orchestrator telemetry. HeartbeatTimer is the sole parent-facing emitter — runners keep emitting internal events, but `run-tasks.ts` intercepts them for live counter updates and stops forwarding to the parent.
+- **Enriched heartbeat (core).** `ProgressEvent` now carries `provider` (current model name), `costUSD` / `savedCostUSD` (running cost with ROI), `final` (terminal marker), and `transition()` for atomic multi-field updates with stage invariant enforcement. Headline format: `[1/3] Implementing (claude-sonnet-4-6) — 10m 20s, $0.12 saved (4.2x), 4 read, 2 written, 12 tool calls`.
+- **Dynamic stage count (core).** `stageCount` is computed from `reviewPolicy` at start: `off` → 1, `spec_only` → 3, `full` → 5. Semantic stage positions allow backward transitions on review re-entry (e.g. spec_rework → spec_review).
+- **`hasFileArtifacts` in supervision (core).** `validateSubAgentOutput` now accepts `hasFileArtifacts` in its priority chain — when a worker self-reports `done` and has written files, the output is trusted even if it looks like a fragment. Reduces false-incomplete statuses.
+- **Plan-aware spec reviewer (core, mcp).** For `execute_plan` tasks, the spec reviewer prompt now includes the matched plan section as `## Plan Context`, so the reviewer checks implementation against the plan — not just the brief summary.
+
+### Changed
+
+- **`ProgressEvent` is now heartbeat-only (core).** Breaking change for consumers that pattern-matched on `turn_start`, `tool_call`, `text_emission`, `turn_complete`, `injection`, `escalation_start`, `retry`, or `done` variants. Use `InternalRunnerEvent` for internal telemetry.
+- **`HeartbeatTimer` API redesigned (core).** Constructor now requires `provider` and accepts optional `parentModel`. New methods: `transition()`, `setProvider()`, `updateCost()`. `stop()` is idempotent and emits a final flush with `final: true`. `setPhase()` removed.
+
 ## [2.5.0] - 2026-04-18
 
 ### Added
@@ -380,7 +395,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.5.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...HEAD
+[2.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.5.0...mcp-v2.6.0
 [2.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.4...mcp-v2.5.0
 [2.4.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.3...mcp-v2.4.4
 [2.4.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.2...mcp-v2.4.3
