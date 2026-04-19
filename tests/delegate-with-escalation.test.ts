@@ -334,4 +334,61 @@ describe('delegateWithEscalation', () => {
     expect(result.escalationLog).toHaveLength(1);
     expect(result.escalationLog[0].provider).toBe('pinned');
   });
+
+  describe('status promotion', () => {
+    it('promotes incomplete to ok when worker self-assessed done with shell verification', async () => {
+      // Worker self-assessed done, ran tests via runShell, wrote no files.
+      // Promotion logic must lift status from 'incomplete' to 'ok'.
+      const provider: Provider = {
+        name: 'standard',
+        config: { type: 'codex', model: 'gpt-5-codex' },
+        run: vi.fn().mockResolvedValue({
+          output: '## Summary\nAll tests pass. Verified.\n\n## Validations run\n- npm test: pass',
+          status: 'incomplete' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/foo.ts'],
+          filesWritten: [],
+          toolCalls: ['runShell(npm test)', 'readFile(src/foo.ts)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+          workerStatus: 'done' as const,
+        }),
+      };
+
+      const task: TaskSpec = { prompt: 'Verify everything works' };
+      const result = await delegateWithEscalation(task, [provider]);
+
+      expect(result.status).toBe('ok');
+      expect(result.terminationReason?.wasPromoted).toBe(true);
+      expect(result.terminationReason?.usedShell).toBe(true);
+    });
+
+    it('does NOT promote when worker self-assessed done but did not use shell', async () => {
+      // Worker self-assessed done but only read files — no runShell evidence.
+      // Promotion must NOT fire; status stays 'incomplete'.
+      const provider: Provider = {
+        name: 'standard',
+        config: { type: 'codex', model: 'gpt-5-codex' },
+        run: vi.fn().mockResolvedValue({
+          output: 'Everything looks fine.',
+          status: 'incomplete' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/foo.ts'],
+          filesWritten: [],
+          toolCalls: ['readFile(src/foo.ts)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+          workerStatus: 'done' as const,
+        }),
+      };
+
+      const task: TaskSpec = { prompt: 'Verify everything works' };
+      const result = await delegateWithEscalation(task, [provider]);
+
+      expect(result.status).toBe('incomplete');
+      expect(result.terminationReason?.wasPromoted).toBe(false);
+    });
+  });
 });
