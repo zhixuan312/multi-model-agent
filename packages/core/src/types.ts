@@ -456,17 +456,13 @@ export type ProgressEvent =
   | {
       kind: 'heartbeat'
       elapsed: string
-      stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
+      stage: 'intaking' | 'implementing' | 'validating' | 'reviewing' | 'completed' | 'blocked' | 'needs_context'
       stageIndex: number
       stageCount: number
       reviewRound?: number
       maxReviewRounds?: number
-      progress: {
-        filesRead: number
-        filesWritten: number
-        toolCalls: number
-        stalled: boolean
-      }
+      progress: number // 0–100
+      turnsCompleted: number
       headline: string
     }
   | { kind: 'done'; status: RunStatus }
