@@ -35,7 +35,7 @@ for (const r of results) {
 - **Provider runners** — Claude, Codex, and any OpenAI-compatible endpoint
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
-- **Reviewed lifecycle** — spec review + quality review by a different agent
+- **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
 - **Config schema** — Zod-validated, same contract as the MCP server
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
 
@@ -57,6 +57,8 @@ for (const r of results) {
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
 | `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan` |
+| `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
+| `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
 
 ## Full documentation
 
