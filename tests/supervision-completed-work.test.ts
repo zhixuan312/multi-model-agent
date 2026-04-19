@@ -54,3 +54,71 @@ describe('extractToolName', () => {
     expect(extractToolName('someFunction')).toBe('someFunction');
   });
 });
+
+describe('validateSubAgentOutput with hasFileArtifacts', () => {
+  it('workerStatus done + hasFileArtifacts → valid even with fragment-like output', () => {
+    const result = validateSubAgentOutput('Here are the results:', {
+      workerStatus: 'done',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('workerStatus done + hasFileArtifacts → valid even with short output', () => {
+    const result = validateSubAgentOutput('ok', {
+      workerStatus: 'done',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('workerStatus done_with_concerns + hasFileArtifacts → valid', () => {
+    const result = validateSubAgentOutput('Done but check the edge case:', {
+      workerStatus: 'done_with_concerns',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('hasFileArtifacts without workerStatus → falls through to heuristic', () => {
+    const result = validateSubAgentOutput('let me check', {
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('fragment');
+  });
+
+  it('hasFileArtifacts does not override empty output', () => {
+    const result = validateSubAgentOutput('', {
+      workerStatus: 'done',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('empty');
+  });
+
+  it('hasFileArtifacts does not override thinking_only', () => {
+    const result = validateSubAgentOutput(
+      '[model final message contained only <think>...</think> reasoning, no plain-text answer]',
+      { workerStatus: 'done', hasFileArtifacts: true },
+    );
+    expect(result.valid).toBe(false);
+    expect(result.kind).toBe('thinking_only');
+  });
+
+  it('workerStatus blocked + hasFileArtifacts → falls through (not auto-validated)', () => {
+    const result = validateSubAgentOutput('I am blocked on this task', {
+      workerStatus: 'blocked',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+
+  it('workerStatus needs_context + hasFileArtifacts → falls through', () => {
+    const result = validateSubAgentOutput('I need more context', {
+      workerStatus: 'needs_context',
+      hasFileArtifacts: true,
+    });
+    expect(result.valid).toBe(true);
+  });
+});
