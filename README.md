@@ -218,11 +218,11 @@ Drop-in rule that automates the full pipeline. With [superpowers](https://github
 
 ```bash
 mkdir -p ~/.claude/rules
-curl -o ~/.claude/rules/multi-model-delegation.md \
-  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/docs/claude-code-delegation-rule.md
+curl -o ~/.claude/rules/delegation-rule.md \
+  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/DELEGATION-RULE.md
 ```
 
-Full reference: [`docs/claude-code-delegation-rule.md`](./docs/claude-code-delegation-rule.md)
+Full reference: [`DELEGATION-RULE.md`](./DELEGATION-RULE.md)
 
 </details>
 
@@ -250,6 +250,12 @@ npm install && npm run build && npm test
 | `@zhixuan92/multi-model-agent-mcp` | MCP stdio server, tool schemas |
 
 </details>
+
+## Learn More
+
+- **[Product Direction](./DIRECTION.md)** — Why we exist, what we build, and what we refuse. The principles behind the horizontal layer.
+- **[Changelog](./CHANGELOG.md)** — What shipped in each release.
+- **[Delegation Rule](./DELEGATION-RULE.md)** — Drop-in rule for Claude Code that automates the full delegation pipeline.
 
 ## License
 
