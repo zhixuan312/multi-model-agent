@@ -5,6 +5,36 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.0] - 2026-04-19
+
+### Added
+
+- **Unified response envelope (mcp).** All 8 MCP tools (`delegate_tasks`, `retry_tasks`, `confirm_clarifications`, `audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan`) now return the same JSON shape: `{ headline, batchId, results: [{ status, output, filesWritten }] }`. Verbose telemetry fields (`usage`, `turns`, `escalationLog`, `agents`, `models`) are only available via `get_batch_slice`.
+- **Auto-escape truncation (mcp).** Large outputs are truncated inline with a `[Output truncated...]` suffix pointing to `get_batch_slice`, replacing the old full/summary response mode split. Proportional budget allocation redistributes surplus from short outputs to long ones.
+- **Plan-literal execution (core).** `execute_plan` compiler now instructs workers to follow the plan exactly as written, use code blocks verbatim, and not redesign or substitute their own approach.
+- **Lenient review parsing (core).** `parseStructuredReport` now accepts `# Summary` (h1), `**Summary**` (bold), `Summary:` (colon), and plain first-paragraph as implicit summary — reducing review parse failures from format variation.
+- **Review retry on parse failure (core).** `runSpecReview` and `runQualityReview` retry once with stronger format instructions when the first attempt produces an unparseable response.
+- **Context block LRU-refresh (core).** Accessing a context block now resets its TTL, preventing frequently-used blocks from expiring mid-workflow.
+
+### Changed
+
+- **`get_batch_slice` simplified (mcp).** The `slice` parameter is removed. Now takes `{ batchId, taskIndex? }` and returns full telemetry + results. Error cases return content text instead of throwing.
+- **`register_context_block` response simplified (mcp).** Returns `{ contextBlockId }` instead of the full registration metadata.
+- **`responseMode` removed from `delegate_tasks` and `retry_tasks` (mcp).** The full/summary/auto mode selector is replaced by deterministic auto-escape truncation. Callers no longer choose a mode.
+- **Default `maxReviewRounds` reduced from 10 to 5 (core).** Limits review cycles to 5 rounds across all review paths.
+
+### Fixed
+
+- **Audit compiler re-read instruction (core).** Delta audit prompts now instruct workers to re-read target files before comparing against prior findings, and begin with a findings count line.
+- **Status promotion for shell-verified work (core).** Workers that self-report `done` and ran shell commands (e.g., `npm test`) are now promoted from `incomplete` to `ok`, even without `filesWritten`.
+- **Context block error messages (core).** `ContextBlockNotFoundError` now includes recovery guidance: retry without `contextBlockIds` or re-register via `register_context_block`.
+- **Heartbeat headline for specialized tools (mcp).** Specialized tools now emit `[task N] headline` format for progress notifications, matching `delegate_tasks`.
+
+### Removed
+
+- **Stall detection (core).** Removed `STALL_HEARTBEAT_THRESHOLD`, `setInFlight()`, `stallCount`, and the `stalled` field from `ProgressEvent`. The stall mechanism produced false positives and added complexity without actionable signal.
+- **Old response builders (mcp).** Deleted `buildMetadataBlock`, `buildFanOutResponse`, `buildClarificationAwareResponse`, `shared-intake.ts`, and `clarification-response.ts` — all replaced by `buildUnifiedResponse`.
+
 ## [2.6.1] - 2026-04-19
 
 ### Fixed
@@ -401,7 +431,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.0...HEAD
+[2.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.1...mcp-v2.7.0
 [2.6.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...mcp-v2.6.1
 [2.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.5.0...mcp-v2.6.0
 [2.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.4.4...mcp-v2.5.0
