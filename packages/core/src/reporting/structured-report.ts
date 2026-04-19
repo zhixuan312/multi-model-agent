@@ -52,21 +52,70 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
 
 function extractSections(output: string): Record<string, string[]> {
   const sections: Record<string, string[]> = {};
-  const parts = output.split(/(?=^##\s)/m);
-  
-  for (const part of parts) {
+
+  // Try ## headers first (standard format)
+  const h2Parts = output.split(/(?=^##\s)/m);
+  for (const part of h2Parts) {
     const trimmed = part.trim();
     if (!trimmed.startsWith('## ')) continue;
-    
     const firstNewline = trimmed.indexOf('\n');
     if (firstNewline === -1) continue;
-    
     const header = trimmed.slice(3, firstNewline).toLowerCase().trim();
     const content = trimmed.slice(firstNewline + 1).trim();
-    
     if (header && content) {
       sections[header] = content.split('\n').map(l => l.trim()).filter(Boolean);
     }
+  }
+
+  // Try # headers (h1) — only if h2 didn't already find summary
+  // (so h1 can find it when both h1(h.summary) and h2(other sections) coexist)
+  const h1Parts = output.split(/(?=^#\s)/m);
+  for (const part of h1Parts) {
+    const trimmed = part.trim();
+    if (!trimmed.startsWith('# ')) continue;
+    const firstNewline = trimmed.indexOf('\n');
+    if (firstNewline === -1) continue;
+    const header = trimmed.slice(2, firstNewline).toLowerCase().trim();
+    const content = trimmed.slice(firstNewline + 1).trim();
+    if (header && content) {
+      sections[header] = content.split('\n').map(l => l.trim()).filter(Boolean);
+    }
+  }
+
+  if (Object.keys(sections).length > 0) return sections;
+
+  // Try **Header** (bold) or Header: (colon) patterns
+  const boldOrColonParts = output.split(/(?=^\*\*[A-Za-z]|^[A-Za-z][A-Za-z ]+:)/m);
+  for (const part of boldOrColonParts) {
+    const trimmed = part.trim();
+    let header: string | undefined;
+    let content: string | undefined;
+
+    const boldMatch = trimmed.match(/^\*\*([^*]+)\*\*\s*\n([\s\S]+)/);
+    if (boldMatch) {
+      header = boldMatch[1].toLowerCase().trim();
+      content = boldMatch[2].trim();
+    }
+
+    if (!header) {
+      const colonMatch = trimmed.match(/^([A-Za-z][A-Za-z ]+):\s*(.+(?:\n[\s\S]*)?)/);
+      if (colonMatch) {
+        header = colonMatch[1].toLowerCase().trim();
+        content = colonMatch[2].trim();
+      }
+    }
+
+    if (header && content) {
+      sections[header] = content.split('\n').map(l => l.trim()).filter(Boolean);
+    }
+  }
+
+  if (Object.keys(sections).length > 0) return sections;
+
+  // Last resort: treat first paragraph as implicit summary
+  const firstParagraph = output.split(/\n\s*\n/)[0]?.trim();
+  if (firstParagraph) {
+    sections['summary'] = [firstParagraph];
   }
 
   return sections;

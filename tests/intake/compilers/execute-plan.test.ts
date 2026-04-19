@@ -80,4 +80,15 @@ Create REST endpoints for CRUD operations on users.
     }, 'req');
     expect((drafts[0].source as any).filePaths).toEqual(['plan.md', 'spec.md']);
   });
+
+  it('prompt instructs worker to follow plan exactly', () => {
+    const drafts = compileExecutePlan(
+      { tasks: ['Task 1: Add widget'], fileContents: '# Plan\n## Task 1: Add widget\nCreate widget.ts', filePaths: ['plan.md'] },
+      'req-1',
+    );
+    expect(drafts).toHaveLength(1);
+    expect(drafts[0].prompt).toContain('Follow the plan exactly as written');
+    expect(drafts[0].prompt).toContain('Do not redesign');
+    expect(drafts[0].prompt).toContain('use them verbatim');
+  });
 });

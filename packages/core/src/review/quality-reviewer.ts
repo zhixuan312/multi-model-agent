@@ -23,10 +23,10 @@ export async function runQualityReview(
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 
+  const reviewerSlot: 'standard' | 'complex' =
+    reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   let result;
   try {
-    const reviewerSlot: 'standard' | 'complex' =
-      reviewerProvider.name === 'standard' ? 'standard' : 'complex';
     result = await delegateWithEscalation(
       {
         prompt: buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog),
@@ -45,9 +45,28 @@ export async function runQualityReview(
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 
-  const report = parseStructuredReport(result.output);
+  let report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section' };
+    try {
+      const retryResult = await delegateWithEscalation(
+        {
+          prompt: buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog) +
+            '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          agentType: reviewerSlot,
+          briefQualityPolicy: 'off',
+          timeoutMs: 120_000,
+        },
+        [reviewerProvider],
+        { explicitlyPinned: true },
+      );
+      if (retryResult.status === 'ok') {
+        report = parseStructuredReport(retryResult.output);
+      }
+    } catch { /* fall through to error */ }
+
+    if (!report.summary) {
+      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)' };
+    }
   }
 
   const summaryLower = report.summary.toLowerCase();
