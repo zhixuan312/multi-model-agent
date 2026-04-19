@@ -56,6 +56,7 @@ export function buildSpecReviewPrompt(
     'In ## Deviations from brief, list specific issues found.',
     'In ## Unresolved, list items needing parent judgment.',
     'Check: scope coverage, acceptance criteria met, required markers present, no out-of-scope changes.',
+    'Completeness: if the task describes multiple files, sections, handlers, or components to modify, check whether each required target was adequately addressed. A target may be addressed by direct edit, by a shared-code change that covers it, or by already being correct. Only flag changes_required when there is positive evidence of omission — e.g., the task names targets A, B, and C, but only A and B appear in the modified files with no indication that C was addressed. Do not flag changes_required merely because a target\'s file is absent from the review bundle — the target may have been correctly left unchanged.',
   );
 
   return sections.join('\n');
