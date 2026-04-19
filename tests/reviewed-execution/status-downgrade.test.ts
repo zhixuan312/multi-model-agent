@@ -122,7 +122,7 @@ describe('status downgrade from review verdicts', () => {
   });
 
   it('test 7: promotion + downgrade compose correctly', async () => {
-    implStatus = 'incomplete';
+    implStatus = 'ok';
     implWorkerStatus = 'done';
     specReviewVerdict = 'changes_required';
     const results = await runTasks([task], config);
