@@ -55,9 +55,14 @@ describe('debug_task handler', () => {
     expect(tasks[0].prompt).toContain('crash on startup');
     expect(tasks[0].prompt).toContain('a.ts');
     expect(tasks[0].prompt).toContain('e.ts');
-    // Always single-task response (2 content blocks), never fan-out
-    expect(result.content).toHaveLength(2);
-    expect(result.content[0].text).toBe('debug output');
+    // Single content block with unified JSON envelope
+    expect(result.content).toHaveLength(1);
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toBeTruthy();
+    expect(envelope.batchId).toBeTruthy();
+    expect(envelope.results).toHaveLength(1);
+    expect(envelope.results[0].status).toBe('ok');
+    expect(envelope.results[0].output).toBe('debug output');
   });
 
   it('propagates parentModel from config into task spec', async () => {
@@ -78,9 +83,9 @@ describe('debug_task handler', () => {
     registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
 
     const result = await getHandler()({ problem: 'bug' });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.08 saved vs claude-opus-4-6');
-    expect(meta.headline).not.toContain('$0.00 saved');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(envelope.headline).not.toContain('$0.00 saved');
   });
 
   it('headline shows actual cost when parentModel is absent', async () => {
@@ -91,9 +96,9 @@ describe('debug_task handler', () => {
     registerDebugTask(mockServer as any, { defaults: {} } as any);
 
     const result = await getHandler()({ problem: 'bug' });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.10 actual');
-    expect(meta.headline).not.toContain('saved vs');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.10 actual');
+    expect(envelope.headline).not.toContain('saved vs');
   });
 
   it('uses correct preset: complex, full review, 1 round', async () => {
@@ -120,14 +125,14 @@ describe('debug_task handler', () => {
     expect(prompt).toContain('memory leak in cache');
   });
 
-  it('returns metadata block with usage info', async () => {
-    mockRunTasks.mockResolvedValue([mockResult({ usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 0.05 } })]);
+  it('returns envelope with results containing output and filesWritten', async () => {
+    mockRunTasks.mockResolvedValue([mockResult({ filesWritten: ['fix.patch'] })]);
     const { mockServer, getHandler } = captureTool();
     registerDebugTask(mockServer as any, {} as any);
 
     const result = await getHandler()({ problem: 'bug' });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.usage.costUSD).toBe(0.05);
-    expect(meta.usage.inputTokens).toBe(500);
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.results[0].output).toBe('debug output');
+    expect(envelope.results[0].filesWritten).toEqual(['fix.patch']);
   });
 });

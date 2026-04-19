@@ -30,6 +30,8 @@ import {
   computeBatchProgress,
   computeAggregateCost,
 } from './tools/batch-response.js';
+import { buildUnifiedResponse } from './tools/shared.js';
+import { truncateResults } from './tools/truncation.js';
 import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
 import { registerExecutePlan } from './tools/execute-plan.js';

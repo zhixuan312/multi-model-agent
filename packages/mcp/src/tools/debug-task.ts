@@ -1,10 +1,11 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
-  buildMetadataBlock,
+  buildUnifiedResponse,
   buildFilePathsPrompt,
   buildRunTasksOptions,
   resolveParentModel,
@@ -58,9 +59,15 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, c
 
       try {
         const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
-        const result = results[0];
         const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
+        return buildUnifiedResponse({
+          batchId: randomUUID(),
+          results,
+          tasks: [{ ...taskSpec, prompt } as TaskSpec],
+          wallClockMs: 0,
+          parentModel,
+          contextBlockId: ctxId,
+        });
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

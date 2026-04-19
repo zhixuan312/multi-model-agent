@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
@@ -6,14 +7,13 @@ import {
   commonToolFields,
   validateInput,
   resolveDispatchMode,
-  buildMetadataBlock,
+  buildUnifiedResponse,
   buildFilePathsPrompt,
   buildPerFilePrompt,
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
 } from './shared.js';
-import { buildFanOutResponse } from './batch-response.js';
 
 export const reviewCodeSchema = z.object({
   code: z.string().optional().describe('Inline code to review'),
@@ -112,14 +112,27 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig, 
           const startMs = Date.now();
           const results = await runTasks(tasks, config, { ...runOptions, runtime });
           const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-          return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel, ctxId)] };
+          return buildUnifiedResponse({
+            batchId: randomUUID(),
+            results,
+            tasks,
+            wallClockMs: Date.now() - startMs,
+            parentModel,
+            contextBlockId: ctxId,
+          });
         }
 
         const prompt = buildReviewPrompt(params.code, params.filePaths, params.focus, hasContextBlocks);
         const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
-        const result = results[0];
         const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-        return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
+        return buildUnifiedResponse({
+          batchId: randomUUID(),
+          results,
+          tasks: [{ ...baseTaskSpec, prompt } as TaskSpec],
+          wallClockMs: 0,
+          parentModel,
+          contextBlockId: ctxId,
+        });
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

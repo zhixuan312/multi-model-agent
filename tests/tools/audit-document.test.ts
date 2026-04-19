@@ -86,10 +86,13 @@ describe('audit_document handler', () => {
     expect(tasks[0].cwd).toBe(process.cwd());
     expect(tasks[0].tools).toBe('readonly');
     expect(tasks[0].reviewPolicy).toBe('off');
-    expect(result.content).toHaveLength(2);
-    expect(result.content[0].text).toBe('audit output');
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.status).toBe('ok');
+    expect(result.content).toHaveLength(1);
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toBeTruthy();
+    expect(envelope.batchId).toBeTruthy();
+    expect(envelope.results).toHaveLength(1);
+    expect(envelope.results[0].status).toBe('ok');
+    expect(envelope.results[0].output).toBe('audit output');
   });
 
   it('fan-out mode: dispatches N tasks when only filePaths provided', async () => {
@@ -105,9 +108,11 @@ describe('audit_document handler', () => {
     expect(tasks[1].prompt).toContain('b.ts');
     expect(result.content).toHaveLength(1);
     const envelope = JSON.parse(result.content[0].text);
-    expect(envelope.mode).toBe('fan_out');
+    expect(envelope.headline).toBeTruthy();
+    expect(envelope.batchId).toBeTruthy();
     expect(envelope.results).toHaveLength(2);
-    expect(envelope).not.toHaveProperty('batchId');
+    expect(envelope.results[0].status).toBe('ok');
+    expect(envelope.results[1].status).toBe('ok');
   });
 
 
@@ -141,10 +146,10 @@ describe('audit_document handler', () => {
     registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
 
     const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.08 saved vs claude-opus-4-6');
-    expect(meta.headline).toContain('1.8x ROI');
-    expect(meta.headline).not.toContain('$0.00 saved');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(envelope.headline).toContain('1.8x ROI');
+    expect(envelope.headline).not.toContain('$0.00 saved');
   });
 
   it('headline reflects saved cost when parentModel is configured (fan-out)', async () => {
@@ -169,9 +174,9 @@ describe('audit_document handler', () => {
     registerAuditDocument(mockServer as any, { defaults: {} } as any);
 
     const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.10 actual');
-    expect(meta.headline).not.toContain('saved vs');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.10 actual');
+    expect(envelope.headline).not.toContain('saved vs');
   });
 
   it('resolves general auditType to all categories', async () => {

@@ -22,4 +22,20 @@ describe('audit compiler', () => {
     const drafts = compileAuditDocument({ auditType: 'security' }, 'req');
     expect(drafts[0].prompt).toContain('structured audit report');
   });
+
+  it('prompt includes findings count instruction', () => {
+    const drafts = compileAuditDocument(
+      { filePaths: ['spec.md'], auditType: 'correctness' },
+      'req-1',
+    );
+    expect(drafts[0].prompt).toContain('Begin your response with a one-line findings count');
+  });
+
+  it('prompt includes re-read instruction for delta audits', () => {
+    const drafts = compileAuditDocument(
+      { filePaths: ['spec.md'], auditType: 'correctness' },
+      'req-1',
+    );
+    expect(drafts[0].prompt).toContain('MUST re-read all target files');
+  });
 });

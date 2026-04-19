@@ -69,7 +69,10 @@ describe('verify_work handler', () => {
     expect(tasks[0].cwd).toBe(process.cwd());
     expect(tasks[0].reviewPolicy).toBe('spec_only');
     expect(tasks[0].agentType).toBe('standard');
-    expect(result.content).toHaveLength(2);
+    expect(result.content).toHaveLength(1);
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toBeTruthy();
+    expect(envelope.results).toHaveLength(1);
   });
 
   it('propagates parentModel from config into task spec (single-task)', async () => {
@@ -101,9 +104,9 @@ describe('verify_work handler', () => {
     registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
 
     const result = await getHandler()({ work: 'done', checklist: ['check'] });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.08 saved vs claude-opus-4-6');
-    expect(meta.headline).not.toContain('$0.00 saved');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.08 saved vs claude-opus-4-6');
+    expect(envelope.headline).not.toContain('$0.00 saved');
   });
 
   it('headline reflects saved cost when parentModel is configured (fan-out)', async () => {
@@ -128,9 +131,9 @@ describe('verify_work handler', () => {
     registerVerifyWork(mockServer as any, { defaults: {} } as any);
 
     const result = await getHandler()({ work: 'done', checklist: ['check'] });
-    const meta = JSON.parse(result.content[1].text);
-    expect(meta.headline).toContain('$0.10 actual');
-    expect(meta.headline).not.toContain('saved vs');
+    const envelope = JSON.parse(result.content[0].text);
+    expect(envelope.headline).toContain('$0.10 actual');
+    expect(envelope.headline).not.toContain('saved vs');
   });
 
   it('fan-out mode: each file verified against same checklist', async () => {
@@ -146,6 +149,7 @@ describe('verify_work handler', () => {
     expect(tasks[1].prompt).toContain('b.ts');
     expect(tasks[1].prompt).toContain('1. compiles');
     const envelope = JSON.parse(result.content[0].text);
-    expect(envelope.mode).toBe('fan_out');
+    expect(envelope.headline).toBeTruthy();
+    expect(envelope.results).toHaveLength(2);
   });
 });
