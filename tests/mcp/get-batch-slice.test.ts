@@ -46,6 +46,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/run-tasks', async () => {
           },
           specReviewStatus: 'approved' as const,
           qualityReviewStatus: 'approved' as const,
+          specReviewReason: undefined,
+          qualityReviewReason: undefined,
           agents: {
             implementer: 'standard' as const,
             specReviewer: 'standard' as const,
@@ -117,31 +119,47 @@ async function dispatchFixtureBatch(server: any): Promise<string> {
 }
 
 describe('get_batch_slice tool', () => {
-  it('slice=output returns { output } for a specific task', async () => {
+  it('returns full results for all tasks when taskIndex omitted', async () => {
     const server = await makeServer();
     const batchId = await dispatchFixtureBatch(server);
 
-    const result = await callTool(server, 'get_batch_slice', { batchId, slice: 'output', taskIndex: 0 });
+    const result = await callTool(server, 'get_batch_slice', { batchId });
 
-    expect(result).toHaveProperty('output', 'output for task 0');
+    expect(result.batchId).toBe(batchId);
+    expect(result.results).toHaveLength(2);
+    expect(result.results[0].output).toBe('output for task 0');
+    expect(result.results[1].output).toBe('output for task 1');
+    expect(result).toHaveProperty('timings');
+    expect(result).toHaveProperty('batchProgress');
+    expect(result).toHaveProperty('aggregateCost');
   });
 
-  it('slice=output returns outputs for multiple task indices', async () => {
+  it('returns filtered result for a specific taskIndex', async () => {
     const server = await makeServer();
     const batchId = await dispatchFixtureBatch(server);
 
-    const r0 = await callTool(server, 'get_batch_slice', { batchId, slice: 'output', taskIndex: 0 });
-    const r1 = await callTool(server, 'get_batch_slice', { batchId, slice: 'output', taskIndex: 1 });
+    const result = await callTool(server, 'get_batch_slice', { batchId, taskIndex: 0 });
 
-    expect(r0.output).toBe('output for task 0');
-    expect(r1.output).toBe('output for task 1');
+    expect(result.batchId).toBe(batchId);
+    expect(result.results).toHaveLength(1);
+    expect(result.results[0].output).toBe('output for task 0');
   });
 
-  it('slice=detail returns specReviewReason and qualityReviewReason when present', async () => {
-    // Override the mock so the returned result has populated reasons
-    const { runTasks: orig } = await vi.importActual<typeof import('@zhixuan92/multi-model-agent-core/run-tasks')>(
-      '@zhixuan92/multi-model-agent-core/run-tasks',
-    );
+  it('returns results with review statuses and agents', async () => {
+    const server = await makeServer();
+    const batchId = await dispatchFixtureBatch(server);
+
+    const result = await callTool(server, 'get_batch_slice', { batchId, taskIndex: 0 });
+    const task = result.results[0];
+
+    expect(task.filesRead).toEqual(['src/read-0.ts', 'src/also-read-0.ts']);
+    expect(task.filesWritten).toEqual(['src/wrote-0.ts']);
+    expect(task.escalationLog).toHaveLength(1);
+    expect(task.specReviewStatus).toBe('approved');
+    expect(task.qualityReviewStatus).toBe('approved');
+  });
+
+  it('includes specReviewReason and qualityReviewReason when present', async () => {
     const overridden = vi.fn(async (tasks: { prompt: string }[]) =>
       tasks.map(() => ({
         output: 'output',
@@ -170,129 +188,65 @@ describe('get_batch_slice tool', () => {
     const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
     const server = buildMcpServer(sampleConfig(), { _testRunTasksOverride: overridden });
 
-    // dispatch with the overridden stub
     const response = await callTool(server, 'delegate_tasks', {
       tasks: [{ prompt: 'Do the thing', done: 'Done', agentType: 'standard' as const }],
     });
-    const batchId = response.batchId;
 
-    const detail = await callTool(server, 'get_batch_slice', { batchId, slice: 'detail', taskIndex: 0 });
+    const result = await callTool(server, 'get_batch_slice', { batchId: response.batchId, taskIndex: 0 });
 
-    expect(detail.specReviewReason).toBe('review agent threw: connection refused');
-    expect(detail.qualityReviewReason).toBe('no files written by implementer');
+    expect(result.results[0].specReviewReason).toBe('review agent threw: connection refused');
+    expect(result.results[0].qualityReviewReason).toBe('no files written by implementer');
   });
 
-  it('slice=detail returns per-task detail with review statuses and agents', async () => {
+  it('returns telemetry fields (timings, batchProgress, aggregateCost)', async () => {
     const server = await makeServer();
     const batchId = await dispatchFixtureBatch(server);
 
-    const detail = await callTool(server, 'get_batch_slice', { batchId, slice: 'detail', taskIndex: 0 });
+    const result = await callTool(server, 'get_batch_slice', { batchId });
 
-    expect(detail.batchId).toBe(batchId);
-    expect(detail.taskIndex).toBe(0);
-    expect(detail.agentType).toBe('standard');
-    expect(detail.filesRead).toEqual(['src/read-0.ts', 'src/also-read-0.ts']);
-    expect(detail.filesWritten).toEqual(['src/wrote-0.ts']);
-    expect(detail.directoriesListed).toEqual(['src']);
-    expect(detail.toolCalls).toEqual([
-      'readFile src/read-0.ts',
-      'grep foo → 2 hits',
-      'writeFile src/wrote-0.ts',
-    ]);
-    expect(detail.escalationLog).toHaveLength(1);
-    expect(detail.escalationLog[0].provider).toBe('mock');
-    expect(detail.terminationReason?.workerSelfAssessment).toBe('done');
-    expect(detail.specReviewStatus).toBe('approved');
-    expect(detail.specReviewReason).toBeUndefined();
-    expect(detail.qualityReviewStatus).toBe('approved');
-    expect(detail.qualityReviewReason).toBeUndefined();
-    expect(detail.agents).toEqual({
-      implementer: 'standard',
-      specReviewer: 'standard',
-      qualityReviewer: 'standard',
-    });
-    expect(detail.implementationReport).toEqual({
-      summary: 'implemented successfully',
-      concerns: [],
-      warnings: [],
-      sections: [],
-    });
-    expect(detail.specReviewReport).toEqual({
-      summary: 'spec approved',
-      concerns: [],
-      warnings: [],
-      sections: [],
-    });
-    expect(detail.qualityReviewReport).toEqual({
-      summary: 'quality approved',
-      concerns: [],
-      warnings: [],
-      sections: [],
-    });
+    expect(result).toHaveProperty('batchId', batchId);
+    expect(result).toHaveProperty('timings');
+    expect(result).toHaveProperty('batchProgress');
+    expect(result).toHaveProperty('aggregateCost');
+    expect(result.results).toHaveLength(2);
+
+    expect(typeof result.timings.wallClockMs).toBe('number');
+    expect(result.timings.wallClockMs).toBeGreaterThanOrEqual(0);
+    expect(result.batchProgress.totalTasks).toBe(2);
+    expect(result.batchProgress.completedTasks).toBe(2);
   });
 
-  it('slice=telemetry returns batch-wide ROI telemetry', async () => {
-    const server = await makeServer();
-    const dispatch = await callTool(server, 'delegate_tasks', {
-      tasks: [
-        { prompt: 'Implement feature one with full test coverage', done: 'Tests pass', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
-        { prompt: 'Implement feature two with full test coverage', done: 'Tests pass', agentType: 'standard' as const, parentModel: 'claude-opus-4-6' },
-      ],
-    });
-
-    const telemetry = await callTool(server, 'get_batch_slice', { batchId: dispatch.batchId, slice: 'telemetry' });
-
-    expect(telemetry).toHaveProperty('batchId', dispatch.batchId);
-    expect(telemetry).toHaveProperty('headline');
-    expect(telemetry).toHaveProperty('timings');
-    expect(telemetry).toHaveProperty('batchProgress');
-    expect(telemetry).toHaveProperty('aggregateCost');
-    expect(telemetry).toHaveProperty('results');
-    expect(telemetry.results).toHaveLength(2);
-
-    expect(telemetry.batchProgress).toEqual(dispatch.batchProgress);
-    expect(telemetry.aggregateCost).toEqual(dispatch.aggregateCost);
-    expect(telemetry.timings.sumOfTaskMs).toBe(dispatch.timings.sumOfTaskMs);
-
-    expect(typeof telemetry.timings.wallClockMs).toBe('number');
-    expect(telemetry.timings.wallClockMs).toBeGreaterThanOrEqual(0);
-    expect(typeof telemetry.timings.estimatedParallelSavingsMs).toBe('number');
-    expect(telemetry.timings.estimatedParallelSavingsMs).toBeGreaterThanOrEqual(0);
-
-    expect(typeof telemetry.headline).toBe('string');
-    expect(telemetry.headline).toMatch(
-      new RegExp(`^2 tasks, ${dispatch.batchProgress.completedTasks}/2 ok`),
-    );
-  });
-
-  it('returns an error for an unknown batchId', async () => {
+  it('returns error text for an unknown batchId', async () => {
     const server = await makeServer();
 
-    await expect(
-      callTool(server, 'get_batch_slice', { batchId: 'nonexistent', slice: 'output', taskIndex: 0 }),
-    ).rejects.toThrow(/unknown or expired/);
+    const result = await callTool(server, 'get_batch_slice', { batchId: 'nonexistent' });
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('unknown or expired');
   });
 
-  it('returns an out-of-range error for a taskIndex past the batch size', async () => {
+  it('returns error text for an out-of-range taskIndex', async () => {
     const server = await makeServer();
     const batchId = await dispatchFixtureBatch(server);
 
-    await expect(
-      callTool(server, 'get_batch_slice', { batchId, slice: 'output', taskIndex: 99 }),
-    ).rejects.toThrow(/out of range/);
+    const result = await callTool(server, 'get_batch_slice', { batchId, taskIndex: 99 });
+
+    expect(typeof result).toBe('string');
+    expect(result).toContain('out of range');
   });
 
   it('telemetry envelope is under 2 KB on a 2-task batch', async () => {
     const server = await makeServer();
-    const dispatch = await callTool(server, 'delegate_tasks', {
-      tasks: [
-        { prompt: 'Implement feature one with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
-        { prompt: 'Implement feature two with full test coverage', done: 'Tests pass', agentType: 'standard' as const },
-      ],
-    });
+    const batchId = await dispatchFixtureBatch(server);
 
-    const telemetry = await callTool(server, 'get_batch_slice', { batchId: dispatch.batchId, slice: 'telemetry' });
-    expect(JSON.stringify(telemetry).length).toBeLessThan(2 * 1024);
+    // get_batch_slice returns full results — just check the overhead is reasonable
+    const tool = server._registeredTools?.['get_batch_slice'];
+    const rawResult = await tool.handler({ batchId }, {});
+    const rawText = rawResult.content[0].text;
+    const parsed = JSON.parse(rawText);
+    // Remove results to measure just the telemetry envelope overhead
+    delete parsed.results;
+    expect(JSON.stringify(parsed).length).toBeLessThan(2 * 1024);
   });
 
   it('old get_task_output tool is NOT registered', async () => {

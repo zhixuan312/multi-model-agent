@@ -144,7 +144,7 @@ describe('context-block + retry_tasks tools', () => {
     expect(tools['retry_tasks']).toBeDefined();
   });
 
-  it('register_context_block handler stores content and returns metadata', async () => {
+  it('register_context_block handler stores content and returns contextBlockId', async () => {
     const server = buildMcpServer(sampleConfig());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools = (server as any)._registeredTools;
@@ -157,11 +157,7 @@ describe('context-block + retry_tasks tools', () => {
     expect(result.content).toBeDefined();
     expect(result.content[0].type).toBe('text');
     const payload = JSON.parse(result.content[0].text);
-    expect(payload.id).toBe('greeting');
-    expect(payload.lengthChars).toBe(5);
-    expect(payload.sha256).toBe(
-      '2cf24dba5fb0a30e26e83b2ac5b9e29e1b161e5c1fa7425e73043362938b9824',
-    );
+    expect(payload).toEqual({ contextBlockId: 'greeting' });
   });
 
   it('retry_tasks throws on an unknown batch id', async () => {
@@ -365,60 +361,13 @@ describe('buildMcpServer — largeResponseThresholdChars (v0.3.0)', () => {
   });
 });
 
-describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
+describe('delegate_tasks — unified response + truncation', () => {
   beforeEach(() => {
     delete process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS;
   });
 
-  it('full-mode response includes specReviewReason and qualityReviewReason when populated', async () => {
-    stubRunTasks.mockResolvedValueOnce([
-      {
-        output: 'done',
-        status: 'ok' as const,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
-        turns: 1,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: false,
-        escalationLog: [],
-        specReviewStatus: 'error' as const,
-        specReviewReason: 'review agent returned status: timeout',
-        qualityReviewStatus: 'skipped' as const,
-        qualityReviewReason: 'no files written by implementer',
-        agents: {
-          implementer: 'standard' as const,
-          specReviewer: 'complex' as const,
-          qualityReviewer: 'skipped' as const,
-        },
-      },
-    ]);
-
-    const server = buildMcpServer(sampleConfig());
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const tools = (server as any)._registeredTools;
-    const delegateTool = tools['delegate_tasks'];
-    const res = await delegateTool.handler(
-      {
-        tasks: [{ prompt: 'Do the thing', done: 'Done', agentType: 'standard' as const }],
-        responseMode: 'full',
-      },
-      {},
-    );
-    const payload = JSON.parse(res.content[0].text);
-
-    expect(payload.mode).toBe('full');
-    expect(payload.results[0].specReviewStatus).toBe('error');
-    expect(payload.results[0].specReviewReason).toBe('review agent returned status: timeout');
-    expect(payload.results[0].qualityReviewStatus).toBe('skipped');
-    expect(payload.results[0].qualityReviewReason).toBe('no files written by implementer');
-  });
-
   // Helper to dispatch a single task and parse the response
-  const dispatchOne = async (
-    server: ReturnType<typeof buildMcpServer>,
-    responseMode?: 'full' | 'summary' | 'auto',
-  ) => {
+  const dispatchOne = async (server: ReturnType<typeof buildMcpServer>) => {
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools = (server as any)._registeredTools;
     const delegateTool = tools['delegate_tasks'];
@@ -429,77 +378,83 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
             prompt: 'Implement the requested feature with full test coverage', done: 'Tests pass',
           },
         ],
-        ...(responseMode && { responseMode }),
       },
       {},
     );
     return JSON.parse(res.content[0].text);
   };
 
-  it('small batch + responseMode: auto → mode: full, no note', async () => {
-    const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'auto');
-    expect(payload.mode).toBe('full');
-    expect(payload.note).toBeUndefined();
-  });
-
-  it('small batch + responseMode: summary → mode: summary, no note', async () => {
-    const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'summary');
-    expect(payload.mode).toBe('summary');
-    expect(payload.note).toBeUndefined();
-    expect(payload.results[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
-  });
-
-  it('large batch + responseMode: auto → mode: summary with note', async () => {
-    stubRunTasks.mockResolvedValueOnce([
-      {
-        output: 'x'.repeat(70000),
-        status: 'ok' as const,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
-        turns: 1,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: false,
-        escalationLog: [],
-      },
-    ]);
-
-    const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'auto');
-    expect(payload.mode).toBe('summary');
-    expect(payload.note).toBeDefined();
-    expect(payload.note).toMatch(/Auto-switched|threshold/);
-  });
-
-  it('large batch + responseMode: full → mode: full anyway (escape hatch)', async () => {
-    stubRunTasks.mockResolvedValueOnce([
-      {
-        output: 'x'.repeat(70000),
-        status: 'ok' as const,
-        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
-        turns: 1,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: false,
-        escalationLog: [],
-      },
-    ]);
-
-    const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'full');
-    expect(payload.mode).toBe('full');
-  });
-
-  it('responseMode omitted → defaults to auto', async () => {
+  it('returns the unified response shape with headline, batchId, and slim results', async () => {
     const server = buildMcpServer(sampleConfig());
     const payload = await dispatchOne(server);
-    expect(payload.mode).toBe('full');
+
+    expect(payload).toHaveProperty('headline');
+    expect(typeof payload.headline).toBe('string');
+    expect(payload).toHaveProperty('batchId');
+    expect(typeof payload.batchId).toBe('string');
+    expect(payload.results).toHaveLength(1);
+    expect(payload.results[0]).toEqual({
+      status: 'ok',
+      output: 'stub ok',
+      filesWritten: [],
+    });
+
+    expect(payload).not.toHaveProperty('mode');
+    expect(payload).not.toHaveProperty('schemaVersion');
+    expect(payload).not.toHaveProperty('timings');
+    expect(payload).not.toHaveProperty('batchProgress');
+    expect(payload).not.toHaveProperty('aggregateCost');
   });
 
-  it('configurable threshold via buildMcpServer option triggers summary mode', async () => {
+  it('includes error only when a result status is error', async () => {
+    stubRunTasks.mockResolvedValueOnce([
+      {
+        output: '',
+        status: 'error' as const,
+        error: 'task failed',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+      },
+    ]);
+
+    const server = buildMcpServer(sampleConfig());
+    const payload = await dispatchOne(server);
+    expect(payload.results[0]).toEqual({
+      status: 'error',
+      output: '',
+      filesWritten: [],
+      error: 'task failed',
+    });
+  });
+
+  it('large outputs are auto-truncated with a get_batch_slice hint', async () => {
+    stubRunTasks.mockResolvedValueOnce([
+      {
+        output: 'x'.repeat(70000),
+        status: 'ok' as const,
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+        turns: 1,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+      },
+    ]);
+
+    const server = buildMcpServer(sampleConfig());
+    const payload = await dispatchOne(server);
+    expect(payload.results[0].output).toContain('[Output truncated at ');
+    expect(payload.results[0].output).toContain('Use get_batch_slice({ batchId:');
+    expect(payload.results[0].output).toContain('taskIndex: 0');
+  });
+
+  it('configurable threshold via buildMcpServer option triggers truncation', async () => {
     stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(200),
@@ -515,11 +470,11 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
     ]);
 
     const server = buildMcpServer(sampleConfig(), { largeResponseThresholdChars: 100 });
-    const payload = await dispatchOne(server, 'auto');
-    expect(payload.mode).toBe('summary');
+    const payload = await dispatchOne(server);
+    expect(payload.results[0].output).toContain('[Output truncated at ');
   });
 
-  it('configurable threshold via env var triggers summary mode', async () => {
+  it('configurable threshold via env var triggers truncation', async () => {
     stubRunTasks.mockResolvedValueOnce([
       {
         output: 'x'.repeat(200),
@@ -536,25 +491,9 @@ describe('delegate_tasks — responseMode + pagination (v0.3.0)', () => {
 
     process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS = '100';
     const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'auto');
-    expect(payload.mode).toBe('summary');
+    const payload = await dispatchOne(server);
+    expect(payload.results[0].output).toContain('[Output truncated at ');
     delete process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS;
-  });
-
-  it('summary mode result has correct shape', async () => {
-    const server = buildMcpServer(sampleConfig());
-    const payload = await dispatchOne(server, 'summary');
-    expect(payload.schemaVersion).toBe('2.1.0');
-    const result = payload.results[0];
-    expect(result.taskIndex).toBe(0);
-    expect(result.outputLength).toBeDefined();
-    expect(typeof result.outputLength).toBe('number');
-    expect(result.outputSha256).toMatch(/^[0-9a-f]{64}$/);
-    expect(result._fetchWith).toContain('get_batch_slice');
-    expect(result._fetchWith).toContain('batchId');
-    expect(result._fetchWith).toContain('taskIndex: 0');
-    expect(result).not.toHaveProperty('_fetchOutputWith');
-    expect(result).not.toHaveProperty('_fetchDetailWith');
   });
 });
 
@@ -568,7 +507,7 @@ describe('get_batch_slice tool', () => {
     expect(tools['get_batch_slice']).toBeDefined();
   });
 
-  it('slice=output: valid batchId + taskIndex → returns full text', async () => {
+  it('valid batchId + taskIndex → returns full batch slice for one task', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
@@ -585,6 +524,7 @@ describe('get_batch_slice tool', () => {
         toolCalls: [],
         outputIsDiagnostic: false,
         escalationLog: [],
+        durationMs: 123,
       },
     ]);
 
@@ -595,21 +535,60 @@ describe('get_batch_slice tool', () => {
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
-    const outputRes = await sliceTool.handler({ batchId, slice: 'output', taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId, taskIndex: 0 }, {});
     const outputPayload = JSON.parse(outputRes.content[0].text);
-    expect(outputPayload.output).toBe('the exact output text');
+    expect(outputPayload.batchId).toBe(batchId);
+    expect(outputPayload.timings).toEqual(computeTimings(123, [{
+      ...baseMockResult,
+      output: 'the exact output text',
+      durationMs: 123,
+    }]));
+    expect(outputPayload.batchProgress).toEqual(computeBatchProgress([{
+      ...baseMockResult,
+      output: 'the exact output text',
+      durationMs: 123,
+    }]));
+    expect(outputPayload.aggregateCost).toEqual(computeAggregateCost([{
+      ...baseMockResult,
+      output: 'the exact output text',
+      durationMs: 123,
+    }]));
+    expect(outputPayload.results).toHaveLength(1);
+    expect(outputPayload.results[0].output).toBe('the exact output text');
   });
 
-  it('slice=output: unknown batchId → throws "unknown or expired"', async () => {
+  it('valid batchId without taskIndex → returns full RunResult array for the batch', async () => {
+    const server = buildMcpServer(sampleConfig());
+    const tools = getTools(server);
+    const delegateTool = tools['delegate_tasks'];
+    const sliceTool = tools['get_batch_slice'];
+
+    const dispatchRes = await delegateTool.handler(
+      {
+        tasks: [
+          { prompt: 'Implement task zero with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+          { prompt: 'Implement task one with full coverage', done: 'Tests pass', agentType: 'standard' as const },
+        ],
+      },
+      {},
+    );
+    const batchId = JSON.parse(dispatchRes.content[0].text).batchId;
+
+    const outputRes = await sliceTool.handler({ batchId }, {});
+    const outputPayload = JSON.parse(outputRes.content[0].text);
+    expect(outputPayload.batchId).toBe(batchId);
+    expect(outputPayload.results).toHaveLength(2);
+  });
+
+  it('unknown batchId → returns content response with error text', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const sliceTool = tools['get_batch_slice'];
-    await expect(
-      sliceTool.handler({ batchId: 'does-not-exist', slice: 'output', taskIndex: 0 }, {}),
-    ).rejects.toThrow(/unknown or expired/);
+    const res = await sliceTool.handler({ batchId: 'does-not-exist', taskIndex: 0 }, {});
+    expect(res.content[0].text).toMatch(/unknown or expired/);
   });
 
-  it('slice=output: out-of-range taskIndex → throws "out of range"', async () => {
+  it('out-of-range taskIndex → returns content response with error text', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
@@ -622,12 +601,11 @@ describe('get_batch_slice tool', () => {
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
-    await expect(
-      sliceTool.handler({ batchId, slice: 'output', taskIndex: 99 }, {}),
-    ).rejects.toThrow(/out of range/);
+    const res = await sliceTool.handler({ batchId, taskIndex: 99 }, {});
+    expect(res.content[0].text).toMatch(/out of range/);
   });
 
-  it('slice=output touches LRU order', async () => {
+  it('get_batch_slice touches LRU order', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
@@ -644,7 +622,7 @@ describe('get_batch_slice tool', () => {
     }
 
     // Touch the first batch via get_batch_slice
-    await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
+    await sliceTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
 
     // Dispatch 1 more batch — this should evict the oldest-not-touched (batch[1])
     await delegateTool.handler(
@@ -653,17 +631,17 @@ describe('get_batch_slice tool', () => {
     );
 
     // batch[1] should be gone (evicted), but batch[0] should still work
-    await expect(
-      sliceTool.handler({ batchId: batchIds[1], slice: 'output', taskIndex: 0 }, {}),
-    ).rejects.toThrow(/unknown or expired/);
+    const evictedRes = await sliceTool.handler({ batchId: batchIds[1], taskIndex: 0 }, {});
+    expect(evictedRes.content[0].text).toMatch(/unknown or expired/);
 
     // batch[0] still works
-    const outputRes = await sliceTool.handler({ batchId: batchIds[0], slice: 'output', taskIndex: 0 }, {});
+    const outputRes = await sliceTool.handler({ batchId: batchIds[0], taskIndex: 0 }, {});
     expect(outputRes.content).toBeDefined();
+    expect(outputRes.content[0].text).not.toMatch(/unknown or expired/);
   });
 });
 
-describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
+describe('retry_tasks — unified response + new batch', () => {
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const getTools = (server: ReturnType<typeof buildMcpServer>): Record<string, any> => (server as any)._registeredTools;
 
@@ -671,7 +649,7 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     delete process.env.MULTI_MODEL_LARGE_RESPONSE_THRESHOLD_CHARS;
   });
 
-  it('accepts responseMode and honors it on the retry response', async () => {
+  it('returns the unified response shape on retry', async () => {
     const server = buildMcpServer(sampleConfig());
     const tools = getTools(server);
     const delegateTool = tools['delegate_tasks'];
@@ -691,14 +669,22 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const dispatchPayload = JSON.parse(dispatchRes.content[0].text);
     const batchId = dispatchPayload.batchId;
 
-    // Retry with summary mode
     const retryRes = await retryTool.handler(
-      { batchId, taskIndices: [0, 2], responseMode: 'summary' },
+      { batchId, taskIndices: [0, 2] },
       {},
     );
     const retryPayload = JSON.parse(retryRes.content[0].text);
-    expect(retryPayload.mode).toBe('summary');
-    expect(retryPayload.results[0].outputSha256).toMatch(/^[0-9a-f]{64}$/);
+    expect(retryPayload).toHaveProperty('headline');
+    expect(retryPayload).toHaveProperty('batchId');
+    expect(retryPayload.results).toHaveLength(2);
+    expect(retryPayload.results[0]).toEqual({
+      status: 'ok',
+      output: 'stub ok',
+      filesWritten: [],
+    });
+    expect(retryPayload).not.toHaveProperty('mode');
+    expect(retryPayload).not.toHaveProperty('originalBatchId');
+    expect(retryPayload).not.toHaveProperty('originalIndices');
   });
 
   it('creates a fresh batch for the retried tasks (new batchId, original preserved)', async () => {
@@ -733,13 +719,14 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     expect(retryBatchId).not.toBe(originalBatchId);
 
     // Original batch still has results accessible via get_batch_slice
-    const originalOutput = await sliceTool.handler({ batchId: originalBatchId, slice: 'output', taskIndex: 1 }, {});
+    const originalOutput = await sliceTool.handler({ batchId: originalBatchId, taskIndex: 1 }, {});
     expect(originalOutput.content).toBeDefined();
+    expect(originalOutput.content[0].text).not.toMatch(/unknown or expired/);
 
     // Retry batch has the retried task
     expect(retryPayload.results.length).toBe(1);
-    expect(retryPayload.originalBatchId).toBe(originalBatchId);
-    expect(retryPayload.originalIndices).toEqual([1]);
+    expect(retryPayload).not.toHaveProperty('originalBatchId');
+    expect(retryPayload).not.toHaveProperty('originalIndices');
   });
 
   it('retry_tasks response includes the new batchId so callers can chain retries', async () => {
@@ -758,31 +745,6 @@ describe('retry_tasks — pagination + new batch (v0.3.0)', () => {
     const retryPayload = JSON.parse(retryRes.content[0].text);
     expect(retryPayload.batchId).toBeDefined();
     expect(retryPayload.batchId).not.toBe(batchId);
-  });
-
-  it('retry_tasks response includes originalBatchId + originalIndices for traceability', async () => {
-    const server = buildMcpServer(sampleConfig());
-    const tools = getTools(server);
-    const delegateTool = tools['delegate_tasks'];
-    const retryTool = tools['retry_tasks'];
-
-    const dispatchRes = await delegateTool.handler(
-      {
-        tasks: [
-          { prompt: 'Implement feature zero with full coverage', done: 'Done', agentType: 'standard' as const },
-          { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const },
-          { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const },
-        ],
-      },
-      {},
-    );
-    const batchId = JSON.parse(dispatchRes.content[0].text).batchId;
-
-    const retryRes = await retryTool.handler({ batchId, taskIndices: [0, 2] }, {});
-    const retryPayload = JSON.parse(retryRes.content[0].text);
-    expect(retryPayload.originalBatchId).toBe(batchId);
-    expect(retryPayload.originalIndices).toEqual([0, 2]);
-    expect(retryPayload.results.length).toBe(2);
   });
 });
 
@@ -975,8 +937,8 @@ describe('buildTaskSchema descriptions', () => {
   }
 });
 
-describe('delegate_tasks headline field (full mode)', () => {
-  it('full-mode response carries a headline string derived from the batch aggregates', async () => {
+describe('delegate_tasks headline field', () => {
+  it('unified response carries a headline string derived from the batch aggregates', async () => {
     const server = buildMcpServer(sampleConfig());
     // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const tools = (server as any)._registeredTools;
@@ -988,28 +950,25 @@ describe('delegate_tasks headline field (full mode)', () => {
           {
             prompt: 'Implement feature one with full coverage',
             done: 'Tests pass',
-            parentModel: 'claude-opus-4-6',
           },
           {
             prompt: 'Implement feature two with full coverage',
             done: 'Tests pass',
-            parentModel: 'claude-opus-4-6',
           },
         ],
-        responseMode: 'full',
       },
       {},
     );
 
     const payload = JSON.parse(result.content[0].text);
 
-    expect(payload.mode).toBe('full');
     expect(payload).toHaveProperty('headline');
     expect(typeof payload.headline).toBe('string');
 
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
     expect(payload.headline).toContain('$0.00 actual');
     expect(payload.headline).not.toContain('ROI');
+    expect(payload).not.toHaveProperty('mode');
   });
 });
 
@@ -1036,17 +995,13 @@ describe('buildTaskSchema descriptions', () => {
   }
 });
 
-describe('delegate_tasks summary mode — slim shape', () => {
+describe('delegate_tasks unified response — slim shape', () => {
   /**
    * Helper: run the delegate_tasks handler with an inline mock override so
-   * the returned RunResult[] has realistic bulky fields (filesRead/Written,
-   * toolCalls, escalationLog with reasons). The summary-shape assertions
-   * need these populated on the source side to verify the slim output
-   * correctly OMITS them.
+   * the returned RunResult[] has realistic bulky fields. The unified-response
+   * assertions verify the inline payload still stays slim and omits those.
    */
-  async function dispatchRichBatch(opts: {
-    responseMode?: 'full' | 'summary' | 'auto';
-  } = {}): Promise<any> {
+  async function dispatchRichBatch(): Promise<any> {
     stubRunTasks.mockImplementationOnce(
       async (tasks: unknown): Promise<RunResult[]> => {
         const arr = tasks as { prompt: string }[];
@@ -1118,7 +1073,6 @@ describe('delegate_tasks summary mode — slim shape', () => {
           { prompt: 'Implement feature one with full coverage', done: 'Done', agentType: 'standard' as const },
           { prompt: 'Implement feature two with full coverage', done: 'Done', agentType: 'standard' as const },
         ],
-        ...(opts.responseMode ? { responseMode: opts.responseMode } : {}),
       },
       {},
     );
@@ -1126,51 +1080,41 @@ describe('delegate_tasks summary mode — slim shape', () => {
   }
 
   it('emits the slim per-task shape without bulky fields', async () => {
-    const payload = await dispatchRichBatch({ responseMode: 'summary' });
+    const payload = await dispatchRichBatch();
 
-    expect(payload.mode).toBe('summary');
-    expect(payload.schemaVersion).toBe('2.1.0');
     expect(payload.results).toHaveLength(2);
 
     const task0 = payload.results[0];
-    expect(task0.taskIndex).toBe(0);
-    expect(task0.agentType).toBe('standard');
-    expect(task0.status).toBe('ok');
-    expect(task0.turns).toBe(3);
-    expect(task0.durationMs).toBe(1000);
-    expect(task0.outputLength).toBe('rich output for task 0'.length);
-    expect(task0).toHaveProperty('outputSha256');
-    expect(typeof task0.outputSha256).toBe('string');
-    expect(task0.outputSha256).toHaveLength(64); // sha256 hex
-
-    // New fetch-hint field
-    expect(task0).toHaveProperty('_fetchWith');
-    expect(task0._fetchWith).toContain('get_batch_slice');
-    expect(task0._fetchWith).toContain(payload.batchId);
-    expect(task0._fetchWith).toContain('taskIndex: 0');
+    expect(task0).toEqual({
+      status: 'ok',
+      output: 'rich output for task 0',
+      filesWritten: ['src/c-0.ts'],
+    });
 
     // Assert dropped fields are NOT present on the slim per-task entry.
     expect(task0).not.toHaveProperty('filesRead');
-    expect(task0).not.toHaveProperty('filesWritten');
     expect(task0).not.toHaveProperty('directoriesListed');
     expect(task0).not.toHaveProperty('toolCalls');
     expect(task0).not.toHaveProperty('progressTrace');
     expect(task0).not.toHaveProperty('escalationLog');
-    expect(task0).not.toHaveProperty('_fetchOutputWith');
-    expect(task0).not.toHaveProperty('_fetchDetailWith');
+    expect(task0).not.toHaveProperty('turns');
+    expect(task0).not.toHaveProperty('durationMs');
+    expect(task0).not.toHaveProperty('usage');
+    expect(task0).not.toHaveProperty('agents');
+    expect(task0).not.toHaveProperty('models');
   });
 
-  it('summary-mode envelope carries a headline field alongside the batch aggregates', async () => {
-    const payload = await dispatchRichBatch({ responseMode: 'summary' });
+  it('unified envelope carries a headline while omitting verbose aggregate fields', async () => {
+    const payload = await dispatchRichBatch();
 
     expect(payload).toHaveProperty('headline');
-    expect(payload).toHaveProperty('timings');
-    expect(payload).toHaveProperty('batchProgress');
-    expect(payload).toHaveProperty('aggregateCost');
     expect(typeof payload.headline).toBe('string');
     expect(payload.headline).toMatch(/^2 tasks, 2\/2 ok \(100\.0%\),/);
-    expect(payload.headline).not.toContain('actual');
     expect(payload.headline).toContain('$0.10 saved vs claude-opus-4-6');
     expect(payload.headline).toContain('ROI');
+
+    expect(payload).not.toHaveProperty('timings');
+    expect(payload).not.toHaveProperty('batchProgress');
+    expect(payload).not.toHaveProperty('aggregateCost');
   });
 });
