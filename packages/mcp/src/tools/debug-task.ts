@@ -53,6 +53,7 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, c
         cwd: process.cwd(),
         contextBlockIds: params.contextBlockIds,
         parentModel: resolveParentModel(config),
+        autoCommit: true,
       };
       const runtime = contextBlockStore ? { contextBlockStore } : undefined;
       const parentModel = taskSpec.parentModel;
