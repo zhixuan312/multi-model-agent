@@ -11,8 +11,9 @@ export function buildSpecReviewPrompt(
   implReport: ParsedStructuredReport,
   fileContents: Record<string, string>,
   toolCallLog: string[],
+  planContext?: string,
 ): string {
-  return [
+  const sections = [
     'You are a spec compliance reviewer. Check whether the implementer satisfied the task exactly.',
     '',
     '## Execution Packet (what was asked)',
@@ -20,6 +21,22 @@ export function buildSpecReviewPrompt(
     `Scope: ${packet.scope.join(', ')}`,
     `Done condition: ${packet.doneCondition}`,
     '',
+  ];
+
+  // Inject plan context when available (execute_plan tasks)
+  if (planContext) {
+    sections.push(
+      '## Plan Context',
+      'The implementation was driven by this plan section. Check whether the worker',
+      'implemented what the plan describes — details, constraints, and acceptance',
+      'criteria from the plan take precedence over the brief summary.',
+      '',
+      planContext,
+      '',
+    );
+  }
+
+  sections.push(
     '## Implementer Structured Report',
     `Summary: ${implReport.summary ?? 'N/A'}`,
     `Files changed: ${implReport.filesChanged.map((f) => `${f.path}: ${f.summary}`).join('; ')}`,
@@ -39,7 +56,9 @@ export function buildSpecReviewPrompt(
     'In ## Deviations from brief, list specific issues found.',
     'In ## Unresolved, list items needing parent judgment.',
     'Check: scope coverage, acceptance criteria met, required markers present, no out-of-scope changes.',
-  ].join('\n');
+  );
+
+  return sections.join('\n');
 }
 
 export function buildQualityReviewPrompt(
