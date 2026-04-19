@@ -259,7 +259,7 @@ async function executeReviewedLifecycle(
     if (task.autoCommit && implResult.status === 'ok' && implResult.filesWritten.length > 0) {
       const commitResult = autoCommitFiles(
         implResult.filesWritten,
-        implReport?.summary,
+        implReport?.summary ?? undefined,
         task.cwd ?? process.cwd(),
       );
       commitSha = commitResult.sha;
@@ -447,7 +447,7 @@ async function executeReviewedLifecycle(
           const reworkReport = parseStructuredReport(reworkResult.output);
           const reworkCommit = autoCommitFiles(
             reworkResult.filesWritten,
-            reworkReport.summary,
+            reworkReport.summary ?? undefined,
             task.cwd ?? process.cwd(),
           );
           if (reworkCommit.sha) commitSha = reworkCommit.sha;
@@ -530,7 +530,7 @@ async function executeReviewedLifecycle(
             const reworkReport = parseStructuredReport(reworkResult.output);
             const reworkCommit = autoCommitFiles(
               reworkResult.filesWritten,
-              reworkReport.summary,
+              reworkReport.summary ?? undefined,
               task.cwd ?? process.cwd(),
             );
             if (reworkCommit.sha) commitSha = reworkCommit.sha;
