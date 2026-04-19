@@ -63,42 +63,6 @@ export function autoRegisterContextBlock(
   return id;
 }
 
-export function buildMetadataBlock(result: RunResult, parentModel?: string, contextBlockId?: string): { type: 'text'; text: string } {
-  const timings = computeTimings(result.durationMs ?? 0, [result]);
-  const batchProgress = computeBatchProgress([result]);
-  const aggregateCost = computeAggregateCost([result]);
-  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
-
-  return {
-    type: 'text' as const,
-    text: JSON.stringify({
-      headline,
-      ...(contextBlockId && { contextBlockId }),
-      status: result.status,
-      terminationReason: result.terminationReason,
-      specReviewStatus: result.specReviewStatus,
-      qualityReviewStatus: result.qualityReviewStatus,
-      specReviewReason: result.specReviewReason,
-      qualityReviewReason: result.qualityReviewReason,
-      usage: {
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        costUSD: result.usage.costUSD,
-        savedCostUSD: result.usage.savedCostUSD,
-      },
-      turns: result.turns,
-      durationMs: result.durationMs,
-      filesRead: result.filesRead,
-      filesWritten: result.filesWritten,
-      directoriesListed: result.directoriesListed ?? [],
-      toolCalls: result.toolCalls,
-      escalationLog: result.escalationLog,
-      agents: result.agents,
-      models: result.models,
-    }, null, 2),
-  };
-}
-
 export function resolveParentModel(config: MultiModelConfig): string | undefined {
   return process.env.PARENT_MODEL_NAME || config.defaults?.parentModel || undefined;
 }

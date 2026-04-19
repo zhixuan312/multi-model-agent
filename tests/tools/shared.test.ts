@@ -1,12 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   resolveDispatchMode,
-  buildMetadataBlock,
   buildFilePathsPrompt,
   buildPerFilePrompt,
   validateInput,
 } from '../../packages/mcp/src/tools/shared.js';
-import type { RunResult } from '@zhixuan92/multi-model-agent-core';
 
 describe('resolveDispatchMode', () => {
   it('returns single when inline content is provided', () => {
@@ -71,95 +69,4 @@ describe('buildPerFilePrompt', () => {
   });
 });
 
-describe('buildMetadataBlock', () => {
-  it('returns JSON content block with expected fields', () => {
-    const r = {
-      output: 'test', status: 'ok' as const,
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-      turns: 3, durationMs: 5000,
-      filesRead: ['a.ts'], filesWritten: [], directoriesListed: ['.'],
-      toolCalls: ['readFile(a.ts)'],
-      outputIsDiagnostic: false, escalationLog: [],
-      workerStatus: 'done' as const,
-      specReviewStatus: 'skipped' as const,
-      qualityReviewStatus: 'skipped' as const,
-    } satisfies RunResult;
-    const block = buildMetadataBlock(r);
-    expect(block.type).toBe('text');
-    const parsed = JSON.parse(block.text);
-    expect(parsed.status).toBe('ok');
-    expect(parsed.usage.costUSD).toBe(0.01);
-    expect(parsed.filesRead).toEqual(['a.ts']);
-    expect(parsed.directoriesListed).toEqual(['.']);
-  });
-
-  it('includes escalationLog and agents when present', () => {
-    const r = {
-      output: 'test', status: 'ok' as const,
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-      turns: 3, durationMs: 5000,
-      filesRead: [], filesWritten: [], directoriesListed: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [{ provider: 'openai', status: 'ok' as const }],
-      workerStatus: 'done' as const,
-      specReviewStatus: 'skipped' as const,
-      qualityReviewStatus: 'skipped' as const,
-      agents: {
-        implementer: { provider: 'openai', model: 'gpt-4o-mini' },
-      },
-    } satisfies RunResult;
-    const block = buildMetadataBlock(r);
-    const parsed = JSON.parse(block.text);
-    expect(parsed.escalationLog).toEqual([{ provider: 'openai', status: 'ok' }]);
-    expect(parsed.agents).toEqual({ implementer: { provider: 'openai', model: 'gpt-4o-mini' } });
-  });
-
-  it('serializes empty escalationLog as empty array, omits agents when undefined', () => {
-    const r = {
-      output: 'test', status: 'ok' as const,
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-      turns: 3, durationMs: 5000,
-      filesRead: [], filesWritten: [], directoriesListed: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [],
-      workerStatus: 'done' as const,
-      specReviewStatus: 'skipped' as const,
-      qualityReviewStatus: 'skipped' as const,
-    } satisfies RunResult;
-    const block = buildMetadataBlock(r);
-    const parsed = JSON.parse(block.text);
-    expect(parsed.escalationLog).toEqual([]);
-    expect(parsed).not.toHaveProperty('agents');
-  });
-
-  it('serializes populated specReviewReason and qualityReviewReason', () => {
-    const r = {
-      output: 'test', status: 'ok' as const,
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-      turns: 3, durationMs: 5000,
-      filesRead: [], filesWritten: [], directoriesListed: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [],
-      workerStatus: 'done' as const,
-      specReviewStatus: 'error' as const,
-      specReviewReason: 'review agent threw: connection refused',
-      qualityReviewStatus: 'skipped' as const,
-      qualityReviewReason: 'no files written by implementer',
-      agents: {
-        implementer: 'standard' as const,
-        specReviewer: 'complex' as const,
-        qualityReviewer: 'skipped' as const,
-      },
-    } satisfies RunResult;
-    const block = buildMetadataBlock(r);
-    const parsed = JSON.parse(block.text);
-    expect(parsed.specReviewStatus).toBe('error');
-    expect(parsed.specReviewReason).toBe('review agent threw: connection refused');
-    expect(parsed.qualityReviewStatus).toBe('skipped');
-    expect(parsed.qualityReviewReason).toBe('no files written by implementer');
-  });
-});
 

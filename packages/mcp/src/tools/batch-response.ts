@@ -1,11 +1,9 @@
 import type {
   RunResult,
-  TaskSpec,
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,
 } from '@zhixuan92/multi-model-agent-core';
-import { composeHeadline } from '../headline.js';
 
 /**
  * Compute per-batch timing metrics.
@@ -59,50 +57,3 @@ export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
   };
 }
 
-/**
- * Build a fan-out response for specialized tools. No batchId (not cache-backed).
- */
-export function buildFanOutResponse(
-  results: RunResult[],
-  tasks: TaskSpec[],
-  wallClockMs: number,
-  parentModel?: string,
-  contextBlockId?: string,
-): { type: 'text'; text: string } {
-  const timings = computeTimings(wallClockMs, results);
-  const batchProgress = computeBatchProgress(results);
-  const aggregateCost = computeAggregateCost(results);
-  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
-
-  return {
-    type: 'text' as const,
-    text: JSON.stringify({
-      schemaVersion: '1.0.0',
-      mode: 'fan_out',
-      headline,
-      ...(contextBlockId && { contextBlockId }),
-      timings,
-      batchProgress,
-      aggregateCost,
-      results: results.map((r, i) => ({
-        agentType: tasks[i]?.agentType ?? '(auto)',
-        status: r.status,
-        output: r.output,
-        turns: r.turns,
-        durationMs: r.durationMs,
-        filesRead: r.filesRead,
-        filesWritten: r.filesWritten,
-        directoriesListed: r.directoriesListed,
-        toolCalls: r.toolCalls,
-        escalationLog: r.escalationLog,
-        usage: r.usage,
-        terminationReason: r.terminationReason,
-        specReviewStatus: r.specReviewStatus,
-        qualityReviewStatus: r.qualityReviewStatus,
-        agents: r.agents,
-        models: r.models,
-        ...(r.error && { error: r.error }),
-      })),
-    }, null, 2),
-  };
-}
