@@ -21,10 +21,10 @@ export async function runSpecReview(
 ): Promise<SpecReviewResult> {
   const prompt = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
 
+  const reviewerSlot: 'standard' | 'complex' =
+    reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   let result;
   try {
-    const reviewerSlot: 'standard' | 'complex' =
-      reviewerProvider.name === 'standard' ? 'standard' : 'complex';
     result = await delegateWithEscalation(
       {
         prompt,
@@ -43,9 +43,32 @@ export async function runSpecReview(
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 
-  const report = parseStructuredReport(result.output);
+  // Design note: we only check summary presence, not full structured format.
+  // After Task 2's lenient parsing, most reviewer outputs will parse successfully — that's the goal.
+  // The retry is a safety net for truly empty/garbage responses, not a format enforcer.
+  // If the reviewer says "Approved" in plain text, lenient parsing accepts it. That's correct.
+  let report = parseStructuredReport(result.output);
   if (!report.summary) {
-    return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section' };
+    // Retry once with stronger format instruction
+    try {
+      const retryResult = await delegateWithEscalation(
+        {
+          prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          agentType: reviewerSlot,
+          briefQualityPolicy: 'off',
+          timeoutMs: 120_000,
+        },
+        [reviewerProvider],
+        { explicitlyPinned: true },
+      );
+      if (retryResult.status === 'ok') {
+        report = parseStructuredReport(retryResult.output);
+      }
+    } catch { /* fall through to error */ }
+
+    if (!report.summary) {
+      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)' };
+    }
   }
 
   const summaryLower = report.summary.toLowerCase();

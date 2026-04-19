@@ -1,16 +1,16 @@
 import { z } from 'zod';
+import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
 import { runTasks, extractPlanSection } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
-  buildMetadataBlock,
+  buildUnifiedResponse,
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
 } from './shared.js';
-import { buildFanOutResponse } from './batch-response.js';
 
 export const executePlanSchema = z.object({
   tasks: z.array(
@@ -124,14 +124,28 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
             return { content: [{ type: 'text' as const, text: 'Error: task produced no result' }], isError: true };
           }
           const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-          return { content: [{ type: 'text' as const, text: result.output }, buildMetadataBlock(result, parentModel, ctxId)] };
+          return buildUnifiedResponse({
+            batchId: randomUUID(),
+            results,
+            tasks,
+            wallClockMs: 0,
+            parentModel,
+            contextBlockId: ctxId,
+          });
         }
 
         // Multiple tasks = fan out (parallel)
         const startMs = Date.now();
         const results = await runTasks(tasks, config, { ...runOptions, runtime });
         const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-        return { content: [buildFanOutResponse(results, tasks, Date.now() - startMs, parentModel, ctxId)] };
+        return buildUnifiedResponse({
+          batchId: randomUUID(),
+          results,
+          tasks,
+          wallClockMs: Date.now() - startMs,
+          parentModel,
+          contextBlockId: ctxId,
+        });
       } catch (err) {
         return {
           content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],

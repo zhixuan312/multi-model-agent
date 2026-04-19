@@ -22,9 +22,6 @@ const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
   'spec_review', 'spec_rework', 'quality_review', 'quality_rework',
 ]);
 
-/** Number of consecutive unchanged-toolCalls heartbeats before stalled=true. */
-export const STALL_HEARTBEAT_THRESHOLD = 5;
-
 export interface HeartbeatTimerOptions {
   provider: string;
   parentModel?: string;
@@ -68,11 +65,6 @@ export class HeartbeatTimer {
   private costUSD: number | null = null;
   private savedCostUSD: number | null = null;
 
-  // Stall detection
-  private prevToolCalls = 0;
-  private stallCount = 0;
-  private inFlight = false;
-
   constructor(
     onProgress: (event: ProgressEvent) => void,
     options: HeartbeatTimerOptions,
@@ -105,9 +97,6 @@ export class HeartbeatTimer {
     this.toolCalls = 0;
     this.costUSD = null;
     this.savedCostUSD = null;
-    this.prevToolCalls = 0;
-    this.stallCount = 0;
-    this.inFlight = false;
     this.timer = setInterval(() => this.emit(false), this.intervalMs);
   }
 
@@ -192,10 +181,6 @@ export class HeartbeatTimer {
       throw new Error(`stageIndex ${this.stageIndex} exceeds stageCount ${this.stageCount}`);
     }
 
-    // Reset stall on stage/provider change
-    this.stallCount = 0;
-    this.prevToolCalls = this.toolCalls;
-
     this.emit(false);
   }
 
@@ -228,25 +213,9 @@ export class HeartbeatTimer {
     this.savedCostUSD = savedCostUSD;
   }
 
-  setInFlight(inFlight: boolean): void {
-    if (!this.started || this.stopped) return;
-    this.inFlight = inFlight;
-  }
-
   private emit(final: boolean): void {
     if (this.stopped && !final) return;
 
-    // Stall detection: only increment when not in-flight and toolCalls unchanged
-    if (!final && !this.inFlight) {
-      if (this.toolCalls === this.prevToolCalls) {
-        this.stallCount++;
-      } else {
-        this.stallCount = 0;
-        this.prevToolCalls = this.toolCalls;
-      }
-    }
-
-    const stalled = this.stallCount >= STALL_HEARTBEAT_THRESHOLD;
     const elapsed = formatElapsed(Date.now() - this.startTime);
 
     this.onProgress({
@@ -262,16 +231,15 @@ export class HeartbeatTimer {
         filesRead: this.filesRead,
         filesWritten: this.filesWritten,
         toolCalls: this.toolCalls,
-        stalled,
       },
       costUSD: this.costUSD,
       savedCostUSD: this.savedCostUSD,
       final,
-      headline: this.composeHeadline(elapsed, stalled),
+      headline: this.composeHeadline(elapsed),
     });
   }
 
-  private composeHeadline(elapsed: string, stalled: boolean): string {
+  private composeHeadline(elapsed: string): string {
     const prefix = `[${this.stageIndex}/${this.stageCount}] ${STAGE_LABELS[this.stage]}`;
     const roundSuffix = this.reviewRound !== undefined && this.maxReviewRounds !== undefined
       ? ` (round ${this.reviewRound}/${this.maxReviewRounds})`
@@ -285,8 +253,7 @@ export class HeartbeatTimer {
       `${this.filesWritten} written`,
       `${this.toolCalls} tool calls`,
     ].join(', ');
-    const stallSuffix = stalled ? ' — stalled' : '';
-    return `${prefix}${roundSuffix}${providerClause} — ${stats}${stallSuffix}`;
+    return `${prefix}${roundSuffix}${providerClause} — ${stats}`;
   }
 
   private composeCostClause(): string | null {

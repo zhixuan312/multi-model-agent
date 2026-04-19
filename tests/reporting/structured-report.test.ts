@@ -58,4 +58,24 @@ None.`;
     expect(r.summary).toBeNull();
     expect(r.filesChanged).toEqual([]);
   });
+
+  it('parses # Summary (h1 instead of h2)', () => {
+    const report = parseStructuredReport('# Summary\nApproved. All good.\n\n## Files changed\n- foo.ts: added');
+    expect(report.summary).toBe('Approved. All good.');
+  });
+
+  it('parses **Summary** (bold instead of heading)', () => {
+    const report = parseStructuredReport('**Summary**\nchanges_required. Fix the bug.\n\n**Files changed**\n- bar.ts: fixed');
+    expect(report.summary).toBe('changes_required. Fix the bug.');
+  });
+
+  it('parses Summary: (colon suffix)', () => {
+    const report = parseStructuredReport('Summary: Approved with no issues.\n\nFiles changed:\n- baz.ts: updated');
+    expect(report.summary).toBe('Approved with no issues.');
+  });
+
+  it('treats first paragraph as implicit summary when no heading found', () => {
+    const report = parseStructuredReport('Approved. The implementation looks correct and matches the spec.\n\nSome additional notes here.');
+    expect(report.summary).toBe('Approved. The implementation looks correct and matches the spec.');
+  });
 });

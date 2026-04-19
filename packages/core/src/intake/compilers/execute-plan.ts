@@ -25,6 +25,9 @@ export function compileExecutePlan(
       '',
       'Find this task in the plan/spec documents above (not in any preceding context blocks),',
       'understand its requirements, and implement it fully.',
+      'Follow the plan exactly as written. If the plan provides code blocks, use them verbatim.',
+      'Do not redesign, do not substitute your own approach.',
+      'The plan was written by a higher-capability model — your job is to execute it faithfully.',
       'Follow any acceptance criteria, file paths, and constraints specified in the plan.',
       'If you cannot find a unique matching task, report that no match was found and do not implement anything.',
     ].join('\n');

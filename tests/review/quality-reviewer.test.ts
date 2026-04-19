@@ -53,11 +53,10 @@ describe('runQualityReview', () => {
     expect(r.errorReason).toBe('review agent returned status: timeout');
   });
 
-  it('returns error with reason when reviewer output has no structured summary', async () => {
+  it('accepts plain text reviewer output via lenient parsing', async () => {
     const p = mockProvider('The implementation looks fine to me, approved.');
     const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('error');
-    expect(r.errorReason).toBe('reviewer output missing ## Summary section');
+    expect(r.status).toBe('approved');
   });
 
   it('returns error with reason when reviewer throws', async () => {

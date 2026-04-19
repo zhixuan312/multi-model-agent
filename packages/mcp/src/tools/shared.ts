@@ -1,5 +1,11 @@
 import { z } from 'zod';
-import type { RunResult, MultiModelConfig, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type {
+  RunResult,
+  MultiModelConfig,
+  ContextBlockStore,
+  TaskSpec,
+} from '@zhixuan92/multi-model-agent-core';
+import type { ClarificationEntry } from '@zhixuan92/multi-model-agent-core/intake/types';
 import type { ProgressEvent } from '@zhixuan92/multi-model-agent-core';
 import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import { composeHeadline } from '../headline.js';
@@ -57,42 +63,6 @@ export function autoRegisterContextBlock(
   return id;
 }
 
-export function buildMetadataBlock(result: RunResult, parentModel?: string, contextBlockId?: string): { type: 'text'; text: string } {
-  const timings = computeTimings(result.durationMs ?? 0, [result]);
-  const batchProgress = computeBatchProgress([result]);
-  const aggregateCost = computeAggregateCost([result]);
-  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
-
-  return {
-    type: 'text' as const,
-    text: JSON.stringify({
-      headline,
-      ...(contextBlockId && { contextBlockId }),
-      status: result.status,
-      terminationReason: result.terminationReason,
-      specReviewStatus: result.specReviewStatus,
-      qualityReviewStatus: result.qualityReviewStatus,
-      specReviewReason: result.specReviewReason,
-      qualityReviewReason: result.qualityReviewReason,
-      usage: {
-        inputTokens: result.usage.inputTokens,
-        outputTokens: result.usage.outputTokens,
-        costUSD: result.usage.costUSD,
-        savedCostUSD: result.usage.savedCostUSD,
-      },
-      turns: result.turns,
-      durationMs: result.durationMs,
-      filesRead: result.filesRead,
-      filesWritten: result.filesWritten,
-      directoriesListed: result.directoriesListed ?? [],
-      toolCalls: result.toolCalls,
-      escalationLog: result.escalationLog,
-      agents: result.agents,
-      models: result.models,
-    }, null, 2),
-  };
-}
-
 export function resolveParentModel(config: MultiModelConfig): string | undefined {
   return process.env.PARENT_MODEL_NAME || config.defaults?.parentModel || undefined;
 }
@@ -126,9 +96,79 @@ export function buildRunTasksOptions(extra?: { _meta?: Record<string, unknown>; 
         params: {
           progressToken,
           progress: progressCounter,
-          message: JSON.stringify({ taskIndex: _taskIndex, event }),
+          message: `[task ${_taskIndex}] ${event.headline}`,
         },
       }).catch(() => { /* ignore */ });
     },
+  };
+}
+
+/**
+ * Input interface for buildUnifiedResponse.
+ */
+export interface BuildUnifiedResponseInput {
+  batchId: string;
+  results: RunResult[];
+  tasks: TaskSpec[];
+  wallClockMs: number;
+  parentModel?: string;
+  contextBlockId?: string;
+  clarificationId?: string;
+  clarifications?: ClarificationEntry[];
+}
+
+export interface UnifiedResponse {
+  headline: string;
+  batchId: string;
+  contextBlockId?: string;
+  clarificationId?: string;
+  clarifications?: ClarificationEntry[];
+  results: {
+    status: RunResult['status'];
+    output: string;
+    filesWritten: string[];
+    error?: string;
+  }[];
+}
+
+/**
+ * Build a unified MCP response envelope for delegate_tasks / clarification flows.
+ * Strips noisy internal fields (escalationLog, usage, turns, agents, models).
+ */
+export function buildUnifiedResponse(
+  input: BuildUnifiedResponseInput,
+): { content: { type: 'text'; text: string }[] } {
+  const {
+    batchId,
+    results,
+    tasks,
+    wallClockMs,
+    parentModel,
+    contextBlockId,
+    clarificationId,
+    clarifications,
+  } = input;
+
+  const timings = computeTimings(wallClockMs, results);
+  const batchProgress = computeBatchProgress(results);
+  const aggregateCost = computeAggregateCost(results);
+  const headline = composeHeadline({ timings, batchProgress, aggregateCost, parentModel });
+
+  const response: UnifiedResponse = {
+    headline,
+    batchId,
+    ...(contextBlockId && { contextBlockId }),
+    ...(clarificationId && { clarificationId }),
+    ...(clarifications && clarifications.length > 0 && { clarifications }),
+    results: results.map((r) => ({
+      status: r.status,
+      output: r.output,
+      filesWritten: r.filesWritten,
+      ...(r.status === 'error' && r.error !== undefined && { error: r.error }),
+    })),
+  };
+
+  return {
+    content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
   };
 }

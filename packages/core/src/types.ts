@@ -473,7 +473,6 @@ export type ProgressEvent = {
     filesRead: number
     filesWritten: number
     toolCalls: number
-    stalled: boolean
   }
   costUSD: number | null
   savedCostUSD: number | null

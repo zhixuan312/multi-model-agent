@@ -216,13 +216,15 @@ export async function delegateWithEscalation(
   const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
 
   // C2: Promote incomplete → ok when agent self-assessed as done AND produced work artifacts
+  // OR verified with shell (ran tests/builds) even without writing files
   const outputIsSubstantive =
     best.output.trim().length > 0 && !best.outputIsDiagnostic;
+  const hasShellVerification = best.toolCalls.some(tc => extractToolName(tc) === 'runShell');
   const finalStatus =
     baseStatus === 'incomplete' &&
     best.workerStatus === 'done' &&
-    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls)) &&
-    outputIsSubstantive
+    outputIsSubstantive &&
+    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification)
       ? 'ok'
       : baseStatus;
 

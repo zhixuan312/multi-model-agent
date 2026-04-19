@@ -30,6 +30,8 @@ import {
   computeBatchProgress,
   computeAggregateCost,
 } from './tools/batch-response.js';
+import { buildUnifiedResponse } from './tools/shared.js';
+import { truncateResults } from './tools/truncation.js';
 import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
 import { registerExecutePlan } from './tools/execute-plan.js';
@@ -38,7 +40,6 @@ import { registerVerifyWork } from './tools/verify-work.js';
 import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
 import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
 import { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
-import { buildClarificationAwareResponse } from './clarification-response.js';
 import { registerConfirmClarifications } from './tools/confirm-clarifications.js';
 
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
@@ -58,111 +59,6 @@ function parsePositiveInt(s: string | undefined): number | undefined {
   return undefined;
 }
 
-function sha256Hex(text: string): string {
-  return createHash('sha256').update(text).digest('hex');
-}
-
-function buildFullResponse(
-  batchId: string,
-  tasks: TaskSpec[],
-  results: RunResult[],
-  aggregates: {
-    timings: BatchTimings;
-    batchProgress: BatchProgress;
-    aggregateCost: BatchAggregateCost;
-    parentModel?: string;
-  },
-) {
-  return {
-    schemaVersion: '1.0.0',
-    batchId,
-    mode: 'full' as const,
-    headline: composeHeadline({
-      timings: aggregates.timings,
-      batchProgress: aggregates.batchProgress,
-      aggregateCost: aggregates.aggregateCost,
-      parentModel: aggregates.parentModel,
-    }),
-    timings: aggregates.timings,
-    batchProgress: aggregates.batchProgress,
-    aggregateCost: aggregates.aggregateCost,
-    results: results.map((r, i) => ({
-      agentType: tasks[i].agentType ?? '(auto)',
-      status: r.status,
-      output: r.output,
-      turns: r.turns,
-      durationMs: r.durationMs,
-      filesRead: r.filesRead,
-      filesWritten: r.filesWritten,
-      directoriesListed: r.directoriesListed,
-      toolCalls: r.toolCalls,
-      escalationLog: r.escalationLog,
-      usage: r.usage,
-      terminationReason: r.terminationReason,
-      specReviewStatus: r.specReviewStatus,
-      qualityReviewStatus: r.qualityReviewStatus,
-      specReviewReason: r.specReviewReason,
-      qualityReviewReason: r.qualityReviewReason,
-      agents: r.agents,
-      models: r.models,
-      implementationReport: r.implementationReport,
-      specReviewReport: r.specReviewReport,
-      qualityReviewReport: r.qualityReviewReport,
-      ...(r.error && { error: r.error }),
-    })),
-  };
-}
-
-function buildSummaryResponse(
-  batchId: string,
-  tasks: TaskSpec[],
-  results: RunResult[],
-  opts: {
-    autoEscaped: boolean;
-    totalOutputChars: number;
-    threshold: number;
-    timings: BatchTimings;
-    batchProgress: BatchProgress;
-    aggregateCost: BatchAggregateCost;
-    parentModel?: string;
-  },
-) {
-  return {
-    schemaVersion: '1.0.0',
-    batchId,
-    mode: 'summary' as const,
-    headline: composeHeadline({
-      timings: opts.timings,
-      batchProgress: opts.batchProgress,
-      aggregateCost: opts.aggregateCost,
-      parentModel: opts.parentModel,
-    }),
-    ...(opts.autoEscaped && {
-      note: `Combined output was ${opts.totalOutputChars} chars (threshold: ${opts.threshold}). Auto-switched to summary mode. Use get_batch_slice({ batchId, slice: 'output', taskIndex }) to fetch individual task outputs, or get_batch_slice({ batchId, slice: 'detail', taskIndex }) for per-task metadata.`,
-    }),
-    timings: opts.timings,
-    batchProgress: opts.batchProgress,
-    aggregateCost: opts.aggregateCost,
-    results: results.map((r, i) => ({
-      taskIndex: i,
-      agentType: tasks[i].agentType ?? '(auto)',
-      status: r.status,
-      turns: r.turns,
-      durationMs: r.durationMs,
-      outputLength: r.output.length,
-      outputSha256: sha256Hex(r.output),
-      usage: r.usage,
-      escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
-      terminationReason: r.terminationReason,
-      specReviewStatus: r.specReviewStatus,
-      qualityReviewStatus: r.qualityReviewStatus,
-      ...(r.error && { error: r.error }),
-      ...(r.errorCode && { errorCode: r.errorCode }),
-      ...(r.retryable !== undefined && { retryable: r.retryable }),
-      _fetchWith: `get_batch_slice({ batchId: "${batchId}", slice: "output", taskIndex: ${i} })`,
-    })),
-  };
-}
 // Read the version from package.json at module load so the MCP server
 // metadata (and tests that assert against it) stays in lockstep with the
 // published npm package version. `createRequire` keeps the JSON read
@@ -339,15 +235,8 @@ export function buildMcpServer(
       renderProviderRoutingMatrix(config),
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
-      responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
-        `How to shape the response envelope. 'full' (default via 'auto') includes each task's output inline. ` +
-        `'summary' returns per-task metadata + outputLength + outputSha256, with full outputs fetchable via ` +
-        `get_batch_slice. 'auto' (the default) returns 'full' when combined output fits under the server's ` +
-        `threshold (default 65 KB; configurable via env / config / buildMcpServer option), otherwise 'summary' ` +
-        `with an auto-escape note.`,
-      ),
     },
-    async ({ tasks, responseMode = 'auto' }, extra) => {
+    async ({ tasks }, extra) => {
       const rawToken = extra._meta?.progressToken;
       const progressToken: string | number | undefined =
         typeof rawToken === 'string' || typeof rawToken === 'number'
@@ -406,57 +295,22 @@ export function buildMcpServer(
         clarificationId = clarificationStore.create(storedDrafts, batchId);
       }
 
-      // Build response using existing envelope (timings, batchProgress, aggregateCost)
-      // plus intake-specific fields (clarifications, intakeProgress)
-      const totalOutputChars = results.reduce((sum, r) => sum + r.output.length, 0);
-      const effectiveMode: 'full' | 'summary' =
-        responseMode === 'full'
-          ? 'full'
-          : responseMode === 'summary'
-            ? 'summary'
-            : totalOutputChars > resolvedThreshold
-              ? 'summary'
-              : 'full';
+      // Apply auto-escape truncation
+      const truncatedResults = truncateResults(
+        results.map(r => ({ status: r.status, output: r.output, filesWritten: r.filesWritten, error: r.error })),
+        batchId,
+        resolvedThreshold,
+      );
 
-      const timings = computeTimings(wallClockMs, results);
-      const batchProgress = computeBatchProgress(results);
-      const aggregateCost = computeAggregateCost(results);
-
-      // Use original tasks (not readySpecs) for response building so parentModel
-      // and other caller-provided fields are available for headline computation
-      const responseTasks = intakeResult.ready.map((r, i) => ({
-        ...readySpecs[i],
-        ...(tasks as TaskSpec[])[r.taskIndex],
-        prompt: readySpecs[i].prompt, // keep the resolved prompt
-      }));
-
-      const baseResponse =
-        effectiveMode === 'full'
-          ? buildFullResponse(batchId, responseTasks, results, { timings, batchProgress, aggregateCost, parentModel: resolvedParentModel })
-          : buildSummaryResponse(batchId, responseTasks, results, {
-              autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
-              totalOutputChars,
-              threshold: resolvedThreshold,
-              timings,
-              batchProgress,
-              aggregateCost,
-              parentModel: resolvedParentModel,
-            });
-
-      // Merge intake fields into the response
-      const response = {
-        ...baseResponse,
-        schemaVersion: '2.1.0',
-        intakeProgress: intakeResult.intakeProgress,
-        ...(intakeResult.clarifications.length > 0 && {
-          clarifications: intakeResult.clarifications,
-        }),
-        ...(clarificationId && { clarificationId }),
-      };
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
-      };
+      return buildUnifiedResponse({
+        batchId,
+        results: results.map((r, i) => ({ ...r, output: truncatedResults[i].output })),
+        tasks: readySpecs,
+        wallClockMs,
+        parentModel: resolvedParentModel,
+        clarificationId,
+        clarifications: intakeResult.clarifications.length > 0 ? intakeResult.clarifications : undefined,
+      });
     },
   );
 
@@ -494,7 +348,7 @@ export function buildMcpServer(
     async ({ id, content }) => {
       const result = contextBlockStore.register(content, { id });
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(result, null, 2) }],
+        content: [{ type: 'text' as const, text: JSON.stringify({ contextBlockId: result.id }, null, 2) }],
       };
     },
   );
@@ -517,12 +371,8 @@ export function buildMcpServer(
       taskIndices: z
         .array(z.number().int().nonnegative())
         .describe('Zero-based indices (into the original batch) of the tasks to re-run'),
-      responseMode: z.enum(['full', 'summary', 'auto']).optional().describe(
-        `How to shape the response envelope for the retry batch. 'full' returns inline outputs. ` +
-        `'summary' returns outputLength + outputSha256. 'auto' (default) auto-escapes based on threshold.`,
-      ),
     },
-    async ({ batchId, taskIndices, responseMode = 'auto' }) => {
+    async ({ batchId, taskIndices }) => {
       const batch = batchCache.get(batchId);
       if (!batch || batch.expiresAt < Date.now()) {
         // Proactively drop the expired entry so subsequent lookups see
@@ -563,173 +413,89 @@ export function buildMcpServer(
       }
       const wallClockMs = Date.now() - batchStartMs;
 
-      // Determine effective response mode
-      const totalOutputChars = results.reduce((sum, r) => sum + r.output.length, 0);
-      const effectiveMode: 'full' | 'summary' =
-        responseMode === 'full'
-          ? 'full'
-          : responseMode === 'summary'
-            ? 'summary'
-            : totalOutputChars > resolvedThreshold
-              ? 'summary'
-              : 'full';
+      // Apply auto-escape truncation
+      const truncatedResults = truncateResults(
+        results.map(r => ({ status: r.status, output: r.output, filesWritten: r.filesWritten, error: r.error })),
+        retryBatchId,
+        resolvedThreshold,
+      );
 
-      const timings = computeTimings(wallClockMs, results);
-      const batchProgress = computeBatchProgress(results);
-      const aggregateCost = computeAggregateCost(results);
-
-      const response =
-        effectiveMode === 'full'
-          ? {
-              ...buildFullResponse(retryBatchId, subset, results, { timings, batchProgress, aggregateCost, parentModel: resolvedParentModel }),
-              originalBatchId: batchId,
-              originalIndices: taskIndices,
-            }
-          : {
-              ...buildSummaryResponse(retryBatchId, subset, results, {
-                autoEscaped: responseMode === 'auto' && totalOutputChars > resolvedThreshold,
-                totalOutputChars,
-                threshold: resolvedThreshold,
-                timings,
-                batchProgress,
-                aggregateCost,
-                parentModel: resolvedParentModel,
-              }),
-              originalBatchId: batchId,
-              originalIndices: taskIndices,
-            };
-
-      return {
-        content: [{ type: 'text' as const, text: JSON.stringify(response, null, 2) }],
-      };
+      return buildUnifiedResponse({
+        batchId: retryBatchId,
+        results: results.map((r, i) => ({ ...r, output: truncatedResults[i].output })),
+        tasks: subset,
+        wallClockMs,
+        parentModel: resolvedParentModel,
+      });
     },
   );
 
   server.tool(
     'get_batch_slice',
-    `Retrieve a specific "slice" of data from a previous delegate_tasks batch.
+    `Retrieve full telemetry and output data from a previous delegate_tasks batch.
 
-Three slices are available:
-- \`output\`: The full text output of a specific task (requires taskIndex).
-- \`detail\`: Per-task execution details including toolCalls, filesRead/Written/Listed,
-  escalationLog, terminationReason, review statuses (specReviewStatus,
-  qualityReviewStatus), agents provenance, and implementation/spec/quality reports
-  (requires taskIndex).
-- \`telemetry\`: Batch-wide ROI telemetry envelope with headline, timings, batchProgress,
-  and aggregateCost (taskIndex not needed).
+Returns the complete batch with timings, progress, cost breakdown, and all task results.
+Optionally filter to a single task via taskIndex.
 
 Batches are cached in memory per MCP server instance with a 30-minute TTL from creation
 and a 100-entry LRU cap. Access touches the LRU order but does not refresh TTL. If the
 batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.`,
     {
-      batchId: z.string().describe('Batch id returned from a previous delegate_tasks call'),
-      slice: z.enum(['output', 'detail', 'telemetry']).describe('Which slice to retrieve'),
-      taskIndex: z.number().int().nonnegative().optional().describe('Zero-based index of the task (required for output and detail slices)'),
+      batchId: z.string().describe('Batch ID from a prior delegate_tasks or retry_tasks response'),
+      taskIndex: z.number().int().min(0).optional().describe('0-based task index. Omit for all tasks.'),
     },
-    async ({ batchId, slice, taskIndex }) => {
-      const batch = batchCache.get(batchId);
-      if (!batch || batch.expiresAt < Date.now()) {
-        if (batch) batchCache.delete(batchId);
-        throw new Error(
-          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
-        );
-      }
-
-      touchBatch(batchId, batch);
-
-      if (batch.results === undefined) {
-        throw new Error(
-          `batch "${batchId}" has no results yet — the original dispatch may still be running`,
-        );
-      }
-
-      if (slice === 'output' || slice === 'detail') {
-        if (taskIndex === undefined) {
-          throw new Error(
-            `taskIndex is required for slice "${slice}" — please specify which task to retrieve`,
-          );
-        }
-        if (taskIndex < 0 || taskIndex >= batch.results.length) {
-          throw new Error(
-            `index ${taskIndex} is out of range for batch ${batchId} (size ${batch.results.length})`,
-          );
-        }
-      }
-
-      if (slice === 'output') {
-        const result = batch.results[taskIndex!];
+    async ({ batchId, taskIndex }) => {
+      const entry = batchCache.get(batchId);
+      if (!entry || entry.expiresAt < Date.now()) {
+        if (entry) batchCache.delete(batchId);
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify({ output: result.output }, null, 2) }],
+          content: [{
+            type: 'text' as const,
+            text: `Batch "${batchId}" is unknown or expired. Batch results are cached for 30 minutes after completion. Re-dispatch the original task to get fresh results.`,
+          }],
         };
       }
 
-      if (slice === 'detail') {
-        const result = batch.results[taskIndex!];
-        const task = batch.tasks[taskIndex!];
+      touchBatch(batchId, entry);
 
-        const detail = {
-          batchId,
-          taskIndex: taskIndex,
-          agentType: task.agentType ?? '(auto)',
-          filesRead: result.filesRead,
-          filesWritten: result.filesWritten,
-          directoriesListed: result.directoriesListed ?? [],
-          toolCalls: result.toolCalls,
-          escalationLog: result.escalationLog,
-          terminationReason: result.terminationReason,
-          specReviewStatus: result.specReviewStatus,
-          qualityReviewStatus: result.qualityReviewStatus,
-          specReviewReason: result.specReviewReason,
-          qualityReviewReason: result.qualityReviewReason,
-          agents: result.agents,
-          models: result.models,
-          implementationReport: result.implementationReport,
-          specReviewReport: result.specReviewReport,
-          qualityReviewReport: result.qualityReviewReport,
-        };
-
+      if (!entry.results) {
         return {
-          content: [{ type: 'text' as const, text: JSON.stringify(detail, null, 2) }],
+          content: [{
+            type: 'text' as const,
+            text: `Batch "${batchId}" has no results yet — the original dispatch may still be running.`,
+          }],
         };
       }
 
-      // slice === 'telemetry'
-      const wallClockMsEstimate = Math.max(
-        0,
-        ...batch.results.map((r) => r.durationMs ?? 0),
-      );
-      const timings = computeTimings(wallClockMsEstimate, batch.results);
-      const batchProgress = computeBatchProgress(batch.results);
-      const aggregateCost = computeAggregateCost(batch.results);
-      const headline = composeHeadline({
-        timings,
-        batchProgress,
-        aggregateCost,
-        parentModel: resolvedParentModel,
-      });
+      if (taskIndex !== undefined && (taskIndex < 0 || taskIndex >= entry.results.length)) {
+        return {
+          content: [{
+            type: 'text' as const,
+            text: `taskIndex ${taskIndex} is out of range. Batch "${batchId}" has ${entry.results.length} tasks (0-based index: 0 to ${entry.results.length - 1}).`,
+          }],
+        };
+      }
 
-      const envelope = {
-        batchId,
-        headline,
-        timings,
-        batchProgress,
-        aggregateCost,
-        results: batch.results.map((r, i) => ({
-          taskIndex: i,
-          agentType: batch.tasks[i].agentType ?? '(auto)',
-          status: r.status,
-          turns: r.turns,
-          durationMs: r.durationMs,
-          usage: r.usage,
-          escalationChain: r.escalationLog.map((a) => `${a.provider}:${a.status}`),
-      ...(r.error && { error: r.error }),
-      ...(r.errorCode && { errorCode: r.errorCode }),
-      ...(r.retryable !== undefined && { retryable: r.retryable }),
-        })),
-      };
+      const results = taskIndex !== undefined
+        ? [entry.results[taskIndex]]
+        : entry.results;
+
+      const wallClockMs = Math.max(0, ...entry.results.map((r) => r.durationMs ?? 0));
+      const timings = computeTimings(wallClockMs, entry.results);
+      const batchProgress = computeBatchProgress(entry.results);
+      const aggregateCost = computeAggregateCost(entry.results);
 
       return {
-        content: [{ type: 'text' as const, text: JSON.stringify(envelope, null, 2) }],
+        content: [{
+          type: 'text' as const,
+          text: JSON.stringify({
+            batchId,
+            timings,
+            batchProgress,
+            aggregateCost,
+            results,
+          }, null, 2),
+        }],
       };
     },
   );

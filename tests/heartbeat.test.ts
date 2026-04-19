@@ -31,7 +31,7 @@ describe('HeartbeatTimer', () => {
         expect(first.stageCount).toBe(3);
         expect(first.reviewRound).toBeUndefined();
         expect(first.maxReviewRounds).toBeUndefined();
-        expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0, stalled: false });
+        expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0 });
         expect(first.costUSD).toBeNull();
         expect(first.savedCostUSD).toBeNull();
         expect(first.final).toBe(false);
@@ -345,21 +345,4 @@ describe('HeartbeatTimer', () => {
     timer.stop();
   });
 
-  it('stall detection after consecutive unchanged ticks', () => {
-    const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
-      provider: 'test',
-      intervalMs: 10,
-    });
-    timer.start(1);
-
-    return new Promise<void>((resolve) => {
-      setTimeout(() => {
-        timer.stop();
-        const stalledEvents = events.filter(e => e.progress.stalled && !e.final);
-        expect(stalledEvents.length).toBeGreaterThan(0);
-        resolve();
-      }, 500);
-    });
-  });
 });

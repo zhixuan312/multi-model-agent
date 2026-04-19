@@ -7,7 +7,8 @@ import type { ConfirmationEntry } from '@zhixuan92/multi-model-agent-core/intake
 import { processConfirmations } from '@zhixuan92/multi-model-agent-core/intake/confirm';
 import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
 import { getMaxRoundsPerDraft } from '@zhixuan92/multi-model-agent-core/intake/feature-flag';
-import { buildClarificationAwareResponse } from '../clarification-response.js';
+import { buildUnifiedResponse } from './shared.js';
+import { truncateResults } from './truncation.js';
 
 export const confirmClarificationsSchema = z.object({
   clarificationId: z.string().describe('ID of the clarification set to resume'),
@@ -109,15 +110,30 @@ export function registerConfirmClarifications(
 
       intakeResult.intakeProgress.executedDrafts = intakeResult.ready.length;
 
+      // Track start time for wall clock measurement
+      const startMs = Date.now();
+
       clarificationStore.cleanupIfResolved(params.clarificationId);
 
-      const response = buildClarificationAwareResponse({
+      // Apply same auto-escape truncation as delegate_tasks
+      const threshold = config.defaults.largeResponseThresholdChars ?? 65_000;
+      const truncatedResults = truncateResults(
+        results.map(r => ({ status: r.status, output: r.output, filesWritten: r.filesWritten, error: r.error })),
+        newBatchId,
+        threshold,
+      );
+
+      // Build unified response — only includes remaining clarifications if any
+      const remainingClarifications = intakeResult.clarifications.length > 0 ? intakeResult.clarifications : undefined;
+      const remainingClarificationId = intakeResult.clarifications.length > 0 ? params.clarificationId : undefined;
+
+      const response = buildUnifiedResponse({
         batchId: newBatchId,
-        results,
-        clarifications: intakeResult.clarifications,
-        intakeProgress: intakeResult.intakeProgress,
-        clarificationId: intakeResult.clarifications.length > 0 ? params.clarificationId : undefined,
-        originalBatchId,
+        results: results.map((r, i) => ({ ...r, output: truncatedResults[i].output })),
+        tasks: intakeResult.ready.map(r => r.task),
+        wallClockMs: Date.now() - startMs,
+        clarificationId: remainingClarificationId,
+        clarifications: remainingClarifications,
       });
 
       const responseObj = {
@@ -126,10 +142,7 @@ export function registerConfirmClarifications(
       };
 
       return {
-        content: [{
-          type: 'text' as const,
-          text: JSON.stringify(responseObj, null, 2),
-        }],
+        content: [{ type: 'text' as const, text: JSON.stringify(responseObj, null, 2) }],
       };
     },
   );

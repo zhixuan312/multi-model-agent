@@ -18,7 +18,13 @@ export function compileAuditDocument(
     if (input.document) promptParts.push(`Document to audit:\n${input.document}`);
     if (input.auditType) promptParts.push(`Audit type: ${input.auditType}`);
     if (filePaths.length) promptParts.push(`\nFiles to audit: ${filePaths.join(', ')}`);
-    promptParts.push('Provide a structured audit report with findings and severity.');
+    promptParts.push(
+      'Begin your response with a one-line findings count: "N findings" for first-round audits, or "N findings (M new, K fixed from prior round)" for delta audits.',
+      '',
+      'You MUST re-read all target files before comparing against prior findings. Do not audit from the context block alone — the context block contains the prior round\'s findings, not the current file contents.',
+      '',
+      'Provide a structured audit report with findings and severity.',
+    );
 
     return [{
       draftId: createDraftId(requestId, 0, 'root'),
@@ -38,7 +44,13 @@ export function compileAuditDocument(
     const promptParts: string[] = [];
     promptParts.push(`Audit this file: ${filePath}`);
     if (input.auditType) promptParts.push(`Audit type: ${input.auditType}`);
-    promptParts.push('Provide a structured audit report with findings and severity.');
+    promptParts.push(
+      'Begin your response with a one-line findings count: "N findings" for first-round audits, or "N findings (M new, K fixed from prior round)" for delta audits.',
+      '',
+      'You MUST re-read all target files before comparing against prior findings. Do not audit from the context block alone — the context block contains the prior round\'s findings, not the current file contents.',
+      '',
+      'Provide a structured audit report with findings and severity.',
+    );
 
     return {
       draftId: createDraftId(requestId, index, nodeId),

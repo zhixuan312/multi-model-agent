@@ -211,7 +211,6 @@ async function executeReviewedLifecycle(
   const wrappedOnProgress = onProgress
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
-          heartbeat?.setInFlight(true);
           progressCounters.toolCalls++;
           const name = event.toolSummary.split('(')[0];
           if (name === 'readFile' || name === 'grep' || name === 'glob' || name === 'listFiles') {
@@ -222,7 +221,6 @@ async function executeReviewedLifecycle(
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
         }
         if (event.kind === 'turn_complete') {
-          heartbeat?.setInFlight(false);
           // Update cost from cumulative tokens
           const costUSD = computeCostUSD(
             event.cumulativeInputTokens,
@@ -378,7 +376,7 @@ async function executeReviewedLifecycle(
 
     heartbeat?.transition({
       stage: 'spec_review', stageIndex: 2,
-      reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+      reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
     });
 
     let specResult = await runSpecReview(
@@ -402,7 +400,7 @@ async function executeReviewedLifecycle(
         round++;
         heartbeat?.transition({
           stage: 'spec_rework', stageIndex: 3,
-          reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 10,
+          reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
         });
         const feedback = specResult.findings.length > 0
           ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -425,7 +423,7 @@ async function executeReviewedLifecycle(
 
         heartbeat?.transition({
           stage: 'spec_review', stageIndex: 2,
-          reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+          reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
         });
         specResult = await runSpecReview(
           otherProvider,
@@ -449,7 +447,7 @@ async function executeReviewedLifecycle(
         prevSpecFindings = specResult.findings;
 
         // Absolute safety: don't exceed 10 rework rounds regardless.
-        if (round >= (task.maxReviewRounds ?? 10)) break;
+        if (round >= (task.maxReviewRounds ?? 5)) break;
       }
     }
 
@@ -457,7 +455,7 @@ async function executeReviewedLifecycle(
     if (reviewPolicy === 'full') {
       heartbeat?.transition({
         stage: 'quality_review', stageIndex: 4,
-        reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+        reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
       });
       qualityResult = await runQualityReview(
         otherProvider,
@@ -475,7 +473,7 @@ async function executeReviewedLifecycle(
           round++;
           heartbeat?.transition({
             stage: 'quality_rework', stageIndex: 5,
-            reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 10,
+            reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
           });
           const feedback = qualityResult.findings.length > 0
             ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -497,7 +495,7 @@ async function executeReviewedLifecycle(
 
           heartbeat?.transition({
             stage: 'quality_review', stageIndex: 4,
-            reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 10,
+            reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
           });
           qualityResult = await runQualityReview(
             otherProvider,
@@ -516,7 +514,7 @@ async function executeReviewedLifecycle(
 
           prevQualityFindings = qualityResult.findings;
 
-          if (round >= (task.maxReviewRounds ?? 10)) break;
+          if (round >= (task.maxReviewRounds ?? 5)) break;
         }
       }
     }

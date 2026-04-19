@@ -29,8 +29,8 @@ async function makeServer() {
   return buildMcpServer(sampleConfig(), { _testRunTasksOverride: mockedRunTasks });
 }
 
-describe('slim summary envelope size', () => {
-  it('11-task batch with worst-case escalation chains stays under 8 KB', async () => {
+describe('unified response envelope size', () => {
+  it('11-task batch with large outputs uses truncation to stay manageable', async () => {
     const worstCaseResults: RunResult[] = Array.from({ length: 11 }, (_, i) => ({
       output: 'x'.repeat(2000),
       status: 'incomplete',
@@ -110,34 +110,32 @@ describe('slim summary envelope size', () => {
           agentType: 'standard' as const,
           parentModel: 'claude-opus-4-6',
         })),
-        responseMode: 'summary',
       },
       {},
     );
 
     const rawText = result.content[0].text;
-    // v1.3.0: terminationReason object (~150B per task) replaces workerStatus string (~15B).
-    // 11 tasks × ~135B delta ≈ 1.5 KB increase. Budget raised from 10 KB to 12 KB.
-    expect(rawText.length).toBeLessThan(12 * 1024);
-
     const payload = JSON.parse(rawText);
-    expect(payload.mode).toBe('summary');
-    expect(payload.schemaVersion).toBe('2.1.0');
-    expect(payload.results).toHaveLength(11);
-    expect(payload.headline).toContain('11 tasks');
 
+    // Unified response shape
+    expect(payload.headline).toContain('11 tasks');
+    expect(payload).toHaveProperty('batchId');
+    expect(payload.results).toHaveLength(11);
+
+    // Unified response only includes slim per-task fields
     const task0 = payload.results[0];
-    expect(task0).not.toHaveProperty('filesRead');
-    expect(task0).not.toHaveProperty('filesWritten');
-    expect(task0).not.toHaveProperty('toolCalls');
+    expect(task0).toHaveProperty('status');
+    expect(task0).toHaveProperty('output');
+    expect(task0).toHaveProperty('filesWritten');
+    // Verbose fields are NOT in the inline response
     expect(task0).not.toHaveProperty('escalationLog');
-    expect(task0).not.toHaveProperty('progressTrace');
-    expect(task0).toHaveProperty('_fetchWith');
-    expect(task0._fetchWith).toContain('get_batch_slice');
-    expect(task0).not.toHaveProperty('_fetchOutputWith');
-    expect(task0).not.toHaveProperty('_fetchDetailWith');
-    expect(task0).toHaveProperty('terminationReason');
-    expect(task0).toHaveProperty('specReviewStatus');
-    expect(task0).toHaveProperty('qualityReviewStatus');
+    expect(task0).not.toHaveProperty('usage');
+    expect(task0).not.toHaveProperty('turns');
+    expect(task0).not.toHaveProperty('agents');
+    expect(task0).not.toHaveProperty('models');
+
+    // The unified envelope with 11 short outputs should be compact
+    // (outputs are 2000 chars each = 22KB outputs + envelope overhead)
+    expect(rawText.length).toBeLessThan(30 * 1024);
   });
 });
