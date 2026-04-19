@@ -206,8 +206,8 @@ describe('delegateWithEscalation', () => {
   });
 
   it('emits escalation_start between attempts and threads onProgress into runners', async () => {
-    const events: ProgressEvent[] = [];
-    const onProgress = (e: ProgressEvent) => { events.push(e); };
+    const events: InternalRunnerEvent[] = [];
+    const onProgress = (e: InternalRunnerEvent) => { events.push(e); };
 
     const failingProvider: Provider = {
       name: 'cheap',

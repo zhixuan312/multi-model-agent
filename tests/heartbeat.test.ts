@@ -1,191 +1,365 @@
-import { describe, it, expect, vi, afterEach } from 'vitest';
-import { HeartbeatTimer, STALL_HEARTBEAT_THRESHOLD } from '@zhixuan92/multi-model-agent-core/heartbeat';
+import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
+import type { ProgressEvent } from '../packages/core/src/types.js';
 
 describe('HeartbeatTimer', () => {
-  afterEach(() => {
-    vi.useRealTimers();
-  });
-
-  it('emits heartbeat with stage, progress, and headline', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.updateProgress(2, 1, 4);
-
-    vi.advanceTimersByTime(5000);
-    expect(events).toHaveLength(1);
-    expect(events[0]).toMatchObject({
-      kind: 'heartbeat',
-      stage: 'implementing',
-      stageIndex: 1,
-      stageCount: 5,
-      progress: { filesRead: 2, filesWritten: 1, toolCalls: 4, stalled: false },
+  it('requires provider at construction', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
     });
-    expect(events[0].elapsed).toBe('5s');
-    expect(events[0].headline).toBe('[1/5] Implementing — 5s, 2 read, 1 written, 4 tool calls');
-    expect(events[0].reviewRound).toBeUndefined();
-    expect(events[0].maxReviewRounds).toBeUndefined();
-    hb.stop();
+    expect(timer).toBeDefined();
   });
 
-  it('includes reviewRound and maxReviewRounds for review stages', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.setStage('spec_review', 2, 1, 10);
-    hb.updateProgress(5, 3, 10);
+  it('start() initializes all state and first tick emits correct snapshot', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      intervalMs: 50,
+    });
+    timer.start(3);
 
-    vi.advanceTimersByTime(5000);
-    expect(events[0]).toMatchObject({
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        timer.stop();
+        // First regular tick + final flush
+        expect(events.length).toBeGreaterThanOrEqual(2);
+        const first = events[0];
+        expect(first.kind).toBe('heartbeat');
+        expect(first.provider).toBe('claude-sonnet-4-6');
+        expect(first.stage).toBe('implementing');
+        expect(first.stageIndex).toBe(1);
+        expect(first.stageCount).toBe(3);
+        expect(first.reviewRound).toBeUndefined();
+        expect(first.maxReviewRounds).toBeUndefined();
+        expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0, stalled: false });
+        expect(first.costUSD).toBeNull();
+        expect(first.savedCostUSD).toBeNull();
+        expect(first.final).toBe(false);
+        expect(first.headline).toContain('[1/3] Implementing');
+        resolve();
+      }, 80);
+    });
+  });
+
+  it('start() does not emit immediately', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 1000,
+    });
+    timer.start(1);
+    expect(events).toHaveLength(0);
+    timer.stop();
+  });
+
+  it('transition() emits eagerly with updated fields', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      intervalMs: 10_000,
+    });
+    timer.start(3);
+
+    timer.transition({
       stage: 'spec_review',
       stageIndex: 2,
       reviewRound: 1,
-      maxReviewRounds: 10,
+      maxReviewRounds: 2,
     });
-    expect(events[0].headline).toBe('[2/5] Spec review (round 1/10) — 5s, 5 read, 3 written, 10 tool calls');
-    hb.stop();
-  });
 
-  it('jumps stageIndex when rework is skipped', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-
-    // Spec review approved on round 1, skip spec_rework, jump to quality_review
-    hb.setStage('spec_review', 2, 1, 10);
-    hb.setStage('quality_review', 4, 1, 10);
-    hb.updateProgress(10, 5, 20);
-
-    vi.advanceTimersByTime(5000);
-    expect(events[0]).toMatchObject({ stageIndex: 4, stageCount: 5, stage: 'quality_review' });
-    expect(events[0].headline).toContain('[4/5] Quality review');
-    hb.stop();
-  });
-
-  it('uses stageCount=1 for no-artifact tasks', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(1);
-    hb.updateProgress(3, 0, 5);
-
-    vi.advanceTimersByTime(5000);
-    expect(events[0]).toMatchObject({ stageIndex: 1, stageCount: 1, stage: 'implementing' });
-    expect(events[0].headline).toBe('[1/1] Implementing — 5s, 3 read, 0 written, 5 tool calls');
-    hb.stop();
-  });
-
-  it('detects stall after STALL_HEARTBEAT_THRESHOLD unchanged heartbeats', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.updateProgress(2, 1, 4);
-
-    // First heartbeat: establishes baseline
-    vi.advanceTimersByTime(5000);
-    expect(events[0].progress.stalled).toBe(false);
-
-    // Heartbeats 2 through STALL_HEARTBEAT_THRESHOLD: toolCalls unchanged
-    for (let i = 1; i < STALL_HEARTBEAT_THRESHOLD; i++) {
-      vi.advanceTimersByTime(5000);
-      expect(events[i].progress.stalled).toBe(false);
-    }
-
-    // Heartbeat STALL_HEARTBEAT_THRESHOLD + 1: stalled
-    vi.advanceTimersByTime(5000);
-    expect(events[STALL_HEARTBEAT_THRESHOLD].progress.stalled).toBe(true);
-    expect(events[STALL_HEARTBEAT_THRESHOLD].headline).toContain('— stalled');
-    hb.stop();
-  });
-
-  it('resets stall when toolCalls increases', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.updateProgress(2, 1, 4);
-
-    // Accumulate stall count
-    for (let i = 0; i < STALL_HEARTBEAT_THRESHOLD + 1; i++) {
-      vi.advanceTimersByTime(5000);
-    }
-    expect(events[events.length - 1].progress.stalled).toBe(true);
-
-    // New tool call resets stall
-    hb.updateProgress(3, 1, 5);
-    vi.advanceTimersByTime(5000);
-    expect(events[events.length - 1].progress.stalled).toBe(false);
-    hb.stop();
-  });
-
-  it('resets stall when stage changes', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.updateProgress(2, 1, 4);
-
-    // Accumulate stall count
-    for (let i = 0; i < STALL_HEARTBEAT_THRESHOLD + 1; i++) {
-      vi.advanceTimersByTime(5000);
-    }
-    expect(events[events.length - 1].progress.stalled).toBe(true);
-
-    // Stage change resets stall
-    hb.setStage('spec_review', 2, 1, 10);
-    vi.advanceTimersByTime(5000);
-    expect(events[events.length - 1].progress.stalled).toBe(false);
-    hb.stop();
-  });
-
-  it('does not increment stall counter when in-flight', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(5);
-    hb.updateProgress(2, 1, 4);
-    hb.setInFlight(true);
-
-    // Many heartbeats while in-flight — should not stall
-    for (let i = 0; i < STALL_HEARTBEAT_THRESHOLD + 3; i++) {
-      vi.advanceTimersByTime(5000);
-    }
-    expect(events[events.length - 1].progress.stalled).toBe(false);
-
-    // End in-flight, now stall counter starts
-    hb.setInFlight(false);
-    for (let i = 0; i < STALL_HEARTBEAT_THRESHOLD + 1; i++) {
-      vi.advanceTimersByTime(5000);
-    }
-    expect(events[events.length - 1].progress.stalled).toBe(true);
-    hb.stop();
-  });
-
-  it('formats elapsed as minutes and seconds at 60+', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 90_000 });
-    hb.start(1);
-
-    vi.advanceTimersByTime(90_000);
-    expect(events[0].elapsed).toBe('1m 30s');
-    hb.stop();
-  });
-
-  it('stops emitting after stop()', () => {
-    vi.useFakeTimers();
-    const events: any[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), { intervalMs: 5000 });
-    hb.start(1);
-
-    vi.advanceTimersByTime(5000);
     expect(events).toHaveLength(1);
-    hb.stop();
-    vi.advanceTimersByTime(10000);
+    expect(events[0].stage).toBe('spec_review');
+    expect(events[0].stageIndex).toBe(2);
+    expect(events[0].reviewRound).toBe(1);
+    expect(events[0].maxReviewRounds).toBe(2);
+    expect(events[0].final).toBe(false);
+    timer.stop();
+  });
+
+  it('transition() to implementing clears reviewRound and maxReviewRounds', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(5);
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    events.length = 0;
+
+    timer.transition({ stage: 'implementing', stageIndex: 3 });
+    expect(events[0].reviewRound).toBeUndefined();
+    expect(events[0].maxReviewRounds).toBeUndefined();
+    timer.stop();
+  });
+
+  it('transition() to review stage without round fields throws', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(3);
+
+    expect(() => {
+      timer.transition({ stage: 'spec_review', stageIndex: 2 });
+    }).toThrow();
+    timer.stop();
+  });
+
+  it('transition() allows stageIndex to go backwards (semantic positions)', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(5);
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: 1, maxReviewRounds: 2 });
+    events.length = 0;
+
+    // Back to position 2 — allowed for review re-entry
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 2, maxReviewRounds: 2 });
+    expect(events[0].stageIndex).toBe(2);
+    expect(events[0].reviewRound).toBe(2);
+    timer.stop();
+  });
+
+  it('transition() is suppressed before start()', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    expect(events).toHaveLength(0);
+    timer.stop();
+  });
+
+  it('setProvider() triggers eager emit via transition()', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'provider-a',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+
+    timer.setProvider('provider-b');
     expect(events).toHaveLength(1);
+    expect(events[0].provider).toBe('provider-b');
+    timer.stop();
+  });
+
+  it('updateProgress() does not emit eagerly', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+
+    timer.updateProgress(5, 2, 10);
+    expect(events).toHaveLength(0);
+    timer.stop();
+  });
+
+  it('updateCost() does not emit eagerly', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+
+    timer.updateCost(0.05, 0.12);
+    expect(events).toHaveLength(0);
+    timer.stop();
+  });
+
+  it('stop() emits final heartbeat with final: true', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+    timer.updateProgress(3, 1, 8);
+    timer.updateCost(0.05, null);
+
+    timer.stop();
+    expect(events).toHaveLength(1);
+    expect(events[0].final).toBe(true);
+    expect(events[0].progress.filesRead).toBe(3);
+    expect(events[0].costUSD).toBe(0.05);
+  });
+
+  it('stop() is idempotent — no double final emit', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+
+    timer.stop();
+    timer.stop();
+    timer.stop();
+    const finalCount = events.filter(e => e.final).length;
+    expect(finalCount).toBe(1);
+  });
+
+  it('no emits after stop()', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+    timer.stop();
+    const countAfterStop = events.length;
+
+    timer.updateProgress(10, 10, 10);
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.setProvider('new-provider');
+    expect(events.length).toBe(countAfterStop);
+  });
+
+  it('headline with parentModel shows saved cost', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      parentModel: 'claude-opus-4-6',
+      intervalMs: 10_000,
+    });
+    timer.start(3);
+    timer.updateCost(0.05, 0.12);
+    timer.updateProgress(4, 2, 12);
+
+    timer.stop();
+    const final = events.find(e => e.final)!;
+    expect(final.headline).toContain('$0.12 saved');
+    expect(final.headline).toContain('x)');
+  });
+
+  it('headline without parentModel shows actual cost', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'claude-sonnet-4-6',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+    timer.updateCost(0.03, null);
+    timer.updateProgress(4, 2, 12);
+
+    timer.stop();
+    const final = events.find(e => e.final)!;
+    expect(final.headline).toContain('$0.03');
+    expect(final.headline).not.toContain('saved');
+  });
+
+  it('headline omits cost when both null', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1);
+
+    timer.stop();
+    const final = events.find(e => e.final)!;
+    expect(final.headline).not.toContain('$');
+  });
+
+  it('updateStageCount() changes denominator', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(5);
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    events.length = 0;
+
+    timer.updateStageCount(4);
+    expect(events).toHaveLength(0); // non-eager: no emit
+    timer.stop();
+    expect(events[0].stageCount).toBe(4); // visible in final flush
+  });
+
+  it('updateProgress() and updateCost() are no-ops before start()', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.updateProgress(5, 3, 10);
+    timer.updateCost(0.05, 0.10);
+    timer.start(1);
+    timer.stop();
+    const final = events.find(e => e.final)!;
+    expect(final.progress.filesRead).toBe(0);
+    expect(final.costUSD).toBeNull();
+  });
+
+  it('updateStageCount() throws when below current stageIndex', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(5);
+    timer.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, maxReviewRounds: 2 });
+    expect(() => timer.updateStageCount(3)).toThrow();
+    timer.stop();
+  });
+
+  it('start() throws on invalid stageCount', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    expect(() => timer.start(0)).toThrow();
+    expect(() => timer.start(-1)).toThrow();
+  });
+
+  it('transition() throws on stageIndex < 1', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(3);
+    expect(() => timer.transition({ stageIndex: 0 })).toThrow();
+    timer.stop();
+  });
+
+  it('transition() rejects review fields while in implementing stage', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(3);
+    expect(() => timer.transition({ reviewRound: 1, maxReviewRounds: 2 })).toThrow();
+    timer.stop();
+  });
+
+  it('stall detection after consecutive unchanged ticks', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10,
+    });
+    timer.start(1);
+
+    return new Promise<void>((resolve) => {
+      setTimeout(() => {
+        timer.stop();
+        const stalledEvents = events.filter(e => e.progress.stalled && !e.final);
+        expect(stalledEvents.length).toBeGreaterThan(0);
+        resolve();
+      }, 500);
+    });
   });
 });

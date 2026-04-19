@@ -4,7 +4,7 @@ import type {
   RunStatus,
   Provider,
   AttemptRecord,
-  ProgressEvent,
+  InternalRunnerEvent,
   TerminationReason,
 } from './types.js';
 import { retryableFor } from './error-codes.js';
@@ -19,7 +19,7 @@ function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['
 
 export interface DelegateOptions {
   explicitlyPinned?: boolean;
-  onProgress?: (event: ProgressEvent) => void;
+  onProgress?: (event: InternalRunnerEvent) => void;
   escalateToProvider?: Provider;
 }
 
@@ -47,7 +47,7 @@ export async function delegateWithEscalation(
     throw new Error('delegateWithEscalation called with empty chain');
   }
 
-  const safeSink: ((event: ProgressEvent) => void) | undefined = options.onProgress
+  const safeSink: ((event: InternalRunnerEvent) => void) | undefined = options.onProgress
     ? (event) => {
         try {
           options.onProgress!(event);

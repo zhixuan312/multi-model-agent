@@ -2,7 +2,7 @@ import type { DegenerateKind } from './supervision.js';
 
 /**
  * Map a supervision `validation.kind` to the `injectionType` label used in
- * the `ProgressEvent` emitted when the runner injects a supervision
+ * the `InternalRunnerEvent` emitted when the runner injects a supervision
  * re-prompt.
  *
  * `fragment` and `no_terminator` collapse onto `supervise_fragment` because

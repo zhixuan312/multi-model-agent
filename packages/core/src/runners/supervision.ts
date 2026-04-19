@@ -1,5 +1,5 @@
 import type { ProviderConfig } from '../types.js';
-import type { TaskSpec, ProgressEvent } from '../types.js';
+import type { TaskSpec } from '../types.js';
 import type { ModelProfile } from '../routing/model-profiles.js';
 
 /**
