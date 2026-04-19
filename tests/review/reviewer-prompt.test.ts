@@ -45,6 +45,46 @@ describe('buildSpecReviewPrompt', () => {
   });
 });
 
+describe('buildSpecReviewPrompt with planContext', () => {
+  it('includes plan context section when planContext is provided', () => {
+    const planContext = '### Task 3: Implement user auth\n\n- Create login/logout functions\n- Use JWT tokens';
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+    expect(p).toContain('## Plan Context');
+    expect(p).toContain('The implementation was driven by this plan section');
+    expect(p).toContain('Create login/logout functions');
+    expect(p).toContain('Use JWT tokens');
+  });
+
+  it('omits plan context section when planContext is undefined', () => {
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog);
+    expect(p).not.toContain('## Plan Context');
+    expect(p).not.toContain('plan section');
+  });
+
+  it('omits plan context section when planContext is empty string', () => {
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, '');
+    expect(p).not.toContain('## Plan Context');
+  });
+
+  it('still includes all standard sections when plan context is provided', () => {
+    const planContext = '### Task 3: Auth\n\nDetails here.';
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+    expect(p).toContain('## Execution Packet');
+    expect(p).toContain('## Implementer Structured Report');
+    expect(p).toContain('## Actual File Contents');
+    expect(p).toContain('## Tool-Call Log');
+    expect(p).toContain('## Your Task');
+  });
+
+  it('plan context appears before implementer report', () => {
+    const planContext = '### Task 3: Auth\n\nDetails here.';
+    const p = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+    const planIdx = p.indexOf('## Plan Context');
+    const reportIdx = p.indexOf('## Implementer Structured Report');
+    expect(planIdx).toBeLessThan(reportIdx);
+  });
+});
+
 describe('buildQualityReviewPrompt', () => {
   it('includes file contents for code review', () => {
     const p = buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
