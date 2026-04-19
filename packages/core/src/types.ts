@@ -80,6 +80,9 @@ export interface TaskSpec {
   }
   requiredCapabilities?: AgentCapability[]
   testCommand?: string
+  /** When true, the platform commits filesWritten via git after the worker finishes.
+   *  Set by preset tools (execute_plan, delegate_tasks, debug_task). Callers don't set this. */
+  autoCommit?: boolean
   /** Plan section content for execute_plan tasks. Injected into spec reviewer prompt
    *  so the reviewer checks implementation against the plan, not just the brief. */
   planContext?: string
@@ -252,6 +255,13 @@ export interface RunResult {
   /** Internal: true when task.filePaths was specified but the worker never
    *  read or wrote any of them — a soft completion concern. */
   filePathsSkipped?: boolean
+  /** True when task.filePaths included non-existent output targets that still
+   *  don't exist after all work (worker + rework) completes. */
+  fileArtifactsMissing?: boolean
+  /** SHA of the last auto-commit created during this task lifecycle. */
+  commitSha?: string
+  /** Error from the last failed auto-commit attempt, if any. */
+  commitError?: string
   /** Quality review outcome. */
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   /** Why quality review returned its status. Present for 'error', 'skipped', and 'not_applicable'. */
