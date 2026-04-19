@@ -362,7 +362,7 @@ export function buildMcpServer(
               params: {
                 progressToken,
                 progress: progressCounter,
-                message: JSON.stringify({ taskIndex, event }),
+                message: `[task ${taskIndex}] ${event.headline}`,
               },
             }).catch(() => { /* ignore */ });
           }
