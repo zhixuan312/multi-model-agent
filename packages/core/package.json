@@ -167,6 +167,10 @@
     "./auto-commit": {
       "types": "./dist/auto-commit.d.ts",
       "import": "./dist/auto-commit.js"
+    },
+    "./file-artifact-check": {
+      "types": "./dist/file-artifact-check.d.ts",
+      "import": "./dist/file-artifact-check.js"
     }
   },
   "scripts": {
