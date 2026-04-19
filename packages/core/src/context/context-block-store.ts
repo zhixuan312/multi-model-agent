@@ -39,7 +39,11 @@ export interface ContextBlockStore {
  */
 export class ContextBlockNotFoundError extends Error {
   constructor(public readonly id: string) {
-    super(`context block "${id}" is unknown or expired`);
+    super(
+      `Context block "${id}" is unknown or expired. ` +
+      `Retry without contextBlockIds for a full (non-delta) run, ` +
+      `or re-register the content via register_context_block and retry with the new ID.`,
+    );
     this.name = 'ContextBlockNotFoundError';
   }
 }
@@ -105,9 +109,12 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     if (!entry) return undefined;
     const now = Date.now();
     if (now - entry.addedAtMs > this.ttlMs) {
+      // Expired — do not revive
       this.entries.delete(id);
       return undefined;
     }
+    // LRU-refresh: extend TTL on access
+    entry.addedAtMs = now;
     entry.lastAccessTick = ++this.tick;
     return entry.content;
   }
