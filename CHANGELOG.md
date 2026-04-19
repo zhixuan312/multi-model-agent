@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.1] - 2026-04-19
+
+### Fixed
+
+- **Review verdicts feed into status (core).** Spec or quality review exhausting all rework rounds without approval now downgrades `status` from `ok` to `incomplete`. Previously, review verdicts were attached as metadata (`specReviewStatus`, `qualityReviewStatus`) but never influenced the top-level `status` field — callers saw `ok` for work that review rejected.
+- **Spec reviewer catches partial edits (core).** The spec review prompt now includes a completeness instruction that checks whether each required target was adequately addressed. Flags `changes_required` only on positive evidence of omission (e.g., task names targets A, B, C but only A and B appear in modified files).
+
 ## [2.7.0] - 2026-04-19
 
 ### Added
@@ -431,7 +438,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.1...HEAD
+[2.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.0...mcp-v2.7.1
 [2.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.1...mcp-v2.7.0
 [2.6.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.6.0...mcp-v2.6.1
 [2.6.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.5.0...mcp-v2.6.0
