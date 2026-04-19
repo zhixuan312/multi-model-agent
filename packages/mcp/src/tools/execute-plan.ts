@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
 import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks, extractPlanSection } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
   buildMetadataBlock,
@@ -108,6 +108,14 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
           ...baseTaskSpec,
           prompt: buildExecutePlanPrompt(fileContents, task, params.context),
         } as TaskSpec));
+
+        // Inject plan section context so spec reviewer checks implementation against the plan
+        for (let i = 0; i < tasks.length; i++) {
+          const section = await extractPlanSection(validPaths, params.tasks[i], baseTaskSpec.cwd);
+          if (section) {
+            tasks[i].planContext = section;
+          }
+        }
 
         if (tasks.length === 1) {
           const results = await runTasks(tasks, config, { ...runOptions, runtime });

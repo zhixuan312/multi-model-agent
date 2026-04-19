@@ -80,6 +80,9 @@ export interface TaskSpec {
   }
   requiredCapabilities?: AgentCapability[]
   testCommand?: string
+  /** Plan section content for execute_plan tasks. Injected into spec reviewer prompt
+   *  so the reviewer checks implementation against the plan, not just the brief. */
+  planContext?: string
 }
 
 // === Provider Config (discriminated union) ===
@@ -456,13 +459,17 @@ export type ProgressEvent =
   | {
       kind: 'heartbeat'
       elapsed: string
-      stage: 'intaking' | 'implementing' | 'validating' | 'reviewing' | 'completed' | 'blocked' | 'needs_context'
+      stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
       stageIndex: number
       stageCount: number
       reviewRound?: number
       maxReviewRounds?: number
-      progress: number // 0–100
-      turnsCompleted: number
+      progress: {
+        filesRead: number
+        filesWritten: number
+        toolCalls: number
+        stalled: boolean
+      }
       headline: string
     }
   | { kind: 'done'; status: RunStatus }

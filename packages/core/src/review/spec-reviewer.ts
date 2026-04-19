@@ -17,8 +17,9 @@ export async function runSpecReview(
   implReport: ParsedStructuredReport,
   fileContents: Record<string, string>,
   toolCallLog: string[],
+  planContext?: string,
 ): Promise<SpecReviewResult> {
-  const prompt = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog);
+  const prompt = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
 
   let result;
   try {
