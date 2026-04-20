@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import { InMemoryContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import { InMemoryContextBlockStore, createDiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import type {
   MultiModelConfig,
   TaskSpec,
@@ -22,6 +22,7 @@ import type {
   BatchProgress,
   BatchAggregateCost,
   AgentCapability,
+  DiagnosticLogger,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import { composeHeadline } from './headline.js';
@@ -554,6 +555,13 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
   });
 }
 
+let installedLifecycleHandlers: null | {
+  stdoutError: (err: NodeJS.ErrnoException) => void;
+  stdinEnd: () => void;
+  uncaught: (err: Error) => void;
+  unhandled: (reason: unknown) => void;
+} = null;
+
 /**
  * Install safety nets for the stdio transport lifecycle. The MCP SDK's
  * StdioServerTransport writes every JSON-RPC frame to `process.stdout`
@@ -562,34 +570,59 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
  * extension reload, client crash, long-running-call abort) the next
  * write emits an `EPIPE` error with no listener, which Node turns into
  * `uncaughtException` and — absent a handler — terminates the process.
- * That is the observed "MCP dies every ~2 calls" failure mode: the
- * client's read side drops, our heartbeat or response write hits EPIPE,
- * and the server dies without logging why. Exiting cleanly here lets
- * Claude Code respawn us on the next tool call without reporting a
- * transport-level crash.
+ * That is the observed "MCP dies every ~2 calls" failure mode.
+ *
+ * Single-install contract: calling this more than once in one process is a
+ * programmer error. The healthy-server contract ("one stderr line at startup")
+ * covers only the first install. A second call writes a warning to stderr
+ * and returns — it does not register duplicate handlers. This warning path is
+ * outside the healthy-server contract; in normal operation `main()` is the only
+ * caller and is invoked exactly once per process.
  */
-export function installStdioLifecycleHandlers(): void {
-  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+export function installStdioLifecycleHandlers(logger: DiagnosticLogger): void {
+  if (installedLifecycleHandlers !== null) {
+    process.stderr.write('[multi-model-agent] lifecycle handlers already installed; skipping second install\n');
+    return;
+  }
+  const stdoutError = (err: NodeJS.ErrnoException) => {
     if (err.code === 'EPIPE') {
+      logger.shutdown('stdout_epipe', err);
       process.exit(0);
       return;
     }
+    logger.shutdown('stdout_other_error', err);
     process.stderr.write(`[multi-model-agent] stdout error: ${err.message}\n`);
     process.exit(1);
-  });
-  process.stdin.on('end', () => {
+  };
+  const stdinEnd = () => {
+    logger.shutdown('stdin_end');
     process.exit(0);
-  });
-  process.on('uncaughtException', (err) => {
-    process.stderr.write(
-      `[multi-model-agent] uncaughtException: ${err.stack ?? String(err)}\n`,
-    );
+  };
+  const uncaught = (err: Error) => {
+    logger.shutdown('uncaughtException', err);
+    process.stderr.write(`[multi-model-agent] uncaughtException: ${err.stack ?? String(err)}\n`);
     process.exit(1);
-  });
-  process.on('unhandledRejection', (reason) => {
+  };
+  const unhandled = (reason: unknown) => {
+    logger.logError('unhandledRejection', reason);
     const stack = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
     process.stderr.write(`[multi-model-agent] unhandledRejection: ${stack}\n`);
-  });
+  };
+  process.stdout.on('error', stdoutError);
+  process.stdin.on('end', stdinEnd);
+  process.on('uncaughtException', uncaught);
+  process.on('unhandledRejection', unhandled);
+  installedLifecycleHandlers = { stdoutError, stdinEnd, uncaught, unhandled };
+}
+
+/** Test-only. Not exported from the package public surface. */
+export function __resetStdioLifecycleHandlersForTests(): void {
+  if (installedLifecycleHandlers === null) return;
+  process.stdout.off('error', installedLifecycleHandlers.stdoutError);
+  process.stdin.off('end', installedLifecycleHandlers.stdinEnd);
+  process.off('uncaughtException', installedLifecycleHandlers.uncaught);
+  process.off('unhandledRejection', installedLifecycleHandlers.unhandled);
+  installedLifecycleHandlers = null;
 }
 
 async function main() {
@@ -613,7 +646,9 @@ async function main() {
     process.exit(1);
   }
 
-  installStdioLifecycleHandlers();
+  const logger = createDiagnosticLogger();
+  process.stderr.write(`[multi-model-agent] diagnostic log: ${logger.expectedPath()}\n`);
+  installStdioLifecycleHandlers(logger);
 
   const server = buildMcpServer(config);
   const transport = new StdioServerTransport();

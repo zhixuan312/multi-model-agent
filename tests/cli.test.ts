@@ -1,5 +1,18 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost, installStdioLifecycleHandlers } from '../packages/mcp/src/cli.js';
+import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost, installStdioLifecycleHandlers, __resetStdioLifecycleHandlersForTests } from '../packages/mcp/src/cli.js';
+import type { DiagnosticLogger } from '../packages/core/src/diagnostics/disconnect-log.js';
+
+function makeMockLogger(): DiagnosticLogger & { calls: { request: unknown[]; notification: unknown[]; logError: unknown[]; shutdown: unknown[] } } {
+  const calls = { request: [] as unknown[], notification: [] as unknown[], logError: [] as unknown[], shutdown: [] as unknown[] };
+  return {
+    calls,
+    request: (p) => { calls.request.push(p); },
+    notification: (h, s) => { calls.notification.push({ h, s }); },
+    logError: (cause, err) => { calls.logError.push({ cause, err }); },
+    shutdown: (cause, err) => { calls.shutdown.push({ cause, err }); },
+    expectedPath: () => '/tmp/fake/mcp-test.jsonl',
+  };
+}
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 // Mock runTasks so the `delegate_tasks` handler returns fast without
@@ -1120,75 +1133,110 @@ describe('delegate_tasks unified response — slim shape', () => {
 });
 
 describe('installStdioLifecycleHandlers', () => {
-  it('registers EPIPE-safe handlers for stdout, stdin-end, uncaughtException, and unhandledRejection', () => {
-    const stdoutOn = vi.spyOn(process.stdout, 'on').mockReturnThis();
-    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
-    const processOn = vi.spyOn(process, 'on').mockReturnThis();
-    try {
-      installStdioLifecycleHandlers();
+  let stdoutOn: ReturnType<typeof vi.spyOn>;
+  let stdinOn: ReturnType<typeof vi.spyOn>;
+  let processOn: ReturnType<typeof vi.spyOn>;
+  let exit: ReturnType<typeof vi.spyOn>;
+  let stderrWrite: ReturnType<typeof vi.spyOn>;
 
-      const stdoutEvents = stdoutOn.mock.calls.map(([event]) => event);
-      const stdinEvents = stdinOn.mock.calls.map(([event]) => event);
-      const processEvents = processOn.mock.calls.map(([event]) => event);
-
-      expect(stdoutEvents).toContain('error');
-      expect(stdinEvents).toContain('end');
-      expect(processEvents).toContain('uncaughtException');
-      expect(processEvents).toContain('unhandledRejection');
-    } finally {
-      stdoutOn.mockRestore();
-      stdinOn.mockRestore();
-      processOn.mockRestore();
-    }
+  beforeEach(() => {
+    __resetStdioLifecycleHandlersForTests();
+    stdoutOn = vi.spyOn(process.stdout, 'on').mockReturnThis();
+    stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
+    processOn = vi.spyOn(process, 'on').mockReturnThis();
+    exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as (code?: number) => never);
+    stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+  });
+  afterEach(() => {
+    stdoutOn.mockRestore();
+    stdinOn.mockRestore();
+    processOn.mockRestore();
+    exit.mockRestore();
+    stderrWrite.mockRestore();
+    __resetStdioLifecycleHandlersForTests();
   });
 
-  it('exits with code 0 when stdout emits EPIPE (client closed pipe)', () => {
-    let registeredHandler: ((err: NodeJS.ErrnoException) => void) | undefined;
-    const stdoutOn = vi.spyOn(process.stdout, 'on').mockImplementation(((event: string, handler: (err: NodeJS.ErrnoException) => void) => {
-      if (event === 'error') registeredHandler = handler;
+  it('registers handlers for stdout-error, stdin-end, uncaughtException, and unhandledRejection', () => {
+    installStdioLifecycleHandlers(makeMockLogger());
+    expect(stdoutOn.mock.calls.map(([e]) => e)).toContain('error');
+    expect(stdinOn.mock.calls.map(([e]) => e)).toContain('end');
+    const events = processOn.mock.calls.map(([e]) => e);
+    expect(events).toContain('uncaughtException');
+    expect(events).toContain('unhandledRejection');
+  });
+
+  it('EPIPE on stdout calls logger.shutdown("stdout_epipe") then process.exit(0)', () => {
+    const logger = makeMockLogger();
+    let handler: ((err: NodeJS.ErrnoException) => void) | undefined;
+    stdoutOn.mockImplementation(((event: string, h: (err: NodeJS.ErrnoException) => void) => {
+      if (event === 'error') handler = h;
       return process.stdout;
     }) as typeof process.stdout.on);
-    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
-    const processOn = vi.spyOn(process, 'on').mockReturnThis();
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as (code?: number) => never);
-    try {
-      installStdioLifecycleHandlers();
-      expect(registeredHandler).toBeDefined();
-      const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) as NodeJS.ErrnoException;
-      registeredHandler?.(epipe);
-      expect(exit).toHaveBeenCalledWith(0);
-    } finally {
-      stdoutOn.mockRestore();
-      stdinOn.mockRestore();
-      processOn.mockRestore();
-      exit.mockRestore();
-    }
+    installStdioLifecycleHandlers(logger);
+    handler!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) as NodeJS.ErrnoException);
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_epipe', err: expect.any(Error) }]);
+    expect(exit).toHaveBeenCalledWith(0);
   });
 
-  it('logs unhandledRejection to stderr without exiting', () => {
-    let registeredHandler: ((reason: unknown) => void) | undefined;
-    const stdoutOn = vi.spyOn(process.stdout, 'on').mockReturnThis();
-    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
-    const processOn = vi.spyOn(process, 'on').mockImplementation(((event: string, handler: (reason: unknown) => void) => {
-      if (event === 'unhandledRejection') registeredHandler = handler;
+  it('non-EPIPE stdout error calls logger.shutdown("stdout_other_error") then process.exit(1)', () => {
+    const logger = makeMockLogger();
+    let handler: ((err: NodeJS.ErrnoException) => void) | undefined;
+    stdoutOn.mockImplementation(((event: string, h: (err: NodeJS.ErrnoException) => void) => {
+      if (event === 'error') handler = h;
+      return process.stdout;
+    }) as typeof process.stdout.on);
+    installStdioLifecycleHandlers(logger);
+    handler!(Object.assign(new Error('something else'), { code: 'EBUSY' }) as NodeJS.ErrnoException);
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_other_error', err: expect.any(Error) }]);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('stdin end calls logger.shutdown("stdin_end") with no err, then process.exit(0)', () => {
+    const logger = makeMockLogger();
+    let handler: (() => void) | undefined;
+    stdinOn.mockImplementation(((event: string, h: () => void) => {
+      if (event === 'end') handler = h;
+      return process.stdin;
+    }) as typeof process.stdin.on);
+    installStdioLifecycleHandlers(logger);
+    handler!();
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdin_end', err: undefined }]);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  it('uncaughtException calls logger.shutdown("uncaughtException") then process.exit(1)', () => {
+    const logger = makeMockLogger();
+    let handler: ((err: Error) => void) | undefined;
+    processOn.mockImplementation(((event: string, h: (err: Error) => void) => {
+      if (event === 'uncaughtException') handler = h;
       return process;
     }) as typeof process.on);
-    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as (code?: number) => never);
-    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
-    try {
-      installStdioLifecycleHandlers();
-      expect(registeredHandler).toBeDefined();
-      registeredHandler?.(new Error('boom'));
-      expect(stderrWrite).toHaveBeenCalled();
-      const msg = String(stderrWrite.mock.calls[0]?.[0] ?? '');
-      expect(msg).toContain('unhandledRejection');
-      expect(exit).not.toHaveBeenCalled();
-    } finally {
-      stdoutOn.mockRestore();
-      stdinOn.mockRestore();
-      processOn.mockRestore();
-      exit.mockRestore();
-      stderrWrite.mockRestore();
-    }
+    installStdioLifecycleHandlers(logger);
+    handler!(new Error('fatal'));
+    expect(logger.calls.shutdown).toEqual([{ cause: 'uncaughtException', err: expect.any(Error) }]);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('unhandledRejection calls logger.logError and does NOT exit', () => {
+    const logger = makeMockLogger();
+    let handler: ((reason: unknown) => void) | undefined;
+    processOn.mockImplementation(((event: string, h: (reason: unknown) => void) => {
+      if (event === 'unhandledRejection') handler = h;
+      return process;
+    }) as typeof process.on);
+    installStdioLifecycleHandlers(logger);
+    handler!(new Error('boom'));
+    expect(logger.calls.logError).toEqual([{ cause: 'unhandledRejection', err: expect.any(Error) }]);
+    expect(exit).not.toHaveBeenCalled();
+  });
+
+  it('second install is a no-op and writes a warning to stderr', () => {
+    const logger = makeMockLogger();
+    installStdioLifecycleHandlers(logger);
+    stderrWrite.mockClear();
+    installStdioLifecycleHandlers(logger);
+    expect(stderrWrite).toHaveBeenCalledWith(
+      expect.stringContaining('lifecycle handlers already installed; skipping second install'),
+    );
   });
 });
