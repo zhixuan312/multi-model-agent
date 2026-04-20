@@ -75,3 +75,115 @@ describe('DiagnosticLogger — construction and expectedPath', () => {
     expect(path.endsWith('/.multi-model/logs/mcp-2026-04-20.jsonl')).toBe(true);
   });
 });
+
+describe('DiagnosticLogger — request events', () => {
+  it('first request call materialises directory and opens the file lazily', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync,
+      closeSync: m.closeSync,
+      writeSync: m.writeSync,
+      mkdirSync: m.mkdirSync,
+    });
+    logger.request({
+      tool: 'delegate_tasks',
+      requestId: 'req-1',
+      progressToken: 'tok-1',
+      durationMs: 100,
+      responseBytes: 50,
+      status: 'ok',
+    });
+    expect(m.calls.mkdirSync).toEqual([
+      { path: '/tmp/fake-logs', options: { recursive: true, mode: 0o700 } },
+    ]);
+    expect(m.calls.openSync).toEqual([
+      { path: '/tmp/fake-logs/mcp-2026-04-20.jsonl', flags: 'a', mode: 0o600 },
+    ]);
+    expect(m.calls.writeSync).toHaveLength(1);
+    const line = m.calls.writeSync[0].data;
+    expect(line.endsWith('\n')).toBe(true);
+    const parsed = JSON.parse(line);
+    expect(parsed).toMatchObject({
+      event: 'request',
+      tool: 'delegate_tasks',
+      requestId: 'req-1',
+      progressToken: 'tok-1',
+      durationMs: 100,
+      responseBytes: 50,
+      status: 'ok',
+    });
+    expect(typeof parsed.ts).toBe('string');
+    expect(typeof parsed.pid).toBe('number');
+  });
+
+  it('second request call reuses the open fd (no extra open)', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync,
+      closeSync: m.closeSync,
+      writeSync: m.writeSync,
+      mkdirSync: m.mkdirSync,
+    });
+    logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' });
+    logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 2, responseBytes: 2, status: 'ok' });
+    expect(m.calls.openSync).toHaveLength(1);
+    expect(m.calls.writeSync).toHaveLength(2);
+  });
+
+  it('omits requestId and progressToken from JSON when undefined', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync,
+      closeSync: m.closeSync,
+      writeSync: m.writeSync,
+      mkdirSync: m.mkdirSync,
+    });
+    logger.request({
+      tool: 'audit_document',
+      requestId: undefined,
+      progressToken: undefined,
+      durationMs: 10,
+      responseBytes: 20,
+      status: 'ok',
+    });
+    const parsed = JSON.parse(m.calls.writeSync[0].data);
+    expect(parsed).not.toHaveProperty('requestId');
+    expect(parsed).not.toHaveProperty('progressToken');
+  });
+
+  it('accepts numeric progressToken and preserves its type', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.request({
+      tool: 't', requestId: undefined, progressToken: 1234,
+      durationMs: 1, responseBytes: 1, status: 'ok',
+    });
+    expect(JSON.parse(m.calls.writeSync[0].data).progressToken).toBe(1234);
+  });
+
+  it('status:"error" requires responseBytes:0 — contract enforced by the caller, logger trusts the value', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.request({
+      tool: 't', requestId: 'r1', progressToken: undefined,
+      durationMs: 42, responseBytes: 0, status: 'error',
+    });
+    const parsed = JSON.parse(m.calls.writeSync[0].data);
+    expect(parsed.status).toBe('error');
+    expect(parsed.responseBytes).toBe(0);
+  });
+});

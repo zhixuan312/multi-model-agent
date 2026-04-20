@@ -53,11 +53,62 @@ export function createDiagnosticLogger(
   });
   const mkdirSync = options.mkdirSync ?? nodeFs.mkdirSync;
 
-  // Silence the lint warning for unused fs helpers until Task 3 wires them in.
-  void openSync; void closeSync; void writeSync; void mkdirSync;
+  const state: {
+    fd: number | null;
+    fdDate: string | null;
+    broken: boolean;
+  } = { fd: null, fdDate: null, broken: false };
+
+  function ensureOpen(): number | null {
+    if (state.broken) return null;
+    const today = formatUtcDate(now());
+    if (state.fd !== null && state.fdDate === today) return state.fd;
+    try {
+      if (state.fd !== null && state.fdDate !== today) {
+        try { closeSync(state.fd); } catch { /* tolerate fd leak */ }
+      }
+      mkdirSync(logDir, { recursive: true, mode: 0o700 });
+      const fd = openSync(nodePath.join(logDir, `mcp-${today}.jsonl`), 'a', 0o600);
+      state.fd = fd;
+      state.fdDate = today;
+      return fd;
+    } catch {
+      state.broken = true;
+      state.fd = null;
+      state.fdDate = null;
+      return null;
+    }
+  }
+
+  function writeLine(obj: Record<string, unknown>): void {
+    if (state.broken) return;
+    const fd = ensureOpen();
+    if (fd === null) return;
+    try {
+      writeSync(fd, JSON.stringify(obj) + '\n');
+    } catch {
+      try { closeSync(fd); } catch { /* tolerate close failure */ }
+      state.broken = true;
+      state.fd = null;
+      state.fdDate = null;
+    }
+  }
 
   return {
-    request: () => { throw new Error('Task 3'); },
+    request: (params) => {
+      const line: Record<string, unknown> = {
+        ts: now().toISOString(),
+        pid: process.pid,
+        event: 'request',
+        tool: params.tool,
+        durationMs: params.durationMs,
+        responseBytes: params.responseBytes,
+        status: params.status,
+      };
+      if (params.requestId !== undefined) line.requestId = params.requestId;
+      if (params.progressToken !== undefined) line.progressToken = params.progressToken;
+      writeLine(line);
+    },
     notification: () => { throw new Error('Task 4'); },
     logError: () => { throw new Error('Task 5'); },
     shutdown: () => { throw new Error('Task 5'); },
