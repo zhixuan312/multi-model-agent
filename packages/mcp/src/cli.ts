@@ -554,6 +554,44 @@ export async function discoverConfig(): Promise<MultiModelConfig> {
   });
 }
 
+/**
+ * Install safety nets for the stdio transport lifecycle. The MCP SDK's
+ * StdioServerTransport writes every JSON-RPC frame to `process.stdout`
+ * but never attaches an error handler to it, so when the Claude Code
+ * client closes the read end of our stdout (reconnect, /mcp restart,
+ * extension reload, client crash, long-running-call abort) the next
+ * write emits an `EPIPE` error with no listener, which Node turns into
+ * `uncaughtException` and — absent a handler — terminates the process.
+ * That is the observed "MCP dies every ~2 calls" failure mode: the
+ * client's read side drops, our heartbeat or response write hits EPIPE,
+ * and the server dies without logging why. Exiting cleanly here lets
+ * Claude Code respawn us on the next tool call without reporting a
+ * transport-level crash.
+ */
+export function installStdioLifecycleHandlers(): void {
+  process.stdout.on('error', (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') {
+      process.exit(0);
+      return;
+    }
+    process.stderr.write(`[multi-model-agent] stdout error: ${err.message}\n`);
+    process.exit(1);
+  });
+  process.stdin.on('end', () => {
+    process.exit(0);
+  });
+  process.on('uncaughtException', (err) => {
+    process.stderr.write(
+      `[multi-model-agent] uncaughtException: ${err.stack ?? String(err)}\n`,
+    );
+    process.exit(1);
+  });
+  process.on('unhandledRejection', (reason) => {
+    const stack = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+    process.stderr.write(`[multi-model-agent] unhandledRejection: ${stack}\n`);
+  });
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
@@ -574,6 +612,8 @@ async function main() {
     console.error('No agents configured. Create ~/.multi-model/config.json or pass --config <path>.');
     process.exit(1);
   }
+
+  installStdioLifecycleHandlers();
 
   const server = buildMcpServer(config);
   const transport = new StdioServerTransport();

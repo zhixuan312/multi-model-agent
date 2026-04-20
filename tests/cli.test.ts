@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost } from '../packages/mcp/src/cli.js';
+import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost, installStdioLifecycleHandlers } from '../packages/mcp/src/cli.js';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 // Mock runTasks so the `delegate_tasks` handler returns fast without
@@ -1116,5 +1116,79 @@ describe('delegate_tasks unified response — slim shape', () => {
     expect(payload).not.toHaveProperty('timings');
     expect(payload).not.toHaveProperty('batchProgress');
     expect(payload).not.toHaveProperty('aggregateCost');
+  });
+});
+
+describe('installStdioLifecycleHandlers', () => {
+  it('registers EPIPE-safe handlers for stdout, stdin-end, uncaughtException, and unhandledRejection', () => {
+    const stdoutOn = vi.spyOn(process.stdout, 'on').mockReturnThis();
+    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
+    const processOn = vi.spyOn(process, 'on').mockReturnThis();
+    try {
+      installStdioLifecycleHandlers();
+
+      const stdoutEvents = stdoutOn.mock.calls.map(([event]) => event);
+      const stdinEvents = stdinOn.mock.calls.map(([event]) => event);
+      const processEvents = processOn.mock.calls.map(([event]) => event);
+
+      expect(stdoutEvents).toContain('error');
+      expect(stdinEvents).toContain('end');
+      expect(processEvents).toContain('uncaughtException');
+      expect(processEvents).toContain('unhandledRejection');
+    } finally {
+      stdoutOn.mockRestore();
+      stdinOn.mockRestore();
+      processOn.mockRestore();
+    }
+  });
+
+  it('exits with code 0 when stdout emits EPIPE (client closed pipe)', () => {
+    let registeredHandler: ((err: NodeJS.ErrnoException) => void) | undefined;
+    const stdoutOn = vi.spyOn(process.stdout, 'on').mockImplementation(((event: string, handler: (err: NodeJS.ErrnoException) => void) => {
+      if (event === 'error') registeredHandler = handler;
+      return process.stdout;
+    }) as typeof process.stdout.on);
+    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
+    const processOn = vi.spyOn(process, 'on').mockReturnThis();
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as (code?: number) => never);
+    try {
+      installStdioLifecycleHandlers();
+      expect(registeredHandler).toBeDefined();
+      const epipe = Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) as NodeJS.ErrnoException;
+      registeredHandler?.(epipe);
+      expect(exit).toHaveBeenCalledWith(0);
+    } finally {
+      stdoutOn.mockRestore();
+      stdinOn.mockRestore();
+      processOn.mockRestore();
+      exit.mockRestore();
+    }
+  });
+
+  it('logs unhandledRejection to stderr without exiting', () => {
+    let registeredHandler: ((reason: unknown) => void) | undefined;
+    const stdoutOn = vi.spyOn(process.stdout, 'on').mockReturnThis();
+    const stdinOn = vi.spyOn(process.stdin, 'on').mockReturnThis();
+    const processOn = vi.spyOn(process, 'on').mockImplementation(((event: string, handler: (reason: unknown) => void) => {
+      if (event === 'unhandledRejection') registeredHandler = handler;
+      return process;
+    }) as typeof process.on);
+    const exit = vi.spyOn(process, 'exit').mockImplementation((() => undefined) as (code?: number) => never);
+    const stderrWrite = vi.spyOn(process.stderr, 'write').mockImplementation(() => true);
+    try {
+      installStdioLifecycleHandlers();
+      expect(registeredHandler).toBeDefined();
+      registeredHandler?.(new Error('boom'));
+      expect(stderrWrite).toHaveBeenCalled();
+      const msg = String(stderrWrite.mock.calls[0]?.[0] ?? '');
+      expect(msg).toContain('unhandledRejection');
+      expect(exit).not.toHaveBeenCalled();
+    } finally {
+      stdoutOn.mockRestore();
+      stdinOn.mockRestore();
+      processOn.mockRestore();
+      exit.mockRestore();
+      stderrWrite.mockRestore();
+    }
   });
 });
