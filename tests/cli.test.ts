@@ -1240,3 +1240,58 @@ describe('installStdioLifecycleHandlers', () => {
     );
   });
 });
+
+describe('integration — DiagnosticLogger wired through buildMcpServer', () => {
+  const fs = require('node:fs') as typeof import('node:fs');
+  const os = require('node:os') as typeof import('node:os');
+  const pathMod = require('node:path') as typeof import('node:path');
+
+  let tmpDir: string;
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'mcp-diag-test-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('audit_document calls (via register helper) produce a request event with tool name', async () => {
+    const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
+    const { buildMcpServer: realBuildMcpServer } = await import('../packages/mcp/src/cli.js');
+
+    const logger = createDiagnosticLogger({ logDir: tmpDir });
+    const server = realBuildMcpServer(sampleConfig(), logger, {
+      _testRunTasksOverride: stubRunTasks as unknown as typeof runTasks,
+    });
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const tools = (server as any)._registeredTools;
+    const audit = tools['audit_document'];
+
+    await audit.handler(
+      { document: 'This is a short document to audit.', auditType: 'correctness' },
+      {},
+    );
+
+    const files = fs.readdirSync(tmpDir);
+    expect(files).toHaveLength(1);
+    const content = fs.readFileSync(pathMod.join(tmpDir, files[0]), 'utf-8');
+    const lines = content.trim().split('\n').map((l) => JSON.parse(l));
+    const requestLines = lines.filter((l) => l.event === 'request');
+    expect(requestLines.length).toBeGreaterThanOrEqual(1);
+    expect(requestLines[0].tool).toBe('audit_document');
+    expect(requestLines[0].status).toBe('ok');
+    expect(typeof requestLines[0].durationMs).toBe('number');
+    expect(typeof requestLines[0].responseBytes).toBe('number');
+  });
+
+  it('the startup banner line matches logger.expectedPath() for today (banner shape check)', async () => {
+    const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
+    const logger = createDiagnosticLogger({
+      logDir: tmpDir,
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+    });
+    const bannerLine = `[multi-model-agent] diagnostic log: ${logger.expectedPath()}\n`;
+    expect(bannerLine).toBe(`[multi-model-agent] diagnostic log: ${tmpDir}/mcp-2026-04-20.jsonl\n`);
+    // Sanity: the logger has not materialised the file by being constructed or queried.
+    expect(fs.readdirSync(tmpDir)).toHaveLength(0);
+  });
+});
