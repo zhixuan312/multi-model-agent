@@ -56,6 +56,10 @@
       "types": "./dist/run-tasks.d.ts",
       "import": "./dist/run-tasks.js"
     },
+    "./diagnostics/disconnect-log": {
+      "types": "./dist/diagnostics/disconnect-log.d.ts",
+      "import": "./dist/diagnostics/disconnect-log.js"
+    },
     "./heartbeat": {
       "types": "./dist/heartbeat.d.ts",
       "import": "./dist/heartbeat.js"
