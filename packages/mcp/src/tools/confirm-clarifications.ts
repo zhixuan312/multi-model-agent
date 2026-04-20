@@ -1,13 +1,13 @@
 import { z } from 'zod';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, RunResult, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import type { RunTasksOptions } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import type { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
 import type { ConfirmationEntry } from '@zhixuan92/multi-model-agent-core/intake/types';
 import { processConfirmations } from '@zhixuan92/multi-model-agent-core/intake/confirm';
 import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
 import { getMaxRoundsPerDraft } from '@zhixuan92/multi-model-agent-core/intake/feature-flag';
-import { buildUnifiedResponse } from './shared.js';
+import { buildUnifiedResponse, withDiagnostics } from './shared.js';
 import { truncateResults } from './truncation.js';
 
 export const confirmClarificationsSchema = z.object({
@@ -25,6 +25,7 @@ export const confirmClarificationsSchema = z.object({
 export function registerConfirmClarifications(
   server: McpServer,
   config: MultiModelConfig,
+  logger: DiagnosticLogger,
   clarificationStore: ClarificationStore,
   runTasksImpl: (tasks: TaskSpec[], config: MultiModelConfig, options?: RunTasksOptions) => Promise<RunResult[]>,
   rememberBatch: (tasks: TaskSpec[]) => string,
@@ -33,7 +34,7 @@ export function registerConfirmClarifications(
     'confirm_clarifications',
     'Resume a clarification set by confirming or editing drafted tasks',
     confirmClarificationsSchema.shape,
-    async (params: z.infer<typeof confirmClarificationsSchema>) => {
+    withDiagnostics('confirm_clarifications', logger, (async (params: z.infer<typeof confirmClarificationsSchema>) => {
       const confirmations = new Map<string, ConfirmationEntry>(
         Object.entries(params.confirmations),
       );
@@ -144,6 +145,6 @@ export function registerConfirmClarifications(
       return {
         content: [{ type: 'text' as const, text: JSON.stringify(responseObj, null, 2) }],
       };
-    },
+    })),
   );
 }

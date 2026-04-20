@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { auditDocumentSchema, registerAuditDocument } from '@zhixuan92/multi-model-agent-mcp/tools/audit-document';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import { makeNoopLogger } from "./helpers.js";
 
 // --- Schema tests ---
 
@@ -62,7 +63,7 @@ describe('audit_document handler', () => {
 
   it('rejects when neither document nor filePaths provided', async () => {
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
+    registerAuditDocument(mockServer as any, {} as any, makeNoopLogger());
     const result = await getHandler()({ auditType: 'security' });
     expect(result.isError).toBe(true);
     expect(result.content[0].text).toContain('Provide content or filePaths');
@@ -71,7 +72,7 @@ describe('audit_document handler', () => {
   it('single-task mode: dispatches 1 task with document', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: { tools: 'readonly', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
+    registerAuditDocument(mockServer as any, { defaults: { tools: 'readonly', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any, makeNoopLogger());
 
     const result = await getHandler()({
       document: 'my doc', auditType: 'correctness',
@@ -98,7 +99,7 @@ describe('audit_document handler', () => {
   it('fan-out mode: dispatches N tasks when only filePaths provided', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
+    registerAuditDocument(mockServer as any, {} as any, makeNoopLogger());
 
     const result = await getHandler()({ auditType: 'general', filePaths: ['a.ts', 'b.ts'] });
 
@@ -120,7 +121,7 @@ describe('audit_document handler', () => {
   it('propagates parentModel from config into task spec (single-task)', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ document: 'doc', auditType: 'correctness' });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -130,7 +131,7 @@ describe('audit_document handler', () => {
   it('propagates parentModel from config into task spec (fan-out)', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ auditType: 'security', filePaths: ['a.ts', 'b.ts'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -143,7 +144,7 @@ describe('audit_document handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
     const envelope = JSON.parse(result.content[0].text);
@@ -158,7 +159,7 @@ describe('audit_document handler', () => {
       mockResult({ usage: { inputTokens: 5000, outputTokens: 1000, totalTokens: 6000, costUSD: 0.05, savedCostUSD: 0.04 } }),
     ]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerAuditDocument(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ auditType: 'security', filePaths: ['a.ts', 'b.ts'] });
     const envelope = JSON.parse(result.content[0].text);
@@ -171,7 +172,7 @@ describe('audit_document handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, { defaults: {} } as any);
+    registerAuditDocument(mockServer as any, { defaults: {} } as any, makeNoopLogger());
 
     const result = await getHandler()({ document: 'doc', auditType: 'correctness' });
     const envelope = JSON.parse(result.content[0].text);
@@ -182,7 +183,7 @@ describe('audit_document handler', () => {
   it('resolves general auditType to all categories', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerAuditDocument(mockServer as any, {} as any);
+    registerAuditDocument(mockServer as any, {} as any, makeNoopLogger());
 
     await getHandler()({ document: 'doc', auditType: 'general' });
     expect(mockRunTasks.mock.calls[0][0][0].prompt).toContain('security, performance, correctness, and style');

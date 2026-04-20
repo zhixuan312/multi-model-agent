@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -10,6 +10,7 @@ import {
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
+  withDiagnostics,
 } from './shared.js';
 
 export const debugTaskSchema = z.object({
@@ -25,13 +26,13 @@ export const debugTaskSchema = z.object({
 
 export type DebugTaskParams = z.infer<typeof debugTaskSchema>;
 
-export function registerDebugTask(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
+export function registerDebugTask(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'debug_task',
     'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
     debugTaskSchema.shape,
-    async (params: DebugTaskParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
+    withDiagnostics('debug_task', logger, (async (params: DebugTaskParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra, logger);
       const parts: string[] = [`Debug this problem:\n\n${params.problem}`];
       if (params.context) parts.push(`Context: ${params.context}`);
       if (params.hypothesis) parts.push(`Initial hypothesis: ${params.hypothesis}`);
@@ -75,6 +76,6 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, c
           isError: true,
         };
       }
-    },
+    })),
   );
 }

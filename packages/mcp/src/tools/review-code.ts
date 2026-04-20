@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -13,6 +13,7 @@ import {
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
+  withDiagnostics,
 } from './shared.js';
 
 export const reviewCodeSchema = z.object({
@@ -68,13 +69,13 @@ function buildReviewPrompt(
   return parts.join('\n\n');
 }
 
-export function registerReviewCode(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
+export function registerReviewCode(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'review_code',
     'Review code with full quality pipeline. Accepts inline code or file paths (multiple files review in parallel). Preset: complex agent, full review. For diff-scoped reviews, register the git diff or prior review as a context block and pass its id in contextBlockIds — the tool automatically focuses on changes relative to that context.',
     reviewCodeSchema.shape,
-    async (params: ReviewCodeParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
+    withDiagnostics('review_code', logger, (async (params: ReviewCodeParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra, logger);
       const validation = validateInput(params.code, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
@@ -139,6 +140,6 @@ export function registerReviewCode(server: McpServer, config: MultiModelConfig, 
           isError: true,
         };
       }
-    },
+    })),
   );
 }

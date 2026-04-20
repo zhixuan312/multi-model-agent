@@ -31,7 +31,7 @@ import {
   computeBatchProgress,
   computeAggregateCost,
 } from './tools/batch-response.js';
-import { buildUnifiedResponse } from './tools/shared.js';
+import { buildUnifiedResponse, withDiagnostics } from './tools/shared.js';
 import { truncateResults } from './tools/truncation.js';
 import { registerAuditDocument } from './tools/audit-document.js';
 import { registerDebugTask } from './tools/debug-task.js';
@@ -126,6 +126,7 @@ const BATCH_MAX = 100;
 
 export function buildMcpServer(
   config: Parameters<typeof runTasks>[1],
+  logger: DiagnosticLogger,
   options?: {
     /** Character threshold that triggers auto-switch from 'full' to
      *  'summary' response mode when the caller uses `responseMode: 'auto'`
@@ -248,14 +249,17 @@ export function buildMcpServer(
       const sendProgress = progressToken !== undefined
         ? (taskIndex: number, event: ProgressEvent) => {
             progressCounter += 1;
+            const headline = `[task ${taskIndex}] ${event.headline}`;
             extra.sendNotification({
               method: 'notifications/progress',
               params: {
                 progressToken,
                 progress: progressCounter,
-                message: `[task ${taskIndex}] ${event.headline}`,
+                message: headline,
               },
-            }).catch(() => { /* ignore */ });
+            })
+              .then(() => { logger.notification(headline, true); })
+              .catch(() => { logger.notification(headline, false); });
           }
         : undefined;
 
@@ -502,15 +506,16 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
-  registerAuditDocument(server, config, contextBlockStore);
-  registerDebugTask(server, config, contextBlockStore);
-  registerExecutePlan(server, config, contextBlockStore);
-  registerReviewCode(server, config, contextBlockStore);
-  registerVerifyWork(server, config, contextBlockStore);
+  registerAuditDocument(server, config, logger, contextBlockStore);
+  registerDebugTask(server, config, logger, contextBlockStore);
+  registerExecutePlan(server, config, logger, contextBlockStore);
+  registerReviewCode(server, config, logger, contextBlockStore);
+  registerVerifyWork(server, config, logger, contextBlockStore);
 
   registerConfirmClarifications(
     server,
     config,
+    logger,
     clarificationStore,
     runTasksImpl,
     rememberBatch,
@@ -650,7 +655,7 @@ async function main() {
   process.stderr.write(`[multi-model-agent] diagnostic log: ${logger.expectedPath()}\n`);
   installStdioLifecycleHandlers(logger);
 
-  const server = buildMcpServer(config);
+  const server = buildMcpServer(config, logger);
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }
