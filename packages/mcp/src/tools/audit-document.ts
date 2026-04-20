@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -13,6 +13,7 @@ import {
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
+  withDiagnostics,
 } from './shared.js';
 
 export const auditDocumentSchema = z.object({
@@ -80,13 +81,13 @@ function buildAuditPrompt(
   return parts.join('\n\n');
 }
 
-export function registerAuditDocument(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
+export function registerAuditDocument(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'audit_document',
     'Audit documents for issues. Accepts inline content or file paths (multiple files audit in parallel). Preset: complex agent, no review. For delta audits (round 2+), register the prior audit report as a context block and pass its id in contextBlockIds — the tool automatically switches to delta mode, reporting only new findings, unfixed findings, and confirming fixes.',
     auditDocumentSchema.shape,
-    async (params: AuditDocumentParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
+    withDiagnostics('audit_document', logger, (async (params: AuditDocumentParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra, logger);
       const validation = validateInput(params.document, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
@@ -154,6 +155,6 @@ export function registerAuditDocument(server: McpServer, config: MultiModelConfi
           isError: true,
         };
       }
-    },
+    })),
   );
 }

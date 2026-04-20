@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "2.7.2",
+  "version": "2.7.3",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -55,6 +55,10 @@
     "./run-tasks": {
       "types": "./dist/run-tasks.d.ts",
       "import": "./dist/run-tasks.js"
+    },
+    "./diagnostics/disconnect-log": {
+      "types": "./dist/diagnostics/disconnect-log.d.ts",
+      "import": "./dist/diagnostics/disconnect-log.js"
     },
     "./heartbeat": {
       "types": "./dist/heartbeat.d.ts",

@@ -2,7 +2,7 @@ import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import { runTasks, extractPlanSection } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -10,6 +10,7 @@ import {
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
+  withDiagnostics,
 } from './shared.js';
 
 export const executePlanSchema = z.object({
@@ -53,13 +54,13 @@ function buildExecutePlanPrompt(fileContents: string, task: string, context?: st
   return parts.join('\n');
 }
 
-export function registerExecutePlan(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
+export function registerExecutePlan(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'execute_plan',
     'Execute tasks from a written plan/spec file. Pass task descriptors and file paths — the worker reads the plan, finds the matching task, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review. Use this when a plan file exists on disk; use delegate_tasks instead when context is inline/ad-hoc with no plan file. Returns contextBlockId in metadata for follow-up calls.',
     executePlanSchema.shape,
-    async (params: ExecutePlanParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
+    withDiagnostics('execute_plan', logger, (async (params: ExecutePlanParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra, logger);
       const filePaths = params.filePaths;
       const validPaths = (filePaths ?? []).filter(p => p.trim().length > 0);
 
@@ -153,6 +154,6 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
           isError: true,
         };
       }
-    },
+    })),
   );
 }

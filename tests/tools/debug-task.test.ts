@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { debugTaskSchema, registerDebugTask } from '@zhixuan92/multi-model-agent-mcp/tools/debug-task';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import { makeNoopLogger } from "./helpers.js";
 
 // --- Schema tests ---
 
@@ -42,7 +43,7 @@ describe('debug_task handler', () => {
   it('always dispatches 1 task even with multiple filePaths', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
+    registerDebugTask(mockServer as any, {} as any, makeNoopLogger());
 
     const result = await getHandler()({
       problem: 'crash on startup',
@@ -68,7 +69,7 @@ describe('debug_task handler', () => {
   it('propagates parentModel from config into task spec', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ problem: 'bug' });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -80,7 +81,7 @@ describe('debug_task handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerDebugTask(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ problem: 'bug' });
     const envelope = JSON.parse(result.content[0].text);
@@ -93,7 +94,7 @@ describe('debug_task handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, { defaults: {} } as any);
+    registerDebugTask(mockServer as any, { defaults: {} } as any, makeNoopLogger());
 
     const result = await getHandler()({ problem: 'bug' });
     const envelope = JSON.parse(result.content[0].text);
@@ -104,7 +105,7 @@ describe('debug_task handler', () => {
   it('uses correct preset: complex, full review, 1 round', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
+    registerDebugTask(mockServer as any, {} as any, makeNoopLogger());
 
     await getHandler()({ problem: 'bug' });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -116,7 +117,7 @@ describe('debug_task handler', () => {
   it('includes context and hypothesis in prompt', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
+    registerDebugTask(mockServer as any, {} as any, makeNoopLogger());
 
     await getHandler()({ problem: 'OOM', context: 'after upgrade', hypothesis: 'memory leak in cache' });
     const prompt = mockRunTasks.mock.calls[0][0][0].prompt;
@@ -128,7 +129,7 @@ describe('debug_task handler', () => {
   it('returns envelope with results containing output and filesWritten', async () => {
     mockRunTasks.mockResolvedValue([mockResult({ filesWritten: ['fix.patch'] })]);
     const { mockServer, getHandler } = captureTool();
-    registerDebugTask(mockServer as any, {} as any);
+    registerDebugTask(mockServer as any, {} as any, makeNoopLogger());
 
     const result = await getHandler()({ problem: 'bug' });
     const envelope = JSON.parse(result.content[0].text);

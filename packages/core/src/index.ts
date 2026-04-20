@@ -119,3 +119,12 @@ export type {
   IntakeResult,
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
+
+// Diagnostics
+export { createDiagnosticLogger } from './diagnostics/disconnect-log.js';
+export type {
+  DiagnosticLogger,
+  ShutdownCause,
+  NonTerminalErrorCause,
+  CreateDiagnosticLoggerOptions,
+} from './diagnostics/disconnect-log.js';

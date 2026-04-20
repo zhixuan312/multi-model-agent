@@ -4,6 +4,7 @@ import type {
   MultiModelConfig,
   ContextBlockStore,
   TaskSpec,
+  DiagnosticLogger,
 } from '@zhixuan92/multi-model-agent-core';
 import type { ClarificationEntry } from '@zhixuan92/multi-model-agent-core/intake/types';
 import type { ProgressEvent } from '@zhixuan92/multi-model-agent-core';
@@ -77,7 +78,10 @@ export function buildPerFilePrompt(filePath: string, promptTemplate: string): st
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
-export function buildRunTasksOptions(extra?: { _meta?: Record<string, unknown>; sendNotification: (...args: any[]) => Promise<void> }): RunTasksOptions {
+export function buildRunTasksOptions(
+  extra: { _meta?: Record<string, unknown>; sendNotification: (...args: any[]) => Promise<void> } | undefined,
+  logger: DiagnosticLogger,
+): RunTasksOptions {
   if (!extra) return {};
   const rawToken = extra._meta?.progressToken;
   const progressToken: string | number | undefined =
@@ -91,15 +95,83 @@ export function buildRunTasksOptions(extra?: { _meta?: Record<string, unknown>; 
   return {
     onProgress: (_taskIndex: number, event: ProgressEvent) => {
       progressCounter += 1;
+      const headline = `[task ${_taskIndex}] ${event.headline}`;
       extra.sendNotification({
         method: 'notifications/progress',
         params: {
           progressToken,
           progress: progressCounter,
-          message: `[task ${_taskIndex}] ${event.headline}`,
+          message: headline,
         },
-      }).catch(() => { /* ignore */ });
+      })
+        .then(() => { logger.notification(headline, true); })
+        .catch(() => { logger.notification(headline, false); });
     },
+  };
+}
+
+type ExtraLike = {
+  requestId?: string | number | null;
+  _meta?: { progressToken?: unknown };
+};
+
+function coerceRequestId(v: unknown): string | undefined {
+  if (typeof v === 'string' && v.length > 0) return v;
+  if (typeof v === 'number') return String(v);
+  return undefined;
+}
+
+function coerceProgressToken(v: unknown): string | number | undefined {
+  return typeof v === 'string' || typeof v === 'number' ? v : undefined;
+}
+
+/**
+ * Wrap an MCP tool handler so every call is recorded as a
+ * `request` event in the DiagnosticLogger. Measures wall-clock
+ * duration and response-body bytes (an approximation of transport
+ * payload size based on JSON.stringify of the handler's return
+ * value). On a thrown handler, logs status:"error" with
+ * responseBytes:0 and rethrows.
+ */
+export function withDiagnostics<Args extends unknown[], R>(
+  tool: string,
+  logger: DiagnosticLogger,
+  handler: (...args: Args) => Promise<R>,
+): (...args: Args) => Promise<R> {
+  return async (...args: Args): Promise<R> => {
+    const rawExtra = args[args.length - 1] as unknown;
+    const extra = (rawExtra && typeof rawExtra === 'object') ? rawExtra as ExtraLike : undefined;
+    const requestId = coerceRequestId(extra?.requestId);
+    const progressToken = coerceProgressToken(extra?._meta?.progressToken);
+    const startedAt = Date.now();
+    try {
+      const result = await handler(...args);
+      let responseBytes = 0;
+      try {
+        responseBytes = Buffer.byteLength(JSON.stringify(result));
+      } catch {
+        responseBytes = 0;
+      }
+      logger.request({
+        tool,
+        requestId,
+        progressToken,
+        durationMs: Date.now() - startedAt,
+        responseBytes,
+        status: 'ok',
+      });
+      return result;
+    } catch (err) {
+      logger.request({
+        tool,
+        requestId,
+        progressToken,
+        durationMs: Date.now() - startedAt,
+        responseBytes: 0,
+        status: 'error',
+      });
+      throw err;
+    }
   };
 }
 

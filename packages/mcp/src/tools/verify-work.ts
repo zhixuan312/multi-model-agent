@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 import {
   commonToolFields,
@@ -13,6 +13,7 @@ import {
   buildRunTasksOptions,
   resolveParentModel,
   autoRegisterContextBlock,
+  withDiagnostics,
 } from './shared.js';
 
 export const verifyWorkSchema = z.object({
@@ -38,13 +39,13 @@ function buildVerifyPrompt(
   return parts.join('\n\n');
 }
 
-export function registerVerifyWork(server: McpServer, config: MultiModelConfig, contextBlockStore?: ContextBlockStore) {
+export function registerVerifyWork(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
   server.tool(
     'verify_work',
     'Verify work against a checklist with pass/fail evidence. Accepts inline description or file paths (multiple files verified in parallel). Preset: standard agent, spec review only.',
     verifyWorkSchema.shape,
-    async (params: VerifyWorkParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
+    withDiagnostics('verify_work', logger, (async (params: VerifyWorkParams, extra) => {
+      const runOptions = buildRunTasksOptions(extra, logger);
       const validation = validateInput(params.work, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };
@@ -107,6 +108,6 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig, 
           isError: true,
         };
       }
-    },
+    })),
   );
 }

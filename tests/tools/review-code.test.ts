@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { reviewCodeSchema, registerReviewCode } from '@zhixuan92/multi-model-agent-mcp/tools/review-code';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import { makeNoopLogger } from "./helpers.js";
 
 // --- Schema tests ---
 
@@ -47,7 +48,7 @@ describe('review_code handler', () => {
 
   it('rejects when neither code nor filePaths provided', async () => {
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
+    registerReviewCode(mockServer as any, {} as any, makeNoopLogger());
     const result = await getHandler()({});
     expect(result.isError).toBe(true);
   });
@@ -55,7 +56,7 @@ describe('review_code handler', () => {
   it('single-task mode with inline code', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
+    registerReviewCode(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ code: 'function foo() {}', focus: ['security'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -75,7 +76,7 @@ describe('review_code handler', () => {
   it('propagates parentModel from config into task spec (single-task)', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ code: 'fn()' });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -85,7 +86,7 @@ describe('review_code handler', () => {
   it('propagates parentModel from config into task spec (fan-out)', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ filePaths: ['a.ts', 'b.ts'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -98,7 +99,7 @@ describe('review_code handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ code: 'fn()' });
     const envelope = JSON.parse(result.content[0].text);
@@ -112,7 +113,7 @@ describe('review_code handler', () => {
       mockResult({ usage: { inputTokens: 5000, outputTokens: 1000, totalTokens: 6000, costUSD: 0.05, savedCostUSD: 0.04 } }),
     ]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerReviewCode(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ filePaths: ['a.ts', 'b.ts'] });
     const envelope = JSON.parse(result.content[0].text);
@@ -125,7 +126,7 @@ describe('review_code handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, { defaults: {} } as any);
+    registerReviewCode(mockServer as any, { defaults: {} } as any, makeNoopLogger());
 
     const result = await getHandler()({ code: 'fn()' });
     const envelope = JSON.parse(result.content[0].text);
@@ -136,7 +137,7 @@ describe('review_code handler', () => {
   it('fan-out mode with multiple filePaths', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerReviewCode(mockServer as any, {} as any);
+    registerReviewCode(mockServer as any, {} as any, makeNoopLogger());
 
     const result = await getHandler()({ filePaths: ['a.ts', 'b.ts', 'c.ts'] });
     const tasks = mockRunTasks.mock.calls[0][0];

@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { verifyWorkSchema, registerVerifyWork } from '@zhixuan92/multi-model-agent-mcp/tools/verify-work';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
+import { makeNoopLogger } from "./helpers.js";
 
 // --- Schema tests ---
 
@@ -50,7 +51,7 @@ describe('verify_work handler', () => {
 
   it('rejects when neither work nor filePaths provided', async () => {
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, {} as any);
+    registerVerifyWork(mockServer as any, {} as any, makeNoopLogger());
     const result = await getHandler()({ checklist: ['check'] });
     expect(result.isError).toBe(true);
   });
@@ -58,7 +59,7 @@ describe('verify_work handler', () => {
   it('single-task mode with inline work', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any);
+    registerVerifyWork(mockServer as any, { defaults: { tools: 'full', timeoutMs: 600_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ work: 'implemented feature X', checklist: ['has tests', 'handles errors'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -78,7 +79,7 @@ describe('verify_work handler', () => {
   it('propagates parentModel from config into task spec (single-task)', async () => {
     mockRunTasks.mockResolvedValue([mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ work: 'done', checklist: ['check'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -88,7 +89,7 @@ describe('verify_work handler', () => {
   it('propagates parentModel from config into task spec (fan-out)', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     await getHandler()({ filePaths: ['a.ts', 'b.ts'], checklist: ['compiles'] });
     const tasks = mockRunTasks.mock.calls[0][0];
@@ -101,7 +102,7 @@ describe('verify_work handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10, savedCostUSD: 0.08 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ work: 'done', checklist: ['check'] });
     const envelope = JSON.parse(result.content[0].text);
@@ -115,7 +116,7 @@ describe('verify_work handler', () => {
       mockResult({ usage: { inputTokens: 5000, outputTokens: 1000, totalTokens: 6000, costUSD: 0.05, savedCostUSD: 0.04 } }),
     ]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any);
+    registerVerifyWork(mockServer as any, { defaults: { parentModel: 'claude-opus-4-6' } } as any, makeNoopLogger());
 
     const result = await getHandler()({ filePaths: ['a.ts', 'b.ts'], checklist: ['compiles'] });
     const envelope = JSON.parse(result.content[0].text);
@@ -128,7 +129,7 @@ describe('verify_work handler', () => {
       usage: { inputTokens: 10000, outputTokens: 2000, totalTokens: 12000, costUSD: 0.10 },
     })]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, { defaults: {} } as any);
+    registerVerifyWork(mockServer as any, { defaults: {} } as any, makeNoopLogger());
 
     const result = await getHandler()({ work: 'done', checklist: ['check'] });
     const envelope = JSON.parse(result.content[0].text);
@@ -139,7 +140,7 @@ describe('verify_work handler', () => {
   it('fan-out mode: each file verified against same checklist', async () => {
     mockRunTasks.mockResolvedValue([mockResult(), mockResult()]);
     const { mockServer, getHandler } = captureTool();
-    registerVerifyWork(mockServer as any, {} as any);
+    registerVerifyWork(mockServer as any, {} as any, makeNoopLogger());
 
     const result = await getHandler()({ filePaths: ['a.ts', 'b.ts'], checklist: ['compiles', 'tested'] });
     const tasks = mockRunTasks.mock.calls[0][0];
