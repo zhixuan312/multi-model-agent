@@ -187,3 +187,128 @@ describe('DiagnosticLogger — request events', () => {
     expect(parsed.responseBytes).toBe(0);
   });
 });
+
+describe('DiagnosticLogger — notification batching', () => {
+  beforeEach(() => { vi.useFakeTimers(); });
+  afterEach(() => { vi.useRealTimers(); });
+
+  it('does not write on first notification — waits for the 5-second tick', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('hello', true);
+    expect(m.calls.writeSync).toHaveLength(0);
+  });
+
+  it('flushes one notification_batch per 5-second window with attempted/succeeded counts', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('h1', true);
+    logger.notification('h2', false);
+    logger.notification('h3', true);
+    nowMs += 5000;
+    vi.advanceTimersByTime(5000);
+    expect(m.calls.writeSync).toHaveLength(1);
+    const parsed = JSON.parse(m.calls.writeSync[0].data);
+    expect(parsed).toMatchObject({
+      event: 'notification_batch',
+      since: '2026-04-20T14:00:00.000Z',
+      attempted: 3,
+      succeeded: 2,
+      lastHeadline: 'h3',
+    });
+  });
+
+  it('`since` of the very first batch equals logger construction time', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    nowMs += 10000;
+    logger.notification('first', true);
+    nowMs += 5000;
+    vi.advanceTimersByTime(5000);
+    const parsed = JSON.parse(m.calls.writeSync[0].data);
+    expect(parsed.since).toBe('2026-04-20T14:00:00.000Z');
+  });
+
+  it('sets `since` of the second batch to the ts of the first flush', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('a', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    const firstTs = JSON.parse(m.calls.writeSync[0].data).ts;
+    logger.notification('b', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    const secondSince = JSON.parse(m.calls.writeSync[1].data).since;
+    expect(secondSince).toBe(firstTs);
+  });
+
+  it('clears the interval after a fully idle window (no notifications in 5s)', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('a', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    expect(m.calls.writeSync).toHaveLength(1);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    expect(m.calls.writeSync).toHaveLength(1);
+    nowMs += 10000; vi.advanceTimersByTime(10000);
+    expect(m.calls.writeSync).toHaveLength(1);
+  });
+
+  it('restarts the interval when notification() is called after an idle clear', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('a', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    logger.notification('b', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    expect(m.calls.writeSync).toHaveLength(2);
+    expect(JSON.parse(m.calls.writeSync[1].data).lastHeadline).toBe('b');
+  });
+
+  it('post-idle batch `since` equals the previous flush timestamp (contract: since = previous flush, across idle gaps)', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('a', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    const firstFlushTs = JSON.parse(m.calls.writeSync[0].data).ts;
+    nowMs += 30000; vi.advanceTimersByTime(30000);
+    logger.notification('b', true);
+    nowMs += 5000; vi.advanceTimersByTime(5000);
+    const secondSince = JSON.parse(m.calls.writeSync[1].data).since;
+    expect(secondSince).toBe(firstFlushTs);
+  });
+});

@@ -59,6 +59,53 @@ export function createDiagnosticLogger(
     broken: boolean;
   } = { fd: null, fdDate: null, broken: false };
 
+  const notifState: {
+    attempted: number;
+    succeeded: number;
+    lastHeadline: string | null;
+    sinceIso: string;
+    interval: ReturnType<typeof setInterval> | null;
+  } = {
+    attempted: 0,
+    succeeded: 0,
+    lastHeadline: null,
+    sinceIso: now().toISOString(),
+    interval: null,
+  };
+
+  function flushNotificationBatch(): void {
+    if (notifState.attempted === 0) {
+      if (notifState.interval !== null) {
+        clearInterval(notifState.interval);
+        notifState.interval = null;
+      }
+      return;
+    }
+    const ts = now().toISOString();
+    writeLine({
+      ts,
+      pid: process.pid,
+      event: 'notification_batch',
+      since: notifState.sinceIso,
+      attempted: notifState.attempted,
+      succeeded: notifState.succeeded,
+      lastHeadline: notifState.lastHeadline,
+    });
+    notifState.sinceIso = ts;
+    notifState.attempted = 0;
+    notifState.succeeded = 0;
+    notifState.lastHeadline = null;
+  }
+
+  function ensureNotifInterval(): void {
+    if (notifState.interval !== null) return;
+    const timer = setInterval(flushNotificationBatch, 5000);
+    if (typeof (timer as { unref?: () => void }).unref === 'function') {
+      (timer as { unref: () => void }).unref();
+    }
+    notifState.interval = timer;
+  }
+
   function ensureOpen(): number | null {
     if (state.broken) return null;
     const today = formatUtcDate(now());
@@ -109,7 +156,12 @@ export function createDiagnosticLogger(
       if (params.progressToken !== undefined) line.progressToken = params.progressToken;
       writeLine(line);
     },
-    notification: () => { throw new Error('Task 4'); },
+    notification: (headline, succeeded) => {
+      notifState.attempted += 1;
+      if (succeeded) notifState.succeeded += 1;
+      notifState.lastHeadline = headline;
+      ensureNotifInterval();
+    },
     logError: () => { throw new Error('Task 5'); },
     shutdown: () => { throw new Error('Task 5'); },
     expectedPath: () => nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`),
