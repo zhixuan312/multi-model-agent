@@ -312,3 +312,229 @@ describe('DiagnosticLogger — notification batching', () => {
     expect(secondSince).toBe(firstFlushTs);
   });
 });
+
+describe('DiagnosticLogger — logError', () => {
+  it('writes one error line per call with normalised Error', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    const err = new Error('boom');
+    logger.logError('unhandledRejection', err);
+    logger.logError('unhandledRejection', err);
+    expect(m.calls.writeSync).toHaveLength(2);
+    const p = JSON.parse(m.calls.writeSync[0].data);
+    expect(p).toMatchObject({ event: 'error', cause: 'unhandledRejection', errorMessage: 'boom' });
+    expect(typeof p.errorStack).toBe('string');
+  });
+
+  it('normalises string rejection reason', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.logError('unhandledRejection', 'naked string reject');
+    const p = JSON.parse(m.calls.writeSync[0].data);
+    expect(p.errorMessage).toBe('naked string reject');
+    expect(p).not.toHaveProperty('errorStack');
+  });
+
+  it('normalises plain object rejection reason via JSON.stringify', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.logError('unhandledRejection', { code: 'X', detail: 42 });
+    const p = JSON.parse(m.calls.writeSync[0].data);
+    expect(p.errorMessage).toBe('{"code":"X","detail":42}');
+    expect(p).not.toHaveProperty('errorStack');
+  });
+
+  it('handles null rejection reason', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.logError('unhandledRejection', null);
+    const p = JSON.parse(m.calls.writeSync[0].data);
+    expect(p.errorMessage).toBe('null');
+    expect(p).not.toHaveProperty('errorStack');
+  });
+
+  it('handles circular references by replacing them with [Circular]', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    const obj: Record<string, unknown> = { a: 1 };
+    obj.self = obj;
+    logger.logError('unhandledRejection', obj);
+    const p = JSON.parse(m.calls.writeSync[0].data);
+    expect(p.errorMessage).toContain('[Circular]');
+    expect(p).not.toHaveProperty('errorStack');
+  });
+});
+
+describe('DiagnosticLogger — shutdown', () => {
+  it('writes a shutdown line with stdin_end cause and no error fields', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.shutdown('stdin_end');
+    const p = JSON.parse(m.calls.writeSync.at(-1)!.data);
+    expect(p).toMatchObject({ event: 'shutdown', cause: 'stdin_end' });
+    expect(p).not.toHaveProperty('errorMessage');
+    expect(p).not.toHaveProperty('errorStack');
+  });
+
+  it('includes lastRequest populated by the most recent request', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.request({ tool: 'review_code', requestId: 'r1', progressToken: 'p1', durationMs: 48213, responseBytes: 72184, status: 'ok' });
+    nowMs += 664;
+    logger.shutdown('stdout_epipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+    const p = JSON.parse(m.calls.writeSync.at(-1)!.data);
+    expect(p.cause).toBe('stdout_epipe');
+    expect(p.errorMessage).toBe('write EPIPE');
+    expect(p.lastRequest).toMatchObject({
+      tool: 'review_code',
+      durationMs: 48213,
+      responseBytes: 72184,
+      msSinceCompletion: 664,
+    });
+  });
+
+  it('notificationsSinceLastRequest resets after each request', () => {
+    const m = makeMocks();
+    let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date(nowMs),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.notification('h1', true);
+    logger.notification('h2', false);
+    logger.request({ tool: 't', requestId: 'r', progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' });
+    logger.notification('h3', true);
+    logger.shutdown('stdin_end');
+    const shutdown = JSON.parse(m.calls.writeSync.at(-1)!.data);
+    expect(shutdown.notificationsSinceLastRequest).toEqual({ attempted: 1, succeeded: 1 });
+  });
+
+  it('is idempotent — a second call is a no-op', () => {
+    const m = makeMocks();
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+    });
+    logger.shutdown('stdin_end');
+    const countAfterFirst = m.calls.writeSync.length;
+    logger.shutdown('uncaughtException', new Error('later'));
+    expect(m.calls.writeSync).toHaveLength(countAfterFirst);
+  });
+
+  it('flushes a pending notification batch synchronously before writing shutdown', () => {
+    vi.useFakeTimers();
+    try {
+      const m = makeMocks();
+      let nowMs = Date.parse('2026-04-20T14:00:00.000Z');
+      const logger = createDiagnosticLogger({
+        logDir: '/tmp/fake-logs',
+        now: () => new Date(nowMs),
+        openSync: m.openSync, closeSync: m.closeSync, writeSync: m.writeSync, mkdirSync: m.mkdirSync,
+      });
+      logger.notification('pending', true);
+      logger.shutdown('stdin_end');
+      expect(m.calls.writeSync).toHaveLength(2);
+      expect(JSON.parse(m.calls.writeSync[0].data).event).toBe('notification_batch');
+      expect(JSON.parse(m.calls.writeSync[1].data).event).toBe('shutdown');
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+});
+
+describe('DiagnosticLogger — fs failure is swallowed', () => {
+  it('disk-full on openSync marks the logger broken and subsequent calls are no-ops', () => {
+    const m = makeMocks();
+    const failingOpen = (_p: string, _f: string, _m: number): number => {
+      throw new Error('ENOSPC');
+    };
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: failingOpen,
+      closeSync: m.closeSync,
+      writeSync: m.writeSync,
+      mkdirSync: m.mkdirSync,
+    });
+    expect(() => logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' })).not.toThrow();
+    expect(m.calls.writeSync).toHaveLength(0);
+    // shutdown always attempts (bypasses broken state), but openSync still fails — so still zero writes.
+    expect(() => logger.shutdown('stdin_end')).not.toThrow();
+    expect(m.calls.writeSync).toHaveLength(0);
+  });
+
+  it('EBADF on writeSync trips broken state on subsequent writes', () => {
+    const m = makeMocks();
+    let failNext = false;
+    const flakyWrite = (fd: number, data: string) => {
+      if (failNext) throw new Error('EBADF');
+      m.calls.writeSync.push({ fd, data });
+    };
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: flakyWrite, mkdirSync: m.mkdirSync,
+    });
+    logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' });
+    expect(m.calls.writeSync).toHaveLength(1);
+    failNext = true;
+    expect(() => logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' })).not.toThrow();
+    failNext = false;
+    logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' });
+    expect(m.calls.writeSync).toHaveLength(1);
+  });
+
+  it('shutdown still writes its line after a prior request write has broken the logger', () => {
+    const m = makeMocks();
+    let failNext = false;
+    const flakyWrite = (fd: number, data: string) => {
+      if (failNext) throw new Error('EBADF');
+      m.calls.writeSync.push({ fd, data });
+    };
+    const logger = createDiagnosticLogger({
+      logDir: '/tmp/fake-logs',
+      now: () => new Date('2026-04-20T14:00:00.000Z'),
+      openSync: m.openSync, closeSync: m.closeSync, writeSync: flakyWrite, mkdirSync: m.mkdirSync,
+    });
+    failNext = true;
+    logger.request({ tool: 't', requestId: undefined, progressToken: undefined, durationMs: 1, responseBytes: 1, status: 'ok' });
+    expect(m.calls.writeSync).toHaveLength(0);
+    failNext = false;
+    logger.shutdown('stdout_epipe', Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }));
+    expect(m.calls.writeSync).toHaveLength(1);
+    const parsed = JSON.parse(m.calls.writeSync[0].data);
+    expect(parsed.event).toBe('shutdown');
+    expect(parsed.cause).toBe('stdout_epipe');
+  });
+});

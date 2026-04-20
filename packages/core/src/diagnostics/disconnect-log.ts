@@ -41,6 +41,33 @@ function formatUtcDate(d: Date): string {
   return `${y}-${m}-${day}`;
 }
 
+function safeStringify(value: unknown): string {
+  const seen = new WeakSet<object>();
+  try {
+    return JSON.stringify(value, (_key, val) => {
+      if (typeof val === 'object' && val !== null) {
+        if (seen.has(val)) return '[Circular]';
+        seen.add(val);
+      }
+      return val;
+    }) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function normaliseError(err: unknown): { errorMessage?: string; errorStack?: string } {
+  if (err === undefined) return {};
+  if (err instanceof Error) {
+    const out: { errorMessage: string; errorStack?: string } = { errorMessage: err.message };
+    if (typeof err.stack === 'string' && err.stack.length > 0) out.errorStack = err.stack;
+    return out;
+  }
+  if (typeof err === 'string') return { errorMessage: err };
+  if (err === null) return { errorMessage: 'null' };
+  return { errorMessage: safeStringify(err) };
+}
+
 export function createDiagnosticLogger(
   options: CreateDiagnosticLoggerOptions = {},
 ): DiagnosticLogger {
@@ -58,6 +85,22 @@ export function createDiagnosticLogger(
     fdDate: string | null;
     broken: boolean;
   } = { fd: null, fdDate: null, broken: false };
+
+  const processStartTime = now().getTime();
+
+  type LastReq = {
+    tool: string;
+    completedAtIso: string;
+    completedAtMs: number;
+    durationMs: number;
+    responseBytes: number;
+  };
+  const perReq: {
+    last: LastReq | null;
+    notifAttempted: number;
+    notifSucceeded: number;
+    shutdownEmitted: boolean;
+  } = { last: null, notifAttempted: 0, notifSucceeded: 0, shutdownEmitted: false };
 
   const notifState: {
     attempted: number;
@@ -143,8 +186,9 @@ export function createDiagnosticLogger(
 
   return {
     request: (params) => {
+      const ts = now();
       const line: Record<string, unknown> = {
-        ts: now().toISOString(),
+        ts: ts.toISOString(),
         pid: process.pid,
         event: 'request',
         tool: params.tool,
@@ -155,15 +199,80 @@ export function createDiagnosticLogger(
       if (params.requestId !== undefined) line.requestId = params.requestId;
       if (params.progressToken !== undefined) line.progressToken = params.progressToken;
       writeLine(line);
+      perReq.last = {
+        tool: params.tool,
+        completedAtIso: ts.toISOString(),
+        completedAtMs: ts.getTime(),
+        durationMs: params.durationMs,
+        responseBytes: params.responseBytes,
+      };
+      perReq.notifAttempted = 0;
+      perReq.notifSucceeded = 0;
     },
     notification: (headline, succeeded) => {
       notifState.attempted += 1;
-      if (succeeded) notifState.succeeded += 1;
+      perReq.notifAttempted += 1;
+      if (succeeded) {
+        notifState.succeeded += 1;
+        perReq.notifSucceeded += 1;
+      }
       notifState.lastHeadline = headline;
       ensureNotifInterval();
     },
-    logError: () => { throw new Error('Task 5'); },
-    shutdown: () => { throw new Error('Task 5'); },
+    logError: (cause, err) => {
+      const normalised = normaliseError(err);
+      const line: Record<string, unknown> = {
+        ts: now().toISOString(),
+        pid: process.pid,
+        event: 'error',
+        cause,
+      };
+      if (normalised.errorMessage !== undefined) line.errorMessage = normalised.errorMessage;
+      if (normalised.errorStack !== undefined) line.errorStack = normalised.errorStack;
+      writeLine(line);
+    },
+    shutdown: (cause, err) => {
+      if (perReq.shutdownEmitted) return;
+      perReq.shutdownEmitted = true;
+      if (notifState.interval !== null) {
+        clearInterval(notifState.interval);
+        notifState.interval = null;
+      }
+      if (notifState.attempted > 0) {
+        flushNotificationBatch();
+      }
+      const ts = now();
+      const normalised = normaliseError(err);
+      const line: Record<string, unknown> = {
+        ts: ts.toISOString(),
+        pid: process.pid,
+        event: 'shutdown',
+        cause,
+        uptimeMs: ts.getTime() - processStartTime,
+        notificationsSinceLastRequest: {
+          attempted: perReq.notifAttempted,
+          succeeded: perReq.notifSucceeded,
+        },
+      };
+      if (normalised.errorMessage !== undefined) line.errorMessage = normalised.errorMessage;
+      if (normalised.errorStack !== undefined) line.errorStack = normalised.errorStack;
+      if (perReq.last !== null) {
+        line.lastRequest = {
+          tool: perReq.last.tool,
+          completedAt: perReq.last.completedAtIso,
+          durationMs: perReq.last.durationMs,
+          responseBytes: perReq.last.responseBytes,
+          msSinceCompletion: ts.getTime() - perReq.last.completedAtMs,
+        };
+      }
+      // Shutdown bypasses the "broken" short-circuit: if an earlier write failed,
+      // reset state and try one final open+write. Preserves the single most
+      // important diagnostic line even when the logger was transiently unhealthy.
+      state.broken = false;
+      state.fd = null;
+      state.fdDate = null;
+      writeLine(line);
+    },
     expectedPath: () => nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`),
   };
 }
