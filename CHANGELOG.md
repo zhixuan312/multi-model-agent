@@ -5,6 +5,24 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.3] - 2026-04-20
+
+### Added
+
+- **Stdio lifecycle handlers (mcp).** `installStdioLifecycleHandlers(logger)` registers EPIPE-safe handlers on `process.stdout`, `process.stdin`, `uncaughtException`, and `unhandledRejection`. Without these the server crashed silently when the client closed its read end of the pipe (the "MCP dies every ~2 calls" failure). Single-install contract; a second call is a no-op with a stderr warning.
+- **Diagnostic logger (core).** New `@zhixuan92/multi-model-agent-core/diagnostics/disconnect-log` module exports `createDiagnosticLogger()` / `DiagnosticLogger`. The logger writes JSON-Lines events to `~/.multi-model/logs/mcp-YYYY-MM-DD.jsonl` — one file per UTC day, lazy-materialised on first write, best-effort fs (a broken disk never breaks a working server). Four event shapes: `request` (per tool call with tool, requestId, progressToken, durationMs, responseBytes, status), `notification_batch` (one summary per 5-second burst with attempted/succeeded counters and `since` timestamp), `error` (non-terminal background errors — currently `unhandledRejection`), and `shutdown` (terminal, written synchronously before exit, carries cause, lastRequest with msSinceCompletion, and notificationsSinceLastRequest counters).
+- **Per-tool request events (mcp).** Every specialised tool (`audit_document`, `debug_task`, `execute_plan`, `review_code`, `verify_work`, `confirm_clarifications`) now emits a `request` event on each invocation via a new `withDiagnostics(tool, logger, handler)` wrapper in `tools/shared.ts`. Measures wall-clock duration and approximate response-body bytes; on a thrown handler, logs `status: 'error'` with `responseBytes: 0` before rethrowing.
+- **Startup banner (mcp).** During normal `serve` startup the server prints exactly one line to stderr: `[multi-model-agent] diagnostic log: <path>`. No new output for healthy users beyond that banner.
+
+### Changed
+
+- **`buildMcpServer` signature (breaking).** Now takes `(config, logger, options?)` — every in-repo caller and test helper updated in the same change. Tests that construct a server pass a no-op logger via `tests/tools/helpers.ts#makeNoopLogger()`.
+- **`installStdioLifecycleHandlers` signature (breaking).** Now requires a `DiagnosticLogger` parameter; idempotent with a stderr warning on second install.
+
+### Why
+
+- End users reported "MCP dies every 1–2 calls" with no stack trace. The lifecycle handlers stop the silent crash on EPIPE; the logger captures the *cause* of the death so we can fix the actual root trigger in a follow-up release. Users on 2.7.3 who still hit disconnects can share `~/.multi-model/logs/mcp-YYYY-MM-DD.jsonl` to make the cause visible.
+
 ## [2.7.2] - 2026-04-20
 
 ### Added
