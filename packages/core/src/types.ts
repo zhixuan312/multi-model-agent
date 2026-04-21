@@ -174,6 +174,10 @@ export interface MultiModelConfig {
      *  each task's `savedCostUSD` is computed against this model's rates. */
     parentModel?: string
   }
+  diagnostics?: {
+    log: boolean
+    logDir?: string
+  }
   clarifications?: {
     maxRoundsPerDraft?: number
   }

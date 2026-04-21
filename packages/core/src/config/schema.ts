@@ -76,6 +76,10 @@ export const multiModelConfigSchema = z.object({
     complex: agentConfigSchema,
   }),
   defaults: defaultsSchema,
+  diagnostics: z.object({
+    log: z.boolean().default(false),
+    logDir: z.string().min(1).optional(),
+  }).optional(),
 });
 
 export interface ParsedConfigSuccess {

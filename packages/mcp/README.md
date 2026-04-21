@@ -94,13 +94,43 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 
 Diagnostic logging is OFF by default.
 
-To capture a crash/disconnect log to send us, start the MCP server with `MCP_DIAGNOSTIC_LOG=1`. Accepted truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
+It stays disabled when the `diagnostics` block is absent or when `diagnostics.log` is `false` in `~/.multi-model/config.json`.
 
-You can optionally set `MCP_DIAGNOSTIC_LOG_DIR` to override the default log directory at `~/.multi-model/logs/`.
+To capture a crash/disconnect log to send us, add a `diagnostics` block to your config.
 
-When enabled, the server appends JSONL records to `mcp-YYYY-MM-DD.jsonl`.
+Minimal example:
 
-Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `error`, and `shutdown`. This is not a progress or general activity feed.
+```json
+{
+  "diagnostics": { "log": true }
+}
+```
+
+Full config shape example:
+
+```json
+{
+  "agents": {
+    "standard": { "type": "codex", "model": "codex-mini-latest" },
+    "complex": { "type": "claude", "model": "claude-sonnet-4-20250514" }
+  },
+  "defaults": {
+    "timeoutMs": 1800000,
+    "maxCostUSD": 10,
+    "tools": "full"
+  },
+  "diagnostics": {
+    "log": true,
+    "logDir": "/some/path"
+  }
+}
+```
+
+`diagnostics.logDir` is optional; when omitted, logs default to `~/.multi-model/logs/`.
+
+When enabled, the server appends JSONL records to `mcp-YYYY-MM-DD.jsonl` in append mode.
+
+Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. This is a crash-diagnosis log, not a progress feed.
 
 ## Setup & Configuration
 

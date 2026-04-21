@@ -690,7 +690,9 @@ async function main() {
     process.exit(1);
   }
 
-  const logger = createDiagnosticLogger();
+  const enabled = config.diagnostics?.log ?? false;
+  const logDir = config.diagnostics?.logDir;
+  const logger = createDiagnosticLogger({ enabled, logDir });
   logger.startup(SERVER_VERSION);
   const diagnosticLogPath = logger.expectedPath();
   if (diagnosticLogPath !== undefined) {

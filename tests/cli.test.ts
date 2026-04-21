@@ -1329,8 +1329,6 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'mcp-diag-test-'));
   });
   afterEach(() => {
-    delete process.env.MCP_DIAGNOSTIC_LOG;
-    delete process.env.MCP_DIAGNOSTIC_LOG_DIR;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
@@ -1338,9 +1336,7 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
     const { buildMcpServer: realBuildMcpServer } = await import('../packages/mcp/src/cli.js');
 
-    process.env.MCP_DIAGNOSTIC_LOG = '1';
-    process.env.MCP_DIAGNOSTIC_LOG_DIR = tmpDir;
-    const logger = createDiagnosticLogger();
+    const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
     const server = realBuildMcpServer(sampleConfig(), logger, {
       _testRunTasksOverride: stubRunTasks as unknown as typeof runTasks,
     });
@@ -1366,14 +1362,12 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     expect(completeLines[0].status).toBe('ok');
     expect(typeof completeLines[0].durationMs).toBe('number');
     expect(typeof completeLines[0].responseBytes).toBe('number');
-    delete process.env.MCP_DIAGNOSTIC_LOG;
-    delete process.env.MCP_DIAGNOSTIC_LOG_DIR;
   });
 
   it('the startup banner line matches logger.expectedPath() for today (banner shape check)', async () => {
-    process.env.MCP_DIAGNOSTIC_LOG = '1';
     const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
     const logger = createDiagnosticLogger({
+      enabled: true,
       logDir: tmpDir,
       now: () => new Date('2026-04-20T14:00:00.000Z'),
     });

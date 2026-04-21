@@ -34,6 +34,7 @@ export interface DiagnosticLogger {
 }
 
 export interface CreateDiagnosticLoggerOptions {
+  enabled: boolean;
   logDir?: string;
   now?: () => Date;
   openSync?: (path: string, flags: string, mode: number) => number;
@@ -48,11 +49,6 @@ function formatUtcDate(d: Date): string {
   const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
   const day = d.getUTCDate().toString().padStart(2, '0');
   return `${y}-${m}-${day}`;
-}
-
-function isTruthyEnvValue(value: string | undefined): boolean {
-  if (value === undefined) return false;
-  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
 function safeStringify(value: unknown): string {
@@ -84,11 +80,10 @@ function normaliseError(err: unknown): { message: string; stack?: string } {
 }
 
 export function createDiagnosticLogger(
-  options: CreateDiagnosticLoggerOptions = {},
+  options: CreateDiagnosticLoggerOptions,
 ): DiagnosticLogger {
-  const enabled = isTruthyEnvValue(process.env.MCP_DIAGNOSTIC_LOG);
-  const logDir = process.env.MCP_DIAGNOSTIC_LOG_DIR
-    ?? options.logDir
+  const enabled = options.enabled;
+  const logDir = options.logDir
     ?? nodePath.join(nodeOs.homedir(), '.multi-model', 'logs');
   const now = options.now ?? (() => new Date());
   const openSync = options.openSync ?? nodeFs.openSync;

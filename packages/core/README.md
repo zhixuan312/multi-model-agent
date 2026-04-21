@@ -64,13 +64,32 @@ for (const r of results) {
 
 Diagnostic logging is OFF by default.
 
-Enable it by setting `MCP_DIAGNOSTIC_LOG=1`. Accepted truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
+It stays disabled when the `diagnostics` block is absent or when `diagnostics.log` is `false` in `~/.multi-model/config.json`.
 
-Optionally set `MCP_DIAGNOSTIC_LOG_DIR` to override the default log directory at `~/.multi-model/logs/`.
+Enable it by adding this minimal config:
+
+```json
+{
+  "diagnostics": { "log": true }
+}
+```
+
+Optionally set `diagnostics.logDir` to override the default log directory:
+
+```json
+{
+  "diagnostics": {
+    "log": true,
+    "logDir": "/some/path"
+  }
+}
+```
+
+When `diagnostics.logDir` is omitted, logs default to `~/.multi-model/logs/`.
 
 When enabled, the MCP diagnostic logger appends JSONL records to `mcp-YYYY-MM-DD.jsonl` in append mode.
 
-Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `error`, and `shutdown`. This is not a progress or general activity feed.
+Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. This is a crash-diagnosis log, not a progress feed.
 
 ## Full documentation
 

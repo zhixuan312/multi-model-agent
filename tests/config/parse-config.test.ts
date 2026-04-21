@@ -33,6 +33,38 @@ describe('parseConfig', () => {
     expect(result.defaults.tools).toBe('none');
   });
 
+  it('accepts diagnostics.log enabled without logDir', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+      diagnostics: { log: true },
+    });
+    expect(result.diagnostics).toEqual({ log: true });
+  });
+
+  it('accepts diagnostics.log with diagnostics.logDir', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+      diagnostics: { log: true, logDir: '/tmp/foo' },
+    });
+    expect(result.diagnostics).toEqual({ log: true, logDir: '/tmp/foo' });
+  });
+
+  it('rejects diagnostics.log when it is not a boolean', () => {
+    expect(() => parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+      diagnostics: { log: 'yes' as any },
+    })).toThrow();
+  });
+
   it('throws on invalid agent type', () => {
     expect(() => parseConfig({
       agents: {
