@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.5] - 2026-04-21
+
+### Changed
+
+- **Diagnostic logging switch moved to the agent config (core, breaking).** Enable/disable and directory override now live in `~/.multi-model/config.json` under a new `diagnostics` block: `{ "diagnostics": { "log": true, "logDir": "/optional/path" } }`. Default remains off. 2.7.4's `MCP_DIAGNOSTIC_LOG` and `MCP_DIAGNOSTIC_LOG_DIR` environment variables are removed entirely — there is no precedence or override layer to reason about. Users who enabled logging in 2.7.4 must move the switch from their MCP client's `env` block into their agent config.
+- **`createDiagnosticLogger` signature (breaking).** Now requires an explicit `{ enabled: boolean, logDir?: string }` options object. The logger no longer reads any environment variables. Callers (only `packages/mcp/src/cli.ts` in-repo) pass `config.diagnostics?.log ?? false` and `config.diagnostics?.logDir`.
+
+### Why
+
+- 2.7.4 required users to edit their MCP client's `env` block — a separate surface from the agent config they already maintain at `~/.multi-model/config.json`. Consolidating both knobs into the agent config makes enabling the crash log a one-line edit in the file users already know about, and eliminates an entire class of precedence/override bugs.
+
 ## [2.7.4] - 2026-04-21
 
 ### Changed
@@ -493,7 +504,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...HEAD
+[2.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...mcp-v2.7.5
 [2.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.3...mcp-v2.7.4
 [2.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.2...mcp-v2.7.3
 [2.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.1...mcp-v2.7.2
