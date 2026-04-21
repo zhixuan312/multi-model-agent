@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.7.4] - 2026-04-21
+
+### Changed
+
+- **Diagnostic logger is opt-in (core, breaking).** The logger created by `createDiagnosticLogger()` is now a complete no-op unless `MCP_DIAGNOSTIC_LOG` is set to a truthy value (`1`, `true`, `yes`, or `on`, case-insensitive). When disabled, the logger performs no directory creation, no file opens, no stat calls — every public method early-returns. When enabled, logs still land at `~/.multi-model/logs/mcp-YYYY-MM-DD.jsonl` (overridable via `MCP_DIAGNOSTIC_LOG_DIR`). Replaces 2.7.3's on-by-default behavior.
+- **Event schema reshaped to 5 types (core, breaking).** The logger now writes exactly `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. Previously-emitted `notification_batch` events (one per 5-second progress burst) are removed entirely — they dominated log volume without aiding crash diagnosis. The old single `request` event is split into `request_start` (emitted before the handler runs) and `request_complete` (emitted after), so the log retains the in-flight tool if the process dies mid-request.
+- **Startup banner suppressed when disabled (mcp).** The `[multi-model-agent] diagnostic log: <path>` stderr line now prints only when logging is enabled.
+
+### Added
+
+- **Expanded signal coverage (mcp).** `installStdioLifecycleHandlers` now registers handlers for `SIGTERM`, `SIGINT`, `SIGPIPE`, `SIGHUP`, `SIGABRT`, and `beforeExit`. Each writes a `shutdown` line with the matching `cause` before exit (0 for graceful signals and `stdin_end`; 1 for error-class signals, `uncaughtException`, and `unhandledRejection`). Previously these signals terminated the process with zero log output, indistinguishable from a segfault.
+- **`unhandledRejection` is fatal (mcp, breaking).** A rejected promise without a handler now logs an `error` event, emits a `shutdown` with cause `unhandledRejection`, and exits 1. Previously the server logged the rejection and kept running, which could leave the process in a wedged half-alive state.
+- **`lastRequestInFlight` on shutdown (core).** If a request is in flight when any shutdown path fires, the `shutdown` line includes `{ requestId, tool, startedAt }` for the most-recent in-flight request, letting us attribute a crash to the tool that was running.
+- **Duplicate `requestId` detection (core).** A second `requestStart` for an already-in-flight requestId now writes an `error` event with `kind: "duplicate_request_id"` before replacing the entry, preventing silent diagnostic corruption from buggy callers.
+
+### Removed
+
+- **`notification_batch` event type (core, breaking).** Progress notifications are still delivered to MCP clients via `notifications/progress`; only the logger-side batching output is gone.
+- **`progressToken` field on request events (core, breaking).** MCP progress tokens are a consumer-side concern, not a diagnostic one.
+- **`NonTerminalErrorCause` from `@zhixuan92/multi-model-agent-core` public exports.** The type only described the old `notification_batch`/`unhandledRejection` error envelope.
+
+### Why
+
+- The 2.7.3 logger shipped on-by-default and was dominated by repeated `notification_batch` lines — in a real disconnect report, ~90% of lines carried no diagnostic signal. Worse, `SIGTERM`/`SIGPIPE` kills still produced zero log output, so a genuine crash and a healthy idle process looked identical at the tail of the file. 2.7.4 treats the log as a crash-diagnosis tool only: off by default so there's no surprise disk write, focused on the events that distinguish "process exited cleanly via stdin_end" from "process was signal-killed" from "process died mid-request." Users who hit a disconnect can enable `MCP_DIAGNOSTIC_LOG=1`, reproduce, and share the resulting file.
+
 ## [2.7.3] - 2026-04-20
 
 ### Added
@@ -468,7 +493,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.3...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...HEAD
+[2.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.3...mcp-v2.7.4
 [2.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.2...mcp-v2.7.3
 [2.7.2]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.1...mcp-v2.7.2
 [2.7.1]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.0...mcp-v2.7.1
