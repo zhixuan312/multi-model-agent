@@ -32,7 +32,7 @@ export function registerDebugTask(server: McpServer, config: MultiModelConfig, l
     'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
     debugTaskSchema.shape,
     withDiagnostics('debug_task', logger, (async (params: DebugTaskParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra, logger);
+      const runOptions = buildRunTasksOptions(extra);
       const parts: string[] = [`Debug this problem:\n\n${params.problem}`];
       if (params.context) parts.push(`Context: ${params.context}`);
       if (params.hypothesis) parts.push(`Initial hypothesis: ${params.hypothesis}`);

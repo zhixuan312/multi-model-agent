@@ -60,7 +60,7 @@ export function registerExecutePlan(server: McpServer, config: MultiModelConfig,
     'Execute tasks from a written plan/spec file. Pass task descriptors and file paths — the worker reads the plan, finds the matching task, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review. Use this when a plan file exists on disk; use delegate_tasks instead when context is inline/ad-hoc with no plan file. Returns contextBlockId in metadata for follow-up calls.',
     executePlanSchema.shape,
     withDiagnostics('execute_plan', logger, (async (params: ExecutePlanParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra, logger);
+      const runOptions = buildRunTasksOptions(extra);
       const filePaths = params.filePaths;
       const validPaths = (filePaths ?? []).filter(p => p.trim().length > 0);
 

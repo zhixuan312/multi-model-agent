@@ -125,6 +125,5 @@ export { createDiagnosticLogger } from './diagnostics/disconnect-log.js';
 export type {
   DiagnosticLogger,
   ShutdownCause,
-  NonTerminalErrorCause,
   CreateDiagnosticLoggerOptions,
 } from './diagnostics/disconnect-log.js';

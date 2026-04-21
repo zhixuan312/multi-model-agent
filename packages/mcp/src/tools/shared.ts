@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { z } from 'zod';
 import type {
   RunResult,
@@ -80,7 +81,6 @@ export function buildPerFilePrompt(filePath: string, promptTemplate: string): st
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export function buildRunTasksOptions(
   extra: { _meta?: Record<string, unknown>; sendNotification: (...args: any[]) => Promise<void> } | undefined,
-  logger: DiagnosticLogger,
 ): RunTasksOptions {
   if (!extra) return {};
   const rawToken = extra._meta?.progressToken;
@@ -96,23 +96,20 @@ export function buildRunTasksOptions(
     onProgress: (_taskIndex: number, event: ProgressEvent) => {
       progressCounter += 1;
       const headline = `[task ${_taskIndex}] ${event.headline}`;
-      extra.sendNotification({
+      void extra.sendNotification({
         method: 'notifications/progress',
         params: {
           progressToken,
           progress: progressCounter,
           message: headline,
         },
-      })
-        .then(() => { logger.notification(headline, true); })
-        .catch(() => { logger.notification(headline, false); });
+      });
     },
   };
 }
 
 type ExtraLike = {
   requestId?: string | number | null;
-  _meta?: { progressToken?: unknown };
 };
 
 function coerceRequestId(v: unknown): string | undefined {
@@ -121,17 +118,11 @@ function coerceRequestId(v: unknown): string | undefined {
   return undefined;
 }
 
-function coerceProgressToken(v: unknown): string | number | undefined {
-  return typeof v === 'string' || typeof v === 'number' ? v : undefined;
-}
-
 /**
- * Wrap an MCP tool handler so every call is recorded as a
- * `request` event in the DiagnosticLogger. Measures wall-clock
- * duration and response-body bytes (an approximation of transport
- * payload size based on JSON.stringify of the handler's return
- * value). On a thrown handler, logs status:"error" with
- * responseBytes:0 and rethrows.
+ * Wrap an MCP tool handler so every call is recorded as request_start and
+ * request_complete in the DiagnosticLogger. The start event is emitted before
+ * the tool handler runs. The completion event is emitted on both success and
+ * throw; thrown handlers record status:"error" with responseBytes:0.
  */
 export function withDiagnostics<Args extends unknown[], R>(
   tool: string,
@@ -141,9 +132,9 @@ export function withDiagnostics<Args extends unknown[], R>(
   return async (...args: Args): Promise<R> => {
     const rawExtra = args[args.length - 1] as unknown;
     const extra = (rawExtra && typeof rawExtra === 'object') ? rawExtra as ExtraLike : undefined;
-    const requestId = coerceRequestId(extra?.requestId);
-    const progressToken = coerceProgressToken(extra?._meta?.progressToken);
+    const requestId = coerceRequestId(extra?.requestId) ?? randomUUID();
     const startedAt = Date.now();
+    logger.requestStart({ requestId, tool });
     try {
       const result = await handler(...args);
       let responseBytes = 0;
@@ -152,20 +143,18 @@ export function withDiagnostics<Args extends unknown[], R>(
       } catch {
         responseBytes = 0;
       }
-      logger.request({
+      logger.requestComplete({
         tool,
         requestId,
-        progressToken,
         durationMs: Date.now() - startedAt,
         responseBytes,
         status: 'ok',
       });
       return result;
     } catch (err) {
-      logger.request({
+      logger.requestComplete({
         tool,
         requestId,
-        progressToken,
         durationMs: Date.now() - startedAt,
         responseBytes: 0,
         status: 'error',

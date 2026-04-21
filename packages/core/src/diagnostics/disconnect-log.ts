@@ -1,24 +1,36 @@
+import * as nodeFs from 'node:fs';
+import * as nodeOs from 'node:os';
+import * as nodePath from 'node:path';
+
 export type ShutdownCause =
+  | 'stdin_end'
   | 'stdout_epipe'
   | 'stdout_other_error'
-  | 'stdin_end'
-  | 'uncaughtException';
-
-export type NonTerminalErrorCause = 'unhandledRejection';
+  | 'uncaughtException'
+  | 'unhandledRejection'
+  | 'SIGTERM'
+  | 'SIGINT'
+  | 'SIGPIPE'
+  | 'SIGHUP'
+  | 'SIGABRT'
+  | 'event_loop_empty';
 
 export interface DiagnosticLogger {
-  request(params: {
+  startup(version: string): void;
+  requestStart(params: {
     tool: string;
-    requestId: string | undefined;
-    progressToken: string | number | undefined;
+    requestId: string;
+  }): void;
+  requestComplete(params: {
+    tool: string;
+    requestId: string;
     durationMs: number;
     responseBytes: number;
     status: 'ok' | 'error';
   }): void;
-  notification(headline: string, succeeded: boolean): void;
-  logError(cause: NonTerminalErrorCause, err: unknown): void;
-  shutdown(cause: ShutdownCause, err?: unknown): void;
-  expectedPath(): string;
+  error(kind: string, err: unknown): void;
+  shutdown(cause: ShutdownCause): void;
+  expectedPath(): string | undefined;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -28,17 +40,19 @@ export interface CreateDiagnosticLoggerOptions {
   closeSync?: (fd: number) => void;
   writeSync?: (fd: number, data: string) => void;
   mkdirSync?: (path: string, options: { recursive: true; mode: number }) => void;
+  stderrWrite?: (data: string) => void;
 }
-
-import * as nodeFs from 'node:fs';
-import * as nodeOs from 'node:os';
-import * as nodePath from 'node:path';
 
 function formatUtcDate(d: Date): string {
   const y = d.getUTCFullYear().toString().padStart(4, '0');
   const m = (d.getUTCMonth() + 1).toString().padStart(2, '0');
   const day = d.getUTCDate().toString().padStart(2, '0');
   return `${y}-${m}-${day}`;
+}
+
+function isTruthyEnvValue(value: string | undefined): boolean {
+  if (value === undefined) return false;
+  return ['1', 'true', 'yes', 'on'].includes(value.trim().toLowerCase());
 }
 
 function safeStringify(value: unknown): string {
@@ -56,22 +70,26 @@ function safeStringify(value: unknown): string {
   }
 }
 
-function normaliseError(err: unknown): { errorMessage?: string; errorStack?: string } {
-  if (err === undefined) return {};
+function normaliseError(err: unknown): { message: string; stack?: string } {
   if (err instanceof Error) {
-    const out: { errorMessage: string; errorStack?: string } = { errorMessage: err.message };
-    if (typeof err.stack === 'string' && err.stack.length > 0) out.errorStack = err.stack;
-    return out;
+    return {
+      message: err.message,
+      ...(typeof err.stack === 'string' && err.stack.length > 0 ? { stack: err.stack } : {}),
+    };
   }
-  if (typeof err === 'string') return { errorMessage: err };
-  if (err === null) return { errorMessage: 'null' };
-  return { errorMessage: safeStringify(err) };
+  if (typeof err === 'string') return { message: err };
+  if (err === null) return { message: 'null' };
+  if (err === undefined) return { message: 'undefined' };
+  return { message: safeStringify(err) };
 }
 
 export function createDiagnosticLogger(
   options: CreateDiagnosticLoggerOptions = {},
 ): DiagnosticLogger {
-  const logDir = options.logDir ?? nodePath.join(nodeOs.homedir(), '.multi-model', 'logs');
+  const enabled = isTruthyEnvValue(process.env.MCP_DIAGNOSTIC_LOG);
+  const logDir = process.env.MCP_DIAGNOSTIC_LOG_DIR
+    ?? options.logDir
+    ?? nodePath.join(nodeOs.homedir(), '.multi-model', 'logs');
   const now = options.now ?? (() => new Date());
   const openSync = options.openSync ?? nodeFs.openSync;
   const closeSync = options.closeSync ?? nodeFs.closeSync;
@@ -79,200 +97,166 @@ export function createDiagnosticLogger(
     nodeFs.writeSync(fd, data);
   });
   const mkdirSync = options.mkdirSync ?? nodeFs.mkdirSync;
+  const stderrWrite = options.stderrWrite ?? ((data: string) => {
+    process.stderr.write(data);
+  });
 
+  if (!enabled) {
+    return {
+      startup: () => {},
+      requestStart: () => {},
+      requestComplete: () => {},
+      error: () => {},
+      shutdown: () => {},
+      expectedPath: () => undefined,
+    };
+  }
+
+  const processStartTime = now().getTime();
+  const inFlight = new Map<string, { tool: string; startedAt: string; startedAtMs: number }>();
   const state: {
     fd: number | null;
     fdDate: string | null;
-    broken: boolean;
-  } = { fd: null, fdDate: null, broken: false };
-
-  const processStartTime = now().getTime();
-
-  type LastReq = {
-    tool: string;
-    completedAtIso: string;
-    completedAtMs: number;
-    durationMs: number;
-    responseBytes: number;
-  };
-  const perReq: {
-    last: LastReq | null;
-    notifAttempted: number;
-    notifSucceeded: number;
+    inert: boolean;
+    startupEmitted: boolean;
     shutdownEmitted: boolean;
-  } = { last: null, notifAttempted: 0, notifSucceeded: 0, shutdownEmitted: false };
-
-  const notifState: {
-    attempted: number;
-    succeeded: number;
-    lastHeadline: string | null;
-    sinceIso: string;
-    interval: ReturnType<typeof setInterval> | null;
+    warned: boolean;
   } = {
-    attempted: 0,
-    succeeded: 0,
-    lastHeadline: null,
-    sinceIso: now().toISOString(),
-    interval: null,
+    fd: null,
+    fdDate: null,
+    inert: false,
+    startupEmitted: false,
+    shutdownEmitted: false,
+    warned: false,
   };
 
-  function flushNotificationBatch(): void {
-    if (notifState.attempted === 0) {
-      if (notifState.interval !== null) {
-        clearInterval(notifState.interval);
-        notifState.interval = null;
-      }
-      return;
+  function disable(reason: string): void {
+    if (state.warned) return;
+    state.warned = true;
+    state.inert = true;
+    if (state.fd !== null) {
+      try { closeSync(state.fd); } catch { /* noop */ }
     }
-    const ts = now().toISOString();
-    writeLine({
-      ts,
-      pid: process.pid,
-      event: 'notification_batch',
-      since: notifState.sinceIso,
-      attempted: notifState.attempted,
-      succeeded: notifState.succeeded,
-      lastHeadline: notifState.lastHeadline,
-    });
-    notifState.sinceIso = ts;
-    notifState.attempted = 0;
-    notifState.succeeded = 0;
-    notifState.lastHeadline = null;
-  }
-
-  function ensureNotifInterval(): void {
-    if (notifState.interval !== null) return;
-    const timer = setInterval(flushNotificationBatch, 5000);
-    if (typeof (timer as { unref?: () => void }).unref === 'function') {
-      (timer as { unref: () => void }).unref();
-    }
-    notifState.interval = timer;
+    state.fd = null;
+    state.fdDate = null;
+    stderrWrite(`[diagnostic-log] disabled: ${reason}\n`);
   }
 
   function ensureOpen(): number | null {
-    if (state.broken) return null;
+    if (state.inert) return null;
     const today = formatUtcDate(now());
     if (state.fd !== null && state.fdDate === today) return state.fd;
     try {
       if (state.fd !== null && state.fdDate !== today) {
-        try { closeSync(state.fd); } catch { /* tolerate fd leak */ }
+        try { closeSync(state.fd); } catch { /* noop */ }
       }
       mkdirSync(logDir, { recursive: true, mode: 0o700 });
       const fd = openSync(nodePath.join(logDir, `mcp-${today}.jsonl`), 'a', 0o600);
       state.fd = fd;
       state.fdDate = today;
       return fd;
-    } catch {
-      state.broken = true;
-      state.fd = null;
-      state.fdDate = null;
+    } catch (err) {
+      disable(normaliseError(err).message);
       return null;
     }
   }
 
   function writeLine(obj: Record<string, unknown>): void {
-    if (state.broken) return;
+    if (state.inert) return;
     const fd = ensureOpen();
     if (fd === null) return;
     try {
-      writeSync(fd, JSON.stringify(obj) + '\n');
-    } catch {
-      try { closeSync(fd); } catch { /* tolerate close failure */ }
-      state.broken = true;
-      state.fd = null;
-      state.fdDate = null;
+      writeSync(fd, `${JSON.stringify(obj)}\n`);
+    } catch (err) {
+      disable(normaliseError(err).message);
     }
   }
 
   return {
-    request: (params) => {
-      const ts = now();
-      const line: Record<string, unknown> = {
-        ts: ts.toISOString(),
-        pid: process.pid,
-        event: 'request',
-        tool: params.tool,
-        durationMs: params.durationMs,
-        responseBytes: params.responseBytes,
-        status: params.status,
-      };
-      if (params.requestId !== undefined) line.requestId = params.requestId;
-      if (params.progressToken !== undefined) line.progressToken = params.progressToken;
-      writeLine(line);
-      perReq.last = {
-        tool: params.tool,
-        completedAtIso: ts.toISOString(),
-        completedAtMs: ts.getTime(),
-        durationMs: params.durationMs,
-        responseBytes: params.responseBytes,
-      };
-      perReq.notifAttempted = 0;
-      perReq.notifSucceeded = 0;
-    },
-    notification: (headline, succeeded) => {
-      notifState.attempted += 1;
-      perReq.notifAttempted += 1;
-      if (succeeded) {
-        notifState.succeeded += 1;
-        perReq.notifSucceeded += 1;
-      }
-      notifState.lastHeadline = headline;
-      ensureNotifInterval();
-    },
-    logError: (cause, err) => {
-      const normalised = normaliseError(err);
-      const line: Record<string, unknown> = {
+    startup: (version) => {
+      if (state.inert || state.startupEmitted) return;
+      state.startupEmitted = true;
+      writeLine({
+        event: 'startup',
         ts: now().toISOString(),
         pid: process.pid,
-        event: 'error',
-        cause,
-      };
-      if (normalised.errorMessage !== undefined) line.errorMessage = normalised.errorMessage;
-      if (normalised.errorStack !== undefined) line.errorStack = normalised.errorStack;
-      writeLine(line);
+        version,
+      });
     },
-    shutdown: (cause, err) => {
-      if (perReq.shutdownEmitted) return;
-      perReq.shutdownEmitted = true;
-      if (notifState.interval !== null) {
-        clearInterval(notifState.interval);
-        notifState.interval = null;
+    requestStart: ({ requestId, tool }) => {
+      if (state.inert) return;
+      const startedAt = now();
+      if (inFlight.has(requestId)) {
+        writeLine({
+          event: 'error',
+          ts: startedAt.toISOString(),
+          kind: 'duplicate_request_id',
+          message: `requestStart called twice for requestId=${requestId}; previous in-flight entry replaced`,
+        });
       }
-      if (notifState.attempted > 0) {
-        flushNotificationBatch();
-      }
-      const ts = now();
+      inFlight.set(requestId, {
+        tool,
+        startedAt: startedAt.toISOString(),
+        startedAtMs: startedAt.getTime(),
+      });
+      writeLine({
+        event: 'request_start',
+        ts: startedAt.toISOString(),
+        requestId,
+        tool,
+      });
+    },
+    requestComplete: ({ requestId, tool, durationMs, responseBytes, status }) => {
+      if (state.inert) return;
+      inFlight.delete(requestId);
+      writeLine({
+        event: 'request_complete',
+        ts: now().toISOString(),
+        requestId,
+        tool,
+        durationMs,
+        status,
+        responseBytes,
+      });
+    },
+    error: (kind, err) => {
+      if (state.inert) return;
       const normalised = normaliseError(err);
-      const line: Record<string, unknown> = {
-        ts: ts.toISOString(),
-        pid: process.pid,
+      writeLine({
+        event: 'error',
+        ts: now().toISOString(),
+        kind,
+        message: normalised.message,
+        ...(normalised.stack !== undefined ? { stack: normalised.stack } : {}),
+      });
+    },
+    shutdown: (cause) => {
+      if (state.inert || state.shutdownEmitted) return;
+      state.shutdownEmitted = true;
+      const ts = now();
+      let lastRequestInFlight:
+        | { requestId: string; tool: string; startedAt: string }
+        | undefined;
+      for (const [requestId, entry] of inFlight.entries()) {
+        if (!lastRequestInFlight || entry.startedAtMs > inFlight.get(lastRequestInFlight.requestId)!.startedAtMs) {
+          lastRequestInFlight = {
+            requestId,
+            tool: entry.tool,
+            startedAt: entry.startedAt,
+          };
+        }
+      }
+      writeLine({
         event: 'shutdown',
+        ts: ts.toISOString(),
         cause,
         uptimeMs: ts.getTime() - processStartTime,
-        notificationsSinceLastRequest: {
-          attempted: perReq.notifAttempted,
-          succeeded: perReq.notifSucceeded,
-        },
-      };
-      if (normalised.errorMessage !== undefined) line.errorMessage = normalised.errorMessage;
-      if (normalised.errorStack !== undefined) line.errorStack = normalised.errorStack;
-      if (perReq.last !== null) {
-        line.lastRequest = {
-          tool: perReq.last.tool,
-          completedAt: perReq.last.completedAtIso,
-          durationMs: perReq.last.durationMs,
-          responseBytes: perReq.last.responseBytes,
-          msSinceCompletion: ts.getTime() - perReq.last.completedAtMs,
-        };
-      }
-      // Shutdown bypasses the "broken" short-circuit: if an earlier write failed,
-      // reset state and try one final open+write. Preserves the single most
-      // important diagnostic line even when the logger was transiently unhealthy.
-      state.broken = false;
-      state.fd = null;
-      state.fdDate = null;
-      writeLine(line);
+        ...(lastRequestInFlight !== undefined ? { lastRequestInFlight } : {}),
+      });
     },
-    expectedPath: () => nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`),
+    expectedPath: () => {
+      if (state.inert) return undefined;
+      return nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`);
+    },
   };
 }

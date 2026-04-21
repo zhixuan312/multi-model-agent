@@ -16,7 +16,6 @@ import { InMemoryContextBlockStore, createDiagnosticLogger } from '@zhixuan92/mu
 import type {
   MultiModelConfig,
   TaskSpec,
-  ProgressEvent,
   RunResult,
   BatchTimings,
   BatchProgress,
@@ -239,7 +238,7 @@ export function buildMcpServer(
     {
       tasks: z.array(buildTaskSchema(availableAgents)).describe('Array of tasks to execute in parallel'),
     },
-    async ({ tasks }, extra) => {
+    withDiagnostics('delegate_tasks', logger, async ({ tasks }, extra) => {
       const rawToken = extra._meta?.progressToken;
       const progressToken: string | number | undefined =
         typeof rawToken === 'string' || typeof rawToken === 'number'
@@ -247,19 +246,17 @@ export function buildMcpServer(
           : undefined;
       let progressCounter = 0;
       const sendProgress = progressToken !== undefined
-        ? (taskIndex: number, event: ProgressEvent) => {
+        ? (taskIndex: number, event: { headline: string }) => {
             progressCounter += 1;
             const headline = `[task ${taskIndex}] ${event.headline}`;
-            extra.sendNotification({
+            void extra.sendNotification({
               method: 'notifications/progress',
               params: {
                 progressToken,
                 progress: progressCounter,
                 message: headline,
               },
-            })
-              .then(() => { logger.notification(headline, true); })
-              .catch(() => { logger.notification(headline, false); });
+            });
           }
         : undefined;
 
@@ -317,7 +314,7 @@ export function buildMcpServer(
         clarificationId,
         clarifications: intakeResult.clarifications.length > 0 ? intakeResult.clarifications : undefined,
       });
-    },
+    }),
   );
 
   server.tool(
@@ -565,6 +562,8 @@ let installedLifecycleHandlers: null | {
   stdinEnd: () => void;
   uncaught: (err: Error) => void;
   unhandled: (reason: unknown) => void;
+  beforeExit: () => void;
+  signals: Record<'SIGTERM' | 'SIGINT' | 'SIGPIPE' | 'SIGHUP' | 'SIGABRT', () => void>;
 } = null;
 
 /**
@@ -591,11 +590,11 @@ export function installStdioLifecycleHandlers(logger: DiagnosticLogger): void {
   }
   const stdoutError = (err: NodeJS.ErrnoException) => {
     if (err.code === 'EPIPE') {
-      logger.shutdown('stdout_epipe', err);
+      logger.shutdown('stdout_epipe');
       process.exit(0);
       return;
     }
-    logger.shutdown('stdout_other_error', err);
+    logger.shutdown('stdout_other_error');
     process.stderr.write(`[multi-model-agent] stdout error: ${err.message}\n`);
     process.exit(1);
   };
@@ -604,20 +603,54 @@ export function installStdioLifecycleHandlers(logger: DiagnosticLogger): void {
     process.exit(0);
   };
   const uncaught = (err: Error) => {
-    logger.shutdown('uncaughtException', err);
+    logger.error('uncaughtException', err);
+    logger.shutdown('uncaughtException');
     process.stderr.write(`[multi-model-agent] uncaughtException: ${err.stack ?? String(err)}\n`);
     process.exit(1);
   };
   const unhandled = (reason: unknown) => {
-    logger.logError('unhandledRejection', reason);
+    logger.error('unhandledRejection', reason);
     const stack = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
     process.stderr.write(`[multi-model-agent] unhandledRejection: ${stack}\n`);
+    logger.shutdown('unhandledRejection');
+    process.exit(1);
+  };
+  const beforeExit = () => {
+    logger.shutdown('event_loop_empty');
+  };
+  const signals = {
+    SIGTERM: () => {
+      logger.shutdown('SIGTERM');
+      process.exit(0);
+    },
+    SIGINT: () => {
+      logger.shutdown('SIGINT');
+      process.exit(0);
+    },
+    SIGPIPE: () => {
+      logger.shutdown('SIGPIPE');
+      process.exit(1);
+    },
+    SIGHUP: () => {
+      logger.shutdown('SIGHUP');
+      process.exit(0);
+    },
+    SIGABRT: () => {
+      logger.shutdown('SIGABRT');
+      process.exit(1);
+    },
   };
   process.stdout.on('error', stdoutError);
   process.stdin.on('end', stdinEnd);
   process.on('uncaughtException', uncaught);
   process.on('unhandledRejection', unhandled);
-  installedLifecycleHandlers = { stdoutError, stdinEnd, uncaught, unhandled };
+  process.on('beforeExit', beforeExit);
+  process.on('SIGTERM', signals.SIGTERM);
+  process.on('SIGINT', signals.SIGINT);
+  process.on('SIGPIPE', signals.SIGPIPE);
+  process.on('SIGHUP', signals.SIGHUP);
+  process.on('SIGABRT', signals.SIGABRT);
+  installedLifecycleHandlers = { stdoutError, stdinEnd, uncaught, unhandled, beforeExit, signals };
 }
 
 /** Test-only. Not exported from the package public surface. */
@@ -627,6 +660,12 @@ export function __resetStdioLifecycleHandlersForTests(): void {
   process.stdin.off('end', installedLifecycleHandlers.stdinEnd);
   process.off('uncaughtException', installedLifecycleHandlers.uncaught);
   process.off('unhandledRejection', installedLifecycleHandlers.unhandled);
+  process.off('beforeExit', installedLifecycleHandlers.beforeExit);
+  process.off('SIGTERM', installedLifecycleHandlers.signals.SIGTERM);
+  process.off('SIGINT', installedLifecycleHandlers.signals.SIGINT);
+  process.off('SIGPIPE', installedLifecycleHandlers.signals.SIGPIPE);
+  process.off('SIGHUP', installedLifecycleHandlers.signals.SIGHUP);
+  process.off('SIGABRT', installedLifecycleHandlers.signals.SIGABRT);
   installedLifecycleHandlers = null;
 }
 
@@ -652,7 +691,11 @@ async function main() {
   }
 
   const logger = createDiagnosticLogger();
-  process.stderr.write(`[multi-model-agent] diagnostic log: ${logger.expectedPath()}\n`);
+  logger.startup(SERVER_VERSION);
+  const diagnosticLogPath = logger.expectedPath();
+  if (diagnosticLogPath !== undefined) {
+    process.stderr.write(`[multi-model-agent] diagnostic log: ${diagnosticLogPath}\n`);
+  }
   installStdioLifecycleHandlers(logger);
 
   const server = buildMcpServer(config, logger);

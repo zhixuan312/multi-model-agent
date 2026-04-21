@@ -60,6 +60,18 @@ for (const r of results) {
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
 
+## Diagnostic logging
+
+Diagnostic logging is OFF by default.
+
+Enable it by setting `MCP_DIAGNOSTIC_LOG=1`. Accepted truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
+
+Optionally set `MCP_DIAGNOSTIC_LOG_DIR` to override the default log directory at `~/.multi-model/logs/`.
+
+When enabled, the MCP diagnostic logger appends JSONL records to `mcp-YYYY-MM-DD.jsonl` in append mode.
+
+Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `error`, and `shutdown`. This is not a progress or general activity feed.
+
 ## Full documentation
 
 → **[github.com/zhixuan312/multi-model-agent](https://github.com/zhixuan312/multi-model-agent)**

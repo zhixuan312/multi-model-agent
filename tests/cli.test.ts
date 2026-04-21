@@ -2,14 +2,21 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost, installStdioLifecycleHandlers, __resetStdioLifecycleHandlersForTests } from '../packages/mcp/src/cli.js';
 import type { DiagnosticLogger } from '../packages/core/src/diagnostics/disconnect-log.js';
 
-function makeMockLogger(): DiagnosticLogger & { calls: { request: unknown[]; notification: unknown[]; logError: unknown[]; shutdown: unknown[] } } {
-  const calls = { request: [] as unknown[], notification: [] as unknown[], logError: [] as unknown[], shutdown: [] as unknown[] };
+function makeMockLogger(): DiagnosticLogger & { calls: { startup: unknown[]; requestStart: unknown[]; requestComplete: unknown[]; error: unknown[]; shutdown: unknown[] } } {
+  const calls = {
+    startup: [] as unknown[],
+    requestStart: [] as unknown[],
+    requestComplete: [] as unknown[],
+    error: [] as unknown[],
+    shutdown: [] as unknown[],
+  };
   return {
     calls,
-    request: (p) => { calls.request.push(p); },
-    notification: (h, s) => { calls.notification.push({ h, s }); },
-    logError: (cause, err) => { calls.logError.push({ cause, err }); },
-    shutdown: (cause, err) => { calls.shutdown.push({ cause, err }); },
+    startup: (version) => { calls.startup.push(version); },
+    requestStart: (params) => { calls.requestStart.push(params); },
+    requestComplete: (params) => { calls.requestComplete.push(params); },
+    error: (kind, err) => { calls.error.push({ kind, err }); },
+    shutdown: (cause) => { calls.shutdown.push({ cause }); },
     expectedPath: () => '/tmp/fake/mcp-test.jsonl',
   };
 }
@@ -1156,77 +1163,148 @@ describe('installStdioLifecycleHandlers', () => {
     __resetStdioLifecycleHandlersForTests();
   });
 
-  it('registers handlers for stdout-error, stdin-end, uncaughtException, and unhandledRejection', () => {
-    installStdioLifecycleHandlers(makeMockLogger());
-    expect(stdoutOn.mock.calls.map(([e]) => e)).toContain('error');
-    expect(stdinOn.mock.calls.map(([e]) => e)).toContain('end');
-    const events = processOn.mock.calls.map(([e]) => e);
-    expect(events).toContain('uncaughtException');
-    expect(events).toContain('unhandledRejection');
-  });
+  function captureHandlers() {
+    const handlers: {
+      stdoutError?: (err: NodeJS.ErrnoException) => void;
+      stdinEnd?: () => void;
+      process: Partial<Record<'uncaughtException' | 'unhandledRejection' | 'beforeExit' | 'SIGTERM' | 'SIGINT' | 'SIGPIPE' | 'SIGHUP' | 'SIGABRT', (...args: unknown[]) => void>>;
+    } = { process: {} };
 
-  it('EPIPE on stdout calls logger.shutdown("stdout_epipe") then process.exit(0)', () => {
-    const logger = makeMockLogger();
-    let handler: ((err: NodeJS.ErrnoException) => void) | undefined;
-    stdoutOn.mockImplementation(((event: string, h: (err: NodeJS.ErrnoException) => void) => {
-      if (event === 'error') handler = h;
+    stdoutOn.mockImplementation(((event: string, handler: (err: NodeJS.ErrnoException) => void) => {
+      if (event === 'error') handlers.stdoutError = handler;
       return process.stdout;
     }) as typeof process.stdout.on);
-    installStdioLifecycleHandlers(logger);
-    handler!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) as NodeJS.ErrnoException);
-    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_epipe', err: expect.any(Error) }]);
-    expect(exit).toHaveBeenCalledWith(0);
-  });
 
-  it('non-EPIPE stdout error calls logger.shutdown("stdout_other_error") then process.exit(1)', () => {
-    const logger = makeMockLogger();
-    let handler: ((err: NodeJS.ErrnoException) => void) | undefined;
-    stdoutOn.mockImplementation(((event: string, h: (err: NodeJS.ErrnoException) => void) => {
-      if (event === 'error') handler = h;
-      return process.stdout;
-    }) as typeof process.stdout.on);
-    installStdioLifecycleHandlers(logger);
-    handler!(Object.assign(new Error('something else'), { code: 'EBUSY' }) as NodeJS.ErrnoException);
-    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_other_error', err: expect.any(Error) }]);
-    expect(exit).toHaveBeenCalledWith(1);
-  });
-
-  it('stdin end calls logger.shutdown("stdin_end") with no err, then process.exit(0)', () => {
-    const logger = makeMockLogger();
-    let handler: (() => void) | undefined;
-    stdinOn.mockImplementation(((event: string, h: () => void) => {
-      if (event === 'end') handler = h;
+    stdinOn.mockImplementation(((event: string, handler: () => void) => {
+      if (event === 'end') handlers.stdinEnd = handler;
       return process.stdin;
     }) as typeof process.stdin.on);
+
+    processOn.mockImplementation(((event: string, handler: (...args: unknown[]) => void) => {
+      if (
+        event === 'uncaughtException'
+        || event === 'unhandledRejection'
+        || event === 'beforeExit'
+        || event === 'SIGTERM'
+        || event === 'SIGINT'
+        || event === 'SIGPIPE'
+        || event === 'SIGHUP'
+        || event === 'SIGABRT'
+      ) {
+        handlers.process[event] = handler;
+      }
+      return process;
+    }) as typeof process.on);
+
+    return handlers;
+  }
+
+  it('registers all stdio, lifecycle, and signal handlers', () => {
+    const handlers = captureHandlers();
+    installStdioLifecycleHandlers(makeMockLogger());
+
+    expect(stdoutOn.mock.calls.map(([event]) => event)).toContain('error');
+    expect(stdinOn.mock.calls.map(([event]) => event)).toContain('end');
+    const processEvents = processOn.mock.calls.map(([event]) => event);
+    expect(processEvents).toEqual(expect.arrayContaining([
+      'uncaughtException',
+      'unhandledRejection',
+      'beforeExit',
+      'SIGTERM',
+      'SIGINT',
+      'SIGPIPE',
+      'SIGHUP',
+      'SIGABRT',
+    ]));
+    expect(typeof handlers.stdoutError).toBe('function');
+    expect(typeof handlers.stdinEnd).toBe('function');
+    expect(typeof handlers.process.beforeExit).toBe('function');
+  });
+
+  it('stdout EPIPE shuts down with stdout_epipe and exits 0', () => {
+    const logger = makeMockLogger();
+    const handlers = captureHandlers();
     installStdioLifecycleHandlers(logger);
-    handler!();
-    expect(logger.calls.shutdown).toEqual([{ cause: 'stdin_end', err: undefined }]);
+
+    handlers.stdoutError!(Object.assign(new Error('write EPIPE'), { code: 'EPIPE' }) as NodeJS.ErrnoException);
+
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_epipe' }]);
     expect(exit).toHaveBeenCalledWith(0);
   });
 
-  it('uncaughtException calls logger.shutdown("uncaughtException") then process.exit(1)', () => {
+  it('stdout non-EPIPE error shuts down with stdout_other_error and exits 1', () => {
     const logger = makeMockLogger();
-    let handler: ((err: Error) => void) | undefined;
-    processOn.mockImplementation(((event: string, h: (err: Error) => void) => {
-      if (event === 'uncaughtException') handler = h;
-      return process;
-    }) as typeof process.on);
+    const handlers = captureHandlers();
     installStdioLifecycleHandlers(logger);
-    handler!(new Error('fatal'));
-    expect(logger.calls.shutdown).toEqual([{ cause: 'uncaughtException', err: expect.any(Error) }]);
+
+    handlers.stdoutError!(Object.assign(new Error('stdout failed'), { code: 'EBUSY' }) as NodeJS.ErrnoException);
+
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdout_other_error' }]);
     expect(exit).toHaveBeenCalledWith(1);
   });
 
-  it('unhandledRejection calls logger.logError and does NOT exit', () => {
+  it('stdin end shuts down with stdin_end and exits 0', () => {
     const logger = makeMockLogger();
-    let handler: ((reason: unknown) => void) | undefined;
-    processOn.mockImplementation(((event: string, h: (reason: unknown) => void) => {
-      if (event === 'unhandledRejection') handler = h;
-      return process;
-    }) as typeof process.on);
+    const handlers = captureHandlers();
     installStdioLifecycleHandlers(logger);
-    handler!(new Error('boom'));
-    expect(logger.calls.logError).toEqual([{ cause: 'unhandledRejection', err: expect.any(Error) }]);
+
+    handlers.stdinEnd!();
+
+    expect(logger.calls.shutdown).toEqual([{ cause: 'stdin_end' }]);
+    expect(exit).toHaveBeenCalledWith(0);
+  });
+
+  it('uncaughtException logs error, shuts down, and exits 1', () => {
+    const logger = makeMockLogger();
+    const handlers = captureHandlers();
+    installStdioLifecycleHandlers(logger);
+    const err = new Error('fatal');
+
+    handlers.process.uncaughtException!(err);
+
+    expect(logger.calls.error).toEqual([{ kind: 'uncaughtException', err }]);
+    expect(logger.calls.shutdown).toEqual([{ cause: 'uncaughtException' }]);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it('unhandledRejection is fatal: logs error, shuts down, and exits 1', () => {
+    const logger = makeMockLogger();
+    const handlers = captureHandlers();
+    installStdioLifecycleHandlers(logger);
+    const err = new Error('boom');
+
+    handlers.process.unhandledRejection!(err);
+
+    expect(logger.calls.error).toEqual([{ kind: 'unhandledRejection', err }]);
+    expect(logger.calls.shutdown).toEqual([{ cause: 'unhandledRejection' }]);
+    expect(exit).toHaveBeenCalledWith(1);
+  });
+
+  it.each([
+    ['SIGTERM', 'SIGTERM', 0],
+    ['SIGINT', 'SIGINT', 0],
+    ['SIGHUP', 'SIGHUP', 0],
+    ['SIGPIPE', 'SIGPIPE', 1],
+    ['SIGABRT', 'SIGABRT', 1],
+  ] as const)('%s handler shuts down and exits with documented code', (eventName, cause, code) => {
+    const logger = makeMockLogger();
+    const handlers = captureHandlers();
+    installStdioLifecycleHandlers(logger);
+
+    handlers.process[eventName]!();
+
+    expect(logger.calls.shutdown).toEqual([{ cause }]);
+    expect(exit).toHaveBeenCalledWith(code);
+  });
+
+  it('beforeExit shuts down with event_loop_empty and does not call process.exit', () => {
+    const logger = makeMockLogger();
+    const handlers = captureHandlers();
+    installStdioLifecycleHandlers(logger);
+
+    handlers.process.beforeExit!();
+
+    expect(logger.calls.shutdown).toEqual([{ cause: 'event_loop_empty' }]);
     expect(exit).not.toHaveBeenCalled();
   });
 
@@ -1251,14 +1329,18 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     tmpDir = fs.mkdtempSync(pathMod.join(os.tmpdir(), 'mcp-diag-test-'));
   });
   afterEach(() => {
+    delete process.env.MCP_DIAGNOSTIC_LOG;
+    delete process.env.MCP_DIAGNOSTIC_LOG_DIR;
     fs.rmSync(tmpDir, { recursive: true, force: true });
   });
 
-  it('audit_document calls (via register helper) produce a request event with tool name', async () => {
+  it('audit_document calls (via register helper) produce request_start and request_complete events', async () => {
     const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
     const { buildMcpServer: realBuildMcpServer } = await import('../packages/mcp/src/cli.js');
 
-    const logger = createDiagnosticLogger({ logDir: tmpDir });
+    process.env.MCP_DIAGNOSTIC_LOG = '1';
+    process.env.MCP_DIAGNOSTIC_LOG_DIR = tmpDir;
+    const logger = createDiagnosticLogger();
     const server = realBuildMcpServer(sampleConfig(), logger, {
       _testRunTasksOverride: stubRunTasks as unknown as typeof runTasks,
     });
@@ -1275,15 +1357,21 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     expect(files).toHaveLength(1);
     const content = fs.readFileSync(pathMod.join(tmpDir, files[0]), 'utf-8');
     const lines = content.trim().split('\n').map((l) => JSON.parse(l));
-    const requestLines = lines.filter((l) => l.event === 'request');
-    expect(requestLines.length).toBeGreaterThanOrEqual(1);
-    expect(requestLines[0].tool).toBe('audit_document');
-    expect(requestLines[0].status).toBe('ok');
-    expect(typeof requestLines[0].durationMs).toBe('number');
-    expect(typeof requestLines[0].responseBytes).toBe('number');
+    const startLines = lines.filter((l) => l.event === 'request_start');
+    const completeLines = lines.filter((l) => l.event === 'request_complete');
+    expect(startLines.length).toBeGreaterThanOrEqual(1);
+    expect(completeLines.length).toBeGreaterThanOrEqual(1);
+    expect(startLines[0].tool).toBe('audit_document');
+    expect(completeLines[0].tool).toBe('audit_document');
+    expect(completeLines[0].status).toBe('ok');
+    expect(typeof completeLines[0].durationMs).toBe('number');
+    expect(typeof completeLines[0].responseBytes).toBe('number');
+    delete process.env.MCP_DIAGNOSTIC_LOG;
+    delete process.env.MCP_DIAGNOSTIC_LOG_DIR;
   });
 
   it('the startup banner line matches logger.expectedPath() for today (banner shape check)', async () => {
+    process.env.MCP_DIAGNOSTIC_LOG = '1';
     const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
     const logger = createDiagnosticLogger({
       logDir: tmpDir,

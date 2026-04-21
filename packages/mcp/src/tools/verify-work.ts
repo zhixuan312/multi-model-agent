@@ -45,7 +45,7 @@ export function registerVerifyWork(server: McpServer, config: MultiModelConfig, 
     'Verify work against a checklist with pass/fail evidence. Accepts inline description or file paths (multiple files verified in parallel). Preset: standard agent, spec review only.',
     verifyWorkSchema.shape,
     withDiagnostics('verify_work', logger, (async (params: VerifyWorkParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra, logger);
+      const runOptions = buildRunTasksOptions(extra);
       const validation = validateInput(params.work, params.filePaths);
       if (!validation.valid) {
         return { content: [{ type: 'text' as const, text: `Error: ${validation.message}` }], isError: true };

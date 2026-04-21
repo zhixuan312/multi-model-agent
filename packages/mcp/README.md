@@ -90,6 +90,18 @@ For Codex CLI, Claude Desktop, and Cursor setup, see the [full guide](https://gi
 | `get_batch_slice` | Fetch output or telemetry from a previous batch |
 | `confirm_clarifications` | Resume a clarification set by confirming or editing proposed interpretations |
 
+## Diagnostic logging
+
+Diagnostic logging is OFF by default.
+
+To capture a crash/disconnect log to send us, start the MCP server with `MCP_DIAGNOSTIC_LOG=1`. Accepted truthy values are `1`, `true`, `yes`, and `on` (case-insensitive).
+
+You can optionally set `MCP_DIAGNOSTIC_LOG_DIR` to override the default log directory at `~/.multi-model/logs/`.
+
+When enabled, the server appends JSONL records to `mcp-YYYY-MM-DD.jsonl`.
+
+Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `error`, and `shutdown`. This is not a progress or general activity feed.
+
 ## Setup & Configuration
 
 See the full setup guide with config examples, client-specific instructions, and auth details:
