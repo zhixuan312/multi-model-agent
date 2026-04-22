@@ -93,6 +93,10 @@ export class ClarificationStore {
     return this.sets.delete(id);
   }
 
+  clear(): void {
+    this.sets.clear();
+  }
+
   private evict(): void {
     let unresolvedCount = 0;
     for (const set of this.sets.values()) {

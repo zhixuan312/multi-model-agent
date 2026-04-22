@@ -123,6 +123,10 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     return this.entries.delete(id);
   }
 
+  clear(): void {
+    this.entries.clear();
+  }
+
   private evictIfOverBound(): void {
     while (this.entries.size > this.maxEntries) {
       let oldestId: string | undefined;
