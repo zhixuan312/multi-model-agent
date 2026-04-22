@@ -13,13 +13,18 @@ export type ShutdownCause =
   | 'SIGPIPE'
   | 'SIGHUP'
   | 'SIGABRT'
-  | 'event_loop_empty';
+  | 'event_loop_empty'
+  | 'SIGTERM_drain_timeout';
+
+export type SessionCloseReason = 'client_closed' | 'transport_error' | 'session_expired' | 'daemon_shutdown' | 'handshake_failed';
 
 export interface DiagnosticLogger {
-  startup(version: string): void;
+  startup(version: string, extras?: { transport?: 'stdio' | 'http' }): void;
   requestStart(params: {
     tool: string;
     requestId: string;
+    sessionId?: string;
+    cwd?: string;
   }): void;
   requestComplete(params: {
     tool: string;
@@ -27,10 +32,20 @@ export interface DiagnosticLogger {
     durationMs: number;
     responseBytes: number;
     status: 'ok' | 'error';
+    sessionId?: string;
+    cwd?: string;
   }): void;
   error(kind: string, err: unknown): void;
   shutdown(cause: ShutdownCause): void;
   expectedPath(): string | undefined;
+
+  // HTTP-only (callable on stdio logger too; they're no-ops when disabled)
+  sessionOpen(params: { sessionId: string; cwd: string; remoteAddr?: string }): void;
+  sessionClose(params: { sessionId: string; cwd: string; reason: SessionCloseReason; durationMs: number }): void;
+  connectionRejected(params: { reason: string; httpStatus: number; cwd?: string; remoteAddr?: string }): void;
+  requestRejected(params: { reason: string; httpStatus: number; sessionIdAttempted?: string }): void;
+  projectCreated(params: { cwd: string }): void;
+  projectEvicted(params: { cwd: string; idleMs: number }): void;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -104,6 +119,12 @@ export function createDiagnosticLogger(
       error: () => {},
       shutdown: () => {},
       expectedPath: () => undefined,
+      sessionOpen: () => {},
+      sessionClose: () => {},
+      connectionRejected: () => {},
+      requestRejected: () => {},
+      projectCreated: () => {},
+      projectEvicted: () => {},
     };
   }
 
@@ -168,7 +189,7 @@ export function createDiagnosticLogger(
   }
 
   return {
-    startup: (version) => {
+    startup: (version, extras) => {
       if (state.inert || state.startupEmitted) return;
       state.startupEmitted = true;
       writeLine({
@@ -176,9 +197,10 @@ export function createDiagnosticLogger(
         ts: now().toISOString(),
         pid: process.pid,
         version,
+        transport: extras?.transport ?? 'stdio',
       });
     },
-    requestStart: ({ requestId, tool }) => {
+    requestStart: ({ requestId, tool, sessionId, cwd }) => {
       if (state.inert) return;
       const startedAt = now();
       if (inFlight.has(requestId)) {
@@ -199,9 +221,11 @@ export function createDiagnosticLogger(
         ts: startedAt.toISOString(),
         requestId,
         tool,
+        ...(sessionId !== undefined ? { sessionId } : {}),
+        ...(cwd !== undefined ? { cwd } : {}),
       });
     },
-    requestComplete: ({ requestId, tool, durationMs, responseBytes, status }) => {
+    requestComplete: ({ requestId, tool, durationMs, responseBytes, status, sessionId, cwd }) => {
       if (state.inert) return;
       inFlight.delete(requestId);
       writeLine({
@@ -212,6 +236,8 @@ export function createDiagnosticLogger(
         durationMs,
         status,
         responseBytes,
+        ...(sessionId !== undefined ? { sessionId } : {}),
+        ...(cwd !== undefined ? { cwd } : {}),
       });
     },
     error: (kind, err) => {
@@ -252,6 +278,65 @@ export function createDiagnosticLogger(
     expectedPath: () => {
       if (state.inert) return undefined;
       return nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`);
+    },
+    sessionOpen: ({ sessionId, cwd, remoteAddr }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'session_open',
+        ts: now().toISOString(),
+        sessionId,
+        cwd,
+        ...(remoteAddr !== undefined ? { remoteAddr } : {}),
+      });
+    },
+    sessionClose: ({ sessionId, cwd, reason, durationMs }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'session_close',
+        ts: now().toISOString(),
+        sessionId,
+        cwd,
+        reason,
+        durationMs,
+      });
+    },
+    connectionRejected: ({ reason, httpStatus, cwd, remoteAddr }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'connection_rejected',
+        ts: now().toISOString(),
+        reason,
+        httpStatus,
+        ...(cwd !== undefined ? { cwd } : {}),
+        ...(remoteAddr !== undefined ? { remoteAddr } : {}),
+      });
+    },
+    requestRejected: ({ reason, httpStatus, sessionIdAttempted }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'request_rejected',
+        ts: now().toISOString(),
+        reason,
+        httpStatus,
+        ...(sessionIdAttempted !== undefined ? { sessionIdAttempted } : {}),
+      });
+    },
+    projectCreated: ({ cwd }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'project_created',
+        ts: now().toISOString(),
+        cwd,
+      });
+    },
+    projectEvicted: ({ cwd, idleMs }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'project_evicted',
+        ts: now().toISOString(),
+        cwd,
+        idleMs,
+      });
     },
   };
 }
