@@ -27,7 +27,8 @@ beforeEach(() => {
 async function makeServer() {
   const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
   const { createDiagnosticLogger } = await import('../../packages/core/src/diagnostics/disconnect-log.js');
-  return buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { _testRunTasksOverride: mockedRunTasks });
+  const { createProjectContext } = await import('../../packages/core/src/project-context.js');
+  return buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { projectContext: createProjectContext(process.cwd()), _testRunTasksOverride: mockedRunTasks });
 }
 
 describe('unified response envelope size', () => {
