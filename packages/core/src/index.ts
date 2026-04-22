@@ -56,6 +56,10 @@ export { createProvider } from './provider.js';
 export { BatchCache } from './batch-cache.js';
 export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './batch-cache.js';
 
+// Project context
+export { createProjectContext } from './project-context.js';
+export type { ProjectContext } from './project-context.js';
+
 // Run tasks
 export { runTasks } from './run-tasks.js';
 export type { RunTasksOptions } from './run-tasks.js';
