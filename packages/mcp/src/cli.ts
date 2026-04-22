@@ -640,6 +640,12 @@ export function parseHttpFlags(args: string[]): { mode: 'http'; port?: number; b
 async function main() {
   const args = process.argv.slice(2);
 
+  if (args[0] === 'status') {
+    const { runStatusCli } = await import('./status-cli.js');
+    await runStatusCli(args.slice(1));
+    return;
+  }
+
   if (args[0] === '--help' || args[0] === '-h') {
     console.log('Usage: multi-model-agent serve [--http [--port N] [--bind ADDR]] [--config <path>]');
     process.exit(0);
