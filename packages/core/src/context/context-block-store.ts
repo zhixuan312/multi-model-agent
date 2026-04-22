@@ -123,6 +123,10 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     return this.entries.delete(id);
   }
 
+  get size(): number {
+    return this.entries.size;
+  }
+
   clear(): void {
     this.entries.clear();
   }

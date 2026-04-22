@@ -89,6 +89,10 @@ export class ClarificationStore {
     }
   }
 
+  get size(): number {
+    return this.sets.size;
+  }
+
   delete(id: string): boolean {
     return this.sets.delete(id);
   }
