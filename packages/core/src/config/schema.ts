@@ -70,6 +70,42 @@ const defaultsSchema = z.object({
   sandboxPolicy: 'cwd-only' as const,
 }));
 
+// Named constants are the single source of truth for transport defaults.
+// Each .default(() => ({...})) references the same constant so changing a
+// value here = one edit, not three. Zod 4 requires explicit defaults at each
+// wrapper level when the parent field is omitted; `.default({})` alone does
+// not cascade to fill in leaf defaults.
+const DEFAULT_TRANSPORT_AUTH = {
+  enabled: false,
+  tokenPath: '~/.multi-model/runtime/token',
+};
+
+const DEFAULT_TRANSPORT_HTTP = {
+  bind: '127.0.0.1',
+  port: 7312,
+  auth: DEFAULT_TRANSPORT_AUTH,
+  projectIdleEvictionMs: 60 * 60 * 1000,
+  projectCap: 50,
+  shutdownDrainMs: 30_000,
+};
+
+const httpTransportSchema = z.object({
+  bind: z.string().default(DEFAULT_TRANSPORT_HTTP.bind),
+  port: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.port),
+  auth: z.object({
+    enabled: z.boolean().default(DEFAULT_TRANSPORT_AUTH.enabled),
+    tokenPath: z.string().default(DEFAULT_TRANSPORT_AUTH.tokenPath),
+  }).default(() => DEFAULT_TRANSPORT_AUTH),
+  projectIdleEvictionMs: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.projectIdleEvictionMs),
+  projectCap: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.projectCap),
+  shutdownDrainMs: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.shutdownDrainMs),
+}).default(() => DEFAULT_TRANSPORT_HTTP);
+
+const transportSchema = z.object({
+  mode: z.enum(['stdio', 'http']).default('stdio'),
+  http: httpTransportSchema,
+}).default(() => ({ mode: 'stdio' as const, http: DEFAULT_TRANSPORT_HTTP }));
+
 export const multiModelConfigSchema = z.object({
   agents: z.object({
     standard: agentConfigSchema,
@@ -80,6 +116,7 @@ export const multiModelConfigSchema = z.object({
     log: z.boolean().default(false),
     logDir: z.string().min(1).optional(),
   }).optional(),
+  transport: transportSchema,
 });
 
 export interface ParsedConfigSuccess {

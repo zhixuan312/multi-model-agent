@@ -341,3 +341,35 @@ describe('agent config hostedTools validation', () => {
     expect(config.agents.standard.hostedTools).toEqual(['web_search', 'image_generation']);
   });
 });
+
+describe('transport config block', () => {
+  it('defaults to stdio when omitted', () => {
+    const cfg = parseConfig({ agents: { standard: { type: 'claude', model: 'x' }, complex: { type: 'claude', model: 'x' } } });
+    expect(cfg.transport).toBeDefined();
+    expect(cfg.transport.mode).toBe('stdio');
+    expect(cfg.transport.http.bind).toBe('127.0.0.1');
+    expect(cfg.transport.http.port).toBe(7312);
+    expect(cfg.transport.http.auth.enabled).toBe(false);
+    expect(cfg.transport.http.auth.tokenPath).toBe('~/.multi-model/runtime/token');
+    expect(cfg.transport.http.projectIdleEvictionMs).toBe(60 * 60 * 1000);
+    expect(cfg.transport.http.projectCap).toBe(50);
+    expect(cfg.transport.http.shutdownDrainMs).toBe(30_000);
+  });
+
+  it('accepts mode: http with overrides', () => {
+    const cfg = parseConfig({
+      agents: { standard: { type: 'claude', model: 'x' }, complex: { type: 'claude', model: 'x' } },
+      transport: { mode: 'http', http: { port: 9999 } },
+    });
+    expect(cfg.transport.mode).toBe('http');
+    expect(cfg.transport.http.port).toBe(9999);
+    expect(cfg.transport.http.bind).toBe('127.0.0.1'); // default preserved
+  });
+
+  it('rejects negative port', () => {
+    expect(() => parseConfig({
+      agents: { standard: { type: 'claude', model: 'x' }, complex: { type: 'claude', model: 'x' } },
+      transport: { mode: 'http', http: { port: -1 } },
+    })).toThrow();
+  });
+});
