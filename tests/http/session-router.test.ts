@@ -1,0 +1,64 @@
+import { describe, it, expect, beforeEach } from 'vitest';
+import { SessionRouter } from '../../packages/mcp/src/http/session-router.js';
+
+const fakeEntry = (_id: string) => ({
+  transport: { close: async () => {}, handleRequest: async () => {} } as any,
+  server: { close: async () => {} } as any,
+  projectContext: { cwd: '/tmp', activeSessions: new Set(), activeRequests: 0, pendingReservations: 0 } as any,
+  openedAt: Date.now(),
+});
+
+describe('SessionRouter', () => {
+  let router: SessionRouter;
+  beforeEach(() => { router = new SessionRouter(); });
+
+  it('set() and get() round-trip', () => {
+    router.set('s1', fakeEntry('s1'));
+    expect(router.get('s1')).toBeDefined();
+  });
+
+  it('get() on unknown sessionId returns undefined', () => {
+    expect(router.get('nope')).toBeUndefined();
+  });
+
+  it('remove() disposes and drops the entry', async () => {
+    const entry = fakeEntry('s1');
+    let closed = false;
+    entry.transport.close = async () => { closed = true; };
+    router.set('s1', entry);
+    await router.remove('s1');
+    expect(router.get('s1')).toBeUndefined();
+    expect(closed).toBe(true);
+  });
+
+  it('delete() drops the entry WITHOUT calling transport.close() (for use from onclose)', () => {
+    const entry = fakeEntry('s1');
+    let closed = false;
+    entry.transport.close = async () => { closed = true; };
+    router.set('s1', entry);
+    router.delete('s1');
+    expect(router.get('s1')).toBeUndefined();
+    expect(closed).toBe(false);
+  });
+
+  it('closeAll disposes every session', async () => {
+    let n = 0;
+    const mk = (id: string) => {
+      const e = fakeEntry(id);
+      e.transport.close = async () => { n += 1; };
+      return e;
+    };
+    router.set('s1', mk('s1'));
+    router.set('s2', mk('s2'));
+    await router.closeAll();
+    expect(n).toBe(2);
+    expect(router.size).toBe(0);
+  });
+
+  it('size reflects current entries', () => {
+    expect(router.size).toBe(0);
+    router.set('s1', fakeEntry('s1'));
+    router.set('s2', fakeEntry('s2'));
+    expect(router.size).toBe(2);
+  });
+});
