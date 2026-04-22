@@ -52,6 +52,10 @@ export { expandContextBlocks } from './context/expand-context-blocks.js';
 // Provider
 export { createProvider } from './provider.js';
 
+// Batch cache
+export { BatchCache } from './batch-cache.js';
+export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './batch-cache.js';
+
 // Run tasks
 export { runTasks } from './run-tasks.js';
 export type { RunTasksOptions } from './run-tasks.js';
