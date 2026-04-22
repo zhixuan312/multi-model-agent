@@ -29,7 +29,8 @@
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "bin": {
-    "multi-model-agent": "./dist/cli.js"
+    "multi-model-agent": "./dist/cli.js",
+    "mmagent": "./dist/cli.js"
   },
   "exports": {
     ".": {
