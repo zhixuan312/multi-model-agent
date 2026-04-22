@@ -623,16 +623,30 @@ export function __resetStdioLifecycleHandlersForTests(): void {
   installedLifecycleHandlers = null;
 }
 
+export function parseHttpFlags(args: string[]): { mode: 'http'; port?: number; bind?: string } | undefined {
+  if (!args.includes('--http')) return undefined;
+  const portIdx = args.indexOf('--port');
+  const bindIdx = args.indexOf('--bind');
+  let port: number | undefined;
+  if (portIdx >= 0 && args[portIdx + 1]) {
+    const n = Number.parseInt(args[portIdx + 1], 10);
+    if (!Number.isFinite(n) || n <= 0) throw new Error(`--port requires a positive integer, got: ${args[portIdx + 1]}`);
+    port = n;
+  }
+  const bind = bindIdx >= 0 ? args[bindIdx + 1] : undefined;
+  return { mode: 'http', port, bind };
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
   if (args[0] === '--help' || args[0] === '-h') {
-    console.log('Usage: multi-model-agent serve [--config <path>]');
+    console.log('Usage: multi-model-agent serve [--http [--port N] [--bind ADDR]] [--config <path>]');
     process.exit(0);
   }
 
   if (args[0] !== 'serve') {
-    console.error('Usage: multi-model-agent serve [--config <path>]');
+    console.error('Usage: multi-model-agent serve [--http [--port N] [--bind ADDR]] [--config <path>]');
     process.exit(1);
   }
 
@@ -644,6 +658,32 @@ async function main() {
     process.exit(1);
   }
 
+  const httpFlags = parseHttpFlags(args);
+  if (httpFlags) {
+    const effectiveConfig = {
+      ...config,
+      transport: {
+        mode: 'http' as const,
+        http: {
+          ...config.transport.http,
+          ...(httpFlags.port !== undefined ? { port: httpFlags.port } : {}),
+          ...(httpFlags.bind !== undefined ? { bind: httpFlags.bind } : {}),
+        },
+      },
+    };
+    const { startHttpDaemon } = await import('./http/transport.js');
+    await startHttpDaemon(effectiveConfig);
+    return;
+  }
+
+  if (config.transport.mode === 'http') {
+    // config says http mode even though CLI flag was absent
+    const { startHttpDaemon } = await import('./http/transport.js');
+    await startHttpDaemon(config);
+    return;
+  }
+
+  // stdio path — unchanged from today
   const enabled = config.diagnostics?.log ?? false;
   const logDir = config.diagnostics?.logDir;
   const logger = createDiagnosticLogger({ enabled, logDir });
