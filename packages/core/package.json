@@ -184,9 +184,45 @@
       "types": "./dist/executors/index.d.ts",
       "import": "./dist/executors/index.js"
     },
+    "./executors/delegate": {
+      "types": "./dist/executors/delegate.d.ts",
+      "import": "./dist/executors/delegate.js"
+    },
+    "./executors/audit": {
+      "types": "./dist/executors/audit.d.ts",
+      "import": "./dist/executors/audit.js"
+    },
+    "./executors/review": {
+      "types": "./dist/executors/review.d.ts",
+      "import": "./dist/executors/review.js"
+    },
+    "./executors/verify": {
+      "types": "./dist/executors/verify.d.ts",
+      "import": "./dist/executors/verify.js"
+    },
+    "./executors/debug": {
+      "types": "./dist/executors/debug.d.ts",
+      "import": "./dist/executors/debug.js"
+    },
+    "./executors/execute-plan": {
+      "types": "./dist/executors/execute-plan.d.ts",
+      "import": "./dist/executors/execute-plan.js"
+    },
+    "./executors/retry": {
+      "types": "./dist/executors/retry.d.ts",
+      "import": "./dist/executors/retry.js"
+    },
+    "./executors/types": {
+      "types": "./dist/executors/types.d.ts",
+      "import": "./dist/executors/types.js"
+    },
     "./executors/shared-compute": {
       "types": "./dist/executors/shared-compute.d.ts",
       "import": "./dist/executors/shared-compute.js"
+    },
+    "./tool-schemas": {
+      "types": "./dist/tool-schemas/index.d.ts",
+      "import": "./dist/tool-schemas/index.js"
     },
     "./tool-schemas/delegate": {
       "types": "./dist/tool-schemas/delegate.d.ts",

@@ -1,6 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import type { RequestContext } from './types.js';
 
-export type RawHandler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>) => Promise<void> | void;
+export type RawHandler = (req: IncomingMessage, res: ServerResponse, params: Record<string, string>, ctx: RequestContext) => Promise<void> | void;
 
 interface RouteEntry {
   handler: RawHandler;
