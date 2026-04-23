@@ -58,6 +58,9 @@ interface Entry {
    *  deterministic. A pure counter is strictly monotonic and unaffected
    *  by fake timers. */
   lastAccessTick: number;
+  /** Reference count — incremented by pin(), decremented by unpin(). Pinned
+   *  entries are excluded from LRU eviction. */
+  pinCount: number;
 }
 
 export interface InMemoryContextBlockStoreOptions {
@@ -95,7 +98,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
   register(content: string, opts: { id?: string } = {}): RegisteredBlock {
     const id = opts.id ?? randomUUID();
     const now = Date.now();
-    this.entries.set(id, { content, addedAtMs: now, lastAccessTick: ++this.tick });
+    this.entries.set(id, { content, addedAtMs: now, lastAccessTick: ++this.tick, pinCount: 0 });
     this.evictIfOverBound();
     return {
       id,
@@ -123,6 +126,25 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     return this.entries.delete(id);
   }
 
+  /** Increment the pin (reference) count for an entry. Pinned entries are
+   *  skipped during LRU eviction. No-op if the entry is unknown. */
+  pin(id: string): void {
+    const entry = this.entries.get(id);
+    if (entry) entry.pinCount += 1;
+  }
+
+  /** Decrement the pin count for an entry. No-op if the entry is unknown or
+   *  the count is already zero. */
+  unpin(id: string): void {
+    const entry = this.entries.get(id);
+    if (entry && entry.pinCount > 0) entry.pinCount -= 1;
+  }
+
+  /** Return the current pin count for an entry, or 0 if unknown. */
+  refcount(id: string): number {
+    return this.entries.get(id)?.pinCount ?? 0;
+  }
+
   get size(): number {
     return this.entries.size;
   }
@@ -136,13 +158,15 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
       let oldestId: string | undefined;
       let oldestTick = Infinity;
       for (const [id, entry] of this.entries) {
+        // Skip pinned entries — they are held by active BatchRegistry entries
+        if (entry.pinCount > 0) continue;
         if (entry.lastAccessTick < oldestTick) {
           oldestTick = entry.lastAccessTick;
           oldestId = id;
         }
       }
       if (oldestId) this.entries.delete(oldestId);
-      else break;
+      else break; // all entries pinned — cannot evict
     }
   }
 }
