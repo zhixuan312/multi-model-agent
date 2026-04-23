@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ProjectRegistry } from '../../packages/mcp/src/http/project-registry.js';
+import { ProjectRegistry } from '../../packages/server/src/http/project-registry.js';
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));

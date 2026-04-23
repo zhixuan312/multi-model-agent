@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLoopbackAddress } from '../../packages/mcp/src/http/loopback.js';
+import { isLoopbackAddress } from '../../packages/server/src/http/loopback.js';
 
 describe('isLoopbackAddress', () => {
   it.each([

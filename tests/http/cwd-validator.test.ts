@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { validateCwd } from '../../packages/mcp/src/http/cwd-validator.js';
+import { validateCwd } from '../../packages/server/src/http/cwd-validator.js';
 
 describe('validateCwd', () => {
   let tmp: string;

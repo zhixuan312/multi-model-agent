@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadToken, validateAuthHeader } from '../../packages/mcp/src/http/auth.js';
+import { loadToken, validateAuthHeader } from '../../packages/server/src/http/auth.js';
 
 describe('loadToken', () => {
   let tmp: string;
