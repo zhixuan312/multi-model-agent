@@ -175,6 +175,46 @@
     "./file-artifact-check": {
       "types": "./dist/file-artifact-check.d.ts",
       "import": "./dist/file-artifact-check.js"
+    },
+    "./executors": {
+      "types": "./dist/executors/index.d.ts",
+      "import": "./dist/executors/index.js"
+    },
+    "./executors/index": {
+      "types": "./dist/executors/index.d.ts",
+      "import": "./dist/executors/index.js"
+    },
+    "./executors/shared-compute": {
+      "types": "./dist/executors/shared-compute.d.ts",
+      "import": "./dist/executors/shared-compute.js"
+    },
+    "./tool-schemas/delegate": {
+      "types": "./dist/tool-schemas/delegate.d.ts",
+      "import": "./dist/tool-schemas/delegate.js"
+    },
+    "./tool-schemas/audit": {
+      "types": "./dist/tool-schemas/audit.d.ts",
+      "import": "./dist/tool-schemas/audit.js"
+    },
+    "./tool-schemas/review": {
+      "types": "./dist/tool-schemas/review.d.ts",
+      "import": "./dist/tool-schemas/review.js"
+    },
+    "./tool-schemas/verify": {
+      "types": "./dist/tool-schemas/verify.d.ts",
+      "import": "./dist/tool-schemas/verify.js"
+    },
+    "./tool-schemas/debug": {
+      "types": "./dist/tool-schemas/debug.d.ts",
+      "import": "./dist/tool-schemas/debug.js"
+    },
+    "./tool-schemas/execute-plan": {
+      "types": "./dist/tool-schemas/execute-plan.d.ts",
+      "import": "./dist/tool-schemas/execute-plan.js"
+    },
+    "./tool-schemas/retry": {
+      "types": "./dist/tool-schemas/retry.d.ts",
+      "import": "./dist/tool-schemas/retry.js"
     }
   },
   "scripts": {

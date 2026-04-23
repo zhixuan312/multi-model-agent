@@ -3,7 +3,6 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { randomUUID, createHash } from 'node:crypto';
 import { createRequire } from 'node:module';
 import { fileURLToPath } from 'url';
 import { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
@@ -17,15 +16,10 @@ import type {
   MultiModelConfig,
   TaskSpec,
   RunResult,
-  BatchTimings,
-  BatchProgress,
-  BatchAggregateCost,
-  AgentCapability,
   DiagnosticLogger,
   ProjectContext,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
-import { composeHeadline } from './headline.js';
 import {
   computeTimings,
   computeBatchProgress,
@@ -38,9 +32,9 @@ import { registerDebugTask } from './tools/debug-task.js';
 import { registerExecutePlan } from './tools/execute-plan.js';
 import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
-import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
-import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
 import { registerConfirmClarifications } from './tools/confirm-clarifications.js';
+import { executeDelegate } from '@zhixuan92/multi-model-agent-core/executors/index';
+import { buildExecutionContextForMcp } from './execution-context.js';
 
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
 
@@ -208,49 +202,18 @@ export function buildMcpServer(
           }
         : undefined;
 
-      // Intake pipeline: compile → infer → classify → resolve
-      const requestId = randomUUID();
-      const drafts = compileDelegateTasks(tasks as { prompt: string; done?: string; filePaths?: string[]; agentType?: string; contextBlockIds?: string[] }[], requestId);
-      const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
+      const ctx = buildExecutionContextForMcp(config, logger, projectContext, contextBlockStore);
+      const executorResult = await executeDelegate(
+        ctx,
+        { tasks },
+        {
+          injectDefaults,
+          runTasksOverride: runTasksImpl,
+          onProgress: sendProgress,
+        },
+      );
 
-      // Execute ready tasks through normal dispatch
-      let results: RunResult[] = [];
-      const readySpecs = intakeResult.ready.map(r => r.task);
-      const batchId = batchCache.remember(readySpecs.length > 0 ? readySpecs : (tasks as TaskSpec[]));
-
-      const batchStartMs = Date.now();
-      let batchAborted = false;
-      try {
-        if (readySpecs.length > 0) {
-          const resolvedTasks = injectDefaults(readySpecs);
-          results = await runTasksImpl(resolvedTasks, config, {
-            onProgress: sendProgress,
-            runtime: { contextBlockStore },
-          });
-          intakeResult.intakeProgress.executedDrafts = results.length;
-        }
-      } catch (err) {
-        batchAborted = true;
-        throw err;
-      } finally {
-        if (batchAborted) {
-          try { batchCache.abort(batchId); } catch { /* already terminal */ }
-        } else {
-          try { batchCache.complete(batchId, results); } catch { /* already terminal */ }
-        }
-      }
-      const wallClockMs = Date.now() - batchStartMs;
-
-      // Create clarification set if needed
-      let clarificationId: string | undefined;
-      if (intakeResult.clarifications.length > 0) {
-        const storedDrafts = intakeResult.clarifications.map(c => ({
-          draft: drafts.find(d => d.draftId === c.draftId)!,
-          taskIndex: c.taskIndex,
-          roundCount: 0,
-        }));
-        clarificationId = clarificationStore.create(storedDrafts, batchId);
-      }
+      const { results, batchId, tasks: readySpecs, wallClockMs, clarificationId, clarifications } = executorResult;
 
       // Apply auto-escape truncation
       const truncatedResults = truncateResults(
@@ -266,7 +229,7 @@ export function buildMcpServer(
         wallClockMs,
         parentModel: resolvedParentModel,
         clarificationId,
-        clarifications: intakeResult.clarifications.length > 0 ? intakeResult.clarifications : undefined,
+        clarifications: clarifications && clarifications.length > 0 ? clarifications : undefined,
       });
     }),
   );

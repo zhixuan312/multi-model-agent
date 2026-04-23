@@ -26,5 +26,6 @@ export interface ExecutorOutput {
   batchId: string;
   contextBlockId?: string;
   clarificationId?: string;
-  [key: string]: unknown;
+  wallClockMs?: number;
+  parentModel?: string;
 }
