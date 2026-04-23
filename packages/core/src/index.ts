@@ -128,6 +128,9 @@ export type {
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
+// Batch registry
+export * from './batch-registry.js';
+
 // Diagnostics
 export { createDiagnosticLogger } from './diagnostics/disconnect-log.js';
 export type {
