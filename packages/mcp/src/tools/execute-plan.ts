@@ -1,17 +1,14 @@
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
-import { runTasks, extractPlanSection } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import type { MultiModelConfig, ContextBlockStore, DiagnosticLogger, ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/executors/index';
 import {
   commonToolFields,
   buildUnifiedResponse,
-  buildRunTasksOptions,
   resolveParentModel,
-  autoRegisterContextBlock,
   withDiagnostics,
 } from './shared.js';
+import { buildExecutionContextForMcp, buildMinimalExecutionContext } from '../execution-context.js';
 
 export const executePlanSchema = z.object({
   tasks: z.array(
@@ -29,131 +26,45 @@ export const executePlanSchema = z.object({
 
 export type ExecutePlanParams = z.infer<typeof executePlanSchema>;
 
-function buildExecutePlanPrompt(fileContents: string, task: string, context?: string): string {
-  const parts = [
-    'Below are the plan and/or spec documents for this project:',
-    '',
-    '---',
-    fileContents,
-    '---',
-    '',
-    'Execute the following task from the documents above:',
-    '',
-    `Requested task: "${task}"`,
-  ];
-  if (context) {
-    parts.push('', `Additional context: ${context}`);
-  }
-  parts.push(
-    '',
-    'Find this task in the plan/spec documents above (not in any preceding context blocks),',
-    'understand its requirements, and implement it fully.',
-    'Follow any acceptance criteria, file paths, and constraints specified in the plan.',
-    'If you cannot find a unique matching task, report that no match was found and do not implement anything.',
-  );
-  return parts.join('\n');
-}
-
-export function registerExecutePlan(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
+export function registerExecutePlan(
+  server: McpServer,
+  config: MultiModelConfig,
+  logger: DiagnosticLogger,
+  contextBlockStore?: ContextBlockStore,
+  projectContext?: ProjectContext,
+) {
   server.tool(
     'execute_plan',
     'Execute tasks from a written plan/spec file. Pass task descriptors and file paths — the worker reads the plan, finds the matching task, and implements it. Multiple tasks execute in parallel. Preset: standard agent, full review. Use this when a plan file exists on disk; use delegate_tasks instead when context is inline/ad-hoc with no plan file. Returns contextBlockId in metadata for follow-up calls.',
     executePlanSchema.shape,
-    withDiagnostics('execute_plan', logger, (async (params: ExecutePlanParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
-      const filePaths = params.filePaths;
-      const validPaths = (filePaths ?? []).filter(p => p.trim().length > 0);
+    withDiagnostics('execute_plan', logger, (async (params: ExecutePlanParams) => {
+      const ctx = projectContext
+        ? buildExecutionContextForMcp(config, logger, projectContext, contextBlockStore ?? projectContext.contextBlocks)
+        : buildMinimalExecutionContext(config, logger, contextBlockStore);
+      const parentModel = resolveParentModel(config);
 
-      if (validPaths.length === 0) {
-        return {
-          content: [{ type: 'text' as const, text: 'Error: Provide filePaths with at least one plan or spec file' }],
-          isError: true,
-        };
-      }
-
-      // Read all plan/spec files
-      let fileContents: string;
-      try {
-        const contents = await Promise.all(
-          validPaths.map(async (fp) => {
-            const content = await readFile(fp, 'utf-8');
-            return `--- ${fp} ---\n${content}`;
-          }),
-        );
-        fileContents = contents.join('\n\n');
-      } catch (err) {
-        return {
-          content: [{ type: 'text' as const, text: `Error reading plan files: ${err instanceof Error ? err.message : String(err)}` }],
-          isError: true,
-        };
-      }
-
-      const baseTaskSpec: Partial<TaskSpec> = {
-        agentType: 'standard',
-        reviewPolicy: 'full',
-        briefQualityPolicy: 'off',
-        done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
-        tools: config.defaults?.tools ?? 'full',
-        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
-        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
-        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-        cwd: process.cwd(),
+      const result = await executeExecutePlan(ctx, {
+        tasks: params.tasks,
+        context: params.context,
+        filePaths: params.filePaths,
         contextBlockIds: params.contextBlockIds,
-        parentModel: resolveParentModel(config),
-        autoCommit: true,
-      };
-      const runtime = contextBlockStore ? { contextBlockStore } : undefined;
-      const parentModel = baseTaskSpec.parentModel;
+      });
 
-      try {
-        const tasks: TaskSpec[] = params.tasks.map(task => ({
-          ...baseTaskSpec,
-          prompt: buildExecutePlanPrompt(fileContents, task, params.context),
-        } as TaskSpec));
-
-        // Inject plan section context so spec reviewer checks implementation against the plan
-        for (let i = 0; i < tasks.length; i++) {
-          const section = await extractPlanSection(validPaths, params.tasks[i], baseTaskSpec.cwd);
-          if (section) {
-            tasks[i].planContext = section;
-          }
-        }
-
-        if (tasks.length === 1) {
-          const results = await runTasks(tasks, config, { ...runOptions, runtime });
-          const result = results[0];
-          if (!result) {
-            return { content: [{ type: 'text' as const, text: 'Error: task produced no result' }], isError: true };
-          }
-          const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-          return buildUnifiedResponse({
-            batchId: randomUUID(),
-            results,
-            tasks,
-            wallClockMs: 0,
-            parentModel,
-            contextBlockId: ctxId,
-          });
-        }
-
-        // Multiple tasks = fan out (parallel)
-        const startMs = Date.now();
-        const results = await runTasks(tasks, config, { ...runOptions, runtime });
-        const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-        return buildUnifiedResponse({
-          batchId: randomUUID(),
-          results,
-          tasks,
-          wallClockMs: Date.now() - startMs,
-          parentModel,
-          contextBlockId: ctxId,
-        });
-      } catch (err) {
+      if ('isError' in result) {
         return {
-          content: [{ type: 'text' as const, text: `Error: ${err instanceof Error ? err.message : String(err)}` }],
+          content: [{ type: 'text' as const, text: `Error: ${result.error}` }],
           isError: true,
         };
       }
+
+      return buildUnifiedResponse({
+        batchId: result.batchId,
+        results: result.results,
+        tasks: result.results.map(() => ({ prompt: '', agentType: 'standard' as const })),
+        wallClockMs: result.wallClockMs ?? 0,
+        parentModel,
+        contextBlockId: result.contextBlockId,
+      });
     })),
   );
 }
