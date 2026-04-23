@@ -141,6 +141,9 @@ export const multiModelConfigSchema = z.object({
   }).default(() => DEFAULT_SERVER),
 }).strict();
 
+/** Inferred type for the standalone server configuration block. */
+export type ServerConfig = z.infer<typeof serverConfigSchema>;
+
 export interface ParsedConfigSuccess {
   config: MultiModelConfig
   success: true

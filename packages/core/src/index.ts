@@ -1,6 +1,7 @@
 // Config
-export { loadConfigFromFile } from './config/load.js';
-export { parseConfig, multiModelConfigSchema } from './config/schema.js';
+export { loadConfigFromFile, loadAuthToken } from './config/load.js';
+export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
+export type { ServerConfig } from './config/schema.js';
 
 // Types (re-export all)
 export type {
