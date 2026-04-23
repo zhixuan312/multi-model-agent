@@ -6,6 +6,7 @@ const fakeEntry = (_id: string) => ({
   server: { close: async () => {} } as any,
   projectContext: { cwd: '/tmp', activeSessions: new Set(), activeRequests: 0, pendingReservations: 0 } as any,
   openedAt: Date.now(),
+  lastRequestAt: Date.now(),
 });
 
 describe('SessionRouter', () => {
@@ -60,5 +61,31 @@ describe('SessionRouter', () => {
     router.set('s1', fakeEntry('s1'));
     router.set('s2', fakeEntry('s2'));
     expect(router.size).toBe(2);
+  });
+
+  it('touchSession updates lastRequestAt', () => {
+    const entry = fakeEntry('s1');
+    entry.lastRequestAt = 0;
+    router.set('s1', entry);
+    router.touchSession('s1');
+    expect(entry.lastRequestAt).toBeGreaterThan(0);
+  });
+
+  it('evictIdleSessions removes stale sessions and skips fresh ones', async () => {
+    const fresh = fakeEntry('fresh');
+    fresh.lastRequestAt = Date.now();
+    const stale = fakeEntry('stale');
+    stale.lastRequestAt = Date.now() - 10_000;
+    let freshClosed = false, staleClosed = false;
+    fresh.transport.close = async () => { freshClosed = true; };
+    stale.transport.close = async () => { staleClosed = true; };
+    router.set('fresh', fresh);
+    router.set('stale', stale);
+    const evicted: string[] = [];
+    await router.evictIdleSessions(5_000, { onEvict: (id) => evicted.push(id) });
+    expect(evicted).toEqual(['stale']);
+    expect(staleClosed).toBe(true);
+    expect(freshClosed).toBe(false);
+    expect(router.size).toBe(1);
   });
 });

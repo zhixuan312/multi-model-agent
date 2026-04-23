@@ -24,6 +24,8 @@ export interface TestDaemonOptions {
   auth?: { enabled: boolean; tokenPath: string };
   /** Extra top-level config overrides (merged shallowly) */
   extras?: Record<string, unknown>;
+  /** Extra http block overrides (merged into transport.http) */
+  httpExtras?: Record<string, unknown>;
 }
 
 export async function startTestDaemon(options?: TestDaemonOptions): Promise<DaemonHandle & { stop(): Promise<void> }> {
@@ -42,6 +44,7 @@ export async function startTestDaemon(options?: TestDaemonOptions): Promise<Daem
         projectCap: 10,
         shutdownDrainMs: 1000,
         ...(options?.auth ? { auth: options.auth } : {}),
+        ...options?.httpExtras,
       },
     },
     ...options?.extras,

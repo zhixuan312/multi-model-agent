@@ -193,6 +193,7 @@ export interface MultiModelConfig {
       projectIdleEvictionMs: number
       projectCap: number
       shutdownDrainMs: number
+      sessionIdleTimeoutMs: number
     }
   }
 }

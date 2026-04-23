@@ -7,6 +7,7 @@ export interface SessionEntry {
   server: McpServer;
   projectContext: ProjectContext;
   openedAt: number;
+  lastRequestAt: number;
 }
 
 export class SessionRouter {
@@ -38,6 +39,25 @@ export class SessionRouter {
     this.map.delete(sessionId);
     try { await entry.transport.close(); } catch { /* best-effort */ }
     try { await entry.server.close(); } catch { /* best-effort */ }
+  }
+
+  touchSession(sessionId: string): void {
+    const entry = this.map.get(sessionId);
+    if (entry) entry.lastRequestAt = Date.now();
+  }
+
+  async evictIdleSessions(timeoutMs: number, options?: {
+    onEvict?: (sessionId: string, entry: SessionEntry) => void;
+  }): Promise<void> {
+    const now = Date.now();
+    const victims: Array<{ id: string; entry: SessionEntry }> = [];
+    for (const [id, entry] of this.map.entries()) {
+      if (now - entry.lastRequestAt > timeoutMs) victims.push({ id, entry });
+    }
+    for (const { id, entry } of victims) {
+      options?.onEvict?.(id, entry);
+      await this.remove(id);
+    }
   }
 
   async closeAll(): Promise<void> {

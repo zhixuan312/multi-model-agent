@@ -56,6 +56,17 @@ export async function startHttpDaemon(
   registry.startEvictionTimer();
 
   const router = new SessionRouter();
+  const SESSION_EVICTION_INTERVAL_MS = 60_000; // check every 1 min
+  const sessionEvictionTimer = setInterval(() => {
+    void router.evictIdleSessions(httpConfig.sessionIdleTimeoutMs, {
+      onEvict: (sessionId, entry) => {
+        const durationMs = Date.now() - entry.openedAt;
+        registry.detachSession(entry.projectContext.cwd, sessionId);
+        logger.sessionClose({ sessionId, cwd: entry.projectContext.cwd, reason: 'session_expired', durationMs });
+      },
+    });
+  }, SESSION_EVICTION_INTERVAL_MS);
+  sessionEvictionTimer.unref?.();
   const statusHandler = buildStatusHandler({ registry, router, config, logger, token });
 
   const handleMcp = async (req: http.IncomingMessage, res: http.ServerResponse, body: Buffer): Promise<void> => {
@@ -101,6 +112,7 @@ export async function startHttpDaemon(
         return;
       }
       entry.projectContext.lastSeenAt = Date.now();
+      router.touchSession(existingSessionId);
       try {
         await entry.transport.handleRequest(req, res, parsedBody);
       } catch (err) {
@@ -149,7 +161,7 @@ export async function startHttpDaemon(
         sessionIdCaptured = sessionId;
         registry.attachSession(canonicalCwd, sessionId);
         const openedAt = Date.now();
-        const entry: SessionEntry = { transport, server: mcpServer, projectContext, openedAt };
+        const entry: SessionEntry = { transport, server: mcpServer, projectContext, openedAt, lastRequestAt: openedAt };
         router.set(sessionId, entry);
         logger.sessionOpen({ sessionId, cwd: canonicalCwd, remoteAddr: req.socket.remoteAddress });
       },
@@ -226,6 +238,7 @@ export async function startHttpDaemon(
   }
 
   const stop = async (): Promise<void> => {
+    clearInterval(sessionEvictionTimer);
     registry.stopEvictionTimer();
     await router.closeAll();
     await new Promise<void>((resolve) => httpServer.close(() => resolve()));

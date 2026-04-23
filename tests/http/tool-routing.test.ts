@@ -79,6 +79,33 @@ describe('HTTP tool routing end-to-end', () => {
     }
   });
 
+  it('idle sessions are detached server-side after sessionIdleTimeoutMs', async () => {
+    // Start a daemon with a very short session timeout.
+    const d = await startTestDaemon({ httpExtras: { sessionIdleTimeoutMs: 500 } });
+    handles.push(d);
+    const { cwd, cleanup } = createTempProject();
+    cleanups.push(cleanup);
+    const c = await connectTestClient({ url: d.url, cwd });
+    // Register a context block, then stop interacting.
+    await c.client.callTool({ name: 'register_context_block', arguments: { id: 'idle-test', content: 'x' } });
+    // Do NOT call c.close() — simulate a client that went away without terminateSession.
+    // Wait past the 500ms timeout so the session becomes stale.
+    await new Promise(r => setTimeout(r, 600));
+    // Manually trigger eviction (the real timer runs every 60s, which is too slow for tests).
+    await d.router.evictIdleSessions(500, {
+      onEvict: (sessionId, entry) => {
+        d.registry.detachSession(entry.projectContext.cwd, sessionId);
+        d.logger.sessionClose({ sessionId, cwd: entry.projectContext.cwd, reason: 'session_expired', durationMs: Date.now() - entry.openedAt });
+      },
+    });
+    // Give onclose a tick to propagate.
+    await new Promise(r => setTimeout(r, 100));
+    const s = await (await fetch(`${d.url}/status`)).json();
+    expect(s.projects.length).toBe(1);
+    expect(s.projects[0].activeSessions).toBe(0);  // session was detached
+    expect(s.projects[0].contextBlocksSize).toBe(1);  // project state survives
+  });
+
   it('client disconnect + reconnect preserves project state (the bug-fix verification)', async () => {
     // This is the end-to-end verification that the daemon survives a client
     // going away and coming back — the exact failure mode that motivated this

@@ -87,6 +87,7 @@ const DEFAULT_TRANSPORT_HTTP = {
   projectIdleEvictionMs: 60 * 60 * 1000,
   projectCap: 50,
   shutdownDrainMs: 30_000,
+  sessionIdleTimeoutMs: 30 * 60 * 1000,
 };
 
 const httpTransportSchema = z.object({
@@ -99,6 +100,7 @@ const httpTransportSchema = z.object({
   projectIdleEvictionMs: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.projectIdleEvictionMs),
   projectCap: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.projectCap),
   shutdownDrainMs: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.shutdownDrainMs),
+  sessionIdleTimeoutMs: z.number().int().positive().default(DEFAULT_TRANSPORT_HTTP.sessionIdleTimeoutMs),
 }).default(() => DEFAULT_TRANSPORT_HTTP);
 
 const transportSchema = z.object({
