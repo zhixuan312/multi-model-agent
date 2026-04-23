@@ -1,17 +1,14 @@
 import { z } from 'zod';
-import { randomUUID } from 'node:crypto';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
-import type { MultiModelConfig, TaskSpec, ContextBlockStore, DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import type { MultiModelConfig, ContextBlockStore, DiagnosticLogger, ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import { executeDebug } from '@zhixuan92/multi-model-agent-core/executors/index';
 import {
   commonToolFields,
   buildUnifiedResponse,
-  buildFilePathsPrompt,
-  buildRunTasksOptions,
   resolveParentModel,
-  autoRegisterContextBlock,
   withDiagnostics,
 } from './shared.js';
+import { buildExecutionContextForMcp, buildMinimalExecutionContext } from '../execution-context.js';
 
 export const debugTaskSchema = z.object({
   problem: z.string().describe('What is broken'),
@@ -26,49 +23,39 @@ export const debugTaskSchema = z.object({
 
 export type DebugTaskParams = z.infer<typeof debugTaskSchema>;
 
-export function registerDebugTask(server: McpServer, config: MultiModelConfig, logger: DiagnosticLogger, contextBlockStore?: ContextBlockStore) {
+export function registerDebugTask(
+  server: McpServer,
+  config: MultiModelConfig,
+  logger: DiagnosticLogger,
+  contextBlockStore?: ContextBlockStore,
+  projectContext?: ProjectContext,
+) {
   server.tool(
     'debug_task',
     'Debug a problem with hypothesis-driven investigation. Always single-task. Preset: complex agent, 1 review round.',
     debugTaskSchema.shape,
-    withDiagnostics('debug_task', logger, (async (params: DebugTaskParams, extra) => {
-      const runOptions = buildRunTasksOptions(extra);
-      const parts: string[] = [`Debug this problem:\n\n${params.problem}`];
-      if (params.context) parts.push(`Context: ${params.context}`);
-      if (params.hypothesis) parts.push(`Initial hypothesis: ${params.hypothesis}`);
-      const fileSection = buildFilePathsPrompt(params.filePaths);
-      if (fileSection) parts.push(fileSection);
-      parts.push('Use hypothesis-driven debugging: identify root cause, propose fix, verify.');
-      const prompt = parts.join('\n\n');
-
-      const taskSpec: Partial<TaskSpec> = {
-        agentType: 'complex',
-        reviewPolicy: 'full',
-        briefQualityPolicy: 'off',
-        done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
-        maxReviewRounds: 1,
-        tools: config.defaults?.tools ?? 'full',
-        timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
-        maxCostUSD: config.defaults?.maxCostUSD ?? 10,
-        sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-        cwd: process.cwd(),
-        contextBlockIds: params.contextBlockIds,
-        parentModel: resolveParentModel(config),
-        autoCommit: true,
-      };
-      const runtime = contextBlockStore ? { contextBlockStore } : undefined;
-      const parentModel = taskSpec.parentModel;
+    withDiagnostics('debug_task', logger, (async (params: DebugTaskParams) => {
+      const ctx = projectContext
+        ? buildExecutionContextForMcp(config, logger, projectContext, contextBlockStore ?? projectContext.contextBlocks)
+        : buildMinimalExecutionContext(config, logger, contextBlockStore);
+      const parentModel = resolveParentModel(config);
 
       try {
-        const results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { ...runOptions, runtime });
-        const ctxId = autoRegisterContextBlock(results, contextBlockStore);
+        const result = await executeDebug(ctx, {
+          problem: params.problem,
+          context: params.context,
+          hypothesis: params.hypothesis,
+          filePaths: params.filePaths,
+          contextBlockIds: params.contextBlockIds,
+        });
+
         return buildUnifiedResponse({
-          batchId: randomUUID(),
-          results,
-          tasks: [{ ...taskSpec, prompt } as TaskSpec],
-          wallClockMs: 0,
+          batchId: result.batchId,
+          results: result.results,
+          tasks: result.results.map(() => ({ prompt: '', agentType: 'complex' as const })),
+          wallClockMs: result.wallClockMs ?? 0,
           parentModel,
-          contextBlockId: ctxId,
+          contextBlockId: result.contextBlockId,
         });
       } catch (err) {
         return {
