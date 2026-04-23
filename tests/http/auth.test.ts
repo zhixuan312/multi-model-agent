@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { loadToken, validateAuthHeader } from '../../packages/server/src/http/auth.js';
+import { loadToken, validateAuthHeader, validateBearerHeader } from '../../packages/server/src/http/auth.js';
 
 describe('loadToken', () => {
   let tmp: string;
@@ -54,6 +54,23 @@ describe('loadToken', () => {
       (process.stderr as NodeJS.WriteStream).write = origWrite;
     }
   });
+
+  it('MMAGENT_AUTH_TOKEN env override wins over file contents', () => {
+    const f = path.join(tmp, 'token-env');
+    fs.writeFileSync(f, 'file-token\n', { mode: 0o600 });
+    const prev = process.env['MMAGENT_AUTH_TOKEN'];
+    process.env['MMAGENT_AUTH_TOKEN'] = 'env-override-token';
+    try {
+      const tok = loadToken(f);
+      expect(tok).toBe('env-override-token');
+    } finally {
+      if (prev === undefined) {
+        delete process.env['MMAGENT_AUTH_TOKEN'];
+      } else {
+        process.env['MMAGENT_AUTH_TOKEN'] = prev;
+      }
+    }
+  });
 });
 
 describe('validateAuthHeader', () => {
@@ -72,5 +89,20 @@ describe('validateAuthHeader', () => {
   });
   it('is case-insensitive on scheme', () => {
     expect(validateAuthHeader('bearer abc', 'abc').ok).toBe(true);
+  });
+  it('uses timingSafeEqual (tokens of different length → mismatch, not throw)', () => {
+    expect(validateAuthHeader('Bearer short', 'a-much-longer-expected-token').ok).toBe(false);
+  });
+});
+
+describe('validateBearerHeader', () => {
+  it('returns true for valid bearer token', () => {
+    expect(validateBearerHeader('Bearer mytoken', 'mytoken')).toBe(true);
+  });
+  it('returns false for wrong token', () => {
+    expect(validateBearerHeader('Bearer bad', 'mytoken')).toBe(false);
+  });
+  it('returns false for missing header', () => {
+    expect(validateBearerHeader(undefined, 'mytoken')).toBe(false);
   });
 });
