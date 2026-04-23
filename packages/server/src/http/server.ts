@@ -1,4 +1,7 @@
 import { createServer } from 'node:http';
+import { readFileSync } from 'node:fs';
+import { fileURLToPath } from 'node:url';
+import { join, dirname } from 'node:path';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import { Router } from './router.js';
@@ -10,6 +13,21 @@ import { isLoopbackAddress } from './loopback.js';
 import type { RequestContext } from './types.js';
 import type { ProjectRegistry } from './project-registry.js';
 
+/** Server package version — read once at module load time from package.json. */
+function readServerVersion(): string {
+  try {
+    const thisDir = dirname(fileURLToPath(import.meta.url));
+    // Walk up from src/http/ to packages/server/
+    const pkgPath = join(thisDir, '..', '..', 'package.json');
+    const pkg = JSON.parse(readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
+
+const SERVER_VERSION = readServerVersion();
+
 export interface RunningServer {
   port: number;
   stop(): Promise<void>;
@@ -17,6 +35,8 @@ export interface RunningServer {
   batchRegistry: BatchRegistry;
   /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
   projectRegistry: ProjectRegistry;
+  /** Wall-clock ms when the server finished starting (Date.now()). Used for uptimeMs in /status. */
+  serverStartedAt: number;
 }
 
 /** Routes where the loopback guard is enforced. */
@@ -139,6 +159,19 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   // Register control handlers (Phase 7)
   await registerControlHandlers(router, config, batchRegistry, projectRegistry);
 
+  // GET /status — operator introspection (registered after registries are ready)
+  // Capture serverStartedAt now (after all setup, before listen) so uptimeMs reflects
+  // time since the server was fully initialised.
+  const serverStartedAt = Date.now();
+  const { buildStatusHandler } = await import('./handlers/introspection/status.js');
+  router.register('GET', '/status', buildStatusHandler({
+    batchRegistry,
+    projectRegistry,
+    serverStartedAt,
+    bind: config.server.bind,
+    version: SERVER_VERSION,
+  }));
+
   const server = createServer((req, res) => {
     void handleRequest(router, token, req, res, config);
   });
@@ -155,6 +188,7 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
     stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
     batchRegistry,
     projectRegistry,
+    serverStartedAt,
   };
 }
 
