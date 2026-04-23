@@ -3,6 +3,19 @@ import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
 /**
+ * Load the auth token for the HTTP server.
+ * If `MMAGENT_AUTH_TOKEN` is set in the environment, it wins over any file.
+ * Otherwise reads and returns the file at `opts.tokenFile`.
+ */
+export function loadAuthToken(opts: { tokenFile: string }): string {
+  const envToken = process.env['MMAGENT_AUTH_TOKEN'];
+  if (envToken && envToken.length > 0) {
+    return envToken;
+  }
+  return fs.readFileSync(opts.tokenFile, 'utf-8').trim();
+}
+
+/**
  * Warn if any openai-compatible agent in the parsed config carries an
  * inline `apiKey` instead of using `apiKeyEnv`. The schema permits both,
  * but storing a plaintext API key in a config file that may end up in a

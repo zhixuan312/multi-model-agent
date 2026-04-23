@@ -181,19 +181,22 @@ export interface MultiModelConfig {
   clarifications?: {
     maxRoundsPerDraft?: number
   }
-  transport: {
-    mode: 'stdio' | 'http'
-    http: {
-      bind: string
-      port: number
-      auth: {
-        enabled: boolean
-        tokenPath: string
-      }
-      projectIdleEvictionMs: number
+  server: {
+    bind: string
+    port: number
+    auth: {
+      tokenFile: string
+    }
+    limits: {
+      maxBodyBytes: number
+      batchTtlMs: number
+      idleProjectTimeoutMs: number
+      clarificationTimeoutMs: number
       projectCap: number
+      maxBatchCacheSize: number
+      maxContextBlockBytes: number
+      maxContextBlocksPerProject: number
       shutdownDrainMs: number
-      sessionIdleTimeoutMs: number
     }
   }
 }
