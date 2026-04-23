@@ -116,3 +116,42 @@ describe('clarification transitions', () => {
     vi.useRealTimers();
   });
 });
+
+describe('TTL expiry sweep', () => {
+  it('complete batches transition to expired after batchTtlMs', () => {
+    vi.useFakeTimers();
+    const reg = new BatchRegistry({ batchTtlMs: 1000, clarificationTimeoutMs: 60_000 });
+    reg.register(makeEntry('b7'));
+    reg.complete('b7', {});
+    vi.setSystemTime(Date.now() + 2000);
+    reg.runExpirySweep();
+    expect(reg.get('b7')?.state).toBe('expired');
+    vi.useRealTimers();
+  });
+
+  it('failed batches also transition to expired after batchTtlMs', () => {
+    vi.useFakeTimers();
+    const reg = new BatchRegistry({ batchTtlMs: 1000, clarificationTimeoutMs: 60_000 });
+    reg.register(makeEntry('b7a'));
+    reg.fail('b7a', { code: 'E', message: 'boom' });
+    vi.setSystemTime(Date.now() + 2000);
+    reg.runExpirySweep();
+    expect(reg.get('b7a')?.state).toBe('expired');
+    vi.useRealTimers();
+  });
+
+  it('expired batches are deleted on the next sweep cycle', () => {
+    const reg = new BatchRegistry({ batchTtlMs: 1000, clarificationTimeoutMs: 60_000 });
+    // set up an already-expired entry
+    reg.register(makeEntry('b7b', { state: 'expired', stateChangedAt: Date.now() - 10_000 }));
+    reg.runExpirySweep();
+    expect(reg.get('b7b')).toBeUndefined();
+  });
+
+  it('expired state never re-transitions via complete()', () => {
+    const reg = new BatchRegistry({ batchTtlMs: 1000, clarificationTimeoutMs: 60_000 });
+    reg.register(makeEntry('b7c', { state: 'expired' }));
+    reg.complete('b7c', {}); // no-op per idempotency
+    expect(reg.get('b7c')?.state).toBe('expired');
+  });
+});
