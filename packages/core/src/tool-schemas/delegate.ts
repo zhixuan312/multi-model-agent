@@ -24,7 +24,7 @@ const taskSchema = z.object({
 
 export const inputSchema = z.object({
   tasks: z.array(taskSchema).describe('Array of tasks to execute in parallel'),
-});
+}).strict();
 
 export type Input = z.infer<typeof inputSchema>;
 
