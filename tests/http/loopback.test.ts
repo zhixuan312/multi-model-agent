@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLoopbackAddress } from '../../packages/server/src/http/loopback.js';
+import { isLoopbackAddress, shouldRejectNonLoopback } from '../../packages/server/src/http/loopback.js';
 
 describe('isLoopbackAddress', () => {
   it.each([
@@ -19,5 +19,23 @@ describe('isLoopbackAddress', () => {
     [undefined, false],
   ])('%j → %s', (input, expected) => {
     expect(isLoopbackAddress(input as string | undefined)).toBe(expected);
+  });
+});
+
+describe('shouldRejectNonLoopback', () => {
+  it('returns false for loopback addresses (should NOT reject)', () => {
+    expect(shouldRejectNonLoopback('127.0.0.1')).toBe(false);
+    expect(shouldRejectNonLoopback('::1')).toBe(false);
+    expect(shouldRejectNonLoopback('localhost')).toBe(false);
+  });
+
+  it('returns true for non-loopback addresses (should reject)', () => {
+    expect(shouldRejectNonLoopback('192.168.1.1')).toBe(true);
+    expect(shouldRejectNonLoopback('10.0.0.1')).toBe(true);
+    expect(shouldRejectNonLoopback('2001:db8::1')).toBe(true);
+  });
+
+  it('returns true for undefined address (should reject)', () => {
+    expect(shouldRejectNonLoopback(undefined)).toBe(true);
   });
 });

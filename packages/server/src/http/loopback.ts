@@ -29,3 +29,13 @@ export function isLoopbackAddress(addr: string | undefined): boolean {
   }
   return false;
 }
+
+/**
+ * Returns true iff the request should be rejected because it came from a
+ * non-loopback address on a loopback-only endpoint.
+ *
+ * @param remoteAddress The socket remote address (req.socket?.remoteAddress)
+ */
+export function shouldRejectNonLoopback(remoteAddress: string | undefined): boolean {
+  return !isLoopbackAddress(remoteAddress);
+}
