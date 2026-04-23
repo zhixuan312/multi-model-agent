@@ -17,22 +17,22 @@ describe('createProjectContext', () => {
     expect(pc.pendingReservations).toBe(0);
   });
 
-  it('sets createdAt and lastSeenAt to now', () => {
+  it('sets createdAt and lastActivityAt to now', () => {
     const before = Date.now();
     const pc = createProjectContext('/tmp/abc');
     const after = Date.now();
     expect(pc.createdAt).toBeGreaterThanOrEqual(before);
     expect(pc.createdAt).toBeLessThanOrEqual(after);
-    expect(pc.lastSeenAt).toBe(pc.createdAt);
+    expect(pc.lastActivityAt).toBe(pc.createdAt);
   });
 
-  it('has mutable activeRequests, pendingReservations, lastSeenAt', () => {
+  it('has mutable activeRequests, pendingReservations, lastActivityAt', () => {
     const pc = createProjectContext('/tmp/abc');
     pc.activeRequests = 5;
     pc.pendingReservations = 2;
-    pc.lastSeenAt = 12345;
+    pc.lastActivityAt = 12345;
     expect(pc.activeRequests).toBe(5);
     expect(pc.pendingReservations).toBe(2);
-    expect(pc.lastSeenAt).toBe(12345);
+    expect(pc.lastActivityAt).toBe(12345);
   });
 });

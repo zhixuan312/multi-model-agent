@@ -1,4 +1,4 @@
-import { createProjectContext, type ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import { createProjectContext, type ProjectContext, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import { validateCwd } from './cwd-validator.js';
 
 export type ReserveError = 'project_cap' | 'invalid_cwd' | 'missing_cwd' | 'cwd_not_dir';
@@ -51,7 +51,7 @@ export class ProjectRegistry {
     const existing = this.map.get(key);
     if (existing) {
       existing.pendingReservations += 1;
-      existing.lastSeenAt = Date.now();
+      existing.lastActivityAt = Date.now();
       return { ok: true, projectContext: existing, created: false };
     }
     if (this.map.size >= this.cap) {
@@ -73,7 +73,7 @@ export class ProjectRegistry {
     if (!pc) throw new Error(`attachSession: no project for ${canonicalCwd} (did you pass the raw cwd instead of projectContext.cwd?)`);
     pc.activeSessions.add(sessionId);
     if (pc.pendingReservations > 0) pc.pendingReservations -= 1;
-    pc.lastSeenAt = Date.now();
+    pc.lastActivityAt = Date.now();
   }
 
   /** Detach a session. `canonicalCwd` must match `projectContext.cwd`. No-op if unknown. */
@@ -81,7 +81,7 @@ export class ProjectRegistry {
     const pc = this.map.get(canonicalCwd);
     if (!pc) return;
     pc.activeSessions.delete(sessionId);
-    pc.lastSeenAt = Date.now();
+    pc.lastActivityAt = Date.now();
   }
 
   /** Called if attachSession never fires. `canonicalCwd` must match `projectContext.cwd`. */
@@ -89,7 +89,7 @@ export class ProjectRegistry {
     const pc = this.map.get(canonicalCwd);
     if (!pc) return;
     if (pc.pendingReservations > 0) pc.pendingReservations -= 1;
-    pc.lastSeenAt = Date.now();
+    pc.lastActivityAt = Date.now();
   }
 
   /** Look up a project by its canonical cwd. */
@@ -105,6 +105,21 @@ export class ProjectRegistry {
     yield* this.map.entries();
   }
 
+  /**
+   * Returns true if the project context is idle and eligible for eviction.
+   * Gates on: no active HTTP requests, no active batches in the registry,
+   * no active sessions, no pending reservations, and idle for at least idleTimeoutMs.
+   */
+  isIdleFor(pc: ProjectContext, now: number, idleTimeoutMs: number, batchRegistry: BatchRegistry): boolean {
+    return (
+      pc.activeRequests === 0 &&
+      batchRegistry.countActiveForProject(pc.cwd) === 0 &&
+      pc.activeSessions.size === 0 &&
+      pc.pendingReservations === 0 &&
+      (now - pc.lastActivityAt) > idleTimeoutMs
+    );
+  }
+
   evictIdle(): void {
     const now = Date.now();
     const victims: string[] = [];
@@ -113,7 +128,7 @@ export class ProjectRegistry {
         pc.activeSessions.size === 0 &&
         pc.activeRequests === 0 &&
         pc.pendingReservations === 0 &&
-        now - pc.lastSeenAt > this.idleEvictionMs
+        now - pc.lastActivityAt > this.idleEvictionMs
       ) {
         victims.push(cwd);
       }
@@ -124,7 +139,7 @@ export class ProjectRegistry {
       pc.batchCache.clear();
       pc.clarifications.clear();
       this.map.delete(cwd);
-      this.onProjectEvicted?.(cwd, now - pc.lastSeenAt);
+      this.onProjectEvicted?.(cwd, now - pc.lastActivityAt);
     }
   }
 
