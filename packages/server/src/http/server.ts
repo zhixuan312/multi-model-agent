@@ -1,6 +1,6 @@
 import { createServer } from 'node:http';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import { Router } from './router.js';
 import { sendError, sendJson } from './errors.js';
 import { readBody } from './middleware/body-reader.js';
@@ -8,10 +8,15 @@ import { loadToken, validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
 import { isLoopbackAddress } from './loopback.js';
 import type { RequestContext } from './types.js';
+import type { ProjectRegistry } from './project-registry.js';
 
 export interface RunningServer {
   port: number;
   stop(): Promise<void>;
+  /** Shared BatchRegistry — exposed for testing and introspection handlers. */
+  batchRegistry: BatchRegistry;
+  /** Shared ProjectRegistry — exposed for testing and introspection handlers. */
+  projectRegistry: ProjectRegistry;
 }
 
 /** Routes where the loopback guard is enforced. */
@@ -21,13 +26,21 @@ const LOOPBACK_ONLY_PATHS = new Set(['/health', '/status']);
 const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
-const CWD_REQUIRED_PATHS = new Set(['/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry']);
+const CWD_REQUIRED_PATHS = new Set([
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry',
+  '/context-blocks',
+]);
 
 /**
  * Registers tool handlers (POST /delegate, /audit, /review, /verify, /debug, /execute-plan, /retry).
  * Imported dynamically to avoid circular-dependency issues and to keep startServer lean.
  */
-async function registerToolHandlers(router: Router, config: ServerConfig): Promise<void> {
+async function registerToolHandlers(
+  router: Router,
+  config: ServerConfig,
+  batchRegistry: BatchRegistry,
+  projectRegistry: ProjectRegistry,
+): Promise<void> {
   const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
   const { buildAuditHandler } = await import('./handlers/tools/audit.js');
   const { buildReviewHandler } = await import('./handlers/tools/review.js');
@@ -35,20 +48,7 @@ async function registerToolHandlers(router: Router, config: ServerConfig): Promi
   const { buildDebugHandler } = await import('./handlers/tools/debug.js');
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
-  const { BatchRegistry, createProjectContext } = await import('@zhixuan92/multi-model-agent-core');
-  const { ProjectRegistry } = await import('./project-registry.js');
   const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
-
-  const batchRegistry = new BatchRegistry({
-    batchTtlMs: config.server.limits.batchTtlMs,
-    clarificationTimeoutMs: config.server.limits.clarificationTimeoutMs,
-  });
-
-  const projectRegistry = new ProjectRegistry({
-    cap: config.server.limits.projectCap,
-    idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
-    evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
-  });
 
   const logger = createDiagnosticLogger({ enabled: false });
 
@@ -89,10 +89,45 @@ async function registerToolHandlers(router: Router, config: ServerConfig): Promi
   router.register('POST', '/retry', buildRetryHandler(deps));
 }
 
+/**
+ * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks,
+ * POST /clarifications/confirm).
+ */
+async function registerControlHandlers(
+  router: Router,
+  config: ServerConfig,
+  batchRegistry: BatchRegistry,
+  projectRegistry: ProjectRegistry,
+): Promise<void> {
+  const { buildBatchHandler } = await import('./handlers/control/batch.js');
+  const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
+  const { buildClarificationsHandler } = await import('./handlers/control/clarifications.js');
+
+  router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
+  router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
+  router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
+  router.register('POST', '/clarifications/confirm', buildClarificationsHandler({ batchRegistry }));
+}
+
 export async function startServer(config: ServerConfig): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
   const router = new Router();
+
+  // ── Create shared registries ───────────────────────────────────────────────
+  const { BatchRegistry } = await import('@zhixuan92/multi-model-agent-core');
+  const { ProjectRegistry } = await import('./project-registry.js');
+
+  const batchRegistry = new BatchRegistry({
+    batchTtlMs: config.server.limits.batchTtlMs,
+    clarificationTimeoutMs: config.server.limits.clarificationTimeoutMs,
+  });
+
+  const projectRegistry = new ProjectRegistry({
+    cap: config.server.limits.projectCap,
+    idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
+    evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
+  });
 
   // GET /health — lightweight liveness probe
   router.register('GET', '/health', (_req, res, _params, _ctx) => {
@@ -100,7 +135,10 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   });
 
   // Register tool handlers (Phase 6)
-  await registerToolHandlers(router, config);
+  await registerToolHandlers(router, config, batchRegistry, projectRegistry);
+
+  // Register control handlers (Phase 7)
+  await registerControlHandlers(router, config, batchRegistry, projectRegistry);
 
   const server = createServer((req, res) => {
     void handleRequest(router, token, req, res, config);
@@ -116,6 +154,8 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   return {
     port,
     stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
+    batchRegistry,
+    projectRegistry,
   };
 }
 
@@ -191,9 +231,17 @@ async function handleRequest(
   }
 
   // ── Step 6: cwd query param → validate → ctx.cwd ─────────────────────────
+  // cwd is required for tool routes and context-block routes.
+  // /batch/:batchId and /clarifications/confirm do NOT require cwd.
   let cwdValue: string | undefined;
   const urlObj = new URL(rawUrl, 'http://localhost');
-  if (CWD_REQUIRED_PATHS.has(pathname)) {
+
+  // Match against pathname prefix patterns for cwd-required routes
+  const requiresCwd = CWD_REQUIRED_PATHS.has(pathname) ||
+    pathname === '/context-blocks' ||
+    /^\/context-blocks\//.test(pathname);
+
+  if (requiresCwd) {
     const cwdParam = urlObj.searchParams.get('cwd') ?? undefined;
     const cwdResult = validateCwd(cwdParam);
     if (!cwdResult.ok) {

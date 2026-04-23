@@ -54,6 +54,10 @@ export interface TestServerWithAgents {
   url: string;
   token: string;
   stop: () => Promise<void>;
+  /** Shared BatchRegistry — exposed for test helpers that need to inject state. */
+  batchRegistry: import('@zhixuan92/multi-model-agent-core').BatchRegistry;
+  /** Shared ProjectRegistry — exposed for test helpers that need to access project state. */
+  projectRegistry: import('../../packages/server/src/http/project-registry.js').ProjectRegistry;
 }
 
 export async function startTestServerWithAgents(
@@ -74,5 +78,7 @@ export async function startTestServerWithAgents(
     url: `http://127.0.0.1:${server.port}`,
     token: DEFAULT_TEST_TOKEN,
     stop: async () => { await server.stop(); },
+    batchRegistry: server.batchRegistry,
+    projectRegistry: server.projectRegistry,
   };
 }
