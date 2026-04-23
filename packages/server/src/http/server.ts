@@ -129,10 +129,9 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
     evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
   });
 
-  // GET /health — lightweight liveness probe
-  router.register('GET', '/health', (_req, res, _params, _ctx) => {
-    sendJson(res, 200, { ok: true });
-  });
+  // GET /health — lightweight liveness probe (extracted to handler module)
+  const { buildHealthHandler } = await import('./handlers/introspection/health.js');
+  router.register('GET', '/health', buildHealthHandler());
 
   // Register tool handlers (Phase 6)
   await registerToolHandlers(router, config, batchRegistry, projectRegistry);
