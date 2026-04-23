@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "private": true,
   "license": "MIT",
   "description": "MCP server that delegates tasks to sub-agents running on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
@@ -28,7 +28,7 @@
     "build": "npm run build --workspaces",
     "test": "vitest run",
     "test:watch": "vitest",
-    "serve": "node packages/mcp/dist/cli.js serve"
+    "serve": "node packages/server/dist/cli/index.js serve"
   },
   "engines": {
     "node": ">=22.0.0"

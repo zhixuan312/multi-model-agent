@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { renderProviderRoutingMatrix } from '@zhixuan92/multi-model-agent-mcp/routing/render-provider-routing-matrix';
+import { renderProviderRoutingMatrix } from '@zhixuan92/multi-model-agent/routing/render-provider-routing-matrix';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 describe('renderProviderRoutingMatrix', () => {

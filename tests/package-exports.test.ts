@@ -96,27 +96,27 @@ describe('package exports contract', () => {
     // (already covered above). loadConfigFromFile subpath added above.
   });
 
-  // ── @zhixuan92/multi-model-agent-mcp ────────────────────────────────────────────
+  // ── @zhixuan92/multi-model-agent ────────────────────────────────────────────
 
-  describe('@zhixuan92/multi-model-agent-mcp (main entry)', () => {
+  describe('@zhixuan92/multi-model-agent (main entry)', () => {
     it('exports buildMcpServer as a function', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent');
       expect(typeof mod.buildMcpServer).toBe('function');
     });
 
     it('exports buildTaskSchema as a function', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent');
       expect(typeof mod.buildTaskSchema).toBe('function');
     });
 
     it('exports SERVER_NAME as a string', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent');
       expect(typeof mod.SERVER_NAME).toBe('string');
       expect(mod.SERVER_NAME).toBeTruthy();
     });
 
     it('exports SERVER_VERSION as a string', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-mcp');
+      const mod = await import('@zhixuan92/multi-model-agent');
       expect(typeof mod.SERVER_VERSION).toBe('string');
       expect(mod.SERVER_VERSION).toBeTruthy();
     });
@@ -126,9 +126,9 @@ describe('package exports contract', () => {
     // and instead assert the values are truthy non-empty strings.
   });
 
-  describe('@zhixuan92/multi-model-agent-mcp subpath exports', () => {
+  describe('@zhixuan92/multi-model-agent subpath exports', () => {
     it('exports ./routing/render-provider-routing-matrix with renderProviderRoutingMatrix', async () => {
-      const mod = await import('@zhixuan92/multi-model-agent-mcp/routing/render-provider-routing-matrix');
+      const mod = await import('@zhixuan92/multi-model-agent/routing/render-provider-routing-matrix');
       expect(typeof mod.renderProviderRoutingMatrix).toBe('function');
     });
   });

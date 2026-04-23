@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { reviewCodeSchema, registerReviewCode } from '@zhixuan92/multi-model-agent-mcp/tools/review-code';
+import { reviewCodeSchema, registerReviewCode } from '@zhixuan92/multi-model-agent/tools/review-code';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
 import { makeNoopLogger } from "./helpers.js";
 

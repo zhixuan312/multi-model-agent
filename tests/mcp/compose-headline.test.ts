@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeHeadline } from '@zhixuan92/multi-model-agent-mcp';
+import { composeHeadline } from '@zhixuan92/multi-model-agent';
 import type {
   BatchTimings,
   BatchProgress,

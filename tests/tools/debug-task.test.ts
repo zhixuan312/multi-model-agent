@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { debugTaskSchema, registerDebugTask } from '@zhixuan92/multi-model-agent-mcp/tools/debug-task';
+import { debugTaskSchema, registerDebugTask } from '@zhixuan92/multi-model-agent/tools/debug-task';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
 import { makeNoopLogger } from "./helpers.js";
 

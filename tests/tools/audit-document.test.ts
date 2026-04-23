@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { auditDocumentSchema, registerAuditDocument } from '@zhixuan92/multi-model-agent-mcp/tools/audit-document';
+import { auditDocumentSchema, registerAuditDocument } from '@zhixuan92/multi-model-agent/tools/audit-document';
 import type { RunResult } from '@zhixuan92/multi-model-agent-core';
 import { makeNoopLogger } from "./helpers.js";
 
