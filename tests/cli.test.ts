@@ -1,5 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { buildMcpServer as rawBuildMcpServer, buildTaskSchema, SERVER_NAME, SERVER_VERSION, ASSISTANT_MODEL_NAME, buildCliGreeting, computeTimings, computeBatchProgress, computeAggregateCost, installStdioLifecycleHandlers, __resetStdioLifecycleHandlersForTests } from '../packages/mcp/src/cli.js';
+import { synthesizeStdioProjectContext } from './helpers/synth-project-context.js';
 import type { DiagnosticLogger } from '../packages/core/src/diagnostics/disconnect-log.js';
 
 function makeMockLogger(): DiagnosticLogger & { calls: { startup: unknown[]; requestStart: unknown[]; requestComplete: unknown[]; error: unknown[]; shutdown: unknown[] } } {
@@ -93,8 +94,8 @@ beforeEach(() => {
 
 const buildMcpServer = (
   config: MultiModelConfig = sampleConfig(),
-  options?: Parameters<typeof rawBuildMcpServer>[2],
-) => rawBuildMcpServer(config, makeMockLogger(), { ...options, _testRunTasksOverride: stubRunTasks });
+  options?: Omit<Parameters<typeof rawBuildMcpServer>[2], 'projectContext'>,
+) => rawBuildMcpServer(config, makeMockLogger(), { projectContext: synthesizeStdioProjectContext(), _testRunTasksOverride: stubRunTasks, ...options });
 
 describe('server metadata', () => {
   it('server name is multi-model-agent', () => {
@@ -1336,8 +1337,10 @@ describe('integration — DiagnosticLogger wired through buildMcpServer', () => 
     const { createDiagnosticLogger } = await import('../packages/core/src/diagnostics/disconnect-log.js');
     const { buildMcpServer: realBuildMcpServer } = await import('../packages/mcp/src/cli.js');
 
+    const { createProjectContext } = await import('../packages/core/src/project-context.js');
     const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
     const server = realBuildMcpServer(sampleConfig(), logger, {
+      projectContext: createProjectContext(process.cwd()),
       _testRunTasksOverride: stubRunTasks as unknown as typeof runTasks,
     });
     // eslint-disable-next-line @typescript-eslint/no-explicit-any

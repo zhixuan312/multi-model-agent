@@ -138,6 +138,80 @@ See the full setup guide with config examples, client-specific instructions, and
 
 → **[github.com/zhixuan312/multi-model-agent](https://github.com/zhixuan312/multi-model-agent#quick-start)**
 
+## Running as an HTTP daemon
+
+The default transport is stdio — Claude Code spawns one `mmagent` process per session. When the Claude Code session ends (compaction, `/clear`, exit), the process dies; the next tool call has to start a fresh one.
+
+To survive Claude Code lifecycle events, run `mmagent` as a long-running HTTP daemon. Multiple Claude Code sessions can connect to the same daemon (each pointing at its own project directory), and a client reconnect reuses the project's in-memory stores.
+
+### Start the daemon
+
+Foreground (quickest way to try):
+
+```bash
+mmagent serve --http
+# → http://127.0.0.1:7312
+```
+
+Background (macOS launchd / Linux systemd): see `scripts/README.md`.
+
+### Point Claude Code at the daemon
+
+In each project's `.mcp.json`:
+
+```jsonc
+{
+  "mcpServers": {
+    "multi-model-agent": {
+      "url": "http://127.0.0.1:7312/?cwd=/absolute/path/to/project"
+    }
+  }
+}
+```
+
+Two projects = two `.mcp.json` files, each with a different `?cwd=`.
+
+### Auth (optional)
+
+For shared development machines:
+
+```jsonc
+// ~/.multi-model/config.json
+{
+  "transport": {
+    "mode": "http",
+    "http": { "auth": { "enabled": true } }
+  }
+}
+```
+
+On startup, `mmagent` generates a random token at `~/.multi-model/runtime/token` (mode 600). Paste it into `.mcp.json`:
+
+```jsonc
+{
+  "url": "http://127.0.0.1:7312/?cwd=...",
+  "headers": { "Authorization": "Bearer <token-from-that-file>" }
+}
+```
+
+### Check daemon status
+
+```bash
+mmagent status
+# mmagent 2.8.0  ·  pid 6821  ·  uptime 3h 24m  ·  http://127.0.0.1:7312
+# Projects (2):
+#   /Users/me/project-X    1 sess   7 batches   last seen 8s ago
+#   /Users/me/project-Y    1 sess   2 batches   last seen 4m ago
+```
+
+### Upgrades
+
+`npm i -g @zhixuan92/multi-model-agent-mcp@latest` writes the new binary but does not restart the running daemon. Restart manually:
+
+- **launchd**: `launchctl kickstart -k gui/$(id -u)/com.zhixuan92.mmagent`
+- **systemd**: `systemctl --user restart mmagent`
+- **foreground**: `Ctrl-C` and run `mmagent serve --http` again.
+
 ## License
 
 [MIT](./LICENSE) — Copyright (c) 2026 Zhang Zhixuan

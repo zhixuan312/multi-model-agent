@@ -1,0 +1,14 @@
+[Unit]
+Description=multi-model-agent HTTP daemon
+After=network.target
+
+[Service]
+Type=simple
+ExecStart=/usr/local/bin/mmagent serve --http
+Restart=always
+RestartSec=5
+StandardOutput=append:%h/.multi-model/logs/daemon.stdout.log
+StandardError=append:%h/.multi-model/logs/daemon.stderr.log
+
+[Install]
+WantedBy=default.target

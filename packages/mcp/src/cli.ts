@@ -12,7 +12,7 @@ import { z } from 'zod';
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import { InMemoryContextBlockStore, createDiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
+import { createDiagnosticLogger, createProjectContext } from '@zhixuan92/multi-model-agent-core';
 import type {
   MultiModelConfig,
   TaskSpec,
@@ -22,6 +22,7 @@ import type {
   BatchAggregateCost,
   AgentCapability,
   DiagnosticLogger,
+  ProjectContext,
 } from '@zhixuan92/multi-model-agent-core';
 import { renderProviderRoutingMatrix } from './routing/render-provider-routing-matrix.js';
 import { composeHeadline } from './headline.js';
@@ -39,7 +40,6 @@ import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
 import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
 import { runIntakePipeline } from '@zhixuan92/multi-model-agent-core/intake/pipeline';
-import { ClarificationStore } from '@zhixuan92/multi-model-agent-core/intake/clarification-store';
 import { registerConfirmClarifications } from './tools/confirm-clarifications.js';
 
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
@@ -95,38 +95,22 @@ export function buildTaskSchema(availableAgents: [string, ...string[]]) {
  * Batch cache for `retry_tasks`. Every `delegate_tasks` call stashes the
  * original `TaskSpec[]` under a UUID so the caller can later ask us to
  * re-dispatch specific indices without re-transmitting the briefs. Two
- * bounds:
+ * bounds (enforced by `BatchCache` in core):
  *
  *   - TTL (30 min from creation): keeps stale batches from lingering
- *     through a long session. TTL is from-creation (not from-last-access),
- *     matching `InMemoryContextBlockStore` — a batch used at minute 29
- *     still dies at minute 30. Access does NOT refresh the expiry.
+ *     through a long session. TTL is from-creation (not from-last-access).
  *   - LRU cap (100 entries): prevents unbounded growth from a chatty
- *     caller that never retries. Eviction is true LRU (least-recently-
- *     *used*, not least-recently-inserted): a batch that is still being
- *     retried stays hot and a newer but unused batch will be evicted
- *     first. This matters when a caller is iterating on one task while
- *     dispatching unrelated batches in parallel.
+ *     caller that never retries.
  *
- * Eviction on TTL is lazy (checked on `retry_tasks` lookup). Eviction on
- * the LRU cap is eager (runs after every `rememberBatch`).
- *
- * LRU implementation note: we use JavaScript's `Map` which preserves
- * insertion order on iteration. To "touch" an entry on access, we
- * `delete` it and re-`set` it, which moves it to the end of the
- * iteration order. `Map.keys().next().value` is then the oldest-*accessed*
- * entry (not the oldest-inserted entry), giving us O(1) LRU without a
- * separate priority structure. The helpers `touchBatch` (on access) and
- * the eviction loop in `rememberBatch` (on insert) are the only two
- * places that mutate the Map.
+ * The `BatchCache` instance lives on `projectContext.batchCache` so it is
+ * shared across all sessions attached to the same project root.
  */
-const BATCH_TTL_MS = 30 * 60 * 1000;
-const BATCH_MAX = 100;
-
 export function buildMcpServer(
   config: Parameters<typeof runTasks>[1],
   logger: DiagnosticLogger,
-  options?: {
+  options: {
+    projectContext: ProjectContext;
+    sessionId?: string;
     /** Character threshold that triggers auto-switch from 'full' to
      *  'summary' response mode when the caller uses `responseMode: 'auto'`
      *  (the default). Defaults to 65_536, tuned for Claude Code's inline
@@ -138,6 +122,7 @@ export function buildMcpServer(
     _testRunTasksOverride?: typeof runTasks;
   },
 ) {
+  const { projectContext } = options;
   const agentKeys = config.agents ? Object.keys(config.agents) : [];
   if (agentKeys.length === 0) {
     throw new Error('buildMcpServer requires at least one configured agent.');
@@ -153,9 +138,9 @@ export function buildMcpServer(
   const resolvedThreshold =
     envThreshold
     ?? config.defaults.largeResponseThresholdChars
-    ?? options?.largeResponseThresholdChars
+    ?? options.largeResponseThresholdChars
     ?? DEFAULT_LARGE_RESPONSE_THRESHOLD_CHARS;
-  const runTasksImpl = options?._testRunTasksOverride ?? runTasks;
+  const runTasksImpl = options._testRunTasksOverride ?? runTasks;
 
   // Resolve parentModel once: env var > config > undefined
   const resolvedParentModel =
@@ -169,7 +154,7 @@ export function buildMcpServer(
       timeoutMs: config.defaults.timeoutMs,
       maxCostUSD: config.defaults.maxCostUSD,
       sandboxPolicy: config.defaults.sandboxPolicy,
-      cwd: process.cwd(),
+      cwd: projectContext.cwd,
       reviewPolicy: 'full',
       effort: undefined,
       parentModel: resolvedParentModel,
@@ -182,47 +167,10 @@ export function buildMcpServer(
     version: SERVER_VERSION,
   });
 
-  // One context-block store per server instance. Persists across calls
-  // within a single `buildMcpServer(...)` lifetime so `register_context_block`
-  // followed by multiple `delegate_tasks` with `contextBlockIds` works.
-  const contextBlockStore = new InMemoryContextBlockStore();
-
-  // Clarification store for intake clarification flow
-  const clarificationStore = new ClarificationStore();
-
-  // Per-server batch cache for `retry_tasks`. See the LRU comment block
-  // above for eviction semantics.
-  const batchCache = new Map<string, {
-    tasks: TaskSpec[];
-    results?: RunResult[];
-    expiresAt: number;
-  }>();
-
-  const rememberBatch = (tasks: TaskSpec[]): string => {
-    const id = randomUUID();
-    batchCache.set(id, { tasks, expiresAt: Date.now() + BATCH_TTL_MS });
-    // Evict the least-recently-USED entry (not least-recently-inserted).
-    // `touchBatch` below moves accessed entries to the end of insertion
-    // order, so `keys().next().value` is the true LRU head.
-    while (batchCache.size > BATCH_MAX) {
-      const lru = batchCache.keys().next().value;
-      if (lru) batchCache.delete(lru);
-      else break;
-    }
-    return id;
-  };
-
-  /**
-   * Mark a batch as recently used by reinserting it at the tail of the
-   * Map's iteration order. `touchBatch` is called on every successful
-   * `retry_tasks` lookup so a frequently-retried batch does not get
-   * evicted by `rememberBatch`'s LRU loop. Does NOT refresh the TTL —
-   * expiry stays at the original creation time.
-   */
-  const touchBatch = (id: string, entry: { tasks: TaskSpec[]; results?: RunResult[]; expiresAt: number }): void => {
-    batchCache.delete(id);
-    batchCache.set(id, entry);
-  };
+  // Stores sourced from projectContext — shared across all sessions for this project.
+  const contextBlockStore = projectContext.contextBlocks;
+  const clarificationStore = projectContext.clarifications;
+  const batchCache = projectContext.batchCache;
 
   const availableAgents = agentKeys as [string, ...string[]];
 
@@ -268,9 +216,10 @@ export function buildMcpServer(
       // Execute ready tasks through normal dispatch
       let results: RunResult[] = [];
       const readySpecs = intakeResult.ready.map(r => r.task);
-      const batchId = rememberBatch(readySpecs.length > 0 ? readySpecs : (tasks as TaskSpec[]));
+      const batchId = batchCache.remember(readySpecs.length > 0 ? readySpecs : (tasks as TaskSpec[]));
 
       const batchStartMs = Date.now();
+      let batchAborted = false;
       try {
         if (readySpecs.length > 0) {
           const resolvedTasks = injectDefaults(readySpecs);
@@ -280,10 +229,15 @@ export function buildMcpServer(
           });
           intakeResult.intakeProgress.executedDrafts = results.length;
         }
+      } catch (err) {
+        batchAborted = true;
+        throw err;
       } finally {
-        // Always attach results so get_batch_slice/retry_tasks can find the batch
-        const batchEntry = batchCache.get(batchId);
-        if (batchEntry) batchEntry.results = results;
+        if (batchAborted) {
+          try { batchCache.abort(batchId); } catch { /* already terminal */ }
+        } else {
+          try { batchCache.complete(batchId, results); } catch { /* already terminal */ }
+        }
       }
       const wallClockMs = Date.now() - batchStartMs;
 
@@ -377,20 +331,14 @@ export function buildMcpServer(
     },
     async ({ batchId, taskIndices }) => {
       const batch = batchCache.get(batchId);
-      if (!batch || batch.expiresAt < Date.now()) {
-        // Proactively drop the expired entry so subsequent lookups see
-        // the same "unknown" result and the cache doesn't slowly fill
-        // with stale rows that are never touched again.
-        if (batch) batchCache.delete(batchId);
+      if (!batch) {
         throw new Error(
           `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
         );
       }
-      // Mark this batch as recently used so the LRU eviction in
-      // `rememberBatch` doesn't drop a hot entry when newer batches
-      // arrive. Does NOT refresh TTL — a batch created 29 minutes ago
-      // still dies at minute 30 even if it's retried heavily.
-      touchBatch(batchId, batch);
+      // Mark this batch as recently used so the LRU eviction does not
+      // drop a hot entry when newer batches arrive. Does NOT refresh TTL.
+      batchCache.touch(batchId);
       for (const i of taskIndices) {
         if (i < 0 || i >= batch.tasks.length) {
           throw new Error(
@@ -402,17 +350,24 @@ export function buildMcpServer(
 
       // Create a fresh batch for the retried tasks so the original batch
       // entry is preserved and get_batch_slice can still retrieve it.
-      const retryBatchId = rememberBatch(subset);
+      const retryBatchId = batchCache.remember(subset);
 
       const batchStartMs = Date.now();
       let results: RunResult[] = [];
+      let retryAborted = false;
       try {
         results = await runTasksImpl(injectDefaults(subset), config, {
           runtime: { contextBlockStore },
         });
+      } catch (err) {
+        retryAborted = true;
+        throw err;
       } finally {
-        const retryEntry = batchCache.get(retryBatchId);
-        if (retryEntry) retryEntry.results = results;
+        if (retryAborted) {
+          try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
+        } else {
+          try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
+        }
       }
       const wallClockMs = Date.now() - batchStartMs;
 
@@ -449,8 +404,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
     async ({ batchId, taskIndex }) => {
       const entry = batchCache.get(batchId);
-      if (!entry || entry.expiresAt < Date.now()) {
-        if (entry) batchCache.delete(batchId);
+      if (!entry) {
         return {
           content: [{
             type: 'text' as const,
@@ -459,7 +413,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
         };
       }
 
-      touchBatch(batchId, entry);
+      batchCache.touch(batchId);
 
       if (!entry.results) {
         return {
@@ -515,7 +469,7 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     logger,
     clarificationStore,
     runTasksImpl,
-    rememberBatch,
+    batchCache.remember.bind(batchCache),
   );
 
   return server;
@@ -669,16 +623,36 @@ export function __resetStdioLifecycleHandlersForTests(): void {
   installedLifecycleHandlers = null;
 }
 
+export function parseHttpFlags(args: string[]): { mode: 'http'; port?: number; bind?: string } | undefined {
+  if (!args.includes('--http')) return undefined;
+  const portIdx = args.indexOf('--port');
+  const bindIdx = args.indexOf('--bind');
+  let port: number | undefined;
+  if (portIdx >= 0 && args[portIdx + 1]) {
+    const n = Number.parseInt(args[portIdx + 1], 10);
+    if (!Number.isFinite(n) || n <= 0) throw new Error(`--port requires a positive integer, got: ${args[portIdx + 1]}`);
+    port = n;
+  }
+  const bind = bindIdx >= 0 ? args[bindIdx + 1] : undefined;
+  return { mode: 'http', port, bind };
+}
+
 async function main() {
   const args = process.argv.slice(2);
 
+  if (args[0] === 'status') {
+    const { runStatusCli } = await import('./status-cli.js');
+    await runStatusCli(args.slice(1));
+    return;
+  }
+
   if (args[0] === '--help' || args[0] === '-h') {
-    console.log('Usage: multi-model-agent serve [--config <path>]');
+    console.log('Usage: multi-model-agent serve [--http [--port N] [--bind ADDR]] [--config <path>]');
     process.exit(0);
   }
 
   if (args[0] !== 'serve') {
-    console.error('Usage: multi-model-agent serve [--config <path>]');
+    console.error('Usage: multi-model-agent serve [--http [--port N] [--bind ADDR]] [--config <path>]');
     process.exit(1);
   }
 
@@ -690,6 +664,32 @@ async function main() {
     process.exit(1);
   }
 
+  const httpFlags = parseHttpFlags(args);
+  if (httpFlags) {
+    const effectiveConfig = {
+      ...config,
+      transport: {
+        mode: 'http' as const,
+        http: {
+          ...config.transport.http,
+          ...(httpFlags.port !== undefined ? { port: httpFlags.port } : {}),
+          ...(httpFlags.bind !== undefined ? { bind: httpFlags.bind } : {}),
+        },
+      },
+    };
+    const { startHttpDaemon } = await import('./http/transport.js');
+    await startHttpDaemon(effectiveConfig);
+    return;
+  }
+
+  if (config.transport.mode === 'http') {
+    // config says http mode even though CLI flag was absent
+    const { startHttpDaemon } = await import('./http/transport.js');
+    await startHttpDaemon(config);
+    return;
+  }
+
+  // stdio path — unchanged from today
   const enabled = config.diagnostics?.log ?? false;
   const logDir = config.diagnostics?.logDir;
   const logger = createDiagnosticLogger({ enabled, logDir });
@@ -700,7 +700,8 @@ async function main() {
   }
   installStdioLifecycleHandlers(logger);
 
-  const server = buildMcpServer(config, logger);
+  const projectContext = createProjectContext(process.cwd());
+  const server = buildMcpServer(config, logger, { projectContext });
   const transport = new StdioServerTransport();
   await server.connect(transport);
 }

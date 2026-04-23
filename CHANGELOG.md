@@ -5,7 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [2.7.5] - 2026-04-21
+## [2.8.0] - 2026-04-23
+
+### Added
+
+- **HTTP transport (mcp).** New opt-in `mmagent serve --http` mode that runs the MCP server as a long-running HTTP/SSE daemon, independent of any Claude Code session's lifetime. The daemon survives Claude Code lifecycle events (compaction, `/clear`, session exit, client crash) that previously tore down the stdio child process and produced "MCP server is down" errors on the next tool call. Stdio remains the default transport; HTTP is opt-in via `--http` flag or `transport.mode: "http"` in config. See the new "Running as an HTTP daemon" section of `packages/mcp/README.md`.
+- **Concurrent multi-project sessions (mcp).** A single HTTP daemon serves multiple Claude Code sessions concurrently, each bound to its own project directory via a `?cwd=/abs/path` URL query param on the MCP endpoint. Per-project `ProjectContext` isolates context blocks, batch cache, and clarifications so sessions cannot see each other's state.
+- **`transport` config block (core).** New top-level field on `~/.multi-model/config.json`: `{ "transport": { "mode": "stdio" | "http", "http": { bind, port, auth: { enabled, tokenPath }, projectIdleEvictionMs, projectCap, shutdownDrainMs, sessionIdleTimeoutMs } } }`. All fields optional with sensible defaults (stdio mode, port 7312, loopback bind, auth off, 60-min project eviction, 30-min session idle timeout, 30-s shutdown drain). Omitting the block preserves the pre-2.8.0 stdio behavior exactly.
+- **Token-based auth (mcp).** Enable via `transport.http.auth.enabled: true`. The daemon generates a 32-byte random token at `~/.multi-model/runtime/token` (mode 600) on first boot and reads it on subsequent boots. Clients present it via `Authorization: Bearer <token>`. Tokens in the query string are explicitly rejected with 401 (prevents leaks via access logs and process listings). A startup safety check refuses to bind to non-loopback addresses unless auth is enabled.
+- **Graceful SIGTERM drain (mcp).** In HTTP mode, SIGTERM triggers a global drain: stop accepting new connections, notify active sessions via SSE, wait up to `shutdownDrainMs` for in-flight handlers, then force-close. Shutdown is logged as `SIGTERM` on clean drain or `SIGTERM_drain_timeout` on escalation. SIGHUP is a no-op in HTTP mode (stdio behavior unchanged).
+- **Session idle timeout (mcp).** Defense-in-depth against clients that don't call `terminateSession()` on disconnect. A periodic timer (1-min tick) detaches sessions with no request activity for `sessionIdleTimeoutMs` (default 30 min). Emits `session_close reason='session_expired'`. Project stores survive the session eviction so reconnecting clients keep their state.
+- **`/status` endpoint (mcp).** Loopback-only `GET /status` returns daemon version, pid, uptime, bind, auth status, per-project stats (sessions, batch cache size, context blocks size, clarifications size), active requests with progress headlines, and a rolling 10-entry recent-requests buffer. Auth-gated when `auth.enabled=true`.
+- **`mmagent status` CLI (mcp).** New subcommand that fetches `/status` and formats a human-readable summary. `--json` flag for scripting.
+- **`mmagent` bin alias (mcp).** Short alias for `multi-model-agent`. Both binaries point at the same CLI; existing `multi-model-agent` invocations continue to work.
+- **New diagnostic log event types (core).** HTTP mode adds `session_open`, `session_close`, `connection_rejected`, `request_rejected`, `project_created`, `project_evicted` to the log stream. `startup` now includes a `transport: 'stdio' | 'http'` field. `request_start` / `request_complete` gain optional `sessionId` and `cwd` fields (both omitted under stdio for backward compatibility). Shutdown cause set extended with `'SIGTERM_drain_timeout'`.
+- **`ProjectContext` type (core).** New exported type bundling per-project stores (`InMemoryContextBlockStore`, `BatchCache`, `ClarificationStore`) plus lifecycle metadata (`cwd`, `createdAt`, `lastSeenAt`, `activeSessions`, `activeRequests`, `pendingReservations`). Synthesized once from `process.cwd()` in stdio mode; created per unique `cwd` in HTTP mode. `createProjectContext(cwd)` factory.
+- **`BatchCache` class (core).** Extracted from `cli.ts`'s previously-inline Map closures into a named class with explicit status enum (`'pending' | 'complete' | 'aborted'`) and `complete()` / `abort()` state-transition methods. Preserves the 30-min TTL + 100-entry LRU semantics.
+- **launchd + systemd service templates (mcp).** New `packages/mcp/scripts/launchd/` and `packages/mcp/scripts/systemd/` with install instructions for running the HTTP daemon as a user service.
+
+### Changed
+
+- **`buildMcpServer` signature (mcp, breaking).** `options` parameter is now **required** and must contain `projectContext: ProjectContext`. Also accepts optional `sessionId?: string`. The three in-memory stores are read from `projectContext` rather than constructed locally — so `buildMcpServer` no longer creates state, it accepts it. Stdio callers synthesize a single `ProjectContext` from `process.cwd()`; HTTP callers construct one per unique `cwd`. Per the development-mode rule, every in-repo call site updates in the same commit (production + tests).
+- **`injectDefaults` cwd source (mcp).** Now reads `cwd` from `projectContext.cwd` instead of `process.cwd()`. In stdio mode these are equal; in HTTP mode each session gets the correct per-project cwd.
+- **Delegation rule (rules).** Clarified auto-pipeline behavior when MCP is unreachable: stop and report rather than falling back to inline labor. Added "When MCP is down" section to `.claude/rules/DELEGATION-RULE.md`.
+
+### Why
+
+- End users kept reporting "MCP server is down" mid-workflow. Investigation of diagnostic logs across multiple incidents showed the same root cause in every case: Claude Code closed the stdin pipe to the MCP child process (compaction, `/clear`, session exit) and the child dutifully exited with `cause: stdin_end`. The MCP was not crashing — it was being terminated by its parent, and under the stdio transport the MCP server is structurally a child of the client with no way to survive the pipe close. The only path to "MCP survives client churn" is a different transport where the server is not a child of the client. HTTP transport delivers that. Stdio remains the default and unchanged for users who don't opt in; HTTP is additive.
+
+
 
 ### Changed
 
@@ -504,7 +532,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.8.0...HEAD
+[2.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...mcp-v2.8.0
 [2.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...mcp-v2.7.5
 [2.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.3...mcp-v2.7.4
 [2.7.3]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.2...mcp-v2.7.3

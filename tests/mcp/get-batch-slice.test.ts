@@ -91,7 +91,8 @@ beforeEach(() => {
 async function makeServer() {
   const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
   const { createDiagnosticLogger } = await import('../../packages/core/src/diagnostics/disconnect-log.js');
-  return buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { _testRunTasksOverride: mockedRunTasks });
+  const { createProjectContext } = await import('../../packages/core/src/project-context.js');
+  return buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { projectContext: createProjectContext(process.cwd()), _testRunTasksOverride: mockedRunTasks });
 }
 
 async function callTool(server: any, toolName: string, input: unknown): Promise<any> {
@@ -188,7 +189,8 @@ describe('get_batch_slice tool', () => {
 
     const { buildMcpServer } = await import('../../packages/mcp/src/cli.js');
     const { createDiagnosticLogger } = await import('../../packages/core/src/diagnostics/disconnect-log.js');
-    const server = buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { _testRunTasksOverride: overridden });
+    const { createProjectContext } = await import('../../packages/core/src/project-context.js');
+    const server = buildMcpServer(sampleConfig(), createDiagnosticLogger({ enabled: false }), { projectContext: createProjectContext(process.cwd()), _testRunTasksOverride: overridden });
 
     const response = await callTool(server, 'delegate_tasks', {
       tasks: [{ prompt: 'Do the thing', done: 'Done', agentType: 'standard' as const }],

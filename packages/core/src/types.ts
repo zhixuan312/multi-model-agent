@@ -181,6 +181,21 @@ export interface MultiModelConfig {
   clarifications?: {
     maxRoundsPerDraft?: number
   }
+  transport: {
+    mode: 'stdio' | 'http'
+    http: {
+      bind: string
+      port: number
+      auth: {
+        enabled: boolean
+        tokenPath: string
+      }
+      projectIdleEvictionMs: number
+      projectCap: number
+      shutdownDrainMs: number
+      sessionIdleTimeoutMs: number
+    }
+  }
 }
 
 // === Result ===
