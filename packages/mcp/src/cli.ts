@@ -33,7 +33,7 @@ import { registerExecutePlan } from './tools/execute-plan.js';
 import { registerReviewCode } from './tools/review-code.js';
 import { registerVerifyWork } from './tools/verify-work.js';
 import { registerConfirmClarifications } from './tools/confirm-clarifications.js';
-import { executeDelegate } from '@zhixuan92/multi-model-agent-core/executors/index';
+import { executeDelegate, executeRetry } from '@zhixuan92/multi-model-agent-core/executors/index';
 import { buildExecutionContextForMcp } from './execution-context.js';
 
 export { computeTimings, computeBatchProgress, computeAggregateCost } from './tools/batch-response.js';
@@ -293,46 +293,18 @@ export function buildMcpServer(
         .describe('Zero-based indices (into the original batch) of the tasks to re-run'),
     },
     async ({ batchId, taskIndices }) => {
-      const batch = batchCache.get(batchId);
-      if (!batch) {
-        throw new Error(
-          `batch "${batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
-        );
-      }
-      // Mark this batch as recently used so the LRU eviction does not
-      // drop a hot entry when newer batches arrive. Does NOT refresh TTL.
-      batchCache.touch(batchId);
-      for (const i of taskIndices) {
-        if (i < 0 || i >= batch.tasks.length) {
-          throw new Error(
-            `index ${i} is out of range for batch ${batchId} (size ${batch.tasks.length})`,
-          );
-        }
-      }
-      const subset = taskIndices.map((i) => batch.tasks[i]);
+      const ctx = buildExecutionContextForMcp(config, logger, projectContext, contextBlockStore);
+      const executorResult = await executeRetry(
+        ctx,
+        { batchId, taskIndices },
+        {
+          injectDefaults,
+          runTasksOverride: runTasksImpl,
+        },
+      );
 
-      // Create a fresh batch for the retried tasks so the original batch
-      // entry is preserved and get_batch_slice can still retrieve it.
-      const retryBatchId = batchCache.remember(subset);
-
-      const batchStartMs = Date.now();
-      let results: RunResult[] = [];
-      let retryAborted = false;
-      try {
-        results = await runTasksImpl(injectDefaults(subset), config, {
-          runtime: { contextBlockStore },
-        });
-      } catch (err) {
-        retryAborted = true;
-        throw err;
-      } finally {
-        if (retryAborted) {
-          try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
-        } else {
-          try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
-        }
-      }
-      const wallClockMs = Date.now() - batchStartMs;
+      const { results, retryBatchId } = executorResult;
+      const wallClockMs = executorResult.wallClockMs ?? 0;
 
       // Apply auto-escape truncation
       const truncatedResults = truncateResults(
@@ -344,7 +316,7 @@ export function buildMcpServer(
       return buildUnifiedResponse({
         batchId: retryBatchId,
         results: results.map((r, i) => ({ ...r, output: truncatedResults[i].output })),
-        tasks: subset,
+        tasks: results.map(() => ({ prompt: '' } as TaskSpec)),
         wallClockMs,
         parentModel: resolvedParentModel,
       });
@@ -420,11 +392,11 @@ batch is expired or evicted, re-dispatch via delegate_tasks with the full specs.
     },
   );
 
-  registerAuditDocument(server, config, logger, contextBlockStore);
-  registerDebugTask(server, config, logger, contextBlockStore);
-  registerExecutePlan(server, config, logger, contextBlockStore);
-  registerReviewCode(server, config, logger, contextBlockStore);
-  registerVerifyWork(server, config, logger, contextBlockStore);
+  registerAuditDocument(server, config, logger, contextBlockStore, projectContext);
+  registerDebugTask(server, config, logger, contextBlockStore, projectContext);
+  registerExecutePlan(server, config, logger, contextBlockStore, projectContext);
+  registerReviewCode(server, config, logger, contextBlockStore, projectContext);
+  registerVerifyWork(server, config, logger, contextBlockStore, projectContext);
 
   registerConfirmClarifications(
     server,

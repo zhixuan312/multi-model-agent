@@ -3,6 +3,7 @@
 // Bridges the MCP server's runtime objects into the ExecutionContext shape
 // required by the core executors.
 import type { MultiModelConfig, DiagnosticLogger, ProjectContext, ContextBlockStore } from '@zhixuan92/multi-model-agent-core';
+import { InMemoryContextBlockStore, BatchCache, ClarificationStore } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/index';
 
 export function buildExecutionContextForMcp(
@@ -16,5 +17,35 @@ export function buildExecutionContextForMcp(
     config,
     logger,
     contextBlockStore,
+  };
+}
+
+/**
+ * Build a minimal ExecutionContext for specialized tools (audit, review, verify, debug,
+ * execute-plan) that don't need batchCache or clarifications. Used when `projectContext`
+ * is not available (e.g. in tests that only pass `config + logger + contextBlockStore`).
+ */
+export function buildMinimalExecutionContext(
+  config: MultiModelConfig,
+  logger: DiagnosticLogger,
+  contextBlockStore?: ContextBlockStore,
+): ExecutionContext {
+  const store = contextBlockStore ?? new InMemoryContextBlockStore();
+  const minimalProjectContext: ProjectContext = {
+    cwd: process.cwd(),
+    contextBlocks: store as InMemoryContextBlockStore,
+    batchCache: new BatchCache(),
+    clarifications: new ClarificationStore(),
+    createdAt: Date.now(),
+    lastSeenAt: Date.now(),
+    activeSessions: new Set<string>(),
+    activeRequests: 0,
+    pendingReservations: 0,
+  };
+  return {
+    projectContext: minimalProjectContext,
+    config,
+    logger,
+    contextBlockStore: store,
   };
 }
