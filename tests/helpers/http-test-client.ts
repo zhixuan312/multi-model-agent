@@ -3,6 +3,7 @@ import { StreamableHTTPClientTransport } from '@modelcontextprotocol/sdk/client/
 
 export async function connectTestClient(opts: { url: string; cwd: string; token?: string }): Promise<{
   client: Client;
+  transport: StreamableHTTPClientTransport;
   close: () => Promise<void>;
 }> {
   const u = new URL(opts.url);
@@ -14,7 +15,11 @@ export async function connectTestClient(opts: { url: string; cwd: string; token?
   await client.connect(transport);
   return {
     client,
+    transport,
     close: async () => {
+      // terminateSession() sends an explicit DELETE so the server-side transport.onclose fires.
+      // Plain close() only tears down the local transport — the daemon doesn't learn the session is gone.
+      try { await transport.terminateSession(); } catch { /* best-effort */ }
       try { await client.close(); } catch { /* best-effort */ }
       try { await transport.close(); } catch { /* best-effort */ }
     },

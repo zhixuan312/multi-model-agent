@@ -78,4 +78,64 @@ describe('HTTP tool routing end-to-end', () => {
       expect(proj.contextBlocksSize).toBe(1);
     }
   });
+
+  it('client disconnect + reconnect preserves project state (the bug-fix verification)', async () => {
+    // This is the end-to-end verification that the daemon survives a client
+    // going away and coming back — the exact failure mode that motivated this
+    // feature ("MCP server is down" after Claude Code's /clear or compaction).
+    const d = await startTestDaemon();
+    handles.push(d);
+    const { cwd, cleanup } = createTempProject();
+    cleanups.push(cleanup);
+
+    // First session: register a context block, then disconnect.
+    const c1 = await connectTestClient({ url: d.url, cwd });
+    const reg = await c1.client.callTool({
+      name: 'register_context_block',
+      arguments: { id: 'survives-reconnect', content: 'from session 1' },
+    });
+    expect(JSON.parse((reg.content as any[])[0].text).contextBlockId).toBe('survives-reconnect');
+
+    // Pre-disconnect: /status shows the project with 1 block and 1 session.
+    {
+      const s = await (await fetch(`${d.url}/status`)).json();
+      expect(s.projects.length).toBe(1);
+      expect(s.projects[0].activeSessions).toBe(1);
+      expect(s.projects[0].contextBlocksSize).toBe(1);
+    }
+
+    // Client disconnects (simulates Claude Code /clear, compaction, or session exit).
+    await c1.close();
+    // Poll for up to 2s waiting for the server to notice the disconnect.
+    // The SDK's close() sends an explicit DELETE; the server's transport.onclose fires on that.
+    let activeSessionsAfterClose: number | undefined;
+    for (let i = 0; i < 20; i++) {
+      const s = await (await fetch(`${d.url}/status`)).json();
+      activeSessionsAfterClose = s.projects[0]?.activeSessions;
+      if (activeSessionsAfterClose === 0) break;
+      await new Promise(r => setTimeout(r, 100));
+    }
+
+    // Post-disconnect: project survives with 0 active sessions, block still there.
+    {
+      const s = await (await fetch(`${d.url}/status`)).json();
+      expect(s.projects.length).toBe(1);
+      expect(s.projects[0].activeSessions).toBe(0);
+      expect(s.projects[0].contextBlocksSize).toBe(1); // STATE PRESERVED — the whole point
+    }
+
+    // Reconnect: brand new MCP session, but same ProjectContext on the server.
+    const c2 = await connectTestClient({ url: d.url, cwd });
+    closers.push(c2.close);
+
+    // Reconnected session can list tools (proves the new session is functional).
+    const tools = await c2.client.listTools();
+    expect(tools.tools.length).toBeGreaterThan(0);
+
+    // /status confirms the project has a new active session AND still has the block.
+    const s = await (await fetch(`${d.url}/status`)).json();
+    expect(s.projects.length).toBe(1);
+    expect(s.projects[0].activeSessions).toBe(1);
+    expect(s.projects[0].contextBlocksSize).toBe(1);
+  });
 });
