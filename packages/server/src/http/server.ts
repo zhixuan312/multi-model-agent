@@ -172,6 +172,10 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
     version: SERVER_VERSION,
   }));
 
+  // GET /tools — OpenAPI 3.0 document (auth required, NOT loopback-gated)
+  const { buildToolsHandler } = await import('./handlers/introspection/tools-list.js');
+  router.register('GET', '/tools', buildToolsHandler());
+
   const server = createServer((req, res) => {
     void handleRequest(router, token, req, res, config);
   });
