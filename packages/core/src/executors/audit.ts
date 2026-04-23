@@ -109,7 +109,7 @@ export async function executeAudit(
 
   const hasContextBlocks = Array.isArray(input.contextBlockIds) && input.contextBlockIds.length > 0;
 
-  const parentModel = process.env.PARENT_MODEL_NAME || config.defaults?.parentModel || undefined;
+  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
@@ -120,7 +120,7 @@ export async function executeAudit(
     timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: process.cwd(),
+    cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
     parentModel,
   };

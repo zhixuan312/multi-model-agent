@@ -90,7 +90,7 @@ export async function executeDelegate(
 
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
-  const parentModel = process.env.PARENT_MODEL_NAME || config.defaults?.parentModel || undefined;
+  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   return {
     results,
