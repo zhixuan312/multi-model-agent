@@ -3,18 +3,17 @@
   "version": "3.0.0",
   "type": "module",
   "license": "MIT",
-  "description": "MCP server for multi-model-agent. Exposes a delegate_tasks tool that routes work to Claude, Codex, or OpenAI-compatible sub-agents based on capability, quality tier, and cost.",
+  "description": "Standalone HTTP server for multi-model-agent. Routes tool-invocation work to Claude, Codex, or OpenAI-compatible sub-agents with async-polling REST dispatch and installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.",
   "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
   "keywords": [
-    "mcp",
-    "model-context-protocol",
     "llm",
     "claude",
     "codex",
     "openai",
     "agent",
     "multi-model",
-    "delegation"
+    "delegation",
+    "http-server"
   ],
   "repository": {
     "type": "git",
@@ -43,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/cli.js",
+    "build": "tsc && chmod +x dist/cli/index.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
@@ -52,6 +51,10 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@zhixuan92/multi-model-agent-core": "^2.8.0",
+    "minimist": "^1.2.8",
     "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/minimist": "^1.2.5"
   }
 }

@@ -113,7 +113,7 @@ const serverLimitsSchema = z.object({
 export const serverConfigSchema = z.object({
   server: z.object({
     bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().positive().default(DEFAULT_SERVER.port),
+    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
     auth: z.object({
       tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
     }).default(() => DEFAULT_SERVER_AUTH),
@@ -133,7 +133,7 @@ export const multiModelConfigSchema = z.object({
   }).optional(),
   server: z.object({
     bind: z.string().default(DEFAULT_SERVER.bind),
-    port: z.number().int().positive().default(DEFAULT_SERVER.port),
+    port: z.number().int().nonnegative().default(DEFAULT_SERVER.port),
     auth: z.object({
       tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
     }).default(() => DEFAULT_SERVER_AUTH),

@@ -30,6 +30,8 @@ const SERVER_VERSION = readServerVersion();
 
 export interface RunningServer {
   port: number;
+  /** The resolved address the server is bound to. Used by CLI to log the actual listen address. */
+  serverAddress: string | null;
   stop(): Promise<void>;
   /** Shared BatchRegistry — exposed for testing and introspection handlers. */
   batchRegistry: BatchRegistry;
@@ -186,9 +188,11 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
 
   const addr = server.address();
   const port = (addr as { port: number }).port;
+  const serverAddress = typeof addr === 'object' && addr !== null ? (addr as { address?: string }).address ?? null : null;
 
   return {
     port,
+    serverAddress,
     stop: () => new Promise<void>((resolve) => server.close(() => resolve())),
     batchRegistry,
     projectRegistry,
