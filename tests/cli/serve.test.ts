@@ -56,7 +56,7 @@ function minimalConfig(overrides: { bind?: string; port?: number; tokenFile?: st
 /** Write a token file and return its path. */
 function writeTokenFile(dir: string): string {
   const tokenFile = join(dir, 'auth-token');
-  writeFileSync(tokenFile, 'test-token', { mode: 0o600 });
+  writeFileSync(tokenFile, 'test-token\n', { mode: 0o600 });
   return tokenFile;
 }
 

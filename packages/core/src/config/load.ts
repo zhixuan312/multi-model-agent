@@ -2,17 +2,33 @@ import fs from 'fs';
 import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
+const TOKEN_REGEX = /^[A-Za-z0-9_\-+=/.]+$/;
+
 /**
  * Load the auth token for the HTTP server.
- * If `MMAGENT_AUTH_TOKEN` is set in the environment, it wins over any file.
- * Otherwise reads and returns the file at `opts.tokenFile`.
+ *
+ * Env var `MMAGENT_AUTH_TOKEN` wins over any file (and bypasses file validation).
+ * File contents must be exactly `<token>\n` — no CRLF, no extra whitespace, and
+ * the token body must match `[A-Za-z0-9_\-+=/.]+`. Strict validation up front
+ * prevents hard-to-diagnose bearer-token mismatches later.
  */
 export function loadAuthToken(opts: { tokenFile: string }): string {
   const envToken = process.env['MMAGENT_AUTH_TOKEN'];
   if (envToken && envToken.length > 0) {
     return envToken;
   }
-  return fs.readFileSync(opts.tokenFile, 'utf-8').trim();
+  const raw = fs.readFileSync(opts.tokenFile, 'utf-8');
+  if (raw.includes('\r\n')) {
+    throw new Error(`config error: auth token file has CRLF line ending; use LF only (${opts.tokenFile})`);
+  }
+  if (!raw.endsWith('\n')) {
+    throw new Error(`config error: auth token file must end with exactly one LF (${opts.tokenFile})`);
+  }
+  const token = raw.slice(0, -1);
+  if (!TOKEN_REGEX.test(token)) {
+    throw new Error(`config error: auth token file has non-canonical bytes (must match [A-Za-z0-9_\\-+=/.]) (${opts.tokenFile})`);
+  }
+  return token;
 }
 
 /**

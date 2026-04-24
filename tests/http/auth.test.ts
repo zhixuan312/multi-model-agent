@@ -9,11 +9,18 @@ describe('loadToken', () => {
   beforeEach(() => { tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'auth-')); });
   afterEach(() => { fs.rmSync(tmp, { recursive: true, force: true }); });
 
-  it('reads token from file, trimming whitespace', () => {
+  it('reads canonical token file (token + LF, no extra whitespace)', () => {
     const f = path.join(tmp, 'token');
-    fs.writeFileSync(f, '  abc123  \n');
+    fs.writeFileSync(f, 'abc123\n');
     fs.chmodSync(f, 0o600);
     expect(loadToken(f)).toBe('abc123');
+  });
+
+  it('rejects token file with surrounding whitespace (strict validation)', () => {
+    const f = path.join(tmp, 'token-loose');
+    fs.writeFileSync(f, '  abc123  \n');
+    fs.chmodSync(f, 0o600);
+    expect(() => loadToken(f)).toThrow(/non-canonical/);
   });
 
   it('generates + writes a token if the file does not exist', () => {
@@ -39,7 +46,7 @@ describe('loadToken', () => {
 
   it('warns via stderr if existing token file has group/other read bits', () => {
     const f = path.join(tmp, 'loose-token');
-    fs.writeFileSync(f, 'abc');
+    fs.writeFileSync(f, 'abc\n');
     fs.chmodSync(f, 0o644);
     const writes: string[] = [];
     const origWrite = process.stderr.write.bind(process.stderr);
