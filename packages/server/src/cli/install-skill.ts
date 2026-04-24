@@ -2,14 +2,9 @@
  * `mmagent install-skill` CLI command.
  *
  * Syntax:
- *   mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=claude-code|gemini|codex|cursor]
+ *   mmagent install-skill [--uninstall] [--dry-run] [--json]
+ *                        [--target=claude-code|gemini|codex|cursor]
  *                        [--all-targets] [skill-name]
- *
- * Config discovery order:
- *   1. --config <path>
- *   2. $MMAGENT_CONFIG env var
- *   3. CWD/.multi-model-agent.json
- *   4. ~/.multi-model/config.json
  *
  * Skills are sourced from packages/server/src/skills/<skill-name>/SKILL.md.
  * install-skill copies the SKILL.md to the appropriate per-client location
@@ -25,14 +20,12 @@ import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import minimist from 'minimist';
 import * as manifest from '../install/manifest.js';
-import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core';
+import type { Client } from '../install/manifest.js';
+import { ALL_CLIENTS, detectClients } from '../install/manifest.js';
 
-/** Resolved path to the bundled skills directory. Can be overridden for testing. */
-const DEFAULT_SKILLS_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'skills',
-);
+// Re-export Client and constants so CLI callers can import from this module.
+export type { Client } from '../install/manifest.js';
+export { ALL_CLIENTS, detectClients } from '../install/manifest.js';
 
 export const SUPPORTED_SKILLS = [
   'multi-model-agent',
@@ -47,11 +40,36 @@ export const SUPPORTED_SKILLS = [
   'mma-clarifications',
 ] as const;
 
-export type Client = 'claude-code' | 'gemini' | 'codex' | 'cursor';
+// ─── Custom errors ────────────────────────────────────────────────────────────
 
-export const ALL_CLIENTS: readonly Client[] = ['claude-code', 'gemini', 'codex', 'cursor'];
+/** Thrown when a passed `--target` value is not a known client. */
+export class UnknownTargetError extends Error {
+  readonly code = 'unknown_target' as const;
+  constructor(target: string, valid: readonly Client[]) {
+    super(`Unknown target: ${target}. Valid: ${valid.join(', ')}`);
+  }
+}
 
-// ─── Helpers ────────────────────────────────────────────────────────────────
+/** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */
+export class SkillNotFoundError extends Error {
+  readonly code = 'skill_not_found' as const;
+  constructor(skillName: string, checkedPath: string) {
+    super(
+      `Skill '${skillName}' not found. ` +
+      `Checked: ${checkedPath}. ` +
+      `Available skills: ${SUPPORTED_SKILLS.join(', ')}`,
+    );
+  }
+}
+
+// ─── Skills root ────────────────────────────────────────────────────────────
+
+/** Resolved path to the bundled skills directory. Can be overridden for testing. */
+const DEFAULT_SKILLS_ROOT = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  '..',
+  'skills',
+);
 
 /**
  * Return the absolute path to the skills root directory.
@@ -65,23 +83,20 @@ export function getSkillsRoot(skillsRoot?: string): string {
   return skillsRoot ?? DEFAULT_SKILLS_ROOT;
 }
 
+/**
+ * Read the content of a skill's SKILL.md file.
+ * Returns null if the file does not exist.
+ * Propagates permission errors and other I/O problems so callers can
+ * distinguish "skill not found" from "can't access skill".
+ */
 export function readSkillContent(skillName: string, skillsRoot?: string): string | null {
   const skillFile = path.join(getSkillsRoot(skillsRoot), skillName, 'SKILL.md');
-  if (!fs.existsSync(skillFile)) return null;
-  return fs.readFileSync(skillFile, 'utf-8');
-}
-
-/**
- * Detect which AI client directories exist in the home directory.
- * Returns the list of detected Client values.
- */
-export function detectClients(homeDir: string): Client[] {
-  const detected: Client[] = [];
-  if (fs.existsSync(path.join(homeDir, '.claude', 'skills'))) detected.push('claude-code');
-  if (fs.existsSync(path.join(homeDir, '.gemini', 'extensions'))) detected.push('gemini');
-  if (fs.existsSync(path.join(homeDir, '.codex', 'AGENTS.md'))) detected.push('codex');
-  if (fs.existsSync(path.join(homeDir, '.cursor', 'rules'))) detected.push('cursor');
-  return detected;
+  try {
+    return fs.readFileSync(skillFile, 'utf-8');
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+    throw err;
+  }
 }
 
 // ─── Per-client writer/remover skeletons ──────────────────────────────────────
@@ -98,7 +113,6 @@ export function writeSkillToClient(
   _target: Client,
   _homeDir: string,
 ): void {
-  // TODO(tasks 9.5–9.8): implement per-client writer
   throw new Error('install-skill: client writers are not yet implemented');
 }
 
@@ -107,59 +121,7 @@ export function writeSkillToClient(
  * STUB — implemented in task 9.9.
  */
 export function removeSkillFromClient(_skillName: string, _target: Client, _homeDir: string): void {
-  // TODO(task 9.9): implement per-client remover
   throw new Error('install-skill: client removers are not yet implemented');
-}
-
-// ─── Config discovery ───────────────────────────────────────────────────────
-
-export interface DiscoveredConfig {
-  /** Absolute path from which the config was loaded. */
-  path: string;
-}
-
-/**
- * Discover the agent configuration using the standard CLI discovery order:
- *   1. --config <path>              (CLI argument, highest priority)
- *   2. $MMAGENT_CONFIG env var      (environment variable)
- *   3. CWD/.multi-model-agent.json  (current working directory)
- *   4. ~/.multi-model/config.json   (per-user default)
- *
- * Returns the first config found that contains at least one agent definition.
- * Throws if a config file exists but is invalid.
- * Returns null if no config file is found.
- *
- * @param explicitPath  Path from --config argument; undefined if not provided.
- */
-export async function discoverConfig(explicitPath?: string): Promise<DiscoveredConfig | null> {
-  type Candidate =
-    | { kind: 'cli'; path: string }
-    | { kind: 'env'; path: string }
-    | { kind: 'cwd'; path: string }
-    | { kind: 'home'; path: string };
-
-  const candidates: Candidate[] = [
-    ...(explicitPath ? [{ kind: 'cli' as const, path: explicitPath }] : []),
-    ...(process.env.MMAGENT_CONFIG
-      ? [{ kind: 'env' as const, path: process.env.MMAGENT_CONFIG }]
-      : []),
-    { kind: 'cwd', path: path.join(process.cwd(), '.multi-model-agent.json') },
-    { kind: 'home', path: path.join(os.homedir(), '.multi-model', 'config.json') },
-  ];
-
-  for (const candidate of candidates) {
-    if (!fs.existsSync(candidate.path)) continue;
-    try {
-      const cfg = await loadConfigFromFile(candidate.path);
-      if (cfg && cfg.agents && Object.keys(cfg.agents).length > 0) {
-        return { path: candidate.path };
-      }
-    } catch {
-      throw new Error(`Config file '${candidate.path}' exists but could not be parsed`);
-    }
-  }
-
-  return null;
 }
 
 // ─── Install/Uninstall result ───────────────────────────────────────────────
@@ -167,6 +129,7 @@ export async function discoverConfig(explicitPath?: string): Promise<DiscoveredC
 export interface InstallResult {
   skill: string;
   action: 'installed' | 'uninstalled';
+  /** Targets for which the operation succeeded. */
   targets: Client[];
   /** Targets that were skipped (dry-run, unknown, or not applicable). */
   skipped: Client[];
@@ -174,27 +137,38 @@ export interface InstallResult {
   dryRun: boolean;
 }
 
+/**
+ * Return codes for `main()`.
+ * Exported so callers (e.g. the CLI dispatcher in cli/index.ts) can pass the
+ * code to `exit()` without calling `process.exit()` directly.
+ */
+export const ExitCode = Object.freeze({
+  SUCCESS: 0,
+  ERR_INVALID_ARGS: 1,
+  ERR_SKILL_NOT_FOUND: 2,
+  ERR_UNKNOWN_SKILL: 3,
+  ERR_NO_TARGETS: 4,
+  ERR_WRITER_NOT_IMPLEMENTED: 5,
+  ERR_UNKNOWN_TARGET: 7,
+  ERR_UNKNOWN: 8,
+});
+
 // ─── Core logic ─────────────────────────────────────────────────────────────
 
 /**
  * Install a skill to the specified client targets.
- * - dryRun=true: resolves targets and checks skill existence; does NOT write files or update manifest.
+ * - dryRun=true: checks skill existence; does NOT write files or update manifest.
  * - dryRun=false: writes files and updates manifest (requires client writers from tasks 9.5+).
- *
- * @param skillsRoot  Optional override for the skills root path (used by tests to point at temp fixtures).
  */
 export function doInstall(
   skillName: string,
   targets: Client[],
-  opts: { dryRun: boolean; json: boolean; homeDir: string; skillsRoot?: string },
+  opts: { dryRun: boolean; homeDir: string; skillsRoot?: string; version: string },
 ): InstallResult {
+  const checkedPath = path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md');
   const content = readSkillContent(skillName, opts.skillsRoot);
   if (!content) {
-    throw new Error(
-      `Skill '${skillName}' not found. ` +
-      `Checked: ${path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md')}. ` +
-      `Available skills: ${SUPPORTED_SKILLS.join(', ')}`,
-    );
+    throw new SkillNotFoundError(skillName, checkedPath);
   }
 
   const installed: Client[] = [];
@@ -223,7 +197,7 @@ export function doInstall(
 export function doUninstall(
   skillName: string,
   targets: Client[],
-  opts: { dryRun: boolean; json: boolean; homeDir: string },
+  opts: { dryRun: boolean; homeDir: string },
 ): InstallResult {
   const installed: Client[] = [];
   const skipped: Client[] = [];
@@ -245,14 +219,25 @@ export function doUninstall(
 
 export interface ParsedArgs {
   skill: string | null;
+  /** Explicit --config path, or null if not specified. */
+  configPath: string | null;
   uninstall: boolean;
   dryRun: boolean;
   json: boolean;
   targets: Client[] | null;
   allTargets: boolean;
-  configPath: string | null;
 }
 
+/**
+ * Parse CLI arguments for `install-skill`.
+ *
+ * NOTE: `stopEarly` is deliberately NOT set on minimist.  `stopEarly: true`
+ * causes options after the first positional argument to be treated as positional
+ * tail, which would misparse a call like:
+ *     mmagent install-skill mma-delegate --json
+ * (--json would be captured in `_` instead of setting the `json` flag).
+ * Instead we let minimist consume all arguments normally.
+ */
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = minimist(argv, {
     string: ['target', 'skill', 'config'],
@@ -263,15 +248,17 @@ export function parseArgs(argv: string[]): ParsedArgs {
       t: 'target',
       c: 'config',
     },
-    stopEarly: true,
+    // stopEarly is NOT set — see note above.
   });
 
   const skill = (args._[0] as string | undefined) ?? null;
+  const configPath = typeof args['config'] === 'string' && args['config'].length > 0
+    ? args['config']
+    : null;
   const uninstall = args['uninstall'] === true;
   const dryRun = args['dry-run'] === true;
   const json = args['json'] === true;
   const allTargets = args['all-targets'] === true;
-  const configPath = (args['config'] as string | undefined) ?? null;
 
   let targets: Client[] | null = null;
   if (args.target) {
@@ -279,7 +266,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     targets = (t as string[]).map((s) => s as Client);
   }
 
-  return { skill, uninstall, dryRun, json, targets, allTargets, configPath };
+  return { skill, configPath, uninstall, dryRun, json, targets, allTargets };
 }
 
 /**
@@ -288,6 +275,10 @@ export function parseArgs(argv: string[]): ParsedArgs {
  *   1. explicit `--target` arguments (validated against known clients)
  *   2. `--all-targets` → all four known clients
  *   3. auto-detect based on `homeDir`
+ *
+ * Explicit targets are de-duplicated while preserving order of first occurrence.
+ *
+ * @throws UnknownTargetError if an explicit target is not a known client.
  */
 export function resolveTargets(
   explicitTargets: Client[] | null,
@@ -297,12 +288,18 @@ export function resolveTargets(
   if (allTargets) return [...ALL_CLIENTS];
 
   if (explicitTargets !== null) {
+    const seen = new Set<Client>();
+    const deduped: Client[] = [];
     for (const t of explicitTargets) {
       if (!ALL_CLIENTS.includes(t)) {
-        throw new Error(`Unknown target: ${t}. Valid: ${ALL_CLIENTS.join(', ')}`);
+        throw new UnknownTargetError(t, ALL_CLIENTS);
+      }
+      if (!seen.has(t)) {
+        seen.add(t);
+        deduped.push(t);
       }
     }
-    return explicitTargets;
+    return deduped;
   }
 
   return detectClients(homeDir);
@@ -310,93 +307,185 @@ export function resolveTargets(
 
 // ─── Output helpers ─────────────────────────────────────────────────────────
 
-function printResult(result: InstallResult, json: boolean): void {
+/**
+ * Print an error message.
+ * Both branches write through the injectable `stderr` writer for testability.
+ */
+function printError(
+  stderr: (s: string) => boolean,
+  json: boolean,
+  code: string,
+  message: string,
+  stdout?: (s: string) => boolean,
+): void {
   if (json) {
-    console.log(JSON.stringify(result));
+    // JSON error output goes to stdout so callers can parse it
+    const out = stdout ?? process.stdout.write.bind(process.stdout);
+    out(JSON.stringify({ error: code, message }) + '\n');
+  } else {
+    stderr(message + '\n');
+  }
+}
+
+/**
+ * Print a success result.
+ * All output goes through the injectable `stdout` writer for testability.
+ */
+function printResult(
+  stdout: (s: string) => boolean,
+  result: InstallResult,
+  json: boolean,
+  manifestUpdated: boolean,
+): void {
+  if (json) {
+    stdout(JSON.stringify(result) + '\n');
   } else {
     const verb = result.action === 'installed' ? 'Installed' : 'Uninstalled';
     const targetStr = result.targets.length > 0 ? ` → ${result.targets.join(', ')}` : '';
     const skippedStr = result.skipped.length > 0 ? ` (dry-run: ${result.skipped.join(', ')})` : '';
-    console.log(`${verb} '${result.skill}'${targetStr}${skippedStr}`);
+    let line = `${verb} '${result.skill}'${targetStr}${skippedStr}\n`;
+    if (manifestUpdated) {
+      line += 'Manifest updated.\n';
+    }
+    stdout(line);
   }
 }
 
-// ─── argv entry point ───────────────────────────────────────────────────────
+// ─── argv entry point ────────────────────────────────────────────────────────
 
-export async function main(argv: string[] = process.argv.slice(2)): Promise<void> {
-  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets, configPath } =
+export interface MainDeps {
+  /** Override argv (defaults to process.argv.slice(2)). */
+  argv?: string[];
+  /** Home directory (defaults to os.homedir()). */
+  homeDir?: string;
+  /** Package version string for manifest entries (defaults to '0.0.0'). */
+  version?: string;
+  /** Override skills root for testing. */
+  skillsRoot?: string;
+  /** Injectable stdout writer. */
+  stdout?: (s: string) => boolean;
+  /** Injectable stderr writer. */
+  stderr?: (s: string) => boolean;
+}
+
+/**
+ * Main entry point for `mmagent install-skill`.
+ *
+ * Returns an exit code (one of `ExitCode.*`) instead of calling `process.exit()`
+ * directly, so the CLI dispatcher in `cli/index.ts` can control the exit
+ * decision and make the function fully unit-testable.
+ */
+export async function main(deps: MainDeps = {}): Promise<number> {
+  const argv = deps.argv ?? process.argv.slice(2);
+  const homeDir = deps.homeDir ?? os.homedir();
+  const version = deps.version ?? '0.0.0';
+  const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
+  const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
+
+  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets } =
     parseArgs(argv);
 
+  // ── 1. Validate skill name ──────────────────────────────────────────────────
   if (!skill) {
-    console.error(
-      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] [--config=<path>] <skill-name>',
-    );
-    console.error('Skills: ' + SUPPORTED_SKILLS.join(', '));
-    process.exit(1);
+    const msg =
+      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] <skill-name>\n' +
+      'Skills: ' + SUPPORTED_SKILLS.join(', ');
+    printError(stderr, json, 'missing_skill_name', msg, stdout);
+    return ExitCode.ERR_INVALID_ARGS;
   }
 
   if (!SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
-    console.error(`Unknown skill '${skill}'. Available: ${SUPPORTED_SKILLS.join(', ')}`);
-    process.exit(1);
+    const msg = `Unknown skill '${skill}'. Available: ${SUPPORTED_SKILLS.join(', ')}`;
+    printError(stderr, json, 'unknown_skill', msg, stdout);
+    return ExitCode.ERR_UNKNOWN_SKILL;
   }
 
-  const homeDir = os.homedir();
-  const resolvedTargets = resolveTargets(explicitTargets, allTargets, homeDir);
+  // ── 2. Resolve targets (may throw UnknownTargetError) ──────────────────────
+  let resolvedTargets: Client[];
+  try {
+    resolvedTargets = resolveTargets(explicitTargets, allTargets, homeDir);
+  } catch (err) {
+    if (err instanceof UnknownTargetError) {
+      printError(stderr, json, err.code, err.message, stdout);
+      return ExitCode.ERR_UNKNOWN_TARGET;
+    }
+    throw err;
+  }
 
+  // ── 3. Check that at least one target is available ─────────────────────────
   if (resolvedTargets.length === 0) {
     if (json) {
-      console.log(
-        JSON.stringify({ skill, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }),
+      stdout(
+        JSON.stringify({ skill, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }) + '\n',
       );
     } else {
-      console.log('No clients detected. Use --target or --all-targets to specify targets.');
+      stdout('No clients detected. Use --target or --all-targets to specify targets.\n');
     }
-    return;
+    return ExitCode.ERR_NO_TARGETS;
   }
 
-  const opts = { dryRun, json, homeDir };
+  // ── 4. Run install/uninstall ──────────────────────────────────────────────
+  const opts = { dryRun, homeDir, version, skillsRoot: deps.skillsRoot };
 
-  const result = uninstall
-    ? doUninstall(skill, resolvedTargets, opts)
-    : doInstall(skill, resolvedTargets, opts);
+  let result: InstallResult;
+  try {
+    result = uninstall
+      ? doUninstall(skill, resolvedTargets, opts)
+      : doInstall(skill, resolvedTargets, opts);
+  } catch (err) {
+    if (err instanceof SkillNotFoundError) {
+      printError(stderr, json, err.code, err.message, stdout);
+      return ExitCode.ERR_SKILL_NOT_FOUND;
+    }
+    const msg = err instanceof Error ? err.message : String(err);
+    if (
+      msg.includes('client writers are not yet implemented') ||
+      msg.includes('client removers are not yet implemented')
+    ) {
+      printError(stderr, json, 'writer_not_implemented', msg, stdout);
+      return ExitCode.ERR_WRITER_NOT_IMPLEMENTED;
+    }
+    printError(stderr, json, 'unknown', msg, stdout);
+    return ExitCode.ERR_UNKNOWN;
+  }
 
-  printResult(result, json);
-
+  // ── 5. Update manifest (only when not in dry-run mode) ─────────────────────
+  let manifestUpdated = false;
   if (!dryRun) {
     if (uninstall) {
-      const removed = manifest.removeEntry(skill, resolvedTargets, homeDir);
-      if (!json && removed.length > 0) {
-        console.log(`Removed manifest entry for ${removed.join(', ')}.`);
-      }
+      manifest.removeEntry(skill, resolvedTargets, homeDir);
     } else {
-      manifest.appendEntry(skill, '1.0.0', resolvedTargets, homeDir);
-      if (!json) {
-        console.log('Manifest updated.');
-      }
+      manifest.appendEntry(skill, version, resolvedTargets, homeDir);
     }
+    manifestUpdated = true;
   }
 
-  // Config discovery result is informational; it does not gate the operation.
-  // Run it here so the CLI exercises the discovery path during smoke testing.
-  if (configPath || process.env.MMAGENT_CONFIG || true) {
-    try {
-      const discovered = await discoverConfig(configPath ?? undefined);
-      // Silently absorb; we surface errors only when a config was explicitly requested
-      // but could not be loaded (handled inside discoverConfig).
-    } catch (_e) {
-      // Only fail on explicit --config that is malformed; auto-discovery failures are fine.
-      if (configPath) {
-        console.error((_e as Error).message);
-        process.exit(1);
-      }
-    }
+  printResult(stdout, result, json, manifestUpdated);
+
+  return ExitCode.SUCCESS;
+}
+
+// ── Bootstrap ──────────────────────────────────────────────────────────────
+
+/**
+ * Robust main-module detection (matching the pattern used in cli/index.ts).
+ * Tests import main() directly and pass MainDeps; this function only gates
+ * the direct-execution bootstrap so the CLI binary can call main().
+ */
+function isMain(): boolean {
+  try {
+    const argv1 = process.argv[1];
+    if (!argv1) return false;
+    const thisFile =
+      import.meta.url.startsWith('file://')
+        ? fileURLToPath(import.meta.url)
+        : path.resolve(import.meta.url);
+    return path.resolve(argv1) === thisFile;
+  } catch {
+    return false;
   }
 }
 
-// Only run when executed directly (not imported)
-if (import.meta.url === `file://${process.argv[1]}`) {
-  main().catch((e: Error) => {
-    console.error(e.message);
-    process.exit(1);
-  });
+if (isMain()) {
+  main().then((code) => process.exit(code));
 }
