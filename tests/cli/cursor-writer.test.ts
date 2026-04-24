@@ -5,7 +5,7 @@
  * All tests use mkdtempSync for fake cwd and fake skillsRoot.
  * Never touch real .cursor/.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
@@ -108,21 +108,59 @@ describe('inlineIncludes', () => {
       cleanup(skillsRoot);
     }
   });
+
+  it('rejects path traversal attempts via @include _shared/../<path>', () => {
+    const skillsRoot = makeFakeSkillsRoot({ 'secret.md': 'SECRET' });
+    try {
+      // Attempt to escape _shared via traversal
+      const content = '# Skill\n@include _shared/../secret.md\nDone.';
+      const result = inlineIncludes(content, skillsRoot);
+      // The directive line should be dropped, secret should NOT appear
+      expect(result).toBe('# Skill\nDone.');
+    } finally {
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('rejects @include paths not starting with _shared/', () => {
+    const skillsRoot = makeFakeSkillsRoot({ 'other.md': 'OTHER' });
+    try {
+      const content = '# Skill\n@include other.md\nDone.';
+      const result = inlineIncludes(content, skillsRoot);
+      // Non-_shared/ paths are rejected; line is dropped
+      expect(result).toBe('# Skill\nDone.');
+    } finally {
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('inlines nested _shared/... paths correctly', () => {
+    // Test that _shared/foo/bar.md resolves to skillsRoot/_shared/foo/bar.md
+    const skillsRoot = makeFakeSkillsRoot({
+      'foo/bar.md': '## Nested Section',
+    });
+    try {
+      const content = '@include _shared/foo/bar.md\n\nMore content.';
+      const result = inlineIncludes(content, skillsRoot);
+      expect(result).toBe('## Nested Section\n\nMore content.');
+    } finally {
+      cleanup(skillsRoot);
+    }
+  });
 });
 
 // ─── installCursor tests ────────────────────────────────────────────────────
 
 describe('installCursor', () => {
-  afterEach(() => {});
-
   it('writes the file when it does not exist', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       const result = installCursor({
         content: '# Multi-Model Agent\n\nCursor skill content.',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -131,17 +169,20 @@ describe('installCursor', () => {
       expect(readFileSync(dest, 'utf-8')).toBe('# Multi-Model Agent\n\nCursor skill content.');
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 
   it('returns written: true and correct targetPath', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       const result = installCursor({
         content: '# Test skill',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -149,18 +190,21 @@ describe('installCursor', () => {
       expect(result.targetPath).toBe(skillPath(cwd));
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 
   it('skips (returns written: false) when file exists and force is NOT set', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       // First write
       installCursor({
         content: '# Original',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -175,7 +219,7 @@ describe('installCursor', () => {
         const result = installCursor({
           content: '# Updated — should not appear',
           cwd,
-          homeDir: makeFakeHome(),
+          homeDir,
           skillsRoot,
         });
 
@@ -194,18 +238,21 @@ describe('installCursor', () => {
       }
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 
   it('overwrites when file exists and force: true', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       // First write
       installCursor({
         content: '# Version 1',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -213,7 +260,7 @@ describe('installCursor', () => {
       const result = installCursor({
         content: '# Version 2\nUpdated.',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
         force: true,
       });
@@ -222,17 +269,20 @@ describe('installCursor', () => {
       expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Version 2\nUpdated.');
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 
   it('@include directive is inlined in the written content', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({ 'endpoints.md': '## Endpoints\n- GET /api' });
     try {
       installCursor({
         content: '# Multi-Model Agent\n@include _shared/endpoints.md\n\nDone.',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -241,11 +291,14 @@ describe('installCursor', () => {
       );
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 
   it('creates .cursor/rules/ directory if it does not exist', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       expect(existsSync(path.join(cwd, '.cursor'))).toBe(false);
@@ -253,13 +306,110 @@ describe('installCursor', () => {
       installCursor({
         content: '# Skill',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
       expect(existsSync(skillPath(cwd))).toBe(true);
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('logs warning to stderr for missing shared file via installCursor', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({}); // no shared files
+    try {
+      const stderrLines: string[] = [];
+      const orig = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (chunk: string) => {
+        stderrLines.push(chunk);
+        return true;
+      };
+      try {
+        installCursor({
+          content: '# Skill\n@include _shared/nonexistent.md\nDone.',
+          cwd,
+          homeDir,
+          skillsRoot,
+        });
+
+        const stderrOutput = stderrLines.join('');
+        expect(stderrOutput).toContain('Warning');
+        expect(stderrOutput).toContain('shared file not found');
+        expect(stderrOutput).toContain('nonexistent.md');
+
+        // Include line should be dropped, rest preserved
+        expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Skill\nDone.');
+      } finally {
+        process.stderr.write = orig;
+      }
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('rejects path traversal in @include via installCursor', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({ 'secret.md': 'SECRET' });
+    try {
+      const stderrLines: string[] = [];
+      const orig = process.stderr.write.bind(process.stderr);
+      process.stderr.write = (chunk: string) => {
+        stderrLines.push(chunk);
+        return true;
+      };
+      try {
+        installCursor({
+          content: '# Skill\n@include _shared/../secret.md\nDone.',
+          cwd,
+          homeDir,
+          skillsRoot,
+        });
+
+        const stderrOutput = stderrLines.join('');
+        expect(stderrOutput).toContain('Warning');
+        expect(stderrOutput).toContain('path traversal');
+
+        // Traversal line should be dropped, rest preserved
+        expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Skill\nDone.');
+      } finally {
+        process.stderr.write = orig;
+      }
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('inlines nested _shared/... paths via installCursor', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({
+      'foo/bar.md': '## Nested Section',
+    });
+    try {
+      installCursor({
+        content: '@include _shared/foo/bar.md\n\nMore content.',
+        cwd,
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(readFileSync(skillPath(cwd), 'utf-8')).toBe(
+        '## Nested Section\n\nMore content.',
+      );
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 });
@@ -269,12 +419,13 @@ describe('installCursor', () => {
 describe('uninstallCursor', () => {
   it('removes the skill file', () => {
     const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       installCursor({
         content: '# Skill',
         cwd,
-        homeDir: makeFakeHome(),
+        homeDir,
         skillsRoot,
       });
 
@@ -285,6 +436,8 @@ describe('uninstallCursor', () => {
       expect(existsSync(skillPath(cwd))).toBe(false);
     } finally {
       cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 

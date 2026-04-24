@@ -5,19 +5,32 @@
  *
  * Before writing, inlines any `@include _shared/<file>.md` directives found in
  * the content. The directive line is replaced with the full content of
- * the corresponding shared file sourced from `<skillsRoot>/_shared/<file>.md`.
+ * the corresponding shared file sourced from `<skillsRoot>/_shared/<path>`.
  * The `@include` directive is NOT preserved in the written file.
  *
- * If a referenced shared file is missing, a warning is logged to stderr but
- * the write continues (the include line is removed from the output).
+ * If a referenced shared file is missing (ENOENT):
+ * - A warning is logged to stderr.
+ * - The include line is removed from the output (not preserved).
+ * - Processing continues for remaining directives.
+ *
+ * Security constraints on `@include` directives:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.
+ *   Path traversal attempts (e.g. `_shared/../secrets.txt`) are rejected
+ *   with a warning and the directive line is dropped.
+ * - Non-`_shared/` paths are rejected with a warning and the directive
+ *   line is dropped.
  *
  * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Regex matching `@include _shared/<file>.md` directive lines. */
-const INCLUDE_RE = /^@include\s+_shared\/(.+)$/;
+/**
+ * Regex matching a line that starts with `@include ` (exact space after
+ * `@include`) followed by a relative path.
+ */
+const INCLUDE_RE = /^@include\s+(.+)$/;
 
 /**
  * Options for installing a Cursor skill.
@@ -35,7 +48,8 @@ export interface CursorInstallOpts {
   cwd: string;
   /**
    * The "home directory" that replaces `os.homedir()`.
-   * Must NOT default to `os.homedir()` — always required explicitly.
+   * Required by the API for signature compatibility, but not used by
+   * the Cursor writer (target is CWD-relative, not home-relative).
    */
   homeDir: string;
   /**
@@ -64,15 +78,24 @@ export interface CursorInstallResult {
 }
 
 /**
- * Inline `@include _shared/<file>.md` directives in `content`.
+ * Inline `@include _shared/<path>` directives in `content`.
  *
- * Each line matching `@include <path>` (space after `@include`) is replaced with
- * the full content of `<skillsRoot>/_shared/<path>`.
+ * Each line matching `@include _shared/<path>` (space after `@include`) is
+ * replaced with the full content of `<skillsRoot>/_shared/<path>`.
  *
- * If a shared file is missing:
+ * Security constraints:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.
+ *   Path traversal attempts are rejected with a warning and the directive
+ *   line is dropped.
+ *
+ * If a shared file is missing (ENOENT):
  * - A warning is written to stderr.
  * - The include line is removed from the output (not preserved).
  * - Processing continues for remaining directives.
+ *
+ * Other I/O errors (permission denied, EISDIR, etc.) are re-thrown so the
+ * caller can distinguish them from a simple missing-file case.
  *
  * @param content     Raw skill content (may contain @include directives).
  * @param skillsRoot  Root directory containing `_shared/` sub-directory.
@@ -89,20 +112,52 @@ export function inlineIncludes(content: string, skillsRoot: string): string {
       continue;
     }
 
-    const relativePath = match[1]!;
+    const relativePath = match[1] ?? '';
+
+    // Security: only accept paths beginning with `_shared/`
+    if (!relativePath.startsWith('_shared/')) {
+      process.stderr.write(
+        `Warning: Cursor skill writer: @include path must start with ` +
+        `"_shared/": ${relativePath}\n`,
+      );
+      // Directive line is dropped — do not push anything.
+      continue;
+    }
+
+    // Security: reject path traversal attempts
+    const resolvedPath = path.resolve(skillsRoot, relativePath);
+    const sharedDir = path.resolve(skillsRoot, '_shared');
+    if (
+      !resolvedPath.startsWith(sharedDir + path.sep) &&
+      resolvedPath !== sharedDir
+    ) {
+      process.stderr.write(
+        `Warning: Cursor skill writer: @include path rejected ` +
+        `(path traversal): ${relativePath}\n`,
+      );
+      // Directive line is dropped.
+      continue;
+    }
+
     const sharedFilePath = path.join(skillsRoot, relativePath);
 
     try {
       const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
       result.push(sharedContent);
     } catch (err) {
-      // Log warning to stderr and drop the include line.
-      const detail = err instanceof Error ? err.message : String(err);
-      process.stderr.write(
-        `Warning: Cursor skill writer: shared file not found: ` +
-        `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
-      );
-      // Line is dropped — do not push anything.
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        // Missing shared file — warn and drop the directive line.
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `Warning: Cursor skill writer: shared file not found: ` +
+          `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
+        );
+        // Line is dropped — do not push anything.
+      } else {
+        // Permission errors, EISDIR, etc. — re-throw so the caller notices.
+        throw err;
+      }
     }
   }
 
@@ -121,7 +176,7 @@ export function inlineIncludes(content: string, skillsRoot: string): string {
  * @param opts  Installation options (see `CursorInstallOpts`).
  */
 export function installCursor(opts: CursorInstallOpts): CursorInstallResult {
-  const { content, cwd, homeDir: _homeDir, skillsRoot, force } = opts;
+  const { content, cwd, skillsRoot, force } = opts;
 
   const targetPath = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
 
@@ -151,7 +206,6 @@ export function installCursor(opts: CursorInstallOpts): CursorInstallResult {
  */
 export function uninstallCursor(cwd: string): void {
   const targetPath = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
-  if (fs.existsSync(targetPath)) {
-    fs.rmSync(targetPath, { force: true });
-  }
+  // rmSync with force:true handles nonexistence safely — no pre-check needed
+  fs.rmSync(targetPath, { recursive: true, force: true });
 }
