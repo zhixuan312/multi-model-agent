@@ -296,12 +296,13 @@ function isMain(): boolean {
   try {
     const argv1 = process.argv[1];
     if (!argv1) return false;
-    // Resolve to absolute path to handle relative argv[1], symlinks, and
-    // platform-specific path normalization consistently.
+    // Resolve to absolute path and follow symlinks — npm installs the bin as a
+    // symlink in node_modules/.bin/, so argv[1] points at the symlink, not the
+    // real file. fs.realpathSync follows the link so it matches import.meta.url.
     const entryPath = import.meta.url.startsWith('file://')
       ? fileURLToPath(import.meta.url)
       : path.resolve(argv1);
-    return path.resolve(argv1) === entryPath;
+    return fs.realpathSync(path.resolve(argv1)) === entryPath;
   } catch {
     return false;
   }
