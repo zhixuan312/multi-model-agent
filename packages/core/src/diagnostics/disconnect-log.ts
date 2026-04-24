@@ -167,7 +167,7 @@ export function createDiagnosticLogger(
         try { closeSync(state.fd); } catch { /* noop */ }
       }
       mkdirSync(logDir, { recursive: true, mode: 0o700 });
-      const fd = openSync(nodePath.join(logDir, `mcp-${today}.jsonl`), 'a', 0o600);
+      const fd = openSync(nodePath.join(logDir, `mmagent-${today}.jsonl`), 'a', 0o600);
       state.fd = fd;
       state.fdDate = today;
       return fd;
@@ -277,7 +277,7 @@ export function createDiagnosticLogger(
     },
     expectedPath: () => {
       if (state.inert) return undefined;
-      return nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`);
+      return nodePath.join(logDir, `mmagent-${formatUtcDate(now())}.jsonl`);
     },
     sessionOpen: ({ sessionId, cwd, remoteAddr }) => {
       if (state.inert) return;
