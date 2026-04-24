@@ -14,7 +14,7 @@ Every provider — Anthropic, OpenAI, Google, DeepSeek, MiniMax — is racing to
 
 The value isn't in any one model's depth. It's in the horizontal layer that connects them — routing the right task to the right agent, enforcing quality through cross-agent review, controlling cost through bounded execution, and giving engineers a labor substrate that improves every time a provider ships a better model. The providers go deeper. We connect them wider.
 
-multi-model-agent is that horizontal layer. It sits between the engineer's agent and a fleet of labor agents, making them work together as seamlessly as if they were one system. The engineer stays on judgment — architecture, design, validation, decisions. We handle labor.
+multi-model-agent is that horizontal layer. It runs as a local HTTP service and exposes installable skills to any agent client — Claude Code, Gemini CLI, Codex CLI, Cursor. The agent client stays on judgment (architecture, design, validation, decisions); multi-model-agent handles labor. Routing, supervision, review, cost control, and reporting all happen inside the service. The client never sees provider details; it calls skills exactly as it would call built-in tools.
 
 The three-tier reality this serves:
 
@@ -52,7 +52,7 @@ If the agent wrote the files and the work evidence is there, the status should r
 
 ### 6. Every tool call is a self-contained unit
 
-Each tool invocation takes everything it needs, executes, and returns. No tool depends on hidden server-side session state to function — tools may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management tools (`register_context_block`, `get_batch_slice`) are an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless tools, stateful caller.
+Each request takes everything it needs, executes, and returns. No request depends on hidden server-side session state to function — requests may depend on explicit inputs and current workspace state (files on disk), but never on implicit state from a previous call. Context management (`register_context_block`, batch polling) is an explicit, caller-controlled content store: the caller registers content, receives an ID, and passes that ID to subsequent calls. We store the content but don't track relationships between calls. Stateless requests, stateful caller.
 
 ### 7. Generic works for everyone, specialized works better
 
@@ -66,7 +66,16 @@ The engineer does judgment. We do labor. We don't make architectural decisions, 
 
 ## What We Are
 
-multi-model-agent is a horizontal connection layer, published as an MCP server. Any MCP client — Claude Code, Codex CLI, Cursor, Gemini CLI, Claude Desktop — connects to it and gets a labor substrate for task delegation. The integration should feel as natural as if the labor agents were built into the client itself.
+multi-model-agent is a horizontal connection layer delivered as a local HTTP service. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent install-skill`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
+
+### Delivery model
+
+```
+mmagent serve               # daemon, stays running
+mmagent install-skill       # writes skill files into the detected client
+```
+
+The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache, clarifications) survive.
 
 ### The two-slot model
 
@@ -123,7 +132,7 @@ Once the protocol is seamless, go deeper into the ecosystems we connect:
 
 - **Provider-aware routing** — Track which agents handle which task shapes well. Not to replace the caller's judgment, but to surface patterns: "this provider succeeds 95% on TypeScript implementation tasks, 40% on complex refactors." The caller decides; we inform.
 - **Workflow templates** — Let callers register custom task templates at runtime. The specialized presets become seed examples, not the full vocabulary. Teams define their own audit types, review checklists, verification patterns.
-- **Runtime integration** — Embed into provider ecosystems as they open extension points. Claude Code hooks, Codex plugins, IDE extensions. multi-model-agent becomes invisible infrastructure — always available, never in the way.
+- **Runtime integration** — Embed into client ecosystems as they open extension points. Claude Code hooks, Codex plugins, IDE extensions. multi-model-agent becomes invisible infrastructure — always available, never in the way.
 
 ### The horizontal layer matures
 
@@ -149,7 +158,7 @@ We execute, review, and report. We don't decide what to build, which approach to
 Specialized tools are thin presets over generic primitives. If a workflow can be achieved by combining existing primitives (prompt text + `contextBlockIds` + tool mode), it doesn't become a parameter. New presets earn their place by proving a pattern is universal enough to warrant a default, not by anticipating hypothetical needs.
 
 **We won't maintain workflow state.**
-Each tool call is a self-contained unit — everything it needs comes in, the result goes out. We provide tools that help the caller manage its own state across calls (`register_context_block`, `get_batch_slice`). We may persist explicit content blobs and return system-generated IDs for them, but we never infer workflow continuity from them — there is no implicit session, no conversation memory, no "the system remembers what you asked last time." The caller owns the workflow. We own individual task execution. This boundary is what makes multi-model-agent predictable and the cost model honest.
+Each request is a self-contained unit — everything it needs comes in, the result goes out. We provide tools that help the caller manage its own state across calls (`register_context_block`, batch polling). We may persist explicit content blobs and return system-generated IDs for them, but we never infer workflow continuity from them — there is no implicit session, no conversation memory, no "the system remembers what you asked last time." The caller owns the workflow. We own individual task execution. This boundary is what makes multi-model-agent predictable and the cost model honest.
 
 **We won't chase autonomy.**
 The industry is racing toward fully autonomous agents that run for hours. We're building the opposite: bounded execution with structured checkpoints. We run a task, review it, and return. The engineer decides what happens next. Autonomy is the caller's problem — we provide the reliable labor substrate they orchestrate.
