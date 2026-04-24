@@ -65,7 +65,7 @@ export async function executeDelegate(
         onProgress,
         runtime: { contextBlockStore },
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
+        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger,
       });
       intakeResult.intakeProgress.executedDrafts = results.length;
     }

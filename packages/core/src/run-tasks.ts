@@ -95,6 +95,14 @@ export interface RunTasksOptions {
   batchId?: string;
   /** Callback fired on every heartbeat tick with a state snapshot. */
   recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void;
+  /**
+   * Optional DiagnosticLogger. When present AND `verbose` is true, the
+   * runner emits per-tool-call + per-LLM-turn events for post-mortem
+   * diagnosis of slow tasks.
+   */
+  logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
+  /** Enable verbose diagnostic emissions (tool_call + llm_turn events). */
+  verbose?: boolean;
 }
 
 function errorResult(error: string): RunResult {
@@ -188,6 +196,7 @@ async function executeReviewedLifecycle(
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
   heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void },
+  diagnostics?: { logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger; verbose?: boolean },
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -223,6 +232,8 @@ async function executeReviewedLifecycle(
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
+  const verboseLogger = diagnostics?.verbose && diagnostics.logger ? diagnostics.logger : undefined;
+  const verboseBatchId = heartbeatWiring?.batchId;
   const wrappedOnProgress = onProgress
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
@@ -234,6 +245,13 @@ async function executeReviewedLifecycle(
             progressCounters.filesWritten++;
           }
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
+          if (verboseLogger && verboseBatchId) {
+            verboseLogger.toolCall({
+              batchId: verboseBatchId,
+              taskIndex,
+              tool: event.toolSummary,
+            });
+          }
         }
         if (event.kind === 'turn_complete') {
           const costUSD = computeCostUSD(
@@ -248,6 +266,17 @@ async function executeReviewedLifecycle(
             task.parentModel,
           );
           heartbeat?.updateCost(costUSD, savedCostUSD);
+          if (verboseLogger && verboseBatchId) {
+            verboseLogger.llmTurn({
+              batchId: verboseBatchId,
+              taskIndex,
+              turnIndex: progressCounters.toolCalls,
+              provider: resolved.provider.config.model,
+              inputTokens: event.cumulativeInputTokens,
+              outputTokens: event.cumulativeOutputTokens,
+              costUSD,
+            });
+          }
         }
       }
     : undefined;
@@ -747,6 +776,9 @@ export async function runTasks(
       return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
         batchId: options.batchId,
         recordHeartbeat: options.recordHeartbeat,
+      }, {
+        logger: options.logger,
+        verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
       }).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {

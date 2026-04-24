@@ -51,6 +51,18 @@ export interface DiagnosticLogger {
   taskStarted(params: { batchId: string; taskIndex: number; worker?: string }): void;
   taskHeartbeat(params: { batchId: string; taskIndex: number; elapsedMs: number; stage?: string }): void;
   taskPhaseChange(params: { batchId: string; taskIndex: number; fromStage: string; toStage: string }): void;
+
+  // Verbose events (3.1.0) — only called when diagnostics.verbose === true
+  toolCall(params: { batchId: string; taskIndex: number; tool: string; durationMs?: number }): void;
+  llmTurn(params: {
+    batchId: string;
+    taskIndex: number;
+    turnIndex: number;
+    provider?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    costUSD?: number | null;
+  }): void;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -133,6 +145,8 @@ export function createDiagnosticLogger(
       taskStarted: () => {},
       taskHeartbeat: () => {},
       taskPhaseChange: () => {},
+      toolCall: () => {},
+      llmTurn: () => {},
     };
   }
 
@@ -376,6 +390,31 @@ export function createDiagnosticLogger(
         taskIndex,
         fromStage,
         toStage,
+      });
+    },
+    toolCall: ({ batchId, taskIndex, tool, durationMs }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'tool_call',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        tool,
+        ...(durationMs !== undefined ? { durationMs } : {}),
+      });
+    },
+    llmTurn: ({ batchId, taskIndex, turnIndex, provider, inputTokens, outputTokens, costUSD }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'llm_turn',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        turnIndex,
+        ...(provider !== undefined ? { provider } : {}),
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+        ...(costUSD !== undefined && costUSD !== null ? { costUSD } : {}),
       });
     },
   };

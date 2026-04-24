@@ -1,7 +1,7 @@
 ---
 name: multi-model-agent
-description: Overview of the multi-model-agent local service. Use this skill to understand which specialized mma-* skill to invoke for a given task.
-when_to_use: When the user asks about delegating tool-using work, or when auth/setup issues arise before a specific mma-* skill can run.
+description: Router for the multi-model-agent local service. Use FIRST when you're about to delegate any tool-using work so you pick the right mma-* skill instead of defaulting to inline Agent dispatches or superpowers:subagent-driven-development.
+when_to_use: Any time you're about to delegate implementation, research, audit, review, verify, debug, or execute-plan work AND mmagent is running. Read this before reaching for inline Agent calls or superpowers subagent skills — if mma-* applies, prefer it (cheaper workers, independent context, diagnostic log).
 version: "0.0.0-unreleased"
 ---
 
@@ -49,8 +49,15 @@ Every request requires `Authorization: Bearer <token>`.
 ### General flow
 
 1. Call the appropriate `mma-*` skill → receive `{ batchId }`.
-2. Poll `GET /batch/:id` until `state` is terminal.
-3. Read `results` from the completed batch.
+2. Poll `GET /batch/:id`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
+3. Read `results` / `error` / `proposedInterpretation` from the terminal envelope.
 
-If the batch reaches `awaiting_clarification`, use `mma-clarifications`
-to confirm or correct the proposed interpretation before the batch resumes.
+If the terminal envelope has `proposedInterpretation` as a string, use `mma-clarifications` to confirm or correct it.
+
+### Diagnosing slow tasks
+
+Start the server with `mmagent serve --verbose` (or set `diagnostics.verbose: true` in config) to record `tool_call` and `llm_turn` events. Then tail them:
+
+```bash
+mmagent logs --follow --batch=$BATCH_ID
+```

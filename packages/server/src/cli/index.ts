@@ -73,7 +73,7 @@ export interface CliDeps {
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
     string: ['config', 'batch'],
-    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'verbose'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -230,6 +230,10 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
+      if (opts['verbose'] === true) {
+        if (!config.diagnostics) config.diagnostics = { log: true, verbose: true };
+        else { config.diagnostics.log = true; config.diagnostics.verbose = true; }
+      }
       // startServe() blocks until a signal arrives and exits the process.
       await startServe(config, exit);
       break;

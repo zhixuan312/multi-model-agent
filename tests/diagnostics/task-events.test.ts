@@ -57,6 +57,33 @@ describe('DiagnosticLogger task events', () => {
     logger.taskStarted({ batchId: 'b', taskIndex: 0 });
     logger.taskHeartbeat({ batchId: 'b', taskIndex: 0, elapsedMs: 0 });
     logger.taskPhaseChange({ batchId: 'b', taskIndex: 0, fromStage: 'x', toStage: 'y' });
+    logger.toolCall({ batchId: 'b', taskIndex: 0, tool: 'x' });
+    logger.llmTurn({ batchId: 'b', taskIndex: 0, turnIndex: 0 });
     expect(readLines(dir)).toEqual([]);
+  });
+
+  it('writes tool_call with tool + durationMs', () => {
+    const dir = tmpLogDir();
+    const logger = createDiagnosticLogger({ enabled: true, logDir: dir });
+    logger.toolCall({ batchId: 'b4', taskIndex: 2, tool: 'readFile(foo.ts)', durationMs: 42 });
+    const line = readLines(dir).find((l) => l['event'] === 'tool_call');
+    expect(line).toBeDefined();
+    expect(line?.['tool']).toBe('readFile(foo.ts)');
+    expect(line?.['durationMs']).toBe(42);
+  });
+
+  it('writes llm_turn with provider + tokens + cost', () => {
+    const dir = tmpLogDir();
+    const logger = createDiagnosticLogger({ enabled: true, logDir: dir });
+    logger.llmTurn({
+      batchId: 'b5', taskIndex: 0, turnIndex: 3,
+      provider: 'MiniMax-M2.7', inputTokens: 1234, outputTokens: 567, costUSD: 0.12,
+    });
+    const line = readLines(dir).find((l) => l['event'] === 'llm_turn');
+    expect(line).toBeDefined();
+    expect(line?.['provider']).toBe('MiniMax-M2.7');
+    expect(line?.['inputTokens']).toBe(1234);
+    expect(line?.['outputTokens']).toBe(567);
+    expect(line?.['costUSD']).toBe(0.12);
   });
 });
