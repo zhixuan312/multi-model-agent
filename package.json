@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "3.1.5",
+  "version": "3.1.6",
   "private": true,
   "license": "MIT",
   "description": "Local HTTP service that delegates tool-using work to sub-agents on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
