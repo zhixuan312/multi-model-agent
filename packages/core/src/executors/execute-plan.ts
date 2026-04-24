@@ -1,6 +1,5 @@
 // packages/core/src/executors/execute-plan.ts
 import { randomUUID } from 'node:crypto';
-import { readFile } from 'node:fs/promises';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/execute-plan.js';
 import type { TaskSpec } from '../types.js';
@@ -9,29 +8,46 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
-// --- Ported from packages/mcp/src/tools/execute-plan.ts ---
-
-function buildExecutePlanPrompt(fileContents: string, task: string, context?: string): string {
-  const parts = [
-    'Below are the plan and/or spec documents for this project:',
+/**
+ * Build a compact worker prompt for one plan task.
+ *
+ * 3.1.7 shift: stop inlining the whole plan file (often 100+ KB). Instead
+ * pass just the section for the current task — `extractPlanSection` already
+ * pulls it cleanly. Fall back to naming the file path so the worker can
+ * readFile it on demand when the heading can't be matched.
+ */
+function buildExecutePlanPrompt(
+  filePaths: string[],
+  task: string,
+  taskSection: string | undefined,
+  context?: string,
+): string {
+  const parts: string[] = [
+    `Execute this task from the plan: "${task}"`,
     '',
-    '---',
-    fileContents,
-    '---',
-    '',
-    'Execute the following task from the documents above:',
-    '',
-    `Requested task: "${task}"`,
   ];
-  if (context) {
-    parts.push('', `Additional context: ${context}`);
+  if (taskSection) {
+    parts.push('Relevant plan section:', '', '---', taskSection.trim(), '---', '');
+  } else {
+    parts.push(
+      `No unique plan section matched that task heading. The full plan file is at:`,
+      ...filePaths.map((p) => `  - ${p}`),
+      'Read the plan file(s) yourself to find the task.',
+      '',
+    );
   }
   parts.push(
+    `Plan files for reference (read on demand if you need adjacent context):`,
+    ...filePaths.map((p) => `  - ${p}`),
     '',
-    'Find this task in the plan/spec documents above (not in any preceding context blocks),',
-    'understand its requirements, and implement it fully.',
-    'Follow any acceptance criteria, file paths, and constraints specified in the plan.',
-    'If you cannot find a unique matching task, report that no match was found and do not implement anything.',
+  );
+  if (context) {
+    parts.push(`Additional context: ${context}`, '');
+  }
+  parts.push(
+    'Implement the task fully. Follow any acceptance criteria, file paths, and',
+    'constraints in the plan section above. If you cannot find or understand',
+    'the task, report that explicitly and do not implement anything.',
   );
   return parts.join('\n');
 }
@@ -73,23 +89,6 @@ export async function executeExecutePlan(
     };
   }
 
-  // Read all plan/spec files
-  let fileContents: string;
-  try {
-    const contents = await Promise.all(
-      validPaths.map(async (fp) => {
-        const content = await readFile(fp, 'utf-8');
-        return `--- ${fp} ---\n${content}`;
-      }),
-    );
-    fileContents = contents.join('\n\n');
-  } catch (err) {
-    return {
-      error: `Error reading plan files: ${err instanceof Error ? err.message : String(err)}`,
-      isError: true,
-    };
-  }
-
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
@@ -108,17 +107,24 @@ export async function executeExecutePlan(
   };
   const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
-  const tasks: TaskSpec[] = input.tasks.map(task => ({
-    ...baseTaskSpec,
-    prompt: buildExecutePlanPrompt(fileContents, task, input.context),
-  } as TaskSpec));
-
-  // Inject plan section context so spec reviewer checks implementation against the plan
-  for (let i = 0; i < tasks.length; i++) {
-    const section = await extractPlanSection(validPaths, input.tasks[i], baseTaskSpec.cwd);
+  // Build per-task specs. Extract the matching plan section ONCE per task
+  // and use it for both the worker prompt and the spec reviewer context.
+  // This keeps the worker prompt compact (~2-5 KB per task instead of
+  // inlining the whole plan file, which was 100+ KB in practice).
+  const tasks: TaskSpec[] = [];
+  for (let i = 0; i < input.tasks.length; i++) {
+    const taskDescriptor = input.tasks[i]!;
+    const section = await extractPlanSection(validPaths, taskDescriptor, baseTaskSpec.cwd);
+    const spec: TaskSpec = {
+      ...baseTaskSpec,
+      prompt: buildExecutePlanPrompt(validPaths, taskDescriptor, section, input.context),
+    } as TaskSpec;
     if (section) {
-      tasks[i].planContext = section;
+      spec.planContext = section;
     }
+    // Tell the worker which plan files exist so it can readFile them on demand.
+    spec.filePaths = [...(baseTaskSpec.filePaths ?? []), ...validPaths];
+    tasks.push(spec);
   }
 
   if (tasks.length === 1) {
