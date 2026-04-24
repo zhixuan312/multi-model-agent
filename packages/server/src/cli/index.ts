@@ -29,6 +29,8 @@ import {
   type MultiModelConfig,
 } from '@zhixuan92/multi-model-agent-core';
 import { startServe } from './serve.js';
+import { printToken } from './print-token.js';
+import { runStatus, buildServerUrl } from './status.js';
 import { main as installSkillMain } from './install-skill.js';
 
 /**
@@ -67,8 +69,8 @@ export interface CliDeps {
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
     string: ['config'],
-    boolean: ['help', 'version'],
-    alias: { config: 'c', help: 'h', version: 'v' },
+    boolean: ['help', 'version', 'json'],
+    alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
     // `mmagent serve --config ./config.json` would lose --config.
@@ -168,6 +170,8 @@ Usage:
 
 Commands:
   serve            Start the HTTP server (default)
+  print-token      Print the bearer auth token to stdout
+  status           Show server status (requires a running server)
   install-skill    Install or uninstall a skill for an AI client
 
 Global options:
@@ -221,6 +225,43 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const config = await loadConfig(configArg, deps);
       // startServe() blocks until a signal arrives and exits the process.
       await startServe(config, exit);
+      break;
+    }
+    case 'print-token': {
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const tokenFile = config
+        ? config.server.auth.tokenFile
+        : path.join(deps.homeDir?.() ?? os.homedir(), '.multi-model', 'auth-token');
+      const code = printToken({
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        tokenFile,
+        env: deps.env?.() ?? process.env,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'status': {
+      const jsonFlag = opts['json'] === true;
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      const home = deps.homeDir?.() ?? os.homedir();
+      const tokenFile = config
+        ? config.server.auth.tokenFile
+        : path.join(home, '.multi-model', 'auth-token');
+      const serverUrl = config
+        ? buildServerUrl(config.server.bind, config.server.port)
+        : buildServerUrl('127.0.0.1', 7337);
+      const code = await runStatus({
+        serverUrl,
+        tokenFile,
+        json: jsonFlag,
+        env: deps.env?.() ?? process.env,
+        homeDir: home,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
       break;
     }
     case 'install-skill': {
