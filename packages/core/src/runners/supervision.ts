@@ -408,10 +408,14 @@ export function logWatchdogEvent(
 export const COMPLETED_WORK_TOOLS = new Set(['writeFile', 'editFile', 'runShell']);
 
 /** Maximum consecutive degenerate outputs (empty/thinking-only) before giving up.
- *  Only counted when the worker has NO recent tool calls. Kept low: if the model
- *  can't produce a valid answer in 3 tries, more retries just burn API round-trips
- *  (each ~30-60s on codex). Time/cost are the real bounds. */
-export const MAX_DEGENERATE_RETRIES = 3;
+ *  Only counted when the worker has NO `writeFile`/`editFile`/`runShell` yet
+ *  (reads don't count as "completed work"). Workers that read many files before
+ *  they feel ready to write legitimately spend several turns "thinking" first —
+ *  the cap should be generous enough for that pattern. 6 covers heavy-read
+ *  tasks (plan implementation, wide refactors) while still bounding truly-stuck
+ *  runs. Complex-tier runners that hit this cap fast are still bounded by
+ *  maxCostUSD and timeoutMs. */
+export const MAX_DEGENERATE_RETRIES = 6;
 
 /** Number of consecutive turns with no new file interactions before injecting a stall warning. */
 export const STALL_DETECTION_TURNS = 5;
