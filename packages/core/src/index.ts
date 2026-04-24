@@ -37,6 +37,7 @@ export type {
   ReadinessResult,
 } from './types.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
+export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 
 // Context blocks
 export {
