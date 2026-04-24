@@ -48,6 +48,27 @@ function skillPath(homeDir: string, skillName: string): string {
   return path.join(homeDir, '.claude', 'skills', skillName, 'SKILL.md');
 }
 
+// ─── Capture stderr ──────────────────────────────────────────────────────────
+
+/**
+ * Wraps process.stderr.write and captures all written chunks into `chunks`.
+ * Returns a restore function.
+ */
+function captureStderr(chunks: string[]): () => void {
+  const orig = process.stderr.write;
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  (process.stderr as any).write = function (chunk: unknown, ..._args: unknown[]) {
+    if (typeof chunk === 'string') {
+      chunks.push(chunk);
+    }
+    return orig(chunk as string);
+  };
+  return function restore() {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (process.stderr as any).write = orig;
+  };
+}
+
 // ─── inlineIncludes edge cases ───────────────────────────────────────────────
 
 describe('inlineIncludes edge cases', () => {
@@ -55,7 +76,7 @@ describe('inlineIncludes edge cases', () => {
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       const content = '# Skill\n@include docs/include.md\nDone.';
-      const result = inlineIncludes(content, skillsRoot);
+      const result = inlineIncludes('test-skill', content, skillsRoot);
       // Directive line should be dropped
       expect(result).toBe('# Skill\nDone.');
     } finally {
@@ -67,7 +88,7 @@ describe('inlineIncludes edge cases', () => {
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       const content = '# Skill\n@include _shared/../../secret.md';
-      const result = inlineIncludes(content, skillsRoot);
+      const result = inlineIncludes('test-skill', content, skillsRoot);
       expect(result).toBe('# Skill');
     } finally {
       cleanup(skillsRoot);
@@ -78,7 +99,7 @@ describe('inlineIncludes edge cases', () => {
     const skillsRoot = makeFakeSkillsRoot({});
     try {
       const content = '# Skill\n@include /etc/passwd';
-      const result = inlineIncludes(content, skillsRoot);
+      const result = inlineIncludes('test-skill', content, skillsRoot);
       expect(result).toBe('# Skill');
     } finally {
       cleanup(skillsRoot);
@@ -89,8 +110,21 @@ describe('inlineIncludes edge cases', () => {
     const skillsRoot = makeFakeSkillsRoot({ 'footer.md': 'Footer content' });
     try {
       const content = '# Skill\n@include _shared/footer.md'; // no trailing newline
-      const result = inlineIncludes(content, skillsRoot);
+      const result = inlineIncludes('test-skill', content, skillsRoot);
       expect(result).toBe('# Skill\nFooter content');
+    } finally {
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('re-throws non-ENOENT errors', () => {
+    const skillsRoot = makeFakeSkillsRoot({});
+    // Create a directory where a file is expected
+    const filePath = path.join(skillsRoot, '_shared', 'should-be-dir');
+    fs.mkdirSync(filePath, { recursive: true });
+    try {
+      const content = '# Skill\n@include _shared/should-be-dir';
+      expect(() => inlineIncludes('test-skill', content, skillsRoot)).toThrow();
     } finally {
       cleanup(skillsRoot);
     }
@@ -164,35 +198,26 @@ describe('installClaudeCode', () => {
   it('logs warning to stderr when shared file is missing and removes line', () => {
     const homeDir = makeFakeHome();
     const skillsRoot = makeFakeSkillsRoot({}); // no shared files
+    const stderrChunks: string[] = [];
+    const restore = captureStderr(stderrChunks);
     try {
-      const stderrChunks: string[] = [];
-      const orig = process.stderr.write.bind(process.stderr);
-      process.stderr.write = function(chunk: unknown, ...args: unknown[]) {
-        if (typeof chunk === 'string') {
-          stderrChunks.push(chunk);
-        }
-        return (orig as (chunk: unknown, ...a: unknown[]) => boolean)(chunk, ...args);
-      };
-      try {
-        installClaudeCode({
-          skillName: 'mma-review',
-          content: '# Review\n@include _shared/missing.md\nDone.',
-          homeDir,
-          skillsRoot,
-        });
+      installClaudeCode({
+        skillName: 'mma-review',
+        content: '# Review\n@include _shared/missing.md\nDone.',
+        homeDir,
+        skillsRoot,
+      });
 
-        const dest = skillPath(homeDir, 'mma-review');
-        // Include directive removed; Done. preserved
-        expect(readFileSync(dest, 'utf-8')).toBe('# Review\nDone.');
+      const dest = skillPath(homeDir, 'mma-review');
+      // Include directive removed; Done. preserved
+      expect(readFileSync(dest, 'utf-8')).toBe('# Review\nDone.');
 
-        // Warning was logged
-        const warning = stderrChunks.join('');
-        expect(warning).toContain('Warning');
-        expect(warning).toContain('missing.md');
-      } finally {
-        process.stderr.write = orig as typeof process.stderr.write;
-      }
+      // Warning was logged
+      const warning = stderrChunks.join('');
+      expect(warning).toContain('Warning');
+      expect(warning).toContain('missing.md');
     } finally {
+      restore();
       cleanup(homeDir);
       cleanup(skillsRoot);
     }
@@ -228,6 +253,24 @@ describe('installClaudeCode', () => {
           skillsRoot,
         }),
       ).toThrow(/path traversal not allowed/);
+    } finally {
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('rejects empty skillName', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({});
+    try {
+      expect(() =>
+        installClaudeCode({
+          skillName: '',
+          content: '# Hack',
+          homeDir,
+          skillsRoot,
+        }),
+      ).toThrow(/skillName must be a non-empty string/);
     } finally {
       cleanup(homeDir);
       cleanup(skillsRoot);
@@ -285,6 +328,19 @@ describe('uninstallClaudeCode', () => {
     try {
       expect(() => uninstallClaudeCode('../otherdir', homeDir)).toThrow(
         /path traversal not allowed/,
+      );
+    } finally {
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  it('rejects empty skillName', () => {
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({});
+    try {
+      expect(() => uninstallClaudeCode('', homeDir)).toThrow(
+        /skillName must be a non-empty string/,
       );
     } finally {
       cleanup(homeDir);

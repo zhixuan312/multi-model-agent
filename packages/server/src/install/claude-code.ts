@@ -8,8 +8,18 @@
  * the corresponding shared file sourced from `<skillsRoot>/_shared/<file>.md`.
  * The `@include` directive is NOT preserved in the written file.
  *
- * If a referenced shared file is missing, a warning is logged to stderr but
- * the write continues (the include line is removed from the output).
+ * If a referenced shared file is missing (ENOENT):
+ * - A warning is logged to stderr.
+ * - The include line is removed from the output (not preserved).
+ * - Processing continues for remaining directives.
+ *
+ * Security constraints on `@include` directives:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.
+ *   Path traversal attempts (e.g. `_shared/../secrets.txt`) are rejected
+ *   with a warning and the directive line is dropped.
+ * - Non-`_shared/` paths are rejected with a warning and the directive
+ *   line is dropped.
  *
  * @module
  */
@@ -39,7 +49,10 @@ export interface ClaudeCodeInstallOpts {
   skillsRoot: string;
 }
 
-/** Regex matching a line that starts with `@include ` followed by a relative path. */
+/**
+ * Regex matching a line that starts with `@include ` (exact space after
+ * `@include`) followed by a relative path.
+ */
 const INCLUDE_RE = /^@include\s+(.+)$/;
 
 /**
@@ -48,16 +61,30 @@ const INCLUDE_RE = /^@include\s+(.+)$/;
  * Each line matching `@include _shared/<path>` (space after `@include`) is
  * replaced with the full content of `<skillsRoot>/_shared/<path>`.
  *
+ * Security constraints:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.
+ *   Path traversal attempts are rejected with a warning and the directive
+ *   line is dropped.
+ *
  * If a shared file is missing (ENOENT):
  * - A warning is written to stderr.
  * - The include line is removed from the output (not preserved).
  * - Processing continues for remaining directives.
  *
- * @param content     Raw SKILL.md content (may contain @include directives).
+ * Other I/O errors (permission denied, EISDIR, etc.) are re-thrown so the
+ * caller can distinguish them from a simple missing-file case.
+ *
+ * @param skillName  Used in warning messages to identify the skill context.
+ * @param content    Raw SKILL.md content (may contain @include directives).
  * @param skillsRoot  Root directory containing `_shared/` sub-directory.
  * @returns The content with directives inlined.
  */
-function inlineIncludes(content: string, skillsRoot: string): string {
+export function inlineIncludes(
+  skillName: string,
+  content: string,
+  skillsRoot: string,
+): string {
   const lines = content.split('\n');
   const result: string[] = [];
 
@@ -68,20 +95,53 @@ function inlineIncludes(content: string, skillsRoot: string): string {
       continue;
     }
 
-    const relativePath = match[1]!;
+    const relativePath = match[1] ?? '';
+
+    // Security: only accept paths beginning with `_shared/`
+    if (!relativePath.startsWith('_shared/')) {
+      process.stderr.write(
+        `Warning: Claude Code skill writer [${skillName}]: @include path must ` +
+        `start with "_shared/": ${relativePath}\n`,
+      );
+      // Directive line is dropped — do not push anything.
+      continue;
+    }
+
+    // Security: reject path traversal attempts
+    const resolvedPath = path.resolve(skillsRoot, relativePath);
+    const sharedDir = path.resolve(skillsRoot, '_shared');
+    if (
+      !resolvedPath.startsWith(sharedDir + path.sep) &&
+      resolvedPath !== sharedDir
+    ) {
+      process.stderr.write(
+        `Warning: Claude Code skill writer [${skillName}]: @include path ` +
+        `rejected (path traversal): ${relativePath}\n`,
+      );
+      // Directive line is dropped.
+      continue;
+    }
+
     const sharedFilePath = path.join(skillsRoot, relativePath);
 
     try {
       const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
       result.push(sharedContent);
     } catch (err) {
-      // Log warning to stderr and drop the include line.
-      const detail = err instanceof Error ? err.message : String(err);
-      process.stderr.write(
-        `Warning: Claude Code skill writer: shared file not found: ` +
-        `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
-      );
-      // Line is dropped — do not push anything.
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        // Missing shared file — warn and drop the directive line.
+        const detail = err instanceof Error ? err.message : String(err);
+        process.stderr.write(
+          `Warning: Claude Code skill writer [${skillName}]: shared file ` +
+          `not found: ${sharedFilePath} (referenced by @include ` +
+          `${relativePath}) — ${detail}\n`,
+        );
+        // Line is dropped — do not push anything.
+      } else {
+        // Permission errors, EISDIR, etc. — re-throw so the caller notices.
+        throw err;
+      }
     }
   }
 
@@ -89,24 +149,29 @@ function inlineIncludes(content: string, skillsRoot: string): string {
 }
 
 /**
- * Validate that the resolved skill directory stays within the intended skills root.
- *
- * This uses path resolution to ensure the skill name cannot escape the
- * `<homeDir>/.claude/skills/` directory via traversal components.
+ * Validate that the resolved skill directory stays within the intended skills root
+ * and that the skill name is non-empty.
  *
  * @param skillName - The skill name to validate.
  * @param homeDir   - The home directory to resolve under.
- * @throws If the resolved path escapes the skills directory.
+ * @throws If the skill name is empty or the resolved path escapes the skills directory.
  */
 function validateSkillName(skillName: string, homeDir: string): void {
+  if (!skillName) {
+    throw new Error('skillName must be a non-empty string');
+  }
+
   const skillsRoot = path.join(homeDir, '.claude', 'skills');
   const resolved = path.resolve(skillsRoot, skillName);
   const normalizedRoot = path.normalize(skillsRoot);
 
   // Ensure the resolved path is under the skills root
-  if (!resolved.startsWith(normalizedRoot + path.sep) && resolved !== normalizedRoot) {
+  if (
+    !resolved.startsWith(normalizedRoot + path.sep) &&
+    resolved !== normalizedRoot
+  ) {
     throw new Error(
-      `Invalid skill name: "${skillName}" — path would resolve outside skills directory`,
+      `path traversal not allowed: "${skillName}" resolves outside skills directory`,
     );
   }
 }
@@ -123,13 +188,13 @@ function validateSkillName(skillName: string, homeDir: string): void {
 export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
   const { skillName, content, homeDir, skillsRoot } = opts;
 
-  // Security: validate skill name using path-based check
+  // Security: validate skill name and check for traversal
   validateSkillName(skillName, homeDir);
 
   const skillDir = path.join(homeDir, '.claude', 'skills', skillName);
   fs.mkdirSync(skillDir, { recursive: true, mode: 0o700 });
 
-  const finalContent = inlineIncludes(content, skillsRoot);
+  const finalContent = inlineIncludes(skillName, content, skillsRoot);
   const destPath = path.join(skillDir, 'SKILL.md');
   fs.writeFileSync(destPath, finalContent, 'utf-8');
 }
@@ -144,7 +209,7 @@ export function installClaudeCode(opts: ClaudeCodeInstallOpts): void {
  * @param homeDir    The "home directory" that replaces `os.homedir()`.
  */
 export function uninstallClaudeCode(skillName: string, homeDir: string): void {
-  // Security: validate skill name using path-based check
+  // Security: validate skill name (empty string would target the whole skills dir)
   validateSkillName(skillName, homeDir);
 
   const skillDir = path.join(homeDir, '.claude', 'skills', skillName);
