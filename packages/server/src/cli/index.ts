@@ -35,6 +35,7 @@ import { runStatus, buildServerUrl } from './status.js';
 import { main as installSkillMain } from './install-skill.js';
 import { runInfo } from './info.js';
 import { runUpdateSkills } from './update-skills.js';
+import { runLogs } from './logs.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -71,8 +72,8 @@ export interface CliDeps {
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config'],
-    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort'],
+    string: ['config', 'batch'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -178,6 +179,7 @@ Commands:
   status           Show server status (requires a running server)
   install-skill    Install or uninstall a skill for an AI client
   update-skills    Re-copy installed skills from the shipped bundle
+  logs             Tail the diagnostic log (use --follow / --batch=<id>)
 
 Global options:
   --config, -c <path>   Path to config file
@@ -284,6 +286,24 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         tokenFile: config.server.auth.tokenFile,
         homeDir: deps.homeDir?.() ?? os.homedir(),
         json: jsonFlag,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'logs': {
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      if (!config) {
+        stderr(`mmagent logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        exit(1);
+        break;
+      }
+      const code = await runLogs({
+        config,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        follow: opts['follow'] === true,
+        batchId: typeof opts['batch'] === 'string' ? opts['batch'] : undefined,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
