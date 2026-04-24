@@ -32,18 +32,21 @@ describe('contract: POST /retry', () => {
         body: JSON.stringify({ tasks: [{ prompt: 'hello' }] }),
       });
       expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
+      const { batchId: dispatchBatchId } = (await dispatch.json()) as { batchId: string };
 
-      await pollToTerminal(h, batchId);
+      const dispatchTerminal = await pollToTerminal(h, dispatchBatchId);
+      // The batchCache-level batchId lives in the terminal payload; this is
+      // the ID retry_tasks operates on, not the dispatch/registry batchId.
+      const cacheBatchId = dispatchTerminal['batchId'] as string;
 
       // Now retry the first task
-      const retryRes = await fetch(`${h.baseUrl}/retry`, {
+      const retryRes = await fetch(`${h.baseUrl}/retry?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ batchId, taskIndices: [0] }),
+        body: JSON.stringify({ batchId: cacheBatchId, taskIndices: [0] }),
       });
       expect(retryRes.status).toBe(202);
       const { batchId: newBatchId } = (await retryRes.json()) as { batchId: string };

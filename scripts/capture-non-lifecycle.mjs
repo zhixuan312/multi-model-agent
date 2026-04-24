@@ -102,16 +102,18 @@ async function main() {
         body: JSON.stringify({ tasks: [{ prompt: 'hello' }] }),
       });
       const retryDispatchData = await dispatchRetry.json();
-      const retryBatchId = retryDispatchData.batchId;
-      await pollToTerminal(h2.baseUrl, h2.token, retryBatchId);
+      const dispatchBatchId = retryDispatchData.batchId;
+      const dispatchTerminal = await pollToTerminal(h2.baseUrl, h2.token, dispatchBatchId);
+      // batchCache-level batchId lives in terminal payload — retry operates on this one
+      const cacheBatchId = dispatchTerminal.batchId;
 
-      const retryRes = await fetch(`${h2.baseUrl}/retry`, {
+      const retryRes = await fetch(`${h2.baseUrl}/retry?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
           Authorization: `Bearer ${h2.token}`,
         },
-        body: JSON.stringify({ batchId: retryBatchId, taskIndices: [0] }),
+        body: JSON.stringify({ batchId: cacheBatchId, taskIndices: [0] }),
       });
       const retryResData = await retryRes.json();
       const newBatchId = retryResData.batchId;

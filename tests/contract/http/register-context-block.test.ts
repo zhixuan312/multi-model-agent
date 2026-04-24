@@ -20,7 +20,7 @@ describe('contract: POST /context-blocks', () => {
           body: JSON.stringify({ content: 'hello from context block' }),
         },
       );
-      expect(res.status).toBe(200);
+      expect(res.status).toBe(201);
       expect(normalize(await res.json())).toEqual(okGolden);
     } finally {
       await h.close();
