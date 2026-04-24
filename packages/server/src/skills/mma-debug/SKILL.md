@@ -1,7 +1,7 @@
 ---
 name: mma-debug
-description: Debug a failure using a structured hypothesis. All provided files are investigated together in a single task.
-when_to_use: When a test fails, a build breaks, or unexpected behavior appears and you need a structured investigation with a hypothesis.
+description: Debug a failure using a structured hypothesis via the local mmagent HTTP service. All provided files are investigated together in a single task on a worker.
+when_to_use: superpowers:systematic-debugging gives you the hypothesis-driven methodology. This skill delegates the investigation work itself — reading files, reproducing the failure, narrowing root cause — to a mmagent worker, keeping your main context focused on the hypothesis and the eventual fix.
 version: "0.0.0-unreleased"
 ---
 

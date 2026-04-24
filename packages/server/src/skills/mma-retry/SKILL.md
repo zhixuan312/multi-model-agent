@@ -1,7 +1,7 @@
 ---
 name: mma-retry
-description: Re-run specific failed or incomplete tasks from a previous batch by index.
-when_to_use: When some tasks in a previous batch failed or returned incomplete results and you want to re-run only those tasks without re-running the whole batch.
+description: Re-run specific failed or incomplete tasks from a previous mmagent batch by index. Preserves the original task specs and only re-executes the named indices.
+when_to_use: A previous mma-delegate / mma-execute-plan batch returned partial results and you want to re-try the failed indices only. Prefer this over redispatching the whole batch or inline-retrying — it's idempotent and keeps the original batch's diagnostics intact.
 version: "0.0.0-unreleased"
 ---
 

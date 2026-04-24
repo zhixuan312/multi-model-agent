@@ -97,12 +97,20 @@ export interface RunTasksOptions {
   recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void;
   /**
    * Optional DiagnosticLogger. When present AND `verbose` is true, the
-   * runner emits per-tool-call + per-LLM-turn events for post-mortem
-   * diagnosis of slow tasks.
+   * runner records per-tool-call + per-LLM-turn events for post-mortem
+   * diagnosis of slow tasks. Logger writes are a no-op if diagnostics.log=false,
+   * so passing it is always safe.
    */
   logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
-  /** Enable verbose diagnostic emissions (tool_call + llm_turn events). */
+  /**
+   * Enable verbose emissions. When true, each tool call and LLM turn is
+   * streamed to `verboseStream` (default: process.stderr) so the operator
+   * sees the server's work live. Orthogonal to `diagnostics.log` — you
+   * can have live streaming without persisting a JSONL file.
+   */
   verbose?: boolean;
+  /** Injectable stream target for verbose output. Defaults to process.stderr. */
+  verboseStream?: (line: string) => void;
 }
 
 function errorResult(error: string): RunResult {
@@ -196,7 +204,11 @@ async function executeReviewedLifecycle(
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
   heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void },
-  diagnostics?: { logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger; verbose?: boolean },
+  diagnostics?: {
+    logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
+    verbose?: boolean;
+    verboseStream?: (line: string) => void;
+  },
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -232,8 +244,18 @@ async function executeReviewedLifecycle(
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
-  const verboseLogger = diagnostics?.verbose && diagnostics.logger ? diagnostics.logger : undefined;
+  const verbose = diagnostics?.verbose ?? false;
+  const verboseLogger = verbose && diagnostics?.logger ? diagnostics.logger : undefined;
   const verboseBatchId = heartbeatWiring?.batchId;
+  const verboseStream = verbose
+    ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
+    : undefined;
+  const shortBatch = verboseBatchId ? verboseBatchId.slice(0, 8) : '????????';
+  if (verboseStream) {
+    verboseStream(
+      `[mmagent verbose] batch=${shortBatch} task=${taskIndex} start worker=${resolved.provider.config.model}`,
+    );
+  }
   const wrappedOnProgress = onProgress
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
@@ -251,6 +273,9 @@ async function executeReviewedLifecycle(
               taskIndex,
               tool: event.toolSummary,
             });
+          }
+          if (verboseStream) {
+            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary}`);
           }
         }
         if (event.kind === 'turn_complete') {
@@ -276,6 +301,14 @@ async function executeReviewedLifecycle(
               outputTokens: event.cumulativeOutputTokens,
               costUSD,
             });
+          }
+          if (verboseStream) {
+            const costStr = costUSD !== null ? ` $${costUSD.toFixed(4)}` : '';
+            verboseStream(
+              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} ` +
+              `turn in=${event.cumulativeInputTokens} out=${event.cumulativeOutputTokens}${costStr} ` +
+              `(${resolved.provider.config.model})`,
+            );
           }
         }
       }
@@ -779,6 +812,7 @@ export async function runTasks(
       }, {
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
+        verboseStream: options.verboseStream,
       }).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {

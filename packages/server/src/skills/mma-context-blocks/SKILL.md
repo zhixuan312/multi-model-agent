@@ -1,7 +1,7 @@
 ---
 name: mma-context-blocks
-description: Register large reused documents as context blocks and reference them by ID across multiple tool calls. Avoids re-sending the same content repeatedly.
-when_to_use: When the same large document (spec, plan, codebase summary) needs to be referenced by multiple mma-* calls. Register once, reference by ID.
+description: Register large reused documents (spec, plan, codebase summary) as a context block the mmagent service caches, then reference it by ID across multiple mma-* calls. Avoids re-uploading the same content on every task.
+when_to_use: A document larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the returned ID via the contextBlockIds field on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug. Cheaper and faster than inlining the same content in every request body.
 version: "0.0.0-unreleased"
 ---
 

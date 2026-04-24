@@ -1,7 +1,7 @@
 ---
 name: mma-audit
-description: Audit a document for security, performance, correctness, or style issues. Sub-agents run in parallel per file.
-when_to_use: When you need to audit a spec, design doc, or configuration file for correctness, security, style, or performance issues.
+description: Audit a document, spec, or config for security, performance, correctness, or style issues via the local mmagent HTTP service. Sub-agents run in parallel per file — no context pollution in the main model.
+when_to_use: You're about to audit a document or spec and would otherwise dispatch the audit work yourself (inline Agent, superpowers:dispatching-parallel-agents, or the security-review slash command). Delegate it here instead so the audit runs on cheap workers and leaves your main context free for the consuming decision.
 version: "0.0.0-unreleased"
 ---
 

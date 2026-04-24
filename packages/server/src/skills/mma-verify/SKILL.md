@@ -1,7 +1,7 @@
 ---
 name: mma-verify
-description: Verify work against a checklist. Sub-agents check each item independently.
-when_to_use: When you need to confirm that implemented work meets a set of acceptance criteria or a review checklist before claiming completion.
+description: Verify work against a checklist via the local mmagent HTTP service. Sub-agents check each item independently.
+when_to_use: superpowers:verification-before-completion tells you to produce evidence before claiming done. This skill delegates that evidence-gathering to mmagent workers so it runs in parallel on cheap models. Use whenever you'd otherwise inline-dispatch a checklist verification.
 version: "0.0.0-unreleased"
 ---
 

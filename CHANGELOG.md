@@ -27,8 +27,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Startup log line `[mmagent] started | version=... | bind=... | pid=... | token=<fp> | boot=<uuid>` on stdout before listening.
 - `/health` response extended with `version`, `pid`, `startedAt`, `uptimeMs`.
 - Diagnostic events `task_started`, `task_heartbeat`, `task_phase_change` on `DiagnosticLogger`. `asyncDispatch` emits `task_started`; `buildExecutionContext`'s heartbeat callback emits `task_heartbeat`.
-- Verbose mode: `diagnostics.verbose: boolean` config field + `mmagent serve --verbose` flag. When enabled, `run-tasks.ts` tees per-tool-call (`tool_call`) and per-LLM-turn (`llm_turn`) events to the diagnostic log so `mmagent logs --batch=<id>` shows why a task is slow.
-- Skill frontmatter updates: `mma-delegate`, `mma-execute-plan`, and `multi-model-agent` router now explicitly direct the calling agent to prefer mma-* over inline Agent dispatches or `superpowers:subagent-driven-development` when mmagent is running.
+- Verbose mode: `diagnostics.verbose: boolean` config + `mmagent serve --verbose` flag. Streams each tool call and LLM turn inline to the server's stderr so operators can diagnose slow tasks live. Orthogonal to log-file persistence.
+- File-log toggle: `diagnostics.log: boolean` (existing) + new `mmagent serve --log` flag. Decoupled from verbose — you can stream inline without ever writing a JSONL file, or persist to file without stderr noise.
+- Skill frontmatter rewrite across every mma-* skill: each one now explicitly positions itself as the execution layer paired with superpowers methodology (superpowers = how to approach the work, mma-* = who actually does it). The `multi-model-agent` router is the canonical entry point for routing delegation intent.
 - Skill frontmatter `version:` field (sentinel `"0.0.0-unreleased"` in source, stamped to package.json version at build time via `packages/server/scripts/inject-skill-version.mjs`).
 - Migration guide at `docs/migration/2.x-mcp-to-3.x-rest.md`.
 
