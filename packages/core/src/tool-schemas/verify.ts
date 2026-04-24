@@ -1,5 +1,6 @@
 // packages/core/src/tool-schemas/verify.ts
 import { z } from 'zod';
+import { buildOutputEnvelopeSchema } from './shared-output.js';
 
 // Ported verbatim from packages/mcp/src/tools/verify-work.ts (verifyWorkSchema).
 // commonToolFields (filePaths + contextBlockIds) are inlined here to avoid
@@ -15,12 +16,6 @@ export const inputSchema = z.object({
 
 export type Input = z.infer<typeof inputSchema>;
 
-// Uniform output envelope — required for GET /batch/:id?taskIndex=N slicing (see spec §6.5)
-export const outputSchema = z.object({
-  results: z.array(z.unknown()),           // per-task RunResult, index-aligned with input tasks
-  headline: z.string(),
-  batchTimings: z.object({}).passthrough(),
-  costSummary: z.object({}).passthrough(),
-}).passthrough();
+export const outputSchema = buildOutputEnvelopeSchema();
 
 export type Output = z.infer<typeof outputSchema>;
