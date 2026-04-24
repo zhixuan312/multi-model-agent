@@ -23,7 +23,9 @@
     "routing",
     "delegation"
   ],
-  "workspaces": ["packages/*"],
+  "workspaces": [
+    "packages/*"
+  ],
   "scripts": {
     "build": "npm run build --workspaces",
     "test": "vitest run",
@@ -35,6 +37,7 @@
   },
   "devDependencies": {
     "@openai/agents": "^0.8.0",
+    "gray-matter": "^4.0.3",
     "openai": "^6.0.0",
     "typescript": "^5.7.0",
     "vitest": "^3.0.0"
