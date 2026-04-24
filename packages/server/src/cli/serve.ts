@@ -15,9 +15,24 @@
  *   mmagent serve [--config <path>]
  *   // this module owns signal handling and process.exit
  */
+import { createHash, randomUUID } from 'node:crypto';
+import * as path from 'node:path';
+import * as fs from 'node:fs';
+import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import { collectInlineApiKeyOffenders } from '@zhixuan92/multi-model-agent-core';
+import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
+
+function readServerVersion(): string {
+  try {
+    const thisDir = path.dirname(fileURLToPath(import.meta.url));
+    const pkgPath = path.join(thisDir, '..', '..', 'package.json');
+    const pkg = JSON.parse(fs.readFileSync(pkgPath, 'utf8')) as { version?: string };
+    return pkg.version ?? '0.0.0';
+  } catch {
+    return '0.0.0';
+  }
+}
 
 function envVarHint(agentName: string): string {
   return `${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
@@ -104,7 +119,25 @@ export async function startServe(
   // Print the actual bound address so operators see what the kernel assigned
   // (useful when port=0 selects an ephemeral port).
   const host = running.serverAddress ?? config.server.bind;
-  stderr(`[mmagent] listening on ${host}:${running.port}\n`);
+
+  // Emit a single structured startup line before the "listening" line.
+  // Fingerprint the auth token (first 8 hex of sha256) so operators can verify
+  // the running instance matches what their clients are using, without ever
+  // revealing the token. bootId discriminates successive startups from the same pid.
+  try {
+    const token = loadAuthToken({ tokenFile: config.server.auth.tokenFile });
+    const fp = createHash('sha256').update(token).digest('hex').slice(0, 8);
+    const bootId = randomUUID();
+    const version = readServerVersion();
+    process.stdout.write(
+      `[mmagent] started | version=${version} | bind=${host}:${running.port} | pid=${process.pid} | token=${fp} | boot=${bootId}\n`,
+    );
+  } catch {
+    // Token load shouldn't fail here (startServer already validated it), but
+    // if it does, skip the startup line rather than crash the server.
+  }
+
+  process.stdout.write(`[mmagent] listening on ${host}:${running.port}\n`);
 
   return {
     port: running.port,

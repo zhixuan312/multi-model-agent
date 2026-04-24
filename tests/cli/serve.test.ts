@@ -75,6 +75,7 @@ async function waitForServerReady(child: ChildProcess, timeoutMs: number): Promi
   const deadline = Date.now() + timeoutMs;
   const chunks: Buffer[] = [];
   child.stderr?.on('data', (c: Buffer) => chunks.push(c));
+  child.stdout?.on('data', (c: Buffer) => chunks.push(c));
 
   while (Date.now() < deadline) {
     const output = Buffer.concat(chunks).toString('utf8');
@@ -178,6 +179,33 @@ describe('serve subcommand', () => {
       expect(res.status).toBe(200);
       const body = await res.json() as { ok: boolean };
       expect(body.ok).toBe(true);
+    } finally {
+      await stopChild(child);
+    }
+  });
+
+  it('emits structured [mmagent] started line with version/bind/pid/token/boot before listening', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mmagent-serve-started-'));
+    const tokenFile = writeTokenFile(dir);
+    const configPath = writeConfigFile(dir, minimalConfig({ tokenFile }), 'config.json');
+
+    const child = spawn('node', [cliPath(), 'serve', '--config', configPath], {
+      stdio: 'pipe',
+      env: { ...process.env },
+    });
+
+    const out: string[] = [];
+    child.stdout?.on('data', (c: Buffer) => out.push(c.toString()));
+    child.stderr?.on('data', (c: Buffer) => out.push(c.toString()));
+
+    try {
+      await waitForServerReady(child, 8000);
+      const full = out.join('');
+      expect(full).toMatch(/\[mmagent\] started \| version=[\d.]+ \| bind=[\d.:]+ \| pid=\d+ \| token=[a-f0-9]{8} \| boot=[0-9a-f-]{36}/);
+      const startedIdx = full.indexOf('[mmagent] started');
+      const listeningIdx = full.indexOf('[mmagent] listening');
+      expect(startedIdx).toBeGreaterThan(-1);
+      expect(listeningIdx).toBeGreaterThan(startedIdx);
     } finally {
       await stopChild(child);
     }
