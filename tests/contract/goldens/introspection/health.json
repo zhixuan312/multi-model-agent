@@ -1,6 +1,6 @@
 {
   "ok": true,
-  "version": "3.1.6",
+  "version": "<DETERMINISTIC>",
   "pid": "<DETERMINISTIC>",
   "startedAt": "<DETERMINISTIC>",
   "uptimeMs": "<DETERMINISTIC>"

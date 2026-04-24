@@ -24,6 +24,7 @@ const VOLATILE_KEYS = new Set([
   'timestamp',
   'batchId',
   'pid',
+  'version',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);

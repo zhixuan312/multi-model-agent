@@ -1,5 +1,5 @@
 {
-  "version": "3.1.6",
+  "version": "<DETERMINISTIC>",
   "pid": "<DETERMINISTIC>",
   "bind": "127.0.0.1",
   "uptimeMs": "<DETERMINISTIC>",
