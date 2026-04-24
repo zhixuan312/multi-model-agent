@@ -35,4 +35,14 @@ describe('server config', () => {
     expect(token).toBe('from-env');
     delete process.env['MMAGENT_AUTH_TOKEN'];
   });
+
+  it('server.autoUpdateSkills defaults to true', () => {
+    const parsed = serverConfigSchema.parse({ server: {} });
+    expect(parsed.server.autoUpdateSkills).toBe(true);
+  });
+
+  it('server.autoUpdateSkills can be opted out', () => {
+    const parsed = serverConfigSchema.parse({ server: { autoUpdateSkills: false } });
+    expect(parsed.server.autoUpdateSkills).toBe(false);
+  });
 });

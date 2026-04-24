@@ -57,7 +57,7 @@ export async function startServe(
   config: MultiModelConfig,
   exit: (code: number) => never = process.exit.bind(process),
 ): Promise<ServeHandle> {
-  const running = await startServer(config as Parameters<typeof startServer>[0]);
+  const running = await startServer({ server: config.server });
 
   const stderr = process.stderr.write.bind(process.stderr);
 

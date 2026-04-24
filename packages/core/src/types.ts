@@ -198,6 +198,7 @@ export interface MultiModelConfig {
       maxContextBlocksPerProject: number
       shutdownDrainMs: number
     }
+    autoUpdateSkills: boolean
   }
 }
 

@@ -96,6 +96,7 @@ const DEFAULT_SERVER = {
   port: 7337,
   auth: DEFAULT_SERVER_AUTH,
   limits: DEFAULT_SERVER_LIMITS,
+  autoUpdateSkills: true,
 };
 
 const serverLimitsSchema = z.object({
@@ -118,6 +119,7 @@ export const serverConfigSchema = z.object({
       tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
     }).default(() => DEFAULT_SERVER_AUTH),
     limits: serverLimitsSchema,
+    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
   }).default(() => DEFAULT_SERVER),
 }).strict();
 
@@ -138,6 +140,7 @@ export const multiModelConfigSchema = z.object({
       tokenFile: z.string().default(DEFAULT_SERVER_AUTH.tokenFile),
     }).default(() => DEFAULT_SERVER_AUTH),
     limits: serverLimitsSchema,
+    autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
   }).default(() => DEFAULT_SERVER),
 }).strict();
 
