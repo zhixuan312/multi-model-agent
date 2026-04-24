@@ -120,7 +120,7 @@ export class ProjectRegistry {
     );
   }
 
-  evictIdle(): void {
+  evictIdle(batchRegistry?: BatchRegistry): void {
     const now = Date.now();
     const victims: string[] = [];
     for (const [cwd, pc] of this.map.entries()) {
@@ -128,6 +128,7 @@ export class ProjectRegistry {
         pc.activeSessions.size === 0 &&
         pc.activeRequests === 0 &&
         pc.pendingReservations === 0 &&
+        (batchRegistry === undefined || batchRegistry.countActiveForProject(cwd) === 0) &&
         now - pc.lastActivityAt > this.idleEvictionMs
       ) {
         victims.push(cwd);
