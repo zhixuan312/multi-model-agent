@@ -20,7 +20,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 
 /** Regex matching a line that starts with `@include ` followed by a relative path. */
-const INCLUDE_RE = /^@include\s+(.+)$/gm;
+const INCLUDE_RE = /^@include\s+(.+)$/;
 
 /**
  * Options for installing a skill via the Gemini CLI writer.
