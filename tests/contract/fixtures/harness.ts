@@ -23,9 +23,15 @@
 // the harness must use `it.todo` / `it.skip` (per global convention #12)
 // until Task 2 completes.
 
-import type { Provider } from '@zhixuan92/multi-model-agent-core';
+import { randomUUID } from 'node:crypto';
+import { unlink } from 'node:fs/promises';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
+import { writeFileSync } from 'node:fs';
+import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
+import { startServer } from '@zhixuan92/multi-model-agent/server';
+import { __setTestProviderOverride } from '../../../packages/server/src/http/test-provider-override.js';
 import { freezeClock } from './deterministic-clock.js';
-import { guardNoNetwork } from './mock-providers.js';
 
 export interface HarnessHandle {
   baseUrl: string;
@@ -38,11 +44,83 @@ export interface BootOptions {
   cwd: string;
 }
 
-export async function boot(_opts: BootOptions): Promise<HarnessHandle> {
-  guardNoNetwork();
+function installLoopbackOnlyFetch(): void {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
+    const requestUrl = typeof input === 'string'
+      ? input
+      : input instanceof URL
+        ? input.href
+        : input.url;
+    const parsed = new URL(requestUrl);
+    if (parsed.hostname !== '127.0.0.1' && parsed.hostname !== 'localhost') {
+      throw new Error(`contract test attempted network call: ${requestUrl}`);
+    }
+    return originalFetch(input, init);
+  }) as typeof globalThis.fetch;
+}
+
+export async function boot(opts: BootOptions): Promise<HarnessHandle> {
+  installLoopbackOnlyFetch();
   freezeClock();
-  throw new Error(
-    'contract-test harness boot() not yet wired: pending Task 2 provider-injection seam. ' +
-      'Tests depending on this should use it.todo / it.skip until Task 2 lands.',
-  );
+  process.env.MMAGENT_TEST_INTROSPECTION = '1';
+  process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+  __setTestProviderOverride(opts.provider);
+
+  const token = randomUUID();
+  const tokenPath = join(tmpdir(), `mmagent-test-token-${randomUUID()}`);
+  writeFileSync(tokenPath, `${token}\n`, 'utf8');
+
+  const config: MultiModelConfig = {
+    agents: {
+      standard: {
+        type: 'openai-compatible',
+        baseUrl: 'http://mock.local',
+        apiKey: 'stub',
+        model: 'mock',
+      },
+      complex: {
+        type: 'openai-compatible',
+        baseUrl: 'http://mock.local',
+        apiKey: 'stub',
+        model: 'mock',
+      },
+    },
+    defaults: {
+      timeoutMs: 1_800_000,
+      maxCostUSD: 10,
+      tools: 'full',
+      sandboxPolicy: 'cwd-only',
+    },
+    server: {
+      bind: '127.0.0.1',
+      port: 0,
+      auth: { tokenFile: tokenPath },
+      limits: {
+        maxBodyBytes: 10_485_760,
+        batchTtlMs: 3_600_000,
+        idleProjectTimeoutMs: 1_800_000,
+        clarificationTimeoutMs: 86_400_000,
+        projectCap: 200,
+        maxBatchCacheSize: 500,
+        maxContextBlockBytes: 524_288,
+        maxContextBlocksPerProject: 32,
+        shutdownDrainMs: 30_000,
+      },
+      autoUpdateSkills: false,
+    },
+  };
+
+  const server = await startServer(config);
+  const baseUrl = `http://127.0.0.1:${server.port}`;
+
+  return {
+    baseUrl,
+    token,
+    async close(): Promise<void> {
+      await server.stop();
+      __setTestProviderOverride(null);
+      await unlink(tokenPath).catch(() => undefined);
+    },
+  };
 }
