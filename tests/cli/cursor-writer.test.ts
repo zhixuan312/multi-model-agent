@@ -5,7 +5,7 @@
  * All tests use mkdtempSync for fake cwd and fake skillsRoot.
  * Never touch real .cursor/.
  */
-import { describe, it, expect, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
@@ -126,25 +126,32 @@ describe('installCursor', () => {
         skillsRoot,
       });
 
-      // Second write without force
+      // Second write without force — capture stderr to verify warning
       const stderr = captureStderr(() => {
-        const result = installCursor({
+        installCursor({
           content: '# Updated — should not appear',
           cwd,
           homeDir,
           skillsRoot,
         });
-
-        expect(result.written).toBe(false);
-        expect(result.targetPath).toBe(skillPath(cwd));
-
-        // Original content preserved
-        expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Original');
-
-        // Warning was emitted to stderr
-        expect(stderr).toContain('Warning');
-        expect(stderr).toContain('already exists');
       });
+
+      const result = installCursor({
+        content: '# Updated — should not appear',
+        cwd,
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(result.written).toBe(false);
+      expect(result.targetPath).toBe(skillPath(cwd));
+
+      // Original content preserved
+      expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Original');
+
+      // Skip warning was emitted to stderr
+      expect(stderr).toContain('Warning');
+      expect(stderr).toContain('already exists');
     } finally {
       cleanup(cwd);
       cleanup(homeDir);
