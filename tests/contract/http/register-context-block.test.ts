@@ -5,23 +5,18 @@ import { normalize } from '../serializer/index.js';
 import okGolden from '../goldens/endpoints/register-context-block-ok.json' with { type: 'json' };
 import invalidGolden from '../goldens/endpoints/register-context-block-invalid.json' with { type: 'json' };
 
-async function authedFetch(url: string, token: string, init?: RequestInit): Promise<Response> {
-  return await fetch(url, {
-    ...init,
-    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
-  });
-}
-
 describe('contract: POST /context-blocks', () => {
-  it.todo('valid body returns 200 with golden shape', async () => {
+  it('valid body returns 200 with golden shape', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await authedFetch(
+      const res = await fetch(
         `${h.baseUrl}/context-blocks?cwd=${encodeURIComponent(process.cwd())}`,
-        h.token,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${h.token}`,
+          },
           body: JSON.stringify({ content: 'hello from context block' }),
         },
       );
@@ -32,15 +27,17 @@ describe('contract: POST /context-blocks', () => {
     }
   });
 
-  it.todo('empty body returns 400 error envelope', async () => {
+  it('empty body returns 400 error envelope', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
-      const res = await authedFetch(
+      const res = await fetch(
         `${h.baseUrl}/context-blocks?cwd=${encodeURIComponent(process.cwd())}`,
-        h.token,
         {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
+          headers: {
+            'Content-Type': 'application/json',
+            Authorization: `Bearer ${h.token}`,
+          },
           body: JSON.stringify({}),
         },
       );
