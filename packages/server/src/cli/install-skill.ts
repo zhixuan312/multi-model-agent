@@ -295,6 +295,7 @@ export interface ParsedArgs {
   json: boolean;
   targets: Client[] | null;
   allTargets: boolean;
+  allSkills: boolean;
 }
 
 /**
@@ -310,7 +311,7 @@ export interface ParsedArgs {
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = minimist(argv, {
     string: ['target', 'skill', 'config'],
-    boolean: ['uninstall', 'dry-run', 'json', 'all-targets'],
+    boolean: ['uninstall', 'dry-run', 'json', 'all-targets', 'all-skills'],
     alias: {
       u: 'uninstall',
       j: 'json',
@@ -328,6 +329,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
   const dryRun = args['dry-run'] === true;
   const json = args['json'] === true;
   const allTargets = args['all-targets'] === true;
+  const allSkills = args['all-skills'] === true;
 
   let targets: Client[] | null = null;
   if (args.target) {
@@ -335,7 +337,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     targets = (t as string[]).map((s) => s as Client);
   }
 
-  return { skill, configPath, uninstall, dryRun, json, targets, allTargets };
+  return { skill, configPath, uninstall, dryRun, json, targets, allTargets, allSkills };
 }
 
 /**
@@ -451,23 +453,34 @@ export async function main(deps: MainDeps = {}): Promise<number> {
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
 
-  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets } =
+  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets, allSkills } =
     parseArgs(argv);
 
-  // ── 1. Validate skill name ──────────────────────────────────────────────────
-  if (!skill) {
+  // ── 1. Validate skill selection ────────────────────────────────────────────
+  // Accept either a named skill (positional) or --all-skills. Not both.
+  if (!skill && !allSkills) {
     const msg =
-      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] <skill-name>\n' +
+      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] [--all-skills] <skill-name>\n' +
       'Skills: ' + SUPPORTED_SKILLS.join(', ');
     printError(stderr, json, 'missing_skill_name', msg, stdout);
     return ExitCode.ERR_INVALID_ARGS;
   }
 
-  if (!SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
+  if (skill && allSkills) {
+    const msg = 'Cannot combine --all-skills with a positional skill name. Pick one.';
+    printError(stderr, json, 'conflicting_skill_selection', msg, stdout);
+    return ExitCode.ERR_INVALID_ARGS;
+  }
+
+  if (skill && !SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
     const msg = `Unknown skill '${skill}'. Available: ${SUPPORTED_SKILLS.join(', ')}`;
     printError(stderr, json, 'unknown_skill', msg, stdout);
     return ExitCode.ERR_UNKNOWN_SKILL;
   }
+
+  const skillsToRun: readonly string[] = allSkills
+    ? SUPPORTED_SKILLS
+    : [skill!];
 
   // ── 2. Resolve targets (may throw UnknownTargetError) ──────────────────────
   let resolvedTargets: Client[];
@@ -485,7 +498,7 @@ export async function main(deps: MainDeps = {}): Promise<number> {
   if (resolvedTargets.length === 0) {
     if (json) {
       stdout(
-        JSON.stringify({ skill, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }) + '\n',
+        JSON.stringify({ skills: skillsToRun, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }) + '\n',
       );
     } else {
       stdout('No clients detected. Use --target or --all-targets to specify targets.\n');
@@ -493,45 +506,51 @@ export async function main(deps: MainDeps = {}): Promise<number> {
     return ExitCode.ERR_NO_TARGETS;
   }
 
-  // ── 4. Run install/uninstall ──────────────────────────────────────────────
+  // ── 4. Run install/uninstall (loops over skillsToRun; same logic per skill) ─
   const opts = { dryRun, homeDir, version, skillsRoot: deps.skillsRoot };
 
-  let result: InstallResult;
-  try {
-    result = uninstall
-      ? doUninstall(skill, resolvedTargets, opts)
-      : doInstall(skill, resolvedTargets, opts);
-  } catch (err) {
-    if (err instanceof SkillNotFoundError) {
-      printError(stderr, json, err.code, err.message, stdout);
-      return ExitCode.ERR_SKILL_NOT_FOUND;
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (
-      msg.includes('client writers are not yet implemented') ||
-      msg.includes('client removers are not yet implemented')
-    ) {
-      printError(stderr, json, 'writer_not_implemented', msg, stdout);
-      return ExitCode.ERR_WRITER_NOT_IMPLEMENTED;
-    }
-    printError(stderr, json, 'unknown', msg, stdout);
-    return ExitCode.ERR_UNKNOWN;
-  }
-
-  // ── 5. Update manifest (only when not in dry-run mode) ─────────────────────
+  let firstError: number | null = null;
   let manifestUpdated = false;
-  if (!dryRun) {
-    if (uninstall) {
-      manifest.removeEntry(skill, resolvedTargets, homeDir);
-    } else {
-      manifest.appendEntry(skill, version, resolvedTargets, homeDir);
+
+  for (const s of skillsToRun) {
+    let result: InstallResult;
+    try {
+      result = uninstall
+        ? doUninstall(s, resolvedTargets, opts)
+        : doInstall(s, resolvedTargets, opts);
+    } catch (err) {
+      if (err instanceof SkillNotFoundError) {
+        printError(stderr, json, err.code, err.message, stdout);
+        if (firstError === null) firstError = ExitCode.ERR_SKILL_NOT_FOUND;
+        continue;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes('client writers are not yet implemented') ||
+        msg.includes('client removers are not yet implemented')
+      ) {
+        printError(stderr, json, 'writer_not_implemented', msg, stdout);
+        if (firstError === null) firstError = ExitCode.ERR_WRITER_NOT_IMPLEMENTED;
+        continue;
+      }
+      printError(stderr, json, 'unknown', msg, stdout);
+      if (firstError === null) firstError = ExitCode.ERR_UNKNOWN;
+      continue;
     }
-    manifestUpdated = true;
+
+    if (!dryRun) {
+      if (uninstall) {
+        manifest.removeEntry(s, resolvedTargets, homeDir);
+      } else {
+        manifest.appendEntry(s, version, resolvedTargets, homeDir);
+      }
+      manifestUpdated = true;
+    }
+
+    printResult(stdout, result, json, manifestUpdated);
   }
 
-  printResult(stdout, result, json, manifestUpdated);
-
-  return ExitCode.SUCCESS;
+  return firstError ?? ExitCode.SUCCESS;
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────
