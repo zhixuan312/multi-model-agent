@@ -52,6 +52,16 @@ Every request requires `Authorization: Bearer <token>`.
 | `mma-context-blocks` | Register large reused documents to reference by ID |
 | `mma-clarifications` | Confirm or correct the service's proposed interpretation |
 
+### Worker tier: `agentType`
+
+`mma-delegate` and `mma-execute-plan` accept `agentType: "standard" | "complex"`. Default is `"standard"` (cheaper, faster). Pick `"complex"` when:
+
+- The task touches many files or requires multi-step reasoning a smaller model cannot hold in context.
+- A prior standard run came back with `filesWritten: 0` or exhausted its turn budget (visible in the verbose stream or the final envelope's `batchTimings` / `results`).
+- The task is security-sensitive or ambiguous enough that being wrong is costly.
+
+`mma-audit`, `mma-review`, `mma-debug` already default to complex; `mma-verify` already defaults to standard — these are not configurable from the caller and do not need an `agentType` field.
+
 ### General flow
 
 1. Call the appropriate `mma-*` skill → receive `{ batchId }`.

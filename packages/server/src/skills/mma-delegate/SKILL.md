@@ -37,12 +37,10 @@ context block references.
 |---|---|---|---|
 | `tasks` | array | yes | At least one task |
 | `tasks[].prompt` | string | yes | The task instruction |
-| `tasks[].agentType` | string | no | `standard` (default) or `complex` |
+| `tasks[].agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"` (cheap). Pick `"complex"` when the task is ambiguous, touches many files, is security-sensitive, or a prior standard run came back with `filesWritten: 0` / ran out of turns. Complex workers cost more but finish bigger jobs. |
 | `tasks[].filePaths` | string[] | no | Files the sub-agent focuses on |
 | `tasks[].done` | string | no | Acceptance criteria |
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-
-Use `agentType: "complex"` for ambiguous scope or security-sensitive tasks.
 
 ### Full example
 

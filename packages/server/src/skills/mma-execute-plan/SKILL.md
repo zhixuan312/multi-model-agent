@@ -30,7 +30,8 @@ parallel and duplicate descriptors are rejected.
     "/project/docs/plan.md",
     "/project/src/auth/login.ts"
   ],
-  "contextBlockIds": []
+  "contextBlockIds": [],
+  "agentType": "standard"
 }
 ```
 
@@ -40,6 +41,7 @@ parallel and duplicate descriptors are rejected.
 | `context` | string | no | Short additional context not in the plan |
 | `filePaths` | string[] | no | Plan file + relevant source files |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"` (cheap). Switch to `"complex"` for tasks too large for a standard-tier model to finish in the turn budget (reads many files, produces many edits, or the last run came back with `filesWritten: 0`). |
 
 If the batch reaches `awaiting_clarification`, use `mma-clarifications`
 to confirm or correct the proposed interpretation.
