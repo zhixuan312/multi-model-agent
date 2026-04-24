@@ -10,6 +10,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - **server (`@zhixuan92/multi-model-agent`).** Verbose mode now emits a line on every HeartbeatTimer tick (not just stage transitions) so operators can confirm the timer is firing during long-running stages. Also logs a one-line "heartbeat started" / "heartbeat DISABLED" marker at lifecycle start to surface timer-wiring issues end-to-end.
+- **server (`@zhixuan92/multi-model-agent`).** Verbose stream now covers the full per-turn lifecycle: `turn_start turn=N provider=X` when an LLM turn begins, `text +Nc (total Mc) preview="..."` as output streams (first 60 chars), `tool=name(args) +Nms` per tool call with delta-time, and `turn in=X out=Y $Z +Nms (model)` on completion. Heartbeat lines carry `cost=$X round=N/M text=Nc idle=Nms` so operators can spot reasoning-phase worker activity (high idle + growing cost = model is thinking, not stalled).
 
 ## 3.1.2 — 2026-04-24
 
