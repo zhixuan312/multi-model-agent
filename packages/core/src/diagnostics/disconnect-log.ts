@@ -46,6 +46,11 @@ export interface DiagnosticLogger {
   requestRejected(params: { reason: string; httpStatus: number; sessionIdAttempted?: string }): void;
   projectCreated(params: { cwd: string }): void;
   projectEvicted(params: { cwd: string; idleMs: number }): void;
+
+  // Task lifecycle events (3.1.0)
+  taskStarted(params: { batchId: string; taskIndex: number; worker?: string }): void;
+  taskHeartbeat(params: { batchId: string; taskIndex: number; elapsedMs: number; stage?: string }): void;
+  taskPhaseChange(params: { batchId: string; taskIndex: number; fromStage: string; toStage: string }): void;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -125,6 +130,9 @@ export function createDiagnosticLogger(
       requestRejected: () => {},
       projectCreated: () => {},
       projectEvicted: () => {},
+      taskStarted: () => {},
+      taskHeartbeat: () => {},
+      taskPhaseChange: () => {},
     };
   }
 
@@ -336,6 +344,38 @@ export function createDiagnosticLogger(
         ts: now().toISOString(),
         cwd,
         idleMs,
+      });
+    },
+    taskStarted: ({ batchId, taskIndex, worker }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_started',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        ...(worker !== undefined ? { worker } : {}),
+      });
+    },
+    taskHeartbeat: ({ batchId, taskIndex, elapsedMs, stage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_heartbeat',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        elapsedMs,
+        ...(stage !== undefined ? { stage } : {}),
+      });
+    },
+    taskPhaseChange: ({ batchId, taskIndex, fromStage, toStage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_phase_change',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        fromStage,
+        toStage,
       });
     },
   };

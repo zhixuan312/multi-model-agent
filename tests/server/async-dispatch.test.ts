@@ -20,6 +20,9 @@ function makeStubDeps(batchRegistry: BatchRegistry): HandlerDeps {
     requestRejected: vi.fn(),
     projectCreated: vi.fn(),
     projectEvicted: vi.fn(),
+    taskStarted: vi.fn(),
+    taskHeartbeat: vi.fn(),
+    taskPhaseChange: vi.fn(),
   } satisfies HandlerDeps['logger'];
   return {
     config: {} as HandlerDeps['config'],

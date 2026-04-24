@@ -59,6 +59,7 @@ export function asyncDispatch<TResult>(
   setImmediate(() => {
     void (async () => {
       try {
+        deps.logger.taskStarted({ batchId, taskIndex: 0 });
         const result = await opts.executor(ctx, batchId);
         batchRegistry.complete(batchId, result);
       } catch (err) {

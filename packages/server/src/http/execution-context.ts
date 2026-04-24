@@ -20,7 +20,8 @@ export function buildExecutionContext(
   batchId: string,
 ): ExecutionContext {
   const recordHeartbeat = (tick: HeartbeatTickInfo) => {
-    const entry = deps.batchRegistry.get(tick.batchId || batchId);
+    const effectiveBatchId = tick.batchId || batchId;
+    const entry = deps.batchRegistry.get(effectiveBatchId);
     if (!entry) return;
     entry.lastHeartbeatAt = Date.now();
     const headline = composeRunningHeadline({
@@ -32,7 +33,13 @@ export function buildExecutionContext(
       lastHeartbeatAt: entry.lastHeartbeatAt,
       running: entry.running ?? [],
     });
-    deps.batchRegistry.updateRunningHeadline(tick.batchId || batchId, headline);
+    deps.batchRegistry.updateRunningHeadline(effectiveBatchId, headline);
+    deps.logger.taskHeartbeat({
+      batchId: effectiveBatchId,
+      taskIndex: 0,
+      elapsedMs: tick.elapsedMs,
+      stage: tick.stage,
+    });
   };
 
   return {
