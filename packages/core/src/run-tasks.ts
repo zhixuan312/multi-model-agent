@@ -228,9 +228,30 @@ async function executeReviewedLifecycle(
     reviewPolicy === 'off' ? 1 :
     reviewPolicy === 'spec_only' ? 3 :
     5;
+  const verbose = diagnostics?.verbose ?? false;
+  let lastStageSeen: string | undefined;
+  const verboseStreamRaw = verbose
+    ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
+    : undefined;
+  const verboseBatchIdEarly = heartbeatWiring?.batchId;
+  const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
   const heartbeat = onProgress
     ? new HeartbeatTimer(
-        (event) => onProgress(taskIndex, event),
+        (event) => {
+          // Detect stage transitions on the heartbeat progress stream. The
+          // authoritative phaseChange flag rides HeartbeatTickInfo (server
+          // logger path); this redundant detection is for the stderr stream
+          // because run-tasks doesn't see HeartbeatTickInfo directly.
+          if (verboseStreamRaw && event.kind === 'heartbeat' && event.stage !== lastStageSeen) {
+            if (lastStageSeen !== undefined) {
+              verboseStreamRaw(
+                `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
+              );
+            }
+            lastStageSeen = event.stage;
+          }
+          onProgress(taskIndex, event);
+        },
         {
           provider: resolved.provider.config.model,
           parentModel: task.parentModel,
@@ -244,18 +265,16 @@ async function executeReviewedLifecycle(
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
-  const verbose = diagnostics?.verbose ?? false;
   const verboseLogger = verbose && diagnostics?.logger ? diagnostics.logger : undefined;
-  const verboseBatchId = heartbeatWiring?.batchId;
-  const verboseStream = verbose
-    ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
-    : undefined;
-  const shortBatch = verboseBatchId ? verboseBatchId.slice(0, 8) : '????????';
+  const verboseBatchId = verboseBatchIdEarly;
+  const verboseStream = verboseStreamRaw;
+  const shortBatch = shortBatchEarly;
   if (verboseStream) {
     verboseStream(
       `[mmagent verbose] batch=${shortBatch} task=${taskIndex} start worker=${resolved.provider.config.model}`,
     );
   }
+  let prevEventAtMs = verbose ? Date.now() : 0;
   const wrappedOnProgress = onProgress
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
@@ -267,15 +286,19 @@ async function executeReviewedLifecycle(
             progressCounters.filesWritten++;
           }
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
+          const now = verbose ? Date.now() : 0;
+          const sincePrevMs = verbose ? now - prevEventAtMs : 0;
+          if (verbose) prevEventAtMs = now;
           if (verboseLogger && verboseBatchId) {
             verboseLogger.toolCall({
               batchId: verboseBatchId,
               taskIndex,
               tool: event.toolSummary,
+              durationMs: sincePrevMs,
             });
           }
           if (verboseStream) {
-            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary}`);
+            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary} +${sincePrevMs}ms`);
           }
         }
         if (event.kind === 'turn_complete') {
@@ -291,6 +314,9 @@ async function executeReviewedLifecycle(
             task.parentModel,
           );
           heartbeat?.updateCost(costUSD, savedCostUSD);
+          const nowTurn = verbose ? Date.now() : 0;
+          const turnDurMs = verbose ? nowTurn - prevEventAtMs : 0;
+          if (verbose) prevEventAtMs = nowTurn;
           if (verboseLogger && verboseBatchId) {
             verboseLogger.llmTurn({
               batchId: verboseBatchId,
@@ -307,7 +333,7 @@ async function executeReviewedLifecycle(
             verboseStream(
               `[mmagent verbose] batch=${shortBatch} task=${taskIndex} ` +
               `turn in=${event.cumulativeInputTokens} out=${event.cumulativeOutputTokens}${costStr} ` +
-              `(${resolved.provider.config.model})`,
+              `+${turnDurMs}ms (${resolved.provider.config.model})`,
             );
           }
         }

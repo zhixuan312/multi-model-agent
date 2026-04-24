@@ -1,7 +1,7 @@
 ---
 name: mma-review
 description: Review code for quality, security, performance, or correctness via the local mmagent HTTP service. Sub-agents run in parallel per file, independent context.
-when_to_use: superpowers:requesting-code-review or the /review or /security-review slash commands tell you WHEN to review. This skill is HOW — delegate the actual reviewer pass to mmagent so the review doesn't consume your main-model context. Also use directly whenever you'd otherwise inline-Agent a code-review task.
+when_to_use: The user asks for a code review, pre-merge check, or quality pass over one or more files OR a methodology skill (superpowers:requesting-code-review, /review, /security-review) points at a review task. Delegate the reviewer pass to mmagent workers — your main context stays free to decide what to merge.
 version: "0.0.0-unreleased"
 ---
 

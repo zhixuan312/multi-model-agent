@@ -46,6 +46,8 @@ export interface HeartbeatTickInfo {
   };
   costUSD: number | null;
   savedCostUSD: number | null;
+  /** Populated only on the tick immediately following a stage change. */
+  phaseChange?: { from: HeartbeatStage; to: HeartbeatStage };
 }
 
 export interface HeartbeatTimerOptions {
@@ -104,6 +106,11 @@ export class HeartbeatTimer {
   private costUSD: number | null = null;
   private savedCostUSD: number | null = null;
 
+  // Most recent phase-change, surfaced via getHeartbeatTickInfo so callers can
+  // emit task_phase_change events. Cleared after each getHeartbeatTickInfo read.
+  private phaseChangeFrom: HeartbeatStage | null = null;
+  private phaseChangeTo: HeartbeatStage | null = null;
+
   constructor(
     onProgress: (event: ProgressEvent) => void,
     options: HeartbeatTimerOptions,
@@ -121,6 +128,13 @@ export class HeartbeatTimer {
    * callbacks to compose the running headline.
    */
   getHeartbeatTickInfo(): HeartbeatTickInfo {
+    const phaseChange =
+      this.phaseChangeFrom !== null && this.phaseChangeTo !== null
+        ? { from: this.phaseChangeFrom, to: this.phaseChangeTo }
+        : undefined;
+    // Consume the pending phase change so the next tick doesn't re-fire it.
+    this.phaseChangeFrom = null;
+    this.phaseChangeTo = null;
     return {
       batchId: this._batchId ?? '',
       elapsedMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
@@ -137,6 +151,7 @@ export class HeartbeatTimer {
       },
       costUSD: this.costUSD,
       savedCostUSD: this.savedCostUSD,
+      ...(phaseChange !== undefined && { phaseChange }),
     };
   }
 
@@ -200,8 +215,13 @@ export class HeartbeatTimer {
     if (fields.stage !== undefined) {
       const newStageIndex = fields.stageIndex ?? this.stageIndex;
 
+      const prevStage = this.stage;
       this.stage = fields.stage;
       this.stageIndex = newStageIndex;
+      if (prevStage !== fields.stage) {
+        this.phaseChangeFrom = prevStage;
+        this.phaseChangeTo = fields.stage;
+      }
 
       // Auto-clear review fields for implementing
       if (fields.stage === 'implementing') {

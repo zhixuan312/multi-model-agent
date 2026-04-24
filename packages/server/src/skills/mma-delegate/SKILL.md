@@ -1,7 +1,7 @@
 ---
 name: mma-delegate
 description: Fan out ad-hoc implementation or research tasks to sub-agents in parallel via the local mmagent HTTP service. Tasks run on cheap workers that don't consume your main-model context window.
-when_to_use: You have one or more ad-hoc tasks WITHOUT a plan file on disk. Prefer this over inline Agent dispatches whenever mmagent is running — delegated workers are cheaper and parallel-safe. If a plan file exists, use mma-execute-plan instead.
+when_to_use: You have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — delegated workers are cheaper, parallel-safe, and keep main context free. If a plan file exists, use mma-execute-plan; if the task is an audit/review/verify/debug, prefer the matching mma-* skill instead.
 version: "0.0.0-unreleased"
 ---
 

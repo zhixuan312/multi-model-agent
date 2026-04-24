@@ -1,7 +1,7 @@
 ---
 name: mma-verify
 description: Verify work against a checklist via the local mmagent HTTP service. Sub-agents check each item independently.
-when_to_use: superpowers:verification-before-completion tells you to produce evidence before claiming done. This skill delegates that evidence-gathering to mmagent workers so it runs in parallel on cheap models. Use whenever you'd otherwise inline-dispatch a checklist verification.
+when_to_use: The user (or a methodology skill like superpowers:verification-before-completion) wants acceptance-criteria checked against implemented work. Delegate the evidence-gathering to mmagent workers — each checklist item is verified independently and in parallel.
 version: "0.0.0-unreleased"
 ---
 

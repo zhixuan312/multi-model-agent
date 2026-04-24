@@ -40,6 +40,14 @@ export function buildExecutionContext(
       elapsedMs: tick.elapsedMs,
       stage: tick.stage,
     });
+    if (tick.phaseChange !== undefined) {
+      deps.logger.taskPhaseChange({
+        batchId: effectiveBatchId,
+        taskIndex: 0,
+        fromStage: tick.phaseChange.from,
+        toStage: tick.phaseChange.to,
+      });
+    }
   };
 
   return {

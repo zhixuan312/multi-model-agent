@@ -27,9 +27,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Startup log line `[mmagent] started | version=... | bind=... | pid=... | token=<fp> | boot=<uuid>` on stdout before listening.
 - `/health` response extended with `version`, `pid`, `startedAt`, `uptimeMs`.
 - Diagnostic events `task_started`, `task_heartbeat`, `task_phase_change` on `DiagnosticLogger`. `asyncDispatch` emits `task_started`; `buildExecutionContext`'s heartbeat callback emits `task_heartbeat`.
-- Verbose mode: `diagnostics.verbose: boolean` config + `mmagent serve --verbose` flag. Streams each tool call and LLM turn inline to the server's stderr so operators can diagnose slow tasks live. Orthogonal to log-file persistence.
-- File-log toggle: `diagnostics.log: boolean` (existing) + new `mmagent serve --log` flag. Decoupled from verbose — you can stream inline without ever writing a JSONL file, or persist to file without stderr noise.
-- Skill frontmatter rewrite across every mma-* skill: each one now explicitly positions itself as the execution layer paired with superpowers methodology (superpowers = how to approach the work, mma-* = who actually does it). The `multi-model-agent` router is the canonical entry point for routing delegation intent.
+- Verbose mode: `diagnostics.verbose: boolean` config (default false) + `mmagent serve --verbose` flag. Streams per-tool-call, per-LLM-turn, per-stage-transition, and per-batch-lifecycle events to stderr so operators can profile server behavior and fine-tune efficiency. Orthogonal to log-file persistence — streams without writing any file by default.
+- File-log toggle: `diagnostics.log: boolean` config (default false) + new `mmagent serve --log` flag. Decoupled from verbose — stream inline without persisting, persist without stderr noise, both, or neither.
+- Verbose tool_call events include `durationMs` (time since prior event); llm_turn includes per-turn duration. New `batch_completed` and `batch_failed` events fire from asyncDispatch with total batch duration and task count / error details. Stage transitions (implementing → spec_review → spec_rework → quality_review → quality_rework) emit `task_phase_change`.
+- Skill frontmatter rewrite across every mma-* skill: each describes direct user intent (audit, review, verify, debug, execute-plan, delegate) as the primary trigger and names the superpowers methodology skill it pairs with as a secondary hint. Works for users who do NOT use superpowers too.
 - Skill frontmatter `version:` field (sentinel `"0.0.0-unreleased"` in source, stamped to package.json version at build time via `packages/server/scripts/inject-skill-version.mjs`).
 - Migration guide at `docs/migration/2.x-mcp-to-3.x-rest.md`.
 

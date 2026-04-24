@@ -59,6 +59,8 @@ describe('DiagnosticLogger task events', () => {
     logger.taskPhaseChange({ batchId: 'b', taskIndex: 0, fromStage: 'x', toStage: 'y' });
     logger.toolCall({ batchId: 'b', taskIndex: 0, tool: 'x' });
     logger.llmTurn({ batchId: 'b', taskIndex: 0, turnIndex: 0 });
+    logger.batchCompleted({ batchId: 'b', tool: 't', durationMs: 0, taskCount: 0 });
+    logger.batchFailed({ batchId: 'b', tool: 't', durationMs: 0, errorCode: 'x', errorMessage: 'y' });
     expect(readLines(dir)).toEqual([]);
   });
 
@@ -70,6 +72,30 @@ describe('DiagnosticLogger task events', () => {
     expect(line).toBeDefined();
     expect(line?.['tool']).toBe('readFile(foo.ts)');
     expect(line?.['durationMs']).toBe(42);
+  });
+
+  it('writes batch_completed with tool + duration + taskCount', () => {
+    const dir = tmpLogDir();
+    const logger = createDiagnosticLogger({ enabled: true, logDir: dir });
+    logger.batchCompleted({ batchId: 'b6', tool: 'delegate', durationMs: 12_345, taskCount: 3 });
+    const line = readLines(dir).find((l) => l['event'] === 'batch_completed');
+    expect(line).toBeDefined();
+    expect(line?.['tool']).toBe('delegate');
+    expect(line?.['durationMs']).toBe(12_345);
+    expect(line?.['taskCount']).toBe(3);
+  });
+
+  it('writes batch_failed with error code + message', () => {
+    const dir = tmpLogDir();
+    const logger = createDiagnosticLogger({ enabled: true, logDir: dir });
+    logger.batchFailed({
+      batchId: 'b7', tool: 'audit', durationMs: 5000,
+      errorCode: 'executor_error', errorMessage: 'timeout',
+    });
+    const line = readLines(dir).find((l) => l['event'] === 'batch_failed');
+    expect(line).toBeDefined();
+    expect(line?.['errorCode']).toBe('executor_error');
+    expect(line?.['errorMessage']).toBe('timeout');
   });
 
   it('writes llm_turn with provider + tokens + cost', () => {

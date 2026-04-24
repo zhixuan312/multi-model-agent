@@ -63,6 +63,8 @@ export interface DiagnosticLogger {
     outputTokens?: number;
     costUSD?: number | null;
   }): void;
+  batchCompleted(params: { batchId: string; tool: string; durationMs: number; taskCount: number }): void;
+  batchFailed(params: { batchId: string; tool: string; durationMs: number; errorCode: string; errorMessage: string }): void;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -147,6 +149,8 @@ export function createDiagnosticLogger(
       taskPhaseChange: () => {},
       toolCall: () => {},
       llmTurn: () => {},
+      batchCompleted: () => {},
+      batchFailed: () => {},
     };
   }
 
@@ -415,6 +419,29 @@ export function createDiagnosticLogger(
         ...(inputTokens !== undefined ? { inputTokens } : {}),
         ...(outputTokens !== undefined ? { outputTokens } : {}),
         ...(costUSD !== undefined && costUSD !== null ? { costUSD } : {}),
+      });
+    },
+    batchCompleted: ({ batchId, tool, durationMs, taskCount }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'batch_completed',
+        ts: now().toISOString(),
+        batchId,
+        tool,
+        durationMs,
+        taskCount,
+      });
+    },
+    batchFailed: ({ batchId, tool, durationMs, errorCode, errorMessage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'batch_failed',
+        ts: now().toISOString(),
+        batchId,
+        tool,
+        durationMs,
+        errorCode,
+        errorMessage,
       });
     },
   };

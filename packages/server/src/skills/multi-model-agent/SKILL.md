@@ -1,7 +1,7 @@
 ---
 name: multi-model-agent
-description: Router for the multi-model-agent local service. Use FIRST when you're about to delegate any tool-using work so you pick the right mma-* skill instead of defaulting to inline Agent dispatches or superpowers:subagent-driven-development.
-when_to_use: Any time you're about to delegate implementation, research, audit, review, verify, debug, or execute-plan work AND mmagent is running. Read this before reaching for inline Agent calls or superpowers subagent skills — if mma-* applies, prefer it (cheaper workers, independent context, diagnostic log).
+description: Router for the multi-model-agent local service. Use first when you're about to delegate any tool-using work — picks the right mma-* skill for the task (audit, review, verify, debug, plan execution, ad-hoc delegation) instead of defaulting to inline Agent dispatches.
+when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or just asked directly.
 version: "0.0.0-unreleased"
 ---
 

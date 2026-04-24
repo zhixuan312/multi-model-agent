@@ -25,6 +25,8 @@ function makeStubDeps(batchRegistry: BatchRegistry): HandlerDeps {
     taskPhaseChange: vi.fn(),
     toolCall: vi.fn(),
     llmTurn: vi.fn(),
+    batchCompleted: vi.fn(),
+    batchFailed: vi.fn(),
   } satisfies HandlerDeps['logger'];
   return {
     config: {} as HandlerDeps['config'],
