@@ -216,6 +216,10 @@
       "types": "./dist/executors/types.d.ts",
       "import": "./dist/executors/types.js"
     },
+    "./executors/execution-context": {
+      "types": "./dist/executors/execution-context.d.ts",
+      "import": "./dist/executors/execution-context.js"
+    },
     "./executors/shared-compute": {
       "types": "./dist/executors/shared-compute.d.ts",
       "import": "./dist/executors/shared-compute.js"

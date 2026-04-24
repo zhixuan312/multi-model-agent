@@ -1,5 +1,25 @@
 import type { TaskSpec } from '../types.js';
 
+export type BriefQualityWarning =
+  | 'outsourced_discovery'
+  | 'brittle_line_anchors'
+  | 'mixed_environment_actions'
+  | 'bare_topic_noun'
+  | 'no_done_condition'
+  | 'no_output_contract'
+  | 'tiny_brief'
+  | 'huge_brief';
+
+export type BriefQualityPolicy = 'strict' | 'warn' | 'off' | undefined;
+
+export interface ReadinessResult {
+  action: 'refuse' | 'warn' | 'ignored'
+  missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[]
+  layer2Warnings: BriefQualityWarning[]
+  layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[]
+  briefQualityWarnings: BriefQualityWarning[]
+}
+
 export type SourceRoute = 'delegate_tasks' | 'review_code' | 'debug_task' | 'verify_work' | 'audit_document' | 'execute_plan';
 
 export type DelegateSource = { route: 'delegate_tasks'; originalInput: Record<string, unknown> };

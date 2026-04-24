@@ -1,26 +1,31 @@
 // packages/core/src/executors/types.ts
 import type { ProjectContext } from '../project-context.js';
-import type { Provider, RunResult, BatchTimings, BatchAggregateCost, MultiModelConfig } from '../types.js';
+import type { RunResult, MultiModelConfig } from '../types.js';
 import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
 import type { ContextBlockStore } from '../context/context-block-store.js';
 import type { NotApplicable } from '../reporting/not-applicable.js';
+import type { HeartbeatTickInfo } from '../heartbeat.js';
 
-// Plan-specified auxiliary types (Task 1.9)
-
-export interface ClarificationProposal {
-  kind: string;
-  interpretation: string;
-  details?: Record<string, unknown>;
+/** Aggregate timing metrics for a `delegate_tasks` batch. */
+export interface BatchTimings {
+  wallClockMs: number
+  sumOfTaskMs: number
+  estimatedParallelSavingsMs: number
 }
 
-export type ClarificationResponse = {
-  interpretation: string;
-};
+/** Aggregate completion counts for a `delegate_tasks` batch. */
+export interface BatchProgress {
+  totalTasks: number
+  completedTasks: number
+  incompleteTasks: number
+  failedTasks: number
+  successPercent: number;
+}
 
-export interface ProgressEvent {
-  kind: string;
-  message: string;
-  timestamp: number;
+/** Aggregate cost metrics for a `delegate_tasks` batch. */
+export interface BatchAggregateCost {
+  totalActualCostUSD: number
+  totalSavedCostUSD: number
 }
 
 export interface ExecutionContext {
@@ -36,25 +41,22 @@ export interface ExecutionContext {
    */
   logger: DiagnosticLogger;
   contextBlockStore: ContextBlockStore;
-  /**
-   * Resolves a named agent profile (e.g. "standard", "complex") to a Provider instance.
-   *
-   * NOTE: interface-populated but not currently consumed by any executor. Today executors pass
-   * `ctx.config` to `runTasks()`, which resolves providers internally via `createProvider`.
-   * Declared here because the 3.0.0 plan mandates this channel; retained so future per-request
-   * provider overrides (tenant auth, per-request model swap) can flow through the context.
-   */
-  providerFactory: (profile: string) => Provider;
-  /** Optional progress callback for streaming progress events to callers. */
-  onProgress?: (event: ProgressEvent) => void;
-  /** Awaits a clarification response from the caller. Not supported in MCP context (stub rejects). */
-  awaitClarification: (proposal: ClarificationProposal) => Promise<ClarificationResponse>;
   /** The parent model name, resolved from env at context-build time. */
   parentModel?: string;
   /** BatchId owning this execution — threaded to runTasks so HeartbeatTimer can tag ticks. */
   batchId?: string;
   /** Callback invoked on every heartbeat tick; pushes a running headline to the caller's store. */
-  recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void;
+  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+}
+
+export interface ExecutionContextInput {
+  projectContext: ProjectContext;
+  config: MultiModelConfig;
+  logger: DiagnosticLogger;
+  contextBlockStore: ContextBlockStore;
+  parentModel?: string;
+  batchId?: string;
+  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
 }
 
 /**

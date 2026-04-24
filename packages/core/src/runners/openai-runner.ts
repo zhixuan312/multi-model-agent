@@ -13,11 +13,10 @@ import {
   computeCostUSD,
   computeSavedCostUSD,
   type RunResult,
-  type RunOptions,
   type ProviderConfig,
-  type InternalRunnerEvent,
   type ToolMode,
 } from '../types.js';
+import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
 
 /**

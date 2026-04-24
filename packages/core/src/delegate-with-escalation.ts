@@ -1,12 +1,10 @@
+import type { TaskSpec, RunResult, Provider } from './types.js';
 import type {
-  TaskSpec,
-  RunResult,
-  RunStatus,
-  Provider,
   AttemptRecord,
   InternalRunnerEvent,
+  RunStatus,
   TerminationReason,
-} from './types.js';
+} from './runners/types.js';
 import { retryableFor } from './error-codes.js';
 import { hasCompletedWork, extractToolName } from './runners/supervision.js';
 

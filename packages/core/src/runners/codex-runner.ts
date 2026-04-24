@@ -8,11 +8,10 @@ import {
   computeCostUSD,
   computeSavedCostUSD,
   type RunResult,
-  type RunOptions,
   type ProviderConfig,
-  type InternalRunnerEvent,
   type ToolMode,
 } from '../types.js';
+import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { READONLY_TOOL_IDS } from '../tools/definitions.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';

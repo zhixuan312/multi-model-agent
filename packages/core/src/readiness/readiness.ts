@@ -1,4 +1,5 @@
-import type { TaskSpec, BriefQualityWarning, ReadinessResult, BriefQualityPolicy } from '../types.js';
+import type { TaskSpec } from '../types.js';
+import type { BriefQualityWarning, ReadinessResult, BriefQualityPolicy } from '../intake/types.js';
 
 export function hasScopePillar(prompt: string): boolean {
   if (!prompt.trim()) return false;
