@@ -9,133 +9,258 @@
  *   ... skill content ...
  *   <!-- multi-model-agent:END -->
  *
- * Install behavior:
+ * Install behaviour:
  *   - If AGENTS.md does NOT exist: create it with just the managed block.
- *   - If AGENTS.md exists but has NO managed block markers: append the block at
- *     the end (with a blank line separator).
+ *   - If AGENTS.md exists but has NO managed block markers: append the block
+ *     at the end with a blank-line separator.
  *   - If AGENTS.md exists WITH managed block markers: replace the content
  *     between (and including) the markers with the new managed block.
  *   - User content OUTSIDE the markers is preserved verbatim.
  *
- * Uninstall behavior:
- *   - Remove the managed block (including the markers) from AGENTS.md.
- *   - If the file becomes empty or only whitespace after removal, delete the file.
+ * Uninstall behaviour:
+ *   - Remove the managed block (including markers) from AGENTS.md.
+ *   - If the file becomes empty or only whitespace after removal, delete the
+ *     file.
  *   - If the file does not contain the markers, do nothing (no error).
  *   - If the file does not exist, do nothing (no error).
  *
  * @include resolution:
  *   Lines beginning with `@include _shared/<file>.md` are replaced with the
  *   file content read from `<skillsRoot>/_shared/<file>.md`.  If the file
- *   cannot be read, a warning is written to stderr and the line is left as-is.
+ *   cannot be read, a warning is written to stderr and the line is omitted
+ *   from the output (the directive is NOT preserved — matching the Claude Code
+ *   writer behaviour).
+ *
+ * Security: @include paths must begin with `_shared/` and are resolved
+ * strictly within `<skillsRoot>/_shared/` to prevent path traversal.
+ *
+ * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
-import { Readable } from 'node:stream';
-import { pipeline } from 'node:stream/promises';
-import process from 'node:process';
 
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MANAGED_BEGIN = '<!-- multi-model-agent:BEGIN -->';
 const MANAGED_END = '<!-- multi-model-agent:END -->';
 
-const INCLUDE_REGEX = /^@include\s+_shared\/(\S+)\s*$/;
-
 // ─── Public types ────────────────────────────────────────────────────────────
 
 export interface CodexCliInstallOpts {
-  /** Human-readable name of the skill (used in logs/warnings). */
+  /** Human-readable name of the skill (used in warning messages). */
   skillName: string;
-  /** Raw skill content with @includes not yet inlined. */
+  /** Raw skill content (may contain @include directives). */
   content: string;
-  /** Home directory (replaces os.homedir() in all file operations). */
+  /**
+   * Home directory — replaces `os.homedir()` in all file operations.
+   * Must NOT default to `os.homedir()`.
+   */
   homeDir: string;
   /** Root of the skills directory for @include resolution. */
   skillsRoot: string;
-}
-
-// ─── @include inlining ───────────────────────────────────────────────────────
-
-/**
- * Inline `@include _shared/<file>.md` directives in `content`.
- *
- * Each line matching `@include _shared/<file>.md` is replaced with the
- * contents of `<skillsRoot>/_shared/<file>.md`.  Missing shared files trigger
- * a warning to stderr; the original directive line is left unchanged in that
- * case.
- *
- * Note: this function is synchronous to keep the overall install flow simple.
- * For large files consider a streaming version, but skills are expected to be
- * small (< 100 kB), so the synchronous approach is sufficient.
- */
-function inlineIncludes(content: string, skillsRoot: string): string {
-  const sharedDir = path.join(skillsRoot, '_shared');
-  return content
-    .split('\n')
-    .map((line) => {
-      const match = line.match(INCLUDE_REGEX);
-      if (!match) return line;
-      const fileName = match[1];
-      const filePath = path.join(sharedDir, fileName);
-      try {
-        return fs.readFileSync(filePath, 'utf-8');
-      } catch (err) {
-        const detail =
-          err instanceof Error ? err.message : String(err);
-        // Write warning to stderr so callers can capture it in tests.
-        process.stderr.write(
-          `[${'codex-cli'}:${'inlineIncludes'}] warning: ` +
-          `missing shared file for @include directive: ` +
-          `${fileName} (${filePath}): ${detail}\n`,
-        );
-        return line;
-      }
-    })
-    .join('\n');
 }
 
 // ─── Managed block helpers ────────────────────────────────────────────────────
 
 /**
  * Build the complete managed block string including delimiters.
+ *
+ * Block format:
+ *   <!-- multi-model-agent:BEGIN -->
+ *   <content>
+ *   <!-- multi-model-agent:END -->
+ *
+ * Key newline rules:
+ * - BEGIN is always followed by `\n` so content starts on its own line.
+ * - The content line(s) end with a newline. If content doesn't already end
+ *   with `\n`, we add one before END.
+ * - END is the final line of the block; no trailing newline is added after
+ *   END (the block ends with the `>` character of the END tag).
+ *
+ * This means the block always ends with `MANAGED_END` as the last characters
+ * of the file (no trailing newline after it).
  */
 function buildManagedBlock(inlinedContent: string): string {
-  return `${MANAGED_BEGIN}\n${inlinedContent}\n${MANAGED_END}`;
+  const contentEndsWithNewline = inlinedContent.endsWith('\n');
+  // Block format: BEGIN + "\n" + content (ending with \n) + END
+  // No trailing newline after END — callers join suffix directly.
+  return `${MANAGED_BEGIN}\n${inlinedContent}${contentEndsWithNewline ? '' : '\n'}${MANAGED_END}`;
 }
 
+// ─── @include inlining (private) ─────────────────────────────────────────────
+
 /**
- * Check whether `content` contains the managed block markers.
+ * Inline `@include _shared/<path>` directives in `content`.
+ *
+ * Each line matching `@include _shared/<path>` is replaced with the full
+ * content of the corresponding file under `<skillsRoot>/_shared/<path>`.
+ *
+ * Security constraints:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.  Path
+ *   traversal attempts (e.g. `_shared/../secrets.txt`) are rejected with a
+ *   warning and the directive line is dropped.
+ *
+ * Missing shared files:
+ * - A warning containing "missing shared file" is written to stderr.
+ * - The directive line is dropped (not preserved) — matching the Claude
+ *   Code writer behaviour as required by the brief.
+ *
+ * @param skillName  Used in warning messages to identify the skill.
+ * @param content    Raw skill content (may contain @include directives).
+ * @param skillsRoot Root directory containing `_shared/`.
+ * @returns The content with directives inlined.
+ */
+function inlineIncludes(
+  skillName: string,
+  content: string,
+  skillsRoot: string,
+): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^@include\s+(.+)$/);
+    if (!match) {
+      result.push(line);
+      continue;
+    }
+
+    // Trim trailing whitespace from the path token.
+    const relativePath = match[1]!.trimEnd();
+
+    // Security: only accept paths beginning with `_shared/`
+    if (!relativePath.startsWith('_shared/')) {
+      process.stderr.write(
+        `Warning: Codex CLI skill writer [${skillName}]: @include path must ` +
+        `start with "_shared/": ${relativePath}\n`,
+      );
+      continue;
+    }
+
+    // Security: reject path traversal attempts
+    const resolvedPath = path.resolve(skillsRoot, relativePath);
+    const sharedDir = path.resolve(skillsRoot, '_shared');
+    if (
+      !resolvedPath.startsWith(sharedDir + path.sep) &&
+      resolvedPath !== sharedDir
+    ) {
+      process.stderr.write(
+        `Warning: Codex CLI skill writer [${skillName}]: @include path ` +
+        `rejected (path traversal): ${relativePath}\n`,
+      );
+      continue;
+    }
+
+    const sharedFilePath = path.join(skillsRoot, relativePath);
+
+    try {
+      const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
+      result.push(sharedContent);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        process.stderr.write(
+          `Warning: Codex CLI skill writer [${skillName}]: missing shared ` +
+          `file: ${sharedFilePath} (referenced by @include ${relativePath})\n`,
+        );
+        // Directive is dropped — do not push anything.
+      } else {
+        // Permission errors, EISDIR, etc. — re-throw so the caller notices.
+        throw err;
+      }
+    }
+  }
+
+  return result.join('\n');
+}
+
+// ─── Marker helpers ────────────────────────────────────────────────────────────
+
+/**
+ * Returns true only when both managed block markers are present in
+ * `content` and BEGIN appears before END.  An orphan marker or corrupt
+ * ordering does NOT constitute a valid block.
  */
 function hasManagedBlock(content: string): boolean {
-  return (
-    content.includes(MANAGED_BEGIN) ||
-    // Also detect orphaned BEGIN without END and orphaned END without BEGIN.
-    content.includes(MANAGED_END)
-  );
+  const beginIdx = content.indexOf(MANAGED_BEGIN);
+  const endIdx = content.indexOf(MANAGED_END);
+  return beginIdx !== -1 && endIdx !== -1 && beginIdx < endIdx;
 }
 
 // ─── Core write logic ─────────────────────────────────────────────────────────
 
 /**
+ * Find the span of the existing managed block (including both markers) in
+ * `content`.  Returns `{ prefix, suffix }` where `prefix` is everything
+ * before BEGIN and `suffix` is everything after the block's final character.
+ *
+ * The block always ends with `MANAGED_END` (no trailing newline after END).
+ * After END, there may be a structural newline (the newline that terminates
+ * the END line). This structural newline is NOT part of the user suffix — it
+ * belongs to the block boundary and must not appear as an extra blank line
+ * when prefix and suffix are joined.
+ *
+ * Edge cases:
+ * - If END is the last character of the file (no trailing newline), suffix
+ *   is empty.
+ * - If BEGIN and END are in corrupt order (END before BEGIN), returns null
+ *   so no user content is inadvertently destroyed.
+ */
+function splitAroundBlock(
+  content: string,
+): { prefix: string; suffix: string } | null {
+  const beginIdx = content.indexOf(MANAGED_BEGIN);
+  const endIdx = content.indexOf(MANAGED_END);
+
+  // No valid block without both markers
+  if (beginIdx === -1 || endIdx === -1) {
+    return null;
+  }
+
+  // Corrupt order: END before BEGIN — treat as no valid block to protect
+  // user content from inadvertent removal.
+  if (beginIdx > endIdx) {
+    return null;
+  }
+
+  // suffix starts immediately after MANAGED_END (includes any trailing newlines).
+  // Callers decide how to handle the leading newlines in suffix:
+  //   - Install (replace): suffix begins with the separator between END and
+  //     following user content; joining block + suffix reconstructs the file.
+  //   - Uninstall: strip all leading newlines from suffix before joining.
+  const suffixStart = endIdx + MANAGED_END.length;
+
+  return {
+    prefix: content.slice(0, beginIdx),
+    suffix: content.slice(suffixStart),
+  };
+}
+
+/**
  * Write (or overwrite) the managed block in the Codex CLI's AGENTS.md.
  *
- * The function follows the three-phase strategy described in the module
- * docstring above: create / append / replace.
+ * The algorithm:
+ *   1. Inline @include directives.
+ *   2. Read existing file if present.
+ *   3. Determine new content: create / append / replace.
+ *   4. Write to disk.
  *
- * No-op when `opts.homeDir/.codex/AGENTS.md` already contains exactly the
- * requested block (avoids unnecessary writes and manifest noise).
- *
- * @throws If the AGENTS.md file exists but cannot be read as UTF-8.
- * @throws If the AGENTS.md file is a directory.
+ * @throws If the AGENTS.md file exists but cannot be read.
+ * @throws If the AGENTS.md path is a directory.
  */
-function writeManagedBlock(opts: CodexCliInstallOpts): void {
+export function installCodexCli(opts: CodexCliInstallOpts): void {
   const agentsPath = path.join(opts.homeDir, '.codex', 'AGENTS.md');
 
-  // ── 1. Inline @include directives ───────────────────────────────────────
-  const inlinedContent = inlineIncludes(opts.content, opts.skillsRoot);
+  // 1. Inline @include directives
+  const inlinedContent = inlineIncludes(
+    opts.skillName,
+    opts.content,
+    opts.skillsRoot,
+  );
   const block = buildManagedBlock(inlinedContent);
 
-  // ── 2. Read existing file ────────────────────────────────────────────────
+  // 2. Read existing file
   let existingContent: string;
   let fileExists = false;
   try {
@@ -154,173 +279,97 @@ function writeManagedBlock(opts: CodexCliInstallOpts): void {
     }
   }
 
-  // ── 3. Short-circuit if content is already correct ───────────────────────
-  if (fileExists && existingContent === block) {
-    return;
-  }
-
-  // ── 4. Determine new content based on existing file state ────────────────
+  // 3. Determine new content
   let newContent: string;
   if (!fileExists) {
     // Case A: file does not exist → create with just the managed block
     newContent = block;
   } else if (!hasManagedBlock(existingContent)) {
-    // Case B: file exists but no managed block → append with blank line
+    // Case B: file exists but no managed block → append with blank-line separator
+    //
+    // The block begins with BEGIN + "\n". To create exactly one blank line
+    // between existing content and the BEGIN marker:
+    //   - If existingContent ends with "\n": add one "\n" → existing ends with
+    //     "\n", block starts with "\n" → two newlines = one blank line. ✓
+    //   - If existingContent does NOT end with "\n": add "\n\n" → existing ends
+    //     with "\n", block starts with "\n" → two newlines = one blank line. ✓
     newContent = existingContent.endsWith('\n')
-      ? `${existingContent}${block}\n`
-      : `${existingContent}\n\n${block}\n`;
+      ? `${existingContent}\n${block}`
+      : `${existingContent}\n\n${block}`;
   } else {
     // Case C: file exists with managed block → replace it
-    newContent = replaceManagedBlock(existingContent, block);
-  }
-
-  // ── 5. Write to disk ─────────────────────────────────────────────────────
-  fs.mkdirSync(path.join(opts.homeDir, '.codex'), { recursive: true, mode: 0o700 });
-  fs.writeFileSync(agentsPath, newContent, { encoding: 'utf-8', mode: 0o600 });
-}
-
-/**
- * Replace the existing managed block (including markers) with `newBlock`.
- * Assumes `existingContent` contains at least one of the marker strings.
- *
- * Algorithm:
- *   1. Split on MANAGED_BEGIN — keep everything before it as `prefix`.
- *   2. Split the remainder on MANAGED_END — keep everything after it as `suffix`.
- *   3. Reassemble: prefix + newBlock (+ suffix trimmed of leading blank lines
- *      to avoid double blank lines when uninstalling later).
- *
- * If only MANAGED_BEGIN is found (orphaned), treat all content after it as
- * the block to replace.  If only MANAGED_END is found (orphaned), treat all
- * content before it as the block to replace.  This is defensive so a corrupt
- * file does not crash the writer.
- */
-function replaceManagedBlock(existingContent: string, newBlock: string): string {
-  const beginIdx = existingContent.indexOf(MANAGED_BEGIN);
-  const endIdx = existingContent.indexOf(MANAGED_END);
-
-  if (beginIdx === -1 && endIdx === -1) {
-    // Should not happen (caller already verified), but return new block safely
-    return newBlock;
-  }
-
-  if (beginIdx === -1) {
-    // Orphan END — remove everything up to and including END
-    return existingContent.slice(0, endIdx).trimEnd();
-  }
-
-  if (endIdx === -1) {
-    // Orphan BEGIN — remove everything from BEGIN onward
-    return existingContent.slice(0, beginIdx).trimEnd();
-  }
-
-  // Normal case: both markers present
-  if (beginIdx < endIdx) {
-    const prefix = existingContent.slice(0, beginIdx);
-    const suffix = existingContent.slice(endIdx + MANAGED_END.length);
-    return `${prefix}${newBlock}${stripLeadingBlankLines(suffix)}`;
-  } else {
-    // END appears before BEGIN (unusual) — treat as orphan END first
-    const beforeEnd = existingContent.slice(0, endIdx);
-    const afterEnd = existingContent.slice(endIdx + MANAGED_END.length);
-    const suffix = stripLeadingBlankLines(afterEnd);
-    const newContent = `${beforeEnd.trimEnd()}${newBlock}${suffix}`;
-    // Now remove orphan BEGIN if it appears after our insertion
-    const remainingBeginIdx = newContent.indexOf(MANAGED_BEGIN, suffix.length);
-    if (remainingBeginIdx !== -1) {
-      return newContent.slice(0, remainingBeginIdx).trimEnd();
+    const split = splitAroundBlock(existingContent);
+    if (split === null) {
+      // Both markers present but split returned null — corrupt marker order.
+      // Do not overwrite; append with separator instead.
+      newContent = existingContent.endsWith('\n')
+        ? `${existingContent}\n${block}`
+        : `${existingContent}\n\n${block}`;
+    } else {
+      const { prefix, suffix } = split;
+      newContent = `${prefix}${block}${suffix}`;
     }
-    return newContent;
   }
+
+  // 4. Write to disk
+  fs.mkdirSync(path.join(opts.homeDir, '.codex'), { recursive: true });
+  fs.writeFileSync(agentsPath, newContent, 'utf-8');
 }
 
-/**
- * Strip a trailing blank line (or sequence of trailing blank lines) from
- * the beginning of `suffix` so that uninstalling a block that is the last
- * thing in the file does not leave a dangling blank line.
- *
- * Examples:
- *   "\n"              → ""
- *   "\n\n# heading"   → "\n# heading"
- *   "# heading"       → "# heading"  (no change)
- *   "\n# heading"     → "# heading"  (single newline removed)
- *   "  \n# heading"   → "# heading" (whitespace-only line removed)
- */
-function stripLeadingBlankLines(suffix: string): string {
-  return suffix.replace(/^[ \t]*\n+/, '');
-}
-
-// ─── Uninstall helpers ───────────────────────────────────────────────────────
+// ─── Uninstall ────────────────────────────────────────────────────────────────
 
 /**
  * Remove the managed block (including markers) from AGENTS.md.
- * If the resulting file is empty or whitespace-only, delete the file.
- * If the file does not exist, do nothing.
- * If the file has no managed block markers, do nothing.
+ *
+ * Behaviour:
+ *   - File does not exist → no-op.
+ *   - File has no managed block markers → no-op (file unchanged).
+ *   - File has managed block → remove it; write remaining content back.
+ *   - Remaining content is empty or whitespace-only → delete the file.
+ *
+ * @throws On filesystem errors other than ENOENT when reading/writing.
  */
-function removeManagedBlock(homeDir: string): void {
+export function uninstallCodexCli(homeDir: string): void {
   const agentsPath = path.join(homeDir, '.codex', 'AGENTS.md');
-
-  // No-op if file does not exist
-  if (!fs.existsSync(agentsPath)) {
-    return;
-  }
 
   let content: string;
   try {
     content = fs.readFileSync(agentsPath, 'utf-8');
-  } catch {
-    // Cannot read — nothing to remove safely; propagate so caller knows
-    return;
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') {
+      // File does not exist — no-op.
+      return;
+    }
+    // Re-throw on read errors, preserving the original error context.
+    throw err;
   }
 
   if (!hasManagedBlock(content)) {
-    // No managed block to remove
+    // No managed block to remove — file unchanged.
     return;
   }
 
-  const newContent = replaceManagedBlock(content, '');
+  const split = splitAroundBlock(content);
+  if (split === null) {
+    // Both markers present but split returned null — corrupt marker order.
+    // No safe block to remove — leave file unchanged.
+    return;
+  }
+
+  const { prefix, suffix } = split;
+  // Strip all leading newlines from suffix. The suffix begins with any
+  // newlines that followed MANAGED_END (including blank-line separators).
+  // Removing them avoids leaving orphan blank lines after the managed block
+  // is gone. The prefix already ends before BEGIN (including any trailing
+  // newlines the user placed before the block), so this does not disturb
+  // user-authored spacing in the prefix.
+  const trimmedSuffix = suffix.replace(/^\n+/, '');
+  const newContent = `${prefix}${trimmedSuffix}`;
 
   if (newContent.trim() === '') {
-    // File is empty after removal — delete it
-    try {
-      fs.unlinkSync(agentsPath);
-    } catch (err) {
-      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
-    }
+    // File is empty after removal — delete it.
+    fs.unlinkSync(agentsPath);
   } else {
-    fs.writeFileSync(agentsPath, newContent, { encoding: 'utf-8', mode: 0o600 });
+    fs.writeFileSync(agentsPath, newContent, 'utf-8');
   }
-}
-
-// ─── Public API ───────────────────────────────────────────────────────────────
-
-/**
- * Install the skill to the Codex CLI by appending/updating the managed block
- * in `<homeDir>/.codex/AGENTS.md`.
- *
- * User content outside the managed block is always preserved.
- *
- * @param opts.skillName  — Human-readable name (logged on @include warnings).
- * @param opts.content    — Raw skill content (may include @include directives).
- * @param opts.homeDir    — Replaces `os.homedir()` in all file operations.
- * @param opts.skillsRoot — Base path for @include resolution.
- */
-export function installCodexCli(opts: CodexCliInstallOpts): void {
-  writeManagedBlock(opts);
-}
-
-/**
- * Uninstall the skill from the Codex CLI by removing the managed block
- * from `<homeDir>/.codex/AGENTS.md`.
- *
- * User content outside the managed block is preserved.
- *
- * No-op conditions:
- *   - File does not exist
- *   - File exists but contains no managed block markers
- *
- * @param homeDir — Replaces `os.homedir()` in all file operations.
- */
-export function uninstallCodexCli(homeDir: string): void {
-  removeManagedBlock(homeDir);
 }
