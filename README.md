@@ -1,59 +1,88 @@
 # multi-model-agent
 
-[![npm: core](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-core?label=core)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-core)
-[![npm: mcp](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent-mcp?label=mcp)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-mcp)
+[![npm](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=npm)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 
-Delegate the labor, keep the judgment. Your expensive model stays on architecture — mechanical work runs on a fleet of cheaper agents, in parallel, for 90% less.
+Local HTTP service for delegating tool-using work to sub-agents on different LLM providers.
 
-An MCP server for Claude Code, Codex CLI, Cursor, Gemini CLI, and Claude Desktop. One tool call dispatches tasks across any mix of models — auto-routed, cost-bounded, cross-agent reviewed.
+*(Replaced `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — see [CHANGELOG](./CHANGELOG.md).)*
 
 ## Why
 
-Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste. multi-model-agent fixes this:
+- **Save 90%+ on implementation labor.** Mechanical work runs on cheaper standard agents; your flagship model stays on architecture and decisions.
+- **Structural quality.** Implementation and review run on different agents — different training data, different blind spots. Cross-agent review catches what self-review can't.
+- **Client-agnostic.** One daemon serves Claude Code, Gemini CLI, Codex CLI, and Cursor via installable skills. The daemon outlives any individual client session.
 
-- **Save 90%+ on implementation labor.** Mechanical work runs on standard agents at $0.01-0.03/task. Review and audit runs on complex agents at $0.30-0.65/task. Your flagship model does neither.
-- **Keep your context window clean.** Every task runs in an isolated worker context. Zero implementation tokens pollute your architect session.
-- **Ship faster with parallelism.** Independent tasks execute concurrently — 30-45% wall-clock savings on multi-file work.
-- **Catch bugs with cross-agent review.** Implementation and review run on different models. Different training data, different blind spots, structural quality you can't get from self-review.
-
-| Project | Tasks | With multi-model-agent | Single flagship model | Saved | Time |
-|---|---|---|---|---|---|
-| Feature implementation (30 files) | ~50 | $1.50 | ~$50 | **97%** | ~35 min |
-| Full web SPA | 59 | $5.65 | ~$68 | **92%** | ~50 min |
-| Backend microservice | 91 | $8.21 | ~$104 | **92%** | ~1.5 hrs |
-
-## Quick Start
-
-Requires Node >= 22 and an MCP client.
-
-### 1. Create config
-
-Three agent types are supported — use whichever matches your setup:
-
-| Type | Auth | API key needed? |
-|---|---|---|
-| `claude` | Your existing Claude Code / Claude subscription | No — uses local OAuth |
-| `codex` | Your existing Codex subscription (`codex login`) | No — reads `~/.codex/auth.json` |
-| `openai-compatible` | Any OpenAI-compatible API (GPT, MiniMax, DeepSeek, Groq, local vLLM) | Yes — `apiKeyEnv` or `apiKey` |
-
-**If you have Claude Code and/or Codex** — zero API keys needed:
+## Install
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
-{
-  "agents": {
-    "standard": { "type": "codex", "model": "codex-mini-latest" },
-    "complex": { "type": "claude", "model": "claude-sonnet-4-20250514" }
-  },
-  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full" }
-}
-EOF
+npm i -g @zhixuan92/multi-model-agent
 ```
 
-**If you prefer OpenAI-compatible endpoints:**
+Requires Node >= 22.
+
+## Run
 
 ```bash
-mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
+mmagent serve   # starts on 127.0.0.1:7337 by default
+```
+
+Keep this running in the background (or as a user service — see `docs/ops/launchd.md` (TBD)).
+
+## Install skills for your AI client
+
+```bash
+mmagent install-skill                           # auto-detect installed clients
+mmagent install-skill --target=claude-code      # or gemini, codex, cursor
+mmagent install-skill --all-targets             # install for every detected client
+mmagent install-skill --uninstall               # remove skills
+```
+
+Skills are thin adapters that point HTTP requests at the running daemon. Once installed, your AI client has the full tool set without further configuration.
+
+## Supported clients
+
+**Claude Code** — Skills install to `~/.claude/skills/`. Claude Code picks them up automatically on next session start.
+
+**Gemini CLI** — Skills install to the Gemini CLI skill directory. Requires a Gemini CLI version that supports external skills.
+
+**Codex CLI** — Skills install to `~/.codex/skills/`. Available on next Codex session.
+
+**Cursor** — Skills install as a Cursor extension manifest. Restart Cursor to load them.
+
+## Config
+
+Config file: `~/.multi-model/config.json`
+
+```json
+{
+  "agents": {
+    "standard": {
+      "type": "codex",
+      "model": "codex-mini-latest"
+    },
+    "complex": {
+      "type": "claude",
+      "model": "claude-sonnet-4-20250514"
+    }
+  },
+  "defaults": {
+    "timeoutMs": 1800000,
+    "maxCostUSD": 10,
+    "tools": "full"
+  },
+  "server": {
+    "bind": "127.0.0.1",
+    "port": 7337,
+    "auth": {
+      "tokenFile": "~/.multi-model/auth-token"
+    }
+  }
+}
+```
+
+Agent types: `claude`, `codex`, `openai-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM):
+
+```json
 {
   "agents": {
     "standard": {
@@ -68,194 +97,25 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json << 'EOF'
       "baseUrl": "https://api.openai.com/v1",
       "apiKeyEnv": "OPENAI_API_KEY"
     }
-  },
-  "defaults": { "timeoutMs": 1800000, "maxCostUSD": 10, "tools": "full", "parentModel": "claude-opus-4-6" }
-}
-EOF
-```
-
-> **`parentModel`** (optional): When set, headlines show `$Y saved vs model (Zx ROI)`. When omitted, headlines show `$X actual`.
-
-Mix and match freely — e.g., `claude` for complex + `openai-compatible` for standard.
-
-### 2. Register the MCP server
-
-```bash
-# Claude/Codex agents (no env vars needed):
-claude mcp add multi-model-agent -s user \
-  -- npx -y @zhixuan92/multi-model-agent-mcp serve
-
-# OpenAI-compatible agents (pass API keys):
-claude mcp add multi-model-agent -s user \
-  -e MINIMAX_API_KEY=... -e OPENAI_API_KEY=... \
-  -- npx -y @zhixuan92/multi-model-agent-mcp serve
-```
-
-<details><summary>Codex CLI / Claude Desktop / Cursor</summary>
-
-**Codex CLI** — add to `~/.codex/config.toml`:
-```toml
-[mcp_servers.multi-model-agent]
-command = "npx"
-args = ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"]
-
-# Only needed for openai-compatible agents:
-# [mcp_servers.multi-model-agent.env]
-# MINIMAX_API_KEY = "..."
-# OPENAI_API_KEY = "..."
-```
-
-**Claude Desktop** — add to `claude_desktop_config.json`:
-```json
-{
-  "mcpServers": {
-    "multi-model-agent": {
-      "command": "npx",
-      "args": ["-y", "@zhixuan92/multi-model-agent-mcp", "serve"],
-      "env": {}
-    }
   }
 }
 ```
 
-Add API key env vars only if using `openai-compatible` agents.
+Config lookup order: `--config <path>` → `MULTI_MODEL_CONFIG` env → `~/.multi-model/config.json`.
 
-</details>
-
-### 3. Verify
+## Operator commands
 
 ```bash
-claude mcp list   # should show multi-model-agent
+mmagent serve                   # start daemon
+mmagent status                  # show running daemon health and stats
+mmagent print-token             # print the current auth token
+mmagent install-skill           # install skills (see above)
+mmagent install-skill --uninstall   # remove skills
 ```
 
-Your AI assistant now has 10 tools. Ask it to delegate work — it knows when to use them.
+## Architecture at a glance
 
-## How It Works
-
-You configure two labor slots:
-
-| Slot | Purpose | Example models |
-|---|---|---|
-| `complex` | Advanced labor — code review, auditing, security analysis | GPT-5, Claude Opus, Claude Sonnet |
-| `standard` | Heavy lifting — file writes, test runs, implementation | MiniMax, DeepSeek, Claude Haiku |
-
-Your own model (whatever you're talking to) stays on architecture, design, and decisions. It never enters the labor slots.
-
-Every task goes through a reviewed lifecycle:
-
-```
-Compile → Classify → Resolve → Implement → Auto-commit → Spec review → Quality review → Verify artifacts → Report
-```
-
-The intake pipeline interprets your request, infers missing details, and either executes immediately or asks for confirmation when confused. Implementation and review run on *different* agents — cross-agent review catches what self-review can't. File changes are auto-committed after each worker round, and output targets are verified to exist before reporting success.
-
-## Tools
-
-**Core**
-
-| Tool | Purpose |
-|---|---|
-| `delegate_tasks` | Dispatch tasks in parallel with minimal input: `prompt` plus optional `agentType`, `filePaths`, `done`, and `contextBlockIds` |
-
-**Specialized presets** — if you use [superpowers](https://github.com/anthropics/claude-code-plugins) for Claude Code, these map directly to your workflow:
-
-| Tool | Workflow match | Preset |
-|---|---|---|
-| `audit_document` | Spec auditing after brainstorming/planning | Complex agent, no review pipeline. Parallel file audit. Accepts `contextBlockIds` for delta mode (round 2+). |
-| `review_code` | Code review after implementation | Complex agent, full spec + quality review. Parallel file review. Accepts `contextBlockIds` for diff-scoped/delta mode. |
-| `verify_work` | Verification before completion | Standard agent, spec review only. Verify against checklist. Accepts `contextBlockIds` for shared context. |
-| `debug_task` | Systematic debugging | Complex agent, full spec + quality review. Hypothesis-driven investigation. Accepts `contextBlockIds` for shared context. |
-| `execute_plan` | Plan task execution via subagent-driven-development | Standard agent, full review. Worker reads plan files, finds matching task by descriptor, implements it. |
-
-Not using superpowers? These tools work standalone — they're just opinionated defaults over `delegate_tasks` for common patterns.
-
-**Utilities**
-
-| Tool | Purpose |
-|---|---|
-| `register_context_block` | Store reusable context (long briefs, reference docs) |
-| `retry_tasks` | Re-run specific tasks from a previous batch |
-| `get_batch_slice` | Fetch output or telemetry from a previous batch |
-| `confirm_clarifications` | Resume a clarification set by confirming or editing the MCP's proposed interpretation |
-
-<details><summary><strong>Configuration</strong></summary>
-
-Config lookup order: `--config <path>` → `MULTI_MODEL_CONFIG` env → `~/.multi-model/config.json`
-
-Agent types: `openai-compatible`, `claude`, `codex`. Any OpenAI-compatible endpoint works — MiniMax, DeepSeek, Groq, Together, local vLLM.
-
-Auth:
-- **OpenAI-compatible**: `apiKeyEnv` (recommended) or inline `apiKey`
-- **Claude**: Local Claude auth flow, or `ANTHROPIC_API_KEY` env
-- **Codex**: `codex login`, or `OPENAI_API_KEY` env
-
-</details>
-
-<details><summary><strong>Security & Sandbox</strong></summary>
-
-- Default `sandboxPolicy: "cwd-only"` confines agents to the task's working directory
-- Path traversal and symlinks resolved via `fs.realpath` — escapes are rejected
-- `runShell` is disabled under `cwd-only`. To allow shell access, set the agent or default config `sandboxPolicy` to `none`
-- `readFile` rejects >50 MiB; `writeFile` rejects >100 MiB
-- Never commit API keys — use `apiKeyEnv` and env vars
-
-</details>
-
-<details><summary><strong>Updating</strong></summary>
-
-`npx -y @zhixuan92/multi-model-agent-mcp serve` fetches the latest version on each spawn. To update: fully quit your MCP client, reopen.
-
-Pin a version for reproducibility:
-```bash
-npx -y @zhixuan92/multi-model-agent-mcp@<version> serve
-```
-
-</details>
-
-<details><summary><strong>Delegation rule for Claude Code</strong></summary>
-
-Drop-in rule that automates the full pipeline. With [superpowers](https://github.com/anthropics/claude-code-plugins): auto-audits specs (3 rounds), auto-audits plans (2 rounds), dispatches implementation via MCP, auto-reviews code after each task. Without superpowers: routes judgment vs labor correctly.
-
-```bash
-mkdir -p ~/.claude/rules
-curl -o ~/.claude/rules/delegation-rule.md \
-  https://raw.githubusercontent.com/zhixuan312/multi-model-agent/HEAD/DELEGATION-RULE.md
-```
-
-Full reference: [`DELEGATION-RULE.md`](./DELEGATION-RULE.md)
-
-</details>
-
-<details><summary><strong>Troubleshooting</strong></summary>
-
-| Problem | Fix |
-|---|---|
-| `No agents configured` | Create `~/.multi-model/config.json` or pass `--config` |
-| Task never routes | Check `agentType` and your configured providers/capabilities match the task |
-| Shell tasks fail | Set `sandboxPolicy: "none"` on the agent or in defaults config |
-| `openai-compatible` fails | Add `baseUrl` + `apiKey`/`apiKeyEnv` |
-| Client doesn't see changes | Fully quit and reopen the MCP client |
-
-</details>
-
-<details><summary><strong>Local development</strong></summary>
-
-```bash
-npm install && npm run build && npm test
-```
-
-| Package | Purpose |
-|---|---|
-| `@zhixuan92/multi-model-agent-core` | Routing, config, runners, execution |
-| `@zhixuan92/multi-model-agent-mcp` | MCP stdio server, tool schemas |
-
-</details>
-
-## Learn More
-
-- **[Product Direction](./DIRECTION.md)** — Why we exist, what we build, and what we refuse. The principles behind the horizontal layer.
-- **[Changelog](./CHANGELOG.md)** — What shipped in each release.
-- **[Delegation Rule](./DELEGATION-RULE.md)** — Drop-in rule for Claude Code that automates the full delegation pipeline.
+`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. See [DIRECTION.md](./DIRECTION.md) for the full design rationale.
 
 ## License
 

@@ -17,6 +17,10 @@ export default defineConfig({
         find: /^@zhixuan92\/multi-model-agent-core\/(.+)$/,
         replacement: path.resolve(__dirname, 'packages/core/src/$1.ts'),
       },
+      {
+        find: /^@zhixuan92\/multi-model-agent\/server$/,
+        replacement: path.resolve(__dirname, 'packages/server/src/http/server.ts'),
+      },
     ],
   },
 });

@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, vi } from 'vitest';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import * as path from 'node:path';
-import { ProjectRegistry } from '../../packages/mcp/src/http/project-registry.js';
+import { ProjectRegistry } from '../../packages/server/src/http/project-registry.js';
 
 function tmpDir(): string {
   return fs.mkdtempSync(path.join(os.tmpdir(), 'reg-'));
@@ -43,16 +43,16 @@ describe('ProjectRegistry', () => {
     expect(r.projectContext.activeSessions.has('s1')).toBe(true);
   });
 
-  it('detachSession removes sessionId and updates lastSeenAt', () => {
+  it('detachSession removes sessionId and updates lastActivityAt', () => {
     const r = reg.reserveProject(dir);
     if (!r.ok) return;
     reg.attachSession(r.projectContext.cwd, 's1');
-    const before = r.projectContext.lastSeenAt;
+    const before = r.projectContext.lastActivityAt;
     vi.useFakeTimers();
     vi.setSystemTime(Date.now() + 100);
     reg.detachSession(r.projectContext.cwd, 's1');
     expect(r.projectContext.activeSessions.has('s1')).toBe(false);
-    expect(r.projectContext.lastSeenAt).toBeGreaterThan(before);
+    expect(r.projectContext.lastActivityAt).toBeGreaterThan(before);
     vi.useRealTimers();
   });
 

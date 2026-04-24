@@ -1,6 +1,7 @@
 // Config
-export { loadConfigFromFile } from './config/load.js';
-export { parseConfig, multiModelConfigSchema } from './config/schema.js';
+export { loadConfigFromFile, loadAuthToken } from './config/load.js';
+export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
+export type { ServerConfig } from './config/schema.js';
 
 // Types (re-export all)
 export type {
@@ -127,6 +128,9 @@ export type {
   IntakeResult,
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
+
+// Batch registry
+export * from './batch-registry.js';
 
 // Diagnostics
 export { createDiagnosticLogger } from './diagnostics/disconnect-log.js';

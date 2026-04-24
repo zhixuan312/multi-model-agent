@@ -1,0 +1,60 @@
+{
+  "name": "@zhixuan92/multi-model-agent",
+  "version": "3.0.0",
+  "type": "module",
+  "license": "MIT",
+  "description": "Standalone HTTP server for multi-model-agent. Routes tool-invocation work to Claude, Codex, or OpenAI-compatible sub-agents with async-polling REST dispatch and installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.",
+  "author": "Zhang Zhixuan <zhangzhixuan312@gmail.com>",
+  "keywords": [
+    "llm",
+    "claude",
+    "codex",
+    "openai",
+    "agent",
+    "multi-model",
+    "delegation",
+    "http-server"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/zhixuan312/multi-model-agent.git",
+    "directory": "packages/server"
+  },
+  "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
+  "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
+  "files": [
+    "dist"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "mmagent": "dist/cli/index.js",
+    "multi-model-agent": "dist/cli/index.js"
+  },
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "types": "./dist/http/server.d.ts",
+      "import": "./dist/http/server.js"
+    }
+  },
+  "scripts": {
+    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && chmod +x dist/cli/index.js",
+    "prepublishOnly": "npm run build"
+  },
+  "engines": {
+    "node": ">=22.0.0"
+  },
+  "dependencies": {
+    "@asteasolutions/zod-to-openapi": "^8.5.0",
+    "@zhixuan92/multi-model-agent-core": "^3.0.0",
+    "minimist": "^1.2.8",
+    "zod": "^4.0.0"
+  },
+  "devDependencies": {
+    "@types/minimist": "^1.2.5"
+  }
+}

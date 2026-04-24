@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "2.8.0",
+  "version": "3.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -175,6 +175,82 @@
     "./file-artifact-check": {
       "types": "./dist/file-artifact-check.d.ts",
       "import": "./dist/file-artifact-check.js"
+    },
+    "./executors": {
+      "types": "./dist/executors/index.d.ts",
+      "import": "./dist/executors/index.js"
+    },
+    "./executors/index": {
+      "types": "./dist/executors/index.d.ts",
+      "import": "./dist/executors/index.js"
+    },
+    "./executors/delegate": {
+      "types": "./dist/executors/delegate.d.ts",
+      "import": "./dist/executors/delegate.js"
+    },
+    "./executors/audit": {
+      "types": "./dist/executors/audit.d.ts",
+      "import": "./dist/executors/audit.js"
+    },
+    "./executors/review": {
+      "types": "./dist/executors/review.d.ts",
+      "import": "./dist/executors/review.js"
+    },
+    "./executors/verify": {
+      "types": "./dist/executors/verify.d.ts",
+      "import": "./dist/executors/verify.js"
+    },
+    "./executors/debug": {
+      "types": "./dist/executors/debug.d.ts",
+      "import": "./dist/executors/debug.js"
+    },
+    "./executors/execute-plan": {
+      "types": "./dist/executors/execute-plan.d.ts",
+      "import": "./dist/executors/execute-plan.js"
+    },
+    "./executors/retry": {
+      "types": "./dist/executors/retry.d.ts",
+      "import": "./dist/executors/retry.js"
+    },
+    "./executors/types": {
+      "types": "./dist/executors/types.d.ts",
+      "import": "./dist/executors/types.js"
+    },
+    "./executors/shared-compute": {
+      "types": "./dist/executors/shared-compute.d.ts",
+      "import": "./dist/executors/shared-compute.js"
+    },
+    "./tool-schemas": {
+      "types": "./dist/tool-schemas/index.d.ts",
+      "import": "./dist/tool-schemas/index.js"
+    },
+    "./tool-schemas/delegate": {
+      "types": "./dist/tool-schemas/delegate.d.ts",
+      "import": "./dist/tool-schemas/delegate.js"
+    },
+    "./tool-schemas/audit": {
+      "types": "./dist/tool-schemas/audit.d.ts",
+      "import": "./dist/tool-schemas/audit.js"
+    },
+    "./tool-schemas/review": {
+      "types": "./dist/tool-schemas/review.d.ts",
+      "import": "./dist/tool-schemas/review.js"
+    },
+    "./tool-schemas/verify": {
+      "types": "./dist/tool-schemas/verify.d.ts",
+      "import": "./dist/tool-schemas/verify.js"
+    },
+    "./tool-schemas/debug": {
+      "types": "./dist/tool-schemas/debug.d.ts",
+      "import": "./dist/tool-schemas/debug.js"
+    },
+    "./tool-schemas/execute-plan": {
+      "types": "./dist/tool-schemas/execute-plan.d.ts",
+      "import": "./dist/tool-schemas/execute-plan.js"
+    },
+    "./tool-schemas/retry": {
+      "types": "./dist/tool-schemas/retry.d.ts",
+      "import": "./dist/tool-schemas/retry.js"
     }
   },
   "scripts": {
