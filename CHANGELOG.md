@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.0.2 — 2026-04-24
+
+### Fixed
+
+- **server (`@zhixuan92/multi-model-agent`).** Fixed the CLI entry's `isMain()` guard to follow symlinks. 3.0.1's bin worked when executed directly but silently exited 0 when invoked via the npm `.bin/mmagent` symlink, because `path.resolve(argv[1])` returned the symlink path, not the real file, and the identity check against `import.meta.url` failed. Now uses `fs.realpathSync(path.resolve(argv[1]))`. 3.0.1 is npm-deprecated; upgrade to 3.0.2.
+
 ## 3.0.1 — 2026-04-24
 
 ### Fixed
