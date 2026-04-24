@@ -10,6 +10,7 @@ import { runIntakePipeline } from '../intake/pipeline.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import type { ClarificationEntry } from '../intake/types.js';
 import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 export interface DelegateOptions {
   /**
@@ -94,8 +95,10 @@ export async function executeDelegate(
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   const awaitingClarification = intakeResult.clarifications.length > 0;
+  const tasksTotal = readySpecs.length;
+  const tasksCompleted = results.length;
   return {
-    headline: '',  // composed by the caller using composeHeadline
+    headline: composeTerminalHeadline({ tool: 'delegate', awaitingClarification, tasksTotal, tasksCompleted }),
     results: awaitingClarification ? notApplicable('awaiting clarification') : results,
     batchTimings: awaitingClarification ? notApplicable('awaiting clarification') : batchTimings,
     costSummary: awaitingClarification ? notApplicable('awaiting clarification') : costSummary,

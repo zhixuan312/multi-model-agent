@@ -39,6 +39,7 @@ export type {
 export { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
+export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
 
 // Context blocks
 export {

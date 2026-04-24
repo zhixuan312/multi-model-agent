@@ -6,6 +6,7 @@ import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -104,7 +105,7 @@ export async function executeVerify(
     const costSummary = computeAggregateCost(results);
 
     return {
-      headline: '',
+      headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
       results,
       batchTimings,
       costSummary,
@@ -125,7 +126,7 @@ export async function executeVerify(
   const costSummary = computeAggregateCost(results);
 
   return {
-    headline: '',
+    headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,

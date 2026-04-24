@@ -5,6 +5,7 @@ import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from the inline retry_tasks registration in packages/mcp/src/cli.ts ---
 
@@ -80,7 +81,7 @@ export async function executeRetry(
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   return {
-    headline: '',
+    headline: composeTerminalHeadline({ tool: 'retry', awaitingClarification: false, tasksTotal: subset.length, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,

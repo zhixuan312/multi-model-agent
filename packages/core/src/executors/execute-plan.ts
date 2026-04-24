@@ -7,6 +7,7 @@ import type { TaskSpec } from '../types.js';
 import { runTasks, extractPlanSection } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from packages/mcp/src/tools/execute-plan.ts ---
 
@@ -134,7 +135,7 @@ export async function executeExecutePlan(
     const costSummary = computeAggregateCost(results);
 
     return {
-      headline: '',
+      headline: composeTerminalHeadline({ tool: 'executePlan', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
       results,
       batchTimings,
       costSummary,
@@ -157,7 +158,7 @@ export async function executeExecutePlan(
   const costSummary = computeAggregateCost(results);
 
   return {
-    headline: '',
+    headline: composeTerminalHeadline({ tool: 'executePlan', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
