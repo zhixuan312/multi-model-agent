@@ -33,6 +33,7 @@ import { startServe } from './serve.js';
 import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { main as installSkillMain } from './install-skill.js';
+import { runInfo } from './info.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -172,6 +173,7 @@ Usage:
 Commands:
   serve            Start the HTTP server (default)
   print-token      Print the bearer auth token to stdout
+  info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   install-skill    Install or uninstall a skill for an AI client
 
@@ -259,6 +261,27 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         json: jsonFlag,
         env: deps.env?.() ?? process.env,
         homeDir: home,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'info': {
+      const jsonFlag = opts['json'] === true;
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      if (!config) {
+        stderr(`mmagent info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        exit(1);
+        break;
+      }
+      const code = await runInfo({
+        cliVersion: readServerVersion(),
+        bind: config.server.bind,
+        port: config.server.port,
+        tokenFile: config.server.auth.tokenFile,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        json: jsonFlag,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
