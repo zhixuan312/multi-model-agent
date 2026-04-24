@@ -53,8 +53,8 @@
       "import": "./dist/provider.js"
     },
     "./run-tasks": {
-      "types": "./dist/run-tasks.d.ts",
-      "import": "./dist/run-tasks.js"
+      "types": "./dist/run-tasks/index.d.ts",
+      "import": "./dist/run-tasks/index.js"
     },
     "./diagnostics/disconnect-log": {
       "types": "./dist/diagnostics/disconnect-log.d.ts",

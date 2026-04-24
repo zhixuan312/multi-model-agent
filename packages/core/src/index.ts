@@ -73,8 +73,8 @@ export { createProjectContext } from './project-context.js';
 export type { ProjectContext } from './project-context.js';
 
 // Run tasks
-export { runTasks } from './run-tasks.js';
-export type { RunTasksOptions } from './run-tasks.js';
+export { runTasks } from './run-tasks/index.js';
+export type { RunTasksOptions } from './run-tasks/index.js';
 
 // Heartbeat
 export { HeartbeatTimer } from './heartbeat.js';

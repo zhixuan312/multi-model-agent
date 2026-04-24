@@ -14,6 +14,10 @@ export default defineConfig({
         replacement: path.resolve(__dirname, 'packages/core/src/index.ts'),
       },
       {
+        find: /^@zhixuan92\/multi-model-agent-core\/run-tasks$/,
+        replacement: path.resolve(__dirname, 'packages/core/src/run-tasks/index.ts'),
+      },
+      {
         find: /^@zhixuan92\/multi-model-agent-core\/(.+)$/,
         replacement: path.resolve(__dirname, 'packages/core/src/$1.ts'),
       },
