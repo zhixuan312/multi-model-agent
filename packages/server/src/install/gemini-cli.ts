@@ -2,64 +2,93 @@
  * Gemini CLI skill writer.
  *
  * Writes to `<homeDir>/.gemini/extensions/multi-model-agent/`:
- * - `gemini-extension.json` — extension manifest
- * - `SKILL.md` — skill content (with @include directives inlined)
+ *   - `gemini-extension.json`  — extension manifest
+ *   - `SKILL.md`               — skill content (with @include directives inlined)
  *
- * The extension manifest schema is a reasonable minimal schema chosen based on
- * available documentation. Gemini CLI extension format is not fully standardized;
- * this implementation uses the most commonly documented shape:
- *   { name, version, description, schemaVersion, contextFiles }
+ * The extension is always named `multi-model-agent` regardless of `skillName`
+ * (the extension loads whichever skill files are provided).  This is a
+ * judgment call because the Gemini CLI extension format is not fully
+ * standardized; a minimal JSON schema is used.
+ *
+ * Before writing SKILL.md, any `@include _shared/<file>.md` directive lines
+ * are replaced with the file content from `<skillsRoot>/_shared/<file>.md`.
+ * Missing shared files → warning to stderr, line is dropped.
+ *
+ * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** Regex matching a line that starts with `@include ` followed by a relative path. */
+const INCLUDE_RE = /^@include\s+(.+)$/gm;
+
+/**
+ * Options for installing a skill via the Gemini CLI writer.
+ */
 export interface GeminiCliInstallOpts {
-  /** Skill name (currently unused — extension is always named 'multi-model-agent'). */
+  /** Skill name (currently informational; writes always go to multi-model-agent extension). */
   skillName: string;
-  /** Raw SKILL.md content (may contain @include directives). */
+  /**
+   * Raw SKILL.md content. May contain `@include _shared/<file>.md` directives
+   * which are inlined before writing.
+   */
   content: string;
-  /** Version string for the extension manifest. */
+  /**
+   * Version string for the extension manifest's `version` field.
+   */
   skillVersion: string;
-  /** Replaces os.homedir() in all path calculations. */
+  /**
+   * The "home directory" that replaces `os.homedir()`.
+   * Must NOT default to `os.homedir()` — always required explicitly.
+   */
   homeDir: string;
   /**
-   * Root directory containing skill source files.
-   * Used for @include resolution (looks for `<skillsRoot>/_shared/<file>.md`).
+   * Where shared files live. The writer reads `<skillsRoot>/_shared/<file>.md`
+   * when inlining `@include` directives.
    */
   skillsRoot: string;
 }
 
 /**
- * Inline @include directives in skill content.
+ * Inline `@include _shared/<file>.md` directives in `content`.
  *
- * Replaces each line matching `@include _shared/<file>.md` with the contents
- * of `<skillsRoot>/_shared/<file>.md`. If the shared file is missing, writes
- * a warning to stderr and skips that line.
+ * Each line matching `@include <path>` (space after `@include`) is replaced with
+ * the full content of `<skillsRoot>/_shared/<path>`.
  *
- * Only the `@include` lines are replaced; all other content passes through unchanged.
+ * If a shared file is missing:
+ * - A warning is written to stderr.
+ * - The include line is removed from the output (not preserved).
+ * - Processing continues for remaining directives.
+ *
+ * @param content     Raw SKILL.md content (may contain @include directives).
+ * @param skillsRoot  Root directory containing `_shared/` sub-directory.
+ * @returns The content with directives inlined.
  */
-function inlineIncludes(content: string, skillsRoot: string, stderr: (s: string) => boolean): string {
-  const includeRegex = /^@include _shared\/([^/\s]+)\.md\r?$/;
+export function inlineIncludes(content: string, skillsRoot: string): string {
   const lines = content.split('\n');
   const result: string[] = [];
 
   for (const line of lines) {
-    const match = line.match(includeRegex);
+    const match = INCLUDE_RE.exec(line);
     if (!match) {
       result.push(line);
       continue;
     }
 
-    const filename = match[1] + '.md';
-    const sharedPath = path.join(skillsRoot, '_shared', filename);
+    const relativePath = match[1]!;
+    const sharedFilePath = path.join(skillsRoot, relativePath);
 
     try {
-      const sharedContent = fs.readFileSync(sharedPath, 'utf-8');
-      result.push(sharedContent.trimEnd());
+      const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
+      result.push(sharedContent);
     } catch (err) {
+      // Log warning to stderr and drop the include line.
       const detail = err instanceof Error ? err.message : String(err);
-      stderr(`[install-skill:gemini] Warning: @include '${filename}' not found in _shared/: ${detail}\n`);
-      // Skip this line — do not include the @include directive in the output
+      process.stderr.write(
+        `Warning: Gemini CLI skill writer: shared file not found: ` +
+        `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
+      );
+      // Line is dropped — do not push anything.
     }
   }
 
@@ -69,21 +98,25 @@ function inlineIncludes(content: string, skillsRoot: string, stderr: (s: string)
 /**
  * Install a skill to the Gemini CLI extensions directory.
  *
- * Writes two files to `<homeDir>/.gemini/extensions/multi-model-agent/`:
- * - `gemini-extension.json` — minimal extension manifest
- * - `SKILL.md` — skill content with @include directives inlined
+ * Writes two files into `<homeDir>/.gemini/extensions/multi-model-agent/`:
+ *   1. `gemini-extension.json` — the extension manifest
+ *   2. `SKILL.md` — the skill content with @include directives inlined
  *
- * Idempotent: calling this function multiple times overwrites the extension files.
+ * The directory (and any parent directories) are created with mode `0o700`.
+ * Calling this function multiple times overwrites the previous installation
+ * (idempotent).
  *
- * @param opts - Installation options (see GeminiCliInstallOpts)
+ * @param opts  Installation options (see `GeminiCliInstallOpts`).
  */
 export function installGeminiCli(opts: GeminiCliInstallOpts): void {
   const { skillName: _skillName, content, skillVersion, homeDir, skillsRoot } = opts;
 
   const extDir = path.join(homeDir, '.gemini', 'extensions', 'multi-model-agent');
-  fs.mkdirSync(extDir, { recursive: true });
+  fs.mkdirSync(extDir, { recursive: true, mode: 0o700 });
 
-  // Write extension manifest
+  // Write the extension manifest.
+  // Shape is a minimal reasonable schema; Gemini CLI extension format is not
+  // fully standardized, so we document this judgment call.
   const manifest = {
     name: 'multi-model-agent',
     version: skillVersion,
@@ -91,28 +124,25 @@ export function installGeminiCli(opts: GeminiCliInstallOpts): void {
     schemaVersion: '1.0',
     contextFiles: ['SKILL.md'],
   };
-
   const manifestPath = path.join(extDir, 'gemini-extension.json');
   fs.writeFileSync(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf-8');
 
-  // Inline @include directives and write SKILL.md
-  const stderr = (s: string) => process.stderr.write(s);
-  const inlinedContent = inlineIncludes(content, skillsRoot, stderr);
+  // Write the skill content with @include directives inlined.
+  const finalContent = inlineIncludes(content, skillsRoot);
   const skillPath = path.join(extDir, 'SKILL.md');
-  fs.writeFileSync(skillPath, inlinedContent + '\n', 'utf-8');
+  fs.writeFileSync(skillPath, finalContent, 'utf-8');
 }
 
 /**
- * Uninstall the multi-model-agent extension from the Gemini CLI.
+ * Uninstall the multi-model-agent Gemini CLI extension.
  *
  * Recursively removes `<homeDir>/.gemini/extensions/multi-model-agent/`.
- * If the directory does not exist, this function is a no-op.
+ * This is a no-op when the directory does not exist (no error is thrown).
  *
- * @param homeDir - Home directory path
+ * @param homeDir  The "home directory" that replaces `os.homedir()`.
  */
 export function uninstallGeminiCli(homeDir: string): void {
   const extDir = path.join(homeDir, '.gemini', 'extensions', 'multi-model-agent');
-
   if (fs.existsSync(extDir)) {
     fs.rmSync(extDir, { recursive: true, force: true });
   }
