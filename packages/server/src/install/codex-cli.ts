@@ -25,32 +25,29 @@
  *   - If the file does not exist, do nothing (no error).
  *
  * @include resolution:
- *   Lines matching `@include _shared/<file>.md` are replaced with the file
- *   content read from `<skillsRoot>/_shared/<file>.md`.  If the file cannot
- *   be read, a warning is written to stderr and the line is omitted from the
- *   output (the directive is NOT preserved — matching the Claude Code writer
- *   behaviour).
+ *   Lines beginning with `@include _shared/<file>.md` are replaced with the
+ *   file content read from `<skillsRoot>/_shared/<file>.md`.  If the file
+ *   cannot be read, a warning is written to stderr and the line is omitted
+ *   from the output (the directive is NOT preserved — matching the Claude Code
+ *   writer behaviour).
+ *
+ * Security: @include paths must begin with `_shared/` and are resolved
+ * strictly within `<skillsRoot>/_shared/` to prevent path traversal.
  *
  * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { inlineIncludes } from './include-utils.js';
-
 // ─── Constants ────────────────────────────────────────────────────────────────
 
 const MANAGED_BEGIN = '<!-- multi-model-agent:BEGIN -->';
 const MANAGED_END = '<!-- multi-model-agent:END -->';
-const MANAGED_BEGIN_NL = MANAGED_BEGIN + '\n';
-const MANAGED_END_NL = MANAGED_END + '\n';
 
 // ─── Public types ────────────────────────────────────────────────────────────
 
 export interface CodexCliInstallOpts {
-  /**
-   * Human-readable name of the skill (used in warning messages).
-   */
+  /** Human-readable name of the skill (used in warning messages). */
   skillName: string;
   /** Raw skill content (may contain @include directives). */
   content: string;
@@ -73,18 +70,109 @@ export interface CodexCliInstallOpts {
  *   <content>
  *   <!-- multi-model-agent:END -->
  *
- * The content is normalized to use LF (\n) line endings and the block always
- * ends with a newline before the END tag so that any following user content
- * starts on its own line.
+ * Key newline rules:
+ * - BEGIN is always followed by `\n` so content starts on its own line.
+ * - The content line(s) end with a newline. If content doesn't already end
+ *   with `\n`, we add one before END.
+ * - END is the final line of the block; no trailing newline is added after
+ *   END (the block ends with the `>` character of the END tag).
+ *
+ * This means the block always ends with `MANAGED_END` as the last characters
+ * of the file (no trailing newline after it).
  */
 function buildManagedBlock(inlinedContent: string): string {
-  // Normalize to LF for consistent file output regardless of input style.
-  const lfContent = inlinedContent.replace(/\r\n/g, '\n').replace(/\r/g, '\n');
-  // Ensure a trailing LF before END so that user suffix content (if any) is
-  // on its own line after the END tag.
-  const content =
-    lfContent.endsWith('\n') ? lfContent : lfContent + '\n';
-  return MANAGED_BEGIN_NL + content + MANAGED_END_NL;
+  const contentEndsWithNewline = inlinedContent.endsWith('\n');
+  // Block format: BEGIN + "\n" + content (ending with \n) + END
+  // No trailing newline after END — callers join suffix directly.
+  return `${MANAGED_BEGIN}\n${inlinedContent}${contentEndsWithNewline ? '' : '\n'}${MANAGED_END}`;
+}
+
+// ─── @include inlining (private) ─────────────────────────────────────────────
+
+/**
+ * Inline `@include _shared/<path>` directives in `content`.
+ *
+ * Each line matching `@include _shared/<path>` is replaced with the full
+ * content of the corresponding file under `<skillsRoot>/_shared/<path>`.
+ *
+ * Security constraints:
+ * - Only paths beginning with `_shared/` are accepted.
+ * - The resolved path must stay within `<skillsRoot>/_shared/`.  Path
+ *   traversal attempts (e.g. `_shared/../secrets.txt`) are rejected with a
+ *   warning and the directive line is dropped.
+ *
+ * Missing shared files:
+ * - A warning containing "missing shared file" is written to stderr.
+ * - The directive line is dropped (not preserved) — matching the Claude
+ *   Code writer behaviour as required by the brief.
+ *
+ * @param skillName  Used in warning messages to identify the skill.
+ * @param content    Raw skill content (may contain @include directives).
+ * @param skillsRoot Root directory containing `_shared/`.
+ * @returns The content with directives inlined.
+ */
+function inlineIncludes(
+  skillName: string,
+  content: string,
+  skillsRoot: string,
+): string {
+  const lines = content.split('\n');
+  const result: string[] = [];
+
+  for (const line of lines) {
+    const match = line.match(/^@include\s+(.+)$/);
+    if (!match) {
+      result.push(line);
+      continue;
+    }
+
+    // Trim trailing whitespace from the path token.
+    const relativePath = match[1]!.trimEnd();
+
+    // Security: only accept paths beginning with `_shared/`
+    if (!relativePath.startsWith('_shared/')) {
+      process.stderr.write(
+        `Warning: Codex CLI skill writer [${skillName}]: @include path must ` +
+        `start with "_shared/": ${relativePath}\n`,
+      );
+      continue;
+    }
+
+    // Security: reject path traversal attempts
+    const resolvedPath = path.resolve(skillsRoot, relativePath);
+    const sharedDir = path.resolve(skillsRoot, '_shared');
+    if (
+      !resolvedPath.startsWith(sharedDir + path.sep) &&
+      resolvedPath !== sharedDir
+    ) {
+      process.stderr.write(
+        `Warning: Codex CLI skill writer [${skillName}]: @include path ` +
+        `rejected (path traversal): ${relativePath}\n`,
+      );
+      continue;
+    }
+
+    const sharedFilePath = path.join(skillsRoot, relativePath);
+
+    try {
+      const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
+      result.push(sharedContent);
+    } catch (err) {
+      const nodeErr = err as NodeJS.ErrnoException;
+      if (nodeErr.code === 'ENOENT') {
+        process.stderr.write(
+          `Warning: Codex CLI skill writer [${skillName}]: missing shared ` +
+          `file: ${sharedFilePath} (referenced by @include ${relativePath})\n`,
+        );
+        // Directive is dropped — do not push anything.
+      } else {
+        // Permission errors, EISDIR, etc. — re-throw so the caller notices.
+        throw err;
+      }
+    }
+  }
+
+  return result.join('\n');
 }
 
 // ─── Marker helpers ────────────────────────────────────────────────────────────
@@ -100,21 +188,24 @@ function hasManagedBlock(content: string): boolean {
   return beginIdx !== -1 && endIdx !== -1 && beginIdx < endIdx;
 }
 
+// ─── Core write logic ─────────────────────────────────────────────────────────
+
 /**
  * Find the span of the existing managed block (including both markers) in
  * `content`.  Returns `{ prefix, suffix }` where `prefix` is everything
- * before BEGIN and `suffix` is everything after the block's final line.
+ * before BEGIN and `suffix` is everything after the block's final character.
  *
- * The newline that terminates the END line (LF or CRLF) is treated as a
- * structural part of the block boundary and is NOT included in suffix.
- * This ensures no extra blank line is introduced between the END tag and
- * any user content that follows.
+ * The block always ends with `MANAGED_END` (no trailing newline after END).
+ * After END, there may be a structural newline (the newline that terminates
+ * the END line). This structural newline is NOT part of the user suffix — it
+ * belongs to the block boundary and must not appear as an extra blank line
+ * when prefix and suffix are joined.
  *
  * Edge cases:
- * - END is the last character of the file (no trailing newline): suffix is
- *   empty.
- * - BEGIN and END are in corrupt order (END before BEGIN): returns null so
- *   no user content is inadvertently destroyed.
+ * - If END is the last character of the file (no trailing newline), suffix
+ *   is empty.
+ * - If BEGIN and END are in corrupt order (END before BEGIN), returns null
+ *   so no user content is inadvertently destroyed.
  */
 function splitAroundBlock(
   content: string,
@@ -122,27 +213,23 @@ function splitAroundBlock(
   const beginIdx = content.indexOf(MANAGED_BEGIN);
   const endIdx = content.indexOf(MANAGED_END);
 
+  // No valid block without both markers
   if (beginIdx === -1 || endIdx === -1) {
     return null;
   }
 
+  // Corrupt order: END before BEGIN — treat as no valid block to protect
+  // user content from inadvertent removal.
   if (beginIdx > endIdx) {
-    // Corrupt order — treat as no valid block.
     return null;
   }
 
-  const endAfterMarker = endIdx + MANAGED_END.length;
-
-  // Strip the structural newline (LF or CRLF) that terminates the END line.
-  // This newline belongs to the block boundary, not to user content.
-  let suffixStart: number;
-  if (content.slice(endAfterMarker, endAfterMarker + 2) === '\r\n') {
-    suffixStart = endAfterMarker + 2;
-  } else if (content[endAfterMarker] === '\n') {
-    suffixStart = endAfterMarker + 1;
-  } else {
-    suffixStart = endAfterMarker;
-  }
+  // suffix starts immediately after MANAGED_END (includes any trailing newlines).
+  // Callers decide how to handle the leading newlines in suffix:
+  //   - Install (replace): suffix begins with the separator between END and
+  //     following user content; joining block + suffix reconstructs the file.
+  //   - Uninstall: strip all leading newlines from suffix before joining.
+  const suffixStart = endIdx + MANAGED_END.length;
 
   return {
     prefix: content.slice(0, beginIdx),
@@ -150,18 +237,22 @@ function splitAroundBlock(
   };
 }
 
-// ─── Core write logic ─────────────────────────────────────────────────────────
-
 /**
  * Write (or overwrite) the managed block in the Codex CLI's AGENTS.md.
  *
+ * The algorithm:
+ *   1. Inline @include directives.
+ *   2. Read existing file if present.
+ *   3. Determine new content: create / append / replace.
+ *   4. Write to disk.
+ *
+ * @throws If the AGENTS.md file exists but cannot be read.
  * @throws If the AGENTS.md path is a directory.
- * @throws On filesystem errors other than ENOENT when reading/writing.
  */
 export function installCodexCli(opts: CodexCliInstallOpts): void {
   const agentsPath = path.join(opts.homeDir, '.codex', 'AGENTS.md');
 
-  // 1. Inline @include directives — use skillName for clear warning context.
+  // 1. Inline @include directives
   const inlinedContent = inlineIncludes(
     opts.skillName,
     opts.content,
@@ -169,7 +260,7 @@ export function installCodexCli(opts: CodexCliInstallOpts): void {
   );
   const block = buildManagedBlock(inlinedContent);
 
-  // 2. Read existing file (single read with ENOENT handling — no separate stat).
+  // 2. Read existing file
   let existingContent: string;
   let fileExists = false;
   try {
@@ -188,29 +279,39 @@ export function installCodexCli(opts: CodexCliInstallOpts): void {
     }
   }
 
-  // 3. Determine new content.
+  // 3. Determine new content
   let newContent: string;
   if (!fileExists) {
-    // Case A: file does not exist → create with just the managed block.
+    // Case A: file does not exist → create with just the managed block
     newContent = block;
   } else if (!hasManagedBlock(existingContent)) {
-    // Case B: file exists but no managed block → append with one blank-line
-    // separator.  The block begins with BEGIN + "\n".  Adding one "\n" before
-    // the block gives exactly one blank line of separation from existing content.
-    newContent = `${existingContent}\n${block}`;
+    // Case B: file exists but no managed block → append with blank-line separator
+    //
+    // The block begins with BEGIN + "\n". To create exactly one blank line
+    // between existing content and the BEGIN marker:
+    //   - If existingContent ends with "\n": add one "\n" → existing ends with
+    //     "\n", block starts with "\n" → two newlines = one blank line. ✓
+    //   - If existingContent does NOT end with "\n": add "\n\n" → existing ends
+    //     with "\n", block starts with "\n" → two newlines = one blank line. ✓
+    newContent = existingContent.endsWith('\n')
+      ? `${existingContent}\n${block}`
+      : `${existingContent}\n\n${block}`;
   } else {
-    // Case C: file exists with managed block → replace it.
+    // Case C: file exists with managed block → replace it
     const split = splitAroundBlock(existingContent);
     if (split === null) {
-      // Corrupt marker order — fall back to append.
-      newContent = `${existingContent}\n${block}`;
+      // Both markers present but split returned null — corrupt marker order.
+      // Do not overwrite; append with separator instead.
+      newContent = existingContent.endsWith('\n')
+        ? `${existingContent}\n${block}`
+        : `${existingContent}\n\n${block}`;
     } else {
       const { prefix, suffix } = split;
       newContent = `${prefix}${block}${suffix}`;
     }
   }
 
-  // 4. Write to disk.
+  // 4. Write to disk
   fs.mkdirSync(path.join(opts.homeDir, '.codex'), { recursive: true });
   fs.writeFileSync(agentsPath, newContent, 'utf-8');
 }
@@ -239,6 +340,7 @@ export function uninstallCodexCli(homeDir: string): void {
       // File does not exist — no-op.
       return;
     }
+    // Re-throw on read errors, preserving the original error context.
     throw err;
   }
 
@@ -249,15 +351,23 @@ export function uninstallCodexCli(homeDir: string): void {
 
   const split = splitAroundBlock(content);
   if (split === null) {
-    // Corrupt marker order — no safe block to remove.
+    // Both markers present but split returned null — corrupt marker order.
+    // No safe block to remove — leave file unchanged.
     return;
   }
 
   const { prefix, suffix } = split;
-  const newContent = `${prefix}${suffix}`;
+  // Strip all leading newlines from suffix. The suffix begins with any
+  // newlines that followed MANAGED_END (including blank-line separators).
+  // Removing them avoids leaving orphan blank lines after the managed block
+  // is gone. The prefix already ends before BEGIN (including any trailing
+  // newlines the user placed before the block), so this does not disturb
+  // user-authored spacing in the prefix.
+  const trimmedSuffix = suffix.replace(/^\n+/, '');
+  const newContent = `${prefix}${trimmedSuffix}`;
 
   if (newContent.trim() === '') {
-    // File is empty or whitespace-only after removal — delete it.
+    // File is empty after removal — delete it.
     fs.unlinkSync(agentsPath);
   } else {
     fs.writeFileSync(agentsPath, newContent, 'utf-8');
