@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.2.0 — 2026-04-25
+
+### Changed (internal refactor; no public API changes)
+
+- **Landing mode:** reduced-scope through Chapter 6 per the Ch 1 contract baseline. Chapters 1–6 + parts of Ch 4 (shared interface + result-builders) and full Ch 8 docs landed; Ch 4 Tasks 28-30 (per-runner migration to the shared scaffold) and Ch 7 (server install decomposition) are deferred. Rollback plan supports this mode.
+- **Contract test baseline (Ch 1, Tasks 1-12).** New `tests/contract/` suite pins the HTTP response envelope, route manifest, polling lifecycle state machine, observability event + field set, per-endpoint × per-lifecycle-stage envelopes (6×6 = 36 goldens), skill-surface frontmatter + endpoint resolution, per-provider runner RunResult shape via SDK mocks, and orchestrator invariants (worker-status, fallback-report, reviewed-lifecycle, plan-extraction). 85 contract assertions + 40 endpoint goldens. Performance baseline captured at `tests/perf/baseline.json` with a budget-enforcement test.
+- **`packages/mcp/` deleted (Ch 2).** Only a dist-only shell remained; no live source was in the repo.
+- **`packages/core/src/types.ts` 654 → 147 LOC (Ch 3).** Runner-local types moved to `runners/types.ts`; intake/readiness-local to `intake/types.ts`; routing-local to `routing/types.ts` (new); executor-local (BatchTimings / BatchProgress / BatchAggregateCost) to `executors/types.ts`. Cross-cutting (TaskSpec, Provider, ProviderConfig, RunResult, MultiModelConfig, ToolMode, etc.) stay in `types.ts`. Inventory at `docs/refactor/types-inventory.md`.
+- **`ExecutionContext` slimmed (Ch 3, Task 22).** Three dead fields removed: `providerFactory`, `onProgress`, `awaitClarification`. Single factory `buildExecutionContext(input)` at `packages/core/src/executors/execution-context.ts` enforces required-field invariants. The server's `buildExecutionContext` now delegates to the core factory. Dead auxiliary types (`ClarificationProposal`, `ClarificationResponse`, the executors/types.ts `ProgressEvent` shadow) also removed. Audit at `docs/refactor/execution-context-inventory.md`.
+- **`RunnerAdapter` interface + shared result-builders (Ch 4a + partial Ch 4b).** New `packages/core/src/runners/base/types.ts` carries the `RunnerAdapter<ProviderTurn, ProviderUsage>` interface derived from the per-provider viability analysis at `docs/refactor/runner-adapter-matrix.md`. New `packages/core/src/runners/base/result-builders.ts` extracts `buildOkResult / buildIncompleteResult / buildForceSalvageResult / buildMaxTurnsExitResult` that the three runners previously duplicated. Per-runner migration to the adapter (Tasks 28-30) is deferred — the three runners still carry their own build functions, which the shared helpers will replace in a follow-up.
+- **`run-tasks.ts` decomposed (Ch 6).** The 904-LOC orchestrator was split into `packages/core/src/run-tasks/{index,execute-task,reviewed-lifecycle,worker-status,fallback-report,plan-extraction}.ts`. Internal imports now reference `./run-tasks/index.js`; the public package subpath `@zhixuan92/multi-model-agent-core/run-tasks` is preserved via `packages/core/package.json` exports map (now points at `./dist/run-tasks/index.js`). The old `packages/core/src/run-tasks.ts` shim is deleted. Vitest alias map updated to resolve the subpath to the new index.
+- **Docs refreshed (Ch 8).** New `docs/ARCHITECTURE.md` with layer map + request lifecycle + maintainer migration appendix. Root `README.md` points at it. `.claude/CLAUDE.md` (local) updated.
+
+### Bug-fix ratifications
+
+- **`providerFactory` on `ExecutionContext` was dead (PRQ-001).** Harness-installed `__setTestProviderOverride` is not consumed by the run-tasks runner layer. Per-stage endpoint goldens therefore all pin the same connection-error envelope — divergence will appear when Chapter 4's full adapter migration wires a provider via `ExecutionContext`. Goldens are shape-only for that axis; recapture is expected at that point.
+- **Clarification intake routing is driven by prompt heuristics, not provider output (PRQ-002 / PRQ-004).** Two tests (`tests/contract/http/confirm-clarifications.test.ts`, one case in `tests/contract/lifecycle.test.ts`) are `it.skip` until the intake compiler pipeline exposes a test seam for forcing clarification. Tracked in `docs/superpowers/refactor/post-refactor-queue.md`.
+- **Three narrative-style commit messages in history (PRQ-003).** Commits `992d3b2`, `884dad6`, `baa7d52` on this branch have stream-of-thought subject lines from an earlier subagent session. Left in place to avoid rewriting published history; future subagent dispatches are bound by commit-hygiene rules to avoid recurrence.
+
+### Verification at Ch 6 close-out
+
+- `npm run build`: green (workspaces: core + server).
+- `npm test`: 1140 passed, 15 skipped, 0 failed.
+- `npx vitest run tests/contract tests/perf`: 85 passed, 9 skipped, 0 failed.
+- `wc -l packages/core/src/types.ts`: 147 (≤150 cap).
+- Node subpath resolution `@zhixuan92/multi-model-agent-core/run-tasks` exports `runTasks` + `extractPlanSection`.
+
+No public API or HTTP surface changes. Clients and skills installed against 3.1.x continue to work unchanged.
+
 ## 3.1.7 — 2026-04-24
 
 ### Changed
