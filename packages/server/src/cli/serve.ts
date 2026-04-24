@@ -16,7 +16,12 @@
  *   // this module owns signal handling and process.exit
  */
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import { collectInlineApiKeyOffenders } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
+
+function envVarHint(agentName: string): string {
+  return `${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
+}
 
 /** A running server handle returned by startServe(). */
 export interface ServeHandle {
@@ -60,6 +65,22 @@ export async function startServe(
   const running = await startServer({ server: config.server });
 
   const stderr = process.stderr.write.bind(process.stderr);
+
+  // Fire once at serve startup. Lives here (not in loadConfigFromFile) so
+  // print-token / info / status don't re-emit the same warning repeatedly.
+  const inlineOffenders = collectInlineApiKeyOffenders(config);
+  if (inlineOffenders.length > 0) {
+    const firstHint = envVarHint(inlineOffenders[0]!);
+    stderr(
+      `[mmagent] WARNING: inline apiKey in config for agent(s): ${inlineOffenders.join(', ')}.\n` +
+      `  Fix:\n` +
+      `    export ${firstHint}='<your-key>'\n` +
+      `    # then in config.json, replace\n` +
+      `    #   "apiKey": "..."\n` +
+      `    # with\n` +
+      `    #   "apiKeyEnv": "${firstHint}"\n`,
+    );
+  }
 
   const cleanupSignal = (sig: 'SIGTERM' | 'SIGINT') => {
     if (stopInFlight) return;

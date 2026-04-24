@@ -1,5 +1,5 @@
 // Config
-export { loadConfigFromFile, loadAuthToken } from './config/load.js';
+export { loadConfigFromFile, loadAuthToken, collectInlineApiKeyOffenders } from './config/load.js';
 export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
 export type { ServerConfig } from './config/schema.js';
 

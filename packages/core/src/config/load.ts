@@ -32,13 +32,12 @@ export function loadAuthToken(opts: { tokenFile: string }): string {
 }
 
 /**
- * Warn if any openai-compatible agent in the parsed config carries an
- * inline `apiKey` instead of using `apiKeyEnv`. The schema permits both,
- * but storing a plaintext API key in a config file that may end up in a
- * backup, dotfile repo, or git is a footgun. We surface the issue at load
- * time, once, so the operator notices.
+ * Return the names of openai-compatible agents carrying an inline `apiKey`
+ * instead of using `apiKeyEnv`. The schema permits both, but plaintext API
+ * keys in a config file are a backup/dotfile/git footgun — serve surfaces
+ * this once at startup so the operator can react.
  */
-function warnOnInlineApiKey(config: MultiModelConfig, configPath: string): void {
+export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[] {
   const offenders: string[] = [];
   for (const [name, agent] of Object.entries(config.agents)) {
     if (
@@ -48,14 +47,7 @@ function warnOnInlineApiKey(config: MultiModelConfig, configPath: string): void 
       offenders.push(name);
     }
   }
-  if (offenders.length > 0) {
-    // eslint-disable-next-line no-console
-    console.warn(
-      `[multi-model-agent] WARNING: ${configPath} stores an inline \`apiKey\` for ` +
-        `agent(s): ${offenders.join(', ')}. Prefer \`apiKeyEnv\` and read the key ` +
-        `from an environment variable so it never lands in version control.`,
-    );
-  }
+  return offenders;
 }
 
 /**
@@ -73,7 +65,6 @@ export async function loadConfigFromFile(path: string): Promise<MultiModelConfig
       try {
         const raw = JSON.parse(data);
         const parsed = multiModelConfigSchema.parse(raw);
-        warnOnInlineApiKey(parsed, path);
         resolve(parsed);
       } catch (e) {
         reject(new Error(`Invalid config at ${path}: ${e instanceof Error ? e.message : String(e)}`));
