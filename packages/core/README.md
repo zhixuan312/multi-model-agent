@@ -66,32 +66,31 @@ for (const r of results) {
 
 ## Diagnostic logging
 
-Diagnostic logging is OFF by default.
-
-It stays disabled when the `diagnostics` block is absent or when `diagnostics.log` is `false` in `~/.multi-model/config.json`.
-
-Enable it by adding this minimal config:
-
-```json
-{
-  "diagnostics": { "log": true }
-}
-```
-
-Optionally set `diagnostics.logDir` to override the default log directory:
+Diagnostic logging and verbose streaming are both OFF by default.
 
 ```json
 {
   "diagnostics": {
-    "log": true,
+    "log": false,
+    "verbose": false,
     "logDir": "/some/path"
   }
 }
 ```
 
-When `diagnostics.logDir` is omitted, logs default to `~/.multi-model/logs/`.
+Two independent axes:
 
-When enabled, the diagnostic logger appends JSONL records to `mmagent-YYYY-MM-DD.jsonl` in append mode.
+- **`diagnostics.log`** — when `true`, append JSONL records to `mmagent-YYYY-MM-DD.jsonl` under `diagnostics.logDir` (defaults to `~/.multi-model/logs/`).
+- **`diagnostics.verbose`** — when `true`, the server emits per-tool-call, per-LLM-turn, per-stage-transition, and per-batch-lifecycle events. If `log` is also true, they're persisted; otherwise they stream only to the server's stderr.
+
+CLI equivalents:
+
+```bash
+mmagent serve --verbose   # stream events to stderr (no file written)
+mmagent serve --log       # persist to JSONL only (no stderr noise)
+mmagent serve --verbose --log   # both
+mmagent logs --follow --batch=<id>   # tail + filter
+```
 
 Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. This is a crash-diagnosis log, not a progress feed.
 

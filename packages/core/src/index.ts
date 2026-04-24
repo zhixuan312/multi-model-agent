@@ -1,5 +1,5 @@
 // Config
-export { loadConfigFromFile, loadAuthToken } from './config/load.js';
+export { loadConfigFromFile, loadAuthToken, collectInlineApiKeyOffenders } from './config/load.js';
 export { parseConfig, multiModelConfigSchema, serverConfigSchema } from './config/schema.js';
 export type { ServerConfig } from './config/schema.js';
 
@@ -37,6 +37,9 @@ export type {
   ReadinessResult,
 } from './types.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
+export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
+export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
+export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
 
 // Context blocks
 export {
@@ -67,7 +70,12 @@ export type { RunTasksOptions } from './run-tasks.js';
 
 // Heartbeat
 export { HeartbeatTimer } from './heartbeat.js';
-export type { HeartbeatTimerOptions, HeartbeatStage, TransitionFields } from './heartbeat.js';
+export type {
+  HeartbeatTimerOptions,
+  HeartbeatStage,
+  TransitionFields,
+  HeartbeatTickInfo,
+} from './heartbeat.js';
 
 // Readiness
 export {

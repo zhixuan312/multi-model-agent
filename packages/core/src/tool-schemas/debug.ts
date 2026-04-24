@@ -1,5 +1,6 @@
 // packages/core/src/tool-schemas/debug.ts
 import { z } from 'zod';
+import { buildOutputEnvelopeSchema } from './shared-output.js';
 
 // Ported verbatim from packages/mcp/src/tools/debug-task.ts (debugTaskSchema).
 // The filePaths field has its description overridden in the original — reproduced here.
@@ -17,12 +18,6 @@ export const inputSchema = z.object({
 
 export type Input = z.infer<typeof inputSchema>;
 
-// Uniform output envelope — required for GET /batch/:id?taskIndex=N slicing (see spec §6.5)
-export const outputSchema = z.object({
-  results: z.array(z.unknown()),           // per-task RunResult, index-aligned with input tasks
-  headline: z.string(),
-  batchTimings: z.object({}).passthrough(),
-  costSummary: z.object({}).passthrough(),
-}).passthrough();
+export const outputSchema = buildOutputEnvelopeSchema();
 
 export type Output = z.infer<typeof outputSchema>;

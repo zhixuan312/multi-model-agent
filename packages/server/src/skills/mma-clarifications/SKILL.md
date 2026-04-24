@@ -1,7 +1,8 @@
 ---
 name: mma-clarifications
-description: Confirm or correct the service's proposed interpretation when a batch is awaiting clarification before it can proceed.
-when_to_use: When polling GET /batch/:id returns state 'awaiting_clarification'. Read proposedInterpretation, then call this skill to confirm or correct it.
+description: Confirm or correct mmagent's proposed interpretation when a batch is awaiting clarification before it can proceed. Paired skill to every mma-* task dispatcher.
+when_to_use: A previous mma-delegate / mma-audit / mma-review / mma-execute-plan / etc. terminal envelope has `proposedInterpretation` as a string (not a NotApplicable sentinel). Read the proposal and call this skill to accept or correct it. The batch resumes after the POST returns.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-clarifications
@@ -46,15 +47,15 @@ executor was already waiting and finishes immediately.
 
 ```bash
 # 1. Poll until awaiting_clarification
-STATE=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+STATE=$(curl -f --show-error -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:$PORT/batch/$BATCH_ID" | jq -r '.state')
 
 # 2. Read the proposal
-PROPOSAL=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+PROPOSAL=$(curl -f --show-error -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:$PORT/batch/$BATCH_ID" | jq -r '.proposedInterpretation')
 
 # 3. Confirm (accept proposal or supply corrected text)
-curl -sf -X POST \
+curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"batchId\":\"$BATCH_ID\",\"interpretation\":\"$PROPOSAL\"}" \

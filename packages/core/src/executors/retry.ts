@@ -4,6 +4,8 @@ import type { Input } from '../tool-schemas/retry.js';
 import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from the inline retry_tasks registration in packages/mcp/src/cli.ts ---
 
@@ -61,6 +63,8 @@ export async function executeRetry(
   try {
     results = await runTasksImpl(injectDefaults(subset), config, {
       runtime: { contextBlockStore },
+      ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+      ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger,
     });
   } catch (err) {
     retryAborted = true;
@@ -79,10 +83,13 @@ export async function executeRetry(
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   return {
+    headline: composeTerminalHeadline({ tool: 'retry', awaitingClarification: false, tasksTotal: subset.length, tasksCompleted: results.length }),
     results,
-    headline: '',
     batchTimings,
     costSummary,
+    structuredReport: notApplicable('no structured report emitted by this executor'),
+    error: notApplicable('batch succeeded'),
+    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: retryBatchId,
     retryBatchId,
     wallClockMs,

@@ -6,6 +6,8 @@ import type { Input } from '../tool-schemas/execute-plan.js';
 import type { TaskSpec } from '../types.js';
 import { runTasks, extractPlanSection } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from packages/mcp/src/tools/execute-plan.ts ---
 
@@ -120,7 +122,7 @@ export async function executeExecutePlan(
   }
 
   if (tasks.length === 1) {
-    const results = await runTasks(tasks, config, { runtime });
+    const results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
     const result = results[0];
     if (!result) {
       return {
@@ -133,10 +135,13 @@ export async function executeExecutePlan(
     const costSummary = computeAggregateCost(results);
 
     return {
+      headline: composeTerminalHeadline({ tool: 'executePlan', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
       results,
-      headline: '',
       batchTimings,
       costSummary,
+      structuredReport: notApplicable('no structured report emitted by this executor'),
+      error: notApplicable('batch succeeded'),
+      proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs: 0,
       parentModel,
@@ -146,17 +151,20 @@ export async function executeExecutePlan(
 
   // Multiple tasks = fan out (parallel)
   const startMs = Date.now();
-  const results = await runTasks(tasks, config, { runtime });
+  const results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
   const wallClockMs = Date.now() - startMs;
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
 
   return {
+    headline: composeTerminalHeadline({ tool: 'executePlan', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
     results,
-    headline: '',
     batchTimings,
     costSummary,
+    structuredReport: notApplicable('no structured report emitted by this executor'),
+    error: notApplicable('batch succeeded'),
+    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
     parentModel,

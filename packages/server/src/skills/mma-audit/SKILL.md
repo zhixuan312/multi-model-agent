@@ -1,7 +1,8 @@
 ---
 name: mma-audit
-description: Audit a document for security, performance, correctness, or style issues. Sub-agents run in parallel per file.
-when_to_use: When you need to audit a spec, design doc, or configuration file for correctness, security, style, or performance issues.
+description: Audit a document, spec, or config for security, performance, correctness, or style issues via the local mmagent HTTP service. Sub-agents run in parallel per file — no context pollution in the main model.
+when_to_use: The user asks to audit a document, spec, or config (for security, correctness, performance, or style) OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at an audit task. Delegate via mmagent so the audit runs on independent workers — your main context stays free to synthesize findings.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-audit
@@ -38,7 +39,7 @@ Either `document` or `filePaths` (or both) must be provided.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"auditType":"correctness","filePaths":["/project/docs/api-spec.md"]}' \

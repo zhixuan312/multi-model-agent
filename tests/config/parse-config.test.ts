@@ -41,7 +41,7 @@ describe('parseConfig', () => {
       },
       diagnostics: { log: true },
     });
-    expect(result.diagnostics).toEqual({ log: true });
+    expect(result.diagnostics).toEqual({ log: true, verbose: false });
   });
 
   it('accepts diagnostics.log with diagnostics.logDir', () => {
@@ -52,7 +52,18 @@ describe('parseConfig', () => {
       },
       diagnostics: { log: true, logDir: '/tmp/foo' },
     });
-    expect(result.diagnostics).toEqual({ log: true, logDir: '/tmp/foo' });
+    expect(result.diagnostics).toEqual({ log: true, logDir: '/tmp/foo', verbose: false });
+  });
+
+  it('accepts diagnostics.verbose: true', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+      diagnostics: { log: true, verbose: true },
+    });
+    expect(result.diagnostics?.verbose).toBe(true);
   });
 
   it('rejects diagnostics.log when it is not a boolean', () => {

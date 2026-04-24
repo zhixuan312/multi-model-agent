@@ -177,7 +177,26 @@ describe('loadConfigFromFile', () => {
     expect(config.agents.standard.capabilities).toEqual(['web_search']);
   });
 
-  it('warns on inline apiKey (warnOnInlineApiKey)', async () => {
+  it('collectInlineApiKeyOffenders surfaces openai-compatible agents with inline apiKey', async () => {
+    const { collectInlineApiKeyOffenders } = await import('@zhixuan92/multi-model-agent-core');
+    const configPath = path.join(tmpDir, 'config.json');
+    fs.writeFileSync(configPath, JSON.stringify({
+      agents: {
+        standard: {
+          type: 'openai-compatible',
+          model: 'test',
+          baseUrl: 'https://api.example.com/v1',
+          apiKey: 'sk-inline-key',
+        },
+        complex: minimalAgentConfig.complex,
+      },
+    }));
+
+    const config = await loadConfigFromFile(configPath);
+    expect(collectInlineApiKeyOffenders(config)).toEqual(['standard']);
+  });
+
+  it('loadConfigFromFile stays silent on inline apiKey (warning is emitted by serve)', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       agents: {
@@ -199,7 +218,7 @@ describe('loadConfigFromFile', () => {
     } finally {
       console.warn = originalWarn;
     }
-    expect(warned).toBe(true);
+    expect(warned).toBe(false);
   });
 });
 

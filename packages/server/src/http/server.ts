@@ -151,9 +151,12 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
     evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
   });
 
-  // GET /health — lightweight liveness probe (extracted to handler module)
+  // Capture serverStartedAt before health registration so /health can expose it.
+  const serverStartedAt = Date.now();
+
+  // GET /health — unauthenticated liveness + minimal identity
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  router.register('GET', '/health', buildHealthHandler());
+  router.register('GET', '/health', buildHealthHandler({ version: SERVER_VERSION, serverStartedAt }));
 
   // Register tool handlers (Phase 6)
   await registerToolHandlers(router, config, batchRegistry, projectRegistry);
@@ -162,9 +165,6 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   await registerControlHandlers(router, config, batchRegistry, projectRegistry);
 
   // GET /status — operator introspection (registered after registries are ready)
-  // Capture serverStartedAt now (after all setup, before listen) so uptimeMs reflects
-  // time since the server was fully initialised.
-  const serverStartedAt = Date.now();
   const { buildStatusHandler } = await import('./handlers/introspection/status.js');
   router.register('GET', '/status', buildStatusHandler({
     batchRegistry,

@@ -1,6 +1,6 @@
 // packages/server/src/http/execution-context.ts
-import { createProvider } from '@zhixuan92/multi-model-agent-core';
-import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import { createProvider, composeRunningHeadline } from '@zhixuan92/multi-model-agent-core';
+import type { ProjectContext, HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext, ClarificationProposal } from '@zhixuan92/multi-model-agent-core/executors/types';
 import type { HandlerDeps } from './handler-deps.js';
 
@@ -19,6 +19,37 @@ export function buildExecutionContext(
   pc: ProjectContext,
   batchId: string,
 ): ExecutionContext {
+  const recordHeartbeat = (tick: HeartbeatTickInfo) => {
+    const effectiveBatchId = tick.batchId || batchId;
+    const entry = deps.batchRegistry.get(effectiveBatchId);
+    if (!entry) return;
+    entry.lastHeartbeatAt = Date.now();
+    const headline = composeRunningHeadline({
+      tasksTotal: entry.tasksTotal ?? 1,
+      tasksStarted: entry.tasksStarted ?? 0,
+      tasksCompleted: entry.tasksCompleted ?? 0,
+      startedAt: entry.startedAt,
+      nowMs: Date.now(),
+      lastHeartbeatAt: entry.lastHeartbeatAt,
+      running: entry.running ?? [],
+    });
+    deps.batchRegistry.updateRunningHeadline(effectiveBatchId, headline);
+    deps.logger.taskHeartbeat({
+      batchId: effectiveBatchId,
+      taskIndex: 0,
+      elapsedMs: tick.elapsedMs,
+      stage: tick.stage,
+    });
+    if (tick.phaseChange !== undefined) {
+      deps.logger.taskPhaseChange({
+        batchId: effectiveBatchId,
+        taskIndex: 0,
+        fromStage: tick.phaseChange.from,
+        toStage: tick.phaseChange.to,
+      });
+    }
+  };
+
   return {
     projectContext: pc,
     config: deps.config,
@@ -27,6 +58,8 @@ export function buildExecutionContext(
     providerFactory: (profile: string) => createProvider(profile as 'standard' | 'complex', deps.config),
     parentModel: process.env['PARENT_MODEL_NAME'],
     onProgress: undefined,
+    batchId,
+    recordHeartbeat,
     awaitClarification: async (proposal: ClarificationProposal) => {
       return new Promise<{ interpretation: string }>((resolve) => {
         const entry = deps.batchRegistry.get(batchId);

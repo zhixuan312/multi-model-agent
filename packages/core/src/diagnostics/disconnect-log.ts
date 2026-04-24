@@ -46,6 +46,25 @@ export interface DiagnosticLogger {
   requestRejected(params: { reason: string; httpStatus: number; sessionIdAttempted?: string }): void;
   projectCreated(params: { cwd: string }): void;
   projectEvicted(params: { cwd: string; idleMs: number }): void;
+
+  // Task lifecycle events (3.1.0)
+  taskStarted(params: { batchId: string; taskIndex: number; worker?: string }): void;
+  taskHeartbeat(params: { batchId: string; taskIndex: number; elapsedMs: number; stage?: string }): void;
+  taskPhaseChange(params: { batchId: string; taskIndex: number; fromStage: string; toStage: string }): void;
+
+  // Verbose events (3.1.0) — only called when diagnostics.verbose === true
+  toolCall(params: { batchId: string; taskIndex: number; tool: string; durationMs?: number }): void;
+  llmTurn(params: {
+    batchId: string;
+    taskIndex: number;
+    turnIndex: number;
+    provider?: string;
+    inputTokens?: number;
+    outputTokens?: number;
+    costUSD?: number | null;
+  }): void;
+  batchCompleted(params: { batchId: string; tool: string; durationMs: number; taskCount: number }): void;
+  batchFailed(params: { batchId: string; tool: string; durationMs: number; errorCode: string; errorMessage: string }): void;
 }
 
 export interface CreateDiagnosticLoggerOptions {
@@ -125,6 +144,13 @@ export function createDiagnosticLogger(
       requestRejected: () => {},
       projectCreated: () => {},
       projectEvicted: () => {},
+      taskStarted: () => {},
+      taskHeartbeat: () => {},
+      taskPhaseChange: () => {},
+      toolCall: () => {},
+      llmTurn: () => {},
+      batchCompleted: () => {},
+      batchFailed: () => {},
     };
   }
 
@@ -167,7 +193,7 @@ export function createDiagnosticLogger(
         try { closeSync(state.fd); } catch { /* noop */ }
       }
       mkdirSync(logDir, { recursive: true, mode: 0o700 });
-      const fd = openSync(nodePath.join(logDir, `mcp-${today}.jsonl`), 'a', 0o600);
+      const fd = openSync(nodePath.join(logDir, `mmagent-${today}.jsonl`), 'a', 0o600);
       state.fd = fd;
       state.fdDate = today;
       return fd;
@@ -277,7 +303,7 @@ export function createDiagnosticLogger(
     },
     expectedPath: () => {
       if (state.inert) return undefined;
-      return nodePath.join(logDir, `mcp-${formatUtcDate(now())}.jsonl`);
+      return nodePath.join(logDir, `mmagent-${formatUtcDate(now())}.jsonl`);
     },
     sessionOpen: ({ sessionId, cwd, remoteAddr }) => {
       if (state.inert) return;
@@ -336,6 +362,86 @@ export function createDiagnosticLogger(
         ts: now().toISOString(),
         cwd,
         idleMs,
+      });
+    },
+    taskStarted: ({ batchId, taskIndex, worker }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_started',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        ...(worker !== undefined ? { worker } : {}),
+      });
+    },
+    taskHeartbeat: ({ batchId, taskIndex, elapsedMs, stage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_heartbeat',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        elapsedMs,
+        ...(stage !== undefined ? { stage } : {}),
+      });
+    },
+    taskPhaseChange: ({ batchId, taskIndex, fromStage, toStage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'task_phase_change',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        fromStage,
+        toStage,
+      });
+    },
+    toolCall: ({ batchId, taskIndex, tool, durationMs }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'tool_call',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        tool,
+        ...(durationMs !== undefined ? { durationMs } : {}),
+      });
+    },
+    llmTurn: ({ batchId, taskIndex, turnIndex, provider, inputTokens, outputTokens, costUSD }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'llm_turn',
+        ts: now().toISOString(),
+        batchId,
+        taskIndex,
+        turnIndex,
+        ...(provider !== undefined ? { provider } : {}),
+        ...(inputTokens !== undefined ? { inputTokens } : {}),
+        ...(outputTokens !== undefined ? { outputTokens } : {}),
+        ...(costUSD !== undefined && costUSD !== null ? { costUSD } : {}),
+      });
+    },
+    batchCompleted: ({ batchId, tool, durationMs, taskCount }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'batch_completed',
+        ts: now().toISOString(),
+        batchId,
+        tool,
+        durationMs,
+        taskCount,
+      });
+    },
+    batchFailed: ({ batchId, tool, durationMs, errorCode, errorMessage }) => {
+      if (state.inert) return;
+      writeLine({
+        event: 'batch_failed',
+        ts: now().toISOString(),
+        batchId,
+        tool,
+        durationMs,
+        errorCode,
+        errorMessage,
       });
     },
   };

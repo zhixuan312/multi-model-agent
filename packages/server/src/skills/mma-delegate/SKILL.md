@@ -1,7 +1,8 @@
 ---
 name: mma-delegate
-description: Fan out ad-hoc implementation or research tasks to sub-agents in parallel. Use when there is no plan file on disk.
-when_to_use: When you need to delegate one or more implementation or research tasks to sub-agents without a pre-existing plan file. Each task runs in parallel.
+description: Fan out ad-hoc implementation or research tasks to sub-agents in parallel via the local mmagent HTTP service. Tasks run on cheap workers that don't consume your main-model context window.
+when_to_use: You have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — delegated workers are cheaper, parallel-safe, and keep main context free. If a plan file exists, use mma-execute-plan; if the task is an audit/review/verify/debug, prefer the matching mma-* skill instead.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-delegate
@@ -46,7 +47,7 @@ Use `agentType: "complex"` for ambiguous scope or security-sensitive tasks.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \

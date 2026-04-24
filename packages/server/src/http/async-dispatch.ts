@@ -56,11 +56,21 @@ export function asyncDispatch<TResult>(
   const ctx = buildExecutionContext(deps, projectContext, batchId);
 
   // Schedule executor asynchronously — do not await here
+  const startedAtMs = Date.now();
   setImmediate(() => {
     void (async () => {
       try {
+        deps.logger.taskStarted({ batchId, taskIndex: 0 });
         const result = await opts.executor(ctx, batchId);
         batchRegistry.complete(batchId, result);
+        const resultObj = result as { results?: unknown[] } | undefined;
+        const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
+        deps.logger.batchCompleted({
+          batchId,
+          tool,
+          durationMs: Date.now() - startedAtMs,
+          taskCount,
+        });
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
@@ -68,6 +78,13 @@ export function asyncDispatch<TResult>(
           code: 'executor_error',
           message,
           ...(stack !== undefined && { stack }),
+        });
+        deps.logger.batchFailed({
+          batchId,
+          tool,
+          durationMs: Date.now() - startedAtMs,
+          errorCode: 'executor_error',
+          errorMessage: message,
         });
       }
     })();

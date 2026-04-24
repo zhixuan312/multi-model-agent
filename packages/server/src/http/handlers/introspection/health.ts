@@ -4,18 +4,27 @@ import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../router.js';
 
+export interface HealthHandlerDeps {
+  version: string;
+  serverStartedAt: number;
+}
+
 /**
- * GET /health — lightweight liveness probe.
+ * GET /health — unauthenticated liveness + minimal identity.
  *
- * This is the only unauthenticated route. It intentionally returns only
- * `{ ok: true }` — no counters, no project data. Richer operator data
- * lives on GET /status.
- *
- * Loopback guard is applied by the server pipeline before the handler
- * is invoked (see LOOPBACK_ONLY_PATHS in server.ts).
+ * Returns ok + version + pid + startedAt + uptimeMs so `mmagent info` and
+ * external monitoring can verify both reachability and the running instance.
+ * Richer operator data (queue depth, active batches) lives on GET /status.
  */
-export function buildHealthHandler(): RawHandler {
+export function buildHealthHandler(deps: HealthHandlerDeps): RawHandler {
   return (_req: IncomingMessage, res: ServerResponse) => {
-    sendJson(res, 200, { ok: true });
+    const now = Date.now();
+    sendJson(res, 200, {
+      ok: true,
+      version: deps.version,
+      pid: process.pid,
+      startedAt: deps.serverStartedAt,
+      uptimeMs: now - deps.serverStartedAt,
+    });
   };
 }

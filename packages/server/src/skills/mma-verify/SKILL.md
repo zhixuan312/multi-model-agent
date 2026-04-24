@@ -1,7 +1,8 @@
 ---
 name: mma-verify
-description: Verify work against a checklist. Sub-agents check each item independently.
-when_to_use: When you need to confirm that implemented work meets a set of acceptance criteria or a review checklist before claiming completion.
+description: Verify work against a checklist via the local mmagent HTTP service. Sub-agents check each item independently.
+when_to_use: The user (or a methodology skill like superpowers:verification-before-completion) wants acceptance-criteria checked against implemented work. Delegate the evidence-gathering to mmagent workers — each checklist item is verified independently and in parallel.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-verify
@@ -40,7 +41,7 @@ Each checklist item is verified in parallel; results are index-aligned.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"checklist":["Error handler exists","Tests pass"],"filePaths":["/project/src/handler.ts"]}' \

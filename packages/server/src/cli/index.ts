@@ -33,6 +33,9 @@ import { startServe } from './serve.js';
 import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { main as installSkillMain } from './install-skill.js';
+import { runInfo } from './info.js';
+import { runUpdateSkills } from './update-skills.js';
+import { runLogs } from './logs.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -69,8 +72,8 @@ export interface CliDeps {
 /** Parse minimist args from an argv array. */
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
-    string: ['config'],
-    boolean: ['help', 'version', 'json'],
+    string: ['config', 'batch'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort', 'follow', 'verbose', 'log'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -172,8 +175,11 @@ Usage:
 Commands:
   serve            Start the HTTP server (default)
   print-token      Print the bearer auth token to stdout
+  info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   install-skill    Install or uninstall a skill for an AI client
+  update-skills    Re-copy installed skills from the shipped bundle
+  logs             Tail the diagnostic log (use --follow / --batch=<id>)
 
 Global options:
   --config, -c <path>   Path to config file
@@ -224,6 +230,14 @@ export async function main(deps: CliDeps = {}): Promise<void> {
   switch (subcommand) {
     case 'serve': {
       const config = await loadConfig(configArg, deps);
+      // --verbose and --log are independent:
+      //   --verbose enables inline stderr streaming (plus JSONL log lines IF --log is on)
+      //   --log persists events to ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl
+      if (opts['verbose'] === true || opts['log'] === true) {
+        if (!config.diagnostics) config.diagnostics = { log: false, verbose: false };
+        if (opts['verbose'] === true) config.diagnostics.verbose = true;
+        if (opts['log'] === true) config.diagnostics.log = true;
+      }
       // startServe() blocks until a signal arrives and exits the process.
       await startServe(config, exit);
       break;
@@ -259,6 +273,59 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         json: jsonFlag,
         env: deps.env?.() ?? process.env,
         homeDir: home,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'info': {
+      const jsonFlag = opts['json'] === true;
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      if (!config) {
+        stderr(`mmagent info: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        exit(1);
+        break;
+      }
+      const code = await runInfo({
+        cliVersion: readServerVersion(),
+        bind: config.server.bind,
+        port: config.server.port,
+        tokenFile: config.server.auth.tokenFile,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        json: jsonFlag,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'logs': {
+      const config = await loadConfig(configArg, deps).catch(() => null);
+      if (!config) {
+        stderr(`mmagent logs: cannot load config. Set --config or $MMAGENT_CONFIG.\n`);
+        exit(1);
+        break;
+      }
+      const code = await runLogs({
+        config,
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        follow: opts['follow'] === true,
+        batchId: typeof opts['batch'] === 'string' ? opts['batch'] : undefined,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'update-skills': {
+      const code = await runUpdateSkills({
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        dryRun: opts['dry-run'] === true,
+        json: opts['json'] === true,
+        ifExists: opts['if-exists'] === true,
+        silent: opts['silent'] === true,
+        bestEffort: opts['best-effort'] === true,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });

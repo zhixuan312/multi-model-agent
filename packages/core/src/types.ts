@@ -177,6 +177,7 @@ export interface MultiModelConfig {
   diagnostics?: {
     log: boolean
     logDir?: string
+    verbose?: boolean
   }
   clarifications?: {
     maxRoundsPerDraft?: number
@@ -198,6 +199,7 @@ export interface MultiModelConfig {
       maxContextBlocksPerProject: number
       shutdownDrainMs: number
     }
+    autoUpdateSkills: boolean
   }
 }
 

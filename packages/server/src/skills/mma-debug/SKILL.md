@@ -1,7 +1,8 @@
 ---
 name: mma-debug
-description: Debug a failure using a structured hypothesis. All provided files are investigated together in a single task.
-when_to_use: When a test fails, a build breaks, or unexpected behavior appears and you need a structured investigation with a hypothesis.
+description: Debug a failure using a structured hypothesis via the local mmagent HTTP service. All provided files are investigated together in a single task on a worker.
+when_to_use: A test fails, a build breaks, or behavior is unexpected AND you need to read files, reproduce the failure, or narrow root cause OR a methodology skill (superpowers:systematic-debugging) points at the investigation step. Delegate the read/reproduce/trace work to a mmagent worker so your main context stays focused on the hypothesis and the fix.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-debug
@@ -42,7 +43,7 @@ in a single task (not parallelised per file).
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"problem":"Tests fail on CI only","hypothesis":"Missing env var","filePaths":["/project/src/config.ts"]}' \

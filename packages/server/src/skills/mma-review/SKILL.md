@@ -1,7 +1,8 @@
 ---
 name: mma-review
-description: Review code for quality, security, performance, or correctness. Sub-agents run in parallel per file.
-when_to_use: When you need an independent code review after implementing a feature or fix, or before merging a branch.
+description: Review code for quality, security, performance, or correctness via the local mmagent HTTP service. Sub-agents run in parallel per file, independent context.
+when_to_use: The user asks for a code review, pre-merge check, or quality pass over one or more files OR a methodology skill (superpowers:requesting-code-review, /review, /security-review) points at a review task. Delegate the reviewer pass to mmagent workers — your main context stays free to decide what to merge.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-review
@@ -38,7 +39,7 @@ Either `code` or `filePaths` (or both) must be provided.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \

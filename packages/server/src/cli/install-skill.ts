@@ -454,20 +454,16 @@ export async function main(deps: MainDeps = {}): Promise<number> {
   const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets } =
     parseArgs(argv);
 
-  // ── 1. Validate skill name ──────────────────────────────────────────────────
-  if (!skill) {
-    const msg =
-      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] <skill-name>\n' +
-      'Skills: ' + SUPPORTED_SKILLS.join(', ');
-    printError(stderr, json, 'missing_skill_name', msg, stdout);
-    return ExitCode.ERR_INVALID_ARGS;
-  }
-
-  if (!SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
+  // ── 1. Validate skill selection ────────────────────────────────────────────
+  // Default: install every shipped skill. Specify a positional skill name to
+  // scope to a single skill.
+  if (skill && !SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
     const msg = `Unknown skill '${skill}'. Available: ${SUPPORTED_SKILLS.join(', ')}`;
     printError(stderr, json, 'unknown_skill', msg, stdout);
     return ExitCode.ERR_UNKNOWN_SKILL;
   }
+
+  const skillsToRun: readonly string[] = skill ? [skill] : SUPPORTED_SKILLS;
 
   // ── 2. Resolve targets (may throw UnknownTargetError) ──────────────────────
   let resolvedTargets: Client[];
@@ -485,7 +481,7 @@ export async function main(deps: MainDeps = {}): Promise<number> {
   if (resolvedTargets.length === 0) {
     if (json) {
       stdout(
-        JSON.stringify({ skill, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }) + '\n',
+        JSON.stringify({ skills: skillsToRun, action: uninstall ? 'uninstalled' : 'installed', targets: [], skipped: [] }) + '\n',
       );
     } else {
       stdout('No clients detected. Use --target or --all-targets to specify targets.\n');
@@ -493,45 +489,51 @@ export async function main(deps: MainDeps = {}): Promise<number> {
     return ExitCode.ERR_NO_TARGETS;
   }
 
-  // ── 4. Run install/uninstall ──────────────────────────────────────────────
+  // ── 4. Run install/uninstall (loops over skillsToRun; same logic per skill) ─
   const opts = { dryRun, homeDir, version, skillsRoot: deps.skillsRoot };
 
-  let result: InstallResult;
-  try {
-    result = uninstall
-      ? doUninstall(skill, resolvedTargets, opts)
-      : doInstall(skill, resolvedTargets, opts);
-  } catch (err) {
-    if (err instanceof SkillNotFoundError) {
-      printError(stderr, json, err.code, err.message, stdout);
-      return ExitCode.ERR_SKILL_NOT_FOUND;
-    }
-    const msg = err instanceof Error ? err.message : String(err);
-    if (
-      msg.includes('client writers are not yet implemented') ||
-      msg.includes('client removers are not yet implemented')
-    ) {
-      printError(stderr, json, 'writer_not_implemented', msg, stdout);
-      return ExitCode.ERR_WRITER_NOT_IMPLEMENTED;
-    }
-    printError(stderr, json, 'unknown', msg, stdout);
-    return ExitCode.ERR_UNKNOWN;
-  }
-
-  // ── 5. Update manifest (only when not in dry-run mode) ─────────────────────
+  let firstError: number | null = null;
   let manifestUpdated = false;
-  if (!dryRun) {
-    if (uninstall) {
-      manifest.removeEntry(skill, resolvedTargets, homeDir);
-    } else {
-      manifest.appendEntry(skill, version, resolvedTargets, homeDir);
+
+  for (const s of skillsToRun) {
+    let result: InstallResult;
+    try {
+      result = uninstall
+        ? doUninstall(s, resolvedTargets, opts)
+        : doInstall(s, resolvedTargets, opts);
+    } catch (err) {
+      if (err instanceof SkillNotFoundError) {
+        printError(stderr, json, err.code, err.message, stdout);
+        if (firstError === null) firstError = ExitCode.ERR_SKILL_NOT_FOUND;
+        continue;
+      }
+      const msg = err instanceof Error ? err.message : String(err);
+      if (
+        msg.includes('client writers are not yet implemented') ||
+        msg.includes('client removers are not yet implemented')
+      ) {
+        printError(stderr, json, 'writer_not_implemented', msg, stdout);
+        if (firstError === null) firstError = ExitCode.ERR_WRITER_NOT_IMPLEMENTED;
+        continue;
+      }
+      printError(stderr, json, 'unknown', msg, stdout);
+      if (firstError === null) firstError = ExitCode.ERR_UNKNOWN;
+      continue;
     }
-    manifestUpdated = true;
+
+    if (!dryRun) {
+      if (uninstall) {
+        manifest.removeEntry(s, resolvedTargets, homeDir);
+      } else {
+        manifest.appendEntry(s, version, resolvedTargets, homeDir);
+      }
+      manifestUpdated = true;
+    }
+
+    printResult(stdout, result, json, manifestUpdated);
   }
 
-  printResult(stdout, result, json, manifestUpdated);
-
-  return ExitCode.SUCCESS;
+  return firstError ?? ExitCode.SUCCESS;
 }
 
 // ── Bootstrap ──────────────────────────────────────────────────────────────

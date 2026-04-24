@@ -16,6 +16,7 @@ import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { HeartbeatTimer } from './heartbeat.js';
+import type { HeartbeatTickInfo } from './heartbeat.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';
@@ -90,6 +91,26 @@ export type RunTasksProgressCallback = (
 export interface RunTasksOptions {
   onProgress?: RunTasksProgressCallback;
   runtime?: RunTasksRuntime;
+  /** Batch ID this run belongs to; threaded to HeartbeatTimer when set. */
+  batchId?: string;
+  /** Callback fired on every heartbeat tick with a state snapshot. */
+  recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void;
+  /**
+   * Optional DiagnosticLogger. When present AND `verbose` is true, the
+   * runner records per-tool-call + per-LLM-turn events for post-mortem
+   * diagnosis of slow tasks. Logger writes are a no-op if diagnostics.log=false,
+   * so passing it is always safe.
+   */
+  logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
+  /**
+   * Enable verbose emissions. When true, each tool call and LLM turn is
+   * streamed to `verboseStream` (default: process.stderr) so the operator
+   * sees the server's work live. Orthogonal to `diagnostics.log` — you
+   * can have live streaming without persisting a JSONL file.
+   */
+  verbose?: boolean;
+  /** Injectable stream target for verbose output. Defaults to process.stderr. */
+  verboseStream?: (line: string) => void;
 }
 
 function errorResult(error: string): RunResult {
@@ -182,6 +203,12 @@ async function executeReviewedLifecycle(
   config: MultiModelConfig,
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
+  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void },
+  diagnostics?: {
+    logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
+    verbose?: boolean;
+    verboseStream?: (line: string) => void;
+  },
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -201,10 +228,36 @@ async function executeReviewedLifecycle(
     reviewPolicy === 'off' ? 1 :
     reviewPolicy === 'spec_only' ? 3 :
     5;
+  const verbose = diagnostics?.verbose ?? false;
+  let lastStageSeen: string | undefined;
+  const verboseStreamRaw = verbose
+    ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
+    : undefined;
+  const verboseBatchIdEarly = heartbeatWiring?.batchId;
+  const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
   const heartbeat = onProgress
     ? new HeartbeatTimer(
-        (event) => onProgress(taskIndex, event),
-        { provider: resolved.provider.config.model, parentModel: task.parentModel },
+        (event) => {
+          // Detect stage transitions on the heartbeat progress stream. The
+          // authoritative phaseChange flag rides HeartbeatTickInfo (server
+          // logger path); this redundant detection is for the stderr stream
+          // because run-tasks doesn't see HeartbeatTickInfo directly.
+          if (verboseStreamRaw && event.kind === 'heartbeat' && event.stage !== lastStageSeen) {
+            if (lastStageSeen !== undefined) {
+              verboseStreamRaw(
+                `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
+              );
+            }
+            lastStageSeen = event.stage;
+          }
+          onProgress(taskIndex, event);
+        },
+        {
+          provider: resolved.provider.config.model,
+          parentModel: task.parentModel,
+          ...(heartbeatWiring?.batchId !== undefined && { batchId: heartbeatWiring.batchId }),
+          ...(heartbeatWiring?.recordHeartbeat !== undefined && { recordHeartbeat: heartbeatWiring.recordHeartbeat }),
+        },
       )
     : undefined;
   heartbeat?.start(stageCount);
@@ -212,6 +265,16 @@ async function executeReviewedLifecycle(
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
+  const verboseLogger = verbose && diagnostics?.logger ? diagnostics.logger : undefined;
+  const verboseBatchId = verboseBatchIdEarly;
+  const verboseStream = verboseStreamRaw;
+  const shortBatch = shortBatchEarly;
+  if (verboseStream) {
+    verboseStream(
+      `[mmagent verbose] batch=${shortBatch} task=${taskIndex} start worker=${resolved.provider.config.model}`,
+    );
+  }
+  let prevEventAtMs = verbose ? Date.now() : 0;
   const wrappedOnProgress = onProgress
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
@@ -223,6 +286,20 @@ async function executeReviewedLifecycle(
             progressCounters.filesWritten++;
           }
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
+          const now = verbose ? Date.now() : 0;
+          const sincePrevMs = verbose ? now - prevEventAtMs : 0;
+          if (verbose) prevEventAtMs = now;
+          if (verboseLogger && verboseBatchId) {
+            verboseLogger.toolCall({
+              batchId: verboseBatchId,
+              taskIndex,
+              tool: event.toolSummary,
+              durationMs: sincePrevMs,
+            });
+          }
+          if (verboseStream) {
+            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary} +${sincePrevMs}ms`);
+          }
         }
         if (event.kind === 'turn_complete') {
           const costUSD = computeCostUSD(
@@ -237,6 +314,28 @@ async function executeReviewedLifecycle(
             task.parentModel,
           );
           heartbeat?.updateCost(costUSD, savedCostUSD);
+          const nowTurn = verbose ? Date.now() : 0;
+          const turnDurMs = verbose ? nowTurn - prevEventAtMs : 0;
+          if (verbose) prevEventAtMs = nowTurn;
+          if (verboseLogger && verboseBatchId) {
+            verboseLogger.llmTurn({
+              batchId: verboseBatchId,
+              taskIndex,
+              turnIndex: progressCounters.toolCalls,
+              provider: resolved.provider.config.model,
+              inputTokens: event.cumulativeInputTokens,
+              outputTokens: event.cumulativeOutputTokens,
+              costUSD,
+            });
+          }
+          if (verboseStream) {
+            const costStr = costUSD !== null ? ` $${costUSD.toFixed(4)}` : '';
+            verboseStream(
+              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} ` +
+              `turn in=${event.cumulativeInputTokens} out=${event.cumulativeOutputTokens}${costStr} ` +
+              `+${turnDurMs}ms (${resolved.provider.config.model})`,
+            );
+          }
         }
       }
     : undefined;
@@ -733,7 +832,14 @@ export async function runTasks(
         return Promise.resolve(refused);
       }
       const readiness = readinessResults[index];
-      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress).then(
+      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
+        batchId: options.batchId,
+        recordHeartbeat: options.recordHeartbeat,
+      }, {
+        logger: options.logger,
+        verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
+        verboseStream: options.verboseStream,
+      }).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };

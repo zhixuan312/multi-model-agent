@@ -5,6 +5,8 @@ import type { Input } from '../tool-schemas/verify.js';
 import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -96,17 +98,20 @@ export async function executeVerify(
     } as TaskSpec));
 
     const startMs = Date.now();
-    const results = await runTasks(tasks, config, { runtime });
+    const results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
     const wallClockMs = Date.now() - startMs;
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
     const costSummary = computeAggregateCost(results);
 
     return {
+      headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
       results,
-      headline: '',
       batchTimings,
       costSummary,
+      structuredReport: notApplicable('no structured report emitted by this executor'),
+      error: notApplicable('batch succeeded'),
+      proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
       parentModel,
@@ -115,16 +120,19 @@ export async function executeVerify(
   }
 
   const prompt = buildVerifyPrompt(input.work, input.filePaths, input.checklist);
-  const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime });
+  const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(0, results);
   const costSummary = computeAggregateCost(results);
 
   return {
+    headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
     results,
-    headline: '',
     batchTimings,
     costSummary,
+    structuredReport: notApplicable('no structured report emitted by this executor'),
+    error: notApplicable('batch succeeded'),
+    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs: 0,
     parentModel,

@@ -65,7 +65,7 @@ export async function startTestServerWithAgents(
 ): Promise<TestServerWithAgents> {
   const tokenDir = mkdtempSync(join(tmpdir(), 'mmagent-handler-test-'));
   const tokenFile = join(tokenDir, 'auth-token');
-  writeFileSync(tokenFile, DEFAULT_TEST_TOKEN, { mode: 0o600 });
+  writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 
   const config = buildTestAgentConfig(overrides);
   config.server!.auth.tokenFile = tokenFile;

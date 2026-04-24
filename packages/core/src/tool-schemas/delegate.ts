@@ -1,5 +1,6 @@
 // packages/core/src/tool-schemas/delegate.ts
 import { z } from 'zod';
+import { buildOutputEnvelopeSchema } from './shared-output.js';
 
 // Inline copy of the task shape from packages/mcp/src/cli.ts buildTaskSchema().
 // agentType is z.string() here (not an enum) because core does not know the
@@ -28,12 +29,6 @@ export const inputSchema = z.object({
 
 export type Input = z.infer<typeof inputSchema>;
 
-// Uniform output envelope — required for GET /batch/:id?taskIndex=N slicing (see spec §6.5)
-export const outputSchema = z.object({
-  results: z.array(z.unknown()),           // per-task RunResult, index-aligned with input tasks
-  headline: z.string(),
-  batchTimings: z.object({}).passthrough(),
-  costSummary: z.object({}).passthrough(),
-}).passthrough();
+export const outputSchema = buildOutputEnvelopeSchema();
 
 export type Output = z.infer<typeof outputSchema>;

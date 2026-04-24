@@ -1,7 +1,8 @@
 ---
 name: mma-execute-plan
-description: Implement tasks from a plan or spec file on disk. Task descriptors match plan headings; tasks run in parallel.
-when_to_use: When you have a written plan or spec file and want sub-agents to implement specific tasks from it.
+description: Execute tasks from a plan or spec file on disk via the local mmagent HTTP service. Delegates to cheap sub-agents that don't consume your main-model context window. Task descriptors match plan headings; tasks run in parallel.
+when_to_use: A plan file exists on disk (any markdown with numbered task headings — docs/superpowers/plans/*.md, a TODO list, a spec doc) AND you need to implement one or more tasks from it. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans when mmagent is running — delegated workers are cheaper and don't pollute main context. Task descriptors must match the plan headings verbatim.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-execute-plan
@@ -46,7 +47,7 @@ to confirm or correct the proposed interpretation.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tasks":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \

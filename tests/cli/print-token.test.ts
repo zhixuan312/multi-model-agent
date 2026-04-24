@@ -152,4 +152,26 @@ describe('print-token', () => {
     expect(code).toBe(0);
     expect(stdout.join('')).toBe('trimmed-token\n');
   });
+
+  it('stdout contains only the token even when stderr has warnings', () => {
+    const tmpDir = makeTempDir();
+    try {
+      const tokenFile = join(tmpDir, 'auth-token');
+      writeFileSync(tokenFile, 'canonical-token\n', { mode: 0o600 });
+      const cap = captureOutput();
+      // Simulate a concurrent warning on stderr before printToken runs; printToken
+      // itself must not emit anything extra on stdout.
+      cap.stderrFn('[multi-model-agent] WARNING: inline apiKey\n');
+      const code = printToken({
+        tokenFile,
+        env: {},
+        stdout: cap.stdoutFn,
+        stderr: cap.stderrFn,
+      });
+      expect(code).toBe(0);
+      expect(cap.stdout.join('')).toBe('canonical-token\n');
+    } finally {
+      rmSync(tmpDir, { recursive: true, force: true });
+    }
+  });
 });

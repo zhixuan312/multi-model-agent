@@ -26,11 +26,10 @@ describe('GET /batch/:batchId', () => {
     }
   });
 
-  it('returns pending state for a newly dispatched batch', async () => {
+  it('returns 202 text/plain for a pending batch', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
-      // POST /delegate creates a batch that stays pending (fake agents don't respond)
       const delegateRes = await fetch(`${s.url}/delegate?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
@@ -45,10 +44,11 @@ describe('GET /batch/:batchId', () => {
       const res = await fetch(`${s.url}/batch/${batchId}`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
-      expect(res.status).toBe(200);
-      const json = await res.json() as { state: string; startedAt: number };
-      expect(json.state).toBe('pending');
-      expect(typeof json.startedAt).toBe('number');
+      expect(res.status).toBe(202);
+      expect(res.headers.get('content-type')).toMatch(/text\/plain/);
+      const text = await res.text();
+      expect(text.length).toBeGreaterThan(0);
+      expect(text).not.toMatch(/^\{/);
     } finally {
       await s.stop();
     }
@@ -70,32 +70,33 @@ describe('GET /batch/:batchId', () => {
         blocksReleased: false,
       });
       s.batchRegistry.complete(batchId, {
-        status: 'ok',
+        headline: 'delegate: 3/3 tasks complete',
         results: [
           { status: 'ok', output: 'result-0' },
           { status: 'ok', output: 'result-1' },
           { status: 'ok', output: 'result-2' },
         ],
+        batchTimings: {},
+        costSummary: {},
+        structuredReport: { kind: 'not_applicable', reason: 'none' },
+        error: { kind: 'not_applicable', reason: 'batch succeeded' },
+        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
-      // Without taskIndex — all results
       const resAll = await fetch(`${s.url}/batch/${batchId}`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(resAll.status).toBe(200);
-      const jsonAll = await resAll.json() as { state: string; result: { results: unknown[] } };
-      expect(jsonAll.state).toBe('complete');
-      expect(jsonAll.result.results).toHaveLength(3);
+      const jsonAll = await resAll.json() as { results: unknown[] };
+      expect(jsonAll.results).toHaveLength(3);
 
-      // With taskIndex=1 — only second result
       const resSliced = await fetch(`${s.url}/batch/${batchId}?taskIndex=1`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(resSliced.status).toBe(200);
-      const jsonSliced = await resSliced.json() as { state: string; result: { results: unknown[] } };
-      expect(jsonSliced.state).toBe('complete');
-      expect(jsonSliced.result.results).toHaveLength(1);
-      expect((jsonSliced.result.results[0] as { output: string }).output).toBe('result-1');
+      const jsonSliced = await resSliced.json() as { results: unknown[] };
+      expect(jsonSliced.results).toHaveLength(1);
+      expect((jsonSliced.results[0] as { output: string }).output).toBe('result-1');
     } finally {
       await s.stop();
     }
@@ -142,8 +143,13 @@ describe('GET /batch/:batchId', () => {
         blocksReleased: false,
       });
       s.batchRegistry.complete(batchId, {
-        status: 'ok',
+        headline: 'delegate: 1/1 tasks complete',
         results: [{ status: 'ok', output: 'only-one' }],
+        batchTimings: {},
+        costSummary: {},
+        structuredReport: { kind: 'not_applicable', reason: 'none' },
+        error: { kind: 'not_applicable', reason: 'batch succeeded' },
+        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       // taskIndex=1 is out of range for a 1-element array
@@ -174,13 +180,12 @@ describe('GET /batch/:batchId', () => {
         blocksReleased: false,
       });
 
-      // taskIndex=99 on a pending batch — should NOT error, just return pending
+      // taskIndex=99 on a pending batch — should NOT error, returns 202 text/plain
       const res = await fetch(`${s.url}/batch/${batchId}?taskIndex=99`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
-      expect(res.status).toBe(200);
-      const json = await res.json() as { state: string };
-      expect(json.state).toBe('pending');
+      expect(res.status).toBe(202);
+      expect(res.headers.get('content-type')).toMatch(/text\/plain/);
     } finally {
       await s.stop();
     }
@@ -206,9 +211,9 @@ describe('GET /batch/:batchId', () => {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
-      const json = await res.json() as { state: string; proposedInterpretation: string };
-      expect(json.state).toBe('awaiting_clarification');
+      const json = await res.json() as { proposedInterpretation: string; results: { kind: string } };
       expect(json.proposedInterpretation).toBe('Did you mean X or Y?');
+      expect(json.results.kind).toBe('not_applicable');
     } finally {
       await s.stop();
     }
@@ -243,8 +248,64 @@ describe('GET /batch/:batchId', () => {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
-      const json = await res.json() as { state: string };
-      expect(json.state).toBe('expired');
+      const json = await res.json() as { headline: string };
+      expect(json.headline).toMatch(/expired/);
+    } finally {
+      await s.stop();
+    }
+  });
+
+  it('failed batch returns 200 JSON with populated error + NotApplicable sentinels', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false,
+      });
+      s.batchRegistry.fail(batchId, { code: 'executor_error', message: 'boom' });
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(200);
+      const body = await res.json() as { error: { code: string }; results: { kind: string } };
+      expect(body.error.code).toBe('executor_error');
+      expect(body.results.kind).toBe('not_applicable');
+    } finally {
+      await s.stop();
+    }
+  });
+
+  it('terminal 200 JSON always includes all 7 envelope fields', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false,
+      });
+      s.batchRegistry.complete(batchId, {
+        headline: 'delegate: 0/0 tasks complete',
+        results: [],
+        batchTimings: {},
+        costSummary: {},
+        structuredReport: { kind: 'not_applicable', reason: 'none' },
+        error: { kind: 'not_applicable', reason: 'batch succeeded' },
+        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
+      });
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(200);
+      expect(res.headers.get('content-type')).toMatch(/application\/json/);
+      const body = await res.json();
+      for (const key of ['headline', 'results', 'batchTimings', 'costSummary', 'structuredReport', 'error', 'proposedInterpretation']) {
+        expect(body, `missing ${key}`).toHaveProperty(key);
+      }
     } finally {
       await s.stop();
     }

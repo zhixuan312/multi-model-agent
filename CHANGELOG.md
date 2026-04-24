@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.0 — 2026-04-24
+
+### BREAKING
+
+- **`GET /batch/:id` response shape split by HTTP status.** Pending → `202 text/plain` plain-text progress line. Terminal → `200 application/json` full envelope. No `state` field — consumers branch on HTTP status. Migration: one conditional per call site.
+- **Response envelope uniformity.** Every terminal JSON envelope now has all seven fields (`headline`, `results`, `batchTimings`, `costSummary`, `structuredReport`, `error`, `proposedInterpretation`). Non-applicable fields are `{ kind: "not_applicable", reason: "..." }`. Consumers of `response.structuredReport.summary` etc. must type-narrow.
+- **`mmagent print-token` output.** Emits only the token on stdout; warnings go to stderr.
+- **Inline-apiKey warning.** No longer fires on every `loadConfigFromFile` — now fires once on `mmagent serve` startup with an actionable fix recipe.
+- **Log file rename.** `~/.multi-model/logs/mcp-YYYY-MM-DD.jsonl` → `mmagent-YYYY-MM-DD.jsonl`. Old files untouched.
+- **`install-skill` default.** No positional skill name now installs every shipped skill (was: error). Specify a skill name to scope to one.
+
+### Added
+
+- `mmagent info [--json]` subcommand: cliVersion, bind/port, token fingerprint, and daemon identity (version/pid/startedAt/uptimeMs via `/health`). Works offline (returns `NotApplicable` sentinels when daemon unreachable).
+- `mmagent update-skills [--dry-run] [--json] [--if-exists] [--silent] [--best-effort]` subcommand: re-copies every manifest-tracked skill from the shipped bundle, updates `skillVersion`, removes skills no longer in bundle.
+- `mmagent logs [--follow] [--batch=<id>]` subcommand: tails today's `mmagent-*.jsonl` with POSIX-sh tail-F semantics.
+- `server.autoUpdateSkills` config field (default `true`). `mmagent serve` auto-updates stale skills before bind (bounded 5s; never blocks).
+- `mmagent install-skill` with no positional skill name now installs every shipped skill (previous behavior required a skill name or `--all-skills` flag — 3.1.0 flips the default). Pass a skill name to scope to one. `--uninstall` with no skill name removes all installed skills.
+- npm `postinstall` hook via `packages/server/scripts/postinstall.js` — zero-touch skill refresh on `npm update`. Always exits 0.
+- Plain-text running headline on `GET /batch/:id` during pending. Recomposed every HeartbeatTimer tick; includes stall detection after 2× heartbeat interval.
+- Startup log line `[mmagent] started | version=... | bind=... | pid=... | token=<fp> | boot=<uuid>` on stdout before listening.
+- `/health` response extended with `version`, `pid`, `startedAt`, `uptimeMs`.
+- Diagnostic events `task_started`, `task_heartbeat`, `task_phase_change` on `DiagnosticLogger`. `asyncDispatch` emits `task_started`; `buildExecutionContext`'s heartbeat callback emits `task_heartbeat`.
+- Verbose mode: `diagnostics.verbose: boolean` config (default false) + `mmagent serve --verbose` flag. Streams per-tool-call, per-LLM-turn, per-stage-transition, and per-batch-lifecycle events to stderr so operators can profile server behavior and fine-tune efficiency. Orthogonal to log-file persistence — streams without writing any file by default.
+- File-log toggle: `diagnostics.log: boolean` config (default false) + new `mmagent serve --log` flag. Decoupled from verbose — stream inline without persisting, persist without stderr noise, both, or neither.
+- Verbose tool_call events include `durationMs` (time since prior event); llm_turn includes per-turn duration. New `batch_completed` and `batch_failed` events fire from asyncDispatch with total batch duration and task count / error details. Stage transitions (implementing → spec_review → spec_rework → quality_review → quality_rework) emit `task_phase_change`.
+- Skill frontmatter rewrite across every mma-* skill: each describes direct user intent (audit, review, verify, debug, execute-plan, delegate) as the primary trigger and names the superpowers methodology skill it pairs with as a secondary hint. Works for users who do NOT use superpowers too.
+- Skill frontmatter `version:` field (sentinel `"0.0.0-unreleased"` in source, stamped to package.json version at build time via `packages/server/scripts/inject-skill-version.mjs`).
+- Migration guide at `docs/migration/2.x-mcp-to-3.x-rest.md`.
+
+### Changed
+
+- Manifest schema v1 → v2: per-entry `version` renamed to `skillVersion`. Auto-migrated on first load with a stderr notice; corrupt files are backed up and rebuilt empty.
+- `FutureManifestError` thrown when a newer mmagent's manifest is encountered; tools refuse to mutate rather than corrupt.
+- Skill curl examples use `curl -f --show-error -s` with explicit HTTP-status branching instead of `curl -sf`.
+- Polling skill snippets: 30s backoff cap (up from 5s), 1800s client-side timeout, per-process `mktemp` body file with `trap` cleanup.
+- Auth token file strictly validated (LF-only, `[A-Za-z0-9_\-+=/.]+` regex). `MMAGENT_AUTH_TOKEN` env override bypasses file validation.
+- `mmagent help` lists five user-facing subcommands (`serve`, `print-token`, `info`, `status`, `install-skill`, `update-skills`, `logs`).
+
+### Removed
+
+- `state` field from `GET /batch/:id` response body (consumers branch on HTTP status instead).
+
 ## 3.0.2 — 2026-04-24
 
 ### Fixed
