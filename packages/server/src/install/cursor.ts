@@ -1,45 +1,84 @@
 /**
  * Cursor skill writer.
  *
- * Writes skill content to `<cwd>/.cursor/rules/multi-model-agent.mdc`.
- * This path is CWD-relative (NOT home-relative), because Cursor rules live
- * in the project directory.
+ * Writes the skill content to `<cwd>/.cursor/rules/multi-model-agent.mdc`.
  *
- * Supports `@include _shared/<file>.md` directive inlining from skillsRoot.
+ * Before writing, inlines any `@include _shared/<file>.md` directives found in
+ * the content. The directive line is replaced with the full content of
+ * the corresponding shared file sourced from `<skillsRoot>/_shared/<file>.md`.
+ * The `@include` directive is NOT preserved in the written file.
+ *
+ * If a referenced shared file is missing, a warning is logged to stderr but
+ * the write continues (the include line is removed from the output).
+ *
+ * @module
  */
 import fs from 'node:fs';
 import path from 'node:path';
 
+/** Regex matching a line that starts with `@include ` followed by a relative path. */
+const INCLUDE_RE = /^@include\s+(.+)$/gm;
+
+/**
+ * Options for installing a Cursor skill.
+ */
 export interface CursorInstallOpts {
-  /** Raw skill content (may include @include directives). */
+  /**
+   * Raw skill content. May contain `@include _shared/<file>.md` directives
+   * which are inlined before writing.
+   */
   content: string;
-  /** Working directory — replaces process.cwd() for the target path. */
+  /**
+   * Working directory — replaces `process.cwd()`.
+   * Must NOT default to `process.cwd()` — always required explicitly.
+   */
   cwd: string;
-  /** For @include resolution (skillsRoot or explicit path). */
+  /**
+   * The "home directory" that replaces `os.homedir()`.
+   * Must NOT default to `os.homedir()` — always required explicitly.
+   */
   homeDir: string;
-  /** Base directory for @include resolution. */
+  /**
+   * Where shared files live. The writer reads `<skillsRoot>/_shared/<path>`
+   * when inlining `@include` directives.
+   */
   skillsRoot: string;
-  /** If true, overwrite an existing file. Defaults to false. */
+  /**
+   * If true, overwrite the existing file. If false (default), skip writing
+   * when the file already exists.
+   */
   force?: boolean;
 }
 
+/**
+ * Result of `installCursor`.
+ */
 export interface CursorInstallResult {
-  /** True if the file was written, false if it was skipped. */
+  /**
+   * `true` if the file was written, `false` if it was skipped because it
+   * already exists and `force` was not set.
+   */
   written: boolean;
-  /** Full path to the file that was (or would have been) written. */
+  /** The full path that was (or would have been) written. */
   targetPath: string;
 }
 
-/** Regex to match `@include _shared/<file>.md` lines. */
-const INCLUDE_RE = /^@include _shared\/([^/\s]+\.md)\s*$/;
-
 /**
- * Inline `@include _shared/<file>.md` directives in `content` with file
- * content from `<skillsRoot>/_shared/<file>.md`.
+ * Inline `@include _shared/<file>.md` directives in `content`.
  *
- * Missing shared file → warn to stderr and skip the line.
+ * Each line matching `@include <path>` (space after `@include`) is replaced with
+ * the full content of `<skillsRoot>/_shared/<path>`.
+ *
+ * If a shared file is missing:
+ * - A warning is written to stderr.
+ * - The include line is removed from the output (not preserved).
+ * - Processing continues for remaining directives.
+ *
+ * @param content     Raw skill content (may contain @include directives).
+ * @param skillsRoot  Root directory containing `_shared/` sub-directory.
+ * @returns The content with directives inlined.
  */
-function inlineIncludes(content: string, skillsRoot: string, stderr: (s: string) => boolean): string {
+export function inlineIncludes(content: string, skillsRoot: string): string {
   const lines = content.split('\n');
   const result: string[] = [];
 
@@ -50,19 +89,20 @@ function inlineIncludes(content: string, skillsRoot: string, stderr: (s: string)
       continue;
     }
 
-    const filename = match[1];
-    const sharedPath = path.join(skillsRoot, '_shared', filename);
-
-    if (!fs.existsSync(sharedPath)) {
-      stderr(`[cursor-install] Warning: @include '${filename}' not found in '${skillsRoot}/_shared/'; skipping line.\n`);
-      continue;
-    }
+    const relativePath = match[1]!;
+    const sharedFilePath = path.join(skillsRoot, relativePath);
 
     try {
-      const included = fs.readFileSync(sharedPath, 'utf-8');
-      result.push(included);
+      const sharedContent = fs.readFileSync(sharedFilePath, 'utf-8');
+      result.push(sharedContent);
     } catch (err) {
-      stderr(`[cursor-install] Warning: could not read '${sharedPath}': ${err instanceof Error ? err.message : String(err)}; skipping line.\n`);
+      // Log warning to stderr and drop the include line.
+      const detail = err instanceof Error ? err.message : String(err);
+      process.stderr.write(
+        `Warning: Cursor skill writer: shared file not found: ` +
+        `${sharedFilePath} (referenced by @include ${relativePath}) — ${detail}\n`,
+      );
+      // Line is dropped — do not push anything.
     }
   }
 
@@ -70,48 +110,48 @@ function inlineIncludes(content: string, skillsRoot: string, stderr: (s: string)
 }
 
 /**
- * Write the skill content to `<cwd>/.cursor/rules/multi-model-agent.mdc`.
+ * Install the multi-model-agent skill for Cursor.
  *
- * - If the file exists and `force` is false → skip with a stderr warning.
- * - If the file exists and `force` is true → overwrite.
- * - If the file does not exist → create it (including parent dirs).
+ * - Target path is `<cwd>/.cursor/rules/multi-model-agent.mdc` (CWD-relative).
+ * - Creates `<cwd>/.cursor/rules/` if it does not exist.
+ * - Inlines `@include` directives before writing (see `inlineIncludes`).
+ * - If the file already exists and `force` is not set, skips writing and
+ *   returns `written: false`.
  *
- * @returns CursorInstallResult with `written: true` if the file was written.
+ * @param opts  Installation options (see `CursorInstallOpts`).
  */
 export function installCursor(opts: CursorInstallOpts): CursorInstallResult {
-  const targetPath = path.join(opts.cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
+  const { content, cwd, homeDir: _homeDir, skillsRoot, force } = opts;
 
-  if (fs.existsSync(targetPath) && !opts.force) {
-    // Emit warning to stderr so callers can surface it in CLI output.
+  const targetPath = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
+
+  if (!force && fs.existsSync(targetPath)) {
     process.stderr.write(
-      `[cursor-install] Skill already installed at '${targetPath}'; skipping. ` +
-      `Use --force to overwrite.\n`,
+      `Warning: Cursor skill writer: file already exists: ${targetPath} — skipping (use force: true to overwrite)\n`,
     );
     return { written: false, targetPath };
   }
 
-  // Inline any @include directives before writing.
-  const inlined = inlineIncludes(opts.content, opts.skillsRoot, (s: string) => {
-    process.stderr.write(s);
-  });
+  const rulesDir = path.join(cwd, '.cursor', 'rules');
+  fs.mkdirSync(rulesDir, { recursive: true, mode: 0o700 });
 
-  // Ensure the rules directory exists.
-  const rulesDir = path.dirname(targetPath);
-  fs.mkdirSync(rulesDir, { recursive: true });
-
-  fs.writeFileSync(targetPath, inlined, { encoding: 'utf-8' });
+  const finalContent = inlineIncludes(content, skillsRoot);
+  fs.writeFileSync(targetPath, finalContent, 'utf-8');
 
   return { written: true, targetPath };
 }
 
 /**
- * Remove `<cwd>/.cursor/rules/multi-model-agent.mdc`.
+ * Uninstall the multi-model-agent Cursor skill.
  *
- * If the file does not exist, this is a no-op (no error thrown).
+ * Removes `<cwd>/.cursor/rules/multi-model-agent.mdc`.
+ * This is a no-op when the file does not exist (no error is thrown).
+ *
+ * @param cwd  Working directory (replaces `process.cwd()`).
  */
 export function uninstallCursor(cwd: string): void {
   const targetPath = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
   if (fs.existsSync(targetPath)) {
-    fs.rmSync(targetPath);
+    fs.rmSync(targetPath, { force: true });
   }
 }
