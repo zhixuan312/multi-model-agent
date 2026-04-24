@@ -25,9 +25,24 @@ export interface ProgressEvent {
 export interface ExecutionContext {
   projectContext: ProjectContext;
   config: MultiModelConfig;
+  /**
+   * Diagnostic logger for the request scope.
+   *
+   * NOTE: interface-populated but not currently consumed by any executor. Diagnostic events
+   * today emit from the HTTP pipeline and `run-tasks.ts` runner layer. Retained so future
+   * executor-internal events (e.g. mid-flight aborts, partial-progress signals) can flow
+   * through the same scoped logger.
+   */
   logger: DiagnosticLogger;
   contextBlockStore: ContextBlockStore;
-  /** Resolves a named agent profile (e.g. "standard", "complex") to a Provider instance. */
+  /**
+   * Resolves a named agent profile (e.g. "standard", "complex") to a Provider instance.
+   *
+   * NOTE: interface-populated but not currently consumed by any executor. Today executors pass
+   * `ctx.config` to `runTasks()`, which resolves providers internally via `createProvider`.
+   * Declared here because the 3.0.0 plan mandates this channel; retained so future per-request
+   * provider overrides (tenant auth, per-request model swap) can flow through the context.
+   */
   providerFactory: (profile: string) => Provider;
   /** Optional progress callback for streaming progress events to callers. */
   onProgress?: (event: ProgressEvent) => void;
