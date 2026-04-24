@@ -30,6 +30,12 @@ import { inlineIncludes } from './include-utils.js';
 
 /**
  * Options for installing a Cursor skill.
+ *
+ * NOTE: `homeDir` is accepted for API parity with other skill writers
+ * (Claude Code, Gemini CLI, etc.) but is intentionally not used by this
+ * writer. The Cursor rules target path is always CWD-relative under
+ * `<cwd>/.cursor/rules/`, not homeDir-relative. This is intentional to
+ * keep Cursor rules scoped to the project directory.
  */
 export interface CursorInstallOpts {
   /**
@@ -39,13 +45,14 @@ export interface CursorInstallOpts {
   content: string;
   /**
    * Working directory — replaces `process.cwd()`.
-   * Must NOT default to `process.cwd()` — always required explicitly.
+   * Used to construct the CWD-relative target path:
+   * `<cwd>/.cursor/rules/multi-model-agent.mdc`
    */
   cwd: string;
   /**
-   * The "home directory" that replaces `os.homedir()`.
-   * Required by the API for signature compatibility, but not used by
-   * the Cursor writer (target is CWD-relative, not home-relative).
+   * Home directory. Accepted for API signature compatibility with other
+   * skill writers, but NOT used by this writer. Cursor rules are always
+   * written relative to `cwd`, not `homeDir`.
    */
   homeDir: string;
   /**

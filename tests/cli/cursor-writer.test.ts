@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { mkdtempSync, rmSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
+import { WriteStream } from 'node:fs';
 
 import { installCursor, uninstallCursor } from '../../packages/server/src/install/cursor.js';
 
@@ -49,11 +50,26 @@ function skillPath(cwd: string): string {
   return path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
 }
 
+/**
+ * Capture stderr output during a function execution.
+ * Returns the concatenated stderr string.
+ *
+ * Uses a type-faithful WriteStream-compatible approach: the write method
+ * accepts the standard Node overloads.
+ */
 function captureStderr(fn: () => void): string {
   const chunks: string[] = [];
-  const orig = process.stderr.write.bind(process.stderr);
-  process.stderr.write = (chunk: string) => {
-    chunks.push(chunk);
+  const orig = process.stderr.write.bind(process.stderr) as (
+    chunk: string | Uint8Array,
+    ...args: unknown[]
+  ) => boolean;
+  process.stderr.write = (
+    chunk: string | Uint8Array,
+    ..._args: unknown[]
+  ): boolean => {
+    if (typeof chunk === 'string') {
+      chunks.push(chunk);
+    }
     return true;
   };
   try {
@@ -126,9 +142,10 @@ describe('installCursor', () => {
         skillsRoot,
       });
 
-      // Second write without force — capture stderr to verify warning
+      // Second write without force — capture stderr and result in one call
+      let capturedResult: ReturnType<typeof installCursor>;
       const stderr = captureStderr(() => {
-        installCursor({
+        capturedResult = installCursor({
           content: '# Updated — should not appear',
           cwd,
           homeDir,
@@ -136,15 +153,8 @@ describe('installCursor', () => {
         });
       });
 
-      const result = installCursor({
-        content: '# Updated — should not appear',
-        cwd,
-        homeDir,
-        skillsRoot,
-      });
-
-      expect(result.written).toBe(false);
-      expect(result.targetPath).toBe(skillPath(cwd));
+      expect(capturedResult!.written).toBe(false);
+      expect(capturedResult!.targetPath).toBe(skillPath(cwd));
 
       // Original content preserved
       expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Original');
@@ -173,17 +183,22 @@ describe('installCursor', () => {
         skillsRoot,
       });
 
-      // Second write with force
-      const result = installCursor({
-        content: '# Version 2\nUpdated.',
-        cwd,
-        homeDir,
-        skillsRoot,
-        force: true,
+      // Second write with force — capture stderr to verify no warning
+      const stderr = captureStderr(() => {
+        const result = installCursor({
+          content: '# Version 2\nUpdated.',
+          cwd,
+          homeDir,
+          skillsRoot,
+          force: true,
+        });
+
+        expect(result.written).toBe(true);
+        expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Version 2\nUpdated.');
       });
 
-      expect(result.written).toBe(true);
-      expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Version 2\nUpdated.');
+      // No warning should be emitted during force: true overwrite
+      expect(stderr).toBe('');
     } finally {
       cleanup(cwd);
       cleanup(homeDir);
@@ -207,6 +222,59 @@ describe('installCursor', () => {
       expect(readFileSync(skillPath(cwd), 'utf-8')).toBe(
         '# Multi-Model Agent\n## Endpoints\n- GET /api\n\nDone.',
       );
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  // Multiple @include directives are all inlined
+  it('inlines multiple @include directives', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot({
+      'intro.md': '# Introduction\nWelcome.',
+      'usage.md': '## Usage\nRun the agent.',
+    });
+    try {
+      installCursor({
+        content: '# Skill\n@include _shared/intro.md\n\n---\n@include _shared/usage.md\n\nEnd.',
+        cwd,
+        homeDir,
+        skillsRoot,
+      });
+
+      expect(readFileSync(skillPath(cwd), 'utf-8')).toBe(
+        '# Skill\n# Introduction\nWelcome.\n\n---\n## Usage\nRun the agent.\n\nEnd.',
+      );
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  // Non-_shared/ include directives are warned and dropped
+  it('warns and drops non-_shared/ @include directives', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+    try {
+      const stderr = captureStderr(() => {
+        installCursor({
+          content: '# Skill\n@include other/shared.md\nDone.',
+          cwd,
+          homeDir,
+          skillsRoot,
+        });
+      });
+
+      expect(stderr).toContain('Warning');
+      expect(stderr).toContain('_shared/');
+
+      // Include line should be dropped, rest preserved
+      expect(readFileSync(skillPath(cwd), 'utf-8')).toBe('# Skill\nDone.');
     } finally {
       cleanup(cwd);
       cleanup(homeDir);
@@ -257,7 +325,9 @@ describe('installCursor', () => {
 
       // File should be in cwd, not in homeDir
       expect(existsSync(skillPath(cwd))).toBe(true);
-      expect(existsSync(path.join(homeDir, '.cursor', 'rules', 'multi-model-agent.mdc'))).toBe(false);
+      expect(existsSync(path.join(homeDir, '.cursor', 'rules', 'multi-model-agent.mdc'))).toBe(
+        false,
+      );
     } finally {
       cleanup(cwd);
       cleanup(homeDir);
@@ -361,6 +431,72 @@ describe('uninstallCursor', () => {
       expect(() => uninstallCursor(cwd)).not.toThrow();
     } finally {
       cleanup(cwd);
+    }
+  });
+
+  // Parent directories remain intact after uninstall
+  it('parent directories remain intact after uninstall', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+    try {
+      installCursor({
+        content: '# Skill',
+        cwd,
+        homeDir,
+        skillsRoot,
+      });
+
+      const rulesDir = path.join(cwd, '.cursor', 'rules');
+      expect(existsSync(rulesDir)).toBe(true);
+
+      uninstallCursor(cwd);
+
+      // Parent directory should still exist
+      expect(existsSync(rulesDir)).toBe(true);
+      expect(existsSync(path.join(cwd, '.cursor'))).toBe(true);
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
+    }
+  });
+
+  // Handles symlink target path gracefully
+  it('handles symlink at target path (removes symlink, not target)', () => {
+    const cwd = makeFakeCwd();
+    const homeDir = makeFakeHome();
+    const skillsRoot = makeFakeSkillsRoot();
+    const realFile = path.join(cwd, '.cursor', 'rules', 'multi-model-agent.mdc');
+    const symlinkPath = path.join(cwd, '.cursor', 'rules', 'link-to-skill.mdc');
+
+    try {
+      // Create the real file
+      installCursor({
+        content: '# Real skill',
+        cwd,
+        homeDir,
+        skillsRoot,
+      });
+      expect(existsSync(realFile)).toBe(true);
+
+      // Create a symlink to the real file
+      fs.symlinkSync(realFile, symlinkPath);
+      expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+
+      // Uninstall the symlink (not the real file path)
+      uninstallCursor(cwd); // This targets realFile, not symlinkPath
+
+      // Real file is removed (this is expected behavior)
+      expect(existsSync(realFile)).toBe(false);
+
+      // Symlink should still exist (but target is gone)
+      expect(fs.lstatSync(symlinkPath).isSymbolicLink()).toBe(true);
+      expect(existsSync(symlinkPath)).toBe(false); // symlink is dangling now
+    } finally {
+      cleanup(cwd);
+      cleanup(homeDir);
+      cleanup(skillsRoot);
     }
   });
 });
