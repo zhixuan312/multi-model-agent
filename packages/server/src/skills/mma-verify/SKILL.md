@@ -41,7 +41,7 @@ Each checklist item is verified in parallel; results are index-aligned.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"checklist":["Error handler exists","Tests pass"],"filePaths":["/project/src/handler.ts"]}' \

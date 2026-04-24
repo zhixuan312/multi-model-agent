@@ -47,7 +47,7 @@ to confirm or correct the proposed interpretation.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tasks":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \

@@ -47,15 +47,15 @@ executor was already waiting and finishes immediately.
 
 ```bash
 # 1. Poll until awaiting_clarification
-STATE=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+STATE=$(curl -f --show-error -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:$PORT/batch/$BATCH_ID" | jq -r '.state')
 
 # 2. Read the proposal
-PROPOSAL=$(curl -sf -H "Authorization: Bearer $TOKEN" \
+PROPOSAL=$(curl -f --show-error -s -H "Authorization: Bearer $TOKEN" \
   "http://localhost:$PORT/batch/$BATCH_ID" | jq -r '.proposedInterpretation')
 
 # 3. Confirm (accept proposal or supply corrected text)
-curl -sf -X POST \
+curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"batchId\":\"$BATCH_ID\",\"interpretation\":\"$PROPOSAL\"}" \

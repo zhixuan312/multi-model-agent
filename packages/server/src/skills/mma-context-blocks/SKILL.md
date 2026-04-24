@@ -53,14 +53,14 @@ wait for those batches to complete before deleting.
 
 ```bash
 # Register spec document
-ID=$(curl -sf -X POST \
+ID=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
   "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
 
 # Use in a delegate call
-curl -sf -X POST \
+curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"tasks\":[{\"prompt\":\"Implement per spec\",\"contextBlockIds\":[\"$ID\"]}]}" \

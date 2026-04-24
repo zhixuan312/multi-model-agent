@@ -43,7 +43,7 @@ in a single task (not parallelised per file).
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"problem":"Tests fail on CI only","hypothesis":"Missing env var","filePaths":["/project/src/config.ts"]}' \

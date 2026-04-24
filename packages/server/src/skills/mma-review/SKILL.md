@@ -39,7 +39,7 @@ Either `code` or `filePaths` (or both) must be provided.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \

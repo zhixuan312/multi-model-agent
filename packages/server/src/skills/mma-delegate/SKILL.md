@@ -47,7 +47,7 @@ Use `agentType: "complex"` for ambiguous scope or security-sensitive tasks.
 ### Full example
 
 ```bash
-BATCH=$(curl -sf -X POST \
+BATCH=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \
