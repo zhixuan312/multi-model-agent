@@ -61,7 +61,19 @@ export function asyncDispatch<TResult>(
     void (async () => {
       try {
         deps.logger.taskStarted({ batchId, taskIndex: 0 });
+        // Mark the batch as running so composeRunningHeadline shows
+        // "1/1 running, Xs elapsed" instead of "1/1 queued" forever.
+        // tasksTotal is a coarse proxy for "some work is underway"; the
+        // per-sub-task counters inside run-tasks track finer progress.
+        const entry = batchRegistry.get(batchId);
+        if (entry) {
+          entry.tasksTotal = 1;
+          entry.tasksStarted = 1;
+          entry.tasksCompleted = 0;
+        }
         const result = await opts.executor(ctx, batchId);
+        const entryAfter = batchRegistry.get(batchId);
+        if (entryAfter) entryAfter.tasksCompleted = 1;
         batchRegistry.complete(batchId, result);
         const resultObj = result as { results?: unknown[] } | undefined;
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;

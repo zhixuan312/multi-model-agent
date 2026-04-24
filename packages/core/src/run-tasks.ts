@@ -235,7 +235,22 @@ async function executeReviewedLifecycle(
     : undefined;
   const verboseBatchIdEarly = heartbeatWiring?.batchId;
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
-  const heartbeat = onProgress
+  // Start the heartbeat whenever there's a downstream consumer:
+  // - onProgress (external progress callback from the runTasks caller)
+  // - verbose (stderr stream needs the heartbeat's tool_call / turn_complete relay)
+  // - recordHeartbeat (server needs heartbeat ticks to update BatchRegistry)
+  // - logger (post-mortem JSONL logging needs the events too)
+  // Otherwise there is no point creating a timer.
+  const needHeartbeat =
+    onProgress !== undefined ||
+    verbose ||
+    heartbeatWiring?.recordHeartbeat !== undefined ||
+    diagnostics?.logger !== undefined;
+  // Synthesize an onProgress sink when the caller didn't pass one — the
+  // heartbeat needs a place to emit heartbeat events so the stage-change
+  // detector below fires. Discards events if there is no external consumer.
+  const synthOnProgress: RunTasksProgressCallback = onProgress ?? (() => {});
+  const heartbeat = needHeartbeat
     ? new HeartbeatTimer(
         (event) => {
           // Detect stage transitions on the heartbeat progress stream. The
@@ -250,7 +265,7 @@ async function executeReviewedLifecycle(
             }
             lastStageSeen = event.stage;
           }
-          onProgress(taskIndex, event);
+          synthOnProgress(taskIndex, event);
         },
         {
           provider: resolved.provider.config.model,
@@ -275,7 +290,11 @@ async function executeReviewedLifecycle(
     );
   }
   let prevEventAtMs = verbose ? Date.now() : 0;
-  const wrappedOnProgress = onProgress
+  // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
+  // verbose stream, or verbose logger). Previously this only wrapped when
+  // the caller passed onProgress, so --verbose + HTTP handlers (which don't
+  // pass onProgress) silently dropped every tool_call / turn_complete event.
+  const wrappedOnProgress = needHeartbeat
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'tool_call') {
           progressCounters.toolCalls++;

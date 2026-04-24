@@ -24,6 +24,10 @@ export function buildExecutionContext(
     const entry = deps.batchRegistry.get(effectiveBatchId);
     if (!entry) return;
     entry.lastHeartbeatAt = Date.now();
+    // Tag the active worker so composeRunningHeadline can render
+    // "running, 47s elapsed, worker: MiniMax-M2.7 (turn 2)" instead of
+    // just "1/1 running". stageIndex is a reasonable turn proxy.
+    entry.running = [{ worker: tick.provider, turn: Math.max(1, tick.stageIndex) }];
     const headline = composeRunningHeadline({
       tasksTotal: entry.tasksTotal ?? 1,
       tasksStarted: entry.tasksStarted ?? 0,
@@ -31,7 +35,7 @@ export function buildExecutionContext(
       startedAt: entry.startedAt,
       nowMs: Date.now(),
       lastHeartbeatAt: entry.lastHeartbeatAt,
-      running: entry.running ?? [],
+      running: entry.running,
     });
     deps.batchRegistry.updateRunningHeadline(effectiveBatchId, headline);
     deps.logger.taskHeartbeat({
