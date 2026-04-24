@@ -518,6 +518,14 @@
             "application/json": {
               "schema": {
                 "properties": {
+                  "agentType": {
+                    "description": "Worker tier. Default: \"standard\" (cost-effective). Set to \"complex\" for harder plan tasks that a smaller model cannot finish in the turn budget.",
+                    "enum": [
+                      "standard",
+                      "complex"
+                    ],
+                    "type": "string"
+                  },
                   "context": {
                     "description": "Short additional context the plan does not contain, e.g. \"Tasks 1-16 are done, files already exist\". Injected into the worker prompt.",
                     "type": "string"
