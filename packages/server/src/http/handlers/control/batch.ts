@@ -3,23 +3,21 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../router.js';
-import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import { notApplicable, type BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
 export interface BatchHandlerDeps {
   batchRegistry: BatchRegistry;
 }
 
 /**
- * GET /batch/:batchId — poll the current state of a batch.
- * Optional ?taskIndex=N query param slices a single task result from a
- * complete batch.
+ * GET /batch/:batchId — poll a batch.
  *
- * State mapping:
- *  pending              → 200 { state, startedAt }
- *  awaiting_clarification → 200 { state, proposedInterpretation }
- *  complete             → 200 { state, result } (or sliced if taskIndex given)
- *  failed               → 200 { state, error }
- *  expired              → 200 { state: 'expired' }
+ * Status split (Theme 7):
+ *  - pending                → 202 text/plain — body is the runningHeadline
+ *  - awaiting_clarification → 200 JSON uniform 7-field envelope with proposedInterpretation populated
+ *  - complete/failed/expired → 200 JSON uniform 7-field envelope
+ *
+ * Optional ?taskIndex=N slices `results` on a complete envelope.
  *
  * Errors:
  *  unknown batchId         → 404 not_found
@@ -35,76 +33,88 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
   ) => {
     const { batchId } = params;
 
-    // ── 1. Lookup ──────────────────────────────────────────────────────────
     const entry = deps.batchRegistry.get(batchId);
     if (!entry) {
       sendError(res, 404, 'not_found', `Batch ${batchId} not found`);
       return;
     }
 
-    // ── 2. Parse optional taskIndex ────────────────────────────────────────
+    // Pending → 202 text/plain progress line
+    if (entry.state === 'pending') {
+      res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(entry.runningHeadline || '1/1 queued');
+      return;
+    }
+
+    // Parse optional taskIndex (only honored on complete state with array results)
     const rawTaskIndex = ctx.url.searchParams.get('taskIndex');
     let taskIndex: number | null = null;
     if (rawTaskIndex !== null) {
       if (!/^\d+$/.test(rawTaskIndex)) {
-        sendError(res, 400, 'invalid_task_index', `taskIndex must be a non-negative integer; got: ${JSON.stringify(rawTaskIndex)}`);
+        sendError(
+          res,
+          400,
+          'invalid_task_index',
+          `taskIndex must be a non-negative integer; got: ${JSON.stringify(rawTaskIndex)}`,
+        );
         return;
       }
       taskIndex = parseInt(rawTaskIndex, 10);
     }
 
-    // ── 3. State mapping ───────────────────────────────────────────────────
-    switch (entry.state) {
-      case 'pending':
-        sendJson(res, 200, { state: 'pending', startedAt: entry.startedAt });
-        return;
-
-      case 'awaiting_clarification':
-        sendJson(res, 200, {
-          state: 'awaiting_clarification',
-          proposedInterpretation: entry.proposedInterpretation,
-        });
-        return;
-
-      case 'complete': {
-        const fullResult = entry.result as { results?: unknown[] } | undefined;
-
-        if (taskIndex !== null) {
-          const results = fullResult?.results;
-          if (!Array.isArray(results) || taskIndex >= results.length) {
-            sendError(
-              res,
-              404,
-              'unknown_task_index',
-              `taskIndex ${taskIndex} is out of range (batch has ${Array.isArray(results) ? results.length : 0} result(s))`,
-            );
-            return;
-          }
-          // Return the full result shape with only the sliced task
-          sendJson(res, 200, {
-            state: 'complete',
-            result: { ...fullResult, results: [results[taskIndex]] },
-          });
-          return;
-        }
-
-        sendJson(res, 200, { state: 'complete', result: fullResult });
-        return;
-      }
-
-      case 'failed':
-        sendJson(res, 200, { state: 'failed', error: entry.error });
-        return;
-
-      case 'expired':
-        sendJson(res, 200, { state: 'expired' });
-        return;
-
-      default: {
-        // Exhaustiveness guard — should never happen
-        const _never: never = entry.state;
-        sendError(res, 500, 'internal_error', `Unexpected batch state: ${String(_never)}`);
-      }
+    if (entry.state === 'awaiting_clarification') {
+      const reason = 'batch awaiting clarification';
+      sendJson(res, 200, {
+        headline: `awaiting clarification: ${entry.proposedInterpretation ?? ''}`.trim(),
+        results: notApplicable(reason),
+        batchTimings: notApplicable(reason),
+        costSummary: notApplicable(reason),
+        structuredReport: notApplicable(reason),
+        error: notApplicable(reason),
+        proposedInterpretation: entry.proposedInterpretation ?? notApplicable('clarification proposed but interpretation unavailable'),
+      });
+      return;
     }
+
+    const fullResult = entry.result as Record<string, unknown> | undefined;
+
+    if (entry.state === 'failed' || entry.state === 'expired' || !fullResult) {
+      const reason = `batch ${entry.state}`;
+      const errPayload = entry.error ?? (fullResult && fullResult['error']) ?? notApplicable('batch succeeded');
+      sendJson(res, 200, {
+        headline:
+          entry.state === 'expired'
+            ? 'batch expired'
+            : entry.state === 'failed'
+              ? 'batch failed'
+              : (fullResult?.['headline'] as string | undefined) ?? `batch ${entry.state}`,
+        results: (fullResult?.['results'] as unknown) ?? notApplicable(reason),
+        batchTimings: (fullResult?.['batchTimings'] as unknown) ?? notApplicable(reason),
+        costSummary: (fullResult?.['costSummary'] as unknown) ?? notApplicable(reason),
+        structuredReport: (fullResult?.['structuredReport'] as unknown) ?? notApplicable(reason),
+        error: errPayload,
+        proposedInterpretation:
+          (fullResult?.['proposedInterpretation'] as unknown) ?? notApplicable('batch not awaiting clarification'),
+      });
+      return;
+    }
+
+    // entry.state === 'complete' with a stored result. Executor emits all 7 fields.
+    if (taskIndex !== null) {
+      const results = fullResult['results'];
+      if (!Array.isArray(results) || taskIndex >= results.length) {
+        sendError(
+          res,
+          404,
+          'unknown_task_index',
+          `taskIndex ${taskIndex} is out of range (batch has ${Array.isArray(results) ? results.length : 0} result(s))`,
+        );
+        return;
+      }
+      sendJson(res, 200, { ...fullResult, results: [results[taskIndex]] });
+      return;
+    }
+
+    sendJson(res, 200, fullResult);
   };
 }
