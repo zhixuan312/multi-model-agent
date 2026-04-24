@@ -22,6 +22,60 @@ import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
+import { runUpdateSkills } from './update-skills.js';
+import { listEntries, FutureManifestError } from '../install/manifest.js';
+import { readSkillContent } from './install-skill.js';
+import matter from 'gray-matter';
+
+function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
+  const src = readSkillContent(entryName);
+  if (src === null) return false; // missing; update-skills handles removal separately
+  try {
+    const parsed = matter(src);
+    const v = parsed.data['version'];
+    return typeof v === 'string' && v !== entrySkillVersion;
+  } catch {
+    return false;
+  }
+}
+
+async function maybeAutoUpdateSkills(
+  config: MultiModelConfig,
+  stderr: (s: string) => boolean,
+): Promise<void> {
+  let entries;
+  try {
+    entries = listEntries();
+  } catch (err) {
+    if (err instanceof FutureManifestError) {
+      stderr(`[mmagent] warning: ${err.message}; skipping skill auto-update\n`);
+      return;
+    }
+    return; // best-effort — never let manifest IO issues block serve
+  }
+
+  const behind = entries.filter((e) => isSkillBehind(e.name, e.skillVersion));
+  if (behind.length === 0) return;
+
+  if (!config.server.autoUpdateSkills) {
+    stderr(
+      `[mmagent] ${behind.length} skill(s) out of date: ${behind.map((e) => e.name).join(', ')}. ` +
+      `Run 'mmagent update-skills' to refresh (or set server.autoUpdateSkills=true in config).\n`,
+    );
+    return;
+  }
+
+  const deadlineMs = 5000;
+  try {
+    await Promise.race([
+      runUpdateSkills({ silent: true, bestEffort: true }),
+      new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
+    ]);
+    process.stdout.write(`[mmagent] auto-updated ${behind.length} skill(s)\n`);
+  } catch {
+    // bestEffort swallows inside; extra safety here.
+  }
+}
 
 function readServerVersion(): string {
   try {
@@ -77,9 +131,12 @@ export async function startServe(
   config: MultiModelConfig,
   exit: (code: number) => never = process.exit.bind(process),
 ): Promise<ServeHandle> {
-  const running = await startServer({ server: config.server });
-
   const stderr = process.stderr.write.bind(process.stderr);
+
+  // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
+  await maybeAutoUpdateSkills(config, stderr);
+
+  const running = await startServer({ server: config.server });
 
   // Fire once at serve startup. Lives here (not in loadConfigFromFile) so
   // print-token / info / status don't re-emit the same warning repeatedly.
