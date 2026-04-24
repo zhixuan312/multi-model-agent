@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.4 — 2026-04-24
+
+### Fixed
+
+- **server (`@zhixuan92/multi-model-agent`).** Core-only fixes from 3.1.2 and 3.1.3 were never actually shipped to npm users — server 3.1.1/3.1.2/3.1.3 depended on `@zhixuan92/multi-model-agent-core: ^3.1.0`, which resolved to the un-updated 3.1.0 tarball. This release re-publishes core at 3.1.4 (with the `needHeartbeat` wiring, per-tick / turn_start / text_emission verbose enrichments, and richer heartbeat payload) and bumps the server dep range to `^3.1.4`. Users upgrading to 3.1.4 will finally see the fixes that 3.1.2 and 3.1.3 intended to deliver.
+- **core (`@zhixuan92/multi-model-agent-core`).** `loadAuthToken` now expands a leading `~/` to `os.homedir()` so configs with `tokenFile: "~/.multi-model/auth-token"` work out of the box. Previously this caused the `mmagent serve` startup line (`[mmagent] started | version=… | token=<fp> | boot=<uuid>`) to be silently skipped because the fingerprint call couldn't open the file, even though the main server process had loaded it via a separate tilde-aware path. `mmagent info` and any other direct consumer benefits as well.
+
 ## 3.1.3 — 2026-04-24
 
 ### Added
