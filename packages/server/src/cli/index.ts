@@ -1,3 +1,4 @@
+#!/usr/bin/env node
 /**
  * CLI entry point for `mmagent` / `multi-model-agent`.
  *
