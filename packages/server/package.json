@@ -23,7 +23,8 @@
   "homepage": "https://github.com/zhixuan312/multi-model-agent#readme",
   "bugs": "https://github.com/zhixuan312/multi-model-agent/issues",
   "files": [
-    "dist"
+    "dist",
+    "scripts/postinstall.js"
   ],
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -43,6 +44,7 @@
   },
   "scripts": {
     "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && node scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
+    "postinstall": "node scripts/postinstall.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
