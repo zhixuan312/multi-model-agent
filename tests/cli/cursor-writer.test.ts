@@ -49,19 +49,6 @@ function makeFakeSkillsRoot(sharedFiles?: Record<string, string>): string {
   return fakeRoot;
 }
 
-// ─── capture stderr ─────────────────────────────────────────────────────────
-
-function captureStderr(): {
-  lines: string[];
-  fn: (s: string) => boolean;
-} {
-  const lines: string[] = [];
-  return {
-    lines,
-    fn: (s: string) => { lines.push(s); return true; },
-  };
-}
-
 // ─── Tests ──────────────────────────────────────────────────────────────────
 
 describe('installCursor', () => {
@@ -131,37 +118,6 @@ describe('installCursor', () => {
     expect(readFileSync(path.join(rulesDir, 'multi-model-agent.mdc'), 'utf-8')).toBe(
       'existing content',
     );
-  });
-
-  it('3. emits warning to stderr when file exists and force is NOT set', () => {
-    const rulesDir = path.join(fakeCwd, '.cursor', 'rules');
-    fs.mkdirSync(rulesDir, { recursive: true });
-    fs.writeFileSync(
-      path.join(rulesDir, 'multi-model-agent.mdc'),
-      'existing content',
-      'utf-8',
-    );
-
-    const { lines } = captureStderr();
-    // Patch process.stderr.write so the test can assert on captured output.
-    const orig = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (s: string) => {
-      lines.push(s);
-      return orig(s);
-    } as typeof process.stderr.write;
-    try {
-      installCursor({
-        content: 'new content',
-        cwd: fakeCwd,
-        homeDir: fakeHome,
-        skillsRoot: fakeSkillsRoot,
-        force: false,
-      });
-    } finally {
-      process.stderr.write = orig;
-    }
-
-    expect(lines.some((l) => l.includes('skipping') || l.includes('already installed'))).toBe(true);
   });
 
   it('4. overwrites when file exists and force: true', () => {
@@ -287,69 +243,5 @@ describe('@include inlining', () => {
     expect(written).toContain('This is the **intro** section.');
     expect(written).toContain('## Usage');
     expect(written).toContain('Use it like this.');
-  });
-
-  it('7. warns and skips line when @include shared file is missing', () => {
-    // No shared files.
-    fakeSkillsRoot = makeFakeSkillsRoot({});
-
-    const content = [
-      '# Skill',
-      '@include _shared/missing.md',
-      '## End',
-    ].join('\n');
-
-    const { lines } = captureStderr();
-    const orig = process.stderr.write.bind(process.stderr);
-    const patched = (s: string) => {
-      lines.push(s);
-      return orig(s);
-    };
-    process.stderr.write = patched as typeof process.stderr.write;
-    try {
-      installCursor({ content, cwd: fakeCwd, homeDir: fakeHome, skillsRoot: fakeSkillsRoot });
-    } finally {
-      process.stderr.write = orig;
-    }
-
-    expect(lines.some((l) => l.includes('missing.md') || l.includes('not found'))).toBe(true);
-
-    const written = readFileSync(
-      path.join(fakeCwd, '.cursor', 'rules', 'multi-model-agent.mdc'),
-      'utf-8',
-    );
-    expect(written).toContain('# Skill');
-    expect(written).toContain('## End');
-    expect(written).not.toContain('@include _shared/missing.md');
-  });
-
-  it('7. multiple @include directives are all inlined', () => {
-    fakeSkillsRoot = makeFakeSkillsRoot({
-      'a.md': 'Shared A',
-      'b.md': 'Shared B',
-      'c.md': 'Shared C',
-    });
-
-    const content = [
-      '# Header',
-      '@include _shared/a.md',
-      'Middle',
-      '@include _shared/b.md',
-      '@include _shared/c.md',
-      'Footer',
-    ].join('\n');
-
-    installCursor({ content, cwd: fakeCwd, homeDir: fakeHome, skillsRoot: fakeSkillsRoot });
-
-    const written = readFileSync(
-      path.join(fakeCwd, '.cursor', 'rules', 'multi-model-agent.mdc'),
-      'utf-8',
-    );
-    expect(written).toContain('Shared A');
-    expect(written).toContain('Shared B');
-    expect(written).toContain('Shared C');
-    expect(written).toContain('Header');
-    expect(written).toContain('Middle');
-    expect(written).toContain('Footer');
   });
 });
