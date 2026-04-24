@@ -2,6 +2,7 @@
 name: mma-delegate
 description: Fan out ad-hoc implementation or research tasks to sub-agents in parallel. Use when there is no plan file on disk.
 when_to_use: When you need to delegate one or more implementation or research tasks to sub-agents without a pre-existing plan file. Each task runs in parallel.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-delegate

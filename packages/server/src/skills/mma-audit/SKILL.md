@@ -2,6 +2,7 @@
 name: mma-audit
 description: Audit a document for security, performance, correctness, or style issues. Sub-agents run in parallel per file.
 when_to_use: When you need to audit a spec, design doc, or configuration file for correctness, security, style, or performance issues.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-audit

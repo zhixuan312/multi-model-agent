@@ -2,6 +2,7 @@
 name: mma-execute-plan
 description: Implement tasks from a plan or spec file on disk. Task descriptors match plan headings; tasks run in parallel.
 when_to_use: When you have a written plan or spec file and want sub-agents to implement specific tasks from it.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-execute-plan

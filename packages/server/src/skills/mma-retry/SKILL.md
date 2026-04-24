@@ -2,6 +2,7 @@
 name: mma-retry
 description: Re-run specific failed or incomplete tasks from a previous batch by index.
 when_to_use: When some tasks in a previous batch failed or returned incomplete results and you want to re-run only those tasks without re-running the whole batch.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-retry

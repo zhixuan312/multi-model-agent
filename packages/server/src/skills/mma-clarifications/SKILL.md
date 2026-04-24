@@ -2,6 +2,7 @@
 name: mma-clarifications
 description: Confirm or correct the service's proposed interpretation when a batch is awaiting clarification before it can proceed.
 when_to_use: When polling GET /batch/:id returns state 'awaiting_clarification'. Read proposedInterpretation, then call this skill to confirm or correct it.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-clarifications

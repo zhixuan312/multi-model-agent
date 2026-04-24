@@ -2,6 +2,7 @@
 name: mma-verify
 description: Verify work against a checklist. Sub-agents check each item independently.
 when_to_use: When you need to confirm that implemented work meets a set of acceptance criteria or a review checklist before claiming completion.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-verify

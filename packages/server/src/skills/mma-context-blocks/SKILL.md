@@ -2,6 +2,7 @@
 name: mma-context-blocks
 description: Register large reused documents as context blocks and reference them by ID across multiple tool calls. Avoids re-sending the same content repeatedly.
 when_to_use: When the same large document (spec, plan, codebase summary) needs to be referenced by multiple mma-* calls. Register once, reference by ID.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-context-blocks

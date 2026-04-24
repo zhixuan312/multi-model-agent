@@ -29,5 +29,23 @@ describe('skill validity', () => {
       const content = readFileSync(join(skillRoot, dir, 'SKILL.md'), 'utf8');
       expect(content.split('\n').length).toBeLessThanOrEqual(80);
     });
+
+    it(`${dir}/SKILL.md has version: "0.0.0-unreleased" in source frontmatter`, () => {
+      const content = readFileSync(join(skillRoot, dir, 'SKILL.md'), 'utf8');
+      const { data } = matter(content);
+      expect(data.version, `${dir}/SKILL.md must have version field`).toBe('0.0.0-unreleased');
+    });
   }
+
+  it('every dist SKILL.md has version matching server package.json', () => {
+    const distRoot = 'packages/server/dist/skills';
+    if (!existsSync(distRoot)) return; // build hasn't run in CI yet
+    const pkgVersion = JSON.parse(readFileSync('packages/server/package.json', 'utf8')).version;
+    const distDirs = readdirSync(distRoot).filter(d => !d.startsWith('_') && statSync(join(distRoot, d)).isDirectory());
+    for (const dir of distDirs) {
+      const content = readFileSync(join(distRoot, dir, 'SKILL.md'), 'utf8');
+      const { data } = matter(content);
+      expect(data.version, `dist/${dir}/SKILL.md version`).toBe(pkgVersion);
+    }
+  });
 });

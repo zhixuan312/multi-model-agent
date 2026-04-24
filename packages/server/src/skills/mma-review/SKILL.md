@@ -2,6 +2,7 @@
 name: mma-review
 description: Review code for quality, security, performance, or correctness. Sub-agents run in parallel per file.
 when_to_use: When you need an independent code review after implementing a feature or fix, or before merging a branch.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-review

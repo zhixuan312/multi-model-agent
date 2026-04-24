@@ -2,6 +2,7 @@
 name: multi-model-agent
 description: Overview of the multi-model-agent local service. Use this skill to understand which specialized mma-* skill to invoke for a given task.
 when_to_use: When the user asks about delegating tool-using work, or when auth/setup issues arise before a specific mma-* skill can run.
+version: "0.0.0-unreleased"
 ---
 
 ## multi-model-agent overview

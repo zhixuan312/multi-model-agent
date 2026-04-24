@@ -42,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && chmod +x dist/cli/index.js",
+    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && node scripts/inject-skill-version.mjs && chmod +x dist/cli/index.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
@@ -55,6 +55,7 @@
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/minimist": "^1.2.5"
+    "@types/minimist": "^1.2.5",
+    "gray-matter": "^4.0.3"
   }
 }

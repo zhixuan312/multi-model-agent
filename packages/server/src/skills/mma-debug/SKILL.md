@@ -2,6 +2,7 @@
 name: mma-debug
 description: Debug a failure using a structured hypothesis. All provided files are investigated together in a single task.
 when_to_use: When a test fails, a build breaks, or unexpected behavior appears and you need a structured investigation with a hypothesis.
+version: "0.0.0-unreleased"
 ---
 
 ## mma-debug
