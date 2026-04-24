@@ -64,4 +64,26 @@ Start at 1 s, double each iteration, cap at 30 s. The 1800-second client-side
 timeout is a safety cap; most batches complete in under 60 s. Discover `$PORT`
 at runtime with `mmagent info --json | jq -r .port` (default: 7337).
 
+### Caller-side tool-timeout note
+
+The poll helper's internal `TIMEOUT_S` default is 1800s (30 minutes). If your
+agent's shell tool (e.g. Claude Code's Bash) caps command wall-clock at
+10 minutes by default, the helper will be killed at 10m regardless of
+`TIMEOUT_S` — long-running delegations then appear to "fail" before terminal.
+
+When invoking this poll loop, pick one:
+
+- **Preferred — pass a 30-minute tool timeout explicitly** (e.g. Claude Code
+  Bash accepts `timeout: 1800000`, up to 600000ms/10 min by default; pass the
+  max the tool allows, or bump the tool's allowed ceiling via harness
+  settings).
+- **Alternative — cap the helper to match the tool's limit** by exporting
+  `MMAGENT_POLL_TIMEOUT_S=600` before running the loop. The helper will then
+  exit 124 cleanly at 10 minutes and the caller can decide whether to
+  re-poll or surface the timeout.
+
+Never let the helper run longer than the caller's tool cap — the process
+gets killed mid-poll, the caller sees a generic failure, and diagnostics
+from the `TIMEOUT_S` exit path are lost.
+
 Windows/PowerShell equivalent is planned for a later release.

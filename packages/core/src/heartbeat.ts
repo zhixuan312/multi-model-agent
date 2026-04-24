@@ -46,6 +46,14 @@ export interface HeartbeatTickInfo {
   };
   costUSD: number | null;
   savedCostUSD: number | null;
+  /**
+   * Rich per-stage headline composed by HeartbeatTimer, e.g.
+   *   "[1/5] Implementing (openai) — 45s, $0.12 saved (3.2x), 2 read, 3 written, 7 tool calls"
+   * Callers (like the server's BatchRegistry) use this for single-task batches
+   * so the 202 polling body carries the stage-detail view instead of a bare
+   * "running, 47s elapsed" summary.
+   */
+  headline: string;
   /** Populated only on the tick immediately following a stage change. */
   phaseChange?: { from: HeartbeatStage; to: HeartbeatStage };
 }
@@ -135,9 +143,10 @@ export class HeartbeatTimer {
     // Consume the pending phase change so the next tick doesn't re-fire it.
     this.phaseChangeFrom = null;
     this.phaseChangeTo = null;
+    const elapsedMs = this.startTime > 0 ? Date.now() - this.startTime : 0;
     return {
       batchId: this._batchId ?? '',
-      elapsedMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
+      elapsedMs,
       stage: this.stage,
       stageIndex: this.stageIndex,
       stageCount: this.stageCount,
@@ -151,6 +160,7 @@ export class HeartbeatTimer {
       },
       costUSD: this.costUSD,
       savedCostUSD: this.savedCostUSD,
+      headline: this.composeHeadline(formatElapsed(elapsedMs)),
       ...(phaseChange !== undefined && { phaseChange }),
     };
   }

@@ -270,6 +270,30 @@ describe('HeartbeatTimer', () => {
     expect(final.headline).not.toContain('$');
   });
 
+  it('getHeartbeatTickInfo() returns a rich per-stage headline matching the onProgress one', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'gpt-5.4',
+      parentModel: 'claude-opus-4-7',
+      intervalMs: 10_000,
+      batchId: 'b-1',
+    });
+    timer.start(5);
+    timer.transition({ stage: 'spec_review', stageIndex: 3, reviewRound: 1, maxReviewRounds: 2 });
+    timer.updateProgress(2, 1, 7);
+    timer.updateCost(0.03, 0.12);
+
+    const tick = timer.getHeartbeatTickInfo();
+    expect(tick.headline).toContain('[3/5] Spec review');
+    expect(tick.headline).toContain('(round 1/2)');
+    expect(tick.headline).toContain('(gpt-5.4)');
+    expect(tick.headline).toContain('2 read');
+    expect(tick.headline).toContain('1 written');
+    expect(tick.headline).toContain('7 tool calls');
+    expect(tick.headline).toContain('$0.12 saved');
+    timer.stop();
+  });
+
   it('updateStageCount() changes denominator', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
