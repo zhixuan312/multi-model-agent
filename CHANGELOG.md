@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.0.0 — 2026-04-24
+
+### BREAKING: MCP Removed
+
+`multi-model-agent` is no longer an MCP server. All MCP transports, tool registrations, and the `@modelcontextprotocol/sdk` dependency have been removed. The package is now a standalone HTTP service with client-installable skills.
+
+**Migration from 2.x MCP users:**
+1. Remove old MCP registration: `claude mcp remove multi-model-agent`
+2. Install new package: `npm i -g @zhixuan92/multi-model-agent`
+3. Start the daemon: `mmagent serve` (keep running; see launchd/systemd scripts)
+4. Install skills: `mmagent install-skill` (auto-detects Claude Code, Gemini CLI, Codex CLI, Cursor)
+
+The deprecation stub `@zhixuan92/multi-model-agent-mcp@2.8.1` ships separately to surface this message to users who blindly upgrade.
+
+### Package rename
+- `@zhixuan92/multi-model-agent-mcp` → `@zhixuan92/multi-model-agent`
+- `packages/mcp/` → `packages/server/` (internal only)
+
+### Added
+- REST API: 7 tool endpoints (delegate/audit/review/verify/debug/execute-plan/retry), 4 control endpoints (context-blocks, clarifications/confirm, batch), 3 introspection endpoints (health/status/tools)
+- Async-with-polling dispatch: `202 { batchId, statusUrl }` + `GET /batch/:id`
+- `GET /batch/:id?taskIndex=N` replaces the old MCP `get_batch_slice` tool
+- Batch state machine: pending / awaiting_clarification / complete / failed / expired
+- Context-block refcount pinning prevents use-after-free during active batches
+- 10 installable skills via `mmagent install-skill` supporting Claude Code, Gemini CLI, Codex CLI, Cursor
+- `mmagent status` / `mmagent print-token` operator commands
+
+### Removed
+- All MCP transports (stdio and HTTP)
+- `@modelcontextprotocol/sdk` dependency
+- `DELEGATION-RULE.md` (only meaningful with MCP)
+
 ## [2.8.0] - 2026-04-23
 
 ### Added
