@@ -4,7 +4,8 @@ export function isTerminal(s: BatchState): boolean {
   return s === 'complete' || s === 'failed' || s === 'expired';
 }
 
-export interface BatchEntry<Result = unknown> {
+// Input accepted by register() — runningHeadline OPTIONAL here so existing callers don't break.
+export interface BatchEntryInput<Result = unknown> {
   batchId: string;
   projectCwd: string;
   tool: string;
@@ -19,6 +20,17 @@ export interface BatchEntry<Result = unknown> {
   blockIds: string[];
   blocksReleased: boolean;
   expiredAt?: number;
+  runningHeadline?: string;
+  tasksTotal?: number;
+  tasksStarted?: number;
+  tasksCompleted?: number;
+  lastHeartbeatAt?: number;
+  running?: Array<{ worker: string; turn: number }>;
+}
+
+// Stored entry — runningHeadline REQUIRED (string, defaulting to '').
+export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
+  runningHeadline: string;
 }
 
 export interface BatchRegistryOptions {
@@ -53,7 +65,9 @@ export class BatchRegistry {
     this.deps = deps;
   }
 
-  register(entry: BatchEntry): void {
+  register(input: BatchEntryInput): void {
+    if (input.runningHeadline === undefined) input.runningHeadline = '';
+    const entry = input as BatchEntry;
     this.map.set(entry.batchId, entry);
     if (this.deps.contextBlockStore) {
       for (const bid of entry.blockIds) {
@@ -64,6 +78,13 @@ export class BatchRegistry {
 
   get(batchId: string): BatchEntry | undefined {
     return this.map.get(batchId);
+  }
+
+  updateRunningHeadline(batchId: string, headline: string): void {
+    const entry = this.map.get(batchId);
+    if (!entry) return;
+    if (isTerminal(entry.state)) return;
+    entry.runningHeadline = headline;
   }
 
   delete(batchId: string): boolean {
@@ -172,6 +193,12 @@ export class BatchRegistry {
   }
 
   private release(entry: BatchEntry): void {
+    entry.runningHeadline = '';
+    entry.tasksTotal = undefined;
+    entry.tasksStarted = undefined;
+    entry.tasksCompleted = undefined;
+    entry.lastHeartbeatAt = undefined;
+    entry.running = undefined;
     if (entry.blocksReleased) return;
     if (this.deps.contextBlockStore) {
       for (const bid of entry.blockIds) {
