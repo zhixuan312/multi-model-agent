@@ -176,7 +176,8 @@ describe('serve subcommand', () => {
 
       const res = await fetch(`${url}/health`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
+      const body = await res.json() as { ok: boolean };
+      expect(body.ok).toBe(true);
     } finally {
       await stopChild(child);
     }
@@ -453,7 +454,8 @@ describe('bare mmagent invocation (no subcommand)', () => {
 
       const res = await fetch(`${url}/health`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
+      const body = await res.json() as { ok: boolean };
+      expect(body.ok).toBe(true);
     } finally {
       await stopChild(child);
     }

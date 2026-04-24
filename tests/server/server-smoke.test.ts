@@ -7,7 +7,9 @@ describe('server smoke test', () => {
     try {
       const res = await fetch(`${s.url}/health`);
       expect(res.status).toBe(200);
-      expect(await res.json()).toEqual({ ok: true });
+      const body = await res.json() as { ok: boolean; version: string };
+      expect(body.ok).toBe(true);
+      expect(typeof body.version).toBe('string');
     } finally {
       await s.stop();
     }
