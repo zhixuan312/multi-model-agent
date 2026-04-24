@@ -51,11 +51,11 @@
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
     "@zhixuan92/multi-model-agent-core": "^3.0.1",
+    "gray-matter": "^4.0.3",
     "minimist": "^1.2.8",
     "zod": "^4.0.0"
   },
   "devDependencies": {
-    "@types/minimist": "^1.2.5",
-    "gray-matter": "^4.0.3"
+    "@types/minimist": "^1.2.5"
   }
 }

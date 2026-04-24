@@ -34,6 +34,7 @@ import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
 import { main as installSkillMain } from './install-skill.js';
 import { runInfo } from './info.js';
+import { runUpdateSkills } from './update-skills.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -71,7 +72,7 @@ export interface CliDeps {
 export function parseArgs(argv: string[]): ParsedArgs {
   return minimist(argv, {
     string: ['config'],
-    boolean: ['help', 'version', 'json'],
+    boolean: ['help', 'version', 'json', 'dry-run', 'if-exists', 'silent', 'best-effort'],
     alias: { config: 'c', help: 'h', version: 'v', json: 'j' },
     // Note: stopEarly is NOT set. With stopEarly:true, options after the first
     // positional argument (the subcommand) would be silently dropped. E.g.
@@ -176,6 +177,7 @@ Commands:
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
   install-skill    Install or uninstall a skill for an AI client
+  update-skills    Re-copy installed skills from the shipped bundle
 
 Global options:
   --config, -c <path>   Path to config file
@@ -282,6 +284,20 @@ export async function main(deps: CliDeps = {}): Promise<void> {
         tokenFile: config.server.auth.tokenFile,
         homeDir: deps.homeDir?.() ?? os.homedir(),
         json: jsonFlag,
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'update-skills': {
+      const code = await runUpdateSkills({
+        homeDir: deps.homeDir?.() ?? os.homedir(),
+        dryRun: opts['dry-run'] === true,
+        json: opts['json'] === true,
+        ifExists: opts['if-exists'] === true,
+        silent: opts['silent'] === true,
+        bestEffort: opts['best-effort'] === true,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
