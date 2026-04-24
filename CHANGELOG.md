@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.7 — 2026-04-24
+
+### Changed
+
+- **core (`@zhixuan92/multi-model-agent-core`).** `MAX_DEGENERATE_RETRIES` raised from 3 to 6. Workers doing heavy file-reading + analysis (plan implementation, wide refactors) legitimately spend several "thinking" turns before committing to their first `writeFile`/`editFile`/`runShell`. The prior cap killed them mid-analysis with `degenerate_exhausted`. Cost and timeout caps remain unchanged — they are the real bounds on runaway workers. Tests adjusted to pump 7 fragments through the mock to still exhaust the cap.
+
 ## 3.1.6 — 2026-04-24
 
 ### Fixed
