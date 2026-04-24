@@ -98,7 +98,7 @@ export async function executeVerify(
     } as TaskSpec));
 
     const startMs = Date.now();
-    const results = await runTasks(tasks, config, { runtime });
+    const results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }) });
     const wallClockMs = Date.now() - startMs;
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
@@ -120,7 +120,7 @@ export async function executeVerify(
   }
 
   const prompt = buildVerifyPrompt(input.work, input.filePaths, input.checklist);
-  const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime });
+  const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }) });
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(0, results);
   const costSummary = computeAggregateCost(results);

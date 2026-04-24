@@ -51,6 +51,10 @@ export interface ExecutionContext {
   awaitClarification: (proposal: ClarificationProposal) => Promise<ClarificationResponse>;
   /** The parent model name, resolved from env at context-build time. */
   parentModel?: string;
+  /** BatchId owning this execution — threaded to runTasks so HeartbeatTimer can tag ticks. */
+  batchId?: string;
+  /** Callback invoked on every heartbeat tick; pushes a running headline to the caller's store. */
+  recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void;
 }
 
 /**

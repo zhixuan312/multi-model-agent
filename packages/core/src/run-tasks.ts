@@ -91,6 +91,10 @@ export type RunTasksProgressCallback = (
 export interface RunTasksOptions {
   onProgress?: RunTasksProgressCallback;
   runtime?: RunTasksRuntime;
+  /** Batch ID this run belongs to; threaded to HeartbeatTimer when set. */
+  batchId?: string;
+  /** Callback fired on every heartbeat tick with a state snapshot. */
+  recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void;
 }
 
 function errorResult(error: string): RunResult {
@@ -183,6 +187,7 @@ async function executeReviewedLifecycle(
   config: MultiModelConfig,
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
+  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void },
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -205,7 +210,12 @@ async function executeReviewedLifecycle(
   const heartbeat = onProgress
     ? new HeartbeatTimer(
         (event) => onProgress(taskIndex, event),
-        { provider: resolved.provider.config.model, parentModel: task.parentModel },
+        {
+          provider: resolved.provider.config.model,
+          parentModel: task.parentModel,
+          ...(heartbeatWiring?.batchId !== undefined && { batchId: heartbeatWiring.batchId }),
+          ...(heartbeatWiring?.recordHeartbeat !== undefined && { recordHeartbeat: heartbeatWiring.recordHeartbeat }),
+        },
       )
     : undefined;
   heartbeat?.start(stageCount);
@@ -734,7 +744,10 @@ export async function runTasks(
         return Promise.resolve(refused);
       }
       const readiness = readinessResults[index];
-      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress).then(
+      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
+        batchId: options.batchId,
+        recordHeartbeat: options.recordHeartbeat,
+      }).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };

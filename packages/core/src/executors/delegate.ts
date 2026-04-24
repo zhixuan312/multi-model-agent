@@ -64,6 +64,8 @@ export async function executeDelegate(
       results = await runTasksImpl(resolvedTasks, config, {
         onProgress,
         runtime: { contextBlockStore },
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
       });
       intakeResult.intakeProgress.executedDrafts = results.length;
     }

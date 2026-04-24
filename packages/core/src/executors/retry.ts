@@ -63,6 +63,8 @@ export async function executeRetry(
   try {
     results = await runTasksImpl(injectDefaults(subset), config, {
       runtime: { contextBlockStore },
+      ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+      ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
     });
   } catch (err) {
     retryAborted = true;
