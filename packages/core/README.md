@@ -1,8 +1,8 @@
 # @zhixuan92/multi-model-agent-core
 
-**Runtime library for multi-model-agent.** Import it to run multi-provider agent tasks directly from your own Node program — same routing, supervision, and review pipeline, no MCP client needed.
+**Runtime library for multi-model-agent.** Import it to run multi-provider agent tasks directly from your own Node program — same routing, supervision, and review pipeline, without the HTTP server.
 
-> **Just want your AI assistant to delegate work?** Install [`@zhixuan92/multi-model-agent-mcp`](https://www.npmjs.com/package/@zhixuan92/multi-model-agent-mcp) instead — it wraps this library in an MCP server.
+> **Want the standalone service instead?** Install [`@zhixuan92/multi-model-agent`](https://www.npmjs.com/package/@zhixuan92/multi-model-agent) — it wraps this library in a local HTTP daemon with client-installable skills for Claude Code, Gemini CLI, Codex CLI, and Cursor.
 
 ## Install
 
@@ -36,21 +36,25 @@ for (const r of results) {
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
-- **Config schema** — Zod-validated, same contract as the MCP server
+- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry (used by the HTTP server package)
+- **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
+- **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
 
 ## Subpath exports
 
 | Subpath | What |
 |---|---|
-| `./config/schema` | `parseConfig`, `multiModelConfigSchema` |
-| `./config/load` | `loadConfigFromFile` |
+| `./config/schema` | `parseConfig`, `multiModelConfigSchema`, `serverConfigSchema` |
+| `./config/load` | `loadConfigFromFile`, `loadAuthToken` |
 | `./routing/resolve-agent` | `resolveAgent` — resolves agent type to provider |
 | `./routing/model-profiles` | Model cost/tier profiles |
 | `./provider` | `createProvider` factory |
 | `./run-tasks` | `runTasks` parallel dispatcher, `RunTasksOptions` |
 | `./heartbeat` | `HeartbeatTimer` — periodic progress heartbeat emitter |
 | `./types` | All shared types |
+| `./executors` | Pure `execute<Tool>(ctx, input)` functions and `ExecutionContext` type |
+| `./tool-schemas` | Zod input/output schemas for each tool |
 | `./intake/pipeline` | `runIntakePipeline` — compile → infer → classify → resolve |
 | `./intake/types` | `DraftTask`, `Source`, `IntakeResult`, `ClarificationEntry` |
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
@@ -87,7 +91,7 @@ Optionally set `diagnostics.logDir` to override the default log directory:
 
 When `diagnostics.logDir` is omitted, logs default to `~/.multi-model/logs/`.
 
-When enabled, the MCP diagnostic logger appends JSONL records to `mcp-YYYY-MM-DD.jsonl` in append mode.
+When enabled, the diagnostic logger appends JSONL records to `mmagent-YYYY-MM-DD.jsonl` in append mode.
 
 Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. This is a crash-diagnosis log, not a progress feed.
 
