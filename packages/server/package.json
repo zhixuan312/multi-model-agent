@@ -42,7 +42,7 @@
     }
   },
   "scripts": {
-    "build": "tsc && chmod +x dist/cli/index.js",
+    "build": "tsc && rm -rf dist/skills && cp -R src/skills dist/skills && chmod +x dist/cli/index.js",
     "prepublishOnly": "npm run build"
   },
   "engines": {
@@ -50,7 +50,7 @@
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@zhixuan92/multi-model-agent-core": "^2.8.0",
+    "@zhixuan92/multi-model-agent-core": "^3.0.0",
     "minimist": "^1.2.8",
     "zod": "^4.0.0"
   },
