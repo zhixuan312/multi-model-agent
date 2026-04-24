@@ -81,7 +81,7 @@ The daemon exposes 13 endpoints. All tool endpoints are async: they return `202 
 | `POST /debug?cwd=<abs>` | Debug a failure with a hypothesis |
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
-| `GET /batch/:id[?taskIndex=N]` | Poll a batch; optionally slice one task's result |
+| `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending; body is the running headline) or `200 application/json` (terminal; uniform 7-field envelope). `?taskIndex=N` slices on complete state. |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
 | `POST /clarifications/confirm` | Confirm / override a clarification proposal |
@@ -94,10 +94,13 @@ All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 ## Operator commands
 
 ```bash
-mmagent serve                       # start daemon
+mmagent serve [--verbose] [--log]   # start daemon (--verbose streams per-tool/turn/stage events to stderr; --log persists JSONL to ~/.multi-model/logs/)
+mmagent info [--json]               # print cliVersion, bind/port, token fingerprint, daemon identity (works offline)
 mmagent status [--json]             # show running daemon health and stats
+mmagent logs [--follow] [--batch=<id>]  # tail today's diagnostic log
 mmagent print-token                 # print the current auth token
-mmagent install-skill               # install / update / uninstall skills
+mmagent install-skill               # install / update / uninstall skills (supports --all-skills)
+mmagent update-skills [--dry-run] [--json]  # refresh installed skills from the shipped bundle
 ```
 
 ## Shipped skills
