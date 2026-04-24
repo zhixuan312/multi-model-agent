@@ -70,7 +70,12 @@ export type { RunTasksOptions } from './run-tasks.js';
 
 // Heartbeat
 export { HeartbeatTimer } from './heartbeat.js';
-export type { HeartbeatTimerOptions, HeartbeatStage, TransitionFields } from './heartbeat.js';
+export type {
+  HeartbeatTimerOptions,
+  HeartbeatStage,
+  TransitionFields,
+  HeartbeatTickInfo,
+} from './heartbeat.js';
 
 // Readiness
 export {

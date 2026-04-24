@@ -16,6 +16,7 @@ import { createProvider } from './provider.js';
 import { resolveAgent } from './routing/resolve-agent.js';
 import { delegateWithEscalation } from './delegate-with-escalation.js';
 import { HeartbeatTimer } from './heartbeat.js';
+import type { HeartbeatTickInfo } from './heartbeat.js';
 import { expandContextBlocks } from './context/expand-context-blocks.js';
 import { inferEffort } from './effort-inference.js';
 import { evaluateReadiness } from './readiness/readiness.js';

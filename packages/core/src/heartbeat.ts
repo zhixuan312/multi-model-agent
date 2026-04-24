@@ -22,10 +22,47 @@ const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
   'spec_review', 'spec_rework', 'quality_review', 'quality_rework',
 ]);
 
+/**
+ * Lightweight state snapshot passed to `recordHeartbeat` on every tick (including
+ * the final flush).  The server uses this — combined with the BatchRegistry entry
+ * it already holds — to compose the running headline and push it via
+ * `BatchRegistry.updateRunningHeadline`.
+ *
+ * HeartbeatTimer has no knowledge of BatchRegistry; it only emits this payload.
+ */
+export interface HeartbeatTickInfo {
+  batchId: string;
+  elapsedMs: number;
+  stage: HeartbeatStage;
+  stageIndex: number;
+  stageCount: number;
+  reviewRound?: number;
+  maxReviewRounds?: number;
+  provider: string;
+  progress: {
+    filesRead: number;
+    filesWritten: number;
+    toolCalls: number;
+  };
+  costUSD: number | null;
+  savedCostUSD: number | null;
+}
+
 export interface HeartbeatTimerOptions {
   provider: string;
   parentModel?: string;
   intervalMs?: number;
+  /**
+   * Optional callback invoked on every HeartbeatTimer tick (including the
+   * final one). Receives a snapshot of the timer's current state so the
+   * caller can compose the running headline from the BatchRegistry entry.
+   *
+   * Core HeartbeatTimer has no knowledge of BatchRegistry — it only invokes
+   * this callback if provided.
+   */
+  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+  /** The batchId this timer belongs to. Required when recordHeartbeat is set. */
+  batchId?: string;
 }
 
 export interface TransitionFields {
@@ -43,6 +80,8 @@ export class HeartbeatTimer {
   private readonly onProgress: (event: ProgressEvent) => void;
   private readonly intervalMs: number;
   private readonly parentModel: string | undefined;
+  private readonly _recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+  private readonly _batchId?: string;
   private timer: ReturnType<typeof setInterval> | null = null;
   private startTime = 0;
   private started = false;
@@ -73,6 +112,32 @@ export class HeartbeatTimer {
     this.provider = options.provider;
     this.parentModel = options.parentModel;
     this.intervalMs = options.intervalMs ?? 5000;
+    this._recordHeartbeat = options.recordHeartbeat;
+    this._batchId = options.batchId;
+  }
+
+  /**
+   * Returns a snapshot of the timer's current state for use by recordHeartbeat
+   * callbacks to compose the running headline.
+   */
+  getHeartbeatTickInfo(): HeartbeatTickInfo {
+    return {
+      batchId: this._batchId ?? '',
+      elapsedMs: this.startTime > 0 ? Date.now() - this.startTime : 0,
+      stage: this.stage,
+      stageIndex: this.stageIndex,
+      stageCount: this.stageCount,
+      reviewRound: this.reviewRound,
+      maxReviewRounds: this.maxReviewRounds,
+      provider: this.provider,
+      progress: {
+        filesRead: this.filesRead,
+        filesWritten: this.filesWritten,
+        toolCalls: this.toolCalls,
+      },
+      costUSD: this.costUSD,
+      savedCostUSD: this.savedCostUSD,
+    };
   }
 
   start(stageCount: number): void {
@@ -237,6 +302,12 @@ export class HeartbeatTimer {
       final,
       headline: this.composeHeadline(elapsed),
     });
+
+    // Push a tick snapshot so the server can recompose the running headline
+    // and call BatchRegistry.updateRunningHeadline on every tick.
+    if (this._recordHeartbeat) {
+      this._recordHeartbeat(this.getHeartbeatTickInfo());
+    }
   }
 
   private composeHeadline(elapsed: string): string {
