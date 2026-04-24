@@ -295,7 +295,6 @@ export interface ParsedArgs {
   json: boolean;
   targets: Client[] | null;
   allTargets: boolean;
-  allSkills: boolean;
 }
 
 /**
@@ -311,7 +310,7 @@ export interface ParsedArgs {
 export function parseArgs(argv: string[]): ParsedArgs {
   const args = minimist(argv, {
     string: ['target', 'skill', 'config'],
-    boolean: ['uninstall', 'dry-run', 'json', 'all-targets', 'all-skills'],
+    boolean: ['uninstall', 'dry-run', 'json', 'all-targets'],
     alias: {
       u: 'uninstall',
       j: 'json',
@@ -329,7 +328,6 @@ export function parseArgs(argv: string[]): ParsedArgs {
   const dryRun = args['dry-run'] === true;
   const json = args['json'] === true;
   const allTargets = args['all-targets'] === true;
-  const allSkills = args['all-skills'] === true;
 
   let targets: Client[] | null = null;
   if (args.target) {
@@ -337,7 +335,7 @@ export function parseArgs(argv: string[]): ParsedArgs {
     targets = (t as string[]).map((s) => s as Client);
   }
 
-  return { skill, configPath, uninstall, dryRun, json, targets, allTargets, allSkills };
+  return { skill, configPath, uninstall, dryRun, json, targets, allTargets };
 }
 
 /**
@@ -453,34 +451,19 @@ export async function main(deps: MainDeps = {}): Promise<number> {
   const stdout = deps.stdout ?? process.stdout.write.bind(process.stdout);
   const stderr = deps.stderr ?? process.stderr.write.bind(process.stderr);
 
-  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets, allSkills } =
+  const { skill, uninstall, dryRun, json, targets: explicitTargets, allTargets } =
     parseArgs(argv);
 
   // ── 1. Validate skill selection ────────────────────────────────────────────
-  // Accept either a named skill (positional) or --all-skills. Not both.
-  if (!skill && !allSkills) {
-    const msg =
-      'Usage: mmagent install-skill [--uninstall] [--dry-run] [--json] [--target=<client>] [--all-targets] [--all-skills] <skill-name>\n' +
-      'Skills: ' + SUPPORTED_SKILLS.join(', ');
-    printError(stderr, json, 'missing_skill_name', msg, stdout);
-    return ExitCode.ERR_INVALID_ARGS;
-  }
-
-  if (skill && allSkills) {
-    const msg = 'Cannot combine --all-skills with a positional skill name. Pick one.';
-    printError(stderr, json, 'conflicting_skill_selection', msg, stdout);
-    return ExitCode.ERR_INVALID_ARGS;
-  }
-
+  // Default: install every shipped skill. Specify a positional skill name to
+  // scope to a single skill.
   if (skill && !SUPPORTED_SKILLS.includes(skill as (typeof SUPPORTED_SKILLS)[number])) {
     const msg = `Unknown skill '${skill}'. Available: ${SUPPORTED_SKILLS.join(', ')}`;
     printError(stderr, json, 'unknown_skill', msg, stdout);
     return ExitCode.ERR_UNKNOWN_SKILL;
   }
 
-  const skillsToRun: readonly string[] = allSkills
-    ? SUPPORTED_SKILLS
-    : [skill!];
+  const skillsToRun: readonly string[] = skill ? [skill] : SUPPORTED_SKILLS;
 
   // ── 2. Resolve targets (may throw UnknownTargetError) ──────────────────────
   let resolvedTargets: Client[];

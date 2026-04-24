@@ -1,12 +1,15 @@
 /**
- * tests/cli/install-skill-all.test.ts — `install-skill --all-skills` flag.
+ * tests/cli/install-skill-all.test.ts — default-all-skills behavior.
+ *
+ * `install-skill` with no positional skill name installs every shipped skill.
+ * A positional skill name scopes to that one skill.
  */
 import { describe, it, expect, afterEach } from 'vitest';
-import { mkdtempSync, mkdirSync, existsSync, rmSync, readdirSync } from 'node:fs';
+import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { main, parseArgs, SUPPORTED_SKILLS } from '../../packages/server/src/cli/install-skill.js';
-import { appendEntry, listEntries } from '../../packages/server/src/install/manifest.js';
+import { listEntries } from '../../packages/server/src/install/manifest.js';
 
 function cap() {
   const out: string[] = [];
@@ -20,7 +23,6 @@ function cap() {
 
 function mkSandbox(): { home: string; cleanup: () => void } {
   const home = mkdtempSync(join(tmpdir(), 'install-all-'));
-  // make the home dir look like it has claude-code installed
   mkdirSync(join(home, '.claude'), { recursive: true });
   mkdirSync(join(home, '.claude', 'skills'), { recursive: true });
   return {
@@ -29,37 +31,34 @@ function mkSandbox(): { home: string; cleanup: () => void } {
   };
 }
 
-describe('install-skill --all-skills flag', () => {
+describe('install-skill default-all behavior', () => {
   const sandboxes: Array<() => void> = [];
   afterEach(() => {
     for (const c of sandboxes.splice(0)) c();
   });
 
-  it('parseArgs: --all-skills alone is accepted', () => {
-    const parsed = parseArgs(['--all-skills']);
-    expect(parsed.allSkills).toBe(true);
+  it('parseArgs: no args gives skill=null (defaulting to all)', () => {
+    const parsed = parseArgs([]);
     expect(parsed.skill).toBe(null);
   });
 
-  it('parseArgs: a positional skill without --all-skills sets skill, allSkills=false', () => {
+  it('parseArgs: positional skill name sets skill', () => {
     const parsed = parseArgs(['mma-delegate']);
-    expect(parsed.allSkills).toBe(false);
     expect(parsed.skill).toBe('mma-delegate');
   });
 
-  it('--all-skills installs every shipped skill to claude-code', async () => {
+  it('no positional skill installs every shipped skill to claude-code', async () => {
     const { home, cleanup } = mkSandbox();
     sandboxes.push(cleanup);
     const c = cap();
     const code = await main({
-      argv: ['--all-skills', '--target=claude-code', '--json'],
+      argv: ['--target=claude-code', '--json'],
       homeDir: home,
       stdout: c.outFn,
       stderr: c.errFn,
     });
     expect(code).toBe(0);
 
-    // Each supported skill appears in the manifest with at least one target
     const entries = listEntries(home);
     for (const skill of SUPPORTED_SKILLS) {
       const entry = entries.find((e) => e.name === skill);
@@ -68,28 +67,29 @@ describe('install-skill --all-skills flag', () => {
     }
   });
 
-  it('--all-skills combined with a positional skill errors out', async () => {
+  it('positional skill scopes to that one skill only', async () => {
     const { home, cleanup } = mkSandbox();
     sandboxes.push(cleanup);
     const c = cap();
     const code = await main({
-      argv: ['--all-skills', '--target=claude-code', 'mma-delegate'],
+      argv: ['mma-delegate', '--target=claude-code'],
       homeDir: home,
       stdout: c.outFn,
       stderr: c.errFn,
     });
-    expect(code).not.toBe(0);
-    expect(c.err.join('')).toMatch(/all-skills/);
+    expect(code).toBe(0);
+    const entries = listEntries(home);
+    expect(entries.map((e) => e.name)).toEqual(['mma-delegate']);
   });
 
-  it('--all-skills --uninstall removes every manifest-tracked skill', async () => {
+  it('--uninstall with no positional skill removes every manifest-tracked skill', async () => {
     const { home, cleanup } = mkSandbox();
     sandboxes.push(cleanup);
 
-    // Install first
+    // Install all first
     const c1 = cap();
     await main({
-      argv: ['--all-skills', '--target=claude-code'],
+      argv: ['--target=claude-code'],
       homeDir: home,
       stdout: c1.outFn,
       stderr: c1.errFn,
@@ -99,7 +99,7 @@ describe('install-skill --all-skills flag', () => {
     // Uninstall all
     const c2 = cap();
     const code = await main({
-      argv: ['--all-skills', '--uninstall', '--target=claude-code'],
+      argv: ['--uninstall', '--target=claude-code'],
       homeDir: home,
       stdout: c2.outFn,
       stderr: c2.errFn,
@@ -108,17 +108,17 @@ describe('install-skill --all-skills flag', () => {
     expect(listEntries(home).length).toBe(0);
   });
 
-  it('--all-skills without --target/--all-targets uses detection (empty if no clients)', async () => {
-    const home = mkdtempSync(join(tmpdir(), 'install-all-empty-'));
-    sandboxes.push(() => rmSync(home, { recursive: true, force: true }));
+  it('unknown positional skill errors out', async () => {
+    const { home, cleanup } = mkSandbox();
+    sandboxes.push(cleanup);
     const c = cap();
     const code = await main({
-      argv: ['--all-skills'],
+      argv: ['not-a-real-skill', '--target=claude-code'],
       homeDir: home,
       stdout: c.outFn,
       stderr: c.errFn,
     });
     expect(code).not.toBe(0);
-    expect(c.out.join('') + c.err.join('')).toMatch(/No clients detected|--target|--all-targets/);
+    expect(c.err.join('')).toMatch(/Unknown skill/);
   });
 });

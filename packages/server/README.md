@@ -99,7 +99,8 @@ mmagent info [--json]               # print cliVersion, bind/port, token fingerp
 mmagent status [--json]             # show running daemon health and stats
 mmagent logs [--follow] [--batch=<id>]  # tail today's diagnostic log
 mmagent print-token                 # print the current auth token
-mmagent install-skill               # install / update / uninstall skills (supports --all-skills)
+mmagent install-skill               # install all shipped skills (default); pass a skill name to scope to one
+mmagent install-skill --uninstall   # remove all installed skills; pass a skill name to scope to one
 mmagent update-skills [--dry-run] [--json]  # refresh installed skills from the shipped bundle
 ```
 

@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **`mmagent print-token` output.** Emits only the token on stdout; warnings go to stderr.
 - **Inline-apiKey warning.** No longer fires on every `loadConfigFromFile` — now fires once on `mmagent serve` startup with an actionable fix recipe.
 - **Log file rename.** `~/.multi-model/logs/mcp-YYYY-MM-DD.jsonl` → `mmagent-YYYY-MM-DD.jsonl`. Old files untouched.
+- **`install-skill` default.** No positional skill name now installs every shipped skill (was: error). Specify a skill name to scope to one.
 
 ### Added
 
@@ -21,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - `mmagent update-skills [--dry-run] [--json] [--if-exists] [--silent] [--best-effort]` subcommand: re-copies every manifest-tracked skill from the shipped bundle, updates `skillVersion`, removes skills no longer in bundle.
 - `mmagent logs [--follow] [--batch=<id>]` subcommand: tails today's `mmagent-*.jsonl` with POSIX-sh tail-F semantics.
 - `server.autoUpdateSkills` config field (default `true`). `mmagent serve` auto-updates stale skills before bind (bounded 5s; never blocks).
-- `--all-skills` flag on `install-skill` (install or uninstall every shipped skill in a single call).
+- `mmagent install-skill` with no positional skill name now installs every shipped skill (previous behavior required a skill name or `--all-skills` flag — 3.1.0 flips the default). Pass a skill name to scope to one. `--uninstall` with no skill name removes all installed skills.
 - npm `postinstall` hook via `packages/server/scripts/postinstall.js` — zero-touch skill refresh on `npm update`. Always exits 0.
 - Plain-text running headline on `GET /batch/:id` during pending. Recomposed every HeartbeatTimer tick; includes stall detection after 2× heartbeat interval.
 - Startup log line `[mmagent] started | version=... | bind=... | pid=... | token=<fp> | boot=<uuid>` on stdout before listening.
