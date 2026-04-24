@@ -419,7 +419,6 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
   it('doInstall dryRun=true returns skipped targets without writing files', () => {
     const result = doInstall('mma-delegate', ['claude-code', 'gemini'], {
       dryRun: true,
-      json: false,
       homeDir: fakeHome,
       skillsRoot: fakeSkillsRoot,
     });
@@ -430,25 +429,27 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
     expect(result.dryRun).toBe(true);
   });
 
-  it('doInstall dryRun=false writes files (client writers not yet stubbed — expects throw)', () => {
-    // Client writers are stubs; non-dry-run triggers the stub error.
-    // Once tasks 9.5–9.8 implement the writers, this test can be updated to verify writes.
-    // Must pass skillsRoot so the skill is found; the stub then throws on the write step.
-    expect(() =>
-      doInstall('mma-delegate', ['claude-code'], {
-        dryRun: false,
-        homeDir: fakeHome,
-        skillsRoot: fakeSkillsRoot,
-        version: '3.0.0',
-      }),
-    ).toThrow(/client writers are not yet implemented/);
+  it('doInstall dryRun=false writes SKILL.md for claude-code target', () => {
+    // Tasks 9.5–9.8 implement the writers; verify actual file write.
+    const result = doInstall('mma-delegate', ['claude-code'], {
+      dryRun: false,
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      version: '3.0.0',
+    });
+    expect(result.action).toBe('installed');
+    expect(result.targets).toContain('claude-code');
+    expect(result.skipped).toHaveLength(0);
+    // Claude Code writes to ~/.claude/skills/<skillName>/SKILL.md
+    const skillFile = path.join(fakeHome, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
+    expect(fs.existsSync(skillFile)).toBe(true);
+    expect(fs.readFileSync(skillFile, 'utf-8')).toContain('# mma-delegate skill content');
   });
 
   it('doInstall throws when skill is not found', () => {
     expect(() =>
       doInstall('nonexistent-skill', ['claude-code'], {
         dryRun: true,
-        json: false,
         homeDir: fakeHome,
         skillsRoot: fakeSkillsRoot,
       }),
@@ -458,7 +459,6 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
   it('doUninstall dryRun=true returns skipped targets without removing files', () => {
     const result = doUninstall('mma-delegate', ['claude-code'], {
       dryRun: true,
-      json: false,
       homeDir: fakeHome,
     });
     expect(result.action).toBe('uninstalled');
@@ -466,14 +466,25 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
     expect(result.targets).toHaveLength(0);
   });
 
-  it('doUninstall dryRun=false triggers remover stub', () => {
-    expect(() =>
-      doUninstall('mma-delegate', ['claude-code'], {
-        dryRun: false,
-        json: false,
-        homeDir: fakeHome,
-      }),
-    ).toThrow(/client removers are not yet implemented/);
+  it('doUninstall dryRun=false removes skill files for claude-code target', () => {
+    // First install so there is something to uninstall
+    doInstall('mma-delegate', ['claude-code'], {
+      dryRun: false,
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      version: '3.0.0',
+    });
+    const skillFile = path.join(fakeHome, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
+    expect(fs.existsSync(skillFile)).toBe(true);
+
+    // Now uninstall
+    const result = doUninstall('mma-delegate', ['claude-code'], {
+      dryRun: false,
+      homeDir: fakeHome,
+    });
+    expect(result.action).toBe('uninstalled');
+    expect(result.targets).toContain('claude-code');
+    expect(fs.existsSync(skillFile)).toBe(false);
   });
 
   it('SUPPORTED_SKILLS includes all expected skills', () => {

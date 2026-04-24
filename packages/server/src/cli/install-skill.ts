@@ -12,7 +12,8 @@
  *
  * Task 9.4 scope: CLI scaffolding, manifest read/append-entry/remove-entry,
  * auto-detection scaffolding, dry-run mode.
- * Individual client writers are implemented in tasks 9.5–9.8.
+ * Tasks 9.5–9.8: Individual client writers.
+ * Task 9.9: Uninstall wires all removers.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -22,6 +23,10 @@ import minimist from 'minimist';
 import * as manifest from '../install/manifest.js';
 import type { Client } from '../install/manifest.js';
 import { ALL_CLIENTS, detectClients } from '../install/manifest.js';
+import { installClaudeCode, uninstallClaudeCode } from '../install/claude-code.js';
+import { installGeminiCli, uninstallGeminiCli } from '../install/gemini-cli.js';
+import { installCodexCli, uninstallCodexCli } from '../install/codex-cli.js';
+import { installCursor, uninstallCursor } from '../install/cursor.js';
 
 // Re-export Client and constants so CLI callers can import from this module.
 export type { Client } from '../install/manifest.js';
@@ -99,29 +104,84 @@ export function readSkillContent(skillName: string, skillsRoot?: string): string
   }
 }
 
-// ─── Per-client writer/remover skeletons ──────────────────────────────────────
-// These are scaffolding for tasks 9.5–9.8. Each writer/remover is currently
-// a no-op stub; the stub is replaced by the actual implementation per task.
+// ─── Per-client writer/remover dispatch ───────────────────────────────────────
 
 /**
  * Write a skill's SKILL.md content to the target client's skill directory.
- * STUB — implemented in tasks 9.5–9.8.
+ * Dispatches to the appropriate writer based on `target`.
+ *
+ * @param skillName  The skill name (used in paths and warnings).
+ * @param content    Raw SKILL.md content (may contain @include directives).
+ * @param target     The AI client to install the skill for.
+ * @param homeDir    Home directory (replaces os.homedir()).
+ * @param skillsRoot Root of the skills directory (for @include resolution).
+ * @param version    Skill version string (used by Gemini extension manifest).
+ * @param cwd        Current working directory (used by Cursor; defaults to process.cwd()).
+ * @param force      If true, overwrite existing Cursor file without warning.
  */
 export function writeSkillToClient(
-  _skillName: string,
-  _content: string,
-  _target: Client,
-  _homeDir: string,
+  skillName: string,
+  content: string,
+  target: Client,
+  homeDir: string,
+  skillsRoot: string,
+  version: string = '0.0.0',
+  cwd: string = process.cwd(),
+  force: boolean = false,
 ): void {
-  throw new Error('install-skill: client writers are not yet implemented');
+  switch (target) {
+    case 'claude-code':
+      installClaudeCode({ skillName, content, homeDir, skillsRoot });
+      break;
+    case 'gemini':
+      installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot });
+      break;
+    case 'codex':
+      installCodexCli({ skillName, content, homeDir, skillsRoot });
+      break;
+    case 'cursor':
+      installCursor({ content, cwd, homeDir, skillsRoot, force });
+      break;
+    default: {
+      const _exhaustive: never = target;
+      throw new Error(`install-skill: unknown target: ${_exhaustive as string}`);
+    }
+  }
 }
 
 /**
  * Remove a skill's files from the target client's skill directory.
- * STUB — implemented in task 9.9.
+ * Dispatches to the appropriate remover based on `target`.
+ *
+ * @param skillName  The skill name (used for claude-code path resolution).
+ * @param target     The AI client to uninstall the skill from.
+ * @param homeDir    Home directory (replaces os.homedir()).
+ * @param cwd        Current working directory (used by Cursor; defaults to process.cwd()).
  */
-export function removeSkillFromClient(_skillName: string, _target: Client, _homeDir: string): void {
-  throw new Error('install-skill: client removers are not yet implemented');
+export function removeSkillFromClient(
+  skillName: string,
+  target: Client,
+  homeDir: string,
+  cwd: string = process.cwd(),
+): void {
+  switch (target) {
+    case 'claude-code':
+      uninstallClaudeCode(skillName, homeDir);
+      break;
+    case 'gemini':
+      uninstallGeminiCli(homeDir);
+      break;
+    case 'codex':
+      uninstallCodexCli(homeDir);
+      break;
+    case 'cursor':
+      uninstallCursor(cwd);
+      break;
+    default: {
+      const _exhaustive: never = target;
+      throw new Error(`install-skill: unknown target: ${_exhaustive as string}`);
+    }
+  }
 }
 
 // ─── Install/Uninstall result ───────────────────────────────────────────────
@@ -158,18 +218,29 @@ export const ExitCode = Object.freeze({
 /**
  * Install a skill to the specified client targets.
  * - dryRun=true: checks skill existence; does NOT write files or update manifest.
- * - dryRun=false: writes files and updates manifest (requires client writers from tasks 9.5+).
+ * - dryRun=false: writes files via the per-client writers.
  */
 export function doInstall(
   skillName: string,
   targets: Client[],
-  opts: { dryRun: boolean; homeDir: string; skillsRoot?: string; version: string },
+  opts: {
+    dryRun: boolean;
+    homeDir: string;
+    skillsRoot?: string;
+    version?: string;
+    cwd?: string;
+    force?: boolean;
+  },
 ): InstallResult {
   const checkedPath = path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md');
   const content = readSkillContent(skillName, opts.skillsRoot);
   if (!content) {
     throw new SkillNotFoundError(skillName, checkedPath);
   }
+
+  const skillsRoot = getSkillsRoot(opts.skillsRoot);
+  const version = opts.version ?? '0.0.0';
+  const cwd = opts.cwd ?? process.cwd();
 
   const installed: Client[] = [];
   const skipped: Client[] = [];
@@ -179,9 +250,7 @@ export function doInstall(
       // In dry-run: record target as skipped (would write), not installed
       skipped.push(target);
     } else {
-      // Non-dry-run: write to disk and update manifest
-      // Client writers (tasks 9.5–9.8) replace the stub below:
-      writeSkillToClient(skillName, content, target, opts.homeDir);
+      writeSkillToClient(skillName, content, target, opts.homeDir, skillsRoot, version, cwd, opts.force);
       installed.push(target);
     }
   }
@@ -192,13 +261,14 @@ export function doInstall(
 /**
  * Uninstall a skill from the specified client targets.
  * - dryRun=true: resolves targets; does NOT remove files or update manifest.
- * - dryRun=false: removes files and updates manifest (requires client removers from task 9.9).
+ * - dryRun=false: removes files via the per-client removers.
  */
 export function doUninstall(
   skillName: string,
   targets: Client[],
-  opts: { dryRun: boolean; homeDir: string },
+  opts: { dryRun: boolean; homeDir: string; cwd?: string },
 ): InstallResult {
+  const cwd = opts.cwd ?? process.cwd();
   const installed: Client[] = [];
   const skipped: Client[] = [];
 
@@ -206,8 +276,7 @@ export function doUninstall(
     if (opts.dryRun) {
       skipped.push(target);
     } else {
-      // Client removers (task 9.9) replace the stub below:
-      removeSkillFromClient(skillName, target, opts.homeDir);
+      removeSkillFromClient(skillName, target, opts.homeDir, cwd);
       installed.push(target);
     }
   }
