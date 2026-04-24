@@ -5,6 +5,7 @@ import type { Input } from '../tool-schemas/verify.js';
 import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -103,10 +104,13 @@ export async function executeVerify(
     const costSummary = computeAggregateCost(results);
 
     return {
-      results,
       headline: '',
+      results,
       batchTimings,
       costSummary,
+      structuredReport: notApplicable('no structured report emitted by this executor'),
+      error: notApplicable('batch succeeded'),
+      proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
       parentModel,
@@ -121,10 +125,13 @@ export async function executeVerify(
   const costSummary = computeAggregateCost(results);
 
   return {
-    results,
     headline: '',
+    results,
     batchTimings,
     costSummary,
+    structuredReport: notApplicable('no structured report emitted by this executor'),
+    error: notApplicable('batch succeeded'),
+    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs: 0,
     parentModel,

@@ -9,6 +9,7 @@ import { compileDelegateTasks } from '../intake/compilers/delegate.js';
 import { runIntakePipeline } from '../intake/pipeline.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import type { ClarificationEntry } from '../intake/types.js';
+import { notApplicable } from '../reporting/not-applicable.js';
 
 export interface DelegateOptions {
   /**
@@ -92,11 +93,19 @@ export async function executeDelegate(
   const costSummary = computeAggregateCost(results);
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
+  const awaitingClarification = intakeResult.clarifications.length > 0;
   return {
-    results,
     headline: '',  // composed by the caller using composeHeadline
-    batchTimings,
-    costSummary,
+    results: awaitingClarification ? notApplicable('awaiting clarification') : results,
+    batchTimings: awaitingClarification ? notApplicable('awaiting clarification') : batchTimings,
+    costSummary: awaitingClarification ? notApplicable('awaiting clarification') : costSummary,
+    structuredReport: awaitingClarification
+      ? notApplicable('awaiting clarification')
+      : notApplicable('no structured report emitted by this executor'),
+    error: notApplicable(awaitingClarification ? 'awaiting clarification' : 'batch succeeded'),
+    proposedInterpretation: awaitingClarification
+      ? notApplicable('clarification proposed but interpretation unavailable')
+      : notApplicable('batch not awaiting clarification'),
     batchId,
     tasks: readySpecs,
     wallClockMs,

@@ -3,6 +3,7 @@ import type { ProjectContext } from '../project-context.js';
 import type { Provider, RunResult, BatchTimings, BatchAggregateCost, MultiModelConfig } from '../types.js';
 import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
 import type { ContextBlockStore } from '../context/context-block-store.js';
+import type { NotApplicable } from '../reporting/not-applicable.js';
 
 // Plan-specified auxiliary types (Task 1.9)
 
@@ -56,14 +57,20 @@ export interface ExecutionContext {
  * Uniform output envelope returned by every executor.
  * Required shape for GET /batch/:id?taskIndex=N slicing (see spec §6.5).
  *
- * All four top-level fields are required; additional passthrough fields
- * (batchId, contextBlockId, clarificationId, etc.) are preserved.
+ * All 7 top-level envelope fields are required. Fields that are not
+ * applicable for a given executor or code path are set to NotApplicable
+ * via `notApplicable(reason)` rather than being omitted. Additional
+ * passthrough fields (batchId, contextBlockId, clarificationId, etc.)
+ * are preserved alongside the envelope.
  */
 export interface ExecutorOutput {
-  results: RunResult[];
   headline: string;
-  batchTimings: BatchTimings;
-  costSummary: BatchAggregateCost;
+  results: RunResult[] | NotApplicable;
+  batchTimings: BatchTimings | NotApplicable;
+  costSummary: BatchAggregateCost | NotApplicable;
+  structuredReport: Record<string, unknown> | NotApplicable;
+  error: { code: string; message: string; details?: unknown } | NotApplicable;
+  proposedInterpretation: string | NotApplicable;
   batchId: string;
   contextBlockId?: string;
   clarificationId?: string;

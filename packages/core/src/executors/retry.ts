@@ -4,6 +4,7 @@ import type { Input } from '../tool-schemas/retry.js';
 import type { TaskSpec } from '../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
 
 // --- Ported from the inline retry_tasks registration in packages/mcp/src/cli.ts ---
 
@@ -79,10 +80,13 @@ export async function executeRetry(
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   return {
-    results,
     headline: '',
+    results,
     batchTimings,
     costSummary,
+    structuredReport: notApplicable('no structured report emitted by this executor'),
+    error: notApplicable('batch succeeded'),
+    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: retryBatchId,
     retryBatchId,
     wallClockMs,
