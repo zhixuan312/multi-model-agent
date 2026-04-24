@@ -253,17 +253,22 @@ async function executeReviewedLifecycle(
   const heartbeat = needHeartbeat
     ? new HeartbeatTimer(
         (event) => {
-          // Detect stage transitions on the heartbeat progress stream. The
-          // authoritative phaseChange flag rides HeartbeatTickInfo (server
-          // logger path); this redundant detection is for the stderr stream
-          // because run-tasks doesn't see HeartbeatTickInfo directly.
-          if (verboseStreamRaw && event.kind === 'heartbeat' && event.stage !== lastStageSeen) {
-            if (lastStageSeen !== undefined) {
-              verboseStreamRaw(
-                `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
-              );
+          if (verboseStreamRaw && event.kind === 'heartbeat') {
+            // Emit on every heartbeat tick so the operator can confirm
+            // the timer is actually firing. Stage-change lines are richer
+            // but fire only on transitions; plain ticks let you see
+            // per-5s progress inside a long-running stage.
+            if (event.stage !== lastStageSeen) {
+              if (lastStageSeen !== undefined) {
+                verboseStreamRaw(
+                  `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
+                );
+              }
+              lastStageSeen = event.stage;
             }
-            lastStageSeen = event.stage;
+            verboseStreamRaw(
+              `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ${event.elapsed} stage=${event.stage} tools=${event.progress.toolCalls} read=${event.progress.filesRead} wrote=${event.progress.filesWritten}`,
+            );
           }
           synthOnProgress(taskIndex, event);
         },
@@ -276,6 +281,12 @@ async function executeReviewedLifecycle(
       )
     : undefined;
   heartbeat?.start(stageCount);
+  if (verboseStreamRaw) {
+    verboseStreamRaw(
+      `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ` +
+      (heartbeat ? `started (stageCount=${stageCount}, 5s tick)` : 'DISABLED (no consumer)'),
+    );
+  }
 
   const implModel = resolved.provider.config.model;
 
