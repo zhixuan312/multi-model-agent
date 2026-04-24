@@ -10,17 +10,23 @@ version: "0.0.0-unreleased"
 multi-model-agent is a local HTTP service that fans out tool-using work to
 sub-agents running on different LLM providers (Claude, OpenAI-compatible, Codex).
 
-### Setup check
+### Preflight: auto-start the daemon if it is not running
+
+Before any mma-* call, check the server. If it is not up, start it in the background — do NOT run `mmagent serve` synchronously, it blocks forever.
 
 ```bash
-curl -s http://localhost:$PORT/health
-# expects: { "ok": true }
+PORT=7337
+if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
+  mmagent serve >/dev/null 2>&1 &
+  disown
+  for _ in 1 2 3 4 5 6 7 8 9 10; do
+    sleep 0.5
+    curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
+  done
+fi
 ```
 
-If this fails, start the server:
-```bash
-mmagent serve
-```
+Idempotent: already-running daemon → curl succeeds → no-op.
 
 ### Auth token
 

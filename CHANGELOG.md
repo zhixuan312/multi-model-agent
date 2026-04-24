@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.5 — 2026-04-24
+
+### Added
+
+- **skills.** `multi-model-agent` router now includes a preflight block that auto-starts `mmagent serve` in the background if `/health` is unreachable. The main agent runs it once before dispatching mma-* work, so users who haven't started the daemon themselves no longer need to — the skill does it for them. Idempotent (no-op when already running).
+
 ## 3.1.4 — 2026-04-24
 
 ### Fixed
