@@ -49,18 +49,26 @@ type ClientValue = z.infer<typeof clientSchema>;
 
 const manifestEntrySchema = z.object({
   name: z.string().min(1),
-  version: z.string().min(1),
+  skillVersion: z.string().min(1),
   installedAt: z.number().int().nonnegative(),
   targets: z.array(clientSchema),
 });
 
 const installManifestSchema = z.object({
-  version: z.number().int().nonnegative(),
+  version: z.literal(2),
   entries: z.array(manifestEntrySchema),
 });
 
 export type InstallManifest = z.infer<typeof installManifestSchema>;
 export type ManifestEntry = z.infer<typeof manifestEntrySchema>;
+
+/** Thrown when the manifest declares a version newer than this mmagent supports. */
+export class FutureManifestError extends Error {
+  constructor(version: number) {
+    super(`install-manifest.json was written by a newer mmagent (version ${version}); upgrade mmagent or remove the file to continue`);
+    this.name = 'FutureManifestError';
+  }
+}
 
 /** Thrown when the manifest file exists but cannot be parsed as valid JSON. */
 export class ManifestParseError extends Error {
@@ -92,27 +100,93 @@ export function manifestPath(homeDir?: string): string {
 
 // ─── Low-level I/O ───────────────────────────────────────────────────────────
 
+interface V1Entry {
+  name: string;
+  version: string;
+  installedAt: number;
+  targets: ClientValue[];
+}
+
+function backupCorrupted(p: string): string {
+  const backup = `${p}.bak-${Date.now()}`;
+  try { fs.renameSync(p, backup); } catch { /* ignore — best effort */ }
+  return backup;
+}
+
 function readManifest(homeDir?: string): InstallManifest {
   const p = manifestPath(homeDir);
   if (!fs.existsSync(p)) return emptyManifest();
+
+  let raw: string;
   try {
-    const raw = fs.readFileSync(p, 'utf-8');
-    const parsed = JSON.parse(raw);
-    // Validate structure with Zod so corrupt-but-valid-JSON is caught at load
-    // rather than failing in unpredictable ways downstream.
+    raw = fs.readFileSync(p, 'utf-8');
+  } catch {
+    return emptyManifest();
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    const backup = backupCorrupted(p);
+    process.stderr.write(`[mmagent] manifest corrupt; rebuilt empty v2 (previous copy at ${backup})\n`);
+    const empty = emptyManifest();
+    writeManifest(empty, homeDir);
+    return empty;
+  }
+
+  const parsedVersion =
+    parsed !== null && typeof parsed === 'object' && 'version' in parsed
+      ? (parsed as { version: unknown }).version
+      : undefined;
+
+  if (typeof parsedVersion === 'number' && parsedVersion > 2) {
+    throw new FutureManifestError(parsedVersion);
+  }
+
+  // v2 — validate strictly
+  if (parsedVersion === 2) {
     const result = installManifestSchema.safeParse(parsed);
     if (!result.success) {
       throw new ManifestSchemaValidationError(p, result.error);
     }
     return result.data;
-  } catch (err) {
-    if (err instanceof ManifestSchemaValidationError) throw err;
-    const detail =
-      err instanceof SyntaxError
-        ? `JSON parse error: ${err.message}`
-        : err instanceof Error ? err.message : String(err);
-    throw new ManifestParseError(p, detail);
   }
+
+  // v1 (legacy) — migrate to v2.
+  // v1 entries have `version` (skill version) instead of `skillVersion`.
+  if (
+    parsedVersion === 1 ||
+    (parsedVersion === undefined && parsed !== null && typeof parsed === 'object' && 'entries' in parsed)
+  ) {
+    const v1Entries = Array.isArray((parsed as { entries?: unknown }).entries)
+      ? ((parsed as { entries: unknown[] }).entries as V1Entry[])
+      : [];
+    const migrated: InstallManifest = {
+      version: 2,
+      entries: v1Entries
+        .filter((e) => e && typeof e === 'object' && typeof e.name === 'string')
+        .map((e) => ({
+          name: e.name,
+          skillVersion: typeof e.version === 'string' && e.version.length > 0 ? e.version : 'unknown',
+          installedAt: typeof e.installedAt === 'number' ? e.installedAt : 0,
+          targets: Array.isArray(e.targets)
+            ? e.targets.filter((t): t is ClientValue => (['claude-code', 'gemini', 'codex', 'cursor'] as const).includes(t as ClientValue))
+            : [],
+        })),
+    };
+    // Persist the migration so subsequent reads skip it.
+    writeManifest(migrated, homeDir);
+    process.stderr.write(`[mmagent] install-manifest.json migrated v1 → v2\n`);
+    return migrated;
+  }
+
+  // Unknown shape — back up and rebuild empty.
+  const backup = backupCorrupted(p);
+  process.stderr.write(`[mmagent] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
+  const empty = emptyManifest();
+  writeManifest(empty, homeDir);
+  return empty;
 }
 
 function writeManifest(manifest: InstallManifest, homeDir?: string): void {
@@ -124,7 +198,7 @@ function writeManifest(manifest: InstallManifest, homeDir?: string): void {
 }
 
 function emptyManifest(): InstallManifest {
-  return { version: 1, entries: [] };
+  return { version: 2, entries: [] };
 }
 
 // ─── Public API ─────────────────────────────────────────────────────────────
@@ -157,7 +231,7 @@ export function getEntry(skillName: string, homeDir?: string): ManifestEntry | u
  */
 export function appendEntry(
   skillName: string,
-  version: string,
+  skillVersion: string,
   newTargets: Client[],
   homeDir?: string,
 ): ManifestEntry {
@@ -177,20 +251,20 @@ export function appendEntry(
     for (const t of dedupedNewTargets) {
       if (!existing.targets.includes(t)) existing.targets.push(t);
     }
-    existing.version = version;
+    existing.skillVersion = skillVersion;
     existing.installedAt = Date.now();
   } else {
     // Clone the array so the caller cannot mutate the stored entry.
     manifest.entries.push({
       name: skillName,
-      version,
+      skillVersion,
       installedAt: Date.now(),
       targets: [...dedupedNewTargets],
     });
   }
 
   writeManifest(manifest, homeDir);
-  return existing ?? manifest.entries[manifest.entries.length - 1];
+  return existing ?? manifest.entries[manifest.entries.length - 1]!;
 }
 
 /**
@@ -208,7 +282,7 @@ export function removeEntry(
   const idx = manifest.entries.findIndex((e) => e.name === skillName);
   if (idx === -1) return [];
 
-  const entry = manifest.entries[idx];
+  const entry = manifest.entries[idx]!;
 
   if (targets.length === 0) {
     // Full removal
