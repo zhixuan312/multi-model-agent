@@ -3,6 +3,7 @@ import { createProvider, composeRunningHeadline } from '@zhixuan92/multi-model-a
 import type { ProjectContext, HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext, ClarificationProposal } from '@zhixuan92/multi-model-agent-core/executors/types';
 import type { HandlerDeps } from './handler-deps.js';
+import { __getTestProviderOverride } from './test-provider-override.js';
 
 /**
  * Builds the ExecutionContext passed to every executor.
@@ -66,7 +67,13 @@ export function buildExecutionContext(
     config: deps.config,
     logger: deps.logger,
     contextBlockStore: pc.contextBlocks,
-    providerFactory: (profile: string) => createProvider(profile as 'standard' | 'complex', deps.config),
+    providerFactory: (profile: string) => {
+      const override = __getTestProviderOverride();
+      if (override) {
+        return override;
+      }
+      return createProvider(profile as 'standard' | 'complex', deps.config);
+    },
     parentModel: process.env['PARENT_MODEL_NAME'],
     onProgress: undefined,
     batchId,

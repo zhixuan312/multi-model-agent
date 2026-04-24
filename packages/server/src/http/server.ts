@@ -178,6 +178,16 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   const { buildToolsHandler } = await import('./handlers/introspection/tools-list.js');
   router.register('GET', '/tools', buildToolsHandler());
 
+  // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
+  if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {
+    router.register('GET', '/__routes', (_req, res) => {
+      sendJson(res, 200, router.listRoutes().map((route) => ({
+        method: route.method.toUpperCase(),
+        path: route.path,
+      })));
+    });
+  }
+
   const server = createServer((req, res) => {
     void handleRequest(router, token, req, res, config);
   });
