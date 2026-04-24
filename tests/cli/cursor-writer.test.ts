@@ -143,9 +143,12 @@ describe('installCursor', () => {
     );
 
     const { lines } = captureStderr();
-    // Patch process.stderr.write for this test
+    // Patch process.stderr.write so the test can assert on captured output.
     const orig = process.stderr.write.bind(process.stderr);
-    process.stderr.write = (() => { for (const l of lines) orig(l); return true; }) as typeof process.stderr.write;
+    process.stderr.write = (s: string) => {
+      lines.push(s);
+      return orig(s);
+    } as typeof process.stderr.write;
     try {
       installCursor({
         content: 'new content',
