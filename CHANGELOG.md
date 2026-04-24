@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.6 — 2026-04-24
+
+### Fixed
+
+- **core (`@zhixuan92/multi-model-agent-core`).** `executeExecutePlan` hardcoded `agentType: 'standard'`, ignoring any tier the caller requested. `mma-execute-plan` now accepts an optional `agentType: 'standard' | 'complex'` in the input schema, and the executor plumbs it through to every dispatched task. Default remains `'standard'` when omitted. Lets users route plan-execution work to the complex tier (e.g. when a standard-tier model burns its turn budget on reads without producing artifacts).
+
 ## 3.1.5 — 2026-04-24
 
 ### Added
