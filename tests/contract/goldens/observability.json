@@ -1,0 +1,16 @@
+{
+  "events": [
+    {
+      "name": "task_started",
+      "requiredFields": ["event", "ts", "batchId", "taskIndex"]
+    },
+    {
+      "name": "task_heartbeat",
+      "requiredFields": ["event", "ts", "batchId", "taskIndex", "elapsedMs", "stage"]
+    },
+    {
+      "name": "batch_completed",
+      "requiredFields": ["event", "ts", "batchId", "tool", "durationMs", "taskCount"]
+    }
+  ]
+}
