@@ -5,6 +5,13 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.1.2 — 2026-04-24
+
+### Fixed
+
+- **server (`@zhixuan92/multi-model-agent`).** `mmagent serve --verbose` was silent after the initial `start worker=...` line for the entire duration of every batch. Root cause: HTTP handlers never pass `onProgress` to `runTasks`, and `run-tasks.ts` gated both HeartbeatTimer creation and `wrappedOnProgress` on `onProgress !== undefined`. The provider runners emit `tool_call` and `turn_complete` events correctly, but with no wrapper to receive them they were dropped. Now gates on "any verbose/logger/recordHeartbeat consumer is present" — so `--verbose` actually streams tool calls and LLM turns as the worker runs.
+- **server (`@zhixuan92/multi-model-agent`).** `GET /batch/:id` returned `1/1 queued` plain-text body for every poll during a pending batch, no matter how long the batch ran. `BatchEntry.tasksStarted` was declared in the schema but never written. `asyncDispatch` now sets `tasksTotal=1, tasksStarted=1` when the executor begins, and `tasksCompleted=1` before marking the batch complete. `composeRunningHeadline` now transitions to `1/1 running, Xs elapsed` as intended. Added `tests/server/async-dispatch-progress-wiring.test.ts` as a regression guard.
+
 ## 3.1.1 — 2026-04-24
 
 ### Fixed
