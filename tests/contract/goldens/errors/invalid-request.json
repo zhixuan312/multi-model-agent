@@ -1,0 +1,16 @@
+{
+  "error": {
+    "code": "invalid_request",
+    "message": "Request body validation failed",
+    "details": {
+      "fieldErrors": {
+        "formErrors": [],
+        "fieldErrors": {
+          "content": [
+            "Invalid input: expected string, received undefined"
+          ]
+        }
+      }
+    }
+  }
+}

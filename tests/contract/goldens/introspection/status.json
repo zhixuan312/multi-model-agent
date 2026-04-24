@@ -1,0 +1,19 @@
+{
+  "version": "3.1.6",
+  "pid": "<DETERMINISTIC>",
+  "bind": "127.0.0.1",
+  "uptimeMs": "<DETERMINISTIC>",
+  "auth": {
+    "enabled": true
+  },
+  "counters": {
+    "projectCount": 0,
+    "activeRequests": 0,
+    "activeBatches": 0
+  },
+  "projects": [],
+  "inflight": [],
+  "recent": [],
+  "skillVersion": null,
+  "skillCompatible": null
+}

@@ -18,10 +18,12 @@ const VOLATILE_KEYS = new Set([
   'sumOfTaskMs',
   'estimatedParallelSavingsMs',
   'durationMs',
+  'uptimeMs',
   'startedAt',
   'finishedAt',
   'timestamp',
   'batchId',
+  'pid',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);
