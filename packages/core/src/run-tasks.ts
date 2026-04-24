@@ -266,8 +266,13 @@ async function executeReviewedLifecycle(
               }
               lastStageSeen = event.stage;
             }
+            const costStr = event.costUSD !== null ? ` cost=$${event.costUSD.toFixed(4)}` : '';
+            const roundStr = event.reviewRound !== undefined && event.maxReviewRounds !== undefined
+              ? ` round=${event.reviewRound}/${event.maxReviewRounds}`
+              : '';
+            const sinceLastMs = Date.now() - prevEventAtMs;
             verboseStreamRaw(
-              `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ${event.elapsed} stage=${event.stage} tools=${event.progress.toolCalls} read=${event.progress.filesRead} wrote=${event.progress.filesWritten}`,
+              `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ${event.elapsed} stage=${event.stage}${roundStr} tools=${event.progress.toolCalls} read=${event.progress.filesRead} wrote=${event.progress.filesWritten} text=${textEmissionChars}c${costStr} idle=${sinceLastMs}ms`,
             );
           }
           synthOnProgress(taskIndex, event);
@@ -305,8 +310,28 @@ async function executeReviewedLifecycle(
   // verbose stream, or verbose logger). Previously this only wrapped when
   // the caller passed onProgress, so --verbose + HTTP handlers (which don't
   // pass onProgress) silently dropped every tool_call / turn_complete event.
+  let textEmissionChars = 0;
   const wrappedOnProgress = needHeartbeat
     ? (event: InternalRunnerEvent) => {
+        if (event.kind === 'turn_start') {
+          if (verbose) prevEventAtMs = Date.now();
+          if (verboseStream) {
+            verboseStream(
+              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} turn_start turn=${event.turn} provider=${event.provider}`,
+            );
+          }
+        }
+        if (event.kind === 'text_emission') {
+          textEmissionChars += event.chars;
+          if (verboseStream && event.chars > 0) {
+            const preview = event.preview.length > 60
+              ? event.preview.slice(0, 57) + '...'
+              : event.preview;
+            verboseStream(
+              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} text +${event.chars}c (total ${textEmissionChars}) preview="${preview.replace(/\n/g, '\\n')}"`,
+            );
+          }
+        }
         if (event.kind === 'tool_call') {
           progressCounters.toolCalls++;
           const name = event.toolSummary.split('(')[0];
