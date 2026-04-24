@@ -16,8 +16,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Regex matching a line that starts with `@include ` followed by a relative path. */
-const INCLUDE_RE = /^@include\s+(.+)$/gm;
+/** Regex matching `@include _shared/<file>.md` directive lines. */
+const INCLUDE_RE = /^@include\s+_shared\/(.+)$/;
 
 /**
  * Options for installing a Cursor skill.
