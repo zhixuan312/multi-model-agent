@@ -343,23 +343,32 @@ export async function executeReviewedLifecycle(
   }
 
   try {
-    const baselineHead = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
-    const baselinePorcelain = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
-    if (baselinePorcelain.length !== 0) {
-      return {
-        output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
-        status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-        turns: 0,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: true,
-        escalationLog: [],
-        error: `task.cwd ${cwd} had pre-existing modifications`,
-        errorCode: 'dirty_worktree',
-        commits,
-      };
+    // The dirty-tree precondition + git baseline only apply to artifact-producing tasks
+    // (those with autoCommit === true). Non-artifact presets — audit, review, verify,
+    // debug — neither produce commits nor read git state, so they bypass the check
+    // entirely. Per spec Section A: "Non-artifact tasks (audits, analyses, read-only
+    // investigations) skip stages 3 and 4."
+    const isArtifactProducing = task.autoCommit === true;
+    let baselineHead = '';
+    if (isArtifactProducing) {
+      baselineHead = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
+      const baselinePorcelain = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      if (baselinePorcelain.length !== 0) {
+        return {
+          output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          error: `task.cwd ${cwd} had pre-existing modifications`,
+          errorCode: 'dirty_worktree',
+          commits,
+        };
+      }
     }
 
     const implResult = await delegateWithEscalation(
@@ -371,7 +380,7 @@ export async function executeReviewedLifecycle(
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
     const workerStatus = extractWorkerStatus(implReport);
 
-    if (implResult.status === 'ok') {
+    if (implResult.status === 'ok' && isArtifactProducing) {
       await captureCommitsAfterImplementation(implResult, implReport, baselineHead);
     }
 

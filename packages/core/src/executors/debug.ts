@@ -60,7 +60,7 @@ export async function executeDebug(
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
     parentModel,
-    autoCommit: true,
+    autoCommit: false,
   };
   const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
