@@ -1,0 +1,922 @@
+{
+  "components": {
+    "parameters": {},
+    "schemas": {}
+  },
+  "info": {
+    "title": "multi-model-agent",
+    "version": "3.0.0"
+  },
+  "openapi": "3.0.3",
+  "paths": {
+    "/audit": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "auditType": {
+                    "anyOf": [
+                      {
+                        "enum": [
+                          "security",
+                          "performance",
+                          "correctness",
+                          "style",
+                          "general"
+                        ],
+                        "type": "string"
+                      },
+                      {
+                        "items": {
+                          "enum": [
+                            "security",
+                            "performance",
+                            "correctness",
+                            "style"
+                          ],
+                          "type": "string"
+                        },
+                        "minItems": 1,
+                        "type": "array"
+                      }
+                    ],
+                    "description": "Audit focus."
+                  },
+                  "contextBlockIds": {
+                    "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "document": {
+                    "description": "Inline document content to audit",
+                    "type": "string"
+                  },
+                  "filePaths": {
+                    "description": "Files the sub-agent should focus on. Multiple files are processed in parallel.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "auditType"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Audit documents or files",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/batch/{batchId}": {
+      "get": {
+        "parameters": [
+          {
+            "description": "Batch identifier",
+            "in": "path",
+            "name": "batchId",
+            "required": true,
+            "schema": {
+              "description": "Batch identifier",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Zero-based task index for result slicing",
+            "in": "query",
+            "name": "taskIndex",
+            "required": false,
+            "schema": {
+              "description": "Zero-based task index for result slicing",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Batch state (pending | awaiting_clarification | complete | failed | expired)"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "404": {
+            "description": "Resource not found"
+          }
+        },
+        "summary": "Poll batch status",
+        "tags": [
+          "Control"
+        ]
+      }
+    },
+    "/clarifications/confirm": {
+      "post": {
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "batchId": {
+                    "type": "string"
+                  },
+                  "interpretation": {
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "batchId",
+                  "interpretation"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Clarification accepted"
+          },
+          "400": {
+            "description": "Invalid batch state"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "404": {
+            "description": "Resource not found"
+          }
+        },
+        "summary": "Confirm a proposed interpretation to unblock an awaiting_clarification batch",
+        "tags": [
+          "Control"
+        ]
+      }
+    },
+    "/context-blocks": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "content": {
+                    "description": "Block content (plain text or markdown)",
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "Human-readable label",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "content"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Block created"
+          },
+          "400": {
+            "description": "Validation error or content too large"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Register a context block",
+        "tags": [
+          "Control"
+        ]
+      }
+    },
+    "/context-blocks/{blockId}": {
+      "delete": {
+        "parameters": [
+          {
+            "description": "Context block identifier",
+            "in": "path",
+            "name": "blockId",
+            "required": true,
+            "schema": {
+              "description": "Context block identifier",
+              "type": "string"
+            }
+          },
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "Block deleted (or was already absent)"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Delete a context block",
+        "tags": [
+          "Control"
+        ]
+      }
+    },
+    "/debug": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "context": {
+                    "description": "Background",
+                    "type": "string"
+                  },
+                  "contextBlockIds": {
+                    "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "filePaths": {
+                    "description": "Files the sub-agent should focus on. For debug_task, all provided files are investigated together in a single task.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "hypothesis": {
+                    "description": "Initial theory",
+                    "type": "string"
+                  },
+                  "problem": {
+                    "description": "What is broken",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "problem"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Debug a problem with sub-agent assistance",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/delegate": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "tasks": {
+                    "description": "Array of tasks to execute in parallel",
+                    "items": {
+                      "additionalProperties": false,
+                      "properties": {
+                        "agentType": {
+                          "description": "How hard the task is. Default: standard (cost-effective). Set to complex for harder reasoning or ambiguous scope.",
+                          "type": "string"
+                        },
+                        "contextBlockIds": {
+                          "description": "IDs from register_context_block to prepend to prompt.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "done": {
+                          "description": "Acceptance criteria in plain language. The worker works toward this goal. The reviewer verifies it.",
+                          "type": "string"
+                        },
+                        "filePaths": {
+                          "description": "Files the sub-agent should focus on. Existing files are pre-verified. Non-existent paths are treated as output targets.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "type": "array"
+                        },
+                        "prompt": {
+                          "description": "The task instruction. Required.",
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "prompt"
+                      ],
+                      "type": "object"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "tasks"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Dispatch tasks to sub-agents",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/execute-plan": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "agentType": {
+                    "description": "Worker tier. Default: \"standard\" (cost-effective). Set to \"complex\" for harder plan tasks that a smaller model cannot finish in the turn budget.",
+                    "enum": [
+                      "standard",
+                      "complex"
+                    ],
+                    "type": "string"
+                  },
+                  "context": {
+                    "description": "Short additional context the plan does not contain, e.g. \"Tasks 1-16 are done, files already exist\". Injected into the worker prompt.",
+                    "type": "string"
+                  },
+                  "contextBlockIds": {
+                    "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "filePaths": {
+                    "description": "Files the sub-agent should focus on. Multiple files are processed in parallel.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "tasks": {
+                    "description": "Descriptive task strings matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "tasks"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Execute tasks from a plan file",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/health": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "ok": {
+                      "enum": [
+                        true
+                      ],
+                      "type": "boolean"
+                    }
+                  },
+                  "required": [
+                    "ok"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Server is alive"
+          }
+        },
+        "summary": "Liveness probe — no auth required",
+        "tags": [
+          "Introspection"
+        ]
+      }
+    },
+    "/retry": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "batchId": {
+                    "description": "Batch id returned from a previous delegate_tasks call",
+                    "type": "string"
+                  },
+                  "taskIndices": {
+                    "description": "Zero-based indices (into the original batch) of the tasks to re-run",
+                    "items": {
+                      "minimum": 0,
+                      "type": "integer"
+                    },
+                    "type": "array"
+                  }
+                },
+                "required": [
+                  "batchId",
+                  "taskIndices"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Retry failed tasks from a previous batch",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/review": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "code": {
+                    "description": "Inline code to review",
+                    "type": "string"
+                  },
+                  "contextBlockIds": {
+                    "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "filePaths": {
+                    "description": "Files the sub-agent should focus on. Multiple files are processed in parallel.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "focus": {
+                    "items": {
+                      "enum": [
+                        "security",
+                        "performance",
+                        "correctness",
+                        "style"
+                      ],
+                      "type": "string"
+                    },
+                    "type": "array"
+                  }
+                },
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Review code for quality and security",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
+    "/status": {
+      "get": {
+        "responses": {
+          "200": {
+            "description": "Server status object (§5.10)"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          },
+          "403": {
+            "description": "Forbidden (loopback-only or path traversal)"
+          }
+        },
+        "summary": "Operator status — loopback + auth required",
+        "tags": [
+          "Introspection"
+        ]
+      }
+    },
+    "/verify": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "checklist": {
+                    "description": "Verification checklist items (at least 1)",
+                    "items": {
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "contextBlockIds": {
+                    "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "filePaths": {
+                    "description": "Files the sub-agent should focus on. Multiple files are processed in parallel.",
+                    "items": {
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "work": {
+                    "description": "Inline work product to verify",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "checklist"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Verify work against a checklist",
+        "tags": [
+          "Tools"
+        ]
+      }
+    }
+  }
+}
