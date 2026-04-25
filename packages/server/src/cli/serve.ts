@@ -18,10 +18,13 @@
 import { createHash, randomUUID } from 'node:crypto';
 import * as path from 'node:path';
 import * as fs from 'node:fs';
+import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
+import type { SessionSnapshot } from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
 import { startServer } from '../http/server.js';
+import { createRecorder } from '../telemetry/recorder.js';
 import { runUpdateSkills } from './update-skills.js';
 import { listEntries, FutureManifestError } from '../install/manifest.js';
 import { readSkillContent } from './install-skill.js';
@@ -88,6 +91,14 @@ function readServerVersion(): string {
   }
 }
 
+function compareSemver(a: string, b: string): number {
+  const [aMaj, aMin, aPat] = a.split('.').map(Number);
+  const [bMaj, bMin, bPat] = b.split('.').map(Number);
+  if (aMaj !== bMaj) return aMaj - bMaj;
+  if (aMin !== bMin) return aMin - bMin;
+  return aPat - bPat;
+}
+
 function envVarHint(agentName: string): string {
   return `${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
 }
@@ -141,6 +152,56 @@ export async function startServe(
   // Stripping to { server } here caused a 3.1.0 regression where tool
   // endpoints returned 503 'no_agent_config' even when agents were set.
   const running = await startServer(config as Parameters<typeof startServer>[0]);
+
+  // ── Telemetry: install.changed + session.started ─────────────────────
+  const homeDir = path.dirname(
+    config.server.auth.tokenFile.startsWith('~/')
+      ? path.join(os.homedir(), config.server.auth.tokenFile.slice(2))
+      : config.server.auth.tokenFile,
+  );
+
+  const mmagentVersion = readServerVersion();
+  const recorder = createRecorder({ homeDir, mmagentVersion });
+
+  const lastVersionPath = path.join(homeDir, 'last-version');
+  let lastVersion: string | null = null;
+  try {
+    lastVersion = fs.readFileSync(lastVersionPath, 'utf8').trim();
+  } catch {
+    // first run — no last-version file yet
+  }
+
+  if (lastVersion !== mmagentVersion) {
+    const trigger: 'fresh_install' | 'upgrade' | 'downgrade' =
+      lastVersion === null
+        ? 'fresh_install'
+        : compareSemver(lastVersion, mmagentVersion) < 0
+          ? 'upgrade'
+          : 'downgrade';
+    recorder.recordInstallChanged(lastVersion, mmagentVersion, trigger);
+    try {
+      fs.mkdirSync(homeDir, { recursive: true });
+      fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });
+    } catch {
+      // best-effort — don't block serve if we can't write last-version
+    }
+  }
+
+  const providersConfigured = new Set<'claude' | 'openai-compatible' | 'codex'>();
+  for (const agent of Object.values(config.agents)) {
+    const t = (agent as { type: string }).type;
+    if (t === 'claude' || t === 'claude-compatible') providersConfigured.add('claude');
+    else if (t === 'openai-compatible') providersConfigured.add('openai-compatible');
+    else if (t === 'codex') providersConfigured.add('codex');
+  }
+
+  const snapshot: SessionSnapshot = {
+    defaultTier: 'standard',
+    diagnosticsEnabled: config.diagnostics?.log ?? false,
+    autoUpdateSkills: config.server.autoUpdateSkills,
+    providersConfigured: [...providersConfigured],
+  };
+  recorder.recordSessionStarted(snapshot);
 
   // Fire once at serve startup. Lives here (not in loadConfigFromFile) so
   // print-token / info / status don't re-emit the same warning repeatedly.
