@@ -1,17 +1,20 @@
 import type { DraftTask, ExecutePlanSource } from '../types.js';
 import { createDraftId } from '../draft-id.js';
+import type { ReviewPolicy } from './delegate.js';
 
 export interface ExecutePlanInput {
   tasks: string[];
   fileContents: string;
   filePaths?: string[];
-  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off';
+  reviewPolicy?: ReviewPolicy;
 }
 
 export function compileExecutePlan(
   input: ExecutePlanInput,
   requestId: string,
 ): DraftTask[] {
+  const reviewPolicy = input.reviewPolicy ?? 'full';
+
   return input.tasks.map((task, index) => {
     const prompt = [
       'Below are the plan and/or spec documents for this project:',
@@ -37,12 +40,12 @@ export function compileExecutePlan(
       draftId: createDraftId(requestId, index, `task-${index}`),
       source: {
         route: 'execute_plan',
-        originalInput: { tasks: input.tasks, filePaths: input.filePaths, reviewPolicy: input.reviewPolicy } as unknown as Record<string, unknown>,
+        originalInput: { tasks: input.tasks, filePaths: input.filePaths, reviewPolicy } as Record<string, unknown>,
         filePaths: input.filePaths ?? [],
         task,
       } as ExecutePlanSource,
       prompt,
-      reviewPolicy: input.reviewPolicy,
+      reviewPolicy,
     };
   });
 }

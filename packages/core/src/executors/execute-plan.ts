@@ -93,7 +93,7 @@ export async function executeExecutePlan(
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: input.agentType ?? 'standard',
-    reviewPolicy: 'full',
+    reviewPolicy: input.reviewPolicy ?? 'full',
     briefQualityPolicy: 'off',
     done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
     tools: config.defaults?.tools ?? 'full',

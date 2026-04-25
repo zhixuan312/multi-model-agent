@@ -47,7 +47,7 @@ export async function executeDelegate(
   // Intake pipeline: compile → infer → classify → resolve
   const requestId = randomUUID();
   const drafts = compileDelegateTasks(
-    input.tasks as { prompt: string; done?: string; filePaths?: string[]; agentType?: string; contextBlockIds?: string[] }[],
+    input.tasks as { prompt: string; done?: string; filePaths?: string[]; agentType?: string; contextBlockIds?: string[]; reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off' }[],
     requestId,
   );
   const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
