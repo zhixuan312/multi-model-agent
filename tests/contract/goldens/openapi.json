@@ -714,6 +714,106 @@
         ]
       }
     },
+    "/investigate": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "additionalProperties": false,
+                "properties": {
+                  "agentType": {
+                    "enum": [
+                      "standard",
+                      "complex"
+                    ],
+                    "type": "string"
+                  },
+                  "contextBlockIds": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "filePaths": {
+                    "items": {
+                      "minLength": 1,
+                      "type": "string"
+                    },
+                    "type": "array"
+                  },
+                  "question": {
+                    "minLength": 1,
+                    "type": "string"
+                  },
+                  "tools": {
+                    "enum": [
+                      "none",
+                      "readonly"
+                    ],
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "question"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Investigate the codebase and answer a question with structured citations",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
     "/retry": {
       "post": {
         "parameters": [
