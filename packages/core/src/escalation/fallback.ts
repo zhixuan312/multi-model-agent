@@ -23,6 +23,15 @@ export function otherTier(t: AgentType): AgentType {
   return t === 'standard' ? 'complex' : 'standard';
 }
 
+/** Two providers are "identical" iff they resolve to the same effective backend
+ *  (type + model + baseUrl + apiKey wiring). When an operator points both tiers
+ *  at the same backend (one-provider deployment), cross-tier fallback is
+ *  structurally pointless — alt would just hit the same place. Comparing the
+ *  serialized config catches this without a new operator-facing flag. */
+export function providersIdentical(a: Provider, b: Provider): boolean {
+  return JSON.stringify(a.config) === JSON.stringify(b.config);
+}
+
 export interface RunWithFallbackInput<T> {
   assigned: AgentType;
   providerFor: (tier: AgentType) => Provider | undefined;
@@ -152,6 +161,22 @@ export async function runWithFallback<T>(
   fallbackReason = 'transport_failure';
   const fallbackTriggeringStatus = calledStatus;
   const altOfUsed = otherTier(usedTier as AgentType);
+
+  // Same-provider short-circuit: if alt resolves to a provider with the same
+  // effective config as the assigned tier (operator pointing both tiers at one
+  // backend), fallback would just hit the same backend. Skip the doomed call
+  // and return the assigned-tier failure as the terminal result. We do NOT
+  // mark alt unavailable here — the failure may be transient, and a future
+  // rework attempt should still be allowed to try.
+  const altProviderForSameCheck = providerFor(altOfUsed);
+  if (altProviderForSameCheck !== undefined && providersIdentical(provider, altProviderForSameCheck)) {
+    return {
+      result,
+      usedTier,
+      fallbackFired: false,
+      bothUnavailable: false,
+    };
+  }
 
   // Check alt availability (sticky first, then not-configured)
   let altUnavailableReason: FallbackReason | undefined;

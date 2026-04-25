@@ -90,7 +90,8 @@ All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 
 ## What's new in 3.5.1
 
-**Bug fix:**
+**Bug fixes:**
+- **Single-provider deployments no longer burn a doomed cross-tier fallback call.** When `agents.standard` and `agents.complex` resolve to the same backend (one-provider deployment) and the assigned-tier call transport-fails, the wrapper used to substitute to the alt tier — which in that configuration just hits the same backend, burning a second doomed call and surfacing as `terminationReason: 'all_tiers_unavailable'`. The original failure now flows through as the task's terminal result with the actual root-cause status. No new operator config; auto-detected via deep-equal of the effective provider config.
 - **No more `runner_crash: verbose-line: invalid key name` on fallback / rework paths.** With `diagnostics.verbose: true`, any run that hit fallback / escalation / spec_rework / quality_rework previously threw inside the verbose-stream serializer (camelCase event-param keys like `assignedTier`, `implTier`, `attemptCap` violated its snake_case-only validator) and surfaced as terminal `runner_crash` even though the model itself succeeded. The verbose-stream branch now drops `batchId` / `taskIndex` (already emitted as `batch` / `task`) and snake-cases the remaining keys; the JSONL `DiagnosticLogger` contract (camelCase `assignedTier` / `implTier` / ... on `escalation` / `fallback` events) is unchanged.
 
 ## What's new in 3.5.0
