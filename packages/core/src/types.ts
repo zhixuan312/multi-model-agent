@@ -78,6 +78,14 @@ export interface MultiModelConfig {
   }
 }
 
+export interface Commit {
+  sha: string
+  subject: string
+  body: string
+  filesChanged: string[]
+  authoredAt: string
+}
+
 export interface RunResult {
   output: string
   status: RunStatus
@@ -100,7 +108,7 @@ export interface RunResult {
   specReviewReason?: string
   filePathsSkipped?: boolean
   fileArtifactsMissing?: boolean
-  commitSha?: string
+  commits?: Commit[]
   commitError?: string
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string

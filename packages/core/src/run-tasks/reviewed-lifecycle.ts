@@ -1,9 +1,12 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   Provider,
   RunResult,
   TaskSpec,
   MultiModelConfig,
   AgentType,
+  Commit,
 } from '../types.js';
 import { computeCostUSD, computeSavedCostUSD } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
@@ -15,13 +18,17 @@ import { runQualityReview } from '../review/quality-reviewer.js';
 import type { QualityReviewResult } from '../review/quality-reviewer.js';
 import { aggregateResult } from '../review/aggregate-result.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
-import { autoCommitFiles } from '../auto-commit.js';
+import type { CommitFields } from '../reporting/structured-report.js';
+import { runCommitStage, readbackCommit } from './commit-stage.js';
+import { runMetadataRepairTurn } from './metadata-repair.js';
 import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.js';
 import type { RunTasksProgressCallback } from './index.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
 import { composeVerboseLine } from '../diagnostics/verbose-line.js';
 import { withDoneCondition } from './execute-task.js';
+
+const exec = promisify(execFile);
 
 export async function executeReviewedLifecycle(
   task: TaskSpec,
@@ -288,11 +295,73 @@ export async function executeReviewedLifecycle(
       }
     : undefined;
 
-  // Track auto-commit state across all rounds
-  let commitSha: string | undefined;
+  const cwd = task.cwd ?? process.cwd();
+  const commits: Commit[] = [];
   let commitError: string | undefined;
 
+  async function recordWorkerCommits(from: string, to = 'HEAD'): Promise<void> {
+    const { stdout: revs } = await exec('git', ['rev-list', '--reverse', `${from}..${to}`], { cwd });
+    for (const sha of revs.trim().split('\n').filter(Boolean)) {
+      const c = await readbackCommit(sha, cwd);
+      commits.push(c);
+    }
+  }
+
+  async function repairCommitMetadata(initialDiagnostic: string): Promise<CommitFields | null> {
+    let metadataAttempts = 0;
+    let lastZodError = initialDiagnostic || 'no commit block emitted';
+    let validCommit: CommitFields | null = null;
+    while (metadataAttempts < 2 && !validCommit) {
+      const preStatus = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      const repaired = await runMetadataRepairTurn({ task, zodError: lastZodError, cwd, providerSlot: resolved.slot, provider: resolved.provider });
+      const postStatus = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      metadataAttempts += 1;
+      if (preStatus !== postStatus) {
+        commitError = 'commit_metadata_repair_modified_files';
+        return null;
+      }
+      if (repaired.commit) validCommit = repaired.commit;
+      else lastZodError = repaired.commitDiagnostic ?? 'no commit block emitted';
+    }
+    if (!validCommit) commitError = `commit_metadata_invalid: ${lastZodError}`;
+    return validCommit;
+  }
+
+  async function captureCommitsAfterImplementation(implResult: RunResult, implReport: ReturnType<typeof parseStructuredReport> | undefined, baselineHead: string): Promise<void> {
+    const porcelain = (await exec('git', ['status', '--porcelain=v1'], { cwd })).stdout;
+    const headNow = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
+    const headMoved = headNow !== baselineHead;
+    const treeDirty = porcelain.length > 0;
+    if (!headMoved && !treeDirty) return;
+    if (headMoved) await recordWorkerCommits(baselineHead, 'HEAD');
+    if (treeDirty) {
+      const validCommit = implReport?.commit ?? await repairCommitMetadata(implReport?.commitDiagnostic ?? 'no commit block emitted');
+      if (!validCommit) return;
+      const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
+      commits.push(c);
+    }
+  }
+
   try {
+    const baselineHead = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
+    const baselinePorcelain = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+    if (baselinePorcelain.length !== 0) {
+      return {
+        output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
+        status: 'error',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+        turns: 0,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: true,
+        escalationLog: [],
+        error: `task.cwd ${cwd} had pre-existing modifications`,
+        errorCode: 'dirty_worktree',
+        commits,
+      };
+    }
+
     const implResult = await delegateWithEscalation(
       withDoneCondition(task),
       [resolved.provider],
@@ -302,15 +371,8 @@ export async function executeReviewedLifecycle(
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
     const workerStatus = extractWorkerStatus(implReport);
 
-    // Auto-commit: commit the worker's file changes
-    if (task.autoCommit && implResult.status === 'ok' && implResult.filesWritten.length > 0) {
-      const commitResult = autoCommitFiles(
-        implResult.filesWritten,
-        implReport?.summary ?? undefined,
-        task.cwd ?? process.cwd(),
-      );
-      commitSha = commitResult.sha;
-      commitError = commitResult.error;
+    if (implResult.status === 'ok') {
+      await captureCommitsAfterImplementation(implResult, implReport, baselineHead);
     }
 
     const filePathsInteracted = task.filePaths && task.filePaths.length > 0
@@ -356,7 +418,7 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: earlyFileArtifactsMissing,
-        commitSha,
+        commits,
         commitError,
       };
     }
@@ -380,7 +442,7 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
+        commits,
         commitError,
       };
     }
@@ -405,7 +467,7 @@ export async function executeReviewedLifecycle(
         },
         implementationReport: implReport,
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
+        commits,
         commitError,
       };
     }
@@ -432,7 +494,7 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
+        commits,
         commitError,
       };
     }
@@ -488,18 +550,6 @@ export async function executeReviewedLifecycle(
           [resolved.provider],
           { explicitlyPinned: true, onProgress: wrappedOnProgress },
         );
-
-        // Auto-commit rework changes
-        if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
-          const reworkReport = parseStructuredReport(reworkResult.output);
-          const reworkCommit = autoCommitFiles(
-            reworkResult.filesWritten,
-            reworkReport.summary ?? undefined,
-            task.cwd ?? process.cwd(),
-          );
-          if (reworkCommit.sha) commitSha = reworkCommit.sha;
-          if (reworkCommit.error) commitError = reworkCommit.error;
-        }
 
         finalImplResult = reworkResult;
         const reworkReport = parseStructuredReport(reworkResult.output);
@@ -571,18 +621,6 @@ export async function executeReviewedLifecycle(
             [resolved.provider],
             { explicitlyPinned: true, onProgress: wrappedOnProgress },
           );
-
-          // Auto-commit rework changes
-          if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
-            const reworkReport = parseStructuredReport(reworkResult.output);
-            const reworkCommit = autoCommitFiles(
-              reworkResult.filesWritten,
-              reworkReport.summary ?? undefined,
-              task.cwd ?? process.cwd(),
-            );
-            if (reworkCommit.sha) commitSha = reworkCommit.sha;
-            if (reworkCommit.error) commitError = reworkCommit.error;
-          }
 
           finalImplResult = reworkResult;
           const reworkReport = parseStructuredReport(reworkResult.output);
@@ -667,7 +705,7 @@ export async function executeReviewedLifecycle(
         qualityReviewer: reviewPolicy === 'full' ? reviewModel : null,
       },
       fileArtifactsMissing,
-      commitSha,
+      commits,
       commitError,
     };
   } finally {

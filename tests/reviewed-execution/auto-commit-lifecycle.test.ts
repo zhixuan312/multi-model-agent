@@ -42,12 +42,13 @@ vi.mock('fs', () => ({
   existsSync: vi.fn().mockReturnValue(true),
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/auto-commit', () => ({
-  autoCommitFiles: vi.fn().mockReturnValue({ sha: 'abc1234' }),
+vi.mock('@zhixuan92/multi-model-agent-core/run-tasks/commit-stage', () => ({
+  runCommitStage: vi.fn().mockResolvedValue({ sha: 'abc1234', subject: 'fix: implemented feature', body: '', filesChanged: ['src/a.ts'], authoredAt: '2026-04-25T00:00:00.000Z' }),
+  readbackCommit: vi.fn(),
 }));
 
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import { autoCommitFiles } from '@zhixuan92/multi-model-agent-core/auto-commit';
+import { runCommitStage } from '@zhixuan92/multi-model-agent-core/run-tasks/commit-stage';
 
 const config: MultiModelConfig = {
   agents: {
@@ -61,7 +62,7 @@ describe('auto-commit in reviewed lifecycle', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     implStatus = 'ok';
-    (autoCommitFiles as ReturnType<typeof vi.fn>).mockReturnValue({ sha: 'abc1234' });
+    (runCommitStage as ReturnType<typeof vi.fn>).mockResolvedValue({ sha: 'abc1234', subject: 'fix: implemented feature', body: '', filesChanged: ['src/a.ts'], authoredAt: '2026-04-25T00:00:00.000Z' });
   });
 
   it('commits when autoCommit is true and worker writes files', async () => {
@@ -69,12 +70,8 @@ describe('auto-commit in reviewed lifecycle', () => {
       [{ prompt: 'do task', agentType: 'standard' as const, autoCommit: true, briefQualityPolicy: 'off' as const }],
       config,
     );
-    expect(autoCommitFiles).toHaveBeenCalledWith(
-      ['src/a.ts'],
-      'Implemented feature',
-      expect.any(String),
-    );
-    expect(results[0].commitSha).toBe('abc1234');
+    expect(runCommitStage).toHaveBeenCalled();
+    expect(results[0].commits?.[0]?.sha).toBe('abc1234');
   });
 
   it('does not commit when autoCommit is false', async () => {
@@ -82,8 +79,8 @@ describe('auto-commit in reviewed lifecycle', () => {
       [{ prompt: 'do task', agentType: 'standard' as const, briefQualityPolicy: 'off' as const }],
       config,
     );
-    expect(autoCommitFiles).not.toHaveBeenCalled();
-    expect(results[0].commitSha).toBeUndefined();
+    expect(runCommitStage).not.toHaveBeenCalled();
+    expect(results[0].commits ?? []).toHaveLength(0);
   });
 
   it('does not commit when worker status is not ok', async () => {
@@ -92,11 +89,11 @@ describe('auto-commit in reviewed lifecycle', () => {
       [{ prompt: 'do task', agentType: 'standard' as const, autoCommit: true, briefQualityPolicy: 'off' as const }],
       config,
     );
-    expect(autoCommitFiles).not.toHaveBeenCalled();
+    expect(runCommitStage).not.toHaveBeenCalled();
   });
 
   it('captures commit error but preserves status', async () => {
-    (autoCommitFiles as ReturnType<typeof vi.fn>).mockReturnValue({ error: 'hook failed' });
+    (runCommitStage as ReturnType<typeof vi.fn>).mockRejectedValue(new Error('hook failed'));
     const results = await runTasks(
       [{ prompt: 'do task', agentType: 'standard' as const, autoCommit: true, briefQualityPolicy: 'off' as const }],
       config,

@@ -3,7 +3,9 @@
 // buildXResult functions. The provider-specific pieces (how usage is
 // sourced, how cost is computed, the exact diagnostic wording) are
 // passed in; the shared shape lives here.
-import type { RunResult } from '../../types.js';
+import type { Commit, RunResult } from '../../types.js';
+
+export type { Commit };
 import type { TokenUsage } from '../types.js';
 import type { FileTracker } from '../../tools/tracker.js';
 import type { TextScratchpad } from '../../tools/scratchpad.js';
