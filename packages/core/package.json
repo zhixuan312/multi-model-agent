@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.2.0",
+  "version": "3.3.0-dev",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -59,6 +59,34 @@
     "./diagnostics/disconnect-log": {
       "types": "./dist/diagnostics/disconnect-log.d.ts",
       "import": "./dist/diagnostics/disconnect-log.js"
+    },
+    "./diagnostics/verbose-line": {
+      "types": "./dist/diagnostics/verbose-line.d.ts",
+      "import": "./dist/diagnostics/verbose-line.js"
+    },
+    "./diagnostics/request-spill": {
+      "types": "./dist/diagnostics/request-spill.d.ts",
+      "import": "./dist/diagnostics/request-spill.js"
+    },
+    "./run-tasks/commit-stage": {
+      "types": "./dist/run-tasks/commit-stage.d.ts",
+      "import": "./dist/run-tasks/commit-stage.js"
+    },
+    "./run-tasks/verify-stage": {
+      "types": "./dist/run-tasks/verify-stage.d.ts",
+      "import": "./dist/run-tasks/verify-stage.js"
+    },
+    "./run-tasks/metadata-repair": {
+      "types": "./dist/run-tasks/metadata-repair.d.ts",
+      "import": "./dist/run-tasks/metadata-repair.js"
+    },
+    "./review/diff-review": {
+      "types": "./dist/review/diff-review.d.ts",
+      "import": "./dist/review/diff-review.js"
+    },
+    "./review/evidence": {
+      "types": "./dist/review/evidence.d.ts",
+      "import": "./dist/review/evidence.js"
     },
     "./heartbeat": {
       "types": "./dist/heartbeat.d.ts",
