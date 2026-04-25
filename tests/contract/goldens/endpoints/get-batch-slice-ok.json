@@ -72,7 +72,13 @@
         "specReviewer": null,
         "qualityReviewer": null
       },
-      "commits": []
+      "commits": [],
+      "verification": {
+        "status": "skipped",
+        "steps": [],
+        "totalDurationMs": 0,
+        "skipReason": "no_command"
+      }
     }
   ],
   "batchTimings": {

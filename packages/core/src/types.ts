@@ -56,6 +56,7 @@ export interface TaskSpec {
   expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
   requiredCapabilities?: AgentCapability[]
   testCommand?: string
+  verifyCommand?: string[]
   autoCommit?: boolean
   planContext?: string
 }

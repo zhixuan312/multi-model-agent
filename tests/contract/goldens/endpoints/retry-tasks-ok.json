@@ -77,7 +77,13 @@
         "no_done_condition",
         "tiny_brief"
       ],
-      "commits": []
+      "commits": [],
+      "verification": {
+        "status": "skipped",
+        "steps": [],
+        "totalDurationMs": 0,
+        "skipReason": "no_command"
+      }
     }
   ],
   "batchTimings": {

@@ -20,6 +20,7 @@ import { aggregateResult } from '../review/aggregate-result.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import type { CommitFields } from '../reporting/structured-report.js';
 import { runCommitStage, readbackCommit } from './commit-stage.js';
+import { runVerifyStage, type VerifyStageResult } from './verify-stage.js';
 import { runMetadataRepairTurn } from './metadata-repair.js';
 import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.js';
 import type { RunTasksProgressCallback } from './index.js';
@@ -296,8 +297,73 @@ export async function executeReviewedLifecycle(
     : undefined;
 
   const cwd = task.cwd ?? process.cwd();
+  const taskStartMs = Date.now();
   const commits: Commit[] = [];
   let commitError: string | undefined;
+  const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
+  let latestVerification: VerifyStageResult = defaultVerification;
+
+  const emitVerbose = (event: string, fields: Record<string, string | number | boolean | null | undefined>): void => {
+    if (!verboseStream) return;
+    verboseStream(composeVerboseLine({
+      event,
+      ts: new Date().toISOString(),
+      batch: shortBatch,
+      task: taskIndex,
+      ...fields,
+    }));
+  };
+
+  async function runVerificationStage(): Promise<VerifyStageResult> {
+    emitVerbose('stage_change', { from: 'committing', to: 'verifying' });
+    heartbeat?.transition({
+      stage: 'verifying' as never,
+      stageIndex: 4,
+      reviewRound: undefined,
+      maxReviewRounds: task.maxReviewRounds ?? 5,
+    });
+    const verification = await runVerifyStage({
+      cwd,
+      verifyCommand: task.verifyCommand,
+      taskTimeoutMs: task.timeoutMs ?? config.defaults.timeoutMs ?? 1_800_000,
+      taskStartMs,
+    });
+    latestVerification = verification;
+    for (const step of verification.steps) {
+      emitVerbose('verify_step', {
+        command: step.command,
+        status: step.status,
+        exit_code: step.exitCode,
+        signal: step.signal,
+        duration_ms: step.durationMs,
+        error_message: step.errorMessage ?? undefined,
+      });
+    }
+    if (verification.status === 'skipped') {
+      emitVerbose('verify_skipped', { reason: verification.skipReason ?? 'no_command', stage: 'verifying' });
+    }
+    return verification;
+  }
+
+  function withVerification(result: RunResult, verification = latestVerification): RunResult {
+    return { ...result, verification };
+  }
+
+  function verificationErrorResult(base: RunResult, verification: VerifyStageResult): RunResult | null {
+    if (verification.status !== 'error') return null;
+    const failedIndex = verification.steps.findIndex((step) => step.status !== 'passed');
+    const failedStep = failedIndex >= 0 ? verification.steps[failedIndex] : undefined;
+    return withVerification({
+      ...base,
+      status: 'error',
+      workerStatus: 'done_with_concerns',
+      error: failedStep?.errorMessage ?? 'verify command error',
+      errorCode: 'verify_command_error',
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
 
   async function recordWorkerCommits(from: string, to = 'HEAD'): Promise<void> {
     const { stdout: revs } = await exec('git', ['rev-list', '--reverse', `${from}..${to}`], { cwd });
@@ -354,7 +420,7 @@ export async function executeReviewedLifecycle(
       baselineHead = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
       const baselinePorcelain = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
       if (baselinePorcelain.length !== 0) {
-        return {
+        return withVerification({
           output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
           status: 'error',
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
@@ -367,7 +433,7 @@ export async function executeReviewedLifecycle(
           error: `task.cwd ${cwd} had pre-existing modifications`,
           errorCode: 'dirty_worktree',
           commits,
-        };
+        });
       }
     }
 
@@ -383,6 +449,10 @@ export async function executeReviewedLifecycle(
     if (implResult.status === 'ok' && isArtifactProducing) {
       await captureCommitsAfterImplementation(implResult, implReport, baselineHead);
     }
+
+    const verification = isArtifactProducing ? await runVerificationStage() : defaultVerification;
+    const verifyError = verificationErrorResult(implResult, verification);
+    if (verifyError) return verifyError;
 
     const filePathsInteracted = task.filePaths && task.filePaths.length > 0
       ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
@@ -429,6 +499,7 @@ export async function executeReviewedLifecycle(
         fileArtifactsMissing: earlyFileArtifactsMissing,
         commits,
         commitError,
+        verification,
       };
     }
 
@@ -453,6 +524,7 @@ export async function executeReviewedLifecycle(
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         commits,
         commitError,
+        verification,
       };
     }
 
@@ -478,6 +550,7 @@ export async function executeReviewedLifecycle(
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         commits,
         commitError,
+        verification,
       };
     }
 
@@ -505,6 +578,7 @@ export async function executeReviewedLifecycle(
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         commits,
         commitError,
+        verification,
       };
     }
 
@@ -716,6 +790,7 @@ export async function executeReviewedLifecycle(
       fileArtifactsMissing,
       commits,
       commitError,
+      verification,
     };
   } finally {
     heartbeat?.stop();
