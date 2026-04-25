@@ -13,9 +13,13 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = executePlan.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
-        fieldErrors: parsed.error.flatten(),
-      });
+      const fieldErrors: Record<string, string[]> = {};
+      for (const issue of parsed.error.issues) {
+        const path = issue.path.join('.');
+        if (!fieldErrors[path]) fieldErrors[path] = [];
+        fieldErrors[path].push(issue.message);
+      }
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', { fieldErrors });
       return;
     }
 
