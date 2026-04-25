@@ -52,6 +52,10 @@ export async function executeInvestigate(
       ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
       ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
       logger: ctx.logger,
+      ...(ctx.recorder !== undefined && { recorder: ctx.recorder }),
+      ...(ctx.route !== undefined && { route: ctx.route }),
+      ...(ctx.client !== undefined && { client: ctx.client }),
+      ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }),
     });
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));

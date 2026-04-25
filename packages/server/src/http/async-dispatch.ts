@@ -53,7 +53,7 @@ export function asyncDispatch<TResult>(
   });
 
   // Build execution context for this batch
-  const ctx = buildExecutionContext(deps, projectContext, batchId);
+  const ctx = buildExecutionContext(deps, projectContext, batchId, tool);
 
   // Schedule executor asynchronously — do not await here
   const startedAtMs = Date.now();

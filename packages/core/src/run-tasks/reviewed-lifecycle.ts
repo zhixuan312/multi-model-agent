@@ -86,7 +86,10 @@ export function endBaseStage(
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
 ): void {
-  stats[name] = {
+  // Cast through unknown — TS can't narrow stats[name] on a union-typed index;
+  // the runtime invariant (set name's slot to its matching variant) is enforced
+  // by the helper signature and tested by tests/run-tasks/stage-stats.test.ts.
+  (stats as Record<string, unknown>)[name] = {
     stage: name,
     entered: true,
     durationMs: Date.now() - t0,
@@ -94,7 +97,7 @@ export function endBaseStage(
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
-  } as StageStatsMap[typeof name];
+  };
 }
 
 export function endReviewStage(
@@ -107,7 +110,7 @@ export function endReviewStage(
   verdict: ReviewVerdict,
   roundsUsed: number,
 ): void {
-  stats[name] = {
+  (stats as Record<string, unknown>)[name] = {
     stage: name,
     entered: true,
     durationMs: Date.now() - t0,
@@ -117,7 +120,7 @@ export function endReviewStage(
     model: agent.model,
     verdict,
     roundsUsed,
-  } as StageStatsMap[typeof name];
+  };
 }
 
 export function endVerifyStage(
@@ -154,6 +157,19 @@ export async function executeReviewedLifecycle(
     verbose?: boolean;
     verboseStream?: (line: string) => void;
   },
+  recorder?: {
+    recordTaskCompleted: (ctx: {
+      route: string;
+      taskSpec: TaskSpec;
+      runResult: RunResult;
+      client: string;
+      triggeringSkill: string;
+      parentModel: string | null;
+    }) => void;
+  },
+  _route?: string,
+  _client?: string,
+  _triggeringSkill?: string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -1014,11 +1030,14 @@ export async function executeReviewedLifecycle(
       const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable || isReviewTransportFailure(diffCall.result) ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
       emitTaskEvent('review_decision', { stage: 'diff_review', verdict: 'kind' in verdict ? verdict.kind : 'skipped', round: 1 });
       endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(),
-        'kind' in verdict ? (verdict.kind === 'approved' ? 'approved'
-          : verdict.kind === 'changes_required' ? 'changes_required'
-          : verdict.kind === 'skipped' ? 'skipped'
-          : 'error')
-        : 'error',
+        // Diff review uses 'approve' | 'concerns' | 'reject' | 'transport_failure' (DiffReviewVerdict),
+        // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
+        'kind' in verdict
+          ? (verdict.kind === 'approve' ? 'approved'
+            : verdict.kind === 'concerns' ? 'concerns'
+            : verdict.kind === 'reject' ? 'changes_required'
+            : 'error')
+          : 'skipped',
         0);
       return resolveDiffOnlyTerminal({
         ...implResult,
@@ -1130,12 +1149,18 @@ export async function executeReviewedLifecycle(
     }
 
     let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: reviewPolicy === 'full' ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
+    // Hoisted so endReviewStage (called after this block) can read them on the
+    // success path. When the quality review is skipped (`reviewPolicy !== 'full'`),
+    // the values stay at 0/null and the corresponding stage entry remains in its
+    // `entered: false` default — endReviewStage is never called.
+    let qualityReviewT0 = 0;
+    let qualityReviewC0: number | null = null;
     if (reviewPolicy === 'full') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
       heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows });
-      const qualityReviewT0 = Date.now();
-      const qualityReviewC0 = runningCostUSD();
+      qualityReviewT0 = Date.now();
+      qualityReviewC0 = runningCostUSD();
       const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block) });
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
@@ -1266,7 +1291,7 @@ export async function executeReviewedLifecycle(
     const specEnvelopeStatus = (specStatus === 'api_error' || specStatus === 'network_error' || specStatus === 'timeout' ? 'error' : specStatus) as 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable';
     const qualityEnvelopeStatus = qualityResult.status === 'api_error' || qualityResult.status === 'network_error' || qualityResult.status === 'timeout' ? 'error' : qualityResult.status;
 
-    return {
+    const runResult: RunResult = {
       ...finalImplResult,
       status: finalStatus,
       workerStatus: finalWorkerStatus,
@@ -1295,8 +1320,32 @@ export async function executeReviewedLifecycle(
       commitError,
       verification,
     };
+
+    try {
+      recorder?.recordTaskCompleted({
+        route: _route ?? 'delegate',
+        taskSpec: task,
+        runResult,
+        client: _client ?? 'claude-code',
+        triggeringSkill: _triggeringSkill ?? 'direct',
+        parentModel: task.parentModel ?? null,
+      });
+    } catch { /* silent — bedrock invariant */ }
+
+    return runResult;
   } catch (err) {
-    return withVerification(workerErrorResult(err));
+    const errorRunResult = withVerification(workerErrorResult(err));
+    try {
+      recorder?.recordTaskCompleted({
+        route: _route ?? 'delegate',
+        taskSpec: task,
+        runResult: errorRunResult,
+        client: _client ?? 'claude-code',
+        triggeringSkill: _triggeringSkill ?? 'direct',
+        parentModel: task.parentModel ?? null,
+      });
+    } catch { /* silent — bedrock invariant */ }
+    return errorRunResult;
   } finally {
     heartbeat?.setStage('terminal', 8);
     heartbeat?.stop();

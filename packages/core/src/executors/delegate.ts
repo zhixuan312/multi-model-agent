@@ -71,6 +71,10 @@ export async function executeDelegate(
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
         ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
         logger: ctx.logger,
+        ...(ctx.recorder !== undefined && { recorder: ctx.recorder }),
+        ...(ctx.route !== undefined && { route: ctx.route }),
+        ...(ctx.client !== undefined && { client: ctx.client }),
+        ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }),
       });
       intakeResult.intakeProgress.executedDrafts = results.length;
     }

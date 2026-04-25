@@ -45,6 +45,23 @@ export interface RunTasksOptions {
   verbose?: boolean;
   /** Injectable stream target for verbose output. Defaults to process.stderr. */
   verboseStream?: (line: string) => void;
+  /** Telemetry recorder — fire-and-forget, failures are silently dropped. */
+  recorder?: {
+    recordTaskCompleted: (ctx: {
+      route: string;
+      taskSpec: TaskSpec;
+      runResult: RunResult;
+      client: string;
+      triggeringSkill: string;
+      parentModel: string | null;
+    }) => void;
+  };
+  /** Route name for telemetry (e.g. 'delegate', 'audit'). */
+  route?: string;
+  /** Client identifier for telemetry (e.g. 'claude-code', 'cursor'). */
+  client?: string;
+  /** Triggering skill for telemetry (e.g. 'mma-delegate', 'direct'). */
+  triggeringSkill?: string;
 }
 
 export async function runTasks(
@@ -159,7 +176,7 @@ export async function runTasks(
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
         verboseStream: options.verboseStream,
-      }).then(
+      }, options.recorder, options.route, options.client, options.triggeringSkill).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
