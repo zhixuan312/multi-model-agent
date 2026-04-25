@@ -11,6 +11,7 @@ dist/
 # under docs/superpowers/. Public docs (architecture, ADRs, guides)
 # can live elsewhere under docs/ and will be tracked normally.
 docs/superpowers/
+.superpowers/
 coverage/
 .vscode/
 .idea/
