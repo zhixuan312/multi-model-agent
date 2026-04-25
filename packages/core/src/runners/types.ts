@@ -85,7 +85,7 @@ export interface RunTasksRuntime {
 
 /** Internal progress events emitted by runners and the escalation orchestrator. */
 export type InternalRunnerEvent =
-  | { kind: 'turn_start'; turn: number; provider: string }
+  | { kind: 'turn_start'; turn: number; provider: string; model: string }
   | { kind: 'tool_call'; turn: number; toolSummary: string }
   | { kind: 'text_emission'; turn: number; chars: number; preview: string }
   | {

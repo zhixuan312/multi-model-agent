@@ -465,7 +465,7 @@ export async function runCodex(
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
         // append, watchdog logs, error diagnostics, result.turns).
-        emit({ kind: 'turn_start', turn: turns, provider: 'codex' });
+        emit({ kind: 'turn_start', turn: turns, provider: 'codex', model: providerConfig.model });
 
         // Codex backend requires streaming. The Codex backend's
         // `response.completed` event does NOT populate `response.output` —

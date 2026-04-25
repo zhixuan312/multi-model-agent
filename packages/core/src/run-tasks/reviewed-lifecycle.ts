@@ -195,6 +195,7 @@ export async function executeReviewedLifecycle(
             emitTaskEvent('turn_start', {
               turn: event.turn,
               provider: event.provider,
+              model: event.model,
             });
           }
         }

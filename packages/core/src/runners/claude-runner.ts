@@ -378,7 +378,7 @@ export async function runClaude(
       for await (const msg of query({ prompt: messageQueue, options: queryOptions })) {
         if (msg.type === 'assistant') {
           turns++;
-          emit({ kind: 'turn_start', turn: turns, provider: 'claude' });
+          emit({ kind: 'turn_start', turn: turns, provider: providerConfig.type, model: providerConfig.model });
 
           // Capture every assistant text block as scratchpad fodder. The
           // claude-agent-sdk's BetaMessage.content is an array of blocks:
@@ -435,7 +435,7 @@ export async function runClaude(
           const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
           if (watchdogStatus !== 'ok') {
             logWatchdogEvent(watchdogStatus, {
-              provider: 'claude',
+              provider: providerConfig.type,
               model: providerConfig.model,
               turn: turns,
               inputTokens,
@@ -580,7 +580,7 @@ export async function runClaude(
           const postResultWatchdog = checkWatchdogThreshold(inputTokens, softLimit);
           if (postResultWatchdog === 'force_salvage') {
             logWatchdogEvent(postResultWatchdog, {
-              provider: 'claude',
+              provider: providerConfig.type,
               model: providerConfig.model,
               turn: turns,
               inputTokens,

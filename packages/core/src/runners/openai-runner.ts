@@ -325,7 +325,7 @@ export async function runOpenAI(
     input: string | AgentInputItem[],
   ): Promise<AgentRunOutput> => {
     const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;
-    emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible' });
+    emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible', model: runner.providerConfig.model });
     const result = (await agentRun(agent, input, {
       maxTurns: Number.MAX_SAFE_INTEGER,
       signal: abortController.signal,
