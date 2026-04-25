@@ -7,6 +7,7 @@ import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-co
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
+import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
 
 /** Builds injectDefaults for delegate/retry — fills harness-level TaskSpec fields from config. */
@@ -63,6 +64,8 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
         });
       },
     });
+
+    await emitRequestReceived({ config: deps.config, batchId, route: _req.url ?? '', parsed: input });
 
     sendJson(res, 202, { batchId, statusUrl });
   };
