@@ -68,8 +68,6 @@ async function registerToolHandlers(
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
 
-  const logger = createDiagnosticLogger({ enabled: false });
-
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
   // have `server:`, we create a stub config. Real CLI startup will load full config.
@@ -90,6 +88,11 @@ async function registerToolHandlers(
     }
     return;
   }
+
+  const logger = createDiagnosticLogger({
+    enabled: multiModelConfig.diagnostics?.log ?? false,
+    ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+  });
 
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
@@ -141,7 +144,10 @@ async function registerControlHandlers(
   if (multiModelConfig) {
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
-      logger: createDiagnosticLogger({ enabled: false }),
+      logger: createDiagnosticLogger({
+        enabled: multiModelConfig.diagnostics?.log ?? false,
+        ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+      }),
       projectRegistry,
       batchRegistry,
     };
