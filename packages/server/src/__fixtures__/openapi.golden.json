@@ -445,13 +445,6 @@
                           "minimum": 0,
                           "type": "number"
                         },
-                        "maxReviewRounds": {
-                          "default": 3,
-                          "description": "Maximum combined spec/quality review rework rounds before the review loop aborts.",
-                          "maximum": 10,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
                         "prompt": {
                           "description": "The task instruction. Required.",
                           "type": "string"
@@ -551,14 +544,6 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
-                  "agentType": {
-                    "description": "Worker tier. Default: \"standard\" (cost-effective). Set to \"complex\" for harder plan tasks that a smaller model cannot finish in the turn budget.",
-                    "enum": [
-                      "standard",
-                      "complex"
-                    ],
-                    "type": "string"
-                  },
                   "context": {
                     "description": "Short additional context the plan does not contain, e.g. \"Tasks 1-16 are done, files already exist\". Injected into the worker prompt.",
                     "type": "string"
@@ -582,13 +567,6 @@
                     "exclusiveMinimum": true,
                     "minimum": 0,
                     "type": "number"
-                  },
-                  "maxReviewRounds": {
-                    "default": 3,
-                    "description": "Maximum combined spec/quality review rework rounds before the review loop aborts.",
-                    "maximum": 10,
-                    "minimum": 0,
-                    "type": "integer"
                   },
                   "tasks": {
                     "description": "Descriptive task strings or task objects matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
