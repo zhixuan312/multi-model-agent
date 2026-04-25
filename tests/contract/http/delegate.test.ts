@@ -24,6 +24,27 @@ async function pollToTerminal(baseUrl: string, token: string, batchId: string): 
 }
 
 describe('contract: POST /delegate', () => {
+  async function dispatch(body: unknown) {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+      body: JSON.stringify(body),
+    });
+    await h.close();
+    return res;
+  }
+
+  it('accepts agentType: standard', async () => {
+    const res = await dispatch({ tasks: [{ prompt: 'test', agentType: 'standard' }] });
+    expect(res.status).toBe(202);
+  });
+
+  it('accepts agentType: complex', async () => {
+    const res = await dispatch({ tasks: [{ prompt: 'test', agentType: 'complex' }] });
+    expect(res.status).toBe(202);
+  });
+
   for (const stage of STAGES) {
     it(`produces the ${stage} envelope`, async () => {
       const h = await boot({ provider: mockProvider({ stage }), cwd: process.cwd() });
