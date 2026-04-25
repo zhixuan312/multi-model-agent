@@ -35,5 +35,10 @@ export function aggregateResult(
       ...(specReport?.unresolved ?? []),
       ...(qualityReport?.unresolved ?? []),
     ],
+    extraSections: {
+      ...(implReport.extraSections ?? {}),
+      ...(specReport?.extraSections ?? {}),
+      ...(qualityReport?.extraSections ?? {}),
+    },
   };
 }

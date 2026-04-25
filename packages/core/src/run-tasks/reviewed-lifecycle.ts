@@ -600,6 +600,7 @@ export async function executeReviewedLifecycle(
           validationsRun: effectiveImplReport.validationsRun,
           deviationsFromBrief: effectiveImplReport.deviationsFromBrief,
           unresolved: effectiveImplReport.unresolved,
+          extraSections: effectiveImplReport.extraSections ?? {},
         },
         filePathsSkipped,
         agents: {

@@ -147,3 +147,30 @@ describe('(none) literal handling', () => {
     expect(r.filesChanged).toEqual([{ path: 'src/none-handler.ts', summary: 'tweak' }]);
   });
 });
+
+describe('extraSections', () => {
+  it('exposes unrecognized sections under their lowercased trimmed header', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Citations\n- a:1 — y\n## Confidence\nhigh\n');
+    expect(r.extraSections['citations']).toEqual(['- a:1 — y']);
+    expect(r.extraSections['confidence']).toEqual(['high']);
+  });
+
+  it('does NOT include the five typed headers in extraSections', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\n(none)\n## Validations run\n(none)\n## Deviations from brief\nnone\n## Unresolved\nfoo\n');
+    expect(r.extraSections['summary']).toBeUndefined();
+    expect(r.extraSections['files changed']).toBeUndefined();
+    expect(r.extraSections['validations run']).toBeUndefined();
+    expect(r.extraSections['deviations from brief']).toBeUndefined();
+    expect(r.extraSections['unresolved']).toBeUndefined();
+  });
+
+  it('last occurrence wins for duplicate headers', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Citations\n- a:1 — first\n## Citations\n- b:2 — second\n');
+    expect(r.extraSections['citations']).toEqual(['- b:2 — second']);
+  });
+
+  it('returns empty extraSections object when the report has no extras', () => {
+    const r = parseStructuredReport('## Summary\nhello\n');
+    expect(r.extraSections).toEqual({});
+  });
+});

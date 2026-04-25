@@ -60,6 +60,7 @@ export interface ParsedStructuredReport {
   validationsRun: Array<{ command: string; result: string }>;
   deviationsFromBrief: string[];
   unresolved: string[];
+  extraSections: Record<string, string[]>;
   commit?: CommitFields;
   commitDiagnostic?: string;
 }
@@ -74,16 +75,29 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
       validationsRun: [],
       deviationsFromBrief: [],
       unresolved: [],
+      extraSections: {},
     };
   }
 
   const sections = extractSections(output);
+
+  const TYPED_HEADERS = new Set([
+    'summary', 'files changed', 'validations run', 'deviations from brief', 'unresolved',
+  ]);
+  const extraSections: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(sections)) {
+    if (!TYPED_HEADERS.has(key)) {
+      extraSections[key] = value;
+    }
+  }
+
   const report: ParsedStructuredReport = {
     summary: sections['summary']?.[0] ?? null,
     filesChanged: parseFilesChanged(sections['files changed']),
     validationsRun: parseValidationsRun(sections['validations run']),
     deviationsFromBrief: sections['deviations from brief'] ?? [],
     unresolved: sections['unresolved'] ?? [],
+    extraSections,
   };
 
   const commitMatch = output.match(/(?:^|\n)\s*commit:\s*({[\s\S]*?})\s*(?:\n|$)/);
@@ -190,7 +204,7 @@ function isLegitimatelyEmpty(lines: string[] | undefined): boolean {
 
 function parseFilesChanged(lines: string[] | undefined): FileChange[] {
   if (isLegitimatelyEmpty(lines)) return [];
-  return lines
+  return (lines as string[])
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))
     .map(l => {
@@ -202,7 +216,7 @@ function parseFilesChanged(lines: string[] | undefined): FileChange[] {
 
 function parseValidationsRun(lines: string[] | undefined): Array<{ command: string; result: string }> {
   if (isLegitimatelyEmpty(lines)) return [];
-  return lines
+  return (lines as string[])
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))
     .map(l => {

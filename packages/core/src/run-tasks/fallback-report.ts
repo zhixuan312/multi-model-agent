@@ -34,5 +34,6 @@ export function buildFallbackImplReport(result: RunResult): ParsedStructuredRepo
     validationsRun: [],
     deviationsFromBrief: [],
     unresolved: [],
+    extraSections: {},
   };
 }
