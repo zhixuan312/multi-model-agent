@@ -52,7 +52,7 @@ function makeCtx(opts: MakeCtxOpts = {}): { ctx: ExecutionContext; cwd: string; 
   const ctx: ExecutionContext = {
     projectContext: { cwd, contextBlockStore: { get: () => undefined, register: () => ({ id: 'x' }) } as any, lastActivityAt: Date.now() } as any,
     config,
-    logger: { event: () => {}, child: () => ({ event: () => {} } as any) } as any,
+    logger: { event: () => {}, emit: () => {}, child: () => ({ event: () => {}, emit: () => {} } as any) } as any,
     contextBlockStore: { get: () => undefined, register: () => ({ id: 'x' }) } as any,
     batchId: 'test-batch',
   };

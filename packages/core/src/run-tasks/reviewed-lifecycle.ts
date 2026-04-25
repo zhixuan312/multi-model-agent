@@ -71,6 +71,20 @@ export async function executeReviewedLifecycle(
     : undefined;
   const verboseBatchIdEarly = heartbeatWiring?.batchId;
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
+  const taskEventLogger = diagnostics?.logger;
+  type EventField = string | number | boolean | null | undefined;
+  const emitTaskEvent = (event: string, fields: Record<string, EventField>): void => {
+    if (taskEventLogger && verboseBatchIdEarly !== undefined) {
+      const cleaned: Record<string, EventField> = {};
+      for (const [key, value] of Object.entries(fields)) {
+        if (value !== undefined) cleaned[key] = value;
+      }
+      taskEventLogger.emit({ event, batchId: verboseBatchIdEarly, taskIndex, ...cleaned });
+    }
+    if (verboseStreamRaw) {
+      verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...fields }));
+    }
+  };
   // Start the heartbeat whenever there's a downstream consumer:
   // - onProgress (external progress callback from the runTasks caller)
   // - verbose (stderr stream needs the heartbeat's tool_call / turn_complete relay)
@@ -89,45 +103,30 @@ export async function executeReviewedLifecycle(
   const heartbeat = needHeartbeat
     ? new HeartbeatTimer(
         (event) => {
-          if (verboseStreamRaw && event.kind === 'heartbeat') {
+          if (event.kind === 'heartbeat') {
             // Emit on every heartbeat tick so the operator can confirm
             // the timer is actually firing. Stage-change lines are richer
             // but fire only on transitions; plain ticks let you see
             // per-5s progress inside a long-running stage.
             if (event.stage !== lastStageSeen) {
               if (lastStageSeen !== undefined) {
-                verboseStreamRaw(
-                  composeVerboseLine({
-                    event: 'stage_change',
-                    ts: new Date().toISOString(),
-                    batch: shortBatchEarly,
-                    task: taskIndex,
-                    from: lastStageSeen,
-                    to: event.stage,
-                  }),
-                );
+                emitTaskEvent('stage_change', { from: lastStageSeen, to: event.stage });
               }
               lastStageSeen = event.stage;
             }
             const sinceLastMs = Date.now() - prevEventAtMs;
-            verboseStreamRaw(
-              composeVerboseLine({
-                event: 'heartbeat',
-                ts: new Date().toISOString(),
-                batch: shortBatchEarly,
-                task: taskIndex,
-                elapsed: event.elapsed,
-                stage: event.stage,
-                round: event.reviewRound,
-                cap: event.maxReviewRounds,
-                tools: event.progress.toolCalls,
-                read: event.progress.filesRead,
-                wrote: event.progress.filesWritten,
-                text: textEmissionChars,
-                cost: event.costUSD,
-                idle_ms: sinceLastMs,
-              }),
-            );
+            emitTaskEvent('heartbeat', {
+              elapsed: event.elapsed,
+              stage: event.stage,
+              round: event.reviewRound,
+              cap: event.maxReviewRounds,
+              tools: event.progress.toolCalls,
+              read: event.progress.filesRead,
+              wrote: event.progress.filesWritten,
+              text: textEmissionChars,
+              cost: event.costUSD,
+              idle_ms: sinceLastMs,
+            });
           }
           synthOnProgress(taskIndex, event);
         },
@@ -140,39 +139,18 @@ export async function executeReviewedLifecycle(
       )
     : undefined;
   heartbeat?.start(stageCount);
-  if (verboseStreamRaw) {
-    verboseStreamRaw(
-      composeVerboseLine({
-        event: 'heartbeat_timer',
-        ts: new Date().toISOString(),
-        batch: shortBatchEarly,
-        task: taskIndex,
-        state: heartbeat ? 'started' : 'disabled',
-        stage_count: stageCount,
-        tick_ms: heartbeat ? 5000 : undefined,
-        reason: heartbeat ? undefined : 'no_consumer',
-      }),
-    );
-  }
+  emitTaskEvent('heartbeat_timer', {
+    state: heartbeat ? 'started' : 'disabled',
+    stage_count: stageCount,
+    tick_ms: heartbeat ? 5000 : undefined,
+    reason: heartbeat ? undefined : 'no_consumer',
+  });
 
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
-  const verboseLogger = verbose && diagnostics?.logger ? diagnostics.logger : undefined;
-  const verboseBatchId = verboseBatchIdEarly;
   const verboseStream = verboseStreamRaw;
-  const shortBatch = shortBatchEarly;
-  if (verboseStream) {
-    verboseStream(
-      composeVerboseLine({
-        event: 'worker_start',
-        ts: new Date().toISOString(),
-        batch: shortBatch,
-        task: taskIndex,
-        worker: resolved.provider.config.model,
-      }),
-    );
-  }
+  emitTaskEvent('worker_start', { worker: resolved.provider.config.model });
   let prevEventAtMs = verbose ? Date.now() : 0;
   // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
   // verbose stream, or verbose logger). Previously this only wrapped when
@@ -184,37 +162,25 @@ export async function executeReviewedLifecycle(
         if (event.kind === 'turn_start') {
           heartbeat?.markEvent('llm');
           if (verbose) prevEventAtMs = Date.now();
-          if (verboseStream) {
-            verboseStream(
-              composeVerboseLine({
-                event: 'turn_start',
-                ts: new Date().toISOString(),
-                batch: shortBatch,
-                task: taskIndex,
-                turn: event.turn,
-                provider: event.provider,
-              }),
-            );
+          if (verbose) {
+            emitTaskEvent('turn_start', {
+              turn: event.turn,
+              provider: event.provider,
+            });
           }
         }
         if (event.kind === 'text_emission') {
           heartbeat?.markEvent('text');
           textEmissionChars += event.chars;
-          if (verboseStream && event.chars > 0) {
+          if (verbose && event.chars > 0) {
             const preview = event.preview.length > 60
               ? event.preview.slice(0, 57) + '...'
               : event.preview;
-            verboseStream(
-              composeVerboseLine({
-                event: 'text_emission',
-                ts: new Date().toISOString(),
-                batch: shortBatch,
-                task: taskIndex,
-                chars: event.chars,
-                total: textEmissionChars,
-                preview,
-              }),
-            );
+            emitTaskEvent('text_emission', {
+              chars: event.chars,
+              total: textEmissionChars,
+              preview,
+            });
           }
         }
         if (event.kind === 'tool_call') {
@@ -230,25 +196,11 @@ export async function executeReviewedLifecycle(
           const now = verbose ? Date.now() : 0;
           const sincePrevMs = verbose ? now - prevEventAtMs : 0;
           if (verbose) prevEventAtMs = now;
-          if (verboseLogger && verboseBatchId) {
-            verboseLogger.toolCall({
-              batchId: verboseBatchId,
-              taskIndex,
+          if (verbose) {
+            emitTaskEvent('tool_call', {
               tool: event.toolSummary,
-              durationMs: sincePrevMs,
+              duration_ms: sincePrevMs,
             });
-          }
-          if (verboseStream) {
-            verboseStream(
-              composeVerboseLine({
-                event: 'tool_call',
-                ts: new Date().toISOString(),
-                batch: shortBatch,
-                task: taskIndex,
-                tool: event.toolSummary,
-                duration_ms: sincePrevMs,
-              }),
-            );
           }
         }
         if (event.kind === 'turn_complete') {
@@ -268,31 +220,14 @@ export async function executeReviewedLifecycle(
           const nowTurn = verbose ? Date.now() : 0;
           const turnDurMs = verbose ? nowTurn - prevEventAtMs : 0;
           if (verbose) prevEventAtMs = nowTurn;
-          if (verboseLogger && verboseBatchId) {
-            verboseLogger.llmTurn({
-              batchId: verboseBatchId,
-              taskIndex,
-              turnIndex: progressCounters.toolCalls,
+          if (verbose) {
+            emitTaskEvent('turn_complete', {
+              input_tokens: event.cumulativeInputTokens,
+              output_tokens: event.cumulativeOutputTokens,
+              cost: costUSD,
+              duration_ms: turnDurMs,
               provider: resolved.provider.config.model,
-              inputTokens: event.cumulativeInputTokens,
-              outputTokens: event.cumulativeOutputTokens,
-              costUSD,
             });
-          }
-          if (verboseStream) {
-            verboseStream(
-              composeVerboseLine({
-                event: 'turn_complete',
-                ts: new Date().toISOString(),
-                batch: shortBatch,
-                task: taskIndex,
-                input_tokens: event.cumulativeInputTokens,
-                output_tokens: event.cumulativeOutputTokens,
-                cost: costUSD,
-                duration_ms: turnDurMs,
-                provider: resolved.provider.config.model,
-              }),
-            );
           }
         }
       }
@@ -331,19 +266,8 @@ export async function executeReviewedLifecycle(
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
 
-  const emitVerbose = (event: string, fields: Record<string, string | number | boolean | null | undefined>): void => {
-    if (!verboseStream) return;
-    verboseStream(composeVerboseLine({
-      event,
-      ts: new Date().toISOString(),
-      batch: shortBatch,
-      task: taskIndex,
-      ...fields,
-    }));
-  };
-
   async function runVerificationStage(): Promise<VerifyStageResult> {
-    emitVerbose('stage_change', { from: 'committing', to: 'verifying' });
+    emitTaskEvent('stage_change', { from: 'committing', to: 'verifying' });
     heartbeat?.transition({
       stage: 'verifying' as never,
       stageIndex: 4,
@@ -358,7 +282,7 @@ export async function executeReviewedLifecycle(
     });
     latestVerification = verification;
     for (const step of verification.steps) {
-      emitVerbose('verify_step', {
+      emitTaskEvent('verify_step', {
         command: step.command,
         status: step.status,
         exit_code: step.exitCode,
@@ -368,7 +292,7 @@ export async function executeReviewedLifecycle(
       });
     }
     if (verification.status === 'skipped') {
-      emitVerbose('verify_skipped', { reason: verification.skipReason ?? 'no_command', stage: 'verifying' });
+      emitTaskEvent('verify_skipped', { reason: verification.skipReason ?? 'no_command', stage: 'verifying' });
     }
     return verification;
   }
@@ -616,7 +540,7 @@ export async function executeReviewedLifecycle(
     if (implResult.filesWritten.length === 0) {
       heartbeat?.updateStageCount(1);
       if (reviewPolicy === 'off') {
-        emitVerbose('stage_change', { from: 'verifying', to: 'terminal' });
+        emitTaskEvent('stage_change', { from: 'verifying', to: 'terminal' });
         const terminal = resolveOffTerminal({
           ...implResult,
           workerStatus,
@@ -709,7 +633,7 @@ export async function executeReviewedLifecycle(
     }
 
     if (reviewPolicy === 'off') {
-      emitVerbose('stage_change', { from: 'verifying', to: 'terminal' });
+      emitTaskEvent('stage_change', { from: 'verifying', to: 'terminal' });
       const terminal = resolveOffTerminal({
         ...implResult,
         workerStatus,
@@ -778,7 +702,7 @@ export async function executeReviewedLifecycle(
       : { block: '', diffTruncated: false, fullDiff: '' };
 
     if (reviewPolicy === 'diff_only') {
-      emitVerbose('stage_change', { from: 'verifying', to: 'diff_review' });
+      emitTaskEvent('stage_change', { from: 'verifying', to: 'diff_review' });
       heartbeat?.transition({
         stage: 'diff_review' as never,
         stageIndex: 2,
@@ -792,7 +716,7 @@ export async function executeReviewedLifecycle(
         verification,
         worker: { call: (prompt: string) => otherProvider.run(prompt) },
       });
-      emitVerbose('review_decision', { stage: 'diff_review', verdict: verdict.kind, round: 1 });
+      emitTaskEvent('review_decision', { stage: 'diff_review', verdict: verdict.kind, round: 1 });
       return resolveDiffOnlyTerminal({
         ...implResult,
         workerStatus,
@@ -843,10 +767,10 @@ export async function executeReviewedLifecycle(
         }
         const currentCostUSD = taskCostUSD();
         if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
-          emitVerbose('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+          emitTaskEvent('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
           return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework', 'spec');
         }
-        emitVerbose('stage_change', { from: 'spec_review', to: 'spec_rework', round: specRework + 1, cap: maxReviewRounds });
+        emitTaskEvent('stage_change', { from: 'spec_review', to: 'spec_rework', round: specRework + 1, cap: maxReviewRounds });
         specRework++;
         const round = specRework;
         heartbeat?.transition({
@@ -924,10 +848,10 @@ export async function executeReviewedLifecycle(
           }
           const currentCostUSD = taskCostUSD();
           if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
-            emitVerbose('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+            emitTaskEvent('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
             return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
           }
-          emitVerbose('stage_change', { from: 'quality_review', to: 'quality_rework', round: qualityRework + 1, cap: maxReviewRounds });
+          emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', round: qualityRework + 1, cap: maxReviewRounds });
           qualityRework++;
           const round = qualityRework;
           heartbeat?.transition({

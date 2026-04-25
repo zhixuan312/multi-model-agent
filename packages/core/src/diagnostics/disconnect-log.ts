@@ -18,6 +18,9 @@ export type ShutdownCause =
 
 export type SessionCloseReason = 'client_closed' | 'transport_error' | 'session_expired' | 'daemon_shutdown' | 'handshake_failed';
 
+export type EventPrimitive = string | number | boolean | null;
+export interface TaskEvent { event: string; batchId: string; taskIndex: number; [key: string]: EventPrimitive | undefined; }
+
 export interface DiagnosticLogger {
   startup(version: string, extras?: { transport?: 'stdio' | 'http' }): void;
   requestStart(params: {
@@ -49,20 +52,7 @@ export interface DiagnosticLogger {
 
   // Task lifecycle events (3.1.0)
   taskStarted(params: { batchId: string; taskIndex: number; worker?: string }): void;
-  taskHeartbeat(params: { batchId: string; taskIndex: number; elapsedMs: number; stage?: string }): void;
-  taskPhaseChange(params: { batchId: string; taskIndex: number; fromStage: string; toStage: string }): void;
-
-  // Verbose events (3.1.0) — only called when diagnostics.verbose === true
-  toolCall(params: { batchId: string; taskIndex: number; tool: string; durationMs?: number }): void;
-  llmTurn(params: {
-    batchId: string;
-    taskIndex: number;
-    turnIndex: number;
-    provider?: string;
-    inputTokens?: number;
-    outputTokens?: number;
-    costUSD?: number | null;
-  }): void;
+  emit(event: TaskEvent): void;
   batchCompleted(params: { batchId: string; tool: string; durationMs: number; taskCount: number }): void;
   batchFailed(params: { batchId: string; tool: string; durationMs: number; errorCode: string; errorMessage: string }): void;
 }
@@ -145,10 +135,7 @@ export function createDiagnosticLogger(
       projectCreated: () => {},
       projectEvicted: () => {},
       taskStarted: () => {},
-      taskHeartbeat: () => {},
-      taskPhaseChange: () => {},
-      toolCall: () => {},
-      llmTurn: () => {},
+      emit: () => {},
       batchCompleted: () => {},
       batchFailed: () => {},
     };
@@ -374,52 +361,18 @@ export function createDiagnosticLogger(
         ...(worker !== undefined ? { worker } : {}),
       });
     },
-    taskHeartbeat: ({ batchId, taskIndex, elapsedMs, stage }) => {
+    emit: ({ event: name, batchId, taskIndex, ...rest }) => {
       if (state.inert) return;
-      writeLine({
-        event: 'task_heartbeat',
+      const out: Record<string, unknown> = {
+        event: name,
         ts: now().toISOString(),
         batchId,
         taskIndex,
-        elapsedMs,
-        ...(stage !== undefined ? { stage } : {}),
-      });
-    },
-    taskPhaseChange: ({ batchId, taskIndex, fromStage, toStage }) => {
-      if (state.inert) return;
-      writeLine({
-        event: 'task_phase_change',
-        ts: now().toISOString(),
-        batchId,
-        taskIndex,
-        fromStage,
-        toStage,
-      });
-    },
-    toolCall: ({ batchId, taskIndex, tool, durationMs }) => {
-      if (state.inert) return;
-      writeLine({
-        event: 'tool_call',
-        ts: now().toISOString(),
-        batchId,
-        taskIndex,
-        tool,
-        ...(durationMs !== undefined ? { durationMs } : {}),
-      });
-    },
-    llmTurn: ({ batchId, taskIndex, turnIndex, provider, inputTokens, outputTokens, costUSD }) => {
-      if (state.inert) return;
-      writeLine({
-        event: 'llm_turn',
-        ts: now().toISOString(),
-        batchId,
-        taskIndex,
-        turnIndex,
-        ...(provider !== undefined ? { provider } : {}),
-        ...(inputTokens !== undefined ? { inputTokens } : {}),
-        ...(outputTokens !== undefined ? { outputTokens } : {}),
-        ...(costUSD !== undefined && costUSD !== null ? { costUSD } : {}),
-      });
+      };
+      for (const [key, value] of Object.entries(rest)) {
+        if (value !== undefined) out[key] = value;
+      }
+      writeLine(out);
     },
     batchCompleted: ({ batchId, tool, durationMs, taskCount }) => {
       if (state.inert) return;

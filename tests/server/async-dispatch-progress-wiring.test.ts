@@ -17,8 +17,6 @@ function stubDeps(batchRegistry: BatchRegistry): HandlerDeps {
     sessionOpen: vi.fn(), sessionClose: vi.fn(),
     connectionRejected: vi.fn(), requestRejected: vi.fn(),
     projectCreated: vi.fn(), projectEvicted: vi.fn(),
-    taskStarted: vi.fn(), taskHeartbeat: vi.fn(), taskPhaseChange: vi.fn(),
-    toolCall: vi.fn(), llmTurn: vi.fn(),
     batchCompleted: vi.fn(), batchFailed: vi.fn(),
   } satisfies HandlerDeps['logger'];
   return {
