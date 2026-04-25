@@ -64,143 +64,47 @@ const response403 = { description: 'Forbidden (loopback-only or path traversal)'
 /** Standard 404 error response. */
 const response404 = { description: 'Resource not found' };
 
+// Tool-endpoint registration table. Each row contributes one path with the
+// shared shape: POST /<path>?cwd=<abs>, JSON body, async 202 response.
+const TOOL_ENDPOINTS: Array<{ path: string; summary: string; schema: z.ZodTypeAny }> = [
+  { path: '/delegate', summary: 'Dispatch tasks to sub-agents', schema: delegate.inputSchema },
+  { path: '/audit', summary: 'Audit documents or files', schema: audit.inputSchema },
+  { path: '/review', summary: 'Review code for quality and security', schema: review.inputSchema },
+  { path: '/verify', summary: 'Verify work against a checklist', schema: verify.inputSchema },
+  { path: '/debug', summary: 'Debug a problem with sub-agent assistance', schema: debug.inputSchema },
+  { path: '/execute-plan', summary: 'Execute tasks from a plan file', schema: executePlan.inputSchema },
+  { path: '/retry', summary: 'Retry failed tasks from a previous batch', schema: retry.inputSchema },
+];
+
+function registerToolEndpoint(
+  registry: OpenAPIRegistry,
+  row: { path: string; summary: string; schema: z.ZodTypeAny },
+): void {
+  registry.registerPath({
+    method: 'post',
+    path: row.path,
+    summary: row.summary,
+    tags: ['Tools'],
+    request: {
+      query: z.object({ cwd: z.string().describe('Project working directory') }),
+      body: {
+        required: true,
+        content: { 'application/json': { schema: row.schema } },
+      },
+    },
+    responses: {
+      202: asyncResponse202,
+      400: { description: 'Request validation error' },
+      401: response401,
+    },
+  });
+}
+
 export function buildOpenApiDoc(): Record<string, unknown> {
   const registry = new OpenAPIRegistry();
 
   // ── Tool endpoints (POST, require cwd + auth) ───────────────────────────────
-
-  registry.registerPath({
-    method: 'post',
-    path: '/delegate',
-    summary: 'Dispatch tasks to sub-agents',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: delegate.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/audit',
-    summary: 'Audit documents or files',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: audit.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/review',
-    summary: 'Review code for quality and security',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: review.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/verify',
-    summary: 'Verify work against a checklist',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: verify.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/debug',
-    summary: 'Debug a problem with sub-agent assistance',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: debug.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/execute-plan',
-    summary: 'Execute tasks from a plan file',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: executePlan.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/retry',
-    summary: 'Retry failed tasks from a previous batch',
-    tags: ['Tools'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: { 'application/json': { schema: retry.inputSchema } },
-      },
-    },
-    responses: {
-      202: asyncResponse202,
-      400: { description: 'Request validation error' },
-      401: response401,
-    },
-  });
+  for (const row of TOOL_ENDPOINTS) registerToolEndpoint(registry, row);
 
   // ── Control endpoints ───────────────────────────────────────────────────────
 
