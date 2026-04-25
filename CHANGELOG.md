@@ -14,6 +14,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 - `executeReviewedLifecycle` no longer overwrites the worker's structured report with a "no file artifacts" wrapper when `reviewPolicy === 'off'`. (Also benefits `audit_document`.)
+- Diagnostic logger refactor: every task-execution event the worker emits to the verbose stderr stream is now also written to the JSONL diagnostic log via a single `emit(TaskEvent)` writer. Removed the per-event typed methods (`taskHeartbeat`, `taskPhaseChange`, `toolCall`, `llmTurn`) on `DiagnosticLogger`. JSONL keys remain camelCase (`batchId`, `taskIndex`); stderr keys remain short-form (`batch`, `task`); event names match across both sinks.
 
 ## 3.3.0 — 2026-04-25
 
