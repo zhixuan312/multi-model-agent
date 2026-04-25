@@ -36,6 +36,7 @@ import { main as installSkillMain } from './install-skill.js';
 import { runInfo } from './info.js';
 import { runUpdateSkills } from './update-skills.js';
 import { runLogs } from './logs.js';
+import { runTelemetry } from './telemetry.js';
 
 /**
  * Minimal I/O dependencies — allows tests to intercept stdout/stderr and
@@ -180,6 +181,7 @@ Commands:
   install-skill    Install or uninstall a skill for an AI client
   update-skills    Re-copy installed skills from the shipped bundle
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
+  telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
 
 Global options:
   --config, -c <path>   Path to config file
@@ -342,6 +344,24 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       const code = await installSkillMain({
         argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
+        stdout: deps.stdout,
+        stderr: deps.stderr,
+      });
+      exit(code);
+      break;
+    }
+    case 'telemetry': {
+      const home = deps.homeDir?.() ?? os.homedir();
+      const telemetrySubcommand = positional[1] ?? 'status';
+      const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
+      if (!validSubcommands.includes(telemetrySubcommand)) {
+        stderr(`mmagent telemetry: unknown subcommand '${telemetrySubcommand}'\nValid: ${validSubcommands.join(', ')}\n`);
+        exit(1);
+        break;
+      }
+      const code = await runTelemetry({
+        subcommand: telemetrySubcommand as 'status' | 'enable' | 'disable' | 'reset-id' | 'dump-queue',
+        homeDir: home,
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
