@@ -1,15 +1,32 @@
 ---
 name: mma-context-blocks
-description: Register large reused documents (spec, plan, codebase summary) as a context block the mmagent service caches, then reference it by ID across multiple mma-* calls. Avoids re-uploading the same content on every task.
-when_to_use: A document larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the returned ID via the contextBlockIds field on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug. Cheaper and faster than inlining the same content in every request body.
+description: Use when a document larger than ~2 KB will be referenced by 2+ subsequent mma-* calls — register once, pass the returned ID to each call instead of re-uploading the same content
+when_to_use: A document (spec, plan, codebase summary, prior round's findings, error log) larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the ID via `contextBlockIds` on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug / mma-investigate. Cheaper and faster than inlining the same content N times.
 version: "0.0.0-unreleased"
 ---
 
-## mma-context-blocks
+# mma-context-blocks
 
-Store large documents once; reference them by ID in subsequent `mma-*` calls
-via `contextBlockIds`. The service prepends the block content to each task
-prompt that references it.
+## Overview
+
+Store large documents once; reference them by ID in subsequent `mma-*` calls via `contextBlockIds`. The service prepends the block content to each task prompt that references the ID — content is transmitted ONCE to the daemon, then reused server-side.
+
+**Core principle:** Without context blocks, the same document is sent N times for N tasks. Blocks transmit once. The savings compound on shared specs, prior-round findings, and codebase summaries.
+
+## When to Use
+
+**Use when:**
+- A doc >2 KB will be referenced by ≥2 mma-* calls
+- You're running iterative audit/review rounds (round 2 references round 1's findings)
+- A spec or design doc is the shared input across N parallel tasks
+- A long error log is the context for debug + delegate calls
+
+**Don't use when:**
+- The doc is <2 KB and used once → just inline it (registration overhead exceeds savings)
+- The doc changes between calls → context blocks are immutable; register a new one
+- Single task that doesn't reference any large shared content → no benefit
+
+## Endpoints
 
 ### Register a context block
 
@@ -29,7 +46,7 @@ prompt that references it.
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `content` | string | yes | Document content (min 1 char) |
-| `ttlMs` | number | no | Time-to-live in ms; omit for session-scoped |
+| `ttlMs` | number | no | Time-to-live in ms; omit for session-scoped (default 1h) |
 
 #### Response (201)
 
@@ -37,34 +54,49 @@ prompt that references it.
 { "id": "cb_abc123" }
 ```
 
-Use this `id` as a `contextBlockIds` entry in `mma-delegate`, `mma-audit`,
-`mma-review`, `mma-verify`, `mma-debug`, or `mma-execute-plan`.
+Use this `id` as a `contextBlockIds` entry in any `mma-*` skill that supports it.
 
 ### Delete a context block
 
 `DELETE /context-blocks/:id?cwd=<abs-path>`
 
-Returns `200 { ok: true }` on success.
+Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held by one or more active batches — wait for those batches to complete before deleting.
 
-Returns `409 pinned` if the block is held by one or more active batches —
-wait for those batches to complete before deleting.
-
-### Example
+## Full example
 
 ```bash
-# Register spec document
+# Register spec document once
 ID=$(curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
   "http://localhost:$PORT/context-blocks?cwd=/project" | jq -r '.id')
 
-# Use in a delegate call
+# Reference from N delegate tasks
 curl -f --show-error -s -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d "{\"tasks\":[{\"prompt\":\"Implement per spec\",\"contextBlockIds\":[\"$ID\"]}]}" \
+  -d "{\"tasks\":[
+    {\"prompt\":\"Implement section 3 per spec\",\"contextBlockIds\":[\"$ID\"]},
+    {\"prompt\":\"Implement section 4 per spec\",\"contextBlockIds\":[\"$ID\"]}
+  ]}" \
   "http://localhost:$PORT/delegate?cwd=/project"
 ```
+
+## Common pitfalls
+
+❌ **Inlining the same 50KB spec into every task prompt**
+> tasks: [{prompt: "Implement section 3:\n[50KB spec]"}, {prompt: "Implement section 4:\n[50KB spec]"}]
+
+N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each task.
+
+❌ **Forgetting to delete short-TTL blocks**
+Blocks count against the project's context-block quota. **Fix:** explicitly `DELETE` after the dependent batches finish — or set a short `ttlMs` so they self-evict.
+
+❌ **Trying to update a block's content**
+Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.
+
+❌ **Deleting a block while a batch still references it**
+Returns `409 pinned`. **Fix:** poll the dependent batches to terminal first, then delete.
 
 @include _shared/error-handling.md

@@ -1,23 +1,38 @@
 ---
 name: mma-debug
-description: Debug a failure using a structured hypothesis via the local mmagent HTTP service. All provided files are investigated together in a single task on a worker.
-when_to_use: A test fails, a build breaks, or behavior is unexpected AND you need to read files, reproduce the failure, or narrow root cause OR a methodology skill (superpowers:systematic-debugging) points at the investigation step. Delegate the read/reproduce/trace work to a mmagent worker so your main context stays focused on the hypothesis and the fix.
+description: Use when a test fails, a build breaks, or behavior is unexpected AND narrowing the root cause requires reading files, reproducing the failure, or tracing across multiple modules — the worker investigates so the main agent stays on the hypothesis
+when_to_use: A failure has surfaced (test/build/runtime) AND you need investigation work — read files, reproduce, trace — OR a methodology skill (superpowers:systematic-debugging) points at the investigation step. Delegate the read/reproduce/trace; the main agent stays on the hypothesis and the fix.
 version: "0.0.0-unreleased"
 ---
 
-## mma-debug
+# mma-debug
 
-Submit a problem, context, and hypothesis to a sub-agent for focused
-debugging. Unlike other tools, all `filePaths` are investigated together
-in a single task (not parallelised per file).
+## Overview
 
-### Endpoint
+Submit a problem, context, and hypothesis to a worker for focused debugging. Unlike `mma-audit` and `mma-review`, all `filePaths` are investigated TOGETHER in a single task (not parallelized per file) — debugging needs cross-file reasoning.
+
+**Core principle:** The hypothesis is judgment (your job). Reading files and reproducing the failure is labor (the worker's job). Pass the hypothesis as input; receive structured findings.
+
+## When to Use
+
+**Use when:**
+- A test fails / build breaks / runtime behavior is unexpected
+- The root cause likely spans 2+ files
+- You have a hypothesis to test (or want the worker to suggest one)
+- A methodology skill (`superpowers:systematic-debugging`) routed here
+
+**Don't use when:**
+- The error message points at one file you can read in 30 seconds → just `Read`
+- You don't know what's broken yet → use `mma-investigate` first to map the area
+- You already know the fix → skip debug, dispatch `mma-delegate` with the fix
+
+## Endpoint
 
 `POST /debug?cwd=<abs-path>`
 
 @include _shared/auth.md
 
-### Request body
+## Request body
 
 ```json
 {
@@ -34,13 +49,13 @@ in a single task (not parallelised per file).
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `problem` | string | yes | What is broken |
-| `context` | string | no | Background information |
-| `hypothesis` | string | no | Initial theory to test |
-| `filePaths` | string[] | no | All files investigated together |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `problem` | string | yes | What is broken (one sentence; concrete symptom) |
+| `context` | string | no | Background — what changed recently, what works, what doesn't |
+| `hypothesis` | string | no | Your initial theory; worker tests it first, then explores |
+| `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 
-### Full example
+## Full example
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
@@ -51,10 +66,27 @@ BATCH=$(curl -f --show-error -s -X POST \
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
-Then poll until complete:
-
 @include _shared/polling.md
 
 @include _shared/response-shape.md
+
+## Common pitfalls
+
+❌ **Vague `problem`**
+> "The login is broken"
+
+Worker has no symptom to chase. **Fix:** specific reproducer — `"POST /login with body {user:'a@b.c', pass:'café'} returns 500 with 'invalid character' in stderr"`.
+
+❌ **No `hypothesis`**
+The worker explores blindly, often investigates the wrong area first. **Fix:** even a weak hypothesis ("might be encoding-related") narrows the search space.
+
+❌ **Splitting one bug across multiple `mma-debug` calls**
+Debug intentionally bundles `filePaths` for cross-file reasoning. Splitting defeats this. **Fix:** one call with all suspect files; if you really have N independent failures, use `mma-delegate` with N tasks.
+
+❌ **Treating `mma-debug` as the fix step**
+Debug investigates and proposes; it doesn't necessarily write the fix. If the worker identifies a fix, dispatch `mma-delegate` to implement it (or write it inline if you understand it).
+
+❌ **Skipping when an error message looks self-explanatory**
+Often the obvious cause isn't the real one. A 30-second debug pass costs less than a wrong fix that breaks something else.
 
 @include _shared/error-handling.md

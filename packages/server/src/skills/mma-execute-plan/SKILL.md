@@ -1,23 +1,37 @@
 ---
 name: mma-execute-plan
-description: Execute tasks from a plan or spec file on disk via the local mmagent HTTP service. Delegates to cheap sub-agents that don't consume your main-model context window. Task descriptors match plan headings; tasks run in parallel.
-when_to_use: A plan file exists on disk (any markdown with numbered task headings — docs/superpowers/plans/*.md, a TODO list, a spec doc) AND you need to implement one or more tasks from it. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans when mmagent is running — delegated workers are cheaper and don't pollute main context. Task descriptors must match the plan headings verbatim.
+description: Use when a plan or spec file exists on disk (any markdown with numbered task headings — docs/superpowers/plans/*.md, a TODO list, a spec doc) and you need to implement one or more tasks from it on cheap workers in parallel
+when_to_use: A plan file exists on disk AND you need to implement one or more tasks from it AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:subagent-driven-development / superpowers:executing-plans — workers are cheaper and don't pollute main context. Task descriptors must match plan headings verbatim.
 version: "0.0.0-unreleased"
 ---
 
-## mma-execute-plan
+# mma-execute-plan
 
-Dispatch named tasks from a plan file to sub-agents. Task descriptors must
-match plan headings (e.g. `"1. Setup database schema"`). All tasks run in
-parallel and duplicate descriptors are rejected.
+## Overview
 
-### Endpoint
+Dispatch named tasks from a plan file to workers. Each `tasks` string must match a heading in the plan verbatim (e.g. `"1. Setup database schema"`). All tasks run in parallel; duplicate descriptors are rejected.
+
+**Core principle:** The plan IS the prompt. Workers re-read the plan file in-process and find their named task — you don't need to inline the task body.
+
+## When to Use
+
+**Use when:**
+- A plan/spec markdown exists with numbered task headings
+- You want to dispatch a subset (or all) of those tasks
+- Tasks are mostly independent (parallel-safe)
+
+**Don't use when:**
+- No plan file → `mma-delegate` (pass the prompt directly)
+- Tasks form a hard linear sequence (later tasks depend on earlier ones' outputs) → dispatch in order, one batch each
+- The "plan" is in conversation only, not on disk → write it to disk first, or use `mma-delegate`
+
+## Endpoint
 
 `POST /execute-plan?cwd=<abs-path>`
 
 @include _shared/auth.md
 
-### Request body
+## Request body
 
 ```json
 {
@@ -37,22 +51,19 @@ parallel and duplicate descriptors are rejected.
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `tasks` | string[] | yes | At least one; must be unique; match plan headings |
+| `tasks` | string[] \| `{task, reviewPolicy}[]` | yes | At least one; must be unique; each string matches a plan heading |
 | `context` | string | no | Short additional context not in the plan |
-| `filePaths` | string[] | no | Plan file + relevant source files |
+| `filePaths` | string[] | no | Plan file + relevant source files. Required: the plan file itself. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"` (cheap). Switch to `"complex"` for tasks too large for a standard-tier model to finish in the turn budget (reads many files, produces many edits, or the last run came back with `filesWritten: 0`). |
-| `verifyCommand` | string[] | no | Commands to run after each plan task completion to verify the work |
-| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | Per-task review lifecycle policy when a task is passed as `{ "task": "...", "reviewPolicy": "..." }`. Default `"full"` |
+| `agentType` | `"standard"` / `"complex"` | no | Default `"standard"`. Use `"complex"` for tasks too large for the standard tier — reads many files, produces many edits, or the last run came back with `filesWritten: 0`. |
+| `verifyCommand` | string[] | no | See verify-and-review snippet below |
+| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | See verify-and-review snippet below. Default `"full"`. |
 
-Set `verifyCommand` when the worker can run a deterministic local check after editing, such as `npm test`, `npm run lint`, or a focused package test. Commands run in order after task completion; each string must be non-empty after trimming. Omit it when no reliable command exists.
+@include _shared/verify-and-review.md
 
-Set `reviewPolicy: 'diff_only'` when you want a cheaper single-pass review of the produced diff without spec-review rework loops. Use `reviewPolicy: 'full'` for default spec + quality review, `reviewPolicy: 'spec_only'` when quality review is not needed, and `reviewPolicy: 'off'` only for trusted low-risk tasks where verification is enough.
+If the batch reaches `awaiting_clarification`, use `mma-clarifications` to confirm or correct the proposed interpretation.
 
-If the batch reaches `awaiting_clarification`, use `mma-clarifications`
-to confirm or correct the proposed interpretation.
-
-### Full example
+## Full example
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
@@ -63,10 +74,26 @@ BATCH=$(curl -f --show-error -s -X POST \
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
-Then poll until complete:
-
 @include _shared/polling.md
 
 @include _shared/response-shape.md
+
+## Common pitfalls
+
+❌ **Task descriptor doesn't match plan heading verbatim**
+> tasks: ["Migrate db schema"]    ← plan heading is "3. Migrate database schema"
+
+Worker rejects with "no matching task" or matches the wrong one. **Fix:** copy the heading from the plan, including the leading number.
+
+❌ **Forgetting the plan file in `filePaths`**
+> filePaths: ["/project/src/db/schema.sql"]    ← no plan file
+
+Worker can't read the task body. **Fix:** always include the plan path: `filePaths: ["/project/docs/plan.md", "/project/src/db/schema.sql"]`.
+
+❌ **Dispatching dependent tasks in one batch**
+Task 5 depends on Task 4's output → workers race; Task 5 might run before Task 4 finishes. **Fix:** dispatch Task 4, wait for terminal, then dispatch Task 5.
+
+❌ **Skipping `verifyCommand` when one exists**
+A passing local check is the cheapest signal you're going to get. **Fix:** wire `["npm test"]` or the focused package test.
 
 @include _shared/error-handling.md
