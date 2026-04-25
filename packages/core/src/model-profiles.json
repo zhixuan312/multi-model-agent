@@ -20,13 +20,15 @@
     "provider": "openai",
     "naming": "gpt-{major}.{minor}[-{size}] — sizes: pro, mini, nano (no suffix = base)",
     "rateSource": "https://developers.openai.com/api/docs/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-04-25",
     "defaults": { "supportsEffort": true, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "gpt",             "tier": "standard",  "cost": "medium", "input": 2.5,   "output": 15,   "bestFor": "general GPT family tasks (catch-all)" },
       { "prefix": "gpt-5",           "tier": "reasoning",                                                    "bestFor": "reasoning-tier coding and agentic workflows", "inputTokenSoftLimit": 1000000, "capabilities": ["web_search"] },
-      { "prefix": "gpt-5.4",                                                                                 "bestFor": "latest GPT-5 flagship" },
-      { "prefix": "gpt-5.4-pro",                          "cost": "high",   "input": 30,    "output": 180,  "bestFor": "highest-quality reasoning and complex research" },
+      { "prefix": "gpt-5.5",                                                "input": 5,     "output": 30,   "bestFor": "latest GPT-5 flagship" },
+      { "prefix": "gpt-5.5-pro",                          "cost": "high",   "input": 30,    "output": 180,  "bestFor": "highest-quality reasoning and complex research" },
+      { "prefix": "gpt-5.4",                                                                                 "bestFor": "prior GPT-5 flagship" },
+      { "prefix": "gpt-5.4-pro",                          "cost": "high",   "input": 30,    "output": 180,  "bestFor": "previous-gen high-end reasoning" },
       { "prefix": "gpt-5.4-mini",    "tier": "standard",  "cost": "low",   "input": 0.75,  "output": 4.5,  "bestFor": "fast cost-effective tasks and extraction" },
       { "prefix": "gpt-5.4-nano",    "tier": "standard",  "cost": "low",   "input": 0.2,   "output": 1.25, "bestFor": "cheapest GPT for high-throughput batch work", "capabilities": [] },
       { "prefix": "gpt-5.3",                                                "input": 1.75,  "output": 14,   "bestFor": "reasoning and coding at lower cost than 5.4" },
@@ -72,12 +74,14 @@
   },
   {
     "provider": "deepseek",
-    "naming": "deepseek-{variant} — flat pricing across variants",
+    "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-04-25",
     "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
-      { "prefix": "deepseek",        "tier": "standard",  "cost": "low",   "input": 0.3,   "output": 0.5,  "bestFor": "cost-effective coding and reasoning" }
+      { "prefix": "deepseek",          "tier": "standard",  "cost": "low",   "input": 0.3,   "output": 0.5,  "bestFor": "cost-effective coding and reasoning" },
+      { "prefix": "deepseek-v4-flash",                                       "input": 0.14,  "output": 0.28, "bestFor": "cheapest DeepSeek V4 with 1M context", "inputTokenSoftLimit": 1000000 },
+      { "prefix": "deepseek-v4-pro",   "tier": "reasoning", "cost": "medium", "input": 1.74,  "output": 3.48, "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context", "inputTokenSoftLimit": 1000000 }
     ]
   },
   {
