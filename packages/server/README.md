@@ -70,7 +70,7 @@ The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent 
 
 ## REST API
 
-The daemon exposes 13 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background.
+The daemon exposes 14 public endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background.
 
 | Endpoint | Purpose |
 |---|---|

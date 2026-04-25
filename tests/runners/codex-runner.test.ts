@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { InternalRunnerEvent } from '../../packages/core/src/types.js';
+import type { InternalRunnerEvent } from '../../packages/core/src/runners/types.js';
 import path from 'path';
 
 /**

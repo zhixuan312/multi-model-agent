@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import type { InternalRunnerEvent } from '../../packages/core/src/types.js';
+import type { InternalRunnerEvent } from '../../packages/core/src/runners/types.js';
 
 vi.mock('@anthropic-ai/claude-agent-sdk', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@anthropic-ai/claude-agent-sdk')>();

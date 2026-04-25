@@ -12,30 +12,38 @@ export type {
   AgentConfig,
   Effort,
   CostTier,
-  RunStatus,
   TaskSpec,
   ProviderConfig,
   CodexProviderConfig,
   ClaudeProviderConfig,
   OpenAICompatibleProviderConfig,
   MultiModelConfig,
-  TokenUsage,
   RunResult,
-  BatchTimings,
-  BatchProgress,
-  BatchAggregateCost,
   Provider,
+} from './types.js';
+export type {
+  RunStatus,
+  TokenUsage,
   RunOptions,
   RunTasksRuntime,
   ProgressEvent,
   InternalRunnerEvent,
+} from './runners/types.js';
+export type {
+  BatchTimings,
+  BatchProgress,
+  BatchAggregateCost,
+} from './executors/types.js';
+export type {
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
+} from './routing/types.js';
+export type {
   BriefQualityWarning,
   BriefQualityPolicy,
   ReadinessResult,
-} from './types.js';
+} from './intake/types.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
@@ -65,8 +73,8 @@ export { createProjectContext } from './project-context.js';
 export type { ProjectContext } from './project-context.js';
 
 // Run tasks
-export { runTasks } from './run-tasks.js';
-export type { RunTasksOptions } from './run-tasks.js';
+export { runTasks } from './run-tasks/index.js';
+export type { RunTasksOptions } from './run-tasks/index.js';
 
 // Heartbeat
 export { HeartbeatTimer } from './heartbeat.js';

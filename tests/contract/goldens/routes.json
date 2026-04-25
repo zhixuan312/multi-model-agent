@@ -1,0 +1,17 @@
+[
+  "DELETE /context-blocks/:blockId",
+  "GET /__routes",
+  "GET /batch/:batchId",
+  "GET /health",
+  "GET /status",
+  "GET /tools",
+  "POST /audit",
+  "POST /clarifications/confirm",
+  "POST /context-blocks",
+  "POST /debug",
+  "POST /delegate",
+  "POST /execute-plan",
+  "POST /retry",
+  "POST /review",
+  "POST /verify"
+]

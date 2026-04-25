@@ -15,7 +15,6 @@
  * Tasks 9.5–9.8: Individual client writers.
  * Task 9.9: Uninstall wires all removers.
  */
-import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -23,179 +22,38 @@ import minimist from 'minimist';
 import * as manifest from '../install/manifest.js';
 import type { Client } from '../install/manifest.js';
 import { ALL_CLIENTS, detectClients } from '../install/manifest.js';
-import { installClaudeCode, uninstallClaudeCode } from '../install/claude-code.js';
-import { installGeminiCli, uninstallGeminiCli } from '../install/gemini-cli.js';
-import { installCodexCli, uninstallCodexCli } from '../install/codex-cli.js';
-import { installCursor, uninstallCursor } from '../install/cursor.js';
+import {
+  SUPPORTED_SKILLS,
+  SkillNotFoundError,
+  getSkillsRoot,
+  readSkillContent,
+} from '../install/discover.js';
+import {
+  UnknownTargetError,
+  writeSkillToClient,
+  removeSkillFromClient,
+} from '../install/manifest-resolve.js';
 
-// Re-export Client and constants so CLI callers can import from this module.
+// Re-export everything callers (cli/index.ts + tests) imported from here.
 export type { Client } from '../install/manifest.js';
 export { ALL_CLIENTS, detectClients } from '../install/manifest.js';
-
-export const SUPPORTED_SKILLS = [
-  'multi-model-agent',
-  'mma-delegate',
-  'mma-audit',
-  'mma-review',
-  'mma-verify',
-  'mma-debug',
-  'mma-execute-plan',
-  'mma-retry',
-  'mma-context-blocks',
-  'mma-clarifications',
-] as const;
-
-// ─── Custom errors ────────────────────────────────────────────────────────────
-
-/** Thrown when a passed `--target` value is not a known client. */
-export class UnknownTargetError extends Error {
-  readonly code = 'unknown_target' as const;
-  constructor(target: string, valid: readonly Client[]) {
-    super(`Unknown target: ${target}. Valid: ${valid.join(', ')}`);
-  }
-}
-
-/** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */
-export class SkillNotFoundError extends Error {
-  readonly code = 'skill_not_found' as const;
-  constructor(skillName: string, checkedPath: string) {
-    super(
-      `Skill '${skillName}' not found. ` +
-      `Checked: ${checkedPath}. ` +
-      `Available skills: ${SUPPORTED_SKILLS.join(', ')}`,
-    );
-  }
-}
-
-// ─── Skills root ────────────────────────────────────────────────────────────
-
-/** Resolved path to the bundled skills directory. Can be overridden for testing. */
-const DEFAULT_SKILLS_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'skills',
-);
-
-/**
- * Return the absolute path to the skills root directory.
- *
- * The skills root is the directory containing per-skill sub-directories
- * (e.g. `<root>/mma-delegate/SKILL.md`).  In production this resolves to
- * `packages/server/src/skills/`.  During tests the caller can pass a custom
- * `skillsRoot` to read from a temp fixture instead.
- */
-export function getSkillsRoot(skillsRoot?: string): string {
-  return skillsRoot ?? DEFAULT_SKILLS_ROOT;
-}
-
-/**
- * Read the content of a skill's SKILL.md file.
- * Returns null if the file does not exist.
- * Propagates permission errors and other I/O problems so callers can
- * distinguish "skill not found" from "can't access skill".
- */
-export function readSkillContent(skillName: string, skillsRoot?: string): string | null {
-  const skillFile = path.join(getSkillsRoot(skillsRoot), skillName, 'SKILL.md');
-  try {
-    return fs.readFileSync(skillFile, 'utf-8');
-  } catch (err) {
-    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
-    throw err;
-  }
-}
-
-// ─── Per-client writer/remover dispatch ───────────────────────────────────────
-
-/**
- * Write a skill's SKILL.md content to the target client's skill directory.
- * Dispatches to the appropriate writer based on `target`.
- *
- * @param skillName  The skill name (used in paths and warnings).
- * @param content    Raw SKILL.md content (may contain @include directives).
- * @param target     The AI client to install the skill for.
- * @param homeDir    Home directory (replaces os.homedir()).
- * @param skillsRoot Root of the skills directory (for @include resolution).
- * @param version    Skill version string (used by Gemini extension manifest).
- * @param cwd        Current working directory (used by Cursor; defaults to process.cwd()).
- * @param force      If true, overwrite existing Cursor file without warning.
- */
-export function writeSkillToClient(
-  skillName: string,
-  content: string,
-  target: Client,
-  homeDir: string,
-  skillsRoot: string,
-  version: string = '0.0.0',
-  cwd: string = process.cwd(),
-  force: boolean = false,
-): void {
-  switch (target) {
-    case 'claude-code':
-      installClaudeCode({ skillName, content, homeDir, skillsRoot });
-      break;
-    case 'gemini':
-      installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot });
-      break;
-    case 'codex':
-      installCodexCli({ skillName, content, homeDir, skillsRoot });
-      break;
-    case 'cursor':
-      installCursor({ content, cwd, homeDir, skillsRoot, force });
-      break;
-    default: {
-      const _exhaustive: never = target;
-      throw new Error(`install-skill: unknown target: ${_exhaustive as string}`);
-    }
-  }
-}
-
-/**
- * Remove a skill's files from the target client's skill directory.
- * Dispatches to the appropriate remover based on `target`.
- *
- * @param skillName  The skill name (used for claude-code path resolution).
- * @param target     The AI client to uninstall the skill from.
- * @param homeDir    Home directory (replaces os.homedir()).
- * @param cwd        Current working directory (used by Cursor; defaults to process.cwd()).
- */
-export function removeSkillFromClient(
-  skillName: string,
-  target: Client,
-  homeDir: string,
-  cwd: string = process.cwd(),
-): void {
-  switch (target) {
-    case 'claude-code':
-      uninstallClaudeCode(skillName, homeDir);
-      break;
-    case 'gemini':
-      uninstallGeminiCli(homeDir);
-      break;
-    case 'codex':
-      uninstallCodexCli(homeDir);
-      break;
-    case 'cursor':
-      uninstallCursor(cwd);
-      break;
-    default: {
-      const _exhaustive: never = target;
-      throw new Error(`install-skill: unknown target: ${_exhaustive as string}`);
-    }
-  }
-}
+export {
+  SUPPORTED_SKILLS,
+  SkillNotFoundError,
+  getSkillsRoot,
+  readSkillContent,
+} from '../install/discover.js';
+export {
+  UnknownTargetError,
+  writeSkillToClient,
+  removeSkillFromClient,
+} from '../install/manifest-resolve.js';
 
 // ─── Install/Uninstall result ───────────────────────────────────────────────
 
-export interface InstallResult {
-  skill: string;
-  action: 'installed' | 'uninstalled';
-  /** Targets for which the operation succeeded. */
-  targets: Client[];
-  /** Targets that were skipped (dry-run, unknown, or not applicable). */
-  skipped: Client[];
-  /** Files would be written but were not (dry-run mode). */
-  dryRun: boolean;
-}
+export type { InstallResult } from '../install/orchestrate.js';
+export { doInstall, doUninstall } from '../install/orchestrate.js';
+import { doInstall, doUninstall, type InstallResult } from '../install/orchestrate.js';
 
 /**
  * Return codes for `main()`.
@@ -212,77 +70,6 @@ export const ExitCode = Object.freeze({
   ERR_UNKNOWN_TARGET: 7,
   ERR_UNKNOWN: 8,
 });
-
-// ─── Core logic ─────────────────────────────────────────────────────────────
-
-/**
- * Install a skill to the specified client targets.
- * - dryRun=true: checks skill existence; does NOT write files or update manifest.
- * - dryRun=false: writes files via the per-client writers.
- */
-export function doInstall(
-  skillName: string,
-  targets: Client[],
-  opts: {
-    dryRun: boolean;
-    homeDir: string;
-    skillsRoot?: string;
-    version?: string;
-    cwd?: string;
-    force?: boolean;
-  },
-): InstallResult {
-  const checkedPath = path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md');
-  const content = readSkillContent(skillName, opts.skillsRoot);
-  if (!content) {
-    throw new SkillNotFoundError(skillName, checkedPath);
-  }
-
-  const skillsRoot = getSkillsRoot(opts.skillsRoot);
-  const version = opts.version ?? '0.0.0';
-  const cwd = opts.cwd ?? process.cwd();
-
-  const installed: Client[] = [];
-  const skipped: Client[] = [];
-
-  for (const target of targets) {
-    if (opts.dryRun) {
-      // In dry-run: record target as skipped (would write), not installed
-      skipped.push(target);
-    } else {
-      writeSkillToClient(skillName, content, target, opts.homeDir, skillsRoot, version, cwd, opts.force);
-      installed.push(target);
-    }
-  }
-
-  return { skill: skillName, action: 'installed', targets: installed, skipped, dryRun: opts.dryRun };
-}
-
-/**
- * Uninstall a skill from the specified client targets.
- * - dryRun=true: resolves targets; does NOT remove files or update manifest.
- * - dryRun=false: removes files via the per-client removers.
- */
-export function doUninstall(
-  skillName: string,
-  targets: Client[],
-  opts: { dryRun: boolean; homeDir: string; cwd?: string },
-): InstallResult {
-  const cwd = opts.cwd ?? process.cwd();
-  const installed: Client[] = [];
-  const skipped: Client[] = [];
-
-  for (const target of targets) {
-    if (opts.dryRun) {
-      skipped.push(target);
-    } else {
-      removeSkillFromClient(skillName, target, opts.homeDir, cwd);
-      installed.push(target);
-    }
-  }
-
-  return { skill: skillName, action: 'uninstalled', targets: installed, skipped, dryRun: opts.dryRun };
-}
 
 // ─── argv parsing ───────────────────────────────────────────────────────────
 

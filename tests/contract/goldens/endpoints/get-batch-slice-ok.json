@@ -1,0 +1,122 @@
+{
+  "headline": "delegate: 2/2 tasks complete",
+  "results": [
+    {
+      "output": "Sub-agent error: Connection error.",
+      "status": "error",
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "totalTokens": 0,
+        "costUSD": null,
+        "savedCostUSD": null
+      },
+      "turns": 0,
+      "filesRead": [],
+      "directoriesListed": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": true,
+      "escalationLog": [
+        {
+          "provider": "standard",
+          "status": "error",
+          "turns": 0,
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "costUSD": null,
+          "initialPromptLengthChars": 2790,
+          "initialPromptHash": "6abaeb4a8c175684f81d6811418787533ed3aa93c7eb7b06e116c5a2165dd98e",
+          "reason": "Connection error."
+        }
+      ],
+      "error": "Connection error.",
+      "durationMs": "<DETERMINISTIC>",
+      "terminationReason": {
+        "cause": "error",
+        "turnsUsed": 0,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": null,
+        "wasPromoted": false
+      },
+      "errorCode": "error",
+      "retryable": false,
+      "workerStatus": "done",
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "Sub-agent error: Connection error.",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": []
+      },
+      "structuredReport": {
+        "summary": "[No artifacts] task produced no file artifacts to review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": []
+      },
+      "filePathsSkipped": false,
+      "agents": {
+        "implementer": "standard",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "models": {
+        "implementer": "mock",
+        "specReviewer": null,
+        "qualityReviewer": null
+      }
+    }
+  ],
+  "batchTimings": {
+    "wallClockMs": "<DETERMINISTIC>",
+    "sumOfTaskMs": "<DETERMINISTIC>",
+    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
+  },
+  "costSummary": {
+    "totalActualCostUSD": 0,
+    "totalSavedCostUSD": 0
+  },
+  "structuredReport": {
+    "kind": "not_applicable",
+    "reason": "no structured report emitted by this executor"
+  },
+  "error": {
+    "kind": "not_applicable",
+    "reason": "batch succeeded"
+  },
+  "proposedInterpretation": {
+    "kind": "not_applicable",
+    "reason": "batch not awaiting clarification"
+  },
+  "batchId": "<DETERMINISTIC>",
+  "tasks": [
+    {
+      "prompt": "task one",
+      "agentType": "standard",
+      "tools": "full",
+      "timeoutMs": 1800000,
+      "maxCostUSD": 10,
+      "sandboxPolicy": "cwd-only",
+      "briefQualityPolicy": "off",
+      "cwd": "<REPO>"
+    },
+    {
+      "prompt": "task two",
+      "agentType": "standard",
+      "tools": "full",
+      "timeoutMs": 1800000,
+      "maxCostUSD": 10,
+      "sandboxPolicy": "cwd-only",
+      "briefQualityPolicy": "off",
+      "cwd": "<REPO>"
+    }
+  ],
+  "wallClockMs": "<DETERMINISTIC>"
+}

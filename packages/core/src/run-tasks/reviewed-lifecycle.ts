@@ -1,211 +1,36 @@
 import type {
   Provider,
   RunResult,
-  RunStatus,
   TaskSpec,
   MultiModelConfig,
-  InternalRunnerEvent,
-  ProgressEvent,
-  RunTasksRuntime,
   AgentType,
-  AgentCapability,
-  BriefQualityWarning,
-} from './types.js';
-import { computeCostUSD, computeSavedCostUSD } from './types.js';
-import { createProvider } from './provider.js';
-import { resolveAgent } from './routing/resolve-agent.js';
-import { delegateWithEscalation } from './delegate-with-escalation.js';
-import { HeartbeatTimer } from './heartbeat.js';
-import type { HeartbeatTickInfo } from './heartbeat.js';
-import { expandContextBlocks } from './context/expand-context-blocks.js';
-import { inferEffort } from './effort-inference.js';
-import { evaluateReadiness } from './readiness/readiness.js';
-import { runSpecReview } from './review/spec-reviewer.js';
-import { runQualityReview } from './review/quality-reviewer.js';
-import type { QualityReviewResult } from './review/quality-reviewer.js';
-import { aggregateResult } from './review/aggregate-result.js';
-import type { ParsedStructuredReport } from './reporting/structured-report.js';
-import { parseStructuredReport } from './reporting/structured-report.js';
-import { autoCommitFiles } from './auto-commit.js';
-import { partitionFilePaths, checkOutputTargets } from './file-artifact-check.js';
-import fs from 'fs/promises';
+} from '../types.js';
+import { computeCostUSD, computeSavedCostUSD } from '../types.js';
+import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
+import { createProvider } from '../provider.js';
+import { delegateWithEscalation } from '../delegate-with-escalation.js';
+import { HeartbeatTimer } from '../heartbeat.js';
+import { runSpecReview } from '../review/spec-reviewer.js';
+import { runQualityReview } from '../review/quality-reviewer.js';
+import type { QualityReviewResult } from '../review/quality-reviewer.js';
+import { aggregateResult } from '../review/aggregate-result.js';
+import { parseStructuredReport } from '../reporting/structured-report.js';
+import { autoCommitFiles } from '../auto-commit.js';
+import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.js';
+import type { RunTasksProgressCallback } from './index.js';
+import { extractWorkerStatus } from './worker-status.js';
+import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
+import { withDoneCondition } from './execute-task.js';
 
-const PLAN_CONTEXT_MAX_CHARS = 10_000;
-
-export async function extractPlanSection(
-  planFilePaths: string[],
-  taskDescriptor: string,
-  cwd: string | undefined,
-): Promise<string | undefined> {
-  const basePath = cwd ?? process.cwd();
-
-  for (const filePath of planFilePaths) {
-    try {
-      const resolved = filePath.startsWith('/') ? filePath : `${basePath}/${filePath}`;
-      const content = await fs.readFile(resolved, 'utf-8');
-
-      const lines = content.split('\n');
-      let startIndex = -1;
-      let headingLevel = 0;
-
-      for (let i = 0; i < lines.length; i++) {
-        const match = lines[i].match(/^(#{1,6})\s+(.*)/);
-        if (match && match[2].trim() === taskDescriptor.trim()) {
-          startIndex = i;
-          headingLevel = match[1].length;
-          break;
-        }
-      }
-
-      if (startIndex === -1) continue;
-
-      let endIndex = lines.length;
-      for (let i = startIndex + 1; i < lines.length; i++) {
-        const match = lines[i].match(/^(#{1,6})\s/);
-        if (match && match[1].length <= headingLevel) {
-          endIndex = i;
-          break;
-        }
-      }
-
-      let section = lines.slice(startIndex, endIndex).join('\n');
-      if (section.length > PLAN_CONTEXT_MAX_CHARS) {
-        section = section.slice(0, PLAN_CONTEXT_MAX_CHARS) + '\n[truncated at 10KB]';
-      }
-      return section;
-    } catch {
-      if (process.env.MULTI_MODEL_DEBUG === '1') {
-        console.error(`[multi-model-agent] plan file not readable: ${filePath}`);
-      }
-    }
-  }
-
-  return undefined;
-}
-
-export type RunTasksProgressCallback = (
-  taskIndex: number,
-  event: ProgressEvent,
-) => void;
-
-export interface RunTasksOptions {
-  onProgress?: RunTasksProgressCallback;
-  runtime?: RunTasksRuntime;
-  /** Batch ID this run belongs to; threaded to HeartbeatTimer when set. */
-  batchId?: string;
-  /** Callback fired on every heartbeat tick with a state snapshot. */
-  recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void;
-  /**
-   * Optional DiagnosticLogger. When present AND `verbose` is true, the
-   * runner records per-tool-call + per-LLM-turn events for post-mortem
-   * diagnosis of slow tasks. Logger writes are a no-op if diagnostics.log=false,
-   * so passing it is always safe.
-   */
-  logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
-  /**
-   * Enable verbose emissions. When true, each tool call and LLM turn is
-   * streamed to `verboseStream` (default: process.stderr) so the operator
-   * sees the server's work live. Orthogonal to `diagnostics.log` — you
-   * can have live streaming without persisting a JSONL file.
-   */
-  verbose?: boolean;
-  /** Injectable stream target for verbose output. Defaults to process.stderr. */
-  verboseStream?: (line: string) => void;
-}
-
-function errorResult(error: string): RunResult {
-  return {
-    output: `Sub-agent error: ${error}`,
-    status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-    turns: 0,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: true,
-    escalationLog: [],
-    error,
-  };
-}
-
-type ResolvedTask =
-  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } }
-  | { task: TaskSpec; error: string; errorCode: string };
-
-function withDoneCondition(task: TaskSpec): TaskSpec {
-  if (!task.done) return task;
-  return { ...task, prompt: `${task.prompt}\n\n## Success Criteria\n${task.done}` };
-}
-
-async function executeTask(
-  resolved: Exclude<ResolvedTask, { error: string }>,
-  onProgress?: (event: InternalRunnerEvent) => void,
-): Promise<RunResult> {
-  try {
-    return await delegateWithEscalation(
-      withDoneCondition(resolved.task),
-      [resolved.resolved.provider],
-      { explicitlyPinned: true, onProgress },
-    );
-  } catch (err) {
-    return errorResult(err instanceof Error ? err.message : String(err));
-  }
-}
-
-function extractWorkerStatus(
-  report: ParsedStructuredReport | undefined,
-): 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' {
-  if (!report || !report.summary) return 'done';
-  const s = report.summary.toLowerCase();
-  if (s.includes('needs_context')) return 'needs_context';
-  if (s.includes('blocked')) return 'blocked';
-  if (s.includes('done_with_concerns') || s.includes('concerns')) return 'done_with_concerns';
-  return 'done';
-}
-
-async function readImplementerFileContents(
-  filesWritten: string[],
-  cwd: string | undefined,
-): Promise<Record<string, string>> {
-  const contents: Record<string, string> = {};
-  const basePath = cwd ?? process.cwd();
-  for (const filePath of filesWritten) {
-    try {
-      const resolved = filePath.startsWith('/') ? filePath : `${basePath}/${filePath}`;
-      const content = await fs.readFile(resolved, 'utf-8');
-      contents[filePath] = content.length > 50_000
-        ? content.slice(0, 50_000) + '\n[truncated at 50KB]'
-        : content;
-    } catch {
-      contents[filePath] = '[file not readable]';
-    }
-  }
-  return contents;
-}
-
-function buildFallbackImplReport(result: RunResult): ParsedStructuredReport {
-  const parsed = parseStructuredReport(result.output);
-  if (parsed.summary) {
-    return parsed;
-  }
-  return {
-    summary: result.output.substring(0, 200),
-    filesChanged: result.filesWritten.map(f => ({ path: f, summary: 'updated' })),
-    validationsRun: [],
-    deviationsFromBrief: [],
-    unresolved: [],
-  };
-}
-
-async function executeReviewedLifecycle(
+export async function executeReviewedLifecycle(
   task: TaskSpec,
   resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
   config: MultiModelConfig,
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
-  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('./heartbeat.js').HeartbeatTickInfo) => void },
+  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void },
   diagnostics?: {
-    logger?: import('./diagnostics/disconnect-log.js').DiagnosticLogger;
+    logger?: import('../diagnostics/disconnect-log.js').DiagnosticLogger;
     verbose?: boolean;
     verboseStream?: (line: string) => void;
   },
@@ -780,128 +605,4 @@ async function executeReviewedLifecycle(
   } finally {
     heartbeat?.stop();
   }
-}
-
-export async function runTasks(
-  tasks: TaskSpec[],
-  config: MultiModelConfig,
-  options: RunTasksOptions = {},
-): Promise<RunResult[]> {
-  if (tasks.length === 0) return [];
-
-  const expandedTasks: (TaskSpec | { error: string })[] = tasks.map((task) => {
-    try {
-      return expandContextBlocks(task, options.runtime?.contextBlockStore);
-    } catch (err) {
-      return { error: err instanceof Error ? err.message : String(err) };
-    }
-  });
-
-  const readinessResults = expandedTasks.map((entry) => {
-    if ('error' in entry) return undefined;
-    const task = entry as TaskSpec;
-    if (task.briefQualityPolicy === 'off') {
-      return { action: 'ignored' as const, missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
-    }
-    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
-  });
-
-  const refusedResults = expandedTasks.map((entry, idx) => {
-    if ('error' in entry) return undefined;
-    const readiness = readinessResults[idx];
-    if (!readiness) return undefined;
-    if (readiness.action === 'refuse') {
-      return {
-        output: `Brief too vague: missing ${readiness.missingPillars.join(', ')}`,
-        status: 'brief_too_vague' as const,
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
-        turns: 0,
-        filesRead: [] as string[],
-        filesWritten: [] as string[],
-        toolCalls: [] as string[],
-        outputIsDiagnostic: true,
-        escalationLog: [] as RunResult['escalationLog'],
-        errorCode: 'brief_too_vague',
-        briefQualityWarnings: readiness.briefQualityWarnings as BriefQualityWarning[],
-        retryable: false,
-      };
-    }
-    return undefined;
-  });
-
-  const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
-    if ('error' in entry) {
-      return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
-    }
-    const task = entry;
-    const agentType: AgentType = task.agentType ?? 'standard';
-    try {
-      const resolved_agent = resolveAgent(
-        agentType,
-        (task.requiredCapabilities ?? []) as AgentCapability[],
-        config,
-      );
-      return { task, resolved: resolved_agent };
-    } catch (err) {
-      return {
-        task,
-        error: err instanceof Error ? err.message : String(err),
-        errorCode: 'capability_missing',
-      };
-    }
-  });
-
-  for (const r of resolved) {
-    if ('error' in r) continue;
-    if (r.task.effort === undefined) {
-      const inferred = inferEffort(r.task.prompt);
-      if (inferred !== undefined) {
-        r.task = { ...r.task, effort: inferred };
-      }
-    }
-  }
-
-  if (resolved.length > 1) {
-    const PARALLEL_SAFETY_SUFFIX =
-      '\n\nYou are running in parallel with other tasks. ' +
-      'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
-      'Only run task-specific test commands if provided.';
-
-    for (const r of resolved) {
-      if ('error' in r) continue;
-      r.task = {
-        ...r.task,
-        prompt: r.task.prompt + PARALLEL_SAFETY_SUFFIX +
-          (r.task.testCommand ? `\nTo verify your work, run: \`${r.task.testCommand}\`` : ''),
-      };
-    }
-  }
-
-  return Promise.all(
-    resolved.map((r, index): Promise<RunResult> => {
-      if ('error' in r) {
-        return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
-      }
-      const refused = refusedResults[index];
-      if (refused) {
-        return Promise.resolve(refused);
-      }
-      const readiness = readinessResults[index];
-      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
-        batchId: options.batchId,
-        recordHeartbeat: options.recordHeartbeat,
-      }, {
-        logger: options.logger,
-        verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
-        verboseStream: options.verboseStream,
-      }).then(
-        (result) => {
-          if (readiness && readiness.briefQualityWarnings.length > 0) {
-            return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
-          }
-          return result;
-        },
-      );
-    }),
-  );
 }

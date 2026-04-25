@@ -1,4 +1,4 @@
-import type { ProgressEvent } from './types.js';
+import type { ProgressEvent } from './runners/types.js';
 
 function formatElapsed(ms: number): string {
   const rounded = Math.round(ms / 1000);

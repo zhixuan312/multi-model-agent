@@ -4,8 +4,8 @@ import type {
   TaskSpec,
   RunResult,
   Provider,
-  ProgressEvent,
 } from '../packages/core/src/types.js';
+import type { InternalRunnerEvent } from '../packages/core/src/runners/types.js';
 
 function makeMockResult(
   status: RunResult['status'],
@@ -248,8 +248,8 @@ describe('delegateWithEscalation', () => {
   });
 
   it('does not emit escalation_start when the first attempt succeeds', async () => {
-    const events: ProgressEvent[] = [];
-    const onProgress = (e: ProgressEvent) => { events.push(e); };
+    const events: InternalRunnerEvent[] = [];
+    const onProgress = (e: InternalRunnerEvent) => { events.push(e); };
 
     const okProvider: Provider = {
       name: 'cheap',

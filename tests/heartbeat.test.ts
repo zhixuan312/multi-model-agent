@@ -1,5 +1,5 @@
 import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
-import type { ProgressEvent } from '../packages/core/src/types.js';
+import type { ProgressEvent } from '../packages/core/src/runners/types.js';
 
 describe('HeartbeatTimer', () => {
   it('requires provider at construction', () => {

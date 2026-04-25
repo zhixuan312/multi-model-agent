@@ -115,7 +115,10 @@ mmagent install-skill --uninstall   # remove skills
 
 ## Architecture at a glance
 
-`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. See [DIRECTION.md](./DIRECTION.md) for the full design rationale.
+`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout.
+
+- [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix (post-3.2.0).
+- [DIRECTION.md](./DIRECTION.md) — product north star.
 
 ## License
 

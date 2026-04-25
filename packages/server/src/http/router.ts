@@ -50,4 +50,15 @@ export class Router {
     }
     return methods;
   }
+
+  /** Returns the full registered route manifest as method/path pairs. */
+  listRoutes(): Array<{ method: string; path: string }> {
+    const manifest: Array<{ method: string; path: string }> = [];
+    for (const [method, entries] of this.routes) {
+      for (const [path] of entries) {
+        manifest.push({ method, path });
+      }
+    }
+    return manifest;
+  }
 }

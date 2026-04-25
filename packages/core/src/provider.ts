@@ -1,4 +1,5 @@
-import type { AgentType, Provider, RunResult, RunOptions, MultiModelConfig, ProviderConfig } from './types.js';
+import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig } from './types.js';
+import type { RunOptions } from './runners/types.js';
 import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
 
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {

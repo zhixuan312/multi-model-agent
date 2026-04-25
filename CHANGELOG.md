@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.2.0 — 2026-04-25
+
+### Changed (internal refactor; no public API changes)
+
+- **Landing mode:** full-refactor (all eight chapters landed). Tier A/B/C contract baseline + Tier D install/openapi goldens, packages/mcp/ deletion, types + ExecutionContext cleanup, runner adapter interface + shared result-builders + per-runner adoption, intake-compiler review, run-tasks/ decomposition + shim removal, server install/openapi/http-pipeline decomposition, ARCHITECTURE.md + CLAUDE.md + CHANGELOG.
+- **Contract test baseline (Ch 1, Tasks 1-12).** New `tests/contract/` suite pins the HTTP response envelope, route manifest, polling lifecycle state machine, observability event + field set, per-endpoint × per-lifecycle-stage envelopes (6×6 = 36 goldens), skill-surface frontmatter + endpoint resolution, per-provider runner RunResult shape via SDK mocks, and orchestrator invariants (worker-status, fallback-report, reviewed-lifecycle, plan-extraction). 85 contract assertions + 40 endpoint goldens. Performance baseline captured at `tests/perf/baseline.json` with a budget-enforcement test.
+- **`packages/mcp/` deleted (Ch 2).** Only a dist-only shell remained; no live source was in the repo.
+- **`packages/core/src/types.ts` 654 → 147 LOC (Ch 3).** Runner-local types moved to `runners/types.ts`; intake/readiness-local to `intake/types.ts`; routing-local to `routing/types.ts` (new); executor-local (BatchTimings / BatchProgress / BatchAggregateCost) to `executors/types.ts`. Cross-cutting (TaskSpec, Provider, ProviderConfig, RunResult, MultiModelConfig, ToolMode, etc.) stay in `types.ts`. Inventory at `docs/refactor/types-inventory.md`.
+- **`ExecutionContext` slimmed (Ch 3, Task 22).** Three dead fields removed: `providerFactory`, `onProgress`, `awaitClarification`. Single factory `buildExecutionContext(input)` at `packages/core/src/executors/execution-context.ts` enforces required-field invariants. The server's `buildExecutionContext` now delegates to the core factory. Dead auxiliary types (`ClarificationProposal`, `ClarificationResponse`, the executors/types.ts `ProgressEvent` shadow) also removed. Audit at `docs/refactor/execution-context-inventory.md`.
+- **`RunnerAdapter` interface + shared result-builders + per-runner adoption (Ch 4).** New `packages/core/src/runners/base/types.ts` carries the `RunnerAdapter<ProviderTurn, ProviderUsage>` interface derived from the per-provider viability analysis at `docs/refactor/runner-adapter-matrix.md`. New `packages/core/src/runners/base/result-builders.ts` extracts `buildOkResult / buildIncompleteResult / buildForceSalvageResult / buildMaxTurnsExitResult`. All three runners (claude, openai, codex) now delegate their per-provider buildXResult wrappers to the shared helpers; provider-local cost computation lives in a small `<provider>Usage(args)` helper. Net LOC delta in runners: -160. Task 27's deeper `runWithAdapter` turn-loop unification is intentionally not landed — the matrix concluded the adapter is "viable if kept shallow"; pushing it deeper would force three different SDK iteration models behind a flag-soup interface, which the SDK-mocked runner contract tests would have to ratify per turn-loop branch. The result-builder adoption captures the cheap, safe LOC win.
+- **Server package decomposed (Ch 7).** `cli/install-skill.ts` 562 → 349 LOC, with discovery (`install/discover.ts`), per-client dispatch (`install/manifest-resolve.ts`), and pure orchestration (`install/orchestrate.ts`) extracted. `openapi.ts` 344 → 248 LOC via a TOOL_ENDPOINTS table replacing seven near-identical registerPath blocks. `http/server.ts` 316 → 216 LOC with the request pipeline (body cap → route → loopback → auth → JSON → cwd → dispatch) moved to `http/request-pipeline.ts`. Per-client install writers (claude-code, gemini-cli, codex-cli, cursor) left in place — they have genuinely different on-disk layouts and a forced shared base would degrade rather than improve the code.
+- **Tier D contract goldens (Ch 1 Task 13).** `tests/contract/openapi/schema.test.ts` pins the generated OpenAPI document byte-for-byte against `tests/contract/goldens/openapi.json`. `tests/contract/install/install-skill.test.ts` drives `doInstall()` for claude-code, gemini, and codex against a temp homeDir and asserts each writes a non-empty file under its expected subdirectory.
+- **`run-tasks.ts` decomposed (Ch 6).** The 904-LOC orchestrator was split into `packages/core/src/run-tasks/{index,execute-task,reviewed-lifecycle,worker-status,fallback-report,plan-extraction}.ts`. Internal imports now reference `./run-tasks/index.js`; the public package subpath `@zhixuan92/multi-model-agent-core/run-tasks` is preserved via `packages/core/package.json` exports map (now points at `./dist/run-tasks/index.js`). The old `packages/core/src/run-tasks.ts` shim is deleted. Vitest alias map updated to resolve the subpath to the new index.
+- **Docs refreshed (Ch 8).** New `docs/ARCHITECTURE.md` with layer map + request lifecycle + maintainer migration appendix. Root `README.md` points at it. `.claude/CLAUDE.md` (local) updated.
+
+### Bug-fix ratifications
+
+- **`providerFactory` on `ExecutionContext` was dead (PRQ-001).** Harness-installed `__setTestProviderOverride` is not consumed by the run-tasks runner layer. Per-stage endpoint goldens therefore all pin the same connection-error envelope — divergence will appear when Chapter 4's full adapter migration wires a provider via `ExecutionContext`. Goldens are shape-only for that axis; recapture is expected at that point.
+- **Clarification intake routing is driven by prompt heuristics, not provider output (PRQ-002 / PRQ-004).** Two tests (`tests/contract/http/confirm-clarifications.test.ts`, one case in `tests/contract/lifecycle.test.ts`) are `it.skip` until the intake compiler pipeline exposes a test seam for forcing clarification. Tracked in `docs/superpowers/refactor/post-refactor-queue.md`.
+- **Three narrative-style commit messages in history (PRQ-003).** Commits `992d3b2`, `884dad6`, `baa7d52` on this branch have stream-of-thought subject lines from an earlier subagent session. Left in place to avoid rewriting published history; future subagent dispatches are bound by commit-hygiene rules to avoid recurrence.
+
+### Verification at full-plan close-out
+
+- `npm run build`: green (workspaces: core + server).
+- `npm test`: 1144 passed, 15 skipped, 0 failed.
+- `npx vitest run tests/contract tests/perf`: 89 passed, 9 skipped, 0 failed.
+- `wc -l packages/core/src/types.ts`: 147 (≤150 cap).
+- Node subpath resolution `@zhixuan92/multi-model-agent-core/run-tasks` exports `runTasks` + `extractPlanSection`.
+- Aggregate `packages/core/src` LOC: 11757 → 11551 (-1.75%). The plan's 25% reduction target was tied to the deep `runWithAdapter` turn-loop unification (Task 27), which is intentionally not landed — see Ch 4 note above. The ratchet points (RunnerAdapter interface, shared result-builders, runner-adapter-matrix) are in place so that work can land in 3.3.x with the SDK-mocked runner contract tests as the safety net.
+
+No public API or HTTP surface changes. Clients and skills installed against 3.1.x continue to work unchanged.
+
 ## 3.1.7 — 2026-04-24
 
 ### Changed

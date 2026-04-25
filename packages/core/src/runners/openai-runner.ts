@@ -13,11 +13,10 @@ import {
   computeCostUSD,
   computeSavedCostUSD,
   type RunResult,
-  type RunOptions,
   type ProviderConfig,
-  type InternalRunnerEvent,
   type ToolMode,
 } from '../types.js';
+import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
 
 /**
@@ -70,6 +69,12 @@ import {
 } from './supervision.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
+import {
+  buildOkResult as sharedBuildOkResult,
+  buildIncompleteResult as sharedBuildIncompleteResult,
+  buildForceSalvageResult as sharedBuildForceSalvageResult,
+  type SharedResultUsage,
+} from './base/result-builders.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
@@ -860,6 +865,18 @@ export async function runOpenAI(
 
 // --- Helpers: canonical return-shape builders -------------------------------
 
+function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
+  const u = currentResult.state.usage;
+  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig);
+  return {
+    inputTokens: u.inputTokens,
+    outputTokens: u.outputTokens,
+    totalTokens: u.totalTokens,
+    costUSD,
+    savedCostUSD: computeSavedCostUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+  };
+}
+
 function buildOkResult(
   output: string,
   currentResult: AgentRunOutput,
@@ -868,29 +885,13 @@ function buildOkResult(
   durationMs: number,
   parentModel?: string,
 ): RunResult {
-  const usage = currentResult.state.usage;
-  const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-  return {
+  return sharedBuildOkResult({
     output,
-    status: 'ok',
-    usage: {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns: usage.requests,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    // `ok` always carries a real model answer — never a diagnostic.
-    outputIsDiagnostic: false,
-    escalationLog: [],
+    usage: openAIUsage(currentResult, providerConfig, parentModel),
+    turns: currentResult.state.usage.requests,
+    tracker,
     durationMs,
-  };
+  });
 }
 
 function buildSupervisionExhaustedResult(
@@ -902,43 +903,16 @@ function buildSupervisionExhaustedResult(
   parentModel?: string,
   opts?: { reason?: string },
 ): RunResult {
-  const usage = currentResult.state.usage;
-  const filesRead = tracker.getReads();
-  const filesWritten = tracker.getWrites();
-  const toolCalls = tracker.getToolCalls();
-  const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : buildIncompleteDiagnostic({
-          providerLabel: 'openai-compatible',
-          turns: usage.requests,
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          filesRead,
-          filesWritten,
-        }),
-    status: 'incomplete',
-    errorCode: 'degenerate_exhausted',
-    usage: {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns: usage.requests,
-    filesRead,
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten,
-    toolCalls,
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    ...(opts?.reason && { error: opts.reason }),
+  return sharedBuildIncompleteResult({
+    usage: openAIUsage(currentResult, providerConfig, parentModel),
+    turns: currentResult.state.usage.requests,
+    tracker,
+    scratchpad,
+    buildDiagnostic: (ctx) => buildIncompleteDiagnostic({ providerLabel: 'openai-compatible', ...ctx }),
     durationMs,
-  };
+    reason: opts?.reason,
+    stampExhausted: true,
+  });
 }
 
 function buildForceSalvageResult(
@@ -950,34 +924,15 @@ function buildForceSalvageResult(
   durationMs: number,
   parentModel?: string,
 ): RunResult {
-  const usage = currentResult.state.usage;
-  const filesRead = tracker.getReads();
-  const filesWritten = tracker.getWrites();
-  const toolCalls = tracker.getToolCalls();
-  const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-    status: 'incomplete',
-    usage: {
-      inputTokens: usage.inputTokens,
-      outputTokens: usage.outputTokens,
-      totalTokens: usage.totalTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns: usage.requests,
-    filesRead,
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten,
-    toolCalls,
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
+  return sharedBuildForceSalvageResult({
+    providerLabel: 'openai-compatible',
+    usage: openAIUsage(currentResult, providerConfig, parentModel),
+    turns: currentResult.state.usage.requests,
+    tracker,
+    scratchpad,
+    softLimit,
     durationMs,
-  };
+  });
 }
 
 /**

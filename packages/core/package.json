@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.1.7",
+  "version": "3.2.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -53,8 +53,8 @@
       "import": "./dist/provider.js"
     },
     "./run-tasks": {
-      "types": "./dist/run-tasks.d.ts",
-      "import": "./dist/run-tasks.js"
+      "types": "./dist/run-tasks/index.d.ts",
+      "import": "./dist/run-tasks/index.js"
     },
     "./diagnostics/disconnect-log": {
       "types": "./dist/diagnostics/disconnect-log.d.ts",
@@ -215,6 +215,10 @@
     "./executors/types": {
       "types": "./dist/executors/types.d.ts",
       "import": "./dist/executors/types.js"
+    },
+    "./executors/execution-context": {
+      "types": "./dist/executors/execution-context.d.ts",
+      "import": "./dist/executors/execution-context.js"
     },
     "./executors/shared-compute": {
       "types": "./dist/executors/shared-compute.d.ts",
