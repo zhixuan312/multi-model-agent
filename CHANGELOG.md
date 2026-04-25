@@ -8,13 +8,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [3.4.0] - 2026-04-25
 
 ### Added
-- New `mma-investigate` skill + `POST /investigate` endpoint: codebase Q&A with structured citations, confidence, and unresolved questions. Read-only filesystem tools; complex tier by default.
-- `parseStructuredReport` now exposes `extraSections: Record<string, string[]>` for non-typed headers.
-- `parseFilesChanged` and `parseValidationsRun` recognize `(none)` / `none` / `N/A` literals as empty arrays.
+- **mma-investigate skill + `POST /investigate` endpoint.** Codebase Q&A with structured `file:line` (or `file:line-range`) citations, confidence level (`high`/`medium`/`low`), and unresolved-questions list. Read-only filesystem tools; complex tier by default. Per-task report carries an `investigation` field; worker statuses include `done`, `done_with_concerns`, `needs_context`, `blocked` with `incompleteReason` (`turn_cap`/`cost_cap`/`timeout`/`missing_sections`).
+- **`parseStructuredReport.extraSections`** — exposes non-typed section headers (`Record<string, string[]>`) so report consumers can reach beyond the five recognized sections.
+- **`parseFilesChanged` / `parseValidationsRun` recognize `(none)` / `none` / `N/A` literals** as empty arrays.
+- **`docs/SKILL_WRITING_GUIDELINES.md`** — 9-rule skill-authoring reference distilled from Anthropic's official guide and superpowers' `writing-skills` meta-skill.
+- **`packages/server/src/skills/_shared/verify-and-review.md`** — shared `verifyCommand` + `reviewPolicy` snippet, included by mma-delegate / mma-execute-plan.
+- **Model profiles refresh** — added `gpt-5.5` / `gpt-5.5-pro` (OpenAI) and `deepseek-v4-flash` / `deepseek-v4-pro` (DeepSeek). `rateLookupDate` bumped to 2026-04-25.
 
 ### Changed
-- `executeReviewedLifecycle` no longer overwrites the worker's structured report with a "no file artifacts" wrapper when `reviewPolicy === 'off'`. (Also benefits `audit_document`.)
-- Diagnostic logger refactor: every task-execution event the worker emits to the verbose stderr stream is now also written to the JSONL diagnostic log via a single `emit(TaskEvent)` writer. Removed the per-event typed methods (`taskHeartbeat`, `taskPhaseChange`, `toolCall`, `llmTurn`) on `DiagnosticLogger`. JSONL keys remain camelCase (`batchId`, `taskIndex`); stderr keys remain short-form (`batch`, `task`); event names match across both sinks.
+- **`executeReviewedLifecycle` preserves the worker structured report when `reviewPolicy === 'off'`.** Previously the lifecycle overwrote the worker's output with a "no file artifacts" wrapper for non-artifact-producing routes. (Also benefits `audit_document`.)
+- **Diagnostic logger unification.** Every task-execution event the worker emits to the verbose stderr stream is now also written to the JSONL diagnostic log via a single `emit(TaskEvent)` writer. Removed the per-event typed methods (`taskHeartbeat`, `taskPhaseChange`, `toolCall`, `llmTurn`) on `DiagnosticLogger`. JSONL keys remain camelCase (`batchId`, `taskIndex`); stderr keys remain short-form (`batch`, `task`); event names match across both sinks.
+- **All 11 mma-* skills restructured** to follow Anthropic + superpowers best practices: `description` starts with "Use when..." (test-enforced), H1 title, Overview + When-to-Use + Common-pitfalls (❌/✅) sections. Skill line-budget cap raised from ≤80 to ≤200 to accommodate the richer pattern. New contract test (`tests/contract/skills/skill-frontmatter.test.ts`) enforces the description-shape rule.
+- **READMEs restructured** for first-time + repeat user clarity: root README has Quick start → Clients → Configuration → REST API → Operator commands → Operations → What's new → Architecture; server README mirrors the structure with the full endpoint table; both updated for the new `/investigate` endpoint.
+
+### Fixed
+- **`commit-stage` accepts absolute paths inside cwd.** Previously `validatePaths` rejected ALL absolute paths, blocking legitimate commits when workers produced cwd-anchored paths in their commit blocks (the common case). Now converts inside-cwd absolute paths to their relative form; only paths that truly escape cwd are rejected.
+
+### Removed
+- **`DELEGATION-RULE.md`** — stale MCP-era routing doc (3.0.0+ replaced MCP with HTTP). Routing now lives in `multi-model-agent/SKILL.md`'s skill map and per-skill `description` / `when_to_use` frontmatter.
+- **23 dead skipped-test placeholders** (auto-commit-lifecycle, status-downgrade, confirm-clarifications, http-events batch+clarification stubs, contract/lifecycle clarification stub) — replaced by current coverage. 7 perf tests moved out of default `npm test` into opt-in `npm run test:perf` / `npm run test:perf:baseline`. Default test run now reports 0 skipped.
 
 ## 3.3.0 — 2026-04-25
 
