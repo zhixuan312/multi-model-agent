@@ -27,9 +27,10 @@ export type Stage =
   | 'review-rework';
 
 export interface MockProviderOptions {
-  stage: Stage;
+  stage?: Stage;
   output?: string;
   cost?: number;
+  onPrompt?: (prompt: string) => void;
 }
 
 const STUB_CONFIG: ProviderConfig = {
@@ -207,19 +208,21 @@ function buildReviewRework(opts: MockProviderOptions): RunResult {
 
 export function mockProvider(opts: MockProviderOptions): Provider {
   const runner = (): RunResult => {
-    switch (opts.stage) {
-      case 'ok': return buildOk(opts);
-      case 'incomplete': return buildIncomplete(opts);
-      case 'force-salvage': return buildForceSalvage(opts);
-      case 'max-turns': return buildMaxTurns(opts);
-      case 'clarification': return buildClarificationNeeded(opts);
-      case 'review-rework': return buildReviewRework(opts);
+    const stage = opts.stage ?? 'ok';
+    switch (stage) {
+      case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
+      case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
+      case 'force-salvage': return buildForceSalvage(opts as MockProviderOptions & { stage: Stage });
+      case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
+      case 'clarification': return buildClarificationNeeded(opts as MockProviderOptions & { stage: Stage });
+      case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
     }
   };
   return {
     name: 'mock',
     config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
+    async run(prompt: string): Promise<RunResult> {
+      opts.onPrompt?.(prompt);
       return runner();
     },
   };
