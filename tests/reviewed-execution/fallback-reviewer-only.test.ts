@@ -172,7 +172,7 @@ describe('reviewed lifecycle reviewer-only fallback', () => {
         role: 'specReviewer',
         loop: 'spec',
         attempt: 0,
-        assigned: 'standard',
+        assigned: 'complex',
         used: 'standard',
         reason: 'transport_failure',
         triggeringStatus: 'api_error',
@@ -186,14 +186,14 @@ describe('reviewed lifecycle reviewer-only fallback', () => {
         loop: 'spec',
         attempt: 0,
         role: 'specReviewer',
-        assignedTier: 'standard',
+        assignedTier: 'complex',
         usedTier: 'standard',
         reason: 'transport_failure',
         triggeringStatus: 'api_error',
         violatesSeparation: true,
       }),
     ]);
-    expect(complexRun).toHaveBeenCalledTimes(2);
-    expect(standardRun).toHaveBeenCalledTimes(1);
+    expect(complexRun).toHaveBeenCalledTimes(3);
+    expect(standardRun).toHaveBeenCalledTimes(2);
   });
 });

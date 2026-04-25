@@ -897,7 +897,9 @@ export async function executeReviewedLifecycle(
         fallbackOverrides.push({ role: 'specReviewer', loop: 'spec', attempt: 0, assigned: initialReviewerTier, used: initialSpecReview.usedTier, reason: initialSpecReview.fallbackReason!, triggeringStatus: initialSpecReview.fallbackTriggeringStatus, bothUnavailable: false });
       }
     }
-    specResult = initialSpecReview.result;
+    specResult = initialSpecReview.bothUnavailable
+      ? makeSkippedReviewResult('all_tiers_unavailable')
+      : initialSpecReview.result;
     specStatus = specResult.status;
     specReport = 'report' in specResult ? specResult.report : undefined;
     specReviewReason = specStatus === 'skipped' ? 'all_tiers_unavailable' : ('errorReason' in specResult ? specResult.errorReason : undefined);

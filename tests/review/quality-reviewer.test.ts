@@ -46,10 +46,10 @@ describe('runQualityReview', () => {
     expect((p.run as any).mock.calls.length).toBe(0);
   });
 
-  it('returns error with reason when reviewer dispatch fails', async () => {
+  it('preserves transport status when reviewer dispatch fails', async () => {
     const p = mockProvider('timed out', 'timeout');
     const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('error');
+    expect(r.status).toBe('timeout');
     expect(r.errorReason).toBe('review agent returned status: timeout');
   });
 

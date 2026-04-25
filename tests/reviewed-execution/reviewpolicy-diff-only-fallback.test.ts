@@ -124,13 +124,13 @@ describe('reviewPolicy=diff_only fallback', () => {
     const fallbackEvents: Array<Record<string, unknown>> = [];
     const standardRun = vi.fn(async (prompt: string) => {
       if (prompt.includes('You are reviewing a mechanical refactor')) {
-        return apiErrorResult();
+        return { output: 'APPROVE' };
       }
       return okResult(STRUCTURED_IMPL_OUTPUT);
     });
     const complexRun = vi.fn(async (prompt: string) => {
       if (prompt.includes('You are reviewing a mechanical refactor')) {
-        return { output: 'APPROVE' };
+        return apiErrorResult();
       }
       return okResult(STRUCTURED_IMPL_OUTPUT);
     });
@@ -172,8 +172,8 @@ describe('reviewPolicy=diff_only fallback', () => {
         role: 'diffReviewer',
         loop: 'diff',
         attempt: 0,
-        assigned: 'standard',
-        used: 'complex',
+        assigned: 'complex',
+        used: 'standard',
         reason: 'transport_failure',
         triggeringStatus: 'api_error',
         bothUnavailable: false,
@@ -184,8 +184,8 @@ describe('reviewPolicy=diff_only fallback', () => {
         loop: 'diff',
         attempt: 0,
         role: 'diffReviewer',
-        assignedTier: 'standard',
-        usedTier: 'complex',
+        assignedTier: 'complex',
+        usedTier: 'standard',
         reason: 'transport_failure',
         triggeringStatus: 'api_error',
       }),

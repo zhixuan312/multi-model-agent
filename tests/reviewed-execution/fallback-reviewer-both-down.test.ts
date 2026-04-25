@@ -68,7 +68,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/review/spec-reviewer', () => ({
   runSpecReview: vi.fn(async (provider: Provider) => {
     const slot = provider.name as 'standard' | 'complex';
     providerCalls.push({ slot, kind: 'specReviewer' });
-    return { status: 'skipped' as const, report: undefined, findings: [], reason: 'all_tiers_unavailable' as const };
+    return { status: 'api_error' as const, findings: [], errorReason: `${slot} reviewer api down` };
   }),
 }));
 
@@ -105,6 +105,7 @@ describe('reviewed lifecycle fallback when both spec reviewer tiers are down', (
     expect(providerCalls).toEqual([
       { slot: 'standard', kind: 'implementer' },
       { slot: 'complex', kind: 'specReviewer' },
+      { slot: 'standard', kind: 'specReviewer' },
     ]);
 
     expect(result.status).toBe('ok');

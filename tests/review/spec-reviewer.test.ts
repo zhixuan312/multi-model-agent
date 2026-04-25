@@ -43,10 +43,10 @@ describe('runSpecReview', () => {
     expect(r.findings.length).toBeGreaterThan(0);
   });
 
-  it('returns error with reason when reviewer dispatch fails', async () => {
+  it('preserves transport status when reviewer dispatch fails', async () => {
     const p = mockProvider(['timed out'], 'timeout');
     const r = await runSpecReview(p, packet, implReport, {}, []);
-    expect(r.status).toBe('error');
+    expect(r.status).toBe('timeout');
     expect(r.errorReason).toBe('review agent returned status: timeout');
   });
 

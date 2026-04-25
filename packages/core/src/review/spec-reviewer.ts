@@ -46,6 +46,9 @@ export async function runSpecReview(
   }
 
   if (result.status !== 'ok') {
+    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
+    }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 

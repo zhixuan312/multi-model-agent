@@ -20,7 +20,7 @@ export interface DiffReviewInput {
   diff: string;
   diffTruncated: boolean;
   verification: VerifyStageResult;
-  worker: { call: (prompt: string) => Promise<{ output: string }> };
+  worker: { call: (prompt: string) => Promise<{ output: string; status?: string }> };
 }
 
 const PROMPT_TEMPLATE = (i: DiffReviewInput) => `
@@ -43,8 +43,11 @@ Reply with EXACTLY one of:
 
 export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewVerdict> {
   const prompt = PROMPT_TEMPLATE(input);
-  const { output } = await input.worker.call(prompt);
-  const trimmed = output.trim();
+  const result = await input.worker.call(prompt);
+  if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+    return { kind: 'transport_failure', status: result.status, concerns: [] };
+  }
+  const trimmed = result.output.trim();
 
   if (trimmed === 'APPROVE') return { kind: 'approve', concerns: [] };
 
