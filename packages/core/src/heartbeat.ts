@@ -33,6 +33,9 @@ const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
 export interface HeartbeatTickInfo {
   batchId: string;
   elapsedMs: number;
+  idleSinceLlmMs: number;
+  idleSinceToolMs: number;
+  idleSinceTextMs: number;
   stage: HeartbeatStage;
   stageIndex: number;
   stageCount: number;
@@ -94,6 +97,9 @@ export class HeartbeatTimer {
   private readonly _batchId?: string;
   private timer: ReturnType<typeof setInterval> | null = null;
   private startTime = 0;
+  private lastLlmMs = 0;
+  private lastToolMs = 0;
+  private lastTextMs = 0;
   private started = false;
   private stopped = false;
 
@@ -143,10 +149,14 @@ export class HeartbeatTimer {
     // Consume the pending phase change so the next tick doesn't re-fire it.
     this.phaseChangeFrom = null;
     this.phaseChangeTo = null;
-    const elapsedMs = this.startTime > 0 ? Date.now() - this.startTime : 0;
+    const now = Date.now();
+    const elapsedMs = this.startTime > 0 ? now - this.startTime : 0;
     return {
       batchId: this._batchId ?? '',
       elapsedMs,
+      idleSinceLlmMs: this.lastLlmMs > 0 ? now - this.lastLlmMs : 0,
+      idleSinceToolMs: this.lastToolMs > 0 ? now - this.lastToolMs : 0,
+      idleSinceTextMs: this.lastTextMs > 0 ? now - this.lastTextMs : 0,
       stage: this.stage,
       stageIndex: this.stageIndex,
       stageCount: this.stageCount,
@@ -177,6 +187,9 @@ export class HeartbeatTimer {
     this.started = true;
     this.stopped = false;
     this.startTime = Date.now();
+    this.lastLlmMs = this.startTime;
+    this.lastToolMs = this.startTime;
+    this.lastTextMs = this.startTime;
     this.stage = 'implementing';
     this.stageIndex = 1;
     this.stageCount = stageCount;
@@ -308,6 +321,18 @@ export class HeartbeatTimer {
     this.savedCostUSD = savedCostUSD;
   }
 
+  markEvent(kind: 'llm' | 'tool' | 'text'): void {
+    if (!this.started || this.stopped) return;
+    const now = Date.now();
+    if (kind === 'llm') {
+      this.lastLlmMs = now;
+    } else if (kind === 'tool') {
+      this.lastToolMs = now;
+    } else {
+      this.lastTextMs = now;
+    }
+  }
+
   private emit(final: boolean): void {
     if (this.stopped && !final) return;
 
@@ -317,6 +342,9 @@ export class HeartbeatTimer {
       kind: 'heartbeat',
       elapsed,
       provider: this.provider,
+      idleSinceLlmMs: this.lastLlmMs > 0 ? Date.now() - this.lastLlmMs : 0,
+      idleSinceToolMs: this.lastToolMs > 0 ? Date.now() - this.lastToolMs : 0,
+      idleSinceTextMs: this.lastTextMs > 0 ? Date.now() - this.lastTextMs : 0,
       stage: this.stage,
       stageIndex: this.stageIndex,
       stageCount: this.stageCount,

@@ -120,6 +120,9 @@ export type ProgressEvent = {
   kind: 'heartbeat'
   elapsed: string
   provider: string
+  idleSinceLlmMs: number
+  idleSinceToolMs: number
+  idleSinceTextMs: number
   stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
   stageIndex: number
   stageCount: number

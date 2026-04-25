@@ -172,6 +172,7 @@ export async function executeReviewedLifecycle(
   const wrappedOnProgress = needHeartbeat
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'turn_start') {
+          heartbeat?.markEvent('llm');
           if (verbose) prevEventAtMs = Date.now();
           if (verboseStream) {
             verboseStream(
@@ -187,6 +188,7 @@ export async function executeReviewedLifecycle(
           }
         }
         if (event.kind === 'text_emission') {
+          heartbeat?.markEvent('text');
           textEmissionChars += event.chars;
           if (verboseStream && event.chars > 0) {
             const preview = event.preview.length > 60
@@ -206,6 +208,7 @@ export async function executeReviewedLifecycle(
           }
         }
         if (event.kind === 'tool_call') {
+          heartbeat?.markEvent('tool');
           progressCounters.toolCalls++;
           const name = event.toolSummary.split('(')[0];
           if (name === 'readFile' || name === 'grep' || name === 'glob' || name === 'listFiles') {
@@ -239,6 +242,7 @@ export async function executeReviewedLifecycle(
           }
         }
         if (event.kind === 'turn_complete') {
+          heartbeat?.markEvent('llm');
           const costUSD = computeCostUSD(
             event.cumulativeInputTokens,
             event.cumulativeOutputTokens,
