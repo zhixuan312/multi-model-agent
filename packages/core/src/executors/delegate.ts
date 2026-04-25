@@ -76,7 +76,25 @@ export async function executeDelegate(
     }
   } catch (err) {
     batchAborted = true;
-    throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    const fallback: RunResult = {
+      output: '',
+      status: 'error' as RunResult['status'],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      error: message,
+      errorCode: 'executor_error',
+      retryable: false,
+      durationMs: 0,
+      structuredError: { code: 'executor_error' as const, message, where: 'executor:delegate' },
+      workerStatus: 'failed' as const,
+    };
+    results = readySpecs.length > 0 ? readySpecs.map(() => ({ ...fallback })) : [fallback];
   } finally {
     if (batchAborted) {
       try { batchCache.abort(batchId); } catch { /* already terminal */ }

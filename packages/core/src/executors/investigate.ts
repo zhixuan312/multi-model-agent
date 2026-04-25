@@ -66,6 +66,11 @@ export async function executeInvestigate(
         extraSections: {},
       },
       workerError: runtimeError,
+      structuredError: {
+        code: 'executor_error' as const,
+        message: runtimeError.message,
+        where: 'executor:investigate',
+      },
     } as unknown as RunResult;   // RunResult shape varies — cast only the assembly, not the field types.
     results = [fallback];
   }

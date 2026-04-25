@@ -1,7 +1,7 @@
 // packages/core/src/executors/retry.ts
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/retry.js';
-import type { TaskSpec } from '../types.js';
+import type { TaskSpec, RunResult } from '../types.js';
 import { runTasks } from '../run-tasks/index.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
@@ -71,7 +71,25 @@ export async function executeRetry(
     });
   } catch (err) {
     retryAborted = true;
-    throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    const fallback: RunResult = {
+      output: '',
+      status: 'error' as RunResult['status'],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      error: message,
+      errorCode: 'executor_error',
+      retryable: false,
+      durationMs: 0,
+      structuredError: { code: 'executor_error' as const, message, where: 'executor:retry' },
+      workerStatus: 'failed' as const,
+    };
+    results = subset.map(() => ({ ...fallback }));
   } finally {
     if (retryAborted) {
       try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
