@@ -25,8 +25,8 @@
           "inputTokens": 0,
           "outputTokens": 0,
           "costUSD": null,
-          "initialPromptLengthChars": 2883,
-          "initialPromptHash": "2bbd51aeb62b8ef691acef4c4a8c6f06db1f86c417e3c0f17deb52fa588ecb5b",
+          "initialPromptLengthChars": 3845,
+          "initialPromptHash": "e760e340cdf89bdddd66ecac7d62166e5a1a7c0d1df940fd81e5851c3eadea21",
           "reason": "Connection error."
         }
       ],
@@ -71,7 +71,8 @@
         "implementer": "mock",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "commits": []
     }
   ],
   "batchTimings": {

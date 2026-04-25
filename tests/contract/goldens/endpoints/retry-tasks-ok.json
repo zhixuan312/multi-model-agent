@@ -25,8 +25,8 @@
           "inputTokens": 0,
           "outputTokens": 0,
           "costUSD": null,
-          "initialPromptLengthChars": 2610,
-          "initialPromptHash": "21e9190771f01f2c6a5530890a6cd1db1f99f6b5e506e0531b580f3db2d20d31",
+          "initialPromptLengthChars": 3572,
+          "initialPromptHash": "12fc265f37db1cd82038ec06a4ea7a6b3d792b872c09c9202c66cada842b17dc",
           "reason": "Connection error."
         }
       ],
@@ -76,7 +76,8 @@
         "bare_topic_noun",
         "no_done_condition",
         "tiny_brief"
-      ]
+      ],
+      "commits": []
     }
   ],
   "batchTimings": {
