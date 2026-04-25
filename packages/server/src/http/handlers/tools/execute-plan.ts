@@ -20,7 +20,7 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
           path = 'agentType';
         } else if (path.startsWith('tasks.') && issue.message === 'Invalid input') {
           const task = issue.path.reduce<unknown>((value, segment) => {
-            if (value && typeof value === 'object') return (value as Record<string, unknown>)[segment];
+            if (value && typeof value === 'object') return (value as Record<string | number, unknown>)[segment as string | number];
             return undefined;
           }, ctx.body);
           if (task && typeof task === 'object' && 'agentType' in task) {
