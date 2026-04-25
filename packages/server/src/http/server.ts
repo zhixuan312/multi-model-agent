@@ -98,13 +98,21 @@ async function registerToolHandlers(
     batchRegistry,
   };
 
-  router.register('POST', '/delegate', buildDelegateHandler(deps));
-  router.register('POST', '/audit', buildAuditHandler(deps));
-  router.register('POST', '/review', buildReviewHandler(deps));
-  router.register('POST', '/verify', buildVerifyHandler(deps));
-  router.register('POST', '/debug', buildDebugHandler(deps));
-  router.register('POST', '/execute-plan', buildExecutePlanHandler(deps));
-  router.register('POST', '/retry', buildRetryHandler(deps));
+  const delegateHandler = buildDelegateHandler(deps);
+  const auditHandler = buildAuditHandler(deps);
+  const reviewHandler = buildReviewHandler(deps);
+  const verifyHandler = buildVerifyHandler(deps);
+  const debugHandler = buildDebugHandler(deps);
+  const executePlanHandler = buildExecutePlanHandler(deps);
+  const retryHandler = buildRetryHandler(deps);
+
+  router.register('POST', '/delegate', delegateHandler);
+  router.register('POST', '/audit', auditHandler);
+  router.register('POST', '/review', reviewHandler);
+  router.register('POST', '/verify', verifyHandler);
+  router.register('POST', '/debug', debugHandler);
+  router.register('POST', '/execute-plan', executePlanHandler);
+  router.register('POST', '/retry', retryHandler);
 }
 
 /**
