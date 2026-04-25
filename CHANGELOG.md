@@ -5,6 +5,17 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.0] - 2026-04-26
+
+### Added
+- Pseudonymous, low-cardinality usage telemetry (off by default in 3.6.0).
+- `mmagent telemetry status|enable|disable|reset-id|dump-queue` CLI.
+- `docs/PRIVACY.md` — the published contract.
+
+### Changed
+- `RunResult` now carries `stageStats` (per-stage bucketing source).
+- `HeartbeatStage` extended with `verifying`, `diff_review`, `committing`, `terminal`.
+
 ## [3.5.3] - 2026-04-26
 
 ### Fixed

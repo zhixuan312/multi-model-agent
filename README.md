@@ -168,7 +168,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 ## What's new
 
-Latest: **3.5.3** — Hard task-level wall-clock cap and a stall watchdog. `defaults.timeoutMs` is now total (across retries + tier fallback) instead of per-call, so a task always finishes within budget. New `defaults.stallTimeoutMs` (default 10 min) aborts the in-flight runner when no LLM / tool / text event has fired for that long — catches "model thinking forever" and "transport hung". Plus a labeling fix: `turn_start` events now show `provider=claude-compatible model=deepseek-v4-pro` instead of misreporting `claude`.
+Latest: **3.6.0** — Anonymous usage telemetry (off by default). `mmagent telemetry status|enable|disable|reset-id` gives you full control over what's collected. See [PRIVACY.md](./docs/PRIVACY.md) for the published data contract — nothing personal, no prompts, no file paths.
 
 Full history in [CHANGELOG](./CHANGELOG.md).
 
