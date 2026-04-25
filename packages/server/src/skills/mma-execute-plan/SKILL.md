@@ -42,6 +42,12 @@ parallel and duplicate descriptors are rejected.
 | `filePaths` | string[] | no | Plan file + relevant source files |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 | `agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"` (cheap). Switch to `"complex"` for tasks too large for a standard-tier model to finish in the turn budget (reads many files, produces many edits, or the last run came back with `filesWritten: 0`). |
+| `verifyCommand` | string[] | no | Commands to run after each plan task completion to verify the work |
+| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | Per-task review lifecycle policy when a task is passed as `{ "task": "...", "reviewPolicy": "..." }`. Default `"full"` |
+
+Set `verifyCommand` when the worker can run a deterministic local check after editing, such as `npm test`, `npm run lint`, or a focused package test. Commands run in order after task completion; each string must be non-empty after trimming. Omit it when no reliable command exists.
+
+Set `reviewPolicy: 'diff_only'` when you want a cheaper single-pass review of the produced diff without spec-review rework loops. Use `reviewPolicy: 'full'` for default spec + quality review, `reviewPolicy: 'spec_only'` when quality review is not needed, and `reviewPolicy: 'off'` only for trusted low-risk tasks where verification is enough.
 
 If the batch reaches `awaiting_clarification`, use `mma-clarifications`
 to confirm or correct the proposed interpretation.
