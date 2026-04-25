@@ -19,7 +19,8 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
           return await runCodex(prompt, options, providerConfig, defaults);
         }
 
-        case 'claude': {
+        case 'claude':
+        case 'claude-compatible': {
           const { runClaude } = await import('./runners/claude-runner.js');
           return await runClaude(prompt, options, providerConfig, defaults);
         }

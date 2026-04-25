@@ -535,4 +535,103 @@ describe('runClaude', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // claude-compatible: env injection for third-party Anthropic-format endpoints
+  // ---------------------------------------------------------------------------
+  describe('claude-compatible env wiring', () => {
+    it('injects ANTHROPIC_BASE_URL and ANTHROPIC_AUTH_TOKEN from inline apiKey', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      const capturedOptions: unknown[] = [];
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+        capturedOptions.push(opts);
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        })();
+      }) as never);
+
+      const cfg = {
+        type: 'claude-compatible' as const,
+        model: 'deepseek-v4-pro',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        apiKey: 'sk-test-inline',
+      };
+      await runClaude('prompt', {}, cfg, defaults);
+
+      const captured = capturedOptions[0] as { options?: { env?: Record<string, string> } };
+      expect(captured.options?.env).toEqual({
+        ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
+        ANTHROPIC_AUTH_TOKEN: 'sk-test-inline',
+      });
+    });
+
+    it('resolves apiKey from apiKeyEnv when set', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      process.env.MMA_TEST_DEEPSEEK_KEY = 'sk-from-env';
+      try {
+        const capturedOptions: unknown[] = [];
+        (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+          capturedOptions.push(opts);
+          return (async function* () {
+            yield assistantMsg(VALID_FINAL_OUTPUT);
+            yield resultMsg({ result: VALID_FINAL_OUTPUT });
+          })();
+        }) as never);
+
+        await runClaude('prompt', {}, {
+          type: 'claude-compatible',
+          model: 'deepseek-v4-pro',
+          baseUrl: 'https://api.deepseek.com/anthropic',
+          apiKeyEnv: 'MMA_TEST_DEEPSEEK_KEY',
+        }, defaults);
+
+        const captured = capturedOptions[0] as { options?: { env?: Record<string, string> } };
+        expect(captured.options?.env?.ANTHROPIC_AUTH_TOKEN).toBe('sk-from-env');
+      } finally {
+        delete process.env.MMA_TEST_DEEPSEEK_KEY;
+      }
+    });
+
+    it('throws when apiKeyEnv is set but the variable is unset', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      delete process.env.MMA_TEST_NOT_SET;
+
+      await expect(runClaude('prompt', {}, {
+        type: 'claude-compatible',
+        model: 'deepseek-v4-pro',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+        apiKeyEnv: 'MMA_TEST_NOT_SET',
+      }, defaults)).rejects.toThrow(/MMA_TEST_NOT_SET/);
+    });
+
+    it('throws when neither apiKey nor apiKeyEnv is set', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      await expect(runClaude('prompt', {}, {
+        type: 'claude-compatible',
+        model: 'deepseek-v4-pro',
+        baseUrl: 'https://api.deepseek.com/anthropic',
+      }, defaults)).rejects.toThrow(/apiKey or apiKeyEnv/);
+    });
+
+    it('does not set env on plain claude agents (preserves Anthropic-direct path)', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      const capturedOptions: unknown[] = [];
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+        capturedOptions.push(opts);
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        })();
+      }) as never);
+
+      await runClaude('prompt', {}, providerConfig, defaults);
+
+      const captured = capturedOptions[0] as { options?: { env?: unknown } };
+      expect(captured.options?.env).toBeUndefined();
+    });
+  });
 });

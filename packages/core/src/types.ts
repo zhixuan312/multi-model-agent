@@ -17,7 +17,7 @@ export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 
 export interface AgentConfig {
-  type: 'openai-compatible' | 'claude' | 'codex'
+  type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex'
   model: string
   baseUrl?: string
   apiKey?: string
@@ -73,8 +73,9 @@ export interface TaskSpec {
 
 export interface CodexProviderConfig { type: 'codex'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
 export interface ClaudeProviderConfig { type: 'claude'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface ClaudeCompatibleProviderConfig { type: 'claude-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
 export interface OpenAICompatibleProviderConfig { type: 'openai-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: 'web_search'[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | OpenAICompatibleProviderConfig
+export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | ClaudeCompatibleProviderConfig | OpenAICompatibleProviderConfig
 
 export interface MultiModelConfig {
   agents: { standard: AgentConfig; complex: AgentConfig }

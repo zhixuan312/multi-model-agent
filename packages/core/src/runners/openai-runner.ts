@@ -241,15 +241,33 @@ export async function runOpenAI(
     }
   }
 
+  // DeepSeek's V4 hybrid models default to thinking mode and emit a
+  // `reasoning_content` field on every assistant turn. The OpenAI Chat
+  // Completions wire format the @openai/agents SDK uses doesn't preserve
+  // that field across turns, which causes a 400 on the second turn
+  // ("reasoning_content ... must be passed back to the API"). For users
+  // who put DeepSeek behind `openai-compatible` we opt out of thinking
+  // so multi-turn tool use works. Users who want DeepSeek's reasoning ON
+  // should configure it as `claude-compatible` instead — the Anthropic
+  // wire format preserves thinking blocks natively.
+  const baseUrl = (runner.providerConfig as { baseUrl?: string }).baseUrl ?? '';
+  const isDeepSeek = /(?:^|[\\/.])deepseek\b/i.test(baseUrl)
+    || /^deepseek-/i.test(runner.providerConfig.model);
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const providerData: Record<string, any> = {};
+  if (isDeepSeek) providerData.thinking = { type: 'disabled' };
+
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const modelSettings: any = {};
+  if (effort && effort !== 'none') modelSettings.reasoning = { effort };
+  if (Object.keys(providerData).length > 0) modelSettings.providerData = providerData;
+
   const agent = new Agent({
     name: 'sub-agent',
     model,
     instructions: systemPrompt,
     tools,
-    ...(effort && effort !== 'none' && {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      modelSettings: { reasoning: { effort: effort as any } },
-    }),
+    ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
   });
 
   // --- Watchdog: resolve the input-token soft limit once per run ---

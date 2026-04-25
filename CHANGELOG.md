@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.2] - 2026-04-25
+
+### New features
+
+- **`claude-compatible` agent type (core).** Routes Anthropic-format-compatible third-party endpoints (e.g. DeepSeek's `https://api.deepseek.com/anthropic`) through the existing claude runner. Mirrors `openai-compatible`: required `baseUrl`, optional `apiKey` / `apiKeyEnv`. Enables DeepSeek V4 (and other Anthropic-compatible vendors) as a `complex` slot with thinking ON, since Anthropic's wire format preserves thinking content blocks across multi-turn tool use. Wiring is per-invocation via `Options.env = { ANTHROPIC_BASE_URL, ANTHROPIC_AUTH_TOKEN }`, so a sibling `claude` agent on the real Anthropic backend is unaffected.
+
+### Fixed
+
+- **DeepSeek thinking-mode 400 in `openai-compatible` (core).** DeepSeek V4 hybrid models default to thinking mode and emit a non-standard `reasoning_content` field on every assistant turn. DeepSeek's chat-completions endpoint requires that field be echoed back on follow-up requests; the `@openai/agents` SDK strips it because it's not in the OpenAI spec, producing `400: The reasoning_content in the thinking mode must be passed back to the API` on the second turn of every tool-using call. Fix: when the configured baseUrl or model name matches DeepSeek, send `thinking: { type: 'disabled' }` via `ModelSettings.providerData`. Trade-off: no thinking on the openai-compatible path. Users wanting full reasoning should configure DeepSeek as `claude-compatible` instead.
+
 ## [3.5.1] - 2026-04-25
 
 ### Fixed

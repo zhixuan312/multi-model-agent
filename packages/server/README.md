@@ -60,7 +60,7 @@ Config file: `~/.multi-model/config.json`. Lookup order: `--config <path>` → `
 }
 ```
 
-Agent types: `claude`, `codex`, `openai-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`.
+Agent types: `claude`, `codex`, `openai-compatible`, `claude-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`. Use `claude-compatible` (same shape) for vendors exposing an Anthropic-format endpoint such as DeepSeek's `/anthropic` — preserves thinking content blocks across multi-turn tool use, required for DeepSeek V4's hybrid reasoning models. See the main README for examples and the trade-off vs. `openai-compatible`.
 
 The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
 
