@@ -1,3 +1,5 @@
+import { z } from 'zod';
+
 export const structuredReportSuffix = `
 ## Summary
 One-line summary of what was done.
@@ -15,6 +17,20 @@ Any intentional or unintentional deviations from the original brief.
 Open questions, incomplete items, or items requiring further investigation.
 `.trim();
 
+export const commitSchema = z.object({
+  type: z.enum(['feat', 'fix', 'refactor', 'test', 'docs', 'chore', 'style']),
+  scope: z.string().regex(/^[a-z0-9][a-z0-9._/-]{0,23}$/).optional(),
+  subject: z.string()
+    .min(1)
+    .max(50)
+    .refine(s => !/^[A-Z]/.test(s), 'subject must not start with ASCII uppercase')
+    .refine(s => !s.endsWith(':'), 'subject must not end with colon')
+    .refine(s => s === s.replace(/^\s+|\s+$/g, ''), 'no leading/trailing whitespace'),
+  body: z.string().max(8192).optional(),
+});
+
+export type CommitFields = z.infer<typeof commitSchema>;
+
 export interface FileChange {
   path: string;
   summary: string;
@@ -26,7 +42,11 @@ export interface ParsedStructuredReport {
   validationsRun: Array<{ command: string; result: string }>;
   deviationsFromBrief: string[];
   unresolved: string[];
+  commit?: CommitFields;
+  commitDiagnostic?: string;
 }
+
+export type StructuredReport = ParsedStructuredReport;
 
 export function parseStructuredReport(output: string): ParsedStructuredReport {
   if (!output || !output.trim()) {
@@ -40,14 +60,32 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
   }
 
   const sections = extractSections(output);
-
-  return {
+  const report: ParsedStructuredReport = {
     summary: sections['summary']?.[0] ?? null,
     filesChanged: parseFilesChanged(sections['files changed']),
     validationsRun: parseValidationsRun(sections['validations run']),
     deviationsFromBrief: sections['deviations from brief'] ?? [],
     unresolved: sections['unresolved'] ?? [],
   };
+
+  const commitMatch = output.match(/(?:^|\n)\s*commit:\s*({[\s\S]*?})\s*(?:\n|$)/);
+  if (commitMatch) {
+    try {
+      const obj = JSON.parse(commitMatch[1]);
+      const parsed = commitSchema.safeParse(obj);
+      if (parsed.success) {
+        report.commit = parsed.data;
+      } else {
+        report.commitDiagnostic = parsed.error.issues
+          .map(i => `${i.path.join('.')}: ${i.message}`)
+          .join('; ');
+      }
+    } catch (e) {
+      report.commitDiagnostic = `commit block JSON parse error: ${(e as Error).message}`;
+    }
+  }
+
+  return report;
 }
 
 function extractSections(output: string): Record<string, string[]> {
