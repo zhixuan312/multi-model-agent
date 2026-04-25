@@ -1,4 +1,5 @@
 import type { VerifyStageResult } from '../run-tasks/verify-stage.js';
+import type { SkippedReviewResult } from './skipped-result.js';
 
 export type DiffReviewConcern = {
   source: 'diff_review';
@@ -7,9 +8,12 @@ export type DiffReviewConcern = {
 };
 
 export type DiffReviewVerdict =
-  | { kind: 'approve'; concerns: [] }
-  | { kind: 'concerns'; concerns: DiffReviewConcern[] }
-  | { kind: 'reject'; message: string };
+  | { kind: 'approve'; status?: 'approved'; concerns: [] }
+  | { kind: 'concerns'; status?: 'changes_required'; concerns: DiffReviewConcern[] }
+  | { kind: 'reject'; status?: 'changes_required'; message: string }
+  | { kind: 'transport_failure'; status: 'api_error' | 'network_error' | 'timeout'; concerns: DiffReviewConcern[]; reason?: string };
+
+export type DiffReviewOrSkipped = DiffReviewVerdict | SkippedReviewResult;
 
 export interface DiffReviewInput {
   cwd: string;

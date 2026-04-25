@@ -15,8 +15,8 @@ import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
-import type { QualityReviewResult } from '../review/quality-reviewer.js';
-import { runDiffReview, type DiffReviewVerdict } from '../review/diff-review.js';
+import type { LegacyQualityReviewResult } from '../review/quality-reviewer.js';
+import { runDiffReview, type DiffReviewOrSkipped } from '../review/diff-review.js';
 import { aggregateResult } from '../review/aggregate-result.js';
 import { buildEvidence } from '../review/evidence.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
@@ -389,8 +389,17 @@ export async function executeReviewedLifecycle(
     }, verification);
   }
 
-  function resolveDiffOnlyTerminal(base: RunResult, verdict: DiffReviewVerdict, verification: VerifyStageResult, diffTruncated: boolean): RunResult {
+  function resolveDiffOnlyTerminal(base: RunResult, verdict: DiffReviewOrSkipped, verification: VerifyStageResult, diffTruncated: boolean): RunResult {
     const concerns = [...(base.concerns ?? [])];
+    if ('status' in verdict && verdict.status === 'skipped') {
+      return withVerification({
+        ...base,
+        workerStatus: workerStatusForTerminal(base.workerStatus),
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
     if (verdict.kind === 'reject') {
       return withVerification({
         ...base,
@@ -403,6 +412,18 @@ export async function executeReviewedLifecycle(
           message: verdict.message || 'diff review rejected implementation',
         },
         concerns,
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
+    if (verdict.kind === 'transport_failure') {
+      return withVerification({
+        ...base,
+        status: verdict.status,
+        workerStatus: 'failed',
+        error: verdict.reason ?? `diff review transport failure: ${verdict.status}`,
+        concerns: [...concerns, ...verdict.concerns],
         commits,
         commitError,
         verification,
@@ -709,14 +730,14 @@ export async function executeReviewedLifecycle(
         reviewRound: 1,
         maxReviewRounds,
       });
-      const verdict = await runDiffReview({
+      const verdict: DiffReviewOrSkipped = await runDiffReview({
         cwd,
         diff: evidence.fullDiff,
         diffTruncated: evidence.diffTruncated,
         verification,
         worker: { call: (prompt: string) => otherProvider.run(prompt) },
       });
-      emitTaskEvent('review_decision', { stage: 'diff_review', verdict: verdict.kind, round: 1 });
+      emitTaskEvent('review_decision', { stage: 'diff_review', verdict: 'kind' in verdict ? verdict.kind : 'skipped', round: 1 });
       return resolveDiffOnlyTerminal({
         ...implResult,
         workerStatus,
@@ -824,7 +845,7 @@ export async function executeReviewedLifecycle(
       }
     }
 
-    let qualityResult: QualityReviewResult = { status: 'skipped', report: undefined, findings: [] };
+    let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: 'no files written by implementer' };
     if (reviewPolicy === 'full') {
       heartbeat?.transition({
         stage: 'quality_review', stageIndex: 4,
@@ -946,16 +967,18 @@ export async function executeReviewedLifecycle(
         : finalImplResult.status === 'ok' && fileArtifactsMissing
           ? 'incomplete'
           : finalImplResult.status;
+    const specEnvelopeStatus = specStatus === 'api_error' || specStatus === 'network_error' || specStatus === 'timeout' ? 'error' : specStatus;
+    const qualityEnvelopeStatus = qualityResult.status === 'api_error' || qualityResult.status === 'network_error' || qualityResult.status === 'timeout' ? 'error' : qualityResult.status;
 
     return {
       ...finalImplResult,
       status: finalStatus,
       workerStatus: finalWorkerStatus,
       concerns,
-      specReviewStatus: specStatus,
-      qualityReviewStatus: qualityResult.status,
+      specReviewStatus: specEnvelopeStatus,
+      qualityReviewStatus: qualityEnvelopeStatus,
       specReviewReason: specResult.errorReason,
-      qualityReviewReason: qualityResult.errorReason,
+      qualityReviewReason: 'errorReason' in qualityResult ? qualityResult.errorReason : undefined,
       structuredReport: aggregated,
       implementationReport: finalImplReport,
       specReviewReport: specReport,
