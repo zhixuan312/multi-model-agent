@@ -88,6 +88,20 @@ The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent 
 
 All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 
+## What's new in 3.5.0
+
+**Breaking changes (operators read this first):**
+- `task.maxReviewRounds` is gone — review caps now derive from policy tables (`maxReworksFor('spec') = 2`, `maxReworksFor('quality') = 2`). Remove the field from any callers.
+- `agentType` is gone from `/execute-plan` (top-level + per-task). The compiler hardcodes `agentType: 'standard'`. `/delegate` is unchanged and still accepts the field.
+- Status-level escalation inside `delegateWithEscalation` is removed. Transport failures now flow through the new `runWithFallback` wrapper in `reviewed-lifecycle.ts`.
+
+**New behavior:**
+- **Tier-escalating rework.** For standard-tier tasks, the implementation tier escalates to complex on the final rework attempt; reviewers swap to keep impl ≠ reviewer.
+- **Runtime tier fallback.** Transport failures (`api_error` / `network_error` / `timeout`) or missing configuration trigger automatic substitution of the other tier. Fallback is sticky per loop.
+- **Single-slot operators** receive reviews on the same tier (`violatesSeparation: true`); set `reviewPolicy: 'off'` to opt out.
+- **Four new diagnostic events** — `escalation`, `escalation_unavailable`, `fallback`, `fallback_unavailable` — emitted via the verbose stderr stream and JSONL log.
+- **New `agents.*History` and `agents.fallbackOverrides`** envelope fields surface tier movement; the headline composer adds `(escalated to complex; fallback fired)` style suffixes.
+
 ## Operator commands
 
 ```bash
