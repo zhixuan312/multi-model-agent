@@ -2,7 +2,7 @@
 name: mma-verify
 description: Use when work is "complete" and you need to confirm acceptance criteria are actually met before claiming so to the user — each checklist item verified independently against the work
 when_to_use: The user (or a methodology skill like superpowers:verification-before-completion) needs acceptance-criteria checked against implemented work BEFORE claiming success. Delegate so each checklist item gets independent evidence-gathering on a worker. Use this BEFORE saying "done" — never after.
-version: "3.5.0"
+version: "0.0.0-unreleased"
 ---
 
 # mma-verify
