@@ -177,8 +177,19 @@ function extractSections(output: string): Record<string, string[]> {
   return sections;
 }
 
+function isLegitimatelyEmpty(lines: string[] | undefined): boolean {
+  if (!lines || lines.length === 0) return true;
+  // Strip optional bullet, lowercase, compare against the empty literals.
+  const collapsed = lines
+    .map(l => l.replace(/^[-*]\s*/, '').trim().toLowerCase())
+    .filter(Boolean);
+  if (collapsed.length === 0) return true;
+  if (collapsed.length !== 1) return false;
+  return collapsed[0] === '(none)' || collapsed[0] === 'none' || collapsed[0] === 'n/a';
+}
+
 function parseFilesChanged(lines: string[] | undefined): FileChange[] {
-  if (!lines) return [];
+  if (isLegitimatelyEmpty(lines)) return [];
   return lines
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))
@@ -190,7 +201,7 @@ function parseFilesChanged(lines: string[] | undefined): FileChange[] {
 }
 
 function parseValidationsRun(lines: string[] | undefined): Array<{ command: string; result: string }> {
-  if (!lines) return [];
+  if (isLegitimatelyEmpty(lines)) return [];
   return lines
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))

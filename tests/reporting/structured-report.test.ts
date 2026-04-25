@@ -120,3 +120,30 @@ None.`;
     expect(report.summary).toBe('Approved. The implementation looks correct and matches the spec.');
   });
 });
+
+describe('(none) literal handling', () => {
+  it('parseStructuredReport returns empty filesChanged when section body is "(none)"', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\n(none)\n');
+    expect(r.filesChanged).toEqual([]);
+  });
+
+  it('parseStructuredReport returns empty filesChanged when section body is "none"', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\nnone\n');
+    expect(r.filesChanged).toEqual([]);
+  });
+
+  it('parseStructuredReport returns empty filesChanged for case-insensitive "N/A" with bullet', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\n- n/a\n');
+    expect(r.filesChanged).toEqual([]);
+  });
+
+  it('parseStructuredReport returns empty validationsRun when body is "(none)"', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Validations run\n(none)\n');
+    expect(r.validationsRun).toEqual([]);
+  });
+
+  it('does not collapse non-(none) entries that happen to contain the word', () => {
+    const r = parseStructuredReport('## Summary\nx\n## Files changed\n- src/none-handler.ts: tweak\n');
+    expect(r.filesChanged).toEqual([{ path: 'src/none-handler.ts', summary: 'tweak' }]);
+  });
+});
