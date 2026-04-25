@@ -291,9 +291,12 @@ export class HeartbeatTimer {
       throw new Error(`stageIndex must be >= 1, got ${this.stageIndex}`);
     }
 
-    // Validate stageIndex <= stageCount
+    // Auto-grow stageCount when a transition advances past the current cap.
+    // Phase 0 of 3.6.0 telemetry adds verifying/diff_review/committing/terminal
+    // stages that the original `start(stageCount)` call cannot anticipate
+    // (the count was set before those stages joined the lifecycle).
     if (this.stageIndex > this.stageCount) {
-      throw new Error(`stageIndex ${this.stageIndex} exceeds stageCount ${this.stageCount}`);
+      this.stageCount = this.stageIndex;
     }
 
     this.emit(false);
