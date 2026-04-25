@@ -579,6 +579,33 @@ export async function executeReviewedLifecycle(
 
     if (implResult.filesWritten.length === 0) {
       heartbeat?.updateStageCount(1);
+      if (reviewPolicy === 'off') {
+        emitVerbose('stage_change', { from: 'verifying', to: 'terminal' });
+        const terminal = resolveOffTerminal({
+          ...implResult,
+          workerStatus,
+          specReviewStatus: 'skipped',
+          qualityReviewStatus: 'skipped',
+          specReviewReason: 'skipped: reviewPolicy is off',
+          qualityReviewReason: 'skipped: reviewPolicy is off',
+          agents: {
+            implementer: resolved.slot,
+            specReviewer: 'skipped',
+            qualityReviewer: 'skipped',
+          },
+          models: {
+            implementer: implModel,
+            specReviewer: null,
+            qualityReviewer: null,
+          },
+          implementationReport: implReport,
+          structuredReport: implReport,
+          filePathsSkipped,
+          fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        }, verification);
+        return terminal;
+      }
+
       const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
       const earlyFileArtifactsMissing = implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined;
       const earlyStatus: RunStatus =
