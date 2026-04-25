@@ -300,6 +300,21 @@ export async function executeReviewedLifecycle(
   const taskStartMs = Date.now();
   const commits: Commit[] = [];
   let commitError: string | undefined;
+  let specRework = 0;
+  let qualityRework = 0;
+  let metadataRepair = 0;
+  const maxReviewRounds = task.maxReviewRounds ?? 3;
+  const maxCostUSD = task.maxCostUSD;
+  const reviewRounds = () => ({ spec: specRework, quality: qualityRework, metadata: metadataRepair, cap: maxReviewRounds });
+  const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
+  const abortReviewLoop = (base: RunResult, terminationReason: 'round_cap' | 'cost_ceiling', message: string): RunResult => ({
+    ...base,
+    status: 'incomplete',
+    workerStatus: 'review_loop_aborted',
+    terminationReason,
+    reviewRounds: reviewRounds(),
+    error: message,
+  });
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
 
@@ -615,12 +630,21 @@ export async function executeReviewedLifecycle(
 
     if (specStatus === 'changes_required') {
       let prevSpecFindings: string[] = [];
-      let round = 0;
       while (true) {
-        round++;
+        if (specRework + qualityRework >= maxReviewRounds) {
+          return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before spec rework');
+        }
+        const currentCostUSD = taskCostUSD();
+        if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
+          emitVerbose('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+          return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework');
+        }
+        emitVerbose('stage_change', { from: 'spec_review', to: 'spec_rework', round: specRework + 1, cap: maxReviewRounds });
+        specRework++;
+        const round = specRework;
         heartbeat?.transition({
           stage: 'spec_rework', stageIndex: 3,
-          reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
+          reviewRound: round, maxReviewRounds,
         });
         const feedback = specResult.findings.length > 0
           ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -643,7 +667,7 @@ export async function executeReviewedLifecycle(
 
         heartbeat?.transition({
           stage: 'spec_review', stageIndex: 2,
-          reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+          reviewRound: round + 1, maxReviewRounds,
         });
         specResult = await runSpecReview(
           otherProvider,
@@ -665,7 +689,6 @@ export async function executeReviewedLifecycle(
 
         prevSpecFindings = specResult.findings;
 
-        if (round >= (task.maxReviewRounds ?? 5)) break;
       }
     }
 
@@ -673,7 +696,7 @@ export async function executeReviewedLifecycle(
     if (reviewPolicy === 'full') {
       heartbeat?.transition({
         stage: 'quality_review', stageIndex: 4,
-        reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+        reviewRound: 1, maxReviewRounds,
       });
       qualityResult = await runQualityReview(
         otherProvider,
@@ -686,12 +709,21 @@ export async function executeReviewedLifecycle(
 
       if (qualityResult.status === 'changes_required') {
         let prevQualityFindings: string[] = [];
-        let round = 0;
         while (true) {
-          round++;
+          if (specRework + qualityRework >= maxReviewRounds) {
+            return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework');
+          }
+          const currentCostUSD = taskCostUSD();
+          if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
+            emitVerbose('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+            return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework');
+          }
+          emitVerbose('stage_change', { from: 'quality_review', to: 'quality_rework', round: qualityRework + 1, cap: maxReviewRounds });
+          qualityRework++;
+          const round = qualityRework;
           heartbeat?.transition({
             stage: 'quality_rework', stageIndex: 5,
-            reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
+            reviewRound: round, maxReviewRounds,
           });
           const feedback = qualityResult.findings.length > 0
             ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -713,7 +745,7 @@ export async function executeReviewedLifecycle(
 
           heartbeat?.transition({
             stage: 'quality_review', stageIndex: 4,
-            reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+            reviewRound: round + 1, maxReviewRounds,
           });
           qualityResult = await runQualityReview(
             otherProvider,
@@ -732,7 +764,6 @@ export async function executeReviewedLifecycle(
 
           prevQualityFindings = qualityResult.findings;
 
-          if (round >= (task.maxReviewRounds ?? 5)) break;
         }
       }
     }

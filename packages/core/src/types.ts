@@ -6,7 +6,7 @@ import type {
   TokenUsage,
 } from './runners/types.js';
 import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
-import type { VerifyStageResult } from './run-tasks/verify-stage.js';
+import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -104,8 +104,11 @@ export interface RunResult {
   errorCode?: string
   retryable?: boolean
   briefQualityWarnings?: BriefQualityWarning[]
-  terminationReason?: TerminationReason
-  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
+  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling'
+  reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
+  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'low' | 'medium' | 'high'; message: string }>
+  structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
+  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_aborted' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   specReviewReason?: string
   filePathsSkipped?: boolean

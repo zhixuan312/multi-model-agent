@@ -4,7 +4,7 @@
 // sourced, how cost is computed, the exact diagnostic wording) are
 // passed in; the shared shape lives here.
 import type { Commit, RunResult } from '../../types.js';
-import type { VerifyStageResult } from '../../run-tasks/verify-stage.js';
+import type { VerifyStageResult, VerifyStepStatus } from '../../run-tasks/verify-stage.js';
 
 export type { Commit };
 import type { TokenUsage } from '../types.js';
@@ -19,6 +19,14 @@ export interface SharedResultUsage {
   totalTokens: number;
   costUSD: number | null;
   savedCostUSD: number | null;
+}
+
+export interface ReviewedRunResultFields {
+  workerStatus: 'done' | 'done_with_concerns' | 'review_loop_aborted' | 'failed';
+  terminationReason?: 'round_cap' | 'cost_ceiling';
+  reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
+  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'low' | 'medium' | 'high'; message: string }>;
+  error?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
 }
 
 function usageShape(u: SharedResultUsage): TokenUsage {

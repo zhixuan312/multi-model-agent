@@ -21,8 +21,11 @@ const taskSchema = z.object({
   contextBlockIds: z.array(z.string()).optional().describe(
     'IDs from register_context_block to prepend to prompt.',
   ),
-  maxCostUSD: z.number().positive().finite().optional().describe(
-    'Maximum estimated cost in USD for this task. Optional; the executor applies a default of 10 when omitted. When explicitly passed it must be a positive finite number; <=0, NaN, or Infinity are rejected with HTTP 400.',
+  maxReviewRounds: z.number().int().min(0).max(10).default(3).describe(
+    'Maximum combined spec/quality review rework rounds before the review loop aborts.',
+  ),
+  maxCostUSD: z.number().positive().finite().describe(
+    'Required maximum estimated cost in USD for this task. Must be a positive finite number; <=0, NaN, or Infinity are rejected with HTTP 400.',
   ),
   verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional().describe(
     'Commands to run after task completion to verify the work.',
