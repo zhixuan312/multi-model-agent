@@ -30,6 +30,17 @@ export interface AgentConfig {
   inputTokenSoftLimit?: number
 }
 
+export interface FallbackOverride {
+  role: 'implementer' | 'specReviewer' | 'qualityReviewer' | 'diffReviewer';
+  loop: 'spec' | 'quality' | 'diff';
+  attempt: number;
+  assigned: AgentType;
+  used: AgentType | 'none';
+  reason: 'transport_failure' | 'not_configured';
+  triggeringStatus?: RunStatus;
+  bothUnavailable: boolean;
+}
+
 export interface FormatConstraints {
   inputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
   outputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
@@ -127,7 +138,15 @@ export interface RunResult {
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
-  agents?: { implementer: 'standard' | 'complex' | 'not_run'; specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'; qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable' }
+  agents?: {
+    implementer: 'standard' | 'complex' | 'not_run'
+    implementerHistory?: AgentType[]
+    specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+    specReviewerHistory?: (AgentType | 'skipped')[]
+    qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+    qualityReviewerHistory?: (AgentType | 'skipped')[]
+    fallbackOverrides?: FallbackOverride[]
+  }
   models?: { implementer: string; specReviewer: string | null; qualityReviewer: string | null }
   implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   specReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
