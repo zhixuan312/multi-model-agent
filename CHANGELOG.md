@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.1] - 2026-04-25
+
+### Fixed
+
+- **Verbose-stream `runner_crash` on fallback / rework paths (core).** `composeVerboseLine` validates field keys against `^[a-z][a-z0-9_]*$`. Several `emitTaskEvent` call sites in `reviewed-lifecycle` (the fallback / fallback_unavailable / escalation / escalation_unavailable wrappers, and the `stage_change` emits on `spec_rework` / `quality_rework`) forwarded the typed `Params` shapes verbatim, which carry camelCase keys (`assignedTier`, `usedTier`, `implTier`, `reviewerTier`, `triggeringStatus`, `violatesSeparation`, `attemptCap`, plus `batchId` / `taskIndex` already covered by `batch` / `task`). Any run with `diagnostics.verbose: true` that reached one of those paths threw `verbose-line: invalid key name (key=...)`, which surfaced as terminal `runner_crash` even though the model itself succeeded. Fix: new `toVerboseFields` helper in `diagnostics/verbose-line.ts` drops `batchId` / `taskIndex` and snake_cases the rest; wired into the verbose-stream branch of `emitTaskEvent` only. The JSONL `DiagnosticLogger` path is untouched, so the `escalation` / `fallback` JSONL contract (camelCase `assignedTier` / `implTier` / ...) stays valid.
+
 ## [3.5.0] - 2026-04-25
 
 ### Breaking changes
@@ -789,7 +795,9 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.4.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.1...HEAD
+[3.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.0...v3.5.1
+[3.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.2.0...v3.3.0
 [2.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...mcp-v2.8.0
