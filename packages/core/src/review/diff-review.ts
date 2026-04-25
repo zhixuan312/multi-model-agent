@@ -1,4 +1,5 @@
 import type { VerifyStageResult } from '../run-tasks/verify-stage.js';
+import type { SkippedReviewResult } from './skipped-result.js';
 
 export type DiffReviewConcern = {
   source: 'diff_review';
@@ -7,16 +8,19 @@ export type DiffReviewConcern = {
 };
 
 export type DiffReviewVerdict =
-  | { kind: 'approve'; concerns: [] }
-  | { kind: 'concerns'; concerns: DiffReviewConcern[] }
-  | { kind: 'reject'; message: string };
+  | { kind: 'approve'; status?: 'approved'; concerns: [] }
+  | { kind: 'concerns'; status?: 'changes_required'; concerns: DiffReviewConcern[] }
+  | { kind: 'reject'; status?: 'changes_required'; message: string }
+  | { kind: 'transport_failure'; status: 'api_error' | 'network_error' | 'timeout'; concerns: DiffReviewConcern[]; reason?: string };
+
+export type DiffReviewOrSkipped = DiffReviewVerdict | SkippedReviewResult;
 
 export interface DiffReviewInput {
   cwd: string;
   diff: string;
   diffTruncated: boolean;
   verification: VerifyStageResult;
-  worker: { call: (prompt: string) => Promise<{ output: string }> };
+  worker: { call: (prompt: string) => Promise<{ output: string; status?: string }> };
 }
 
 const PROMPT_TEMPLATE = (i: DiffReviewInput) => `
@@ -39,8 +43,11 @@ Reply with EXACTLY one of:
 
 export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewVerdict> {
   const prompt = PROMPT_TEMPLATE(input);
-  const { output } = await input.worker.call(prompt);
-  const trimmed = output.trim();
+  const result = await input.worker.call(prompt);
+  if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+    return { kind: 'transport_failure', status: result.status, concerns: [] };
+  }
+  const trimmed = result.output.trim();
 
   if (trimmed === 'APPROVE') return { kind: 'approve', concerns: [] };
 

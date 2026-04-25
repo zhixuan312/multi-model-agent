@@ -38,3 +38,60 @@ describe('contract: POST /execute-plan', () => {
     }, 60_000);
   }
 });
+
+describe('POST /execute-plan rejects agentType', () => {
+  it('top-level agentType → 400 with fieldErrors.agentType', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({ agentType: 'complex', tasks: ['1. rejected execute-plan test task'] }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('invalid_request');
+      expect(body.error.details.fieldErrors).toHaveProperty('agentType');
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('per-task agentType → 400 with fieldErrors[tasks.0.agentType]', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({ tasks: [{ agentType: 'complex', prompt: 'x' }] }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('invalid_request');
+      expect(body.error.details.fieldErrors).toHaveProperty('tasks.0.agentType');
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('both top-level and per-task agentType → both keys in fieldErrors', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({ agentType: 'complex', tasks: [{ agentType: 'standard', prompt: 'x' }] }),
+      });
+
+      expect(res.status).toBe(400);
+      const body = await res.json();
+      expect(body.error.code).toBe('invalid_request');
+      expect(body.error.details.fieldErrors).toHaveProperty('agentType');
+      expect(body.error.details.fieldErrors).toHaveProperty('tasks.0.agentType');
+    } finally {
+      await h.close();
+    }
+  });
+});

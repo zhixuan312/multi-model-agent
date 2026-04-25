@@ -3,13 +3,17 @@ import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import { buildSpecReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import type { SkippedReviewResult } from './skipped-result.js';
 
 export interface SpecReviewResult {
-  status: 'approved' | 'changes_required' | 'error';
+  status: 'approved' | 'changes_required' | 'error' | 'api_error' | 'network_error' | 'timeout';
   report?: ParsedStructuredReport;
   findings: string[];
   errorReason?: string;
+  reason?: string;
 }
+
+export type SpecReviewOrSkipped = SpecReviewResult | SkippedReviewResult;
 
 export async function runSpecReview(
   reviewerProvider: Provider,
@@ -42,6 +46,9 @@ export async function runSpecReview(
   }
 
   if (result.status !== 'ok') {
+    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
+    }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 

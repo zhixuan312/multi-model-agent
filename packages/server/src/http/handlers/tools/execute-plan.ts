@@ -13,9 +13,24 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = executePlan.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
-        fieldErrors: parsed.error.flatten(),
-      });
+      const fieldErrors: Record<string, string[]> = {};
+      for (const issue of parsed.error.issues) {
+        let path = issue.path.join('.');
+        if (path === '' && issue.message.includes('"agentType"')) {
+          path = 'agentType';
+        } else if (path.startsWith('tasks.') && issue.message === 'Invalid input') {
+          const task = issue.path.reduce<unknown>((value, segment) => {
+            if (value && typeof value === 'object') return (value as Record<string | number, unknown>)[segment as string | number];
+            return undefined;
+          }, ctx.body);
+          if (task && typeof task === 'object' && 'agentType' in task) {
+            path = `${path}.agentType`;
+          }
+        }
+        if (!fieldErrors[path]) fieldErrors[path] = [];
+        fieldErrors[path].push(issue.message);
+      }
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', { fieldErrors });
       return;
     }
 

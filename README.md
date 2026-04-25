@@ -30,7 +30,7 @@ mmagent install-skill                      # all detected clients
 mmagent install-skill --target=claude-code # or gemini / codex / cursor
 
 # 5. verify
-curl -s http://localhost:7337/health       # → {"ok":true,"version":"3.4.0",...}
+curl -s http://localhost:7337/health       # → {"ok":true,"version":"3.5.0",...}
 ```
 
 Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
@@ -153,6 +153,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 See [CHANGELOG](./CHANGELOG.md) for the full history. Recent highlights:
 
+- **3.5.0** — Tier-escalating rework + runtime tier fallback in `reviewed-lifecycle.ts`. Standard-tier tasks now escalate the implementer to complex on the final rework attempt (reviewers swap to keep impl ≠ reviewer). Transport failures (`api_error` / `network_error` / `timeout`) auto-substitute the alternative tier per loop. Four new diagnostic events (`escalation`, `escalation_unavailable`, `fallback`, `fallback_unavailable`) and new envelope fields (`agents.implementerHistory`, `specReviewerHistory`, `qualityReviewerHistory`, `fallbackOverrides`). Breaking: `task.maxReviewRounds` removed; `agentType` removed from `/execute-plan` (per-task and top-level).
 - **3.4.0** — `POST /investigate` + `mma-investigate` skill: codebase Q&A with structured `file:line` citations, confidence, and unresolved questions. Read-only filesystem tools; complex tier by default. Plus structured-report parser additively exposes `extraSections` and recognizes `(none)` literals; diagnostic logger refactored to a single `emit()` writer feeding both verbose stderr and JSONL log.
 - **3.3.0** — `verifyCommand` runs after each task and feeds output to the reviewer; `reviewPolicy: "diff_only"` for cheap single-pass review; `commits[]` and `verification` on every RunResult.
 

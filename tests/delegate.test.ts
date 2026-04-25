@@ -245,14 +245,12 @@ describe('runTasks', () => {
     expect(result.agents?.specReviewer).toBe('complex');
   });
 
-  it('1.0.0 TaskSpec accepts reviewPolicy and maxReviewRounds', () => {
+  it('1.0.0 TaskSpec accepts reviewPolicy', () => {
     const task: import('@zhixuan92/multi-model-agent-core').TaskSpec = {
       prompt: 'do X',
       agentType: 'standard',
       reviewPolicy: 'full',
-      maxReviewRounds: 2,
     };
     expect(task.reviewPolicy).toBe('full');
-    expect(task.maxReviewRounds).toBe(2);
   });
 });

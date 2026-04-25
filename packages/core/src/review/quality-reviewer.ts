@@ -3,13 +3,18 @@ import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import { buildQualityReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import type { SkippedReviewResult } from './skipped-result.js';
 
 export interface QualityReviewResult {
-  status: 'approved' | 'changes_required' | 'skipped' | 'error';
+  status: 'approved' | 'changes_required' | 'error' | 'api_error' | 'network_error' | 'timeout';
   report?: ParsedStructuredReport;
   findings: string[];
   errorReason?: string;
+  reason?: string;
 }
+
+export type QualityReviewOrSkipped = QualityReviewResult | SkippedReviewResult;
+export type LegacyQualityReviewResult = QualityReviewOrSkipped | { status: 'skipped'; report?: ParsedStructuredReport; findings: string[]; errorReason?: string };
 
 export async function runQualityReview(
   reviewerProvider: Provider,
@@ -19,7 +24,7 @@ export async function runQualityReview(
   toolCallLog: string[],
   filesWritten: string[],
   evidenceBlock?: string,
-): Promise<QualityReviewResult> {
+): Promise<LegacyQualityReviewResult> {
   if (filesWritten.length === 0) {
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
@@ -45,6 +50,9 @@ export async function runQualityReview(
   }
 
   if (result.status !== 'ok') {
+    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
+    }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
   }
 

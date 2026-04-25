@@ -40,7 +40,7 @@ export interface HeartbeatTickInfo {
   stageIndex: number;
   stageCount: number;
   reviewRound?: number;
-  maxReviewRounds?: number;
+  attemptCap?: number;
   provider: string;
   progress: {
     filesRead: number;
@@ -83,7 +83,7 @@ export interface TransitionFields {
   stageIndex?: number;
   stageCount?: number;
   reviewRound?: number;
-  maxReviewRounds?: number;
+  attemptCap?: number;
   provider?: string;
   costUSD?: number | null;
   savedCostUSD?: number | null;
@@ -109,7 +109,7 @@ export class HeartbeatTimer {
   private stageIndex = 1;
   private stageCount = 1;
   private reviewRound: number | undefined;
-  private maxReviewRounds: number | undefined;
+  private attemptCap: number | undefined;
 
   // Progress counters (cumulative totals)
   private filesRead = 0;
@@ -161,7 +161,7 @@ export class HeartbeatTimer {
       stageIndex: this.stageIndex,
       stageCount: this.stageCount,
       reviewRound: this.reviewRound,
-      maxReviewRounds: this.maxReviewRounds,
+      attemptCap: this.attemptCap,
       provider: this.provider,
       progress: {
         filesRead: this.filesRead,
@@ -194,7 +194,7 @@ export class HeartbeatTimer {
     this.stageIndex = 1;
     this.stageCount = stageCount;
     this.reviewRound = undefined;
-    this.maxReviewRounds = undefined;
+    this.attemptCap = undefined;
     this.filesRead = 0;
     this.filesWritten = 0;
     this.toolCalls = 0;
@@ -249,16 +249,16 @@ export class HeartbeatTimer {
       // Auto-clear review fields for implementing
       if (fields.stage === 'implementing') {
         this.reviewRound = undefined;
-        this.maxReviewRounds = undefined;
+        this.attemptCap = undefined;
       } else if (REVIEW_STAGES.has(fields.stage)) {
         // Review/rework requires round fields
         const round = fields.reviewRound ?? this.reviewRound;
-        const maxRounds = fields.maxReviewRounds ?? this.maxReviewRounds;
-        if (round === undefined || maxRounds === undefined) {
-          throw new Error(`reviewRound and maxReviewRounds required for stage '${fields.stage}'`);
+        const attemptCap = fields.attemptCap ?? this.attemptCap;
+        if (round === undefined || attemptCap === undefined) {
+          throw new Error(`reviewRound and attemptCap required for stage '${fields.stage}'`);
         }
         this.reviewRound = round;
-        this.maxReviewRounds = maxRounds;
+        this.attemptCap = attemptCap;
       }
     } else {
       // Stage didn't change but stageIndex might
@@ -269,13 +269,13 @@ export class HeartbeatTimer {
       if (fields.reviewRound !== undefined) {
         this.reviewRound = fields.reviewRound;
       }
-      if (fields.maxReviewRounds !== undefined) {
-        this.maxReviewRounds = fields.maxReviewRounds;
+      if (fields.attemptCap !== undefined) {
+        this.attemptCap = fields.attemptCap;
       }
 
       // Reject review fields if current stage is implementing
-      if (this.stage === 'implementing' && (this.reviewRound !== undefined || this.maxReviewRounds !== undefined)) {
-        throw new Error('reviewRound and maxReviewRounds must not be set for implementing stage');
+      if (this.stage === 'implementing' && (this.reviewRound !== undefined || this.attemptCap !== undefined)) {
+        throw new Error('reviewRound and attemptCap must not be set for implementing stage');
       }
     }
 
@@ -296,8 +296,8 @@ export class HeartbeatTimer {
     this.transition({ provider });
   }
 
-  setStage(stage: HeartbeatStage, stageIndex: number, reviewRound?: number, maxReviewRounds?: number): void {
-    this.transition({ stage, stageIndex, reviewRound, maxReviewRounds });
+  setStage(stage: HeartbeatStage, stageIndex: number, reviewRound?: number, attemptCap?: number): void {
+    this.transition({ stage, stageIndex, reviewRound, attemptCap });
   }
 
   updateStageCount(stageCount: number): void {
@@ -349,7 +349,7 @@ export class HeartbeatTimer {
       stageIndex: this.stageIndex,
       stageCount: this.stageCount,
       reviewRound: this.reviewRound,
-      maxReviewRounds: this.maxReviewRounds,
+      attemptCap: this.attemptCap,
       progress: {
         filesRead: this.filesRead,
         filesWritten: this.filesWritten,
@@ -370,8 +370,8 @@ export class HeartbeatTimer {
 
   private composeHeadline(elapsed: string): string {
     const prefix = `[${this.stageIndex}/${this.stageCount}] ${STAGE_LABELS[this.stage]}`;
-    const roundSuffix = this.reviewRound !== undefined && this.maxReviewRounds !== undefined
-      ? ` (round ${this.reviewRound}/${this.maxReviewRounds})`
+    const roundSuffix = this.reviewRound !== undefined && this.attemptCap !== undefined
+      ? ` (round ${this.reviewRound}/${this.attemptCap})`
       : '';
     const providerClause = ` (${this.provider})`;
     const costClause = this.composeCostClause();

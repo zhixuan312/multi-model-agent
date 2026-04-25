@@ -30,6 +30,17 @@ export interface AgentConfig {
   inputTokenSoftLimit?: number
 }
 
+export interface FallbackOverride {
+  role: 'implementer' | 'specReviewer' | 'qualityReviewer' | 'diffReviewer';
+  loop: 'spec' | 'quality' | 'diff';
+  attempt: number;
+  assigned: AgentType;
+  used: AgentType | 'none';
+  reason: 'transport_failure' | 'not_configured';
+  triggeringStatus?: RunStatus;
+  bothUnavailable: boolean;
+}
+
 export interface FormatConstraints {
   inputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
   outputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
@@ -48,7 +59,6 @@ export interface TaskSpec {
   sandboxPolicy?: SandboxPolicy
   maxCostUSD?: number
   reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off'
-  maxReviewRounds?: number
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
   formatConstraints?: FormatConstraints
@@ -104,7 +114,7 @@ export interface RunResult {
   errorCode?: string
   retryable?: boolean
   briefQualityWarnings?: BriefQualityWarning[]
-  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling'
+  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'low' | 'medium' | 'high'; message: string }>
   structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
@@ -127,7 +137,15 @@ export interface RunResult {
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
-  agents?: { implementer: 'standard' | 'complex' | 'not_run'; specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'; qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable' }
+  agents?: {
+    implementer: 'standard' | 'complex' | 'not_run'
+    implementerHistory?: AgentType[]
+    specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+    specReviewerHistory?: (AgentType | 'skipped')[]
+    qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
+    qualityReviewerHistory?: (AgentType | 'skipped')[]
+    fallbackOverrides?: FallbackOverride[]
+  }
   models?: { implementer: string; specReviewer: string | null; qualityReviewer: string | null }
   implementationReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   specReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport

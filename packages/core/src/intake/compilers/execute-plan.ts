@@ -55,6 +55,7 @@ export function compileExecutePlan(
       } as ExecutePlanSource,
       prompt,
       reviewPolicy,
+      agentType: 'standard',
     };
   });
 }

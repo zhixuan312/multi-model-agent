@@ -1,11 +1,20 @@
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 
+type ReviewAggregateStatus =
+  | 'approved'
+  | 'changes_required'
+  | 'skipped'
+  | 'error'
+  | 'api_error'
+  | 'network_error'
+  | 'timeout';
+
 export function aggregateResult(
   implReport: ParsedStructuredReport,
   specReport: ParsedStructuredReport | undefined,
   qualityReport: ParsedStructuredReport | undefined,
-  specStatus: 'approved' | 'changes_required' | 'skipped' | 'error',
-  qualityStatus: 'approved' | 'changes_required' | 'skipped' | 'error',
+  specStatus: ReviewAggregateStatus,
+  qualityStatus: ReviewAggregateStatus,
 ): ParsedStructuredReport {
   const prefix =
     specStatus === 'changes_required'

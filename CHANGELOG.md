@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.0] - 2026-04-25
+
+### Breaking changes
+- `task.maxReviewRounds` removed from `TaskSpec`; replaced with derived per-loop caps (`maxReworksFor('spec') = 2`, `maxReworksFor('quality') = 2`). Callers passing the field receive `400 invalid_request`.
+- `agentType` removed from `/execute-plan` request body (per-task and top-level). Callers receive `400 invalid_request` with `fieldErrors[<path>]`. `/delegate` is unchanged.
+- Status-level escalation in `delegateWithEscalation` removed. Initial transport failures now surface as `incomplete` (after one cross-tier fallback attempt).
+- `terminationReason` envelope field union widened with `'all_tiers_unavailable'`.
+- `RunStatus` union widened with `'unavailable'` (used by synthetic both-unavailable result).
+
+### New features
+- **Tier-escalating rework.** For standard tasks, the rework loop runs the implementation on standard for the first 2 attempts; complex implements the last attempt. Reviewers swap to preserve impl≠reviewer. Complex tasks do not policy-escalate.
+- **Runtime tier fallback.** When an assigned provider transport-fails (api_error / network_error / timeout) or is not configured, the lifecycle automatically substitutes the alternative tier for that call. Sticky per loop.
+- **Single-slot operators now get reviews** on the same tier (impl=reviewer accepted, flagged with `violatesSeparation: true`). Operators preferring no-review can set `reviewPolicy: 'off'`.
+- **Four new diagnostic events:** `escalation`, `escalation_unavailable`, `fallback`, `fallback_unavailable`.
+- **New envelope fields:** `agents.implementerHistory`, `agents.specReviewerHistory`, `agents.qualityReviewerHistory`, `agents.fallbackOverrides` (all optional; present only when carrying information beyond the singular fields).
+- **Headline composer** surfaces escalation + fallback so operators see tier movement without parsing the envelope.
+
 ## [3.4.0] - 2026-04-25
 
 ### Added

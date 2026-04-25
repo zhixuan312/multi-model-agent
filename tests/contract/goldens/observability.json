@@ -11,6 +11,22 @@
     {
       "name": "batch_completed",
       "requiredFields": ["event", "ts", "batchId", "tool", "durationMs", "taskCount"]
+    },
+    {
+      "name": "escalation",
+      "requiredFields": ["loop", "attempt", "baseTier", "implTier", "reviewerTier"]
+    },
+    {
+      "name": "escalation_unavailable",
+      "requiredFields": ["loop", "attempt", "role", "wantedTier", "reason"]
+    },
+    {
+      "name": "fallback",
+      "requiredFields": ["loop", "attempt", "role", "assignedTier", "usedTier", "reason", "violatesSeparation"]
+    },
+    {
+      "name": "fallback_unavailable",
+      "requiredFields": ["loop", "attempt", "role", "assignedTier", "reason"]
     }
   ]
 }
