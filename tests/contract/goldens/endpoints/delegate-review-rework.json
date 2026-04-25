@@ -112,7 +112,8 @@
       "maxCostUSD": 10,
       "sandboxPolicy": "cwd-only",
       "briefQualityPolicy": "off",
-      "cwd": "<REPO>"
+      "cwd": "<REPO>",
+      "reviewPolicy": "full"
     }
   ],
   "wallClockMs": "<DETERMINISTIC>"

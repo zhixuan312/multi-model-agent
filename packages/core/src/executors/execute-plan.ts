@@ -16,6 +16,14 @@ import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.
  * pulls it cleanly. Fall back to naming the file path so the worker can
  * readFile it on demand when the heading can't be matched.
  */
+function getTaskDescriptor(task: Input['tasks'][number]): string {
+  return typeof task === 'string' ? task : task.task;
+}
+
+function getTaskReviewPolicy(task: Input['tasks'][number]): TaskSpec['reviewPolicy'] {
+  return typeof task === 'string' ? 'full' : task.reviewPolicy;
+}
+
 function buildExecutePlanPrompt(
   filePaths: string[],
   task: string,
@@ -93,7 +101,6 @@ export async function executeExecutePlan(
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: input.agentType ?? 'standard',
-    reviewPolicy: input.reviewPolicy ?? 'full',
     briefQualityPolicy: 'off',
     done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
     tools: config.defaults?.tools ?? 'full',
@@ -113,10 +120,12 @@ export async function executeExecutePlan(
   // inlining the whole plan file, which was 100+ KB in practice).
   const tasks: TaskSpec[] = [];
   for (let i = 0; i < input.tasks.length; i++) {
-    const taskDescriptor = input.tasks[i]!;
+    const rawTask = input.tasks[i]!;
+    const taskDescriptor = getTaskDescriptor(rawTask);
     const section = await extractPlanSection(validPaths, taskDescriptor, baseTaskSpec.cwd);
     const spec: TaskSpec = {
       ...baseTaskSpec,
+      reviewPolicy: getTaskReviewPolicy(rawTask),
       prompt: buildExecutePlanPrompt(validPaths, taskDescriptor, section, input.context),
     } as TaskSpec;
     if (section) {

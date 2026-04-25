@@ -28,7 +28,7 @@ export function compileDelegateTasks(
   }
 
   return tasks.map((task, index) => {
-    const originalInput: Record<string, unknown> = structuredClone(task) as Record<string, unknown>;
+    const originalInput: Record<string, unknown> = structuredClone(task) as unknown as Record<string, unknown>;
     return {
       draftId: createDraftId(requestId, index, 'root'),
       source: {

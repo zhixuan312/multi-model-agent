@@ -456,6 +456,17 @@
                           "description": "The task instruction. Required.",
                           "type": "string"
                         },
+                        "reviewPolicy": {
+                          "default": "full",
+                          "description": "Review lifecycle policy for this task. Default: full.",
+                          "enum": [
+                            "full",
+                            "spec_only",
+                            "diff_only",
+                            "off"
+                          ],
+                          "type": "string"
+                        },
                         "verifyCommand": {
                           "description": "Commands to run after task completion to verify the work.",
                           "items": {
@@ -538,6 +549,7 @@
           "content": {
             "application/json": {
               "schema": {
+                "additionalProperties": false,
                 "properties": {
                   "agentType": {
                     "description": "Worker tier. Default: \"standard\" (cost-effective). Set to \"complex\" for harder plan tasks that a smaller model cannot finish in the turn budget.",
@@ -579,10 +591,38 @@
                     "type": "integer"
                   },
                   "tasks": {
-                    "description": "Descriptive task strings matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
+                    "description": "Descriptive task strings or task objects matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
                     "items": {
-                      "minLength": 1,
-                      "type": "string"
+                      "anyOf": [
+                        {
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        {
+                          "additionalProperties": false,
+                          "properties": {
+                            "reviewPolicy": {
+                              "default": "full",
+                              "description": "Review lifecycle policy for this task. Default: full.",
+                              "enum": [
+                                "full",
+                                "spec_only",
+                                "diff_only",
+                                "off"
+                              ],
+                              "type": "string"
+                            },
+                            "task": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "task"
+                          ],
+                          "type": "object"
+                        }
+                      ]
                     },
                     "minItems": 1,
                     "type": "array"
