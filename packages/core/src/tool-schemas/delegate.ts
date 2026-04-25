@@ -21,6 +21,12 @@ const taskSchema = z.object({
   contextBlockIds: z.array(z.string()).optional().describe(
     'IDs from register_context_block to prepend to prompt.',
   ),
+  maxCostUSD: z.number().nonnegative().describe(
+    'Maximum estimated cost in USD for this task. Required.',
+  ),
+  verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional().describe(
+    'Commands to run after task completion to verify the work.',
+  ),
 }).strict();
 
 export const inputSchema = z.object({

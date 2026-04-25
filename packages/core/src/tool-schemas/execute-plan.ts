@@ -21,6 +21,8 @@ export const inputSchema = z.object({
     .describe('IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.'),
   agentType: z.enum(['standard', 'complex']).optional()
     .describe('Worker tier. Default: "standard" (cost-effective). Set to "complex" for harder plan tasks that a smaller model cannot finish in the turn budget.'),
+  verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional()
+    .describe('Commands to run after plan task completion to verify the work.'),
 });
 
 export type Input = z.infer<typeof inputSchema>;
