@@ -1,0 +1,18 @@
+{
+  "version": "3.3.0",
+  "events": [
+    { "name": "request_received",  "scope": "batch", "required_keys": ["batch", "route", "body_bytes"], "either_or": [["body", "body_path"]] },
+    { "name": "batch_created",     "scope": "batch", "required_keys": ["batch"] },
+    { "name": "task_started",      "scope": "task",  "required_keys": ["task", "provider", "agent_type"] },
+    { "name": "stage_change",      "scope": "task",  "required_keys": ["from", "to"] },
+    { "name": "tool_call",         "scope": "task",  "required_keys": ["tool", "args_summary"] },
+    { "name": "text_emission",     "scope": "task",  "required_keys": ["preview"] },
+    { "name": "heartbeat",         "scope": "task",  "required_keys": ["idle_since_llm_ms", "idle_since_tool_ms", "idle_since_text_ms"] },
+    { "name": "commit_recorded",   "scope": "task",  "required_keys": ["sha", "subject"] },
+    { "name": "verify_step",       "scope": "task",  "required_keys": ["command", "status", "exit_code", "signal", "duration_ms"] },
+    { "name": "verify_skipped",    "scope": "task",  "required_keys": ["reason", "stage"] },
+    { "name": "review_decision",   "scope": "task",  "required_keys": ["stage", "verdict", "round"] },
+    { "name": "cost_check",        "scope": "task",  "required_keys": ["stage", "tripped", "cost_available"] },
+    { "name": "task_terminal",     "scope": "task",  "required_keys": ["worker_status"] }
+  ]
+}
