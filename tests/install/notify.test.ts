@@ -1,7 +1,6 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as notify from '../../packages/server/src/install/notify.js';
-import * as headers from '../../packages/server/src/install/headers.js';
 import { writeSkillToClient } from '../../packages/server/src/install/manifest-resolve.js';
 
 vi.mock('node:fs');
@@ -32,38 +31,36 @@ function mockFsForNonExistentFiles() {
   });
 }
 
-describe('notifySkillInstalled', () => {
-  it('is a no-op function', () => {
-    expect(() => notify.notifySkillInstalled('mma-delegate', 'claude-code')).not.toThrow();
-    expect(notify.notifySkillInstalled('mma-delegate', 'claude-code')).toBeUndefined();
+describe('notifySkillInstalled (no-op without fetch)', () => {
+  it('is a no-op when fetch is not provided', () => {
+    expect(() => notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' })).not.toThrow();
+    expect(notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' })).toBeUndefined();
+  });
+});
+
+describe('notifySkillInstalled (with fetch)', () => {
+  it('POSTs with X-MMA-Client: claude-code for claude-code client', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+    const fakeFetch = async (_url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Record<string, string>;
+      return new Response('{}', { status: 200 });
+    };
+    notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code', fetch: fakeFetch as typeof globalThis.fetch });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(capturedHeaders).toBeTruthy();
+    expect(capturedHeaders!['X-MMA-Client']).toBe('claude-code');
   });
 
-  it('calls clientHeaders with the mapped client name for gemini', () => {
-    const spy = vi.spyOn(headers, 'clientHeaders');
-    notify.notifySkillInstalled('mma-delegate', 'gemini');
-    expect(spy).toHaveBeenCalledWith('gemini-cli');
-    spy.mockRestore();
-  });
-
-  it('calls clientHeaders with the mapped client name for codex', () => {
-    const spy = vi.spyOn(headers, 'clientHeaders');
-    notify.notifySkillInstalled('mma-delegate', 'codex');
-    expect(spy).toHaveBeenCalledWith('codex-cli');
-    spy.mockRestore();
-  });
-
-  it('calls clientHeaders with the mapped client name for cursor', () => {
-    const spy = vi.spyOn(headers, 'clientHeaders');
-    notify.notifySkillInstalled('mma-delegate', 'cursor');
-    expect(spy).toHaveBeenCalledWith('cursor');
-    spy.mockRestore();
-  });
-
-  it('calls clientHeaders with the mapped client name for claude-code', () => {
-    const spy = vi.spyOn(headers, 'clientHeaders');
-    notify.notifySkillInstalled('mma-delegate', 'claude-code');
-    expect(spy).toHaveBeenCalledWith('claude-code');
-    spy.mockRestore();
+  it('POSTs with X-MMA-Client: gemini-cli for gemini client', async () => {
+    let capturedHeaders: Record<string, string> | undefined;
+    const fakeFetch = async (_url: string, init?: RequestInit) => {
+      capturedHeaders = init?.headers as Record<string, string>;
+      return new Response('{}', { status: 200 });
+    };
+    notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'gemini', fetch: fakeFetch as typeof globalThis.fetch });
+    await new Promise((r) => setTimeout(r, 10));
+    expect(capturedHeaders).toBeTruthy();
+    expect(capturedHeaders!['X-MMA-Client']).toBe('gemini-cli');
   });
 });
 
@@ -77,21 +74,21 @@ describe('writeSkillToClient calls notifySkillInstalled after successful install
 
   it('fires for claude-code', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'claude-code', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'claude-code');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'claude-code' });
   });
 
   it('fires for gemini', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'gemini', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'gemini');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'gemini' });
   });
 
   it('fires for codex', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'codex', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'codex');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'codex' });
   });
 
   it('fires for cursor', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'cursor', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version, baseOpts.cwd);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'cursor');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'cursor' });
   });
 });

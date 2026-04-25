@@ -4,8 +4,53 @@ import {
   endBaseStage,
   endVerifyStage,
   endReviewStage,
+  executeReviewedLifecycle,
 } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
-import type { StageStatsMap } from '../../packages/core/src/types.js';
+import { mockProvider } from '../contract/fixtures/mock-providers.js';
+import type { StageStatsMap, MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
+
+function makeConfig(opts?: { defaultTools?: 'none' | 'readonly' | 'no-shell' | 'full' }): MultiModelConfig {
+  return {
+    agents: {
+      standard: {
+        type: 'openai-compatible',
+        model: 'gpt-5',
+        baseUrl: 'http://mock.local',
+        apiKey: 'mock',
+      },
+      complex: {
+        type: 'openai-compatible',
+        model: 'gpt-5.2',
+        baseUrl: 'http://mock.local',
+        apiKey: 'mock',
+      },
+    },
+    defaults: {
+      timeoutMs: 300_000,
+      stallTimeoutMs: 600_000,
+      maxCostUSD: 10,
+      tools: opts?.defaultTools ?? 'full',
+      sandboxPolicy: 'cwd-only',
+    },
+    server: {
+      bind: '127.0.0.1',
+      port: 7337,
+      auth: { tokenFile: '/tmp/mock-token' },
+      limits: {
+        maxBodyBytes: 1_000_000,
+        batchTtlMs: 300_000,
+        idleProjectTimeoutMs: 3_600_000,
+        clarificationTimeoutMs: 300_000,
+        projectCap: 10,
+        maxBatchCacheSize: 10,
+        maxContextBlockBytes: 100_000,
+        maxContextBlocksPerProject: 10,
+        shutdownDrainMs: 5_000,
+      },
+      autoUpdateSkills: false,
+    },
+  };
+}
 
 describe('emptyStats', () => {
   it('returns a StageStatsMap with all stages having entered=false', () => {
@@ -154,5 +199,170 @@ describe('StageStatsMap type safety', () => {
     endVerifyStage(stats, Date.now() - 100, 0, agent, 0.01, 'passed', null);
     expect(stats.verifying.entered).toBe(true);
     expect(stats.verifying.outcome).toBe('passed');
+  });
+});
+
+// Integration tests — verify that executeReviewedLifecycle actually
+// wires stageStats into the returned RunResult, not just the unit helpers.
+describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
+  it('populates stageStats when reviewPolicy=off and no file artifacts', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: mockProvider({ stage: 'ok', output: 'done' }).run,
+      },
+      capabilityOverride: false,
+    };
+
+    const r = await executeReviewedLifecycle(task, resolved, config, 0);
+
+    // stageStats must be defined on the returned RunResult
+    expect(r.stageStats).toBeDefined();
+    const s = r.stageStats!;
+
+    // implementing stage was entered (the provider ran)
+    expect(s.implementing.entered).toBe(true);
+    expect(s.implementing.durationMs).toBeGreaterThanOrEqual(0);
+    expect(s.implementing.model).toBeTruthy();
+    expect(s.implementing.agentTier).toBeTruthy();
+
+    // Stages not entered have entered=false and null sub-fields (R4)
+    expect(s.spec_review.entered).toBe(false);
+    expect(s.spec_review.verdict).toBeNull();
+    expect(s.spec_review.roundsUsed).toBeNull();
+
+    expect(s.spec_rework.entered).toBe(false);
+    expect(s.spec_rework.durationMs).toBeNull();
+    expect(s.spec_rework.costUSD).toBeNull();
+
+    expect(s.quality_review.entered).toBe(false);
+    expect(s.quality_review.verdict).toBeNull();
+
+    expect(s.quality_rework.entered).toBe(false);
+    expect(s.quality_rework.durationMs).toBeNull();
+
+    expect(s.diff_review.entered).toBe(false);
+    expect(s.diff_review.verdict).toBeNull();
+
+    expect(s.committing.entered).toBe(false);
+    expect(s.committing.durationMs).toBeNull();
+
+    // verifying is not entered for non-artifact tasks
+    expect(s.verifying.entered).toBe(false);
+    expect(s.verifying.outcome).toBeNull();
+    expect(s.verifying.skipReason).toBeNull();
+  });
+
+  it('populates stageStats when provider returns incomplete', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: mockProvider({ stage: 'incomplete', output: 'partial work' }).run,
+      },
+      capabilityOverride: false,
+    };
+
+    const r = await executeReviewedLifecycle(task, resolved, config, 0);
+
+    expect(r.stageStats).toBeDefined();
+    const s = r.stageStats!;
+
+    // implementing stage was still entered even though result was incomplete
+    expect(s.implementing.entered).toBe(true);
+    expect(s.implementing.durationMs).toBeGreaterThanOrEqual(0);
+    expect(s.implementing.model).toBeTruthy();
+
+    // stages not entered remain entered=false
+    expect(s.spec_review.entered).toBe(false);
+    expect(s.spec_rework.entered).toBe(false);
+    expect(s.quality_review.entered).toBe(false);
+    expect(s.diff_review.entered).toBe(false);
+    expect(s.committing.entered).toBe(false);
+  });
+
+  it('records verifying stage when autoCommit is true and verifyCommand is set', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = {
+      prompt: 'test',
+      reviewPolicy: 'off',
+      autoCommit: true,
+      verifyCommand: ['true'],
+    };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: mockProvider({ stage: 'ok', output: 'done' }).run,
+      },
+      capabilityOverride: false,
+    };
+
+    const r = await executeReviewedLifecycle(task, resolved, config, 0);
+
+    expect(r.stageStats).toBeDefined();
+    const s = r.stageStats!;
+    expect(s.verifying.entered).toBe(true);
+    expect(s.verifying.outcome).toBe('passed');
+    expect(s.verifying.durationMs).toBeGreaterThanOrEqual(0);
+    expect(s.verifying.model).toBeTruthy();
+    expect(s.verifying.agentTier).toBeTruthy();
+  });
+
+  it('records terminal as the final heartbeat stage', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: mockProvider({ stage: 'ok', output: 'done' }).run,
+      },
+      capabilityOverride: false,
+    };
+
+    const r = await executeReviewedLifecycle(task, resolved, config, 0);
+
+    // After lifecycle completion, stageStats must be present
+    // and implementing stage must have been entered+closed
+    expect(r.stageStats).toBeDefined();
+    expect(r.stageStats!.implementing.entered).toBe(true);
+    expect(r.stageStats!.implementing.durationMs).toBeGreaterThanOrEqual(0);
+  });
+
+  it('all 8 stage entries are present', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: mockProvider({ stage: 'ok', output: 'done' }).run,
+      },
+      capabilityOverride: false,
+    };
+
+    const r = await executeReviewedLifecycle(task, resolved, config, 0);
+
+    const keys = Object.keys(r.stageStats ?? {}) as Array<keyof StageStatsMap>;
+    expect(keys).toHaveLength(8);
+    expect(keys).toContain('implementing');
+    expect(keys).toContain('verifying');
+    expect(keys).toContain('spec_review');
+    expect(keys).toContain('spec_rework');
+    expect(keys).toContain('quality_review');
+    expect(keys).toContain('quality_rework');
+    expect(keys).toContain('diff_review');
+    expect(keys).toContain('committing');
   });
 });

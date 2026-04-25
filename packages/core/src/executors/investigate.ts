@@ -55,8 +55,21 @@ export async function executeInvestigate(
     });
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));
+    const msg = runtimeError.message;
     const fallback: RunResult = {
       output: '',
+      status: 'error' as const,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      error: msg,
+      errorCode: 'executor_error',
+      retryable: false,
+      durationMs: 0,
       structuredReport: {
         summary: null,
         filesChanged: [],
@@ -68,10 +81,11 @@ export async function executeInvestigate(
       workerError: runtimeError,
       structuredError: {
         code: 'executor_error' as const,
-        message: runtimeError.message,
+        message: msg,
         where: 'executor:investigate',
       },
-    } as unknown as RunResult;   // RunResult shape varies — cast only the assembly, not the field types.
+      workerStatus: 'failed' as const,
+    } as unknown as RunResult;
     results = [fallback];
   }
   const wallClockMs = Date.now() - startMs;

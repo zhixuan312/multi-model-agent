@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.5.3] - 2026-04-26
+
+### Fixed
+
+- **Tasks could exceed `defaults.timeoutMs` indefinitely (core).** `timeoutMs` was applied per-runner-call, so retries (api_error / network_error / timeout) and tier fallbacks each got a fresh 30-min budget — the orchestrator-level wall-clock had no upper bound. Now `defaults.timeoutMs` is a hard task-level cap: per-call timeouts are clamped to remaining budget, and the retry / fallback loops short-circuit when the deadline is past, returning the best salvage so far. *Behavior change*: a task that previously spent N×30 min across retries now finishes within `timeoutMs` total.
+- **Silent stalls (model thinking forever, transport hung) burned the full timeout (core).** No watchdog detected runs that had no LLM / tool / text activity for minutes. New `defaults.stallTimeoutMs` (default 10 min) aborts the in-flight `provider.run` via an external `AbortSignal` plumbed through all three runners (claude, openai-compatible, codex) and `withTimeout`. The runner force-salvages and returns; retry / fallback loops also bail. Emits a `stall_abort` diagnostic event with `idle_ms` + `threshold_ms`.
+- **`turn_start` events mislabeled `claude-compatible` agents as `claude` (core).** The runner hardcoded `provider: 'claude'`; now it emits `provider: providerConfig.type`. Added `model` field on `turn_start` events across all runners so the configured model name (e.g. `deepseek-v4-pro`) shows on every turn in stderr verbose and JSONL — not just on the one-time `worker_start`.
+
+### New features
+
+- **`defaults.stallTimeoutMs`** — operator-tunable idle threshold for the new stall watchdog. Default 600000 (10 min). Set to a larger value if you have legitimately long-running single tool calls (huge diffs, slow shell scripts).
+
 ## [3.5.2] - 2026-04-25
 
 ### New features

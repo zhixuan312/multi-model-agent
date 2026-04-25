@@ -25,6 +25,20 @@ function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['
 export interface DelegateOptions {
   explicitlyPinned?: boolean;
   onProgress?: (event: InternalRunnerEvent) => void;
+  /**
+   * Absolute Date.now() deadline for the entire task — across retries AND
+   * tier fallbacks. Each provider.run gets at most `deadline - Date.now()`
+   * as its per-call timeout. When the deadline is hit between calls, the
+   * loop breaks and returns the best salvage so far.
+   */
+  taskDeadlineMs?: number;
+  /**
+   * External abort signal — when fired (e.g. by the orchestrator's stall
+   * watchdog when nothing has progressed for `defaults.stallTimeoutMs`),
+   * the in-flight provider.run force-salvages and returns; the retry/
+   * fallback loops short-circuit so the user gets *something* back.
+   */
+  abortSignal?: AbortSignal;
 }
 
 const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'network_error']);
@@ -85,9 +99,24 @@ export async function delegateWithEscalation(
       const adjustedMaxCostUSD =
         task.maxCostUSD !== undefined ? Math.max(0, task.maxCostUSD - cumulativeCostUSD) : undefined;
 
+      // Cap per-call timeout at the remaining task-level budget. When the
+      // deadline is in the past, force a 1ms timeout so the runner returns
+      // immediately with whatever salvage it has — synthesized into a
+      // task_wall_clock outcome below.
+      let effectiveTimeoutMs = task.timeoutMs;
+      if (options.taskDeadlineMs !== undefined) {
+        const remaining = options.taskDeadlineMs - Date.now();
+        const remainingClamped = remaining > 0 ? remaining : 1;
+        effectiveTimeoutMs =
+          effectiveTimeoutMs !== undefined
+            ? Math.min(effectiveTimeoutMs, remainingClamped)
+            : remainingClamped;
+      }
+
       result = await provider.run(task.prompt, {
         tools: task.tools,
-        timeoutMs: task.timeoutMs,
+        timeoutMs: effectiveTimeoutMs,
+        abortSignal: options.abortSignal,
         cwd: task.cwd,
         effort: task.effort,
         sandboxPolicy: task.sandboxPolicy,
@@ -109,6 +138,11 @@ export async function delegateWithEscalation(
       const attemptCost = result.usage.costUSD ?? 0;
       cumulativeCostUSD += attemptCost;
       if (task.maxCostUSD !== undefined && cumulativeCostUSD >= task.maxCostUSD) break;
+
+      // Don't burn the retry budget on a doomed call: if the task-level
+      // deadline is already past or the stall watchdog aborted, stop trying.
+      if (options.taskDeadlineMs !== undefined && Date.now() >= options.taskDeadlineMs) break;
+      if (options.abortSignal?.aborted) break;
 
       const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
       safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status, delayMs });
@@ -137,6 +171,15 @@ export async function delegateWithEscalation(
         ...result,
         escalationLog: attempts.map((a) => a.record),
       };
+    }
+
+    // Skip the next provider in the fallback chain if the task-level
+    // deadline has been hit or the stall watchdog aborted.
+    if (options.taskDeadlineMs !== undefined && Date.now() >= options.taskDeadlineMs) {
+      break;
+    }
+    if (options.abortSignal?.aborted) {
+      break;
     }
 
     if (options.explicitlyPinned) {

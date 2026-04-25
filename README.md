@@ -168,7 +168,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 ## What's new
 
-Latest: **3.5.2** — New `claude-compatible` agent type for Anthropic-format third-party endpoints (e.g. DeepSeek's `/anthropic`). Mirrors `openai-compatible` (required `baseUrl`, optional `apiKey` / `apiKeyEnv`); preserves thinking blocks across multi-turn tool use. Bonus: DeepSeek under `openai-compatible` now auto-disables thinking so multi-turn calls don't 400.
+Latest: **3.5.3** — Hard task-level wall-clock cap and a stall watchdog. `defaults.timeoutMs` is now total (across retries + tier fallback) instead of per-call, so a task always finishes within budget. New `defaults.stallTimeoutMs` (default 10 min) aborts the in-flight runner when no LLM / tool / text event has fired for that long — catches "model thinking forever" and "transport hung". Plus a labeling fix: `turn_start` events now show `provider=claude-compatible model=deepseek-v4-pro` instead of misreporting `claude`.
 
 Full history in [CHANGELOG](./CHANGELOG.md).
 

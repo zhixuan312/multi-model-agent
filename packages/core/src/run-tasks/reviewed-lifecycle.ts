@@ -508,12 +508,8 @@ export async function executeReviewedLifecycle(
   let latestVerification: VerifyStageResult = defaultVerification;
 
   async function runVerificationStage(): Promise<VerifyStageResult> {
-    emitTaskEvent('stage_change', { from: 'committing', to: 'verifying' });
-    heartbeat?.transition({
-      stage: 'verifying' as never,
-      stageIndex: 4,
-      reviewRound: undefined,
-    });
+    emitTaskEvent('stage_change', { from: 'implementing', to: 'verifying' });
+    heartbeat?.setStage('verifying', 4);
     const overallVerificationStart = Date.now();
     const verifyCostStart = runningCostUSD();
     const verification = await runVerifyStage({
@@ -927,6 +923,7 @@ export async function executeReviewedLifecycle(
         commits,
         commitError,
         verification,
+        stageStats: stats,
       };
     }
 
@@ -948,6 +945,7 @@ export async function executeReviewedLifecycle(
         commits,
         commitError,
         verification,
+        stageStats: stats,
       };
     }
 

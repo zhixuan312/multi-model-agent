@@ -76,6 +76,10 @@ export interface RunOptions {
   parentModel?: string
   maxCostUSD?: number
   formatConstraints?: FormatConstraints
+  /** External abort signal — when fired, the runner force-salvages and
+   *  returns a `timeout` result via the same path as the per-call timeout.
+   *  Used by the orchestrator's stall watchdog. */
+  abortSignal?: AbortSignal
 }
 
 /** Runtime dependencies for `runTasks`. */

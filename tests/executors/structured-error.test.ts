@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import type { RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeDelegate } from '@zhixuan92/multi-model-agent-core/executors/index';
-import { buildExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/execution-context';
-import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/types';
-import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
+import type { RunResult } from '../../packages/core/src/types.js';
+import { executeDelegate } from '../../packages/core/src/executors/delegate.js';
+import { buildExecutionContext } from '../../packages/core/src/executors/execution-context.js';
+import type { ExecutionContext } from '../../packages/core/src/executors/types.js';
+import type { ProjectContext } from '../../packages/core/src/project-context.js';
 
 function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
   const pc = {

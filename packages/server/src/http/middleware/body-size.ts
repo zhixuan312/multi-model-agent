@@ -1,6 +1,8 @@
-export const COMPRESSED_BODY_LIMIT_BYTES   = 256 * 1024;        // 256 KiB
-export const DECOMPRESSED_BODY_LIMIT_BYTES = 2   * 1024 * 1024; // 2 MiB
+export const COMPRESSED_BODY_LIMIT_BYTES = 256 * 1024; // 256 KiB
 
-export function buildServerOpts(): { bodyLimit: number } {
+/** Decompressed body cap — 2 MiB. Enforced by the decompress middleware. */
+export const DECOMPRESSED_BODY_LIMIT_BYTES = 2 * 1024 * 1024; // 2 MiB
+
+export function buildServerOpts() {
   return { bodyLimit: COMPRESSED_BODY_LIMIT_BYTES };
 }

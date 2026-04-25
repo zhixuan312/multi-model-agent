@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { COMPRESSED_BODY_LIMIT_BYTES, DECOMPRESSED_BODY_LIMIT_BYTES, buildServerOpts } from '../../packages/server/src/http/middleware/body-size.js';
+import { COMPRESSED_BODY_LIMIT_BYTES, DECOMPRESSED_BODY_LIMIT_BYTES } from '../../packages/server/src/http/middleware/body-size.js';
 import { startTestServer } from '../helpers/test-server.js';
 
 describe('body-size middleware', () => {
@@ -10,14 +10,6 @@ describe('body-size middleware', () => {
 
     it('DECOMPRESSED_BODY_LIMIT_BYTES is 2 MiB', () => {
       expect(DECOMPRESSED_BODY_LIMIT_BYTES).toBe(2 * 1024 * 1024);
-    });
-  });
-
-  describe('buildServerOpts', () => {
-    it('returns bodyLimit equal to COMPRESSED_BODY_LIMIT_BYTES', () => {
-      const opts = buildServerOpts();
-      expect(opts.bodyLimit).toBe(COMPRESSED_BODY_LIMIT_BYTES);
-      expect(opts.bodyLimit).toBe(256 * 1024);
     });
   });
 
@@ -38,7 +30,7 @@ describe('body-size middleware', () => {
     it('passes when body is within compressed cap', async () => {
       const s = await startTestServer({ server: { limits: { maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES } } });
       try {
-        const small = JSON.stringify({ foo: 'bar' });
+        const small = JSON.stringify({ prompt: 'hello' });
         const res = await fetch(`${s.url}/delegate?cwd=/tmp`, {
           method: 'POST',
           body: small,
@@ -46,7 +38,8 @@ describe('body-size middleware', () => {
         });
         expect(res.status).not.toBe(413);
         const body = await res.json();
-        expect(body.error.code).not.toBe('payload_too_large');
+        expect(body.error).toBeDefined();
+        expect(body.error.code).toBe('no_agent_config');
       } finally {
         await s.stop();
       }

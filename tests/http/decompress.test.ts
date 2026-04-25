@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { gzipSync } from 'node:zlib';
 import { decompressBody } from '../../packages/server/src/http/middleware/decompress.js';
+import { boot } from '../contract/fixtures/harness.js';
+import { mockProvider } from '../contract/fixtures/mock-providers.js';
 
-describe('decompressBody', () => {
+describe('decompressBody (unit)', () => {
   const opts = { maxDecompressedBytes: 2 * 1024 * 1024 };
 
   it('inflates a gzip body back to original content', async () => {
@@ -90,6 +92,65 @@ describe('decompressBody', () => {
     if (!result.ok) {
       expect(result.reason).toBe('decompress_error');
       expect(result.statusCode).toBe(400);
+    }
+  });
+});
+
+describe('decompress pipeline integration', () => {
+  it('decompresses gzip body through the full HTTP pipeline', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const body = JSON.stringify({ tasks: [{ prompt: 'gzip test', agentType: 'standard' }] });
+      const compressed = gzipSync(Buffer.from(body));
+      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          Authorization: `Bearer ${h.token}`,
+        },
+        body: compressed,
+      });
+      expect(res.status).toBe(202);
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('returns 400 for corrupt gzip body through HTTP', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'gzip',
+          Authorization: `Bearer ${h.token}`,
+        },
+        body: Buffer.from('not gzip data'),
+      });
+      expect(res.status).toBe(400);
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('returns 415 for unsupported content-encoding through HTTP', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const body = JSON.stringify({ tasks: [{ prompt: 'br test', agentType: 'standard' }] });
+      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Content-Encoding': 'br',
+          Authorization: `Bearer ${h.token}`,
+        },
+        body,
+      });
+      expect(res.status).toBe(415);
+    } finally {
+      await h.close();
     }
   });
 });
