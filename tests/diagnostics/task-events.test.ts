@@ -114,4 +114,71 @@ describe('DiagnosticLogger task events', () => {
     expect(line?.['errorCode']).toBe('executor_error');
     expect(line?.['errorMessage']).toBe('timeout');
   });
+
+  it('escalation writes a JSONL line with all required fields when enabled', () => {
+    const lines: string[] = [];
+    const logger = createDiagnosticLogger({
+      enabled: true,
+      writeSync: (_fd, data) => { lines.push(data.trim()); },
+      openSync: () => 1,
+      closeSync: () => {},
+      mkdirSync: () => {},
+      now: () => new Date('2026-04-25T00:00:00Z'),
+    });
+
+    logger.escalation({
+      batchId: 'b1',
+      taskIndex: 0,
+      loop: 'spec',
+      attempt: 2,
+      baseTier: 'standard',
+      implTier: 'complex',
+      reviewerTier: 'standard',
+    });
+
+    expect(lines).toHaveLength(1);
+    const parsed = JSON.parse(lines[0]) as Record<string, unknown>;
+    expect(parsed).toMatchObject({
+      event: 'escalation',
+      ts: '2026-04-25T00:00:00.000Z',
+      batchId: 'b1',
+      taskIndex: 0,
+      loop: 'spec',
+      attempt: 2,
+      baseTier: 'standard',
+      implTier: 'complex',
+      reviewerTier: 'standard',
+    });
+  });
+
+  it('all four escalation and fallback methods are no-ops when disabled', () => {
+    const lines: string[] = [];
+    const logger = createDiagnosticLogger({
+      enabled: false,
+      writeSync: (_fd, data) => { lines.push(data); },
+      openSync: () => 1,
+      closeSync: () => {},
+      mkdirSync: () => {},
+    });
+
+    logger.escalation({
+      batchId: '', taskIndex: 0, loop: 'spec', attempt: 0,
+      baseTier: 'standard', implTier: 'standard', reviewerTier: 'complex',
+    });
+    logger.escalationUnavailable({
+      batchId: '', taskIndex: 0, loop: 'spec', attempt: 0,
+      role: 'implementer', wantedTier: 'complex', reason: 'not_configured',
+    });
+    logger.fallback({
+      batchId: '', taskIndex: 0, loop: 'spec', attempt: 0,
+      role: 'implementer', assignedTier: 'standard', usedTier: 'complex',
+      reason: 'transport_failure', violatesSeparation: false,
+    });
+    logger.fallbackUnavailable({
+      batchId: '', taskIndex: 0, loop: 'spec', attempt: 0,
+      role: 'implementer', assignedTier: 'standard', reason: 'transport_failure',
+    });
+
+    expect(lines).toHaveLength(0);
+  });
 });
