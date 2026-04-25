@@ -2,6 +2,9 @@ import * as nodeFs from 'node:fs';
 import * as nodeOs from 'node:os';
 import * as nodePath from 'node:path';
 
+import type { RunStatus } from '../runners/types.js';
+import type { AgentType } from '../types.js';
+
 export type ShutdownCause =
   | 'stdin_end'
   | 'stdout_epipe'
@@ -20,6 +23,10 @@ export type SessionCloseReason = 'client_closed' | 'transport_error' | 'session_
 
 export type EventPrimitive = string | number | boolean | null;
 export interface TaskEvent { event: string; batchId: string; taskIndex: number; [key: string]: EventPrimitive | undefined; }
+
+export type DiagLoop = 'spec' | 'quality' | 'diff';
+export type DiagRole = 'implementer' | 'specReviewer' | 'qualityReviewer' | 'diffReviewer';
+export type DiagReason = 'transport_failure' | 'not_configured';
 
 export interface DiagnosticLogger {
   startup(version: string, extras?: { transport?: 'stdio' | 'http' }): void;
@@ -55,7 +62,57 @@ export interface DiagnosticLogger {
   emit(event: TaskEvent): void;
   batchCompleted(params: { batchId: string; tool: string; durationMs: number; taskCount: number }): void;
   batchFailed(params: { batchId: string; tool: string; durationMs: number; errorCode: string; errorMessage: string }): void;
+
+  escalation(params: {
+    batchId: string;
+    taskIndex: number;
+    loop: DiagLoop;
+    attempt: number;
+    baseTier: AgentType;
+    implTier: AgentType;
+    reviewerTier: AgentType;
+  }): void;
+
+  escalationUnavailable(params: {
+    batchId: string;
+    taskIndex: number;
+    loop: DiagLoop;
+    attempt: number;
+    role: DiagRole;
+    wantedTier: AgentType;
+    reason: DiagReason;
+  }): void;
+
+  fallback(params: {
+    batchId: string;
+    taskIndex: number;
+    loop: DiagLoop;
+    attempt: number;
+    role: DiagRole;
+    assignedTier: AgentType;
+    usedTier: AgentType;
+    reason: DiagReason;
+    triggeringStatus?: RunStatus;
+    violatesSeparation: boolean;
+  }): void;
+
+  fallbackUnavailable(params: {
+    batchId: string;
+    taskIndex: number;
+    loop: DiagLoop;
+    attempt: number;
+    role: DiagRole;
+    assignedTier: AgentType;
+    reason: DiagReason;
+  }): void;
 }
+
+// Export param types so lifecycle helpers can declare types without reaching into
+// possibly-optional `diagnostics.logger` (round-1 audit #7).
+export type EscalationEventParams = Parameters<DiagnosticLogger['escalation']>[0];
+export type EscalationUnavailableEventParams = Parameters<DiagnosticLogger['escalationUnavailable']>[0];
+export type FallbackEventParams = Parameters<DiagnosticLogger['fallback']>[0];
+export type FallbackUnavailableEventParams = Parameters<DiagnosticLogger['fallbackUnavailable']>[0];
 
 export interface CreateDiagnosticLoggerOptions {
   enabled: boolean;
@@ -138,6 +195,10 @@ export function createDiagnosticLogger(
       emit: () => {},
       batchCompleted: () => {},
       batchFailed: () => {},
+      escalation: () => {},
+      escalationUnavailable: () => {},
+      fallback: () => {},
+      fallbackUnavailable: () => {},
     };
   }
 
@@ -396,6 +457,22 @@ export function createDiagnosticLogger(
         errorCode,
         errorMessage,
       });
+    },
+    escalation: (params) => {
+      if (state.inert) return;
+      writeLine({ event: 'escalation', ts: now().toISOString(), ...params });
+    },
+    escalationUnavailable: (params) => {
+      if (state.inert) return;
+      writeLine({ event: 'escalation_unavailable', ts: now().toISOString(), ...params });
+    },
+    fallback: (params) => {
+      if (state.inert) return;
+      writeLine({ event: 'fallback', ts: now().toISOString(), ...params });
+    },
+    fallbackUnavailable: (params) => {
+      if (state.inert) return;
+      writeLine({ event: 'fallback_unavailable', ts: now().toISOString(), ...params });
     },
   };
 }
