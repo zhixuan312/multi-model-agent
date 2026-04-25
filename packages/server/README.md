@@ -12,36 +12,34 @@ Local HTTP service for delegating tool-using work to sub-agents on different LLM
 - **Structural quality.** Implementation and review run on different agents — different training data, different blind spots. Cross-agent review catches what self-review can't.
 - **Client-agnostic.** One daemon serves Claude Code, Gemini CLI, Codex CLI, and Cursor via installable skills. The daemon outlives any individual client session.
 
-## Install
+---
+
+## Quick start
 
 ```bash
-npm i -g @zhixuan92/multi-model-agent
+# 1. install
+npm i -g @zhixuan92/multi-model-agent     # requires Node ≥ 22
+
+# 2. write a config (~/.multi-model/config.json) — see Configuration below
+
+# 3. start the daemon
+mmagent serve                              # 127.0.0.1:7337 by default
+
+# 4. install skills for your AI client (auto-detect or pick a target)
+mmagent install-skill                      # all detected clients
+mmagent install-skill --target=claude-code # or gemini / codex / cursor
+
+# 5. verify
+curl -s http://localhost:7337/health       # → {"ok":true,"version":"3.4.0",...}
 ```
 
-Requires Node >= 22.
+Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
 
-## Run
+For a long-running background install, use a user service ([macOS launchd / Linux systemd templates](./scripts/README.md)).
 
-```bash
-mmagent serve   # starts on 127.0.0.1:7337 by default
-```
+## Configuration
 
-Leave this running in the background, or install as a user service (launchd on macOS, systemd on Linux).
-
-## Install skills for your AI client
-
-```bash
-mmagent install-skill                           # auto-detect installed clients
-mmagent install-skill --target=claude-code      # or gemini, codex, cursor
-mmagent install-skill --all-targets             # install for every detected client
-mmagent install-skill --uninstall               # remove skills
-```
-
-Skills are thin adapters that point HTTP requests at the running daemon. Once installed, your AI client has the full tool set without further configuration.
-
-## Config
-
-Config file: `~/.multi-model/config.json`
+Config file: `~/.multi-model/config.json`. Lookup order: `--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
 
 ```json
 {
@@ -64,13 +62,11 @@ Config file: `~/.multi-model/config.json`
 
 Agent types: `claude`, `codex`, `openai-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`.
 
-Config lookup order: `--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
-
-The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` in your environment to override the file.
+The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
 
 ## REST API
 
-The daemon exposes 15 public endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background.
+15 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
@@ -95,14 +91,13 @@ All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 ## Operator commands
 
 ```bash
-mmagent serve [--verbose] [--log]   # start daemon (--verbose streams per-tool/turn/stage events to stderr; --log persists JSONL to ~/.multi-model/logs/)
-mmagent info [--json]               # print cliVersion, bind/port, token fingerprint, daemon identity (works offline)
-mmagent status [--json]             # show running daemon health and stats
-mmagent logs [--follow] [--batch=<id>]  # tail today's diagnostic log
-mmagent print-token                 # print the current auth token
-mmagent install-skill               # install all shipped skills (default); pass a skill name to scope to one
-mmagent install-skill --uninstall   # remove all installed skills; pass a skill name to scope to one
-mmagent update-skills [--dry-run] [--json]  # refresh installed skills from the shipped bundle
+mmagent serve [--verbose] [--log]         # start daemon (--verbose → stderr events; --log → JSONL to ~/.multi-model/logs/)
+mmagent info  [--json]                    # cliVersion, bind/port, token fingerprint, daemon identity (offline)
+mmagent status [--json]                   # health + stats from a running daemon
+mmagent logs  [--follow] [--batch=<id>]   # tail today's diagnostic log
+mmagent print-token                       # print the current auth token
+mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]   # default installs all shipped skills
+mmagent update-skills [--dry-run] [--json]   # refresh installed skills after upgrade
 ```
 
 ## Shipped skills
@@ -111,7 +106,7 @@ Skills are Markdown prompts that tell your AI client when and how to call each e
 
 | Skill | Target endpoint |
 |---|---|
-| `multi-model-agent` | Overview + skill map |
+| `multi-model-agent` | Overview + skill map (read first to pick the right `mma-*` skill) |
 | `mma-delegate` | `POST /delegate` |
 | `mma-audit` | `POST /audit` |
 | `mma-review` | `POST /review` |
@@ -119,8 +114,41 @@ Skills are Markdown prompts that tell your AI client when and how to call each e
 | `mma-debug` | `POST /debug` |
 | `mma-execute-plan` | `POST /execute-plan` |
 | `mma-retry` | `POST /retry` |
+| `mma-investigate` | `POST /investigate` |
 | `mma-context-blocks` | `POST/DELETE /context-blocks` |
 | `mma-clarifications` | `POST /clarifications/confirm` |
+
+## Operations
+
+### Upgrading
+
+```bash
+npm install -g @zhixuan92/multi-model-agent@latest
+pkill -f "mmagent serve"            # stop the running daemon
+mmagent update-skills               # refresh installed skills
+# next AI-client session respawns the daemon via the skill preflight
+```
+
+A drift warning prints on `mmagent serve` if installed skills are older than the daemon.
+
+### Verbose mode
+
+Enable per-run via `mmagent serve --verbose --log`, or persist in config:
+
+```json
+{ "diagnostics": { "log": true, "verbose": true } }
+```
+
+JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`. Large request bodies (over 16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`. **Note:** request bodies may include prompts and file paths — disable `verbose` for production servers handling sensitive data.
+
+### Troubleshooting
+
+| Symptom | Fix |
+|---|---|
+| Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
+| Daemon stale after upgrade | `pkill -f "mmagent serve"`; preflight respawns |
+| Skill version mismatch | `mmagent update-skills` and restart your client |
+| `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 
 ## Architecture at a glance
 
