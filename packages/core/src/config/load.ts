@@ -54,7 +54,7 @@ export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[]
   const offenders: string[] = [];
   for (const [name, agent] of Object.entries(config.agents)) {
     if (
-      agent.type === 'openai-compatible' &&
+      (agent.type === 'openai-compatible' || agent.type === 'claude-compatible') &&
       typeof (agent as { apiKey?: unknown }).apiKey === 'string'
     ) {
       offenders.push(name);

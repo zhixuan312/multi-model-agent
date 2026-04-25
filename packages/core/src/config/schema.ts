@@ -42,6 +42,19 @@ const claudeAgentSchema = z.object({
   ...baseAgentFields,
 }).strict();
 
+// `claude-compatible` targets an Anthropic-format endpoint hosted by another
+// vendor (e.g. DeepSeek's https://api.deepseek.com/anthropic). It mirrors
+// `openai-compatible`: required baseUrl + apiKey/apiKeyEnv, talks the same
+// wire format as the canonical provider.
+const claudeCompatibleAgentSchema = z.object({
+  type: z.literal('claude-compatible'),
+  baseUrl: z.string().min(1, 'baseUrl is required for claude-compatible agents'),
+  apiKey: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
+  hostedTools: hostedToolsSchema.optional(),
+  ...baseAgentFields,
+}).strict();
+
 const codexAgentSchema = z.object({
   type: z.literal('codex'),
   hostedTools: hostedToolsSchema.optional(),
@@ -51,6 +64,7 @@ const codexAgentSchema = z.object({
 const agentConfigSchema = z.discriminatedUnion('type', [
   openAICompatibleAgentSchema,
   claudeAgentSchema,
+  claudeCompatibleAgentSchema,
   codexAgentSchema,
 ]);
 

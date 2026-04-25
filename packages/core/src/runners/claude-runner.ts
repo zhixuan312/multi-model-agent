@@ -253,6 +253,30 @@ export async function runClaude(
     }
   }
 
+  // `claude-compatible` agents target an Anthropic-format endpoint hosted by
+  // a third party (e.g. DeepSeek's https://api.deepseek.com/anthropic). The
+  // agent SDK's `Options.env` merges on top of `process.env` per-invocation,
+  // so a claude-compatible agent pointed at DeepSeek does not leak into a
+  // sibling `claude` agent that uses the real Anthropic backend.
+  let resolvedAuthToken: string | undefined;
+  let resolvedBaseUrl: string | undefined;
+  if (providerConfig.type === 'claude-compatible') {
+    resolvedBaseUrl = providerConfig.baseUrl;
+    if (providerConfig.apiKey) {
+      resolvedAuthToken = providerConfig.apiKey;
+    } else if (providerConfig.apiKeyEnv) {
+      resolvedAuthToken = process.env[providerConfig.apiKeyEnv];
+      if (!resolvedAuthToken) {
+        throw new Error(
+          `claude-compatible agent has apiKeyEnv=${providerConfig.apiKeyEnv}, ` +
+          `but ${providerConfig.apiKeyEnv} is not set in the environment`,
+        );
+      }
+    } else {
+      throw new Error('claude-compatible agent requires apiKey or apiKeyEnv');
+    }
+  }
+
   // Permission bypass is intentional for sub-agent use. File-system confinement
   // is enforced by assertWithinCwd in tool definitions when sandboxPolicy is 'cwd-only'.
   const queryOptions: Options = {
@@ -268,6 +292,12 @@ export async function runClaude(
       preset: 'claude_code',
       append: systemPrompt,
     },
+    ...(resolvedBaseUrl && resolvedAuthToken && {
+      env: {
+        ANTHROPIC_BASE_URL: resolvedBaseUrl,
+        ANTHROPIC_AUTH_TOKEN: resolvedAuthToken,
+      },
+    }),
   };
 
   if (toolMode !== 'none') {
