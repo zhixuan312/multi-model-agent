@@ -1,7 +1,7 @@
 ---
 name: multi-model-agent
-description: Router for the multi-model-agent local service. Use first when you're about to delegate any tool-using work — picks the right mma-* skill for the task (audit, review, verify, debug, plan execution, ad-hoc delegation) instead of defaulting to inline Agent dispatches.
-when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or just asked directly.
+description: Router for the multi-model-agent local service. Use first when you're about to delegate any tool-using work — picks the right mma-* skill for the task (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation) instead of defaulting to inline Agent dispatches.
+when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or just asked directly.
 version: "0.0.0-unreleased"
 ---
 
@@ -49,6 +49,7 @@ Every request requires `Authorization: Bearer <token>`.
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-execute-plan` | Implement tasks from a plan or spec file |
 | `mma-retry` | Re-run specific failed tasks from a previous batch |
+| `mma-investigate` | Codebase Q&A — structured answer with file:line citations and confidence |
 | `mma-context-blocks` | Register large reused documents to reference by ID |
 | `mma-clarifications` | Confirm or correct the service's proposed interpretation |
 
@@ -60,7 +61,7 @@ Every request requires `Authorization: Bearer <token>`.
 - A prior standard run came back with `filesWritten: 0` or exhausted its turn budget (visible in the verbose stream or the final envelope's `batchTimings` / `results`).
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
-`mma-audit`, `mma-review`, `mma-debug` already default to complex; `mma-verify` already defaults to standard — these are not configurable from the caller and do not need an `agentType` field.
+`mma-audit`, `mma-review`, `mma-debug`, `mma-investigate` already default to complex; `mma-verify` already defaults to standard — these are not configurable from the caller and do not need an `agentType` field.
 
 ### General flow
 
@@ -72,8 +73,4 @@ If the terminal envelope has `proposedInterpretation` as a string, use `mma-clar
 
 ### Diagnosing slow tasks
 
-Start the server with `mmagent serve --verbose` (or set `diagnostics.verbose: true` in config) to record `tool_call` and `llm_turn` events. Then tail them:
-
-```bash
-mmagent logs --follow --batch=$BATCH_ID
-```
+`mmagent serve --verbose` (or `diagnostics.verbose: true` in config) records `tool_call` and `llm_turn` events. Tail with `mmagent logs --follow --batch=$BATCH_ID`.
