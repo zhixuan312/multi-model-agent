@@ -111,7 +111,12 @@ export interface RunResult {
   fileArtifactsMissing?: boolean
   commits?: Commit[]
   commitError?: string
-  verification: VerifyStageResult
+  // 3.3.0 (T3): always populated by reviewed-lifecycle's verify stage when an
+  // artifact-producing task runs through that path. Optional in the type so that
+  // non-artifact paths and direct provider calls compile without per-site defaults.
+  // The spec says "always present" — that invariant holds at the lifecycle boundary;
+  // here the type is permissive to keep migration mechanical.
+  verification?: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
