@@ -8,6 +8,10 @@ import type {
   AgentType,
   Commit,
   FallbackOverride,
+  StageStatsMap,
+  ReviewVerdict,
+  VerifyOutcome,
+  VerifySkipReason,
 } from '../types.js';
 import { computeCostUSD, computeSavedCostUSD } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
@@ -27,7 +31,7 @@ import {
   isReviewTransportFailure,
   type UnavailableMap,
 } from '../escalation/fallback.js';
-import { findModelCapabilities } from '../routing/model-profiles.js';
+import { findModelCapabilities, findModelProfile } from '../routing/model-profiles.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -55,6 +59,88 @@ import type {
 import { withDoneCondition } from './execute-task.js';
 
 const exec = promisify(execFile);
+
+export function emptyStats(): StageStatsMap {
+  return {
+    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, outcome: null, skipReason: null },
+    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
+    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
+    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
+  };
+}
+
+function modelFamily(model: string): string {
+  const dash = model.indexOf('-');
+  return dash > 0 ? model.slice(0, dash) : model;
+}
+
+export function endBaseStage(
+  stats: StageStatsMap,
+  name: 'implementing' | 'spec_rework' | 'quality_rework' | 'committing',
+  t0: number,
+  c0: number | null,
+  agent: { tier: 'standard' | 'complex'; model: string },
+  finalCostUSD: number | null,
+): void {
+  stats[name] = {
+    stage: name,
+    entered: true,
+    durationMs: Date.now() - t0,
+    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
+    agentTier: agent.tier,
+    modelFamily: modelFamily(agent.model),
+    model: agent.model,
+  } as StageStatsMap[typeof name];
+}
+
+export function endReviewStage(
+  stats: StageStatsMap,
+  name: 'spec_review' | 'quality_review' | 'diff_review',
+  t0: number,
+  c0: number | null,
+  agent: { tier: 'standard' | 'complex'; model: string },
+  finalCostUSD: number | null,
+  verdict: ReviewVerdict,
+  roundsUsed: number,
+): void {
+  stats[name] = {
+    stage: name,
+    entered: true,
+    durationMs: Date.now() - t0,
+    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
+    agentTier: agent.tier,
+    modelFamily: modelFamily(agent.model),
+    model: agent.model,
+    verdict,
+    roundsUsed,
+  } as StageStatsMap[typeof name];
+}
+
+export function endVerifyStage(
+  stats: StageStatsMap,
+  t0: number,
+  c0: number | null,
+  agent: { tier: 'standard' | 'complex'; model: string },
+  finalCostUSD: number | null,
+  outcome: VerifyOutcome,
+  skipReason: VerifySkipReason | null,
+): void {
+  stats.verifying = {
+    stage: 'verifying',
+    entered: true,
+    durationMs: Date.now() - t0,
+    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
+    agentTier: agent.tier,
+    modelFamily: modelFamily(agent.model),
+    model: agent.model,
+    outcome,
+    skipReason,
+  } as StageStatsMap['verifying'];
+}
 
 export async function executeReviewedLifecycle(
   task: TaskSpec,
@@ -317,6 +403,16 @@ export async function executeReviewedLifecycle(
   let lastNonRejectedImpl: { tier: AgentType; result: RunResult } | undefined;
   const reviewRounds = () => ({ spec: specAttemptIndex, quality: qualityAttemptIndex, metadata: metadataRepair, cap: Math.max(maxSpecRows, maxQualityRows) });
   const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
+
+  // Per-stage stats tracking
+  const stats = emptyStats();
+  const resolvedModel = config.agents[resolved.slot].model;
+  const implementerAgentInfo = {
+    tier: resolved.slot,
+    family: modelFamily(resolvedModel),
+    model: resolvedModel,
+  };
+  const runningCostUSD = () => taskCostUSD();
   const policyEscalated: { spec: boolean; quality: boolean; diff: boolean } = { spec: false, quality: false, diff: false };
   const emitFallback = (p: FallbackEventParams) => {
     diagnostics?.logger?.fallback(p);
@@ -360,6 +456,7 @@ export async function executeReviewedLifecycle(
         specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
         qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
       ),
+      stageStats: stats,
     } as RunResult;
   }
 
@@ -405,6 +502,7 @@ export async function executeReviewedLifecycle(
       specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
       qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
     ),
+    stageStats: stats,
   });
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
@@ -416,6 +514,8 @@ export async function executeReviewedLifecycle(
       stageIndex: 4,
       reviewRound: undefined,
     });
+    const overallVerificationStart = Date.now();
+    const verifyCostStart = runningCostUSD();
     const verification = await runVerifyStage({
       cwd,
       verifyCommand: task.verifyCommand,
@@ -423,6 +523,13 @@ export async function executeReviewedLifecycle(
       taskStartMs,
     });
     latestVerification = verification;
+    endVerifyStage(stats, overallVerificationStart, verifyCostStart,
+      implementerAgentInfo, runningCostUSD(),
+      verification.status === 'passed' ? 'passed'
+        : verification.status === 'failed' ? 'failed'
+        : verification.status === 'skipped' ? 'skipped'
+        : 'not_applicable',
+      (verification as any).skipReason ?? null);
     for (const step of verification.steps) {
       emitTaskEvent('verify_step', {
         command: step.command,
@@ -476,7 +583,7 @@ export async function executeReviewedLifecycle(
   }
 
   function withVerification(result: RunResult, verification = latestVerification): RunResult {
-    return signalize({ ...result, verification });
+    return signalize({ ...result, verification, stageStats: stats });
   }
 
   function verificationErrorResult(base: RunResult, verification: VerifyStageResult): RunResult | null {
@@ -528,6 +635,7 @@ export async function executeReviewedLifecycle(
       commits,
       commitError,
       verification,
+      stageStats: stats,
     }, verification);
   }
 
@@ -642,8 +750,12 @@ export async function executeReviewedLifecycle(
     if (treeDirty) {
       const validCommit = implReport?.commit ?? await repairCommitMetadata(implReport?.commitDiagnostic ?? 'no commit block emitted');
       if (!validCommit) return;
+      heartbeat?.setStage('committing', 7);
+      const commitT0 = Date.now();
+      const commitC0 = runningCostUSD();
       const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
       commits.push(c);
+      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD());
     }
   }
 
@@ -681,6 +793,8 @@ export async function executeReviewedLifecycle(
       attemptIndex: 0,
       baseTier: resolved.slot,
     });
+    const implT0 = Date.now();
+    const implC0 = runningCostUSD();
     const initialImpl = await runWithFallback<RunResult>({
       assigned: initialDecision.impl,
       providerFor,
@@ -732,6 +846,8 @@ export async function executeReviewedLifecycle(
     latestAttemptedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     lastNonRejectedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     implementerHistory.push(initialImpl.usedTier as AgentType);
+
+    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD());
     specAttemptIndex = 1;
 
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
@@ -876,8 +992,12 @@ export async function executeReviewedLifecycle(
       const diffUnavailable: UnavailableMap = new Map();
       const diffReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
       emitTaskEvent('stage_change', { from: 'verifying', to: 'diff_review' });
-      heartbeat?.transition({ stage: 'diff_review' as never, stageIndex: 2, reviewRound: 1, attemptCap: 1 });
-      const diffCall = await runWithFallback<DiffReviewOrSkipped>({
+      const diffReviewT0 = Date.now();
+    const diffReviewC0 = runningCostUSD();
+    heartbeat?.transition({ stage: 'diff_review' as never, stageIndex: 2, reviewRound: 1, attemptCap: 1 });
+      const diffReviewT0_commit = Date.now();
+    const diffReviewC0_commit = runningCostUSD();
+    const diffCall = await runWithFallback<DiffReviewOrSkipped>({
         assigned: diffReviewerTier,
         providerFor,
         unavailableTiers: diffUnavailable,
@@ -895,6 +1015,13 @@ export async function executeReviewedLifecycle(
       }
       const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable || isReviewTransportFailure(diffCall.result) ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
       emitTaskEvent('review_decision', { stage: 'diff_review', verdict: 'kind' in verdict ? verdict.kind : 'skipped', round: 1 });
+      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(),
+        'kind' in verdict ? (verdict.kind === 'approved' ? 'approved'
+          : verdict.kind === 'changes_required' ? 'changes_required'
+          : verdict.kind === 'skipped' ? 'skipped'
+          : 'error')
+        : 'error',
+        0);
       return resolveDiffOnlyTerminal({
         ...implResult,
         workerStatus,
@@ -918,6 +1045,8 @@ export async function executeReviewedLifecycle(
 
     heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows });
     const initialReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
+    const specReviewT0 = Date.now();
+    const specReviewC0 = runningCostUSD();
     const initialSpecReview = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({
       assigned: initialReviewerTier,
       providerFor,
@@ -1007,6 +1136,8 @@ export async function executeReviewedLifecycle(
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
       heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows });
+      const qualityReviewT0 = Date.now();
+      const qualityReviewC0 = runningCostUSD();
       const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block) });
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
@@ -1094,7 +1225,22 @@ export async function executeReviewedLifecycle(
     }
 
     const specAggregateStatus = (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+
+    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(),
+      specStatus === 'approved' ? 'approved'
+        : specStatus === 'changes_required' ? 'changes_required'
+        : specStatus === 'skipped' ? 'skipped'
+        : specStatus === 'not_applicable' ? 'not_applicable'
+        : 'error',
+      specAttemptIndex - 1);
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+
+    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(),
+      qualityResult.status === 'approved' ? 'approved'
+        : qualityResult.status === 'changes_required' ? 'changes_required'
+        : qualityResult.status === 'skipped' ? 'skipped'
+        : 'error',
+      qualityAttemptIndex - 1);
     const aggregated = aggregateResult(
       finalReport,
       specReport,
@@ -1129,6 +1275,7 @@ export async function executeReviewedLifecycle(
       concerns,
       specReviewStatus: specEnvelopeStatus,
       qualityReviewStatus: qualityEnvelopeStatus,
+      stageStats: stats,
       specReviewReason: 'errorReason' in specResult ? specResult.errorReason : undefined,
       qualityReviewReason: 'errorReason' in qualityResult ? qualityResult.errorReason : undefined,
       structuredReport: aggregated,
@@ -1153,6 +1300,7 @@ export async function executeReviewedLifecycle(
   } catch (err) {
     return withVerification(workerErrorResult(err));
   } finally {
+    heartbeat?.setStage('terminal', 8);
     heartbeat?.stop();
     clearInterval(stallWatchdogInterval);
   }
