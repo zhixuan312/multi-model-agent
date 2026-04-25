@@ -16,7 +16,8 @@ export type RunStatus =
   | 'network_error'
   | 'error'
   | 'brief_too_vague'
-  | 'cost_exceeded';
+  | 'cost_exceeded'
+  | 'unavailable';
 
 export interface TokenUsage {
   inputTokens: number

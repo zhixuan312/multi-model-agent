@@ -12,6 +12,7 @@ function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';
   if (status === 'ok') return 'finished';
   if (status === 'incomplete') return 'incomplete';
+  if (status === 'unavailable') return 'error';
   return status;
 }
 
