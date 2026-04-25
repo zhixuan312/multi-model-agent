@@ -439,9 +439,23 @@
                           },
                           "type": "array"
                         },
+                        "maxCostUSD": {
+                          "description": "Maximum estimated cost in USD for this task. Optional; the executor applies a default of 10 when omitted. When explicitly passed it must be a positive finite number; <=0, NaN, or Infinity are rejected with HTTP 400.",
+                          "exclusiveMinimum": true,
+                          "minimum": 0,
+                          "type": "number"
+                        },
                         "prompt": {
                           "description": "The task instruction. Required.",
                           "type": "string"
+                        },
+                        "verifyCommand": {
+                          "description": "Commands to run after task completion to verify the work.",
+                          "items": {
+                            "type": "string"
+                          },
+                          "minItems": 1,
+                          "type": "array"
                         }
                       },
                       "required": [
@@ -548,6 +562,14 @@
                     "description": "Descriptive task strings matching plan headings, e.g. \"1. Setup database schema\". Multiple = parallel.",
                     "items": {
                       "minLength": 1,
+                      "type": "string"
+                    },
+                    "minItems": 1,
+                    "type": "array"
+                  },
+                  "verifyCommand": {
+                    "description": "Commands to run after plan task completion to verify the work.",
+                    "items": {
                       "type": "string"
                     },
                     "minItems": 1,

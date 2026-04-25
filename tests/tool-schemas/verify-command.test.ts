@@ -25,8 +25,16 @@ describe('TaskSpec.verifyCommand', () => {
     expect(r.success).toBe(true);
   });
 
-  it('omitting maxCostUSD is REJECTED', () => {
+  it('omitting maxCostUSD is allowed (executor applies default of 10)', () => {
     const r = delegateInputSchema.safeParse({ tasks: [{ prompt: 'x' }] });
+    expect(r.success).toBe(true);
+  });
+  it('rejects maxCostUSD <= 0 when explicitly passed', () => {
+    const r = delegateInputSchema.safeParse({ tasks: [{ prompt: 'x', maxCostUSD: 0 }] });
+    expect(r.success).toBe(false);
+  });
+  it('rejects non-finite maxCostUSD when explicitly passed', () => {
+    const r = delegateInputSchema.safeParse({ tasks: [{ prompt: 'x', maxCostUSD: Infinity }] });
     expect(r.success).toBe(false);
   });
 });
