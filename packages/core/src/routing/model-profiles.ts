@@ -169,6 +169,12 @@ const PROFILE_ENTRIES: ModelProfile[] = (() => {
   return [...resolved.values()].sort((a, b) => b.prefix.length - a.prefix.length);
 })();
 
+export const ALL_MODEL_IDS: readonly string[] = Object.freeze(
+  PROFILE_ENTRIES
+    .map(p => p.prefix)
+    .filter((id): id is string => typeof id === 'string' && id.length > 0)
+);
+
 export function findModelProfile(modelId: string): ModelProfile {
   const normalized = modelId.toLowerCase();
   for (const entry of PROFILE_ENTRIES) {
