@@ -42,6 +42,13 @@ import {
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
+import {
+  buildOkResult as sharedBuildOkResult,
+  buildIncompleteResult as sharedBuildIncompleteResult,
+  buildForceSalvageResult as sharedBuildForceSalvageResult,
+  buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
+  type SharedResultUsage,
+} from './base/result-builders.js';
 import type { SandboxPolicy } from '../types.js';
 
 // CODEX_DEBUG=1 causes the runner to log raw HTTP request/response bodies to
@@ -938,32 +945,28 @@ interface CodexResultCommonArgs {
   turns: number;
 }
 
+function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
+  const { providerConfig, inputTokens, outputTokens, parentModel } = args;
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUSD,
+    savedCostUSD: computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel),
+  };
+}
+
 function buildCodexOkResult(
   args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, providerConfig, inputTokens, outputTokens, turns, output, durationMs, parentModel } = args;
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  return {
-    output,
-    status: 'ok',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    // `ok` always carries a real model answer — never a diagnostic.
-    outputIsDiagnostic: false,
-    escalationLog: [],
-    durationMs,
-  };
+  return sharedBuildOkResult({
+    output: args.output,
+    usage: codexUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    durationMs: args.durationMs,
+  });
 }
 
 /**
@@ -973,105 +976,44 @@ function buildCodexOkResult(
 function buildCodexIncompleteResult(
   args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, reason, durationMs, parentModel } = args;
-  const filesRead = tracker.getReads();
-  const filesWritten = tracker.getWrites();
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : buildCodexIncompleteDiagnostic({
-          turns,
-          inputTokens,
-          outputTokens,
-          filesRead,
-          filesWritten,
-        }),
-    status: 'incomplete',
-    errorCode: 'degenerate_exhausted',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead,
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten,
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    error: reason,
-    durationMs,
-  };
+  return sharedBuildIncompleteResult({
+    usage: codexUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    buildDiagnostic: buildCodexIncompleteDiagnostic,
+    durationMs: args.durationMs,
+    reason: args.reason,
+    stampExhausted: true,
+  });
 }
 
 function buildCodexForceSalvageResult(
   args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel } = args;
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : `[codex sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-    status: 'incomplete',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    durationMs,
-  };
+  return sharedBuildForceSalvageResult({
+    providerLabel: 'codex',
+    usage: codexUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    softLimit: args.softLimit,
+    durationMs: args.durationMs,
+  });
 }
 
 function buildCodexMaxTurnsExitResult(
   args: CodexResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, inputTokens, outputTokens, turns, lastOutput, reason, durationMs, parentModel } = args;
-  const hasSalvage = !scratchpad.isEmpty();
-  const output = hasSalvage
-    ? scratchpad.latest()
-    : (lastOutput || `Agent exhausted time or cost budget.`);
-  const outputIsDiagnostic = !hasSalvage && !lastOutput;
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  return {
-    output,
-    status: 'incomplete',
-    errorCode: 'degenerate_exhausted',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic,
-    escalationLog: [],
-    error: reason,
-    durationMs,
-  };
+  return sharedBuildMaxTurnsExitResult({
+    usage: codexUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    lastOutput: args.lastOutput,
+    reason: args.reason,
+    durationMs: args.durationMs,
+  });
 }
 
 function buildCodexIncompleteDiagnostic(opts: {

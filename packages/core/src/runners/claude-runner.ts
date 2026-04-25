@@ -39,6 +39,13 @@ import {
 import { injectionTypeFor } from './injection-type.js';
 import { classifyError } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
+import {
+  buildOkResult as sharedBuildOkResult,
+  buildIncompleteResult as sharedBuildIncompleteResult,
+  buildForceSalvageResult as sharedBuildForceSalvageResult,
+  buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
+  type SharedResultUsage,
+} from './base/result-builders.js';
 
 
 
@@ -797,32 +804,28 @@ function effectiveClaudeCost(
   return computed ?? sdkCost;
 }
 
+function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
+  const { providerConfig, sdkCostUSD, inputTokens, outputTokens, parentModel } = args;
+  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
+  return {
+    inputTokens,
+    outputTokens,
+    totalTokens: inputTokens + outputTokens,
+    costUSD,
+    savedCostUSD: computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel),
+  };
+}
+
 function buildClaudeOkResult(
   args: ClaudeResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, output, durationMs, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  return {
-    output,
-    status: 'ok',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    // `ok` always carries a real model answer — never a diagnostic.
-    outputIsDiagnostic: false,
-    escalationLog: [],
-    durationMs,
-  };
+  return sharedBuildOkResult({
+    output: args.output,
+    usage: claudeUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    durationMs: args.durationMs,
+  });
 }
 
 /**
@@ -832,104 +835,43 @@ function buildClaudeOkResult(
 function buildClaudeIncompleteResult(
   args: ClaudeResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, reason, durationMs, parentModel } = args;
-  const filesRead = tracker.getReads();
-  const filesWritten = tracker.getWrites();
-  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : buildClaudeIncompleteDiagnostic({
-          turns,
-          inputTokens,
-          outputTokens,
-          filesRead,
-          filesWritten,
-        }),
-    status: 'incomplete',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead,
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten,
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    error: reason,
-    durationMs,
-  };
+  return sharedBuildIncompleteResult({
+    usage: claudeUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    buildDiagnostic: buildClaudeIncompleteDiagnostic,
+    durationMs: args.durationMs,
+    reason: args.reason,
+  });
 }
 
 function buildClaudeForceSalvageResult(
   args: ClaudeResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, softLimit, durationMs, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : `[claude sub-agent forcibly terminated at ${inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-    status: 'incomplete',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    durationMs,
-  };
+  return sharedBuildForceSalvageResult({
+    providerLabel: 'claude',
+    usage: claudeUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    softLimit: args.softLimit,
+    durationMs: args.durationMs,
+  });
 }
 
 function buildClaudeMaxTurnsExitResult(
   args: ClaudeResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
 ): RunResult {
-  const { tracker, scratchpad, providerConfig, sdkCostUSD, inputTokens, outputTokens, turns, lastOutput, reason, durationMs, parentModel } = args;
-  const hasSalvage = !scratchpad.isEmpty();
-  const output = hasSalvage
-    ? scratchpad.latest()
-    : (lastOutput || `Agent exhausted time or cost budget.`);
-  const outputIsDiagnostic = !hasSalvage && !lastOutput;
-  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
-  const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
-  return {
-    output,
-    status: 'incomplete',
-    errorCode: 'degenerate_exhausted',
-    usage: {
-      inputTokens,
-      outputTokens,
-      totalTokens: inputTokens + outputTokens,
-      costUSD,
-      savedCostUSD,
-    },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic,
-    escalationLog: [],
-    error: reason,
-    durationMs,
-  };
+  return sharedBuildMaxTurnsExitResult({
+    usage: claudeUsage(args),
+    turns: args.turns,
+    tracker: args.tracker,
+    scratchpad: args.scratchpad,
+    lastOutput: args.lastOutput,
+    reason: args.reason,
+    durationMs: args.durationMs,
+  });
 }
 
 function buildClaudeIncompleteDiagnostic(opts: {
