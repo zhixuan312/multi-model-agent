@@ -67,7 +67,7 @@ import {
   detectToolCallLoop,
   hasNewFileActivity,
 } from './supervision.js';
-import { classifyError } from './error-classification.js';
+import { classifyError, isRateLimit } from './error-classification.js';
 import { findModelProfile } from '../routing/model-profiles.js';
 import {
   buildOkResult as sharedBuildOkResult,
@@ -842,6 +842,9 @@ export async function runOpenAI(
         escalationLog: [],
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
+        ...(isRateLimit(err) && {
+          structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:openai-compatible' },
+        }),
       };
     }
   };
@@ -878,6 +881,7 @@ export async function runOpenAI(
       };
     },
     abortController,
+    options.abortSignal,
   );
 }
 

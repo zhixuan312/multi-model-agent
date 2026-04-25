@@ -24,6 +24,22 @@ import type { RunStatus } from './types.js';
  * here is the *classification* string; the codex catch branch still builds
  * a richer `detailed` message and uses it as the final `error` field.
  */
+
+/**
+ * Detect whether an error represents a provider-side rate limit (HTTP 429
+ * or equivalent). Used by every runner to surface a structured
+ * `rate_limit_exceeded` code so the escalation orchestrator and downstream
+ * observers can distinguish rate-limit backpressure from other API errors
+ * without string-matching the `error` field.
+ */
+export function isRateLimit(err: unknown): boolean {
+  const e = (err ?? {}) as { status?: unknown; code?: unknown; message?: unknown };
+  if (typeof e.status === 'number' && e.status === 429) return true;
+  if (typeof e.code === 'string' && e.code === 'rate_limit_exceeded') return true;
+  if (typeof e.message === 'string' && /rate.limit/i.test(e.message)) return true;
+  return false;
+}
+
 export function classifyError(err: unknown): { status: RunStatus; reason: string } {
   // Unwrap the common fields we read below. `err` may be anything, so guard
   // every access.
