@@ -30,7 +30,7 @@ describe('HeartbeatTimer', () => {
         expect(first.stageIndex).toBe(1);
         expect(first.stageCount).toBe(3);
         expect(first.reviewRound).toBeUndefined();
-        expect(first.maxReviewRounds).toBeUndefined();
+        expect(first.attemptCap).toBeUndefined();
         expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0 });
         expect(first.costUSD).toBeNull();
         expect(first.savedCostUSD).toBeNull();
@@ -64,31 +64,31 @@ describe('HeartbeatTimer', () => {
       stage: 'spec_review',
       stageIndex: 2,
       reviewRound: 1,
-      maxReviewRounds: 2,
+      attemptCap: 2,
     });
 
     expect(events).toHaveLength(1);
     expect(events[0].stage).toBe('spec_review');
     expect(events[0].stageIndex).toBe(2);
     expect(events[0].reviewRound).toBe(1);
-    expect(events[0].maxReviewRounds).toBe(2);
+    expect(events[0].attemptCap).toBe(2);
     expect(events[0].final).toBe(false);
     timer.stop();
   });
 
-  it('transition() to implementing clears reviewRound and maxReviewRounds', () => {
+  it('transition() to implementing clears reviewRound and attemptCap', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     timer.transition({ stage: 'implementing', stageIndex: 3 });
     expect(events[0].reviewRound).toBeUndefined();
-    expect(events[0].maxReviewRounds).toBeUndefined();
+    expect(events[0].attemptCap).toBeUndefined();
     timer.stop();
   });
 
@@ -113,12 +113,12 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
-    timer.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     // Back to position 2 — allowed for review re-entry
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 2, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 2, attemptCap: 2 });
     expect(events[0].stageIndex).toBe(2);
     expect(events[0].reviewRound).toBe(2);
     timer.stop();
@@ -131,7 +131,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
 
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     expect(events).toHaveLength(0);
     timer.stop();
   });
@@ -219,7 +219,7 @@ describe('HeartbeatTimer', () => {
     const countAfterStop = events.length;
 
     timer.updateProgress(10, 10, 10);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     timer.setProvider('new-provider');
     expect(events.length).toBe(countAfterStop);
   });
@@ -279,7 +279,7 @@ describe('HeartbeatTimer', () => {
       batchId: 'b-1',
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 3, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
     timer.updateProgress(2, 1, 7);
     timer.updateCost(0.03, 0.12);
 
@@ -301,7 +301,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     timer.updateStageCount(4);
@@ -332,7 +332,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, maxReviewRounds: 2 });
+    timer.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: 2 });
     expect(() => timer.updateStageCount(3)).toThrow();
     timer.stop();
   });
@@ -365,7 +365,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.start(3);
-    expect(() => timer.transition({ reviewRound: 1, maxReviewRounds: 2 })).toThrow();
+    expect(() => timer.transition({ reviewRound: 1, attemptCap: 2 })).toThrow();
     timer.stop();
   });
 

@@ -14,7 +14,7 @@ export const OUTPUT_CONTRACT_CLAUSES: Partial<Record<SourceRoute, string>> = {
 export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
   delegate_tasks: {},
   review_code: { agentType: 'complex', reviewPolicy: 'full' },
-  debug_task: { agentType: 'complex', reviewPolicy: 'full', maxReviewRounds: 1 },
+  debug_task: { agentType: 'complex', reviewPolicy: 'full' },
   verify_work: { agentType: 'standard', reviewPolicy: 'spec_only' },
   audit_document: { agentType: 'complex', reviewPolicy: 'off' },
   execute_plan: { agentType: 'standard', reviewPolicy: 'full' },
@@ -40,7 +40,6 @@ export function resolveDraft(
     filePaths: draft.filePaths,
     agentType: agentType as 'standard' | 'complex',
     reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
-    maxReviewRounds: routeDefaults.maxReviewRounds,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,

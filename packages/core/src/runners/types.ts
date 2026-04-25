@@ -128,7 +128,7 @@ export type ProgressEvent = {
   stageIndex: number
   stageCount: number
   reviewRound?: number
-  maxReviewRounds?: number
+  attemptCap?: number
   progress: {
     filesRead: number
     filesWritten: number

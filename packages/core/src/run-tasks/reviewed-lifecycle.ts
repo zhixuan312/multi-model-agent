@@ -148,7 +148,7 @@ export async function executeReviewedLifecycle(
               elapsed: event.elapsed,
               stage: event.stage,
               round: event.reviewRound,
-              cap: event.maxReviewRounds,
+              cap: event.attemptCap,
               tools: event.progress.toolCalls,
               read: event.progress.filesRead,
               wrote: event.progress.filesWritten,
@@ -366,7 +366,6 @@ export async function executeReviewedLifecycle(
       stage: 'verifying' as never,
       stageIndex: 4,
       reviewRound: undefined,
-      maxReviewRounds: task.maxReviewRounds ?? 5,
     });
     const verification = await runVerifyStage({
       cwd,
@@ -828,7 +827,7 @@ export async function executeReviewedLifecycle(
       const diffUnavailable: UnavailableMap = new Map();
       const diffReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
       emitTaskEvent('stage_change', { from: 'verifying', to: 'diff_review' });
-      heartbeat?.transition({ stage: 'diff_review' as never, stageIndex: 2, reviewRound: 1, maxReviewRounds: 1 });
+      heartbeat?.transition({ stage: 'diff_review' as never, stageIndex: 2, reviewRound: 1, attemptCap: 1 });
       const diffCall = await runWithFallback<DiffReviewOrSkipped>({
         assigned: diffReviewerTier,
         providerFor,
@@ -868,7 +867,7 @@ export async function executeReviewedLifecycle(
     let specReport: typeof effectiveImplReport | undefined;
     let specReviewReason: string | undefined;
 
-    heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, maxReviewRounds: maxSpecRows });
+    heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows });
     const initialReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
     const initialSpecReview = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({
       assigned: initialReviewerTier,
@@ -906,7 +905,7 @@ export async function executeReviewedLifecycle(
       const decision = pickEscalation({ loop: 'spec', attemptIndex: specAttemptIndex, baseTier: resolved.slot });
       if (decision.isEscalated) emitEscalationEvent('spec', specAttemptIndex, decision);
       emitTaskEvent('stage_change', { from: 'spec_review', to: 'spec_rework', attempt: specAttemptIndex, attemptCap: maxSpecRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
-      heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, maxReviewRounds: maxSpecRows });
+      heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
       const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status), getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress }) });
@@ -923,7 +922,7 @@ export async function executeReviewedLifecycle(
       const reworkReport = parseStructuredReport(finalImplResult.output);
       finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
       fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
-      heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, maxReviewRounds: maxSpecRows });
+      heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows });
       const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block) });
       if (reviewCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -953,7 +952,7 @@ export async function executeReviewedLifecycle(
     if (reviewPolicy === 'full') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
-      heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, maxReviewRounds: maxQualityRows });
+      heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows });
       const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block) });
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
@@ -979,7 +978,7 @@ export async function executeReviewedLifecycle(
         const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
         if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
         emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
-        heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, maxReviewRounds: maxQualityRows });
+        heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
         const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
         const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
         const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status), getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress }) });
@@ -996,7 +995,7 @@ export async function executeReviewedLifecycle(
         const reworkReport = parseStructuredReport(finalImplResult.output);
         finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
         fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
-        heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, maxReviewRounds: maxQualityRows });
+        heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows });
         const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block) });
         if (reviewCall.bothUnavailable) {
           emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });

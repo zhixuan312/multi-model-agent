@@ -52,7 +52,6 @@ export async function executeDebug(
     reviewPolicy: 'full',
     briefQualityPolicy: 'off',
     done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
-    maxReviewRounds: 1,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,

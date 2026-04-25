@@ -59,7 +59,6 @@ export interface TaskSpec {
   sandboxPolicy?: SandboxPolicy
   maxCostUSD?: number
   reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off'
-  maxReviewRounds?: number
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
   formatConstraints?: FormatConstraints
