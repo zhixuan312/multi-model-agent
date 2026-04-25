@@ -1,0 +1,25 @@
+name: Privacy co-modification check
+
+on:
+  pull_request:
+    paths:
+      - 'packages/core/src/telemetry/types.ts'
+
+jobs:
+  privacy-co-mod:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Check PRIVACY.md co-modification
+        run: |
+          if git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q 'packages/core/src/telemetry/types.ts'; then
+            if ! git diff --name-only origin/${{ github.base_ref }}...HEAD | grep -q 'docs/PRIVACY.md'; then
+              echo "ERROR: PR modifies packages/core/src/telemetry/types.ts but does not modify docs/PRIVACY.md"
+              echo "Any change to the telemetry schema MUST include a corresponding update to docs/PRIVACY.md."
+              exit 1
+            fi
+          fi
+          echo "OK: PRIVACY.md co-modification check passed."
