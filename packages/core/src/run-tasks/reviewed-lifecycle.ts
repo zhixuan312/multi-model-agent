@@ -44,7 +44,7 @@ import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.j
 import type { RunTasksProgressCallback } from './index.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
-import { composeVerboseLine } from '../diagnostics/verbose-line.js';
+import { composeVerboseLine, toVerboseFields } from '../diagnostics/verbose-line.js';
 import type {
   FallbackEventParams,
   FallbackUnavailableEventParams,
@@ -111,7 +111,7 @@ export async function executeReviewedLifecycle(
       taskEventLogger.emit({ event, batchId: verboseBatchIdEarly, taskIndex, ...cleaned });
     }
     if (verboseStreamRaw) {
-      verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...fields }));
+      verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));
     }
   };
   // Start the heartbeat whenever there's a downstream consumer:

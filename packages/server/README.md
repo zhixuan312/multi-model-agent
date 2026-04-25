@@ -88,6 +88,11 @@ The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent 
 
 All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 
+## What's new in 3.5.1
+
+**Bug fix:**
+- **No more `runner_crash: verbose-line: invalid key name` on fallback / rework paths.** With `diagnostics.verbose: true`, any run that hit fallback / escalation / spec_rework / quality_rework previously threw inside the verbose-stream serializer (camelCase event-param keys like `assignedTier`, `implTier`, `attemptCap` violated its snake_case-only validator) and surfaced as terminal `runner_crash` even though the model itself succeeded. The verbose-stream branch now drops `batchId` / `taskIndex` (already emitted as `batch` / `task`) and snake-cases the remaining keys; the JSONL `DiagnosticLogger` contract (camelCase `assignedTier` / `implTier` / ... on `escalation` / `fallback` events) is unchanged.
+
 ## What's new in 3.5.0
 
 **Breaking changes (operators read this first):**
