@@ -128,7 +128,7 @@ export type ProgressEvent = {
   idleSinceLlmMs: number
   idleSinceToolMs: number
   idleSinceTextMs: number
-  stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
+  stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework' | 'verifying' | 'diff_review' | 'committing' | 'terminal'
   stageIndex: number
   stageCount: number
   reviewRound?: number

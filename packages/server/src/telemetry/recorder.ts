@@ -1,8 +1,10 @@
+import { existsSync, unlinkSync } from 'node:fs';
+import { join } from 'node:path';
 import { decide } from './consent.js';
-import { getOrCreateInstallId } from './install-id.js';
+import { getOrCreateInstallId, deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
-import { readGeneration } from './generation.js';
+import { readGeneration, bumpGeneration } from './generation.js';
 import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 import {
   buildTaskCompletedEvent,
@@ -14,10 +16,12 @@ import {
 } from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
 
 export interface Recorder {
+  readonly signal: AbortSignal;
   recordTaskCompleted(ctx: BuildContext): void;
   recordSessionStarted(snap: SessionSnapshot): void;
   recordInstallChanged(from: string | null, to: string, trigger: string): void;
   recordSkillInstalled(skillId: string, client: string): void;
+  revokeIdentity(options?: { deleteInstallId?: boolean }): Promise<void>;
 }
 
 let _recorder: Recorder | null = null;
@@ -42,6 +46,7 @@ export function createRecorder(opts: { homeDir: string; mmagentVersion: string }
 function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
   const { homeDir, mmagentVersion } = opts;
   const queue = new Queue(homeDir);
+  const controller = new AbortController();
   let _installId: string | null = null;
   let dropped = 0;
 
@@ -79,6 +84,10 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
   };
 
   return {
+    get signal() {
+      return controller.signal;
+    },
+
     recordTaskCompleted(ctx) {
       try {
         const d = decide(homeDir);
@@ -116,6 +125,17 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
         enqueue(buildSkillInstalledEvent(skillId, client));
       } catch {
         dropped++;
+      }
+    },
+
+    async revokeIdentity(options) {
+      await bumpGeneration(homeDir);
+      controller.abort();
+      const queuePath = join(homeDir, 'telemetry-queue.ndjson');
+      if (existsSync(queuePath)) unlinkSync(queuePath);
+      _installId = null;
+      if (options?.deleteInstallId) {
+        deleteInstallId(homeDir);
       }
     },
   };

@@ -12,6 +12,10 @@ const {
   buildSessionStartedEventMock,
   buildInstallChangedEventMock,
   buildSkillInstalledEventMock,
+  bumpGenerationMock,
+  deleteInstallIdMock,
+  existsSyncMock,
+  unlinkSyncMock,
 } = vi.hoisted(() => ({
   decideMock: vi.fn(),
   getOrCreateInstallIdMock: vi.fn(),
@@ -22,6 +26,10 @@ const {
   buildSessionStartedEventMock: vi.fn(),
   buildInstallChangedEventMock: vi.fn(),
   buildSkillInstalledEventMock: vi.fn(),
+  bumpGenerationMock: vi.fn(),
+  deleteInstallIdMock: vi.fn(),
+  existsSyncMock: vi.fn(),
+  unlinkSyncMock: vi.fn(),
 }));
 
 vi.mock('../../packages/server/src/telemetry/consent.js', () => ({
@@ -30,6 +38,7 @@ vi.mock('../../packages/server/src/telemetry/consent.js', () => ({
 
 vi.mock('../../packages/server/src/telemetry/install-id.js', () => ({
   getOrCreateInstallId: getOrCreateInstallIdMock,
+  deleteInstallId: deleteInstallIdMock,
 }));
 
 vi.mock('../../packages/server/src/telemetry/install-meta.js', () => ({
@@ -38,6 +47,7 @@ vi.mock('../../packages/server/src/telemetry/install-meta.js', () => ({
 
 vi.mock('../../packages/server/src/telemetry/generation.js', () => ({
   readGeneration: readGenerationMock,
+  bumpGeneration: bumpGenerationMock,
 }));
 
 vi.mock('../../packages/server/src/telemetry/queue.js', () => ({
@@ -54,6 +64,15 @@ vi.mock('@zhixuan92/multi-model-agent-core/telemetry/event-builder', () => ({
 }));
 
 import { createRecorder } from '../../packages/server/src/telemetry/recorder.js';
+
+vi.mock('node:fs', async () => {
+  const actual = await vi.importActual<typeof import('node:fs')>('node:fs');
+  return {
+    ...actual,
+    existsSync: existsSyncMock,
+    unlinkSync: unlinkSyncMock,
+  };
+});
 
 describe('recorder', () => {
   beforeEach(() => {
@@ -247,5 +266,40 @@ describe('recorder', () => {
     expect(queueAppendMock).not.toHaveBeenCalled();
     // getOrCreateInstallId was called before buildInstallMeta threw
     expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+  });
+
+  // ── revokeIdentity ─────────────────────────────────────────────────
+
+  it('revokeIdentity bumps generation, aborts in-flight, deletes queue, drops install-id (when called from reset-id)', async () => {
+    bumpGenerationMock.mockResolvedValue(5);
+    existsSyncMock.mockReturnValue(true);
+
+    const r = createRecorder({ homeDir, mmagentVersion: '3.6.0' });
+
+    // Record an event first to set up cached install-id
+    r.recordTaskCompleted({ route: 'delegate', taskSpec: {}, runResult: {} as any, client: 'claude-code', triggeringSkill: 'direct', parentModel: null });
+    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+
+    // revokeIdentity with deleteInstallId
+    await r.revokeIdentity({ deleteInstallId: true });
+
+    // bumpGeneration was called
+    expect(bumpGenerationMock).toHaveBeenCalledWith(homeDir);
+    expect(bumpGenerationMock).toHaveBeenCalledTimes(1);
+
+    // AbortController was aborted
+    expect(r.signal.aborted).toBe(true);
+
+    // Queue file was deleted
+    expect(existsSyncMock).toHaveBeenCalledWith(expect.stringContaining('telemetry-queue.ndjson'));
+    expect(unlinkSyncMock).toHaveBeenCalledWith(expect.stringContaining('telemetry-queue.ndjson'));
+
+    // Install-id was deleted
+    expect(deleteInstallIdMock).toHaveBeenCalledWith(homeDir);
+
+    // A new event after revokeIdentity gets a fresh install-id
+    // (previous _installId was cleared)
+    r.recordSessionStarted({ defaultTier: 'standard', diagnosticsEnabled: false, autoUpdateSkills: false, providersConfigured: [] });
+    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(2);
   });
 });

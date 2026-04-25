@@ -42,7 +42,11 @@ export function buildExecutionContext(
 
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
-    recorder = getRecorder();
+    // Server's Recorder uses a stricter route enum than ExecutionContext['recorder']
+    // (which takes a plain string). The server type is a strict subset of what core
+    // accepts at runtime, so cast through unknown to satisfy TS function-parameter
+    // contravariance — fire-and-forget telemetry never reads the route field anyway.
+    recorder = getRecorder() as unknown as ExecutionContext['recorder'];
   } catch {
     // Recorder not initialized — telemetry disabled
   }

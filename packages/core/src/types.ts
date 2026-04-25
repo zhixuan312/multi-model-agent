@@ -44,15 +44,32 @@ export type ReviewVerdict =
 export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable';
 export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other';
 
+// One union member per stage so `Extract<RawStageStats, { stage: 'X' }>` resolves
+// to a non-`never` variant for every stage in StageStatsMap below. (A union of
+// literal stages on a single member would make Extract fail because the member's
+// `stage` field doesn't extend any one literal.)
 export type RawStageStats =
-  | (BaseStageStats & { stage: 'implementing' | 'spec_rework' | 'quality_rework' | 'committing' })
+  | (BaseStageStats & { stage: 'implementing' })
+  | (BaseStageStats & { stage: 'spec_rework' })
+  | (BaseStageStats & { stage: 'quality_rework' })
+  | (BaseStageStats & { stage: 'committing' })
   | (BaseStageStats & {
       stage:      'verifying';
       outcome:    VerifyOutcome   | null;
       skipReason: VerifySkipReason | null;
     })
   | (BaseStageStats & {
-      stage:      'spec_review' | 'quality_review' | 'diff_review';
+      stage:      'spec_review';
+      verdict:    ReviewVerdict | null;
+      roundsUsed: number        | null;
+    })
+  | (BaseStageStats & {
+      stage:      'quality_review';
+      verdict:    ReviewVerdict | null;
+      roundsUsed: number        | null;
+    })
+  | (BaseStageStats & {
+      stage:      'diff_review';
       verdict:    ReviewVerdict | null;
       roundsUsed: number        | null;
     });

@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ConsentDecision } from '@zhixuan92/multi-model-agent-core/telemetry/consent-rules.js';
+import type { ConsentDecision } from '@zhixuan92/multi-model-agent-core/telemetry/consent-rules';
 
 const FLAG_FILE = 'telemetry-notice-shown';
 const HR = '────────────────────────────────────────────────────────────────────────────';
