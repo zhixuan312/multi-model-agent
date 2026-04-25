@@ -20,6 +20,7 @@ import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.j
 import type { RunTasksProgressCallback } from './index.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
+import { composeVerboseLine } from '../diagnostics/verbose-line.js';
 import { withDoneCondition } from './execute-task.js';
 
 export async function executeReviewedLifecycle(
@@ -86,18 +87,36 @@ export async function executeReviewedLifecycle(
             if (event.stage !== lastStageSeen) {
               if (lastStageSeen !== undefined) {
                 verboseStreamRaw(
-                  `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
+                  composeVerboseLine({
+                    event: 'stage_change',
+                    ts: new Date().toISOString(),
+                    batch: shortBatchEarly,
+                    task: taskIndex,
+                    from: lastStageSeen,
+                    to: event.stage,
+                  }),
                 );
               }
               lastStageSeen = event.stage;
             }
-            const costStr = event.costUSD !== null ? ` cost=$${event.costUSD.toFixed(4)}` : '';
-            const roundStr = event.reviewRound !== undefined && event.maxReviewRounds !== undefined
-              ? ` round=${event.reviewRound}/${event.maxReviewRounds}`
-              : '';
             const sinceLastMs = Date.now() - prevEventAtMs;
             verboseStreamRaw(
-              `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ${event.elapsed} stage=${event.stage}${roundStr} tools=${event.progress.toolCalls} read=${event.progress.filesRead} wrote=${event.progress.filesWritten} text=${textEmissionChars}c${costStr} idle=${sinceLastMs}ms`,
+              composeVerboseLine({
+                event: 'heartbeat',
+                ts: new Date().toISOString(),
+                batch: shortBatchEarly,
+                task: taskIndex,
+                elapsed: event.elapsed,
+                stage: event.stage,
+                round: event.reviewRound,
+                cap: event.maxReviewRounds,
+                tools: event.progress.toolCalls,
+                read: event.progress.filesRead,
+                wrote: event.progress.filesWritten,
+                text: textEmissionChars,
+                cost: event.costUSD,
+                idle_ms: sinceLastMs,
+              }),
             );
           }
           synthOnProgress(taskIndex, event);
@@ -113,8 +132,16 @@ export async function executeReviewedLifecycle(
   heartbeat?.start(stageCount);
   if (verboseStreamRaw) {
     verboseStreamRaw(
-      `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ` +
-      (heartbeat ? `started (stageCount=${stageCount}, 5s tick)` : 'DISABLED (no consumer)'),
+      composeVerboseLine({
+        event: 'heartbeat_timer',
+        ts: new Date().toISOString(),
+        batch: shortBatchEarly,
+        task: taskIndex,
+        state: heartbeat ? 'started' : 'disabled',
+        stage_count: stageCount,
+        tick_ms: heartbeat ? 5000 : undefined,
+        reason: heartbeat ? undefined : 'no_consumer',
+      }),
     );
   }
 
@@ -127,7 +154,13 @@ export async function executeReviewedLifecycle(
   const shortBatch = shortBatchEarly;
   if (verboseStream) {
     verboseStream(
-      `[mmagent verbose] batch=${shortBatch} task=${taskIndex} start worker=${resolved.provider.config.model}`,
+      composeVerboseLine({
+        event: 'worker_start',
+        ts: new Date().toISOString(),
+        batch: shortBatch,
+        task: taskIndex,
+        worker: resolved.provider.config.model,
+      }),
     );
   }
   let prevEventAtMs = verbose ? Date.now() : 0;
@@ -142,7 +175,14 @@ export async function executeReviewedLifecycle(
           if (verbose) prevEventAtMs = Date.now();
           if (verboseStream) {
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} turn_start turn=${event.turn} provider=${event.provider}`,
+              composeVerboseLine({
+                event: 'turn_start',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                turn: event.turn,
+                provider: event.provider,
+              }),
             );
           }
         }
@@ -153,7 +193,15 @@ export async function executeReviewedLifecycle(
               ? event.preview.slice(0, 57) + '...'
               : event.preview;
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} text +${event.chars}c (total ${textEmissionChars}) preview="${preview.replace(/\n/g, '\\n')}"`,
+              composeVerboseLine({
+                event: 'text_emission',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                chars: event.chars,
+                total: textEmissionChars,
+                preview,
+              }),
             );
           }
         }
@@ -178,7 +226,16 @@ export async function executeReviewedLifecycle(
             });
           }
           if (verboseStream) {
-            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary} +${sincePrevMs}ms`);
+            verboseStream(
+              composeVerboseLine({
+                event: 'tool_call',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                tool: event.toolSummary,
+                duration_ms: sincePrevMs,
+              }),
+            );
           }
         }
         if (event.kind === 'turn_complete') {
@@ -209,11 +266,18 @@ export async function executeReviewedLifecycle(
             });
           }
           if (verboseStream) {
-            const costStr = costUSD !== null ? ` $${costUSD.toFixed(4)}` : '';
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} ` +
-              `turn in=${event.cumulativeInputTokens} out=${event.cumulativeOutputTokens}${costStr} ` +
-              `+${turnDurMs}ms (${resolved.provider.config.model})`,
+              composeVerboseLine({
+                event: 'turn_complete',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                input_tokens: event.cumulativeInputTokens,
+                output_tokens: event.cumulativeOutputTokens,
+                cost: costUSD,
+                duration_ms: turnDurMs,
+                provider: resolved.provider.config.model,
+              }),
             );
           }
         }
