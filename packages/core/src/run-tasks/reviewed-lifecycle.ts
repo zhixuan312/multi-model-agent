@@ -715,11 +715,7 @@ export async function executeReviewedLifecycle(
           qualityReviewStatus: 'skipped',
           specReviewReason: 'skipped: reviewPolicy is off',
           qualityReviewReason: 'skipped: reviewPolicy is off',
-          agents: {
-            implementer: resolved.slot,
-            specReviewer: 'skipped',
-            qualityReviewer: 'skipped',
-          },
+          agents: agentEnvelope('skipped', 'skipped'),
           models: {
             implementer: implModel,
             specReviewer: null,
@@ -757,11 +753,7 @@ export async function executeReviewedLifecycle(
           extraSections: effectiveImplReport.extraSections ?? {},
         },
         filePathsSkipped,
-        agents: {
-          implementer: resolved.slot,
-          specReviewer: 'not_applicable',
-          qualityReviewer: 'not_applicable',
-        },
+        agents: agentEnvelope('not_applicable', 'not_applicable'),
         models: {
           implementer: implModel,
           specReviewer: null,
@@ -782,11 +774,7 @@ export async function executeReviewedLifecycle(
         qualityReviewStatus: 'skipped',
         specReviewReason: 'skipped: worker reported ' + workerStatus,
         qualityReviewReason: 'skipped: worker reported ' + workerStatus,
-        agents: {
-          implementer: resolved.slot,
-          specReviewer: 'skipped',
-          qualityReviewer: 'skipped',
-        },
+        agents: agentEnvelope('skipped', 'skipped'),
         models: {
           implementer: implModel,
           specReviewer: null,
@@ -808,11 +796,7 @@ export async function executeReviewedLifecycle(
         qualityReviewStatus: 'skipped',
         specReviewReason: 'skipped: reviewPolicy is off',
         qualityReviewReason: 'skipped: reviewPolicy is off',
-        agents: {
-          implementer: resolved.slot,
-          specReviewer: 'skipped',
-          qualityReviewer: 'skipped',
-        },
+        agents: agentEnvelope('skipped', 'skipped'),
         models: {
           implementer: implModel,
           specReviewer: null,
@@ -1099,11 +1083,10 @@ export async function executeReviewedLifecycle(
       specReviewReport: specReport,
       qualityReviewReport: qualityResult.report,
       filePathsSkipped,
-      agents: {
-        implementer: resolved.slot,
-        specReviewer: otherSlot,
-        qualityReviewer: reviewPolicy === 'full' ? otherSlot : 'skipped',
-      },
+      agents: agentEnvelope(
+        specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
+        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+      ),
       models: {
         implementer: implModel,
         specReviewer: reviewModel,
