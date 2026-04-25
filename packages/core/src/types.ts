@@ -6,6 +6,7 @@ import type {
   TokenUsage,
 } from './runners/types.js';
 import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
+import type { VerifyStageResult } from './run-tasks/verify-stage.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -46,7 +47,7 @@ export interface TaskSpec {
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
   maxCostUSD?: number
-  reviewPolicy?: 'full' | 'spec_only' | 'off'
+  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off'
   maxReviewRounds?: number
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
@@ -110,6 +111,7 @@ export interface RunResult {
   fileArtifactsMissing?: boolean
   commits?: Commit[]
   commitError?: string
+  verification: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport

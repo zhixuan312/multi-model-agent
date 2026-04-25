@@ -4,9 +4,12 @@
 // sourced, how cost is computed, the exact diagnostic wording) are
 // passed in; the shared shape lives here.
 import type { Commit, RunResult } from '../../types.js';
+import type { VerifyStageResult } from '../../run-tasks/verify-stage.js';
 
 export type { Commit };
 import type { TokenUsage } from '../types.js';
+
+const DEFAULT_VERIFICATION: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
 import type { FileTracker } from '../../tools/tracker.js';
 import type { TextScratchpad } from '../../tools/scratchpad.js';
 
@@ -47,6 +50,7 @@ export function buildOkResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: false,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     durationMs,
   };
 }
@@ -90,6 +94,7 @@ export function buildIncompleteResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
   };
@@ -119,6 +124,7 @@ export function buildForceSalvageResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     durationMs,
   };
 }
@@ -150,6 +156,7 @@ export function buildMaxTurnsExitResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
   };
