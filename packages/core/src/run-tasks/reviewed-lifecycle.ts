@@ -16,6 +16,7 @@ import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
 import type { QualityReviewResult } from '../review/quality-reviewer.js';
+import { runDiffReview, type DiffReviewVerdict } from '../review/diff-review.js';
 import { aggregateResult } from '../review/aggregate-result.js';
 import { buildEvidence } from '../review/evidence.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
@@ -392,6 +393,94 @@ export async function executeReviewedLifecycle(
     }, verification);
   }
 
+  function resolveOffTerminal(base: RunResult, verification: VerifyStageResult): RunResult {
+    const concerns = [...(base.concerns ?? [])];
+    let workerStatus = workerStatusForTerminal(base.workerStatus);
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+      workerStatus = 'done_with_concerns';
+    }
+    if (verification.status === 'error') {
+      const failedIndex = verification.steps.findIndex((step) => step.status !== 'passed');
+      const failedStep = failedIndex >= 0 ? verification.steps[failedIndex] : undefined;
+      return withVerification({
+        ...base,
+        status: 'error',
+        workerStatus: 'failed',
+        error: failedStep?.errorMessage ?? 'verify command error',
+        errorCode: 'verify_command_error',
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
+    return withVerification({
+      ...base,
+      status: base.status === 'ok' ? 'ok' : base.status,
+      workerStatus,
+      concerns,
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
+
+  function resolveDiffOnlyTerminal(base: RunResult, verdict: DiffReviewVerdict, verification: VerifyStageResult, diffTruncated: boolean): RunResult {
+    const concerns = [...(base.concerns ?? [])];
+    if (verdict.kind === 'reject') {
+      return withVerification({
+        ...base,
+        status: 'error',
+        workerStatus: 'failed',
+        error: verdict.message || 'diff review rejected implementation',
+        errorCode: 'diff_review_rejected',
+        structuredError: {
+          code: 'diff_review_rejected',
+          message: verdict.message || 'diff review rejected implementation',
+        },
+        concerns,
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
+    concerns.push(...verdict.concerns);
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+    }
+    if (diffTruncated) {
+      concerns.push({
+        source: 'diff_truncated',
+        severity: 'medium',
+        message: 'Implementation diff exceeded the reviewer evidence byte cap and was truncated.',
+      });
+    }
+    const hasConcerns = concerns.length > 0 || verification.status === 'failed';
+    return withVerification({
+      ...base,
+      status: base.status === 'ok' ? 'ok' : base.status,
+      workerStatus: hasConcerns ? 'done_with_concerns' : workerStatusForTerminal(base.workerStatus),
+      concerns,
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
+
+  function workerStatusForTerminal(status: RunResult['workerStatus']): RunResult['workerStatus'] {
+    return status === 'needs_context' || status === 'blocked' || status === 'failed' || status === 'done_with_concerns'
+      ? status
+      : 'done';
+  }
+
   async function recordWorkerCommits(from: string, to = 'HEAD'): Promise<void> {
     const { stdout: revs } = await exec('git', ['rev-list', '--reverse', `${from}..${to}`], { cwd });
     for (const sha of revs.trim().split('\n').filter(Boolean)) {
@@ -556,7 +645,8 @@ export async function executeReviewedLifecycle(
     }
 
     if (reviewPolicy === 'off') {
-      return {
+      emitVerbose('stage_change', { from: 'verifying', to: 'terminal' });
+      const terminal = resolveOffTerminal({
         ...implResult,
         workerStatus,
         specReviewStatus: 'skipped',
@@ -575,10 +665,8 @@ export async function executeReviewedLifecycle(
         },
         implementationReport: implReport,
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commits,
-        commitError,
-        verification,
-      };
+      }, verification);
+      return terminal;
     }
 
     let otherProvider: Provider;
@@ -624,6 +712,44 @@ export async function executeReviewedLifecycle(
     const evidence = isArtifactProducing
       ? await buildEvidence({ cwd, baselineHead, commits, verification, reviewPolicy })
       : { block: '', diffTruncated: false, fullDiff: '' };
+
+    if (reviewPolicy === 'diff_only') {
+      emitVerbose('stage_change', { from: 'verifying', to: 'diff_review' });
+      heartbeat?.transition({
+        stage: 'diff_review' as never,
+        stageIndex: 2,
+        reviewRound: 1,
+        maxReviewRounds,
+      });
+      const verdict = await runDiffReview({
+        cwd,
+        diff: evidence.fullDiff,
+        diffTruncated: evidence.diffTruncated,
+        verification,
+        worker: { call: (prompt: string) => otherProvider.run(prompt) },
+      });
+      emitVerbose('review_decision', { stage: 'diff_review', verdict: verdict.kind, round: 1 });
+      return resolveDiffOnlyTerminal({
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'skipped',
+        qualityReviewStatus: 'skipped',
+        specReviewReason: 'skipped: reviewPolicy is diff_only',
+        qualityReviewReason: 'skipped: reviewPolicy is diff_only',
+        implementationReport: effectiveImplReport,
+        fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        agents: {
+          implementer: resolved.slot,
+          specReviewer: 'skipped',
+          qualityReviewer: 'skipped',
+        },
+        models: {
+          implementer: implModel,
+          specReviewer: reviewModel,
+          qualityReviewer: null,
+        },
+      }, verdict, verification, evidence.diffTruncated);
+    }
 
     heartbeat?.transition({
       stage: 'spec_review', stageIndex: 2,
