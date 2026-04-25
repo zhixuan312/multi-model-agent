@@ -81,6 +81,7 @@ The daemon exposes 15 public endpoints. All tool endpoints are async: they retur
 | `POST /debug?cwd=<abs>` | Debug a failure with a hypothesis |
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
+| `POST /investigate?cwd=<abs>` | Codebase Q&A — structured answer with file:line citations + confidence |
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending; body is the running headline) or `200 application/json` (terminal; uniform 7-field envelope). `?taskIndex=N` slices on complete state. |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
