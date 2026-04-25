@@ -9,6 +9,7 @@ import { readBody } from './middleware/body-reader.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
 import { isLoopbackAddress } from './loopback.js';
+import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -106,12 +107,17 @@ export async function handleRequest(
     cwdValue = cwdResult.canonicalCwd;
   }
 
-  // ── Step 7: Hand off to matched handler ────────────────────────────────────
+  // ── Step 7: Caller identity from headers ────────────────────────────────────
+  const identity = resolveCallerIdentity(req);
+
+  // ── Step 8: Hand off to matched handler ────────────────────────────────────
   const ctx: RequestContext = {
     url: urlObj,
     cwd: cwdValue,
     body: parsedBody,
     authed: !pipelineCfg.authExemptPaths.has(pathname),
+    callerClient: identity.callerClient,
+    callerSkill: identity.callerSkill,
   };
 
   await match.handler(req, res, match.params, ctx);
