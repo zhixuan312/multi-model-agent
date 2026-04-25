@@ -15,6 +15,24 @@ Any intentional or unintentional deviations from the original brief.
 
 ## Unresolved
 Open questions, incomplete items, or items requiring further investigation.
+
+If you wrote, modified, or deleted files, your structured report MUST include a \`commit:\` block as a JSON object with these fields:
+
+  {
+    "type": "feat" | "fix" | "refactor" | "test" | "docs" | "chore" | "style",
+    "scope": "<optional, 1-24 chars: lowercase letters, digits, dot, underscore, slash, hyphen; must start with letter or digit>",
+    "subject": "<1-50 chars, lowercase first letter, no trailing colon, no leading/trailing whitespace>",
+    "body": "<optional multi-paragraph plain text explaining WHY>"
+  }
+
+Examples:
+  type: "feat", scope: "core", subject: "add x"
+  type: "refactor", scope: "run_tasks", subject: "extract Y from Z"
+  type: "fix", subject: "guard against undefined"
+
+Do NOT write narrative ("Now I'm going to...") in the subject. The runner will compose \`<type>(<scope>): <subject>\` as the commit message; your subject becomes the commit subject line verbatim.
+
+If you did not write any files, omit the commit block entirely.
 `.trim();
 
 export const commitSchema = z.object({
