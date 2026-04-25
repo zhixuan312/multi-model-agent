@@ -30,6 +30,8 @@
     "build": "npm run build --workspaces",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:perf": "MMAGENT_PERF_CHECK=1 vitest run tests/perf/",
+    "test:perf:baseline": "MMAGENT_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
     "serve": "node packages/server/dist/cli/index.js serve"
   },
   "engines": {

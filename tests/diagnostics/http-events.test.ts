@@ -180,33 +180,4 @@ describe('§5.9 canonical HTTP diagnostic events', () => {
     expect(names).toEqual(['project_created']);
   });
 
-  // SKIPPED — batch_started: not yet emitted by DiagnosticLogger.
-  // asyncDispatch does not call any logger method when the executor begins.
-  // Future work: add a batchStarted(batchId, tool, cwd) method to DiagnosticLogger
-  // and call it inside the setImmediate callback in async-dispatch.ts.
-  it.skip('batch_started event — not yet emitted (future work: add logger.batchStarted)', () => {});
-
-  // SKIPPED — batch_completed: not yet emitted by DiagnosticLogger.
-  // batchRegistry.complete() does not invoke any logger method.
-  // Future work: wire DiagnosticLogger into BatchRegistry or asyncDispatch completion path.
-  it.skip('batch_completed event — not yet emitted (future work: add logger.batchCompleted)', () => {});
-
-  // SKIPPED — batch_failed: not yet emitted by DiagnosticLogger.
-  // Same gap as batch_completed.
-  it.skip('batch_failed event — not yet emitted (future work: add logger.batchFailed)', () => {});
-
-  // SKIPPED — batch_expired: not yet emitted by DiagnosticLogger.
-  // batchRegistry.runExpirySweep() does not invoke any logger method.
-  // Future work: add logger.batchExpired and call from runExpirySweep.
-  it.skip('batch_expired event — not yet emitted (future work: add logger.batchExpired)', () => {});
-
-  // SKIPPED — clarification_requested: not yet emitted by DiagnosticLogger.
-  // batchRegistry.requestClarification() does not call any logger method.
-  // Future work: add logger.clarificationRequested and call from requestClarification.
-  it.skip('clarification_requested event — not yet emitted (future work: add logger.clarificationRequested)', () => {});
-
-  // SKIPPED — clarification_resolved: not yet emitted by DiagnosticLogger.
-  // batchRegistry.resumeFromClarification() does not call any logger method.
-  // Future work: add logger.clarificationResolved and call from resumeFromClarification.
-  it.skip('clarification_resolved event — not yet emitted (future work: add logger.clarificationResolved)', () => {});
 });
