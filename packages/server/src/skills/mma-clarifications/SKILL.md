@@ -2,7 +2,7 @@
 name: mma-clarifications
 description: Use when a previous mma-* batch's terminal envelope has `proposedInterpretation` as a string (not the `not_applicable` sentinel) — the service paused waiting for you to confirm or correct its read of the task
 when_to_use: A previous mma-delegate / mma-audit / mma-review / mma-execute-plan / mma-debug / mma-investigate terminal envelope has `proposedInterpretation` as a string. Read the proposal, decide whether to accept or correct it, then call this skill. The batch resumes immediately after the POST returns.
-version: "0.0.0-unreleased"
+version: "3.5.0"
 ---
 
 # mma-clarifications

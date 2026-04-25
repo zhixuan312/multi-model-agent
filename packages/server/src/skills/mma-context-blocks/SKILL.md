@@ -2,7 +2,7 @@
 name: mma-context-blocks
 description: Use when a document larger than ~2 KB will be referenced by 2+ subsequent mma-* calls — register once, pass the returned ID to each call instead of re-uploading the same content
 when_to_use: A document (spec, plan, codebase summary, prior round's findings, error log) larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the ID via `contextBlockIds` on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug / mma-investigate. Cheaper and faster than inlining the same content N times.
-version: "0.0.0-unreleased"
+version: "3.5.0"
 ---
 
 # mma-context-blocks

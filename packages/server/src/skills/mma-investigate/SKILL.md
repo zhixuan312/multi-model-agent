@@ -2,7 +2,7 @@
 name: mma-investigate
 description: Use when you need to answer a question about the codebase ("how does X work", "where is Y called", "what does this directory do") and reading + grepping the codebase yourself would consume main-context tokens
 when_to_use: A question about THIS codebase has surfaced — from the user, from a methodology skill, or from your own next-step planning — AND mmagent is running. Delegate the read/grep/synthesis to a worker so the main context stays on judgment. Codebase only — does not perform web research or git-history queries.
-version: "0.0.0-unreleased"
+version: "3.5.0"
 ---
 
 # mma-investigate

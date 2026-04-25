@@ -2,7 +2,7 @@
 name: mma-delegate
 description: Use when you have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk and you want them to run on cheap workers in parallel instead of consuming main-context tokens
 when_to_use: You have ad-hoc implementation or research tasks (no plan file on disk) AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — workers are cheaper, parallel-safe, and keep main context free. If a plan file exists → use mma-execute-plan. If the task is audit / review / verify / debug / investigate → use the matching specialized skill.
-version: "0.0.0-unreleased"
+version: "3.5.0"
 ---
 
 # mma-delegate
