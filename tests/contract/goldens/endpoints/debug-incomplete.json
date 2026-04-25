@@ -67,7 +67,9 @@
       "agents": {
         "implementer": "complex",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "qualityReviewer": "not_applicable",
+        "implementerToolMode": "full",
+        "implementerCapabilities": []
       },
       "models": {
         "implementer": "mock",
@@ -80,6 +82,88 @@
         "steps": [],
         "totalDurationMs": 0,
         "skipReason": "no_command"
+      },
+      "stageStats": {
+        "implementing": {
+          "agentTier": "complex",
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": true,
+          "model": "mock",
+          "modelFamily": "mock",
+          "stage": "implementing"
+        },
+        "committing": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "stage": "committing"
+        },
+        "diff_review": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "roundsUsed": null,
+          "stage": "diff_review",
+          "verdict": null
+        },
+        "quality_review": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "roundsUsed": null,
+          "stage": "quality_review",
+          "verdict": null
+        },
+        "quality_rework": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "stage": "quality_rework"
+        },
+        "spec_review": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "roundsUsed": null,
+          "stage": "spec_review",
+          "verdict": null
+        },
+        "spec_rework": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "stage": "spec_rework"
+        },
+        "verifying": {
+          "agentTier": null,
+          "costUSD": null,
+          "durationMs": "<DETERMINISTIC>",
+          "entered": false,
+          "model": null,
+          "modelFamily": null,
+          "outcome": null,
+          "skipReason": null,
+          "stage": "verifying"
+        }
       }
     }
   ],

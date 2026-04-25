@@ -370,7 +370,8 @@ describe('server config block', () => {
     expect(cfg.server.auth.tokenFile).toBe('~/.multi-model/auth-token');
     expect(cfg.server.limits.projectCap).toBe(200);
     expect(cfg.server.limits.shutdownDrainMs).toBe(30_000);
-    expect(cfg.server.limits.maxBodyBytes).toBe(10_485_760);
+    expect(cfg.server.limits.maxBodyBytes).toBe(262144);
+    expect(cfg.defaults.stallTimeoutMs).toBe(600_000);
   });
 
   it('accepts server block with overrides', () => {

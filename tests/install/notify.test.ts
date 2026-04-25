@@ -43,10 +43,11 @@ function mockRecorder(): Recorder {
 }
 
 describe('notifySkillInstalled', () => {
-  it('forwards to recorder.recordSkillInstalled', () => {
+  it('forwards to recorder.recordSkillInstalled', async () => {
     const rec = mockRecorder();
     setRecorderForTest(rec);
-    notify.notifySkillInstalled('mma-delegate', 'claude-code');
+    notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' });
+    await new Promise((r) => setTimeout(r, 10));
     expect(rec.recordSkillInstalled).toHaveBeenCalledWith('mma-delegate', 'claude-code');
   });
 });
@@ -60,7 +61,7 @@ describe('notifySkillInstalled errors are silent', () => {
       recordSkillInstalled: () => { throw new Error('boom'); },
     };
     setRecorderForTest(boom);
-    expect(() => notify.notifySkillInstalled('mma-delegate', 'claude-code')).not.toThrow();
+    expect(() => notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' })).not.toThrow();
   });
 });
 
@@ -74,21 +75,21 @@ describe('writeSkillToClient calls notifySkillInstalled after successful install
 
   it('fires for claude-code', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'claude-code', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'claude-code');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'claude-code' });
   });
 
   it('fires for gemini', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'gemini', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'gemini');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'gemini' });
   });
 
   it('fires for codex', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'codex', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'codex');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'codex' });
   });
 
   it('fires for cursor', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'cursor', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version, baseOpts.cwd);
-    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'cursor');
+    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'cursor' });
   });
 });

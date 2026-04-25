@@ -30,19 +30,19 @@ export function writeSkillToClient(
   switch (target) {
     case 'claude-code':
       installClaudeCode({ skillName, content, homeDir, skillsRoot });
-      notifySkillInstalled(skillName, target);
+      notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'gemini':
       installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot });
-      notifySkillInstalled(skillName, target);
+      notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'codex':
       installCodexCli({ skillName, content, homeDir, skillsRoot });
-      notifySkillInstalled(skillName, target);
+      notifySkillInstalled({ skillId: skillName, client: target });
       break;
     case 'cursor':
       installCursor({ content, cwd, homeDir, skillsRoot, force });
-      notifySkillInstalled(skillName, target);
+      notifySkillInstalled({ skillId: skillName, client: target });
       break;
     default: {
       const _exhaustive: never = target;
