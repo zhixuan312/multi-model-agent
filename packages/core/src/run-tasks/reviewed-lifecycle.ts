@@ -373,8 +373,44 @@ export async function executeReviewedLifecycle(
     return verification;
   }
 
+  function signalize(result: RunResult): RunResult {
+    const cause = typeof result.terminationReason === 'object' ? result.terminationReason.cause : result.terminationReason;
+    const capExhausted = result.capExhausted
+      ?? (result.status === 'cost_exceeded' || cause === 'cost_exceeded' || cause === 'cost_ceiling' ? 'cost'
+        : result.status === 'timeout' || cause === 'timeout' ? 'wall_clock'
+          : result.status === 'incomplete' && result.turns > 1 ? 'turn'
+            : undefined);
+    const lifecycleClarificationRequested = result.lifecycleClarificationRequested
+      ?? (result.status === 'brief_too_vague' || cause === 'brief_too_vague' ? true : undefined);
+    return {
+      ...result,
+      ...(capExhausted !== undefined && { capExhausted }),
+      ...(lifecycleClarificationRequested !== undefined && { lifecycleClarificationRequested }),
+    };
+  }
+
+  function workerErrorResult(err: unknown): RunResult {
+    const workerError = err instanceof Error ? err : new Error(String(err));
+    return signalize({
+      output: '',
+      status: 'error',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      error: workerError.message,
+      errorCode: 'runner_crash',
+      structuredError: { code: 'runner_crash', message: workerError.message },
+      workerStatus: 'failed',
+      workerError,
+    });
+  }
+
   function withVerification(result: RunResult, verification = latestVerification): RunResult {
-    return { ...result, verification };
+    return signalize({ ...result, verification });
   }
 
   function verificationErrorResult(base: RunResult, verification: VerifyStageResult): RunResult | null {
@@ -1016,6 +1052,8 @@ export async function executeReviewedLifecycle(
       commitError,
       verification,
     };
+  } catch (err) {
+    return withVerification(workerErrorResult(err));
   } finally {
     heartbeat?.stop();
   }

@@ -225,14 +225,75 @@ export function mockProvider(opts: MockProviderOptions): Provider {
   };
 }
 
-export function failProvider(message = 'mocked failure'): Provider {
+export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
   return {
-    name: 'mock-fail',
+    name: `mock-${opts.kind}-cap`,
     config: STUB_CONFIG,
     async run(): Promise<RunResult> {
-      throw new Error(message);
+      const output = opts.partialOutput ?? 'mock cap output';
+      if (opts.kind === 'cost') {
+        return {
+          ...buildIncomplete({ stage: 'incomplete', output }),
+          status: 'cost_exceeded',
+          capExhausted: 'cost',
+          terminationReason: {
+            cause: 'cost_exceeded',
+            turnsUsed: 1,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: null,
+            wasPromoted: false,
+          },
+        };
+      }
+      if (opts.kind === 'wall_clock') {
+        return {
+          ...buildIncomplete({ stage: 'incomplete', output }),
+          status: 'timeout',
+          capExhausted: 'wall_clock',
+          terminationReason: {
+            cause: 'timeout',
+            turnsUsed: 1,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: null,
+            wasPromoted: false,
+          },
+        };
+      }
+      return {
+        ...buildMaxTurns({ stage: 'max-turns', output }),
+        capExhausted: 'turn',
+      };
     },
   };
+}
+
+export function clarificationProvider(opts: { proposedInterpretation: string }): Provider {
+  return {
+    name: 'mock-clarification',
+    config: STUB_CONFIG,
+    async run(): Promise<RunResult> {
+      return {
+        ...buildClarificationNeeded({ stage: 'clarification', output: opts.proposedInterpretation }),
+        lifecycleClarificationRequested: true,
+      };
+    },
+  };
+}
+
+export function throwingProvider(err: Error): Provider {
+  return {
+    name: 'mock-throw',
+    config: STUB_CONFIG,
+    async run(): Promise<RunResult> {
+      throw err;
+    },
+  };
+}
+
+export function failProvider(message = 'mocked failure'): Provider {
+  return throwingProvider(new Error(message));
 }
 
 // Patches global fetch so any outbound network call from a contract test is
