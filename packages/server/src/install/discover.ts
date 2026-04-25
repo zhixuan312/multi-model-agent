@@ -15,6 +15,7 @@ export const SUPPORTED_SKILLS = [
   'mma-retry',
   'mma-context-blocks',
   'mma-clarifications',
+  'mma-investigate',
 ] as const;
 
 /** Thrown when a skill's SKILL.md cannot be read from the bundled skills directory. */

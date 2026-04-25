@@ -49,6 +49,7 @@ const ACTIONABLE_SKILLS = [
   'mma-review',
   'mma-verify',
   'mma-clarifications',
+  'mma-investigate',
 ];
 
 describe('contract: skill manifest surface', () => {
