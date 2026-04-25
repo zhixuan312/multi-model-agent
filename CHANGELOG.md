@@ -5,6 +5,16 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.4.0] - 2026-04-25
+
+### Added
+- New `mma-investigate` skill + `POST /investigate` endpoint: codebase Q&A with structured citations, confidence, and unresolved questions. Read-only filesystem tools; complex tier by default.
+- `parseStructuredReport` now exposes `extraSections: Record<string, string[]>` for non-typed headers.
+- `parseFilesChanged` and `parseValidationsRun` recognize `(none)` / `none` / `N/A` literals as empty arrays.
+
+### Changed
+- `executeReviewedLifecycle` no longer overwrites the worker's structured report with a "no file artifacts" wrapper when `reviewPolicy === 'off'`. (Also benefits `audit_document`.)
+
 ## 3.3.0 — 2026-04-25
 
 Reviewed-lifecycle trustworthiness: T1–T7 hardening.
@@ -749,7 +759,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.3.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.4.0...HEAD
+[3.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.3.0...v3.4.0
 [3.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.2.0...v3.3.0
 [2.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...mcp-v2.8.0
 [2.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...mcp-v2.7.5
