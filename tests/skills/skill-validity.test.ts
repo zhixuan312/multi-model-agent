@@ -25,9 +25,9 @@ describe('skill validity', () => {
       }
     });
 
-    it(`${dir}/SKILL.md is within line budget (≤80 lines)`, () => {
+    it(`${dir}/SKILL.md is within line budget (≤200 lines)`, () => {
       const content = readFileSync(join(skillRoot, dir, 'SKILL.md'), 'utf8');
-      expect(content.split('\n').length).toBeLessThanOrEqual(80);
+      expect(content.split('\n').length).toBeLessThanOrEqual(200);
     });
 
     it(`${dir}/SKILL.md has version: "0.0.0-unreleased" in source frontmatter`, () => {

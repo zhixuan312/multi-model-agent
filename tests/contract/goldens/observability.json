@@ -5,8 +5,8 @@
       "requiredFields": ["event", "ts", "batchId", "taskIndex"]
     },
     {
-      "name": "task_heartbeat",
-      "requiredFields": ["event", "ts", "batchId", "taskIndex", "elapsedMs", "stage"]
+      "name": "heartbeat",
+      "requiredFields": ["event", "ts", "batchId", "taskIndex", "elapsed", "stage", "tools", "read", "wrote", "cost", "idle_ms"]
     },
     {
       "name": "batch_completed",

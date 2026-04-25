@@ -1,22 +1,37 @@
 ---
 name: mma-audit
-description: Audit a document, spec, or config for security, performance, correctness, or style issues via the local mmagent HTTP service. Sub-agents run in parallel per file — no context pollution in the main model.
-when_to_use: The user asks to audit a document, spec, or config (for security, correctness, performance, or style) OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at an audit task. Delegate via mmagent so the audit runs on independent workers — your main context stays free to synthesize findings.
+description: Use when the user asks to audit a document, spec, config, or PR description for security, correctness, performance, or style issues — and the audit can run in parallel per file with no context pollution
+when_to_use: User asks for a doc/spec/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Delegate so each file audits on its own worker; the main agent only synthesizes findings. Audit on PROSE/SPEC docs — use mma-review for source code.
 version: "0.0.0-unreleased"
 ---
 
-## mma-audit
+# mma-audit
 
-Send a document or set of files to sub-agents for structured auditing. Each
-file is audited independently in parallel; results are indexed by file.
+## Overview
 
-### Endpoint
+Send a document or set of files to workers for structured auditing. Each file is audited independently in parallel; per-file results are indexed by path in the terminal envelope.
+
+**Core principle:** One worker per file = no cross-file context pollution. The aggregator (you) decides what to do with the findings.
+
+## When to Use
+
+**Use when:**
+- A spec / design doc / API contract / config file needs a critical read
+- The audit type is `security`, `performance`, `correctness`, or `style` (or a combination)
+- 2+ files would benefit from parallel audit
+
+**Don't use when:**
+- The thing being audited is source code → `mma-review` (knows about types, call sites, test coverage)
+- You want a quick look ("does this look right?") → just `Read` and use your judgment
+- The doc references many other files the auditor must cross-reference → consider `mma-review` instead (it pulls in source context)
+
+## Endpoint
 
 `POST /audit?cwd=<abs-path>`
 
 @include _shared/auth.md
 
-### Request body
+## Request body
 
 ```json
 {
@@ -31,12 +46,12 @@ file is audited independently in parallel; results are indexed by file.
 |---|---|---|---|
 | `document` | string | no | Inline document content |
 | `auditType` | string \| string[] | yes | `security`, `performance`, `correctness`, `style`, or `general`; or an array of the first four |
-| `filePaths` | string[] | no | Files to audit (parallel) |
+| `filePaths` | string[] | no | Files to audit (one worker per file, parallel) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
 Either `document` or `filePaths` (or both) must be provided.
 
-### Full example
+## Full example
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
@@ -47,10 +62,22 @@ BATCH=$(curl -f --show-error -s -X POST \
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
-Then poll until complete:
-
 @include _shared/polling.md
 
 @include _shared/response-shape.md
+
+## Common pitfalls
+
+❌ **Auditing source code with `mma-audit`**
+The auditor lacks codebase context (no type info, no call-site lookup, no test awareness). Findings are speculative. **Fix:** use `mma-review` — it pulls in surrounding source context and validates against the actual types.
+
+❌ **Single huge `document` string instead of `filePaths`**
+Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `filePaths`.
+
+❌ **Asking for `auditType: "general"` when you mean something specific**
+`"general"` is a catch-all that produces watery findings. **Fix:** pick the dimension you actually care about (`"correctness"` for spec gaps, `"security"` for threat models, etc.).
+
+❌ **Re-auditing the same files round after round without delta context**
+Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 findings as a context block (`mma-context-blocks`) and pass `contextBlockIds` to round 2.
 
 @include _shared/error-handling.md

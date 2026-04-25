@@ -27,9 +27,10 @@ export type Stage =
   | 'review-rework';
 
 export interface MockProviderOptions {
-  stage: Stage;
+  stage?: Stage;
   output?: string;
   cost?: number;
+  onPrompt?: (prompt: string) => void;
 }
 
 const STUB_CONFIG: ProviderConfig = {
@@ -207,32 +208,95 @@ function buildReviewRework(opts: MockProviderOptions): RunResult {
 
 export function mockProvider(opts: MockProviderOptions): Provider {
   const runner = (): RunResult => {
-    switch (opts.stage) {
-      case 'ok': return buildOk(opts);
-      case 'incomplete': return buildIncomplete(opts);
-      case 'force-salvage': return buildForceSalvage(opts);
-      case 'max-turns': return buildMaxTurns(opts);
-      case 'clarification': return buildClarificationNeeded(opts);
-      case 'review-rework': return buildReviewRework(opts);
+    const stage = opts.stage ?? 'ok';
+    switch (stage) {
+      case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
+      case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
+      case 'force-salvage': return buildForceSalvage(opts as MockProviderOptions & { stage: Stage });
+      case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
+      case 'clarification': return buildClarificationNeeded(opts as MockProviderOptions & { stage: Stage });
+      case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
     }
   };
   return {
     name: 'mock',
     config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
+    async run(prompt: string): Promise<RunResult> {
+      opts.onPrompt?.(prompt);
       return runner();
     },
   };
 }
 
-export function failProvider(message = 'mocked failure'): Provider {
+export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
   return {
-    name: 'mock-fail',
+    name: `mock-${opts.kind}-cap`,
     config: STUB_CONFIG,
     async run(): Promise<RunResult> {
-      throw new Error(message);
+      const output = opts.partialOutput ?? 'mock cap output';
+      if (opts.kind === 'cost') {
+        return {
+          ...buildIncomplete({ stage: 'incomplete', output }),
+          status: 'cost_exceeded',
+          capExhausted: 'cost',
+          terminationReason: {
+            cause: 'cost_exceeded',
+            turnsUsed: 1,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: null,
+            wasPromoted: false,
+          },
+        };
+      }
+      if (opts.kind === 'wall_clock') {
+        return {
+          ...buildIncomplete({ stage: 'incomplete', output }),
+          status: 'timeout',
+          capExhausted: 'wall_clock',
+          terminationReason: {
+            cause: 'timeout',
+            turnsUsed: 1,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: null,
+            wasPromoted: false,
+          },
+        };
+      }
+      return {
+        ...buildMaxTurns({ stage: 'max-turns', output }),
+        capExhausted: 'turn',
+      };
     },
   };
+}
+
+export function clarificationProvider(opts: { proposedInterpretation: string }): Provider {
+  return {
+    name: 'mock-clarification',
+    config: STUB_CONFIG,
+    async run(): Promise<RunResult> {
+      return {
+        ...buildClarificationNeeded({ stage: 'clarification', output: opts.proposedInterpretation }),
+        lifecycleClarificationRequested: true,
+      };
+    },
+  };
+}
+
+export function throwingProvider(err: Error): Provider {
+  return {
+    name: 'mock-throw',
+    config: STUB_CONFIG,
+    async run(): Promise<RunResult> {
+      throw err;
+    },
+  };
+}
+
+export function failProvider(message = 'mocked failure'): Provider {
+  return throwingProvider(new Error(message));
 }
 
 // Patches global fetch so any outbound network call from a contract test is

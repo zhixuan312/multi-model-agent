@@ -49,6 +49,7 @@ const ACTIONABLE_SKILLS = [
   'mma-review',
   'mma-verify',
   'mma-clarifications',
+  'mma-investigate',
 ];
 
 describe('contract: skill manifest surface', () => {
@@ -71,6 +72,18 @@ describe('contract: skill manifest surface', () => {
         expect(fm.description.length).toBeGreaterThan(20);
         expect(fm.when_to_use.length).toBeGreaterThan(20);
         expect(fm.version).toMatch(/^(\d+\.\d+\.\d+|0\.0\.0-unreleased)/);
+      });
+
+      it('description starts with "Use when" or "Use first" (skill-discovery convention)', () => {
+        // Per docs/SKILL_WRITING_GUIDELINES.md rule #1 — description must answer
+        // "should I use this right now?" via concrete triggering conditions, not
+        // a workflow summary. Anthropic + superpowers both enforce this pattern;
+        // descriptions that summarize the workflow cause Claude to shortcut on
+        // the description and skip the body.
+        expect(
+          fm.description,
+          `${skillName} description must start with "Use when" or "Use first" — see docs/SKILL_WRITING_GUIDELINES.md rule #1`,
+        ).toMatch(/^Use (when|first)\b/);
       });
 
       it('declares an endpoint that resolves to a real route (when applicable)', () => {

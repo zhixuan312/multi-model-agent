@@ -52,6 +52,7 @@
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
+        "extraSections": {},
         "unresolved": []
       },
       "structuredReport": {
@@ -59,6 +60,7 @@
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
+        "extraSections": {},
         "unresolved": []
       },
       "filePathsSkipped": false,

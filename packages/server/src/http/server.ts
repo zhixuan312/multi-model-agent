@@ -45,7 +45,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry',
+  '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate',
   '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
@@ -66,6 +66,7 @@ async function registerToolHandlers(
   const { buildDebugHandler } = await import('./handlers/tools/debug.js');
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
+  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
   const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
@@ -80,7 +81,7 @@ async function registerToolHandlers(
     // Server started with server-only config (e.g. tests): register stubs that return 503
     for (const [method, path] of [
       ['POST', '/delegate'], ['POST', '/audit'], ['POST', '/review'],
-      ['POST', '/verify'], ['POST', '/debug'], ['POST', '/execute-plan'], ['POST', '/retry'],
+      ['POST', '/verify'], ['POST', '/debug'], ['POST', '/execute-plan'], ['POST', '/retry'], ['POST', '/investigate'],
     ] as [string, string][]) {
       router.register(method, path, (_req, res, _params, _ctx) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
@@ -108,6 +109,7 @@ async function registerToolHandlers(
   const debugHandler = buildDebugHandler(deps);
   const executePlanHandler = buildExecutePlanHandler(deps);
   const retryHandler = buildRetryHandler(deps);
+  const investigateHandler = buildInvestigateHandler(deps);
 
   router.register('POST', '/delegate', delegateHandler);
   router.register('POST', '/tools/delegate', delegateHandler);
@@ -117,6 +119,7 @@ async function registerToolHandlers(
   router.register('POST', '/debug', debugHandler);
   router.register('POST', '/execute-plan', executePlanHandler);
   router.register('POST', '/retry', retryHandler);
+  router.register('POST', '/investigate', investigateHandler);
 }
 
 /**

@@ -91,7 +91,7 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/health');
     expect(paths).toContain('/status');
 
-    // Total: 13 paths
-    expect(paths.length).toBe(13);
+    // Total: 14 paths
+    expect(paths.length).toBe(14);
   });
 });

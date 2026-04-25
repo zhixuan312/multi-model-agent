@@ -43,29 +43,15 @@
       "errorCode": "error",
       "retryable": false,
       "workerStatus": "done",
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "implementationReport": {
-        "summary": "Sub-agent error: Connection error.",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": []
-      },
-      "structuredReport": {
-        "summary": "[No artifacts] task produced no file artifacts to review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": []
-      },
+      "specReviewStatus": "skipped",
+      "qualityReviewStatus": "skipped",
+      "specReviewReason": "skipped: reviewPolicy is off",
+      "qualityReviewReason": "skipped: reviewPolicy is off",
       "filePathsSkipped": false,
       "agents": {
         "implementer": "complex",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "specReviewer": "skipped",
+        "qualityReviewer": "skipped"
       },
       "models": {
         "implementer": "mock",
@@ -73,6 +59,7 @@
         "qualityReviewer": null
       },
       "commits": [],
+      "concerns": [],
       "verification": {
         "status": "skipped",
         "steps": [],

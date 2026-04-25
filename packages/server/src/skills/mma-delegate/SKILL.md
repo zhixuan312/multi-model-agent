@@ -1,23 +1,38 @@
 ---
 name: mma-delegate
-description: Fan out ad-hoc implementation or research tasks to sub-agents in parallel via the local mmagent HTTP service. Tasks run on cheap workers that don't consume your main-model context window.
-when_to_use: You have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — delegated workers are cheaper, parallel-safe, and keep main context free. If a plan file exists, use mma-execute-plan; if the task is an audit/review/verify/debug, prefer the matching mma-* skill instead.
+description: Use when you have one or more ad-hoc implementation or research tasks WITHOUT a plan file on disk and you want them to run on cheap workers in parallel instead of consuming main-context tokens
+when_to_use: You have ad-hoc implementation or research tasks (no plan file on disk) AND mmagent is running. Prefer this over inline Agent dispatches or superpowers:dispatching-parallel-agents — workers are cheaper, parallel-safe, and keep main context free. If a plan file exists → use mma-execute-plan. If the task is audit / review / verify / debug / investigate → use the matching specialized skill.
 version: "0.0.0-unreleased"
 ---
 
-## mma-delegate
+# mma-delegate
 
-Dispatch one or more tasks to sub-agents concurrently. Each task is an
-independent instruction with optional file scope, acceptance criteria, and
-context block references.
+## Overview
 
-### Endpoint
+Dispatch one or more ad-hoc tasks to sub-agents concurrently. Each task is an independent instruction with optional file scope, acceptance criteria, and context blocks.
+
+**Core principle:** Workers run on cheap providers; the main agent consumes only the structured per-task report. Parallelize freely as long as tasks don't write the same files.
+
+## When to Use
+
+**Use when:**
+- 2+ unrelated implementation tasks (parallel speedup)
+- A research task you'd otherwise spend tokens reading and grepping
+- A focused refactor that fits in one prompt
+- The task does NOT match audit / review / verify / debug / investigate (those have specialized skills)
+
+**Don't use when:**
+- A plan file exists on disk → `mma-execute-plan` (descriptors auto-match plan headings)
+- Two tasks write the same file → dispatch sequentially, not in one batch (workers race)
+- The work needs to read across many files for synthesis only → `mma-investigate` is cheaper (read-only)
+
+## Endpoint
 
 `POST /delegate?cwd=<abs-path>`
 
 @include _shared/auth.md
 
-### Request body
+## Request body
 
 ```json
 {
@@ -37,18 +52,16 @@ context block references.
 |---|---|---|---|
 | `tasks` | array | yes | At least one task |
 | `tasks[].prompt` | string | yes | The task instruction |
-| `tasks[].agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"` (cheap). Pick `"complex"` when the task is ambiguous, touches many files, is security-sensitive, or a prior standard run came back with `filesWritten: 0` / ran out of turns. Complex workers cost more but finish bigger jobs. |
-| `tasks[].filePaths` | string[] | no | Files the sub-agent focuses on |
+| `tasks[].agentType` | `"standard"` / `"complex"` | no | Worker tier. Default `"standard"`. Pick `"complex"` when the task is ambiguous, security-sensitive, touches many files, or a prior standard run came back with `filesWritten: 0` / hit `incompleteReason: "turn_cap"`. |
+| `tasks[].filePaths` | string[] | no | Files the worker focuses on |
 | `tasks[].done` | string | no | Acceptance criteria |
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `tasks[].verifyCommand` | string[] | no | Commands to run after task completion to verify the work |
-| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | Review lifecycle policy. Default `"full"` |
+| `tasks[].verifyCommand` | string[] | no | See verify-and-review snippet below |
+| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | See verify-and-review snippet below. Default `"full"` |
 
-Set `verifyCommand` when the worker can run a deterministic local check after editing, such as `npm test`, `npm run lint`, or a focused package test. Commands run in order after task completion; each string must be non-empty after trimming. Omit it when no reliable command exists.
+@include _shared/verify-and-review.md
 
-Set `reviewPolicy: 'diff_only'` when you want a cheaper single-pass review of the produced diff without spec-review rework loops. Use `reviewPolicy: 'full'` for default spec + quality review, `reviewPolicy: 'spec_only'` when quality review is not needed, and `reviewPolicy: 'off'` only for trusted low-risk tasks where verification is enough.
-
-### Full example
+## Full example
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
@@ -59,10 +72,29 @@ BATCH=$(curl -f --show-error -s -X POST \
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
 
-Then poll until complete:
-
 @include _shared/polling.md
 
 @include _shared/response-shape.md
+
+## Common pitfalls
+
+❌ **Two tasks writing the same file in one batch**
+> tasks: [{prompt:"add JWT to login.ts"}, {prompt:"add logging to login.ts"}]
+
+Workers run concurrently and race on the file. **Fix:** dispatch sequentially, or merge into one prompt.
+
+❌ **Vague `prompt`, no `done` criterion**
+> "improve the auth module"
+
+Worker has no completion signal — likely returns `done_with_concerns`. **Fix:** specific verb + acceptance: `"Add input validation to login.ts so all string fields reject empty/whitespace; tests pass"`.
+
+❌ **Defaulting to `agentType: "complex"` for everything**
+Standard tier is 5–10× cheaper and finishes most edits. Escalate only when standard returns `filesWritten: 0` or `incompleteReason: "turn_cap"`.
+
+❌ **Inlining a 50KB doc into every prompt**
+N tasks × 50KB = N transmissions. **Fix:** register the doc once via `mma-context-blocks`, pass the `contextBlockIds` to each task.
+
+❌ **Reading the worker's diff inline before review**
+The reviewer sees the full diff with the original prompt as context. Reading inline burns main-context tokens for no quality gain.
 
 @include _shared/error-handling.md

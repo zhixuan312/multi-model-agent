@@ -18,6 +18,7 @@ import * as verify from '@zhixuan92/multi-model-agent-core/tool-schemas/verify';
 import * as debug from '@zhixuan92/multi-model-agent-core/tool-schemas/debug';
 import * as executePlan from '@zhixuan92/multi-model-agent-core/tool-schemas/execute-plan';
 import * as retry from '@zhixuan92/multi-model-agent-core/tool-schemas/retry';
+import * as investigate from '@zhixuan92/multi-model-agent-core/tool-schemas/investigate';
 
 // Extend Zod once with openapi support.
 extendZodWithOpenApi(z);
@@ -74,6 +75,11 @@ const TOOL_ENDPOINTS: Array<{ path: string; summary: string; schema: z.ZodTypeAn
   { path: '/debug', summary: 'Debug a problem with sub-agent assistance', schema: debug.inputSchema },
   { path: '/execute-plan', summary: 'Execute tasks from a plan file', schema: executePlan.inputSchema },
   { path: '/retry', summary: 'Retry failed tasks from a previous batch', schema: retry.inputSchema },
+  {
+    path: '/investigate',
+    summary: 'Investigate the codebase and answer a question with structured citations',
+    schema: investigate.inputSchema,
+  },
 ];
 
 function registerToolEndpoint(

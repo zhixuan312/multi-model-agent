@@ -60,6 +60,7 @@ export interface ParsedStructuredReport {
   validationsRun: Array<{ command: string; result: string }>;
   deviationsFromBrief: string[];
   unresolved: string[];
+  extraSections: Record<string, string[]>;
   commit?: CommitFields;
   commitDiagnostic?: string;
 }
@@ -74,16 +75,29 @@ export function parseStructuredReport(output: string): ParsedStructuredReport {
       validationsRun: [],
       deviationsFromBrief: [],
       unresolved: [],
+      extraSections: {},
     };
   }
 
   const sections = extractSections(output);
+
+  const TYPED_HEADERS = new Set([
+    'summary', 'files changed', 'validations run', 'deviations from brief', 'unresolved',
+  ]);
+  const extraSections: Record<string, string[]> = {};
+  for (const [key, value] of Object.entries(sections)) {
+    if (!TYPED_HEADERS.has(key)) {
+      extraSections[key] = value;
+    }
+  }
+
   const report: ParsedStructuredReport = {
     summary: sections['summary']?.[0] ?? null,
     filesChanged: parseFilesChanged(sections['files changed']),
     validationsRun: parseValidationsRun(sections['validations run']),
     deviationsFromBrief: sections['deviations from brief'] ?? [],
     unresolved: sections['unresolved'] ?? [],
+    extraSections,
   };
 
   const commitMatch = output.match(/(?:^|\n)\s*commit:\s*({[\s\S]*?})\s*(?:\n|$)/);
@@ -177,9 +191,20 @@ function extractSections(output: string): Record<string, string[]> {
   return sections;
 }
 
+function isLegitimatelyEmpty(lines: string[] | undefined): boolean {
+  if (!lines || lines.length === 0) return true;
+  // Strip optional bullet, lowercase, compare against the empty literals.
+  const collapsed = lines
+    .map(l => l.replace(/^[-*]\s*/, '').trim().toLowerCase())
+    .filter(Boolean);
+  if (collapsed.length === 0) return true;
+  if (collapsed.length !== 1) return false;
+  return collapsed[0] === '(none)' || collapsed[0] === 'none' || collapsed[0] === 'n/a';
+}
+
 function parseFilesChanged(lines: string[] | undefined): FileChange[] {
-  if (!lines) return [];
-  return lines
+  if (isLegitimatelyEmpty(lines)) return [];
+  return (lines as string[])
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))
     .map(l => {
@@ -190,8 +215,8 @@ function parseFilesChanged(lines: string[] | undefined): FileChange[] {
 }
 
 function parseValidationsRun(lines: string[] | undefined): Array<{ command: string; result: string }> {
-  if (!lines) return [];
-  return lines
+  if (isLegitimatelyEmpty(lines)) return [];
+  return (lines as string[])
     .map(l => l.replace(/^[-*]\s*/, '').trim())
     .filter(l => l && !l.startsWith('#'))
     .map(l => {

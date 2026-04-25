@@ -36,7 +36,7 @@ for (const r of results) {
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
-- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry (used by the HTTP server package)
+- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
@@ -60,7 +60,8 @@ for (const r of results) {
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
-| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan` |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate` |
+| `./reporting/parse-investigation-report` | `parseInvestigationReport`, `parseCitations`, `parseConfidence` (3.4.0) |
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
 
@@ -92,7 +93,7 @@ mmagent serve --verbose --log   # both
 mmagent logs --follow --batch=<id>   # tail + filter
 ```
 
-Only crash/disconnect diagnostic events are logged: `startup`, `request_start`, `request_complete`, `shutdown`, and `error`. This is a crash-diagnosis log, not a progress feed.
+As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
 ## Full documentation
 

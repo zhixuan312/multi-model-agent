@@ -1,5 +1,5 @@
 import { execFile } from 'node:child_process';
-import { isAbsolute, normalize, relative } from 'node:path';
+import { isAbsolute, normalize, relative, sep } from 'node:path';
 import { promisify } from 'node:util';
 import { composeCommitMessage } from '../auto-commit.js';
 import type { CommitFields } from '../reporting/structured-report.js';
@@ -23,12 +23,23 @@ export interface CommitStageResult {
 function validatePaths(cwd: string, paths: string[]): string[] {
   const out: string[] = [];
   for (const p of paths) {
-    if (isAbsolute(p)) throw new Error(`commit-stage: absolute path rejected: ${p}`);
     if (/[\x00-\x1f]/.test(p)) throw new Error(`commit-stage: path contains control chars: ${JSON.stringify(p)}`);
-    const norm = normalize(p);
-    const rel = relative(cwd, normalize(`${cwd}/${norm}`));
-    if (rel.startsWith('..')) throw new Error(`commit-stage: path escapes cwd: ${p}`);
-    out.push(norm);
+
+    let candidate: string;
+    if (isAbsolute(p)) {
+      const rel = relative(cwd, normalize(p));
+      if (rel === '' || rel === '..' || rel.startsWith(`..${sep}`) || isAbsolute(rel)) {
+        throw new Error(`commit-stage: absolute path outside cwd rejected: ${p}`);
+      }
+      candidate = rel;
+    } else {
+      const norm = normalize(p);
+      const rel = relative(cwd, normalize(`${cwd}/${norm}`));
+      if (rel.startsWith('..')) throw new Error(`commit-stage: path escapes cwd: ${p}`);
+      candidate = norm;
+    }
+
+    out.push(candidate);
   }
   return out;
 }

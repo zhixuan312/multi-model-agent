@@ -43,20 +43,6 @@ export function buildExecutionContext(
           running: entry.running,
         });
     deps.batchRegistry.updateRunningHeadline(effectiveBatchId, headline);
-    deps.logger.taskHeartbeat({
-      batchId: effectiveBatchId,
-      taskIndex: 0,
-      elapsedMs: tick.elapsedMs,
-      stage: tick.stage,
-    });
-    if (tick.phaseChange !== undefined) {
-      deps.logger.taskPhaseChange({
-        batchId: effectiveBatchId,
-        taskIndex: 0,
-        fromStage: tick.phaseChange.from,
-        toStage: tick.phaseChange.to,
-      });
-    }
   };
 
   return buildCoreExecutionContext({

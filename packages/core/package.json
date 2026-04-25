@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.3.0",
+  "version": "3.4.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -220,6 +220,10 @@
       "types": "./dist/executors/audit.d.ts",
       "import": "./dist/executors/audit.js"
     },
+    "./executors/investigate": {
+      "types": "./dist/executors/investigate.d.ts",
+      "import": "./dist/executors/investigate.js"
+    },
     "./executors/review": {
       "types": "./dist/executors/review.d.ts",
       "import": "./dist/executors/review.js"
@@ -263,6 +267,10 @@
     "./tool-schemas/audit": {
       "types": "./dist/tool-schemas/audit.d.ts",
       "import": "./dist/tool-schemas/audit.js"
+    },
+    "./tool-schemas/investigate": {
+      "types": "./dist/tool-schemas/investigate.d.ts",
+      "import": "./dist/tool-schemas/investigate.js"
     },
     "./tool-schemas/review": {
       "types": "./dist/tool-schemas/review.d.ts",

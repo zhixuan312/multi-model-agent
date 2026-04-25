@@ -115,6 +115,9 @@ export interface RunResult {
   fileArtifactsMissing?: boolean
   commits?: Commit[]
   commitError?: string
+  capExhausted?: 'turn' | 'cost' | 'wall_clock'
+  lifecycleClarificationRequested?: boolean
+  workerError?: Error
   // 3.3.0 (T3): always populated by reviewed-lifecycle's verify stage when an
   // artifact-producing task runs through that path. Optional in the type so that
   // non-artifact paths and direct provider calls compile without per-site defaults.
