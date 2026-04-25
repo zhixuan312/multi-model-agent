@@ -12,13 +12,15 @@ export function readGeneration(dir: string): number {
 }
 
 /**
- * Atomic increment. Uses proper-lockfile so two simultaneous
- * invocations cannot both read N and both write N+1.
+ * Atomic increment. Uses proper-lockfile (already a dep for queue.ts) so two
+ * simultaneous `mmagent telemetry disable` invocations cannot both read N and
+ * both write N+1 (which would silently lose a generation bump and leave a
+ * revoked identity's events accepted by the backend).
  */
 export async function bumpGeneration(dir: string): Promise<number> {
   const p = join(dir, FILE);
   if (!existsSync(p)) writeFileSync(p, '0', { mode: 0o600 });
-  const release = await lockfile.lock(p, { retries: { retries: 50, minTimeout: 10, maxTimeout: 100 } });
+  const release = await lockfile.lock(p, { retries: { retries: 15, minTimeout: 50, maxTimeout: 500 } });
   try {
     const current = readGeneration(dir);
     const next = current + 1;
