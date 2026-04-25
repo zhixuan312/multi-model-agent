@@ -307,13 +307,24 @@ export async function executeReviewedLifecycle(
   const maxCostUSD = task.maxCostUSD;
   const reviewRounds = () => ({ spec: specRework, quality: qualityRework, metadata: metadataRepair, cap: maxReviewRounds });
   const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
-  const abortReviewLoop = (base: RunResult, terminationReason: 'round_cap' | 'cost_ceiling', message: string): RunResult => ({
+  // When the review loop aborts mid-flight, preserve any review-status info already set
+  // on the base result (set by callers via abortReviewLoop({ ...res, specReviewStatus, ... })).
+  // Defaults to 'changes_required' for whichever loop tripped — that's the only state the
+  // loop ever fires from, by construction.
+  const abortReviewLoop = (
+    base: RunResult,
+    terminationReason: 'round_cap' | 'cost_ceiling',
+    message: string,
+    aborting: 'spec' | 'quality',
+  ): RunResult => ({
     ...base,
     status: 'incomplete',
     workerStatus: 'review_loop_aborted',
     terminationReason,
     reviewRounds: reviewRounds(),
     error: message,
+    specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
+    qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
   });
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
@@ -632,12 +643,12 @@ export async function executeReviewedLifecycle(
       let prevSpecFindings: string[] = [];
       while (true) {
         if (specRework + qualityRework >= maxReviewRounds) {
-          return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before spec rework');
+          return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before spec rework', 'spec');
         }
         const currentCostUSD = taskCostUSD();
         if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
           emitVerbose('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
-          return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework');
+          return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework', 'spec');
         }
         emitVerbose('stage_change', { from: 'spec_review', to: 'spec_rework', round: specRework + 1, cap: maxReviewRounds });
         specRework++;
@@ -711,12 +722,12 @@ export async function executeReviewedLifecycle(
         let prevQualityFindings: string[] = [];
         while (true) {
           if (specRework + qualityRework >= maxReviewRounds) {
-            return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework');
+            return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework', 'quality');
           }
           const currentCostUSD = taskCostUSD();
           if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
             emitVerbose('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
-            return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework');
+            return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
           }
           emitVerbose('stage_change', { from: 'quality_review', to: 'quality_rework', round: qualityRework + 1, cap: maxReviewRounds });
           qualityRework++;

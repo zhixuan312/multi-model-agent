@@ -23,8 +23,8 @@ export const inputSchema = z.object({
     .describe('Worker tier. Default: "standard" (cost-effective). Set to "complex" for harder plan tasks that a smaller model cannot finish in the turn budget.'),
   maxReviewRounds: z.number().int().min(0).max(10).default(3)
     .describe('Maximum combined spec/quality review rework rounds before the review loop aborts.'),
-  maxCostUSD: z.number().positive().finite()
-    .describe('Required maximum estimated cost in USD for each generated plan task.'),
+  maxCostUSD: z.number().positive().finite().optional()
+    .describe('Maximum estimated cost in USD for each generated plan task. Optional; the executor applies a default of 10 when omitted. Validation when explicitly passed: positive finite.'),
   verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional()
     .describe('Commands to run after plan task completion to verify the work.'),
 });
