@@ -2,6 +2,7 @@
 // concrete writer/remover pair. Extracted from cli/install-skill.ts as
 // part of Ch 7 Task 39.
 import type { Client } from './manifest.js';
+import { notifySkillInstalled } from './notify.js';
 import { installClaudeCode, uninstallClaudeCode } from './claude-code.js';
 import { installGeminiCli, uninstallGeminiCli } from './gemini-cli.js';
 import { installCodexCli, uninstallCodexCli } from './codex-cli.js';
@@ -29,15 +30,19 @@ export function writeSkillToClient(
   switch (target) {
     case 'claude-code':
       installClaudeCode({ skillName, content, homeDir, skillsRoot });
+      notifySkillInstalled(skillName, target);
       break;
     case 'gemini':
       installGeminiCli({ skillName, content, skillVersion: version, homeDir, skillsRoot });
+      notifySkillInstalled(skillName, target);
       break;
     case 'codex':
       installCodexCli({ skillName, content, homeDir, skillsRoot });
+      notifySkillInstalled(skillName, target);
       break;
     case 'cursor':
       installCursor({ content, cwd, homeDir, skillsRoot, force });
+      notifySkillInstalled(skillName, target);
       break;
     default: {
       const _exhaustive: never = target;
