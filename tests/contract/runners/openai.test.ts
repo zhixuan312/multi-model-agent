@@ -92,6 +92,7 @@ describe('contract: runOpenAI RunResult shape', () => {
       outputIsDiagnostic: false,
       escalationLog: [],
       durationMs: '<DETERMINISTIC>',
+      verification: { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' },
     });
   });
 });

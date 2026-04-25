@@ -1,9 +1,12 @@
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type {
   Provider,
   RunResult,
   TaskSpec,
   MultiModelConfig,
   AgentType,
+  Commit,
 } from '../types.js';
 import { computeCostUSD, computeSavedCostUSD } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
@@ -13,14 +16,22 @@ import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
 import type { QualityReviewResult } from '../review/quality-reviewer.js';
+import { runDiffReview, type DiffReviewVerdict } from '../review/diff-review.js';
 import { aggregateResult } from '../review/aggregate-result.js';
+import { buildEvidence } from '../review/evidence.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
-import { autoCommitFiles } from '../auto-commit.js';
+import type { CommitFields } from '../reporting/structured-report.js';
+import { runCommitStage, readbackCommit } from './commit-stage.js';
+import { runVerifyStage, type VerifyStageResult } from './verify-stage.js';
+import { runMetadataRepairTurn } from './metadata-repair.js';
 import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.js';
 import type { RunTasksProgressCallback } from './index.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
+import { composeVerboseLine } from '../diagnostics/verbose-line.js';
 import { withDoneCondition } from './execute-task.js';
+
+const exec = promisify(execFile);
 
 export async function executeReviewedLifecycle(
   task: TaskSpec,
@@ -86,18 +97,36 @@ export async function executeReviewedLifecycle(
             if (event.stage !== lastStageSeen) {
               if (lastStageSeen !== undefined) {
                 verboseStreamRaw(
-                  `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} stage ${lastStageSeen} → ${event.stage}`,
+                  composeVerboseLine({
+                    event: 'stage_change',
+                    ts: new Date().toISOString(),
+                    batch: shortBatchEarly,
+                    task: taskIndex,
+                    from: lastStageSeen,
+                    to: event.stage,
+                  }),
                 );
               }
               lastStageSeen = event.stage;
             }
-            const costStr = event.costUSD !== null ? ` cost=$${event.costUSD.toFixed(4)}` : '';
-            const roundStr = event.reviewRound !== undefined && event.maxReviewRounds !== undefined
-              ? ` round=${event.reviewRound}/${event.maxReviewRounds}`
-              : '';
             const sinceLastMs = Date.now() - prevEventAtMs;
             verboseStreamRaw(
-              `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ${event.elapsed} stage=${event.stage}${roundStr} tools=${event.progress.toolCalls} read=${event.progress.filesRead} wrote=${event.progress.filesWritten} text=${textEmissionChars}c${costStr} idle=${sinceLastMs}ms`,
+              composeVerboseLine({
+                event: 'heartbeat',
+                ts: new Date().toISOString(),
+                batch: shortBatchEarly,
+                task: taskIndex,
+                elapsed: event.elapsed,
+                stage: event.stage,
+                round: event.reviewRound,
+                cap: event.maxReviewRounds,
+                tools: event.progress.toolCalls,
+                read: event.progress.filesRead,
+                wrote: event.progress.filesWritten,
+                text: textEmissionChars,
+                cost: event.costUSD,
+                idle_ms: sinceLastMs,
+              }),
             );
           }
           synthOnProgress(taskIndex, event);
@@ -113,8 +142,16 @@ export async function executeReviewedLifecycle(
   heartbeat?.start(stageCount);
   if (verboseStreamRaw) {
     verboseStreamRaw(
-      `[mmagent verbose] batch=${shortBatchEarly} task=${taskIndex} heartbeat ` +
-      (heartbeat ? `started (stageCount=${stageCount}, 5s tick)` : 'DISABLED (no consumer)'),
+      composeVerboseLine({
+        event: 'heartbeat_timer',
+        ts: new Date().toISOString(),
+        batch: shortBatchEarly,
+        task: taskIndex,
+        state: heartbeat ? 'started' : 'disabled',
+        stage_count: stageCount,
+        tick_ms: heartbeat ? 5000 : undefined,
+        reason: heartbeat ? undefined : 'no_consumer',
+      }),
     );
   }
 
@@ -127,7 +164,13 @@ export async function executeReviewedLifecycle(
   const shortBatch = shortBatchEarly;
   if (verboseStream) {
     verboseStream(
-      `[mmagent verbose] batch=${shortBatch} task=${taskIndex} start worker=${resolved.provider.config.model}`,
+      composeVerboseLine({
+        event: 'worker_start',
+        ts: new Date().toISOString(),
+        batch: shortBatch,
+        task: taskIndex,
+        worker: resolved.provider.config.model,
+      }),
     );
   }
   let prevEventAtMs = verbose ? Date.now() : 0;
@@ -139,25 +182,43 @@ export async function executeReviewedLifecycle(
   const wrappedOnProgress = needHeartbeat
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'turn_start') {
+          heartbeat?.markEvent('llm');
           if (verbose) prevEventAtMs = Date.now();
           if (verboseStream) {
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} turn_start turn=${event.turn} provider=${event.provider}`,
+              composeVerboseLine({
+                event: 'turn_start',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                turn: event.turn,
+                provider: event.provider,
+              }),
             );
           }
         }
         if (event.kind === 'text_emission') {
+          heartbeat?.markEvent('text');
           textEmissionChars += event.chars;
           if (verboseStream && event.chars > 0) {
             const preview = event.preview.length > 60
               ? event.preview.slice(0, 57) + '...'
               : event.preview;
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} text +${event.chars}c (total ${textEmissionChars}) preview="${preview.replace(/\n/g, '\\n')}"`,
+              composeVerboseLine({
+                event: 'text_emission',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                chars: event.chars,
+                total: textEmissionChars,
+                preview,
+              }),
             );
           }
         }
         if (event.kind === 'tool_call') {
+          heartbeat?.markEvent('tool');
           progressCounters.toolCalls++;
           const name = event.toolSummary.split('(')[0];
           if (name === 'readFile' || name === 'grep' || name === 'glob' || name === 'listFiles') {
@@ -178,10 +239,20 @@ export async function executeReviewedLifecycle(
             });
           }
           if (verboseStream) {
-            verboseStream(`[mmagent verbose] batch=${shortBatch} task=${taskIndex} tool=${event.toolSummary} +${sincePrevMs}ms`);
+            verboseStream(
+              composeVerboseLine({
+                event: 'tool_call',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                tool: event.toolSummary,
+                duration_ms: sincePrevMs,
+              }),
+            );
           }
         }
         if (event.kind === 'turn_complete') {
+          heartbeat?.markEvent('llm');
           const costUSD = computeCostUSD(
             event.cumulativeInputTokens,
             event.cumulativeOutputTokens,
@@ -209,22 +280,279 @@ export async function executeReviewedLifecycle(
             });
           }
           if (verboseStream) {
-            const costStr = costUSD !== null ? ` $${costUSD.toFixed(4)}` : '';
             verboseStream(
-              `[mmagent verbose] batch=${shortBatch} task=${taskIndex} ` +
-              `turn in=${event.cumulativeInputTokens} out=${event.cumulativeOutputTokens}${costStr} ` +
-              `+${turnDurMs}ms (${resolved.provider.config.model})`,
+              composeVerboseLine({
+                event: 'turn_complete',
+                ts: new Date().toISOString(),
+                batch: shortBatch,
+                task: taskIndex,
+                input_tokens: event.cumulativeInputTokens,
+                output_tokens: event.cumulativeOutputTokens,
+                cost: costUSD,
+                duration_ms: turnDurMs,
+                provider: resolved.provider.config.model,
+              }),
             );
           }
         }
       }
     : undefined;
 
-  // Track auto-commit state across all rounds
-  let commitSha: string | undefined;
+  const cwd = task.cwd ?? process.cwd();
+  const taskStartMs = Date.now();
+  const commits: Commit[] = [];
   let commitError: string | undefined;
+  let specRework = 0;
+  let qualityRework = 0;
+  let metadataRepair = 0;
+  const maxReviewRounds = task.maxReviewRounds ?? 3;
+  const maxCostUSD = task.maxCostUSD;
+  const reviewRounds = () => ({ spec: specRework, quality: qualityRework, metadata: metadataRepair, cap: maxReviewRounds });
+  const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
+  // When the review loop aborts mid-flight, preserve any review-status info already set
+  // on the base result (set by callers via abortReviewLoop({ ...res, specReviewStatus, ... })).
+  // Defaults to 'changes_required' for whichever loop tripped — that's the only state the
+  // loop ever fires from, by construction.
+  const abortReviewLoop = (
+    base: RunResult,
+    terminationReason: 'round_cap' | 'cost_ceiling',
+    message: string,
+    aborting: 'spec' | 'quality',
+  ): RunResult => ({
+    ...base,
+    status: 'incomplete',
+    workerStatus: 'review_loop_aborted',
+    terminationReason,
+    reviewRounds: reviewRounds(),
+    error: message,
+    specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
+    qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
+  });
+  const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
+  let latestVerification: VerifyStageResult = defaultVerification;
+
+  const emitVerbose = (event: string, fields: Record<string, string | number | boolean | null | undefined>): void => {
+    if (!verboseStream) return;
+    verboseStream(composeVerboseLine({
+      event,
+      ts: new Date().toISOString(),
+      batch: shortBatch,
+      task: taskIndex,
+      ...fields,
+    }));
+  };
+
+  async function runVerificationStage(): Promise<VerifyStageResult> {
+    emitVerbose('stage_change', { from: 'committing', to: 'verifying' });
+    heartbeat?.transition({
+      stage: 'verifying' as never,
+      stageIndex: 4,
+      reviewRound: undefined,
+      maxReviewRounds: task.maxReviewRounds ?? 5,
+    });
+    const verification = await runVerifyStage({
+      cwd,
+      verifyCommand: task.verifyCommand,
+      taskTimeoutMs: task.timeoutMs ?? config.defaults.timeoutMs ?? 1_800_000,
+      taskStartMs,
+    });
+    latestVerification = verification;
+    for (const step of verification.steps) {
+      emitVerbose('verify_step', {
+        command: step.command,
+        status: step.status,
+        exit_code: step.exitCode,
+        signal: step.signal,
+        duration_ms: step.durationMs,
+        error_message: step.errorMessage ?? undefined,
+      });
+    }
+    if (verification.status === 'skipped') {
+      emitVerbose('verify_skipped', { reason: verification.skipReason ?? 'no_command', stage: 'verifying' });
+    }
+    return verification;
+  }
+
+  function withVerification(result: RunResult, verification = latestVerification): RunResult {
+    return { ...result, verification };
+  }
+
+  function verificationErrorResult(base: RunResult, verification: VerifyStageResult): RunResult | null {
+    if (verification.status !== 'error') return null;
+    const failedIndex = verification.steps.findIndex((step) => step.status !== 'passed');
+    const failedStep = failedIndex >= 0 ? verification.steps[failedIndex] : undefined;
+    return withVerification({
+      ...base,
+      status: 'error',
+      workerStatus: 'done_with_concerns',
+      error: failedStep?.errorMessage ?? 'verify command error',
+      errorCode: 'verify_command_error',
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
+
+  function resolveOffTerminal(base: RunResult, verification: VerifyStageResult): RunResult {
+    const concerns = [...(base.concerns ?? [])];
+    let workerStatus = workerStatusForTerminal(base.workerStatus);
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+      workerStatus = 'done_with_concerns';
+    }
+    if (verification.status === 'error') {
+      const failedIndex = verification.steps.findIndex((step) => step.status !== 'passed');
+      const failedStep = failedIndex >= 0 ? verification.steps[failedIndex] : undefined;
+      return withVerification({
+        ...base,
+        status: 'error',
+        workerStatus: 'failed',
+        error: failedStep?.errorMessage ?? 'verify command error',
+        errorCode: 'verify_command_error',
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
+    return withVerification({
+      ...base,
+      status: base.status === 'ok' ? 'ok' : base.status,
+      workerStatus,
+      concerns,
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
+
+  function resolveDiffOnlyTerminal(base: RunResult, verdict: DiffReviewVerdict, verification: VerifyStageResult, diffTruncated: boolean): RunResult {
+    const concerns = [...(base.concerns ?? [])];
+    if (verdict.kind === 'reject') {
+      return withVerification({
+        ...base,
+        status: 'error',
+        workerStatus: 'failed',
+        error: verdict.message || 'diff review rejected implementation',
+        errorCode: 'diff_review_rejected',
+        structuredError: {
+          code: 'diff_review_rejected',
+          message: verdict.message || 'diff review rejected implementation',
+        },
+        concerns,
+        commits,
+        commitError,
+        verification,
+      }, verification);
+    }
+    concerns.push(...verdict.concerns);
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+    }
+    if (diffTruncated) {
+      concerns.push({
+        source: 'diff_truncated',
+        severity: 'medium',
+        message: 'Implementation diff exceeded the reviewer evidence byte cap and was truncated.',
+      });
+    }
+    const hasConcerns = concerns.length > 0 || verification.status === 'failed';
+    return withVerification({
+      ...base,
+      status: base.status === 'ok' ? 'ok' : base.status,
+      workerStatus: hasConcerns ? 'done_with_concerns' : workerStatusForTerminal(base.workerStatus),
+      concerns,
+      commits,
+      commitError,
+      verification,
+    }, verification);
+  }
+
+  function workerStatusForTerminal(status: RunResult['workerStatus']): RunResult['workerStatus'] {
+    return status === 'needs_context' || status === 'blocked' || status === 'failed' || status === 'done_with_concerns'
+      ? status
+      : 'done';
+  }
+
+  async function recordWorkerCommits(from: string, to = 'HEAD'): Promise<void> {
+    const { stdout: revs } = await exec('git', ['rev-list', '--reverse', `${from}..${to}`], { cwd });
+    for (const sha of revs.trim().split('\n').filter(Boolean)) {
+      const c = await readbackCommit(sha, cwd);
+      commits.push(c);
+    }
+  }
+
+  async function repairCommitMetadata(initialDiagnostic: string): Promise<CommitFields | null> {
+    let metadataAttempts = 0;
+    let lastZodError = initialDiagnostic || 'no commit block emitted';
+    let validCommit: CommitFields | null = null;
+    while (metadataAttempts < 2 && !validCommit) {
+      const preStatus = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      const repaired = await runMetadataRepairTurn({ task, zodError: lastZodError, cwd, providerSlot: resolved.slot, provider: resolved.provider });
+      const postStatus = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      metadataAttempts += 1;
+      if (preStatus !== postStatus) {
+        commitError = 'commit_metadata_repair_modified_files';
+        return null;
+      }
+      if (repaired.commit) validCommit = repaired.commit;
+      else lastZodError = repaired.commitDiagnostic ?? 'no commit block emitted';
+    }
+    if (!validCommit) commitError = `commit_metadata_invalid: ${lastZodError}`;
+    return validCommit;
+  }
+
+  async function captureCommitsAfterImplementation(implResult: RunResult, implReport: ReturnType<typeof parseStructuredReport> | undefined, baselineHead: string): Promise<void> {
+    const porcelain = (await exec('git', ['status', '--porcelain=v1'], { cwd })).stdout;
+    const headNow = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
+    const headMoved = headNow !== baselineHead;
+    const treeDirty = porcelain.length > 0;
+    if (!headMoved && !treeDirty) return;
+    if (headMoved) await recordWorkerCommits(baselineHead, 'HEAD');
+    if (treeDirty) {
+      const validCommit = implReport?.commit ?? await repairCommitMetadata(implReport?.commitDiagnostic ?? 'no commit block emitted');
+      if (!validCommit) return;
+      const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
+      commits.push(c);
+    }
+  }
 
   try {
+    // The dirty-tree precondition + git baseline only apply to artifact-producing tasks
+    // (those with autoCommit === true). Non-artifact presets — audit, review, verify,
+    // debug — neither produce commits nor read git state, so they bypass the check
+    // entirely. Per spec Section A: "Non-artifact tasks (audits, analyses, read-only
+    // investigations) skip stages 3 and 4."
+    const isArtifactProducing = task.autoCommit === true;
+    let baselineHead = '';
+    if (isArtifactProducing) {
+      baselineHead = (await exec('git', ['rev-parse', 'HEAD'], { cwd })).stdout.trim();
+      const baselinePorcelain = (await exec('git', ['status', '--porcelain=v1', '-z'], { cwd })).stdout;
+      if (baselinePorcelain.length !== 0) {
+        return withVerification({
+          output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          error: `task.cwd ${cwd} had pre-existing modifications`,
+          errorCode: 'dirty_worktree',
+          commits,
+        });
+      }
+    }
+
     const implResult = await delegateWithEscalation(
       withDoneCondition(task),
       [resolved.provider],
@@ -234,16 +562,13 @@ export async function executeReviewedLifecycle(
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
     const workerStatus = extractWorkerStatus(implReport);
 
-    // Auto-commit: commit the worker's file changes
-    if (task.autoCommit && implResult.status === 'ok' && implResult.filesWritten.length > 0) {
-      const commitResult = autoCommitFiles(
-        implResult.filesWritten,
-        implReport?.summary ?? undefined,
-        task.cwd ?? process.cwd(),
-      );
-      commitSha = commitResult.sha;
-      commitError = commitResult.error;
+    if (implResult.status === 'ok' && isArtifactProducing) {
+      await captureCommitsAfterImplementation(implResult, implReport, baselineHead);
     }
+
+    const verification = isArtifactProducing ? await runVerificationStage() : defaultVerification;
+    const verifyError = verificationErrorResult(implResult, verification);
+    if (verifyError) return verifyError;
 
     const filePathsInteracted = task.filePaths && task.filePaths.length > 0
       ? [...(implResult.filesRead ?? []), ...implResult.filesWritten].some(f =>
@@ -288,8 +613,9 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: earlyFileArtifactsMissing,
-        commitSha,
+        commits,
         commitError,
+        verification,
       };
     }
 
@@ -312,13 +638,15 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
+        commits,
         commitError,
+        verification,
       };
     }
 
     if (reviewPolicy === 'off') {
-      return {
+      emitVerbose('stage_change', { from: 'verifying', to: 'terminal' });
+      const terminal = resolveOffTerminal({
         ...implResult,
         workerStatus,
         specReviewStatus: 'skipped',
@@ -337,9 +665,8 @@ export async function executeReviewedLifecycle(
         },
         implementationReport: implReport,
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
-        commitError,
-      };
+      }, verification);
+      return terminal;
     }
 
     let otherProvider: Provider;
@@ -364,8 +691,9 @@ export async function executeReviewedLifecycle(
           qualityReviewer: null,
         },
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
-        commitSha,
+        commits,
         commitError,
+        verification,
       };
     }
 
@@ -381,6 +709,48 @@ export async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
+    const evidence = isArtifactProducing
+      ? await buildEvidence({ cwd, baselineHead, commits, verification, reviewPolicy })
+      : { block: '', diffTruncated: false, fullDiff: '' };
+
+    if (reviewPolicy === 'diff_only') {
+      emitVerbose('stage_change', { from: 'verifying', to: 'diff_review' });
+      heartbeat?.transition({
+        stage: 'diff_review' as never,
+        stageIndex: 2,
+        reviewRound: 1,
+        maxReviewRounds,
+      });
+      const verdict = await runDiffReview({
+        cwd,
+        diff: evidence.fullDiff,
+        diffTruncated: evidence.diffTruncated,
+        verification,
+        worker: { call: (prompt: string) => otherProvider.run(prompt) },
+      });
+      emitVerbose('review_decision', { stage: 'diff_review', verdict: verdict.kind, round: 1 });
+      return resolveDiffOnlyTerminal({
+        ...implResult,
+        workerStatus,
+        specReviewStatus: 'skipped',
+        qualityReviewStatus: 'skipped',
+        specReviewReason: 'skipped: reviewPolicy is diff_only',
+        qualityReviewReason: 'skipped: reviewPolicy is diff_only',
+        implementationReport: effectiveImplReport,
+        fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
+        agents: {
+          implementer: resolved.slot,
+          specReviewer: 'skipped',
+          qualityReviewer: 'skipped',
+        },
+        models: {
+          implementer: implModel,
+          specReviewer: reviewModel,
+          qualityReviewer: null,
+        },
+      }, verdict, verification, evidence.diffTruncated);
+    }
+
     heartbeat?.transition({
       stage: 'spec_review', stageIndex: 2,
       reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
@@ -393,6 +763,7 @@ export async function executeReviewedLifecycle(
       fileContents,
       implResult.toolCalls,
       task.planContext,
+      evidence.block,
     );
 
     let finalImplResult = implResult;
@@ -402,12 +773,21 @@ export async function executeReviewedLifecycle(
 
     if (specStatus === 'changes_required') {
       let prevSpecFindings: string[] = [];
-      let round = 0;
       while (true) {
-        round++;
+        if (specRework + qualityRework >= maxReviewRounds) {
+          return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before spec rework', 'spec');
+        }
+        const currentCostUSD = taskCostUSD();
+        if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
+          emitVerbose('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+          return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework', 'spec');
+        }
+        emitVerbose('stage_change', { from: 'spec_review', to: 'spec_rework', round: specRework + 1, cap: maxReviewRounds });
+        specRework++;
+        const round = specRework;
         heartbeat?.transition({
           stage: 'spec_rework', stageIndex: 3,
-          reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
+          reviewRound: round, maxReviewRounds,
         });
         const feedback = specResult.findings.length > 0
           ? `\n\n## Spec Review Feedback (round ${round}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -421,18 +801,6 @@ export async function executeReviewedLifecycle(
           { explicitlyPinned: true, onProgress: wrappedOnProgress },
         );
 
-        // Auto-commit rework changes
-        if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
-          const reworkReport = parseStructuredReport(reworkResult.output);
-          const reworkCommit = autoCommitFiles(
-            reworkResult.filesWritten,
-            reworkReport.summary ?? undefined,
-            task.cwd ?? process.cwd(),
-          );
-          if (reworkCommit.sha) commitSha = reworkCommit.sha;
-          if (reworkCommit.error) commitError = reworkCommit.error;
-        }
-
         finalImplResult = reworkResult;
         const reworkReport = parseStructuredReport(reworkResult.output);
         finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
@@ -442,7 +810,7 @@ export async function executeReviewedLifecycle(
 
         heartbeat?.transition({
           stage: 'spec_review', stageIndex: 2,
-          reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+          reviewRound: round + 1, maxReviewRounds,
         });
         specResult = await runSpecReview(
           otherProvider,
@@ -451,6 +819,7 @@ export async function executeReviewedLifecycle(
           reworkContents,
           reworkResult.toolCalls,
           task.planContext,
+          evidence.block,
         );
 
         specStatus = specResult.status;
@@ -464,7 +833,6 @@ export async function executeReviewedLifecycle(
 
         prevSpecFindings = specResult.findings;
 
-        if (round >= (task.maxReviewRounds ?? 5)) break;
       }
     }
 
@@ -472,7 +840,7 @@ export async function executeReviewedLifecycle(
     if (reviewPolicy === 'full') {
       heartbeat?.transition({
         stage: 'quality_review', stageIndex: 4,
-        reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+        reviewRound: 1, maxReviewRounds,
       });
       qualityResult = await runQualityReview(
         otherProvider,
@@ -481,16 +849,26 @@ export async function executeReviewedLifecycle(
         fileContents,
         finalImplResult.toolCalls,
         finalImplResult.filesWritten,
+        evidence.block,
       );
 
       if (qualityResult.status === 'changes_required') {
         let prevQualityFindings: string[] = [];
-        let round = 0;
         while (true) {
-          round++;
+          if (specRework + qualityRework >= maxReviewRounds) {
+            return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework', 'quality');
+          }
+          const currentCostUSD = taskCostUSD();
+          if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
+            emitVerbose('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+            return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
+          }
+          emitVerbose('stage_change', { from: 'quality_review', to: 'quality_rework', round: qualityRework + 1, cap: maxReviewRounds });
+          qualityRework++;
+          const round = qualityRework;
           heartbeat?.transition({
             stage: 'quality_rework', stageIndex: 5,
-            reviewRound: round, maxReviewRounds: task.maxReviewRounds ?? 5,
+            reviewRound: round, maxReviewRounds,
           });
           const feedback = qualityResult.findings.length > 0
             ? `\n\n## Quality Review Feedback (round ${round}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}`
@@ -504,18 +882,6 @@ export async function executeReviewedLifecycle(
             { explicitlyPinned: true, onProgress: wrappedOnProgress },
           );
 
-          // Auto-commit rework changes
-          if (task.autoCommit && reworkResult.status === 'ok' && reworkResult.filesWritten.length > 0) {
-            const reworkReport = parseStructuredReport(reworkResult.output);
-            const reworkCommit = autoCommitFiles(
-              reworkResult.filesWritten,
-              reworkReport.summary ?? undefined,
-              task.cwd ?? process.cwd(),
-            );
-            if (reworkCommit.sha) commitSha = reworkCommit.sha;
-            if (reworkCommit.error) commitError = reworkCommit.error;
-          }
-
           finalImplResult = reworkResult;
           const reworkReport = parseStructuredReport(reworkResult.output);
           finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(reworkResult);
@@ -524,7 +890,7 @@ export async function executeReviewedLifecycle(
 
           heartbeat?.transition({
             stage: 'quality_review', stageIndex: 4,
-            reviewRound: round + 1, maxReviewRounds: task.maxReviewRounds ?? 5,
+            reviewRound: round + 1, maxReviewRounds,
           });
           qualityResult = await runQualityReview(
             otherProvider,
@@ -533,6 +899,7 @@ export async function executeReviewedLifecycle(
             reworkContents,
             reworkResult.toolCalls,
             reworkResult.filesWritten,
+            evidence.block,
           );
 
           if (qualityResult.status === 'approved') break;
@@ -543,12 +910,29 @@ export async function executeReviewedLifecycle(
 
           prevQualityFindings = qualityResult.findings;
 
-          if (round >= (task.maxReviewRounds ?? 5)) break;
         }
       }
     }
 
     const finalReport = specReport ?? finalImplReport;
+
+    const concerns = [...(finalImplResult.concerns ?? [])];
+    let finalWorkerStatus = workerStatus;
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+      if (finalWorkerStatus === 'done') finalWorkerStatus = 'done_with_concerns';
+    }
+    if (evidence.diffTruncated) {
+      concerns.push({
+        source: 'diff_truncated',
+        severity: 'medium',
+        message: 'Implementation diff exceeded the reviewer evidence byte cap and was truncated.',
+      });
+    }
 
     const aggregated = aggregateResult(
       finalReport,
@@ -578,7 +962,8 @@ export async function executeReviewedLifecycle(
     return {
       ...finalImplResult,
       status: finalStatus,
-      workerStatus,
+      workerStatus: finalWorkerStatus,
+      concerns,
       specReviewStatus: specStatus,
       qualityReviewStatus: qualityResult.status,
       specReviewReason: specResult.errorReason,
@@ -599,8 +984,9 @@ export async function executeReviewedLifecycle(
         qualityReviewer: reviewPolicy === 'full' ? reviewModel : null,
       },
       fileArtifactsMissing,
-      commitSha,
+      commits,
       commitError,
+      verification,
     };
   } finally {
     heartbeat?.stop();

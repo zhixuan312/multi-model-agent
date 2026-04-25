@@ -8,10 +8,13 @@
   "POST /audit",
   "POST /clarifications/confirm",
   "POST /context-blocks",
+  "POST /control/batch-slice",
+  "POST /control/retry",
   "POST /debug",
   "POST /delegate",
   "POST /execute-plan",
   "POST /retry",
   "POST /review",
+  "POST /tools/delegate",
   "POST /verify"
 ]

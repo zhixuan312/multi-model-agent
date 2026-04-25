@@ -41,6 +41,12 @@ context block references.
 | `tasks[].filePaths` | string[] | no | Files the sub-agent focuses on |
 | `tasks[].done` | string | no | Acceptance criteria |
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `tasks[].verifyCommand` | string[] | no | Commands to run after task completion to verify the work |
+| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | Review lifecycle policy. Default `"full"` |
+
+Set `verifyCommand` when the worker can run a deterministic local check after editing, such as `npm test`, `npm run lint`, or a focused package test. Commands run in order after task completion; each string must be non-empty after trimming. Omit it when no reliable command exists.
+
+Set `reviewPolicy: 'diff_only'` when you want a cheaper single-pass review of the produced diff without spec-review rework loops. Use `reviewPolicy: 'full'` for default spec + quality review, `reviewPolicy: 'spec_only'` when quality review is not needed, and `reviewPolicy: 'off'` only for trusted low-risk tasks where verification is enough.
 
 ### Full example
 

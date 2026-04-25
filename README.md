@@ -111,7 +111,57 @@ mmagent status                  # show running daemon health and stats
 mmagent print-token             # print the current auth token
 mmagent install-skill           # install skills (see above)
 mmagent install-skill --uninstall   # remove skills
+mmagent update-skills           # refresh installed skills after upgrade
 ```
+
+## Operating mmagent (3.3.0+)
+
+### Upgrading
+
+```
+npm install -g @zhixuan92/multi-model-agent@latest
+pkill -f "mmagent serve"        # stop the running daemon
+mmagent update-skills            # next session of any client respawns it
+```
+
+A drift warning prints on `mmagent serve` if installed skills are older than the daemon.
+
+### Health check
+
+```
+curl -s http://localhost:7337/health
+# {"ok": true, "version": "<installed version>", ...}
+```
+
+### Verbose mode
+
+Enable in config (`~/.multi-model/config.json`):
+
+```
+{ "diagnostics": { "log": true, "verbose": true } }
+```
+
+Verbose mode logs to `~/.multi-model/logs/`. Large request bodies (over 16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`. **Note:** request bodies may include prompts, file paths, and other task content — disable `verbose` for production servers handling sensitive data.
+
+### Token regeneration
+
+```
+mmagent print-token              # show current
+# delete ~/.multi-model/auth-token and restart to rotate
+```
+
+### Troubleshooting
+
+- **Port 7337 already in use** — `lsof -nP -i :7337` to find owner; kill the stale process.
+- **Daemon stale after upgrade** — `pkill -f "mmagent serve"`; preflight respawns.
+- **Skill version mismatch** — `mmagent update-skills` and restart your client.
+
+### 3.3.0 features at a glance
+
+- `verifyCommand: ["npm run build", "npm test"]` on a TaskSpec — service runs the commands sequentially after committing, captures pass/fail, feeds output to the reviewer.
+- `reviewPolicy: "diff_only"` — single-pass review against the diff, no rework loop. Ideal for mechanical refactors (file moves, import path updates, type renames).
+- `commits: []` on the terminal envelope — one entry per commit landed by the worker, with `sha`, `subject`, `body`, `filesChanged`, `authoredAt`. Cross-check against `git log`.
+- `verification: {status, steps[], totalDurationMs}` on every RunResult — present even when no `verifyCommand` was set (`status: "skipped"`).
 
 ## Architecture at a glance
 

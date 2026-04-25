@@ -1,17 +1,30 @@
 import type { DraftTask, ExecutePlanSource } from '../types.js';
 import { createDraftId } from '../draft-id.js';
+import type { ReviewPolicy } from './delegate.js';
+
+export interface ExecutePlanTaskInput {
+  task: string;
+  reviewPolicy?: ReviewPolicy;
+}
 
 export interface ExecutePlanInput {
-  tasks: string[];
+  tasks: Array<string | ExecutePlanTaskInput>;
   fileContents: string;
   filePaths?: string[];
+}
+
+function normalizeTask(input: string | ExecutePlanTaskInput): ExecutePlanTaskInput {
+  return typeof input === 'string' ? { task: input } : input;
 }
 
 export function compileExecutePlan(
   input: ExecutePlanInput,
   requestId: string,
 ): DraftTask[] {
-  return input.tasks.map((task, index) => {
+  return input.tasks.map((rawTask, index) => {
+    const taskInput = normalizeTask(rawTask);
+    const task = taskInput.task;
+    const reviewPolicy = taskInput.reviewPolicy ?? 'full';
     const prompt = [
       'Below are the plan and/or spec documents for this project:',
       '',
@@ -36,11 +49,12 @@ export function compileExecutePlan(
       draftId: createDraftId(requestId, index, `task-${index}`),
       source: {
         route: 'execute_plan',
-        originalInput: { tasks: input.tasks, filePaths: input.filePaths } as unknown as Record<string, unknown>,
+        originalInput: { tasks: input.tasks, filePaths: input.filePaths } as Record<string, unknown>,
         filePaths: input.filePaths ?? [],
         task,
       } as ExecutePlanSource,
       prompt,
+      reviewPolicy,
     };
   });
 }

@@ -5,6 +5,53 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## 3.3.0 — 2026-04-25
+
+Reviewed-lifecycle trustworthiness: T1–T7 hardening.
+
+### Breaking
+
+- `BatchCacheEntry.batchId` removed; `/control/retry` and `/control/batch-slice` now accept the same `batchId` returned by `/tools/delegate` (T4).
+- `RunResult.commitSha` (single string) removed; replaced with `RunResult.commits: Commit[]` array (T2).
+- Worker structured-report `commit: { type, scope, subject, body }` is required when the worker writes files. Workers running pre-3.3.0 prompts that omit it consume up to 2 metadata-repair turns before terminal `failed` `error.code: 'commit_metadata_invalid'` (T2).
+- Verbose log format: prose → strict logfmt with canonical key names (`event=`, `ts=`, `batch=`, `task=`, ...). 13-event manifest locked.
+- `maxReviewRounds` default changed from 5 to 3. Tasks relying on the longer loop terminate sooner with new `workerStatus: 'review_loop_aborted'` and `terminationReason: 'round_cap' | 'cost_ceiling'` (T1).
+- Intake validation: `maxCostUSD`, when explicitly passed, must be a positive finite number (`<=0`, `NaN`, `Infinity` rejected with HTTP 400). Optional with executor default of 10. `verifyCommand: []` and whitespace-only items rejected.
+- Pre-existing dirty worktrees on artifact-producing tasks fail the per-task baseline check with terminal `failed` `error.code: 'dirty_worktree'`.
+- Lifecycle: every rework round now loops through `committing` and `verifying` before the reviewer.
+
+### Added
+
+- `verifyCommand: string[]` on TaskSpec; service runs commands sequentially under `/bin/bash -lc` between committing and reviewing. Stops on first non-passed step. (T3)
+- `verification: { status, steps[], totalDurationMs, skipReason? }` on RunResult — always present (status `'skipped'` when no command). (T3)
+- `reviewPolicy: 'full' | 'spec_only' | 'diff_only' | 'off'` on per-task spec for `/tools/delegate` and `/tools/execute-plan` request body. Default `'full'`. (T5)
+- `commits: Commit[]` on RunResult — full SHA, subject, body, filesChanged, ISO 8601 committer timestamp.
+- `terminationReason`, `reviewRounds: { spec, quality, metadata, cap }`, `concerns: []` (with sources `'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'`), structured `error: { code, message, ... }` on terminal envelopes.
+- Three new heartbeat tick fields: `idleSinceLlmMs`, `idleSinceToolMs`, `idleSinceTextMs` (T7).
+- Observability event manifest locked at 13 events: `request_received`, `batch_created`, `task_started`, `stage_change`, `tool_call`, `text_emission`, `heartbeat`, `commit_recorded`, `verify_step`, `verify_skipped`, `review_decision`, `cost_check`, `task_terminal`. New contract test (`tests/contract/observability/event-manifest.test.ts`) (T6).
+- `event=request_received` per dispatch with body inline (≤16 KB UTF-8) or spilled to `~/.multi-model/logs/requests/<batchId>.json` (mode 0600) (T6).
+- `runDiffReview` helper for single-pass mechanical-refactor review (T5).
+- Reviewer prompts include a structured "Implementation evidence" block (commits, verification output, task-scoped diff up to 64 KB with `diffTruncated` flag) (T1).
+
+### Fixed
+
+- Off-by-one in review-round counter (no more `round=6/5` on a `maxReviewRounds: 5` task). Strict `>=` semantics: cap of 3 → exactly 3 rework attempts.
+- Reviewer no longer silently approves on failed verification — auto-converted to `done_with_concerns` with `source: 'verification'`.
+- Reviewer evidence is task-scoped (`<taskBaseline.headSha>..HEAD`), not batch-scoped — eliminates sibling-task contamination in multi-task batches.
+- Worker-created commits via `git commit` are detected (HEAD-movement check) and read back into `commits[]` instead of being treated as "no files written" (T2).
+- Verify-stage timeouts honor remaining task budget (`min(task.timeoutMs/4, 600_000, remaining)`).
+- Process-group kill on POSIX so verifyCommand subprocesses (and grandchildren) terminate on timeout.
+- Rolling 8 KB tail buffer on verify stdout/stderr — no unbounded memory growth on noisy commands.
+
+### Internal
+
+- New: `packages/core/src/diagnostics/{verbose-line,request-spill}.ts` (logfmt composer + spill helper).
+- New: `packages/core/src/run-tasks/{commit-stage,verify-stage,metadata-repair}.ts`.
+- New: `packages/core/src/review/{diff-review,evidence}.ts`.
+- New: per-route `request-observability.ts` shared helper in server package.
+- Refactor: every `[mmagent verbose]` line now goes through `composeVerboseLine`.
+- 32 endpoint contract goldens regenerated for new `commits`, `verification`, `reviewPolicy` fields.
+
 ## 3.2.0 — 2026-04-25
 
 ### Changed (internal refactor; no public API changes)
@@ -702,7 +749,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.8.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.3.0...HEAD
+[3.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.2.0...v3.3.0
 [2.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.5...mcp-v2.8.0
 [2.7.5]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.4...mcp-v2.7.5
 [2.7.4]: https://github.com/zhixuan312/multi-model-agent/compare/mcp-v2.7.3...mcp-v2.7.4

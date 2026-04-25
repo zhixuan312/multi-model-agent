@@ -45,8 +45,8 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry',
-  '/context-blocks',
+  '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry',
+  '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
 /**
@@ -67,8 +67,6 @@ async function registerToolHandlers(
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
-
-  const logger = createDiagnosticLogger({ enabled: false });
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
@@ -91,6 +89,11 @@ async function registerToolHandlers(
     return;
   }
 
+  const logger = createDiagnosticLogger({
+    enabled: multiModelConfig.diagnostics?.log ?? false,
+    ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+  });
+
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
@@ -98,13 +101,22 @@ async function registerToolHandlers(
     batchRegistry,
   };
 
-  router.register('POST', '/delegate', buildDelegateHandler(deps));
-  router.register('POST', '/audit', buildAuditHandler(deps));
-  router.register('POST', '/review', buildReviewHandler(deps));
-  router.register('POST', '/verify', buildVerifyHandler(deps));
-  router.register('POST', '/debug', buildDebugHandler(deps));
-  router.register('POST', '/execute-plan', buildExecutePlanHandler(deps));
-  router.register('POST', '/retry', buildRetryHandler(deps));
+  const delegateHandler = buildDelegateHandler(deps);
+  const auditHandler = buildAuditHandler(deps);
+  const reviewHandler = buildReviewHandler(deps);
+  const verifyHandler = buildVerifyHandler(deps);
+  const debugHandler = buildDebugHandler(deps);
+  const executePlanHandler = buildExecutePlanHandler(deps);
+  const retryHandler = buildRetryHandler(deps);
+
+  router.register('POST', '/delegate', delegateHandler);
+  router.register('POST', '/tools/delegate', delegateHandler);
+  router.register('POST', '/audit', auditHandler);
+  router.register('POST', '/review', reviewHandler);
+  router.register('POST', '/verify', verifyHandler);
+  router.register('POST', '/debug', debugHandler);
+  router.register('POST', '/execute-plan', executePlanHandler);
+  router.register('POST', '/retry', retryHandler);
 }
 
 /**
@@ -118,10 +130,37 @@ async function registerControlHandlers(
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
   const { buildBatchHandler } = await import('./handlers/control/batch.js');
+  const { buildRetryHandler } = await import('./handlers/control/retry.js');
+  const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
   const { buildClarificationsHandler } = await import('./handlers/control/clarifications.js');
+  const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
+
+  const multiModelConfig = (config as unknown as { agents?: unknown }).agents
+    ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
+    : undefined;
 
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
+  if (multiModelConfig) {
+    const deps: import('./handler-deps.js').HandlerDeps = {
+      config: multiModelConfig,
+      logger: createDiagnosticLogger({
+        enabled: multiModelConfig.diagnostics?.log ?? false,
+        ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+      }),
+      projectRegistry,
+      batchRegistry,
+    };
+    router.register('POST', '/control/retry', buildRetryHandler(deps));
+    router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
+  } else {
+    router.register('POST', '/control/retry', (_req, res) => {
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+    });
+    router.register('POST', '/control/batch-slice', (_req, res) => {
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+    });
+  }
   router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
   router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   router.register('POST', '/clarifications/confirm', buildClarificationsHandler({ batchRegistry }));

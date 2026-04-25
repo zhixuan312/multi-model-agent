@@ -25,8 +25,8 @@
           "inputTokens": 0,
           "outputTokens": 0,
           "costUSD": null,
-          "initialPromptLengthChars": 2864,
-          "initialPromptHash": "f313ab226bbf824ac472bed8771143ac144ce53341b9a0b805fc7099d762fb12",
+          "initialPromptLengthChars": 3826,
+          "initialPromptHash": "d8ce0c9f4b0fc61fda13ee2788436a4ae8beb1df8804b444500b7df70a7350f3",
           "reason": "Connection error."
         }
       ],
@@ -71,6 +71,13 @@
         "implementer": "mock",
         "specReviewer": null,
         "qualityReviewer": null
+      },
+      "commits": [],
+      "verification": {
+        "status": "skipped",
+        "steps": [],
+        "totalDurationMs": 0,
+        "skipReason": "no_command"
       }
     }
   ],

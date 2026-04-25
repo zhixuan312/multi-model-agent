@@ -369,4 +369,27 @@ describe('HeartbeatTimer', () => {
     timer.stop();
   });
 
+  it('exposes idleSinceLlmMs/ToolMs/TextMs on the tick', async () => {
+    vi.useFakeTimers();
+    const ticks: any[] = [];
+    const timer = new HeartbeatTimer((() => {}) as any, {
+      provider: 'codex',
+      intervalMs: 10,
+      recordHeartbeat: t => ticks.push(t),
+    });
+    timer.start(1);
+    timer.markEvent('llm');
+    vi.advanceTimersByTime(50);
+    timer.markEvent('tool');
+    vi.advanceTimersByTime(30);
+    timer.markEvent('text');
+    vi.advanceTimersByTime(20);
+    timer.stop();
+    const last = ticks[ticks.length - 1];
+    expect(last.idleSinceLlmMs).toBeGreaterThanOrEqual(100);
+    expect(last.idleSinceToolMs).toBeGreaterThanOrEqual(50);
+    expect(last.idleSinceTextMs).toBeGreaterThanOrEqual(20);
+    vi.useRealTimers();
+  });
+
 });

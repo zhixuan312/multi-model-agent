@@ -1,11 +1,21 @@
 import { execFileSync } from 'child_process';
 import { resolve, relative } from 'path';
-
-const FALLBACK_MESSAGE = 'worker: task completed';
+import type { CommitFields } from './reporting/structured-report.js';
 
 export interface AutoCommitResult {
   sha?: string;
   error?: string;
+}
+
+export interface AutoCommitOptions {
+  filesWritten: string[];
+  commit: CommitFields;
+  cwd: string;
+}
+
+export function composeCommitMessage(c: CommitFields): string {
+  const subject = `${c.type}${c.scope ? `(${c.scope})` : ''}: ${c.subject}`;
+  return c.body ? `${subject}\n\n${c.body}` : subject;
 }
 
 /**
@@ -13,11 +23,7 @@ export interface AutoCommitResult {
  * Returns the commit SHA on success, or an error message on failure.
  * "Nothing to commit" is treated as a benign no-op (no error, no SHA).
  */
-export function autoCommitFiles(
-  filesWritten: string[],
-  summary: string | undefined,
-  cwd: string,
-): AutoCommitResult {
+export function autoCommitFiles({ filesWritten, commit, cwd }: AutoCommitOptions): AutoCommitResult {
   // Resolve all paths and filter to those inside cwd (cross-platform)
   const contained: string[] = [];
   for (const fp of filesWritten) {
@@ -29,7 +35,7 @@ export function autoCommitFiles(
 
   if (contained.length === 0) return {};
 
-  const message = summary?.trim() || FALLBACK_MESSAGE;
+  const message = composeCommitMessage(commit);
 
   try {
     // Use git add + git commit with explicit pathspec to avoid committing

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { autoCommitFiles } from '@zhixuan92/multi-model-agent-core/auto-commit';
+import { autoCommitFiles, composeCommitMessage } from '@zhixuan92/multi-model-agent-core/auto-commit';
 
 vi.mock('child_process', () => ({
   execFileSync: vi.fn().mockReturnValue(Buffer.from('abc1234\n')),
@@ -12,6 +12,21 @@ vi.mock('fs', () => ({
 import { execFileSync } from 'child_process';
 import { existsSync } from 'fs';
 
+describe('composeCommitMessage', () => {
+  it('composes "type(scope): subject" with body', () => {
+    const msg = composeCommitMessage({ type: 'feat', scope: 'core', subject: 'add x', body: 'why\n\nbecause.' });
+    expect(msg).toBe('feat(core): add x\n\nwhy\n\nbecause.');
+  });
+
+  it('omits scope when absent', () => {
+    expect(composeCommitMessage({ type: 'fix', subject: 'bar' })).toBe('fix: bar');
+  });
+
+  it('omits body when absent', () => {
+    expect(composeCommitMessage({ type: 'docs', scope: 'spec', subject: 'baz' })).toBe('docs(spec): baz');
+  });
+});
+
 describe('autoCommitFiles', () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -20,43 +35,53 @@ describe('autoCommitFiles', () => {
   });
 
   it('commits files and returns SHA', () => {
-    const result = autoCommitFiles(['src/a.ts', 'src/b.ts'], 'Implemented auth', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['src/a.ts', 'src/b.ts'],
+      commit: { type: 'feat', subject: 'implemented auth' },
+      cwd: '/project',
+    });
     expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts', 'src/b.ts'], { cwd: '/project' });
-    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'Implemented auth', '--', 'src/a.ts', 'src/b.ts'], { cwd: '/project' });
+    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'feat: implemented auth', '--', 'src/a.ts', 'src/b.ts'], { cwd: '/project' });
     expect(execFileSync).toHaveBeenCalledWith('git', ['rev-parse', 'HEAD'], { cwd: '/project' });
     expect(result).toEqual({ sha: 'abc1234' });
   });
 
-  it('uses fallback message when summary is undefined', () => {
-    autoCommitFiles(['src/a.ts'], undefined, '/project');
-    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'worker: task completed', '--', 'src/a.ts'], { cwd: '/project' });
-  });
-
-  it('uses fallback message when summary is empty', () => {
-    autoCommitFiles(['src/a.ts'], '', '/project');
-    expect(execFileSync).toHaveBeenCalledWith('git', ['commit', '-m', 'worker: task completed', '--', 'src/a.ts'], { cwd: '/project' });
-  });
-
   it('skips paths outside cwd', () => {
-    const result = autoCommitFiles(['/other/dir/file.ts', 'src/a.ts'], 'done', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['/other/dir/file.ts', 'src/a.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
     expect(result).toEqual({ sha: 'abc1234' });
   });
 
   it('returns empty when all paths filtered out', () => {
-    const result = autoCommitFiles(['/other/dir/file.ts'], 'done', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['/other/dir/file.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     expect(execFileSync).not.toHaveBeenCalled();
     expect(result).toEqual({});
   });
 
   it('resolves relative paths within cwd', () => {
-    autoCommitFiles(['src/a.ts'], 'done', '/project');
+    autoCommitFiles({
+      filesWritten: ['src/a.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     // src/a.ts resolves to /project/src/a.ts which is inside /project
     expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
   });
 
   it('skips relative paths that escape cwd', () => {
-    const result = autoCommitFiles(['../outside.ts', 'src/a.ts'], 'done', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['../outside.ts', 'src/a.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     expect(execFileSync).toHaveBeenCalledWith('git', ['add', 'src/a.ts'], { cwd: '/project' });
     expect(result).toEqual({ sha: 'abc1234' });
   });
@@ -67,7 +92,11 @@ describe('autoCommitFiles', () => {
     (execFileSync as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => Buffer.from('')) // git add succeeds
       .mockImplementationOnce(() => { throw nothingError; }); // git commit fails
-    const result = autoCommitFiles(['src/a.ts'], 'done', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['src/a.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     expect(result).toEqual({}); // no sha, no error
   });
 
@@ -76,7 +105,11 @@ describe('autoCommitFiles', () => {
     (execFileSync as ReturnType<typeof vi.fn>)
       .mockImplementationOnce(() => Buffer.from('')) // git add succeeds
       .mockImplementationOnce(() => { throw hookError; }); // git commit fails
-    const result = autoCommitFiles(['src/a.ts'], 'done', '/project');
+    const result = autoCommitFiles({
+      filesWritten: ['src/a.ts'],
+      commit: { type: 'chore', subject: 'done' },
+      cwd: '/project',
+    });
     expect(result).toEqual({ error: 'pre-commit hook failed' });
   });
 });

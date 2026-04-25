@@ -25,8 +25,8 @@
           "inputTokens": 0,
           "outputTokens": 0,
           "costUSD": null,
-          "initialPromptLengthChars": 2654,
-          "initialPromptHash": "b884d4f29488f4ca034cd726c4ef6dd23ac196ac0170b73cee2d96653133d343",
+          "initialPromptLengthChars": 3616,
+          "initialPromptHash": "684c4fd7629e0a01f259561666fd7453199e107a17df257ad74711aca3f93019",
           "reason": "Connection error."
         }
       ],
@@ -71,6 +71,13 @@
         "implementer": "mock",
         "specReviewer": null,
         "qualityReviewer": null
+      },
+      "commits": [],
+      "verification": {
+        "status": "skipped",
+        "steps": [],
+        "totalDurationMs": 0,
+        "skipReason": "no_command"
       }
     }
   ],
@@ -105,7 +112,8 @@
       "maxCostUSD": 10,
       "sandboxPolicy": "cwd-only",
       "briefQualityPolicy": "off",
-      "cwd": "<REPO>"
+      "cwd": "<REPO>",
+      "reviewPolicy": "full"
     }
   ],
   "wallClockMs": "<DETERMINISTIC>"

@@ -6,6 +6,7 @@ import type {
   TokenUsage,
 } from './runners/types.js';
 import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
+import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -46,7 +47,7 @@ export interface TaskSpec {
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
   maxCostUSD?: number
-  reviewPolicy?: 'full' | 'spec_only' | 'off'
+  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off'
   maxReviewRounds?: number
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
@@ -55,6 +56,7 @@ export interface TaskSpec {
   expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
   requiredCapabilities?: AgentCapability[]
   testCommand?: string
+  verifyCommand?: string[]
   autoCommit?: boolean
   planContext?: string
 }
@@ -78,6 +80,14 @@ export interface MultiModelConfig {
   }
 }
 
+export interface Commit {
+  sha: string
+  subject: string
+  body: string
+  filesChanged: string[]
+  authoredAt: string
+}
+
 export interface RunResult {
   output: string
   status: RunStatus
@@ -94,14 +104,23 @@ export interface RunResult {
   errorCode?: string
   retryable?: boolean
   briefQualityWarnings?: BriefQualityWarning[]
-  terminationReason?: TerminationReason
-  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked'
+  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling'
+  reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
+  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'low' | 'medium' | 'high'; message: string }>
+  structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
+  workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_aborted' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   specReviewReason?: string
   filePathsSkipped?: boolean
   fileArtifactsMissing?: boolean
-  commitSha?: string
+  commits?: Commit[]
   commitError?: string
+  // 3.3.0 (T3): always populated by reviewed-lifecycle's verify stage when an
+  // artifact-producing task runs through that path. Optional in the type so that
+  // non-artifact paths and direct provider calls compile without per-site defaults.
+  // The spec says "always present" — that invariant holds at the lifecycle boundary;
+  // here the type is permissive to keep migration mechanical.
+  verification?: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport

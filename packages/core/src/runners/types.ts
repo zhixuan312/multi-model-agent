@@ -35,7 +35,7 @@ export interface TerminationReason {
   turnsUsed: number
   hasFileArtifacts: boolean
   usedShell: boolean
-  workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | null
+  workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_aborted' | null
   wasPromoted: boolean
 }
 
@@ -120,6 +120,9 @@ export type ProgressEvent = {
   kind: 'heartbeat'
   elapsed: string
   provider: string
+  idleSinceLlmMs: number
+  idleSinceToolMs: number
+  idleSinceTextMs: number
   stage: 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework'
   stageIndex: number
   stageCount: number

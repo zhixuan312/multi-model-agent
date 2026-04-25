@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { structuredReportSuffix, parseStructuredReport } from '@zhixuan92/multi-model-agent-core/reporting/structured-report';
+import { structuredReportSuffix, parseStructuredReport, commitSchema } from '@zhixuan92/multi-model-agent-core/reporting/structured-report';
 
 describe('structuredReportSuffix', () => {
   it('contains all required section headers', () => {
@@ -9,6 +9,47 @@ describe('structuredReportSuffix', () => {
     expect(s).toContain('## Validations run');
     expect(s).toContain('## Deviations from brief');
     expect(s).toContain('## Unresolved');
+  });
+});
+
+describe('structured-report commit field', () => {
+  const validCommit = { type: 'feat' as const, scope: 'core', subject: 'add x', body: 'why' };
+
+  it('accepts valid commit block', () => {
+    const r = parseStructuredReport(`## Summary\nDone.\n\ncommit:\n${JSON.stringify(validCommit)}\n`);
+    expect(r.commit).toEqual(validCommit);
+  });
+
+  it('rejects subject > 50 chars', () => {
+    const bad = { ...validCommit, subject: 'x'.repeat(51) };
+    expect(() => commitSchema.parse(bad)).toThrow(/50/);
+  });
+
+  it('rejects subject starting with ASCII uppercase', () => {
+    expect(() => commitSchema.parse({ ...validCommit, subject: 'Add x' })).toThrow();
+  });
+
+  it('rejects subject with trailing colon', () => {
+    expect(() => commitSchema.parse({ ...validCommit, subject: 'add x:' })).toThrow();
+  });
+
+  it('rejects subject with leading or trailing whitespace (no silent trim)', () => {
+    expect(() => commitSchema.parse({ ...validCommit, subject: ' add x' })).toThrow();
+    expect(() => commitSchema.parse({ ...validCommit, subject: 'add x ' })).toThrow();
+  });
+
+  it('rejects scope with invalid first char', () => {
+    expect(() => commitSchema.parse({ ...validCommit, scope: '/bad' })).toThrow();
+  });
+
+  it('accepts scope "server/http", "run_tasks", "api.v2"', () => {
+    expect(commitSchema.parse({ ...validCommit, scope: 'server/http' })).toBeDefined();
+    expect(commitSchema.parse({ ...validCommit, scope: 'run_tasks' })).toBeDefined();
+    expect(commitSchema.parse({ ...validCommit, scope: 'api.v2' })).toBeDefined();
+  });
+
+  it('rejects unknown type enum', () => {
+    expect(() => commitSchema.parse({ ...validCommit, type: 'wip' as any })).toThrow();
   });
 });
 

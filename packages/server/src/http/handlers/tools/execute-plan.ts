@@ -6,6 +6,7 @@ import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/executors/
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
+import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
 
 export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
@@ -42,6 +43,8 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
         return executeExecutePlan(executionCtx, input);
       },
     });
+
+    await emitRequestReceived({ config: deps.config, batchId, route: _req.url ?? '', parsed: input });
 
     sendJson(res, 202, { batchId, statusUrl });
   };

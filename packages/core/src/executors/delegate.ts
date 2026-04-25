@@ -6,6 +6,7 @@ import type { TaskSpec, RunResult } from '../types.js';
 import { runTasks } from '../run-tasks/index.js';
 import type { RunTasksOptions } from '../run-tasks/index.js';
 import { compileDelegateTasks } from '../intake/compilers/delegate.js';
+import type { DelegateTaskInput } from '../intake/compilers/delegate.js';
 import { runIntakePipeline } from '../intake/pipeline.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import type { ClarificationEntry } from '../intake/types.js';
@@ -47,14 +48,17 @@ export async function executeDelegate(
   // Intake pipeline: compile → infer → classify → resolve
   const requestId = randomUUID();
   const drafts = compileDelegateTasks(
-    input.tasks as { prompt: string; done?: string; filePaths?: string[]; agentType?: string; contextBlockIds?: string[] }[],
+    input.tasks as DelegateTaskInput[],
     requestId,
   );
   const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
 
+  if (ctx.batchId === undefined) {
+    throw new Error('executeDelegate requires ctx.batchId');
+  }
   let results: RunResult[] = [];
   const readySpecs = intakeResult.ready.map(r => r.task);
-  const batchId = batchCache.remember(readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
+  const batchId = batchCache.remember(ctx.batchId, readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
 
   const batchStartMs = Date.now();
   let batchAborted = false;
@@ -65,7 +69,8 @@ export async function executeDelegate(
         onProgress,
         runtime: { contextBlockStore },
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger,
+        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
+        logger: ctx.logger,
       });
       intakeResult.intakeProgress.executedDrafts = results.length;
     }

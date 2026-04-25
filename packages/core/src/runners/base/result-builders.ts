@@ -3,8 +3,13 @@
 // buildXResult functions. The provider-specific pieces (how usage is
 // sourced, how cost is computed, the exact diagnostic wording) are
 // passed in; the shared shape lives here.
-import type { RunResult } from '../../types.js';
+import type { Commit, RunResult } from '../../types.js';
+import type { VerifyStageResult, VerifyStepStatus } from '../../run-tasks/verify-stage.js';
+
+export type { Commit };
 import type { TokenUsage } from '../types.js';
+
+const DEFAULT_VERIFICATION: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
 import type { FileTracker } from '../../tools/tracker.js';
 import type { TextScratchpad } from '../../tools/scratchpad.js';
 
@@ -14,6 +19,14 @@ export interface SharedResultUsage {
   totalTokens: number;
   costUSD: number | null;
   savedCostUSD: number | null;
+}
+
+export interface ReviewedRunResultFields {
+  workerStatus: 'done' | 'done_with_concerns' | 'review_loop_aborted' | 'failed';
+  terminationReason?: 'round_cap' | 'cost_ceiling';
+  reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
+  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'low' | 'medium' | 'high'; message: string }>;
+  error?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
 }
 
 function usageShape(u: SharedResultUsage): TokenUsage {
@@ -45,6 +58,7 @@ export function buildOkResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: false,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     durationMs,
   };
 }
@@ -88,6 +102,7 @@ export function buildIncompleteResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
   };
@@ -117,6 +132,7 @@ export function buildForceSalvageResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic: !hasSalvage,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     durationMs,
   };
 }
@@ -148,6 +164,7 @@ export function buildMaxTurnsExitResult(args: {
     toolCalls: tracker.getToolCalls(),
     outputIsDiagnostic,
     escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
   };
