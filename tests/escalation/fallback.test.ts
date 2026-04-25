@@ -7,8 +7,15 @@ import {
 } from '../../packages/core/src/escalation/fallback.js';
 import type { Provider, RunResult, AgentType } from '../../packages/core/src/types.js';
 
-function mockProvider(name: string, run: () => Promise<RunResult>): Provider {
-  return { name, config: { type: 'codex', model: 'mock' } as never, run };
+function mockProvider(name: string, run: () => Promise<RunResult>, config?: unknown): Provider {
+  // Default config varies by name so existing tests get DISTINCT effective providers
+  // (fallback fires); the same-provider short-circuit tests pass an explicit shared
+  // config to opt into single-tier mode.
+  return {
+    name,
+    config: (config ?? { type: 'codex', model: `mock-${name}` }) as never,
+    run,
+  };
 }
 
 function okResult(name: string): RunResult {
@@ -197,6 +204,61 @@ describe('runWithFallback — both unavailable mid-call', () => {
     expect(result.result.status).toBe('network_error');
     expect(map.get('standard')).toBe('transport_failure');
     expect(map.get('complex')).toBe('transport_failure');
+  });
+});
+
+describe('runWithFallback — same-provider config short-circuits fallback', () => {
+  // Operators may legitimately point both `standard` and `complex` at the same
+  // backend (one-provider deployment). Cross-tier fallback is structurally
+  // pointless in that case — alt would just hit the same backend. We should
+  // skip the doomed second call and return the assigned-tier failure as the
+  // task's terminal result.
+
+  const sharedConfig = { type: 'openai-compatible', model: 'deepseek-v4-pro', baseUrl: 'https://api.deepseek.com' };
+
+  it('does not call alt when both tiers resolve to identical provider config', async () => {
+    const map: UnavailableMap = new Map();
+    const standardCall = vi.fn(async () => failResult('api_error'));
+    const complexCall = vi.fn(async () => okResult('complex'));
+    const standard = mockProvider('standard', standardCall, sharedConfig);
+    const complex = mockProvider('complex', complexCall, sharedConfig);
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complex),
+      unavailableTiers: map,
+      isTransportFailure,
+      getStatus: (r) => r.status,
+      makeSyntheticFailure: makeSynthetic,
+      call: (p) => p.run('test', {}),
+    });
+    expect(standardCall).toHaveBeenCalledTimes(1);
+    expect(complexCall).toHaveBeenCalledTimes(0);
+    expect(result.fallbackFired).toBe(false);
+    expect(result.bothUnavailable).toBe(false);
+    expect(result.usedTier).toBe('standard');
+    expect(result.result.status).toBe('api_error');
+    // Assigned still gets marked unavailable (sticky) so a future rework call
+    // sees the prior failure and short-circuits via the up-front sticky path.
+    expect(map.get('standard')).toBe('transport_failure');
+  });
+
+  it('still fires fallback when configs differ (regression guard)', async () => {
+    const map: UnavailableMap = new Map();
+    const standard = mockProvider('standard', async () => failResult('api_error'),
+      { type: 'openai-compatible', model: 'a', baseUrl: 'https://x' });
+    const complex = mockProvider('complex', async () => okResult('complex'),
+      { type: 'openai-compatible', model: 'b', baseUrl: 'https://x' });
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complex),
+      unavailableTiers: map,
+      isTransportFailure,
+      getStatus: (r) => r.status,
+      makeSyntheticFailure: makeSynthetic,
+      call: (p) => p.run('test', {}),
+    });
+    expect(result.fallbackFired).toBe(true);
+    expect(result.usedTier).toBe('complex');
   });
 });
 
