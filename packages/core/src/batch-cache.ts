@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import type { TaskSpec, RunResult } from './types.js';
 
 export type BatchEntryStatus = 'pending' | 'complete' | 'aborted';
@@ -28,21 +27,20 @@ export class BatchCache {
     this.max = options?.max ?? DEFAULT_MAX;
   }
 
-  remember(tasks: TaskSpec[]): string {
-    const id = randomUUID();
+  remember(batchId: string, tasks: TaskSpec[]): string {
     const entry: BatchEntry = {
       tasks,
       status: 'pending',
       results: undefined,
       expiresAt: Date.now() + this.ttlMs,
     };
-    this.map.set(id, entry);
+    this.map.set(batchId, entry);
     while (this.map.size > this.max) {
       const lru = this.map.keys().next().value;
       if (lru === undefined) break;
       this.map.delete(lru);
     }
-    return id;
+    return batchId;
   }
 
   complete(batchId: string, results: RunResult[]): void {

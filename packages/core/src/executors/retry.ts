@@ -53,9 +53,12 @@ export async function executeRetry(
   }
   const subset = input.taskIndices.map((i) => batch.tasks[i]);
 
+  if (ctx.batchId === undefined) {
+    throw new Error('executeRetry requires ctx.batchId');
+  }
   // Create a fresh batch for the retried tasks so the original batch
   // entry is preserved and get_batch_slice can still retrieve it.
-  const retryBatchId = batchCache.remember(subset);
+  const retryBatchId = batchCache.remember(ctx.batchId, subset);
 
   const batchStartMs = Date.now();
   let results: import('../types.js').RunResult[] = [];

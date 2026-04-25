@@ -52,9 +52,12 @@ export async function executeDelegate(
   );
   const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
 
+  if (ctx.batchId === undefined) {
+    throw new Error('executeDelegate requires ctx.batchId');
+  }
   let results: RunResult[] = [];
   const readySpecs = intakeResult.ready.map(r => r.task);
-  const batchId = batchCache.remember(readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
+  const batchId = batchCache.remember(ctx.batchId, readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
 
   const batchStartMs = Date.now();
   let batchAborted = false;
