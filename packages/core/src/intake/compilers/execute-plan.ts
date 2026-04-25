@@ -5,6 +5,7 @@ export interface ExecutePlanInput {
   tasks: string[];
   fileContents: string;
   filePaths?: string[];
+  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off';
 }
 
 export function compileExecutePlan(
@@ -36,11 +37,12 @@ export function compileExecutePlan(
       draftId: createDraftId(requestId, index, `task-${index}`),
       source: {
         route: 'execute_plan',
-        originalInput: { tasks: input.tasks, filePaths: input.filePaths } as unknown as Record<string, unknown>,
+        originalInput: { tasks: input.tasks, filePaths: input.filePaths, reviewPolicy: input.reviewPolicy } as unknown as Record<string, unknown>,
         filePaths: input.filePaths ?? [],
         task,
       } as ExecutePlanSource,
       prompt,
+      reviewPolicy: input.reviewPolicy,
     };
   });
 }

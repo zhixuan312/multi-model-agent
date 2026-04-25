@@ -30,6 +30,9 @@ const taskSchema = z.object({
   verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional().describe(
     'Commands to run after task completion to verify the work.',
   ),
+  reviewPolicy: z.enum(['full', 'spec_only', 'diff_only', 'off']).optional().default('full').describe(
+    'Review lifecycle policy for this task. Default: full.',
+  ),
 }).strict();
 
 export const inputSchema = z.object({

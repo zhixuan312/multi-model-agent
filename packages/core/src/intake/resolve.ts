@@ -37,7 +37,7 @@ export function resolveDraft(
     done: draft.done,
     filePaths: draft.filePaths,
     agentType: agentType as 'standard' | 'complex',
-    reviewPolicy: routeDefaults.reviewPolicy,
+    reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
     maxReviewRounds: routeDefaults.maxReviewRounds,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,

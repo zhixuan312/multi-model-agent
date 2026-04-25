@@ -7,6 +7,7 @@ export interface DelegateTaskInput {
   filePaths?: string[];
   agentType?: string;
   contextBlockIds?: string[];
+  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off';
 }
 
 export function compileDelegateTasks(
@@ -24,5 +25,6 @@ export function compileDelegateTasks(
     filePaths: task.filePaths,
     agentType: task.agentType,
     contextBlockIds: task.contextBlockIds,
+    reviewPolicy: task.reviewPolicy,
   }));
 }

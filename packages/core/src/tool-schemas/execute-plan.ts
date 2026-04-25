@@ -27,6 +27,8 @@ export const inputSchema = z.object({
     .describe('Maximum estimated cost in USD for each generated plan task. Optional; the executor applies a default of 10 when omitted. Validation when explicitly passed: positive finite.'),
   verifyCommand: z.array(z.string().refine((s) => s.trim().length > 0, 'non-empty after trim')).min(1).optional()
     .describe('Commands to run after plan task completion to verify the work.'),
+  reviewPolicy: z.enum(['full', 'spec_only', 'diff_only', 'off']).optional().default('full')
+    .describe('Review lifecycle policy for each generated plan task. Default: full.'),
 });
 
 export type Input = z.infer<typeof inputSchema>;
