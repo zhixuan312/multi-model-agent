@@ -16,6 +16,58 @@ export type AgentCapability = 'web_search' | 'web_fetch';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 
+/**
+ * Stages whose execution we record per-stage stats for.
+ *
+ * `terminal` is intentionally NOT here — it is a heartbeat-display-only state
+ * (signaling "the lifecycle is done") and has no work to time, no model that
+ * ran during it, no cost to attribute. `HeartbeatStage` (in `heartbeat.ts`)
+ * includes `terminal`; `StageName` does not. If you add another display-only
+ * stage in the future, exclude it from `StageName` for the same reason.
+ */
+export type StageName =
+  | 'implementing' | 'verifying' | 'spec_review' | 'spec_rework'
+  | 'quality_review' | 'quality_rework' | 'diff_review' | 'committing';
+
+interface BaseStageStats {
+  entered:     boolean;
+  durationMs:  number | null;
+  costUSD:     number | null;
+  agentTier:   'standard' | 'complex' | null;
+  modelFamily: string | null;
+  model:       string | null;
+}
+
+export type ReviewVerdict =
+  | 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
+
+export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable';
+export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other';
+
+export type RawStageStats =
+  | (BaseStageStats & { stage: 'implementing' | 'spec_rework' | 'quality_rework' | 'committing' })
+  | (BaseStageStats & {
+      stage:      'verifying';
+      outcome:    VerifyOutcome   | null;
+      skipReason: VerifySkipReason | null;
+    })
+  | (BaseStageStats & {
+      stage:      'spec_review' | 'quality_review' | 'diff_review';
+      verdict:    ReviewVerdict | null;
+      roundsUsed: number        | null;
+    });
+
+export type StageStatsMap = {
+  implementing:   Extract<RawStageStats, { stage: 'implementing' }>;
+  verifying:      Extract<RawStageStats, { stage: 'verifying' }>;
+  spec_review:    Extract<RawStageStats, { stage: 'spec_review' }>;
+  spec_rework:    Extract<RawStageStats, { stage: 'spec_rework' }>;
+  quality_review: Extract<RawStageStats, { stage: 'quality_review' }>;
+  quality_rework: Extract<RawStageStats, { stage: 'quality_rework' }>;
+  diff_review:    Extract<RawStageStats, { stage: 'diff_review' }>;
+  committing:     Extract<RawStageStats, { stage: 'committing' }>;
+};
+
 export interface AgentConfig {
   type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex'
   model: string
@@ -79,7 +131,7 @@ export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | Claude
 
 export interface MultiModelConfig {
   agents: { standard: AgentConfig; complex: AgentConfig }
-  defaults: { timeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; parentModel?: string }
+  defaults: { timeoutMs: number; stallTimeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; parentModel?: string }
   diagnostics?: { log: boolean; logDir?: string; verbose?: boolean }
   clarifications?: { maxRoundsPerDraft?: number }
   server: {
@@ -129,6 +181,8 @@ export interface RunResult {
   capExhausted?: 'turn' | 'cost' | 'wall_clock'
   lifecycleClarificationRequested?: boolean
   workerError?: Error
+  /** Per-stage raw stats (Phase 0). Bucketing happens in the telemetry event-builder. */
+  stageStats?: StageStatsMap
   // 3.3.0 (T3): always populated by reviewed-lifecycle's verify stage when an
   // artifact-producing task runs through that path. Optional in the type so that
   // non-artifact paths and direct provider calls compile without per-site defaults.
@@ -177,12 +231,26 @@ function resolveRatePair(inputCostPerMTok: number | undefined, outputCostPerMTok
   return null;
 }
 
-export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController): Promise<T> {
+export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController, externalSignal?: AbortSignal): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;
+  let externalAbortHandler: (() => void) | undefined;
   const timeoutPromise = new Promise<T>((resolve) => {
-    timeoutId = setTimeout(() => { abort?.abort(); resolve(onTimeout()); }, timeoutMs);
+    const fire = (): void => {
+      abort?.abort();
+      resolve(onTimeout());
+    };
+    timeoutId = setTimeout(fire, timeoutMs);
+    if (externalSignal) {
+      if (externalSignal.aborted) {
+        fire();
+      } else {
+        externalAbortHandler = fire;
+        externalSignal.addEventListener('abort', externalAbortHandler, { once: true });
+      }
+    }
   });
   return Promise.race([promise, timeoutPromise]).finally(() => {
     if (timeoutId !== undefined) clearTimeout(timeoutId);
+    if (externalAbortHandler && externalSignal) externalSignal.removeEventListener('abort', externalAbortHandler);
   });
 }
