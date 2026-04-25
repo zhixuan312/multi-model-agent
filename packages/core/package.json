@@ -296,6 +296,10 @@
       "types": "./dist/telemetry/consent-rules.d.ts",
       "import": "./dist/telemetry/consent-rules.js"
     },
+    "./telemetry/event-builder": {
+      "types": "./dist/telemetry/event-builder.d.ts",
+      "import": "./dist/telemetry/event-builder.js"
+    },
     "./telemetry/types": {
       "types": "./dist/telemetry/types.d.ts",
       "import": "./dist/telemetry/types.js"
