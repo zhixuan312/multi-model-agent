@@ -15,7 +15,18 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
     if (!parsed.success) {
       const fieldErrors: Record<string, string[]> = {};
       for (const issue of parsed.error.issues) {
-        const path = issue.path.join('.');
+        let path = issue.path.join('.');
+        if (path === '' && issue.message.includes('"agentType"')) {
+          path = 'agentType';
+        } else if (path.startsWith('tasks.') && issue.message === 'Invalid input') {
+          const task = issue.path.reduce<unknown>((value, segment) => {
+            if (value && typeof value === 'object') return (value as Record<string, unknown>)[segment];
+            return undefined;
+          }, ctx.body);
+          if (task && typeof task === 'object' && 'agentType' in task) {
+            path = `${path}.agentType`;
+          }
+        }
         if (!fieldErrors[path]) fieldErrors[path] = [];
         fieldErrors[path].push(issue.message);
       }
