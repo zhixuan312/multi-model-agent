@@ -27,6 +27,7 @@ import {
   isReviewTransportFailure,
   type UnavailableMap,
 } from '../escalation/fallback.js';
+import { findModelCapabilities } from '../routing/model-profiles.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -175,6 +176,20 @@ export async function executeReviewedLifecycle(
     reason: heartbeat ? undefined : 'no_consumer',
   });
 
+  // Stall watchdog: poll every 5s; abort if no runner event has fired for
+  // stallTimeoutMs. Stops at lifecycle exit (cleared in the finally block
+  // around runReviewedLifecycle's body — see end-of-function teardown).
+  const stallWatchdogInterval = setInterval(() => {
+    if (stallFired) return;
+    const idleMs = Date.now() - lastRunnerEventAtMs;
+    if (idleMs >= stallTimeoutMs) {
+      stallFired = true;
+      emitTaskEvent('stall_abort', { idle_ms: idleMs, threshold_ms: stallTimeoutMs });
+      stallController.abort();
+    }
+  }, 5000);
+  stallWatchdogInterval.unref?.();
+
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
@@ -186,8 +201,12 @@ export async function executeReviewedLifecycle(
   // the caller passed onProgress, so --verbose + HTTP handlers (which don't
   // pass onProgress) silently dropped every tool_call / turn_complete event.
   let textEmissionChars = 0;
+  const markRunnerEvent = (): void => { lastRunnerEventAtMs = Date.now(); };
   const wrappedOnProgress = needHeartbeat
     ? (event: InternalRunnerEvent) => {
+        if (event.kind === 'turn_start' || event.kind === 'text_emission' || event.kind === 'tool_call' || event.kind === 'turn_complete') {
+          markRunnerEvent();
+        }
         if (event.kind === 'turn_start') {
           heartbeat?.markEvent('llm');
           if (verbose) prevEventAtMs = Date.now();
@@ -265,6 +284,21 @@ export async function executeReviewedLifecycle(
 
   const cwd = task.cwd ?? process.cwd();
   const taskStartMs = Date.now();
+  // Hard task-level wall-clock cap. Once Date.now() crosses this, no new
+  // provider.run is dispatched (retries / tier-fallback short-circuit) and
+  // any in-flight call gets a per-call timeoutMs clamped to remaining
+  // budget so it returns its salvage promptly. The user gets *something*
+  // back instead of an open-ended retry storm.
+  const taskTimeoutMs = task.timeoutMs ?? config.defaults.timeoutMs ?? 1_800_000;
+  const taskDeadlineMs = taskStartMs + taskTimeoutMs;
+  // Stall watchdog: when no LLM / tool / text event has fired for this
+  // many ms, the in-flight runner is force-aborted via `stallController`.
+  // Catches "model is silently thinking forever" and "transport hung" —
+  // both invisible to the wall-clock cap until the very end.
+  const stallTimeoutMs = config.defaults.stallTimeoutMs ?? 600_000;
+  const stallController = new AbortController();
+  let lastRunnerEventAtMs = taskStartMs;
+  let stallFired = false;
   const commits: Commit[] = [];
   let commitError: string | undefined;
   let specAttemptIndex = 0;
@@ -333,12 +367,18 @@ export async function executeReviewedLifecycle(
     return status === 'approved' || status === 'skipped';
   }
 
+  const implementerToolMode = task.tools ?? config.defaults.tools;
+  const agentConfig = config.agents[resolved.slot];
+  const implementerCapabilities = (agentConfig.capabilities ?? findModelCapabilities(agentConfig.model) ?? []) as ('web_search' | 'web_fetch')[];
+
   const agentEnvelope = (specReviewer: AgentType | 'skipped' | 'not_applicable', qualityReviewer: AgentType | 'skipped' | 'not_applicable') => {
     const selectedImpl = latestAttemptedImpl ?? lastNonRejectedImpl;
     const implementer = selectedImpl?.tier ?? resolved.slot;
     return {
       implementer,
       ...(implementerHistory.length > 1 || implementerHistory.some(t => t !== implementer) ? { implementerHistory } : {}),
+      implementerToolMode,
+      implementerCapabilities,
       specReviewer,
       ...(specReviewerHistory.length > 0 && (specReviewerHistory.length > 1 || specReviewerHistory.some(t => t === 'skipped')) ? { specReviewerHistory } : {}),
       qualityReviewer,
@@ -651,7 +691,7 @@ export async function executeReviewedLifecycle(
       call: (provider) => delegateWithEscalation(
         withDoneCondition(task),
         [provider],
-        { explicitlyPinned: false, onProgress: wrappedOnProgress },
+        { explicitlyPinned: false, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal },
       ),
     });
 
@@ -919,7 +959,7 @@ export async function executeReviewedLifecycle(
       heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress }) });
+      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
       if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'spec', attempt: specAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
       if (reworkCall.fallbackFired) {
         emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
@@ -995,7 +1035,7 @@ export async function executeReviewedLifecycle(
         heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
         const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
         const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress }) });
+        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
         if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
         if (reworkCall.fallbackFired) emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
         if (reworkCall.bothUnavailable) {
@@ -1114,5 +1154,6 @@ export async function executeReviewedLifecycle(
     return withVerification(workerErrorResult(err));
   } finally {
     heartbeat?.stop();
+    clearInterval(stallWatchdogInterval);
   }
 }
