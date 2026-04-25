@@ -94,6 +94,10 @@ function readServerVersion(): string {
 function compareSemver(a: string, b: string): number {
   const [aMaj, aMin, aPat] = a.split('.').map(Number);
   const [bMaj, bMin, bPat] = b.split('.').map(Number);
+  if (Number.isNaN(aMaj) || Number.isNaN(aMin) || Number.isNaN(aPat) ||
+      Number.isNaN(bMaj) || Number.isNaN(bMin) || Number.isNaN(bPat)) {
+    return -1; // unparseable version → treat as mismatched
+  }
   if (aMaj !== bMaj) return aMaj - bMaj;
   if (aMin !== bMin) return aMin - bMin;
   return aPat - bPat;
@@ -154,12 +158,7 @@ export async function startServe(
   const running = await startServer(config as Parameters<typeof startServer>[0]);
 
   // ── Telemetry: install.changed + session.started ─────────────────────
-  const homeDir = path.dirname(
-    config.server.auth.tokenFile.startsWith('~/')
-      ? path.join(os.homedir(), config.server.auth.tokenFile.slice(2))
-      : config.server.auth.tokenFile,
-  );
-
+  const homeDir = path.join(os.homedir(), '.multi-model');
   const mmagentVersion = readServerVersion();
   const recorder = createRecorder({ homeDir, mmagentVersion });
 
@@ -182,14 +181,14 @@ export async function startServe(
     try {
       fs.mkdirSync(homeDir, { recursive: true });
       fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });
-    } catch {
-      // best-effort — don't block serve if we can't write last-version
+    } catch (err) {
+      stderr(`[mmagent] warning: failed to write last-version at ${lastVersionPath}: ${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
 
   const providersConfigured = new Set<'claude' | 'openai-compatible' | 'codex'>();
   for (const agent of Object.values(config.agents)) {
-    const t = (agent as { type: string }).type;
+    const t = agent.type;
     if (t === 'claude' || t === 'claude-compatible') providersConfigured.add('claude');
     else if (t === 'openai-compatible') providersConfigured.add('openai-compatible');
     else if (t === 'codex') providersConfigured.add('codex');

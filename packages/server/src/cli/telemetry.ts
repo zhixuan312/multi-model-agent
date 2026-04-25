@@ -11,8 +11,8 @@
 import { readFileSync, writeFileSync, existsSync, mkdirSync, unlinkSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { decide } from '../telemetry/consent.js';
-import { deleteInstallId, hasInstallId, getOrCreateInstallId } from '../telemetry/install-id.js';
-import { readGeneration, bumpGeneration } from '../telemetry/generation.js';
+import { deleteInstallId } from '../telemetry/install-id.js';
+import { bumpGeneration } from '../telemetry/generation.js';
 import { Queue } from '../telemetry/queue.js';
 
 export interface TelemetryDeps {

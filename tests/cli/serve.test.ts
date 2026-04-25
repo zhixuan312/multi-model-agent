@@ -251,25 +251,36 @@ describe('serve subcommand', () => {
     const tokenFile = writeTokenFile(homeDir);
 
     // Write an old last-version so install.changed fires with 'upgrade'
-    writeFileSync(join(homeDir, 'last-version'), '0.0.1\n', { mode: 0o600 });
+    // Must be under ~/.multi-model/last-version (telemetry data dir)
+    const mmDir = join(homeDir, '.multi-model');
+    mkdirSync(mmDir, { recursive: true });
+    writeFileSync(join(mmDir, 'last-version'), '0.0.1\n', { mode: 0o600 });
 
     const configPath = writeConfigFile(homeDir, minimalConfig({ tokenFile }), 'config.json');
 
     const child = spawn('node', [cliPath(), 'serve', '--config', configPath], {
       stdio: 'pipe',
-      env: { ...process.env, MMAGENT_TELEMETRY: '1' },
+      env: { ...process.env, HOME: homeDir, MMAGENT_TELEMETRY: '1' },
     });
 
     try {
       await waitForServerReady(child, 8000);
 
-      // Queue append is fire-and-forget; give it a moment to flush
-      await new Promise(r => setTimeout(r, 500));
+      // Queue append is fire-and-forget; poll for the queue file to appear
+      const queuePath = join(homeDir, '.multi-model', 'telemetry-queue.ndjson');
+      const deadline = Date.now() + 5000;
+      let lines: string[] = [];
+      while (Date.now() < deadline) {
+        if (existsSync(queuePath)) {
+          const content = readFileSync(queuePath, 'utf8').trim();
+          lines = content.split('\n').filter(l => l.trim());
+          if (lines.length >= 2) break; // we expect at least 2 events
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
 
-      const queuePath = join(homeDir, 'telemetry-queue.ndjson');
-      expect(existsSync(queuePath)).toBe(true);
+      expect(lines.length).toBeGreaterThanOrEqual(2);
 
-      const lines = readFileSync(queuePath, 'utf8').trim().split('\n');
       const events = lines.map(l => JSON.parse(l) as { event: { type: string } });
 
       const types = events.map(e => e.event.type);

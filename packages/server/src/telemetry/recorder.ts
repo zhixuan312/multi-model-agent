@@ -20,7 +20,26 @@ export interface Recorder {
   recordSkillInstalled(skillId: string, client: string): void;
 }
 
+let _recorder: Recorder | null = null;
+
+export function getRecorder(): Recorder {
+  if (!_recorder) {
+    throw new Error('Recorder not initialized — call createRecorder first');
+  }
+  return _recorder;
+}
+
+export function setRecorderForTest(r: Recorder): void {
+  _recorder = r;
+}
+
 export function createRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
+  const recorder = _buildRecorder(opts);
+  _recorder = recorder;
+  return recorder;
+}
+
+function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Recorder {
   const { homeDir, mmagentVersion } = opts;
   const queue = new Queue(homeDir);
   let _installId: string | null = null;

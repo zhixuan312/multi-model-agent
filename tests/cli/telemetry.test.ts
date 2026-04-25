@@ -171,7 +171,7 @@ describe('mmagent telemetry status', () => {
     }
   });
 
-  it('exits 1 when config file is unreadable (invalid JSON)', async () => {
+  it('exits 0 when config file is unreadable (invalid JSON) — status still succeeds', async () => {
     const tmp = setupTempHome();
     try {
       writeFileSync(join(tmp, 'config.json'), '{bad json', { mode: 0o600 });
@@ -288,6 +288,35 @@ describe('mmagent telemetry disable', () => {
 
       // install-id preserved (disable does NOT delete install-id)
       expect(existsSync(join(tmp, 'install-id'))).toBe(true);
+
+      expect(stdout.join('')).toContain('disabled');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('succeeds when identity files (generation, queue) do not exist', async () => {
+    const tmp = setupTempHome();
+    try {
+      writeConfig(tmp, { telemetry: { enabled: true } });
+
+      const { stdoutFn, stderrFn, stdout } = captureOutput();
+      const code = await runTelemetry({
+        subcommand: 'disable',
+        homeDir: tmp,
+        stdout: stdoutFn,
+        stderr: stderrFn,
+      });
+      expect(code).toBe(0);
+
+      const cfg = readConfig(tmp) as any;
+      expect(cfg.telemetry.enabled).toBe(false);
+
+      // generation created and bumped to 1
+      const genPath = join(tmp, 'telemetry-generation');
+      expect(existsSync(genPath)).toBe(true);
+      const gen = readFileSync(genPath, 'utf8').trim();
+      expect(gen).toBe('1');
 
       expect(stdout.join('')).toContain('disabled');
     } finally {

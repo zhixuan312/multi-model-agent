@@ -2,6 +2,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest';
 import * as fs from 'node:fs';
 import * as notify from '../../packages/server/src/install/notify.js';
 import { writeSkillToClient } from '../../packages/server/src/install/manifest-resolve.js';
+import { setRecorderForTest } from '../../packages/server/src/telemetry/recorder.js';
+import type { Recorder } from '../../packages/server/src/telemetry/recorder.js';
 
 vi.mock('node:fs');
 
@@ -31,36 +33,34 @@ function mockFsForNonExistentFiles() {
   });
 }
 
-describe('notifySkillInstalled (no-op without fetch)', () => {
-  it('is a no-op when fetch is not provided', () => {
-    expect(() => notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' })).not.toThrow();
-    expect(notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code' })).toBeUndefined();
+function mockRecorder(): Recorder {
+  return {
+    recordTaskCompleted: vi.fn(),
+    recordSessionStarted: vi.fn(),
+    recordInstallChanged: vi.fn(),
+    recordSkillInstalled: vi.fn(),
+  };
+}
+
+describe('notifySkillInstalled', () => {
+  it('forwards to recorder.recordSkillInstalled', () => {
+    const rec = mockRecorder();
+    setRecorderForTest(rec);
+    notify.notifySkillInstalled('mma-delegate', 'claude-code');
+    expect(rec.recordSkillInstalled).toHaveBeenCalledWith('mma-delegate', 'claude-code');
   });
 });
 
-describe('notifySkillInstalled (with fetch)', () => {
-  it('POSTs with X-MMA-Client: claude-code for claude-code client', async () => {
-    let capturedHeaders: Record<string, string> | undefined;
-    const fakeFetch = async (_url: string, init?: RequestInit) => {
-      capturedHeaders = init?.headers as Record<string, string>;
-      return new Response('{}', { status: 200 });
+describe('notifySkillInstalled errors are silent', () => {
+  it('does not throw when recorder throws', () => {
+    const boom: Recorder = {
+      recordTaskCompleted: vi.fn(),
+      recordSessionStarted: vi.fn(),
+      recordInstallChanged: vi.fn(),
+      recordSkillInstalled: () => { throw new Error('boom'); },
     };
-    notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'claude-code', fetch: fakeFetch as typeof globalThis.fetch });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(capturedHeaders).toBeTruthy();
-    expect(capturedHeaders!['X-MMA-Client']).toBe('claude-code');
-  });
-
-  it('POSTs with X-MMA-Client: gemini-cli for gemini client', async () => {
-    let capturedHeaders: Record<string, string> | undefined;
-    const fakeFetch = async (_url: string, init?: RequestInit) => {
-      capturedHeaders = init?.headers as Record<string, string>;
-      return new Response('{}', { status: 200 });
-    };
-    notify.notifySkillInstalled({ skillId: 'mma-delegate', client: 'gemini', fetch: fakeFetch as typeof globalThis.fetch });
-    await new Promise((r) => setTimeout(r, 10));
-    expect(capturedHeaders).toBeTruthy();
-    expect(capturedHeaders!['X-MMA-Client']).toBe('gemini-cli');
+    setRecorderForTest(boom);
+    expect(() => notify.notifySkillInstalled('mma-delegate', 'claude-code')).not.toThrow();
   });
 });
 
@@ -74,21 +74,21 @@ describe('writeSkillToClient calls notifySkillInstalled after successful install
 
   it('fires for claude-code', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'claude-code', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'claude-code' });
+    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'claude-code');
   });
 
   it('fires for gemini', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'gemini', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version);
-    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'gemini' });
+    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'gemini');
   });
 
   it('fires for codex', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'codex', baseOpts.homeDir, baseOpts.skillsRoot);
-    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'codex' });
+    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'codex');
   });
 
   it('fires for cursor', () => {
     writeSkillToClient(baseOpts.skillName, baseOpts.content, 'cursor', baseOpts.homeDir, baseOpts.skillsRoot, baseOpts.version, baseOpts.cwd);
-    expect(spy).toHaveBeenCalledWith({ skillId: 'mma-test-skill', client: 'cursor' });
+    expect(spy).toHaveBeenCalledWith('mma-test-skill', 'cursor');
   });
 });
