@@ -321,6 +321,10 @@ export async function executeReviewedLifecycle(
       terminationReason: 'all_tiers_unavailable',
       reviewRounds: reviewRounds(),
       error: `runWithFallback: both tiers unavailable (loop=${loop}, attempt=${attempt}, role=implementer)`,
+      agents: agentEnvelope(
+        specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
+        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+      ),
     } as RunResult;
   }
 
@@ -329,7 +333,7 @@ export async function executeReviewedLifecycle(
   }
 
   const agentEnvelope = (specReviewer: AgentType | 'skipped' | 'not_applicable', qualityReviewer: AgentType | 'skipped' | 'not_applicable') => {
-    const selectedImpl = lastNonRejectedImpl ?? latestAttemptedImpl;
+    const selectedImpl = latestAttemptedImpl ?? lastNonRejectedImpl;
     const implementer = selectedImpl?.tier ?? resolved.slot;
     return {
       implementer,
@@ -356,6 +360,10 @@ export async function executeReviewedLifecycle(
     error: message,
     specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
     qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
+    agents: agentEnvelope(
+      specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
+      qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+    ),
   });
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
