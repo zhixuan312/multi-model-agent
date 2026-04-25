@@ -69,7 +69,7 @@ Config file: `~/.multi-model/config.json`. Lookup order: `--config <path>` → `
 }
 ```
 
-Agent types: `claude`, `codex`, `openai-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`:
+Agent types: `claude`, `codex`, `openai-compatible`, `claude-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`:
 
 ```json
 {
@@ -89,6 +89,23 @@ Agent types: `claude`, `codex`, `openai-compatible`. Any OpenAI-compatible endpo
   }
 }
 ```
+
+`claude-compatible` is the same wiring shape (`baseUrl` + `apiKey` / `apiKeyEnv`) for vendors that expose an Anthropic-format endpoint instead — e.g. DeepSeek's `/anthropic`. Use this for thinking-mode reasoning models on third-party hosts: Anthropic's wire format preserves thinking content blocks across multi-turn tool use, which is required for DeepSeek V4's hybrid thinking models to work reliably (the OpenAI Chat Completions wire format strips the non-standard `reasoning_content` field on follow-up turns and 400s):
+
+```json
+{
+  "agents": {
+    "complex": {
+      "type": "claude-compatible",
+      "model": "deepseek-v4-pro",
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  }
+}
+```
+
+DeepSeek configured under `openai-compatible` still works — thinking is auto-disabled to keep multi-turn calls from 400ing — but reasoning is sacrificed. Use `claude-compatible` to keep V4's reasoning ON.
 
 The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
 
@@ -153,6 +170,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 See [CHANGELOG](./CHANGELOG.md) for the full history. Recent highlights:
 
+- **3.5.2** — New `claude-compatible` agent type for Anthropic-format third-party endpoints (DeepSeek's `/anthropic`, similar). Mirrors `openai-compatible`: required `baseUrl`, optional `apiKey` / `apiKeyEnv`. Routes through the existing claude-runner via per-invocation `ANTHROPIC_BASE_URL` + `ANTHROPIC_AUTH_TOKEN` env injection (sibling `claude` agents on real Anthropic are unaffected). Unlocks DeepSeek V4 with thinking ON for tool-using tasks — Anthropic's wire format preserves thinking blocks across turns, which the OpenAI Chat Completions adapter cannot. Bonus: when DeepSeek is configured under `openai-compatible`, the runner now auto-sends `thinking: {type: 'disabled'}` so multi-turn calls don't 400 on the missing `reasoning_content` echo-back (no thinking, but works).
 - **3.5.1** — Two bug fixes. (1) `verbose-line: invalid key name` no longer crashes workers — with `diagnostics.verbose: true`, runs that reached fallback / escalation / spec_rework / quality_rework paths previously threw inside the verbose-stream serializer (camelCase event-param keys violated its snake_case-only validator) and surfaced as terminal `runner_crash`. (2) Single-provider deployments (operators pointing both `standard` and `complex` at the same backend) no longer burn a doomed cross-tier fallback call when the assigned tier transport-fails — the original failure now flows through as the task's terminal result instead of `all_tiers_unavailable`. Internal-only fixes; JSONL `DiagnosticLogger` keys (`assignedTier`, `implTier`, ...) and operator-facing config unchanged.
 - **3.5.0** — Tier-escalating rework + runtime tier fallback in `reviewed-lifecycle.ts`. Standard-tier tasks now escalate the implementer to complex on the final rework attempt (reviewers swap to keep impl ≠ reviewer). Transport failures (`api_error` / `network_error` / `timeout`) auto-substitute the alternative tier per loop. Four new diagnostic events (`escalation`, `escalation_unavailable`, `fallback`, `fallback_unavailable`) and new envelope fields (`agents.implementerHistory`, `specReviewerHistory`, `qualityReviewerHistory`, `fallbackOverrides`). Breaking: `task.maxReviewRounds` removed; `agentType` removed from `/execute-plan` (per-task and top-level).
 - **3.4.0** — `POST /investigate` + `mma-investigate` skill: codebase Q&A with structured `file:line` citations, confidence, and unresolved questions. Read-only filesystem tools; complex tier by default. Plus structured-report parser additively exposes `extraSections` and recognizes `(none)` literals; diagnostic logger refactored to a single `emit()` writer feeding both verbose stderr and JSONL log.
