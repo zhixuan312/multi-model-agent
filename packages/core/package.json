@@ -291,6 +291,14 @@
     "./tool-schemas/retry": {
       "types": "./dist/tool-schemas/retry.d.ts",
       "import": "./dist/tool-schemas/retry.js"
+    },
+    "./telemetry/consent-rules": {
+      "types": "./dist/telemetry/consent-rules.d.ts",
+      "import": "./dist/telemetry/consent-rules.js"
+    },
+    "./telemetry/types": {
+      "types": "./dist/telemetry/types.d.ts",
+      "import": "./dist/telemetry/types.js"
     }
   },
   "scripts": {
