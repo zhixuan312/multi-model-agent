@@ -35,7 +35,7 @@ export interface TerminationReason {
   turnsUsed: number
   hasFileArtifacts: boolean
   usedShell: boolean
-  workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | null
+  workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_aborted' | null
   wasPromoted: boolean
 }
 

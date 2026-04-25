@@ -18,8 +18,10 @@ export async function runSpecReview(
   fileContents: Record<string, string>,
   toolCallLog: string[],
   planContext?: string,
+  evidenceBlock?: string,
 ): Promise<SpecReviewResult> {
-  const prompt = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
+    buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
 
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';

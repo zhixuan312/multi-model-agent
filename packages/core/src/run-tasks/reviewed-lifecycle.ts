@@ -17,6 +17,7 @@ import { runSpecReview } from '../review/spec-reviewer.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
 import type { QualityReviewResult } from '../review/quality-reviewer.js';
 import { aggregateResult } from '../review/aggregate-result.js';
+import { buildEvidence } from '../review/evidence.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import type { CommitFields } from '../reporting/structured-report.js';
 import { runCommitStage, readbackCommit } from './commit-stage.js';
@@ -620,6 +621,10 @@ export async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
+    const evidence = isArtifactProducing
+      ? await buildEvidence({ cwd, baselineHead, commits, verification, reviewPolicy })
+      : { block: '', diffTruncated: false, fullDiff: '' };
+
     heartbeat?.transition({
       stage: 'spec_review', stageIndex: 2,
       reviewRound: 1, maxReviewRounds: task.maxReviewRounds ?? 5,
@@ -632,6 +637,7 @@ export async function executeReviewedLifecycle(
       fileContents,
       implResult.toolCalls,
       task.planContext,
+      evidence.block,
     );
 
     let finalImplResult = implResult;
@@ -687,6 +693,7 @@ export async function executeReviewedLifecycle(
           reworkContents,
           reworkResult.toolCalls,
           task.planContext,
+          evidence.block,
         );
 
         specStatus = specResult.status;
@@ -716,6 +723,7 @@ export async function executeReviewedLifecycle(
         fileContents,
         finalImplResult.toolCalls,
         finalImplResult.filesWritten,
+        evidence.block,
       );
 
       if (qualityResult.status === 'changes_required') {
@@ -765,6 +773,7 @@ export async function executeReviewedLifecycle(
             reworkContents,
             reworkResult.toolCalls,
             reworkResult.filesWritten,
+            evidence.block,
           );
 
           if (qualityResult.status === 'approved') break;
@@ -780,6 +789,24 @@ export async function executeReviewedLifecycle(
     }
 
     const finalReport = specReport ?? finalImplReport;
+
+    const concerns = [...(finalImplResult.concerns ?? [])];
+    let finalWorkerStatus = workerStatus;
+    if (verification.status === 'failed') {
+      concerns.push({
+        source: 'verification',
+        severity: 'high',
+        message: 'Verification failed after implementation.',
+      });
+      if (finalWorkerStatus === 'done') finalWorkerStatus = 'done_with_concerns';
+    }
+    if (evidence.diffTruncated) {
+      concerns.push({
+        source: 'diff_truncated',
+        severity: 'medium',
+        message: 'Implementation diff exceeded the reviewer evidence byte cap and was truncated.',
+      });
+    }
 
     const aggregated = aggregateResult(
       finalReport,
@@ -809,7 +836,8 @@ export async function executeReviewedLifecycle(
     return {
       ...finalImplResult,
       status: finalStatus,
-      workerStatus,
+      workerStatus: finalWorkerStatus,
+      concerns,
       specReviewStatus: specStatus,
       qualityReviewStatus: qualityResult.status,
       specReviewReason: specResult.errorReason,
