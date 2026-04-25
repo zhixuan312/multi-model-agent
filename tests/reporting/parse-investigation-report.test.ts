@@ -68,3 +68,52 @@ describe('parseCitations', () => {
     expect(r.malformedCitationLines).toBe(0);
   });
 });
+import { parseConfidence } from '../../packages/core/src/reporting/parse-investigation-report.js';
+
+describe('parseConfidence', () => {
+  it('parses "high — rationale"', () => {
+    expect(parseConfidence(['high — all citations verified'])).toEqual({ level: 'high', rationale: 'all citations verified' });
+  });
+
+  it('parses "medium -- rationale"', () => {
+    expect(parseConfidence(['medium -- partial coverage'])).toEqual({ level: 'medium', rationale: 'partial coverage' });
+  });
+
+  it('parses "low: rationale"', () => {
+    expect(parseConfidence(['low: no test coverage found'])).toEqual({ level: 'low', rationale: 'no test coverage found' });
+  });
+
+  it('parses bare level token (no separator)', () => {
+    expect(parseConfidence(['high'])).toEqual({ level: 'high', rationale: '' });
+  });
+
+  it('is case-insensitive on the level token but normalizes to lowercase', () => {
+    expect(parseConfidence(['HIGH — x'])).toEqual({ level: 'high', rationale: 'x' });
+  });
+
+  it('appends subsequent non-blank lines to the rationale separated by newline', () => {
+    expect(parseConfidence(['high — first', 'second line', '', 'third line'])).toEqual({ level: 'high', rationale: 'first\nsecond line\nthird line' });
+  });
+
+  it('returns null for an unparseable level token', () => {
+    expect(parseConfidence(['maybe?'])).toBeNull();
+    expect(parseConfidence(['highly confident'])).toBeNull();
+  });
+
+  it('returns null for empty input', () => {
+    expect(parseConfidence([])).toBeNull();
+    expect(parseConfidence([''])).toBeNull();
+  });
+
+  it('rejects "high confidence" (no separator)', () => {
+    expect(parseConfidence(['high confidence'])).toBeNull();
+  });
+
+  it('rejects "high—because" (em-dash without surrounding spaces)', () => {
+    expect(parseConfidence(['high—because'])).toBeNull();
+  });
+
+  it('rejects "high--because" (dash without surrounding spaces)', () => {
+    expect(parseConfidence(['high--because'])).toBeNull();
+  });
+});

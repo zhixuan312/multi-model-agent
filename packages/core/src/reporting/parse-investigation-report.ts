@@ -52,3 +52,26 @@ export function parseCitations(rawLines: string[]): ParseCitationsResult {
   }
   return { citations, malformedCitationLines: malformed };
 }
+
+export interface Confidence {
+  level: 'high' | 'medium' | 'low';
+  rationale: string;
+}
+
+const CONFIDENCE_HEAD_RE = /^(high|medium|low)(?:(?:\s+(?:—|--)\s+|:\s*)(.*))?\s*$/i;
+
+export function parseConfidence(rawLines: string[]): Confidence | null {
+  const firstIdx = rawLines.findIndex(l => l.trim());
+  if (firstIdx === -1) return null;
+  const head = rawLines[firstIdx].trim();
+  const m = head.match(CONFIDENCE_HEAD_RE);
+  if (!m) return null;
+  const level = m[1].toLowerCase() as 'high' | 'medium' | 'low';
+  const headRationale = m[2]?.trim() ?? '';
+  const rest = rawLines
+    .slice(firstIdx + 1)
+    .map(l => l.trim())
+    .filter(Boolean);
+  const rationale = [headRationale, ...rest].filter(Boolean).join('\n');
+  return { level, rationale };
+}
