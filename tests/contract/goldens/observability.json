@@ -9,10 +9,6 @@
       "requiredFields": ["event", "ts", "batchId", "taskIndex", "elapsed", "stage", "tools", "read", "wrote", "cost", "idle_ms"]
     },
     {
-      "name": "stage_change",
-      "requiredFields": ["event", "ts", "batchId", "taskIndex", "from", "to"]
-    },
-    {
       "name": "batch_completed",
       "requiredFields": ["event", "ts", "batchId", "tool", "durationMs", "taskCount"]
     }
