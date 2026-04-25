@@ -53,13 +53,6 @@ export async function executeReviewedLifecycle(
   // Output targets are paths that do not yet exist on disk.
   const { outputTargets } = partitionFilePaths(task.filePaths, task.cwd ?? process.cwd());
 
-  let escalationProvider: Provider | undefined;
-  try {
-    escalationProvider = createProvider(otherSlot, config);
-  } catch {
-    // Other slot not configured — auto-escalation not available
-  }
-
   const stageCount =
     reviewPolicy === 'off' ? 1 :
     reviewPolicy === 'spec_only' ? 3 :
@@ -537,7 +530,7 @@ export async function executeReviewedLifecycle(
     const implResult = await delegateWithEscalation(
       withDoneCondition(task),
       [resolved.provider],
-      { explicitlyPinned: false, escalateToProvider: escalationProvider, onProgress: wrappedOnProgress },
+      { explicitlyPinned: false, onProgress: wrappedOnProgress },
     );
 
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
