@@ -2,6 +2,8 @@
 
 **Last updated:** 2026-04-26  •  **Schema version:** 1  •  **Code:** [types.ts](../packages/core/src/telemetry/types.ts) · [event-builder.ts](../packages/core/src/telemetry/event-builder.ts) · [queue.ts](../packages/server/src/telemetry/queue.ts) · [consent.ts](../packages/server/src/telemetry/consent.ts)
 
+> **3.6.0 release note — local-only.** This release ships the telemetry instrumentation and CLI, but **does not upload anything over the network**. Even when you opt in (`mmagent telemetry enable`), events queue only to `~/.multi-model/telemetry-queue.ndjson` on your machine and can be inspected with `mmagent telemetry dump-queue`. The schema below describes what *would* be uploaded once the receiver service is deployed in a follow-up release. Until then, the truthful summary of "what leaves your machine" is: nothing.
+
 ## What we collect (client-submitted)
 
 ### Envelope (`UploadBatch`)
