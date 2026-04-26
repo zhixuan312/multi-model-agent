@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.3] - 2026-04-26
+
+### Added
+- **Telemetry uploader wired into `mmagent serve` (server).** The `Flusher` class shipped in 3.6.0 but was never instantiated, so opt-in events sat in `~/.multi-model/telemetry-queue.ndjson` indefinitely. 3.6.3 starts a flusher at serve boot that POSTs gzipped `UploadBatch` payloads on a 5-minute cadence (5 s boot delay, exponential backoff with 1 hr cap on transport errors). Drain is wired into both signal-driven shutdown and programmatic `stop()` so in-flight events get a 2 s window to ship before exit.
+- **Self-hostable telemetry endpoint (server).** Operators can override the upload destination with `MMAGENT_TELEMETRY_ENDPOINT=<your-url>`; setting it to an empty string disables uploads (events stay queued locally). **Consent stays opt-in:** with `MMAGENT_TELEMETRY` unset and no `telemetry.enabled` in config, the recorder builds nothing, the queue stays empty, and the flusher's tick is a no-op regardless of which endpoint is configured. Out-of-the-box behavior unchanged — nothing leaves your machine until you explicitly opt in.
+
 ## [3.6.2] - 2026-04-26
 
 ### Fixed
