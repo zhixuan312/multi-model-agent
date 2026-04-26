@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.2] - 2026-04-26
+
+### Fixed
+- **Telemetry recorder fired on only 2 of ~5 lifecycle exit paths (core).** `recorder.recordTaskCompleted` was wired only at the natural success-return and the catch-block, so early returns (`reviewPolicy: 'off'`, diff-only, all-tiers-unavailable, both-unavailable) never produced a `task.completed` event. Now hoisted into a `finally` block via a `__recordOnce(result)` helper that captures the final `RunResult` from any exit path, ensuring exactly-one event per task regardless of which branch the lifecycle takes.
+- **`errorCode` defaulted to `'other'` for non-error outcomes (core).** When `terminalStatus` was `incomplete` / `timeout` / `cost_exceeded` / `brief_too_vague` / `unavailable`, the event-builder set `errorCode: 'other'` even though those terminal states aren't error categories. Now `errorCode` is `null` unless `terminalStatus === 'error'` or the runner attached an explicit `structuredError.code` — keeps "Top failure modes" panels from being polluted with non-failures.
+
 ## [3.6.1] - 2026-04-26
 
 ### Fixed

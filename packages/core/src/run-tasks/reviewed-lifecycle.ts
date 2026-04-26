@@ -771,6 +771,17 @@ export async function executeReviewedLifecycle(
     }
   }
 
+  // Tracks the final RunResult across every exit path so the `finally` block
+  // below fires `recorder.recordTaskCompleted` exactly once regardless of which
+  // `return` the lifecycle takes — the success path, every early return inside
+  // the try (reviewPolicy='off', diff-only, all-tiers-unavailable, …), and the
+  // catch path. Without this, the recorder only fires on 2 of ~5 exit paths.
+  let __finalRunResult: RunResult | undefined;
+  const __recordOnce = (r: RunResult): RunResult => {
+    if (__finalRunResult === undefined) __finalRunResult = r;
+    return r;
+  };
+
   try {
     // The dirty-tree precondition + git baseline only apply to artifact-producing tasks
     // (those with autoCommit === true). Non-artifact presets — audit, review, verify,
@@ -851,7 +862,7 @@ export async function executeReviewedLifecycle(
         assignedTier: initialDecision.impl,
         reason: initialImpl.unavailableReason!,
       });
-      return adaptForAllTiersUnavailable(initialImpl.result, 'spec', 0);
+      return __recordOnce(adaptForAllTiersUnavailable(initialImpl.result, 'spec', 0));
     }
 
     const implResult = initialImpl.result;
@@ -901,7 +912,7 @@ export async function executeReviewedLifecycle(
           filePathsSkipped,
           fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         }, verification);
-        return terminal;
+        return __recordOnce(terminal);
       }
 
       const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
@@ -982,7 +993,7 @@ export async function executeReviewedLifecycle(
         implementationReport: implReport,
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
       }, verification);
-      return terminal;
+      return __recordOnce(terminal);
     }
 
     const reviewModel = providerFor(pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot }))?.config.model ?? null;
@@ -1038,7 +1049,7 @@ export async function executeReviewedLifecycle(
             : 'error')
           : 'skipped',
         0);
-      return resolveDiffOnlyTerminal({
+      return __recordOnce(resolveDiffOnlyTerminal({
         ...implResult,
         workerStatus,
         specReviewStatus: 'skipped',
@@ -1049,7 +1060,7 @@ export async function executeReviewedLifecycle(
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         agents: agentEnvelope('skipped', 'skipped'),
         models: { implementer: implModel, specReviewer: reviewModel, qualityReviewer: null },
-      }, verdict, verification, evidence.diffTruncated);
+      }, verdict, verification, evidence.diffTruncated));
     }
 
     let finalImplResult = implResult;
@@ -1113,7 +1124,7 @@ export async function executeReviewedLifecycle(
       if (reworkCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
         if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
-        return adaptForAllTiersUnavailable(reworkCall.result, 'spec', specAttemptIndex);
+        return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'spec', specAttemptIndex));
       }
       finalImplResult = reworkCall.result;
       latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };
@@ -1194,7 +1205,7 @@ export async function executeReviewedLifecycle(
         if (reworkCall.bothUnavailable) {
           emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
           if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
-          return adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex);
+          return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex));
         }
         finalImplResult = reworkCall.result;
         latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };
@@ -1320,32 +1331,25 @@ export async function executeReviewedLifecycle(
       verification,
     };
 
-    try {
-      recorder?.recordTaskCompleted({
-        route: _route ?? 'delegate',
-        taskSpec: task,
-        runResult,
-        client: _client ?? 'claude-code',
-        triggeringSkill: _triggeringSkill ?? 'direct',
-        parentModel: task.parentModel ?? null,
-      });
-    } catch { /* silent — bedrock invariant */ }
-
-    return runResult;
+    return __recordOnce(runResult);
   } catch (err) {
     const errorRunResult = withVerification(workerErrorResult(err));
-    try {
-      recorder?.recordTaskCompleted({
-        route: _route ?? 'delegate',
-        taskSpec: task,
-        runResult: errorRunResult,
-        client: _client ?? 'claude-code',
-        triggeringSkill: _triggeringSkill ?? 'direct',
-        parentModel: task.parentModel ?? null,
-      });
-    } catch { /* silent — bedrock invariant */ }
-    return errorRunResult;
+    return __recordOnce(errorRunResult);
   } finally {
+    // Fire telemetry recorder once across every exit path. Bedrock invariant:
+    // telemetry failure NEVER throws to the user task.
+    if (__finalRunResult !== undefined) {
+      try {
+        recorder?.recordTaskCompleted({
+          route: _route ?? 'delegate',
+          taskSpec: task,
+          runResult: __finalRunResult,
+          client: _client ?? 'claude-code',
+          triggeringSkill: _triggeringSkill ?? 'direct',
+          parentModel: task.parentModel ?? null,
+        });
+      } catch { /* silent */ }
+    }
     heartbeat?.setStage('terminal', 8);
     heartbeat?.stop();
     clearInterval(stallWatchdogInterval);

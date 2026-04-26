@@ -42,7 +42,20 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
   const { route, taskSpec, runResult, client, triggeringSkill, parentModel } = ctx;
 
   const terminalStatus = deriveTerminalStatus(runResult);
-  const errorCode = terminalStatus === 'ok' ? null : deriveErrorCode(runResult);
+  // errorCode is set only when there's a *real* failure to attribute. R1 forbids
+  // it on `ok`. For `error` we derive from structuredError + terminationReason.
+  // For `incomplete` / `timeout` / `cost_exceeded` / `brief_too_vague` /
+  // `unavailable` — these are non-success outcomes but not error categories;
+  // leave null unless the runner attached an explicit structured code. Avoids
+  // the lazy `'other'` fallback that pollutes failure-mode panels.
+  const errorCode = (() => {
+    if (terminalStatus === 'ok')    return null;
+    if (terminalStatus === 'error') return deriveErrorCode(runResult);
+    if (runResult.structuredError?.code) {
+      return runResult.structuredError.code as ErrorCodeType;
+    }
+    return null;
+  })();
   const workerStatus = deriveWorkerStatus(runResult);
   const escalated = (runResult.escalationLog?.length ?? 0) > 1;
   const fallbackTriggered = (runResult.agents?.fallbackOverrides?.length ?? 0) > 0;
