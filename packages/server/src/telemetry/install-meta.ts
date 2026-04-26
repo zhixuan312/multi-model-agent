@@ -7,7 +7,7 @@ const KNOWN_LANG = new Set([
 
 function bucketTz(): InstallMetadataType['tzOffsetBucket'] {
   const utcHours = -new Date().getTimezoneOffset() / 60;
-  if (utcHours <= -6) return 'utc_minus_12_to_minus_6';
+  if (utcHours < -6) return 'utc_minus_12_to_minus_6';
   if (utcHours < 0) return 'utc_minus_6_to_0';
   if (utcHours < 6) return 'utc_0_to_plus_6';
   if (utcHours < 12) return 'utc_plus_6_to_plus_12';
