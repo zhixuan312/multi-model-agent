@@ -168,6 +168,12 @@ export const multiModelConfigSchema = z.object({
     limits: serverLimitsSchema,
     autoUpdateSkills: z.boolean().default(DEFAULT_SERVER.autoUpdateSkills),
   }).default(() => DEFAULT_SERVER),
+  // Per spec §7.1: opt-in telemetry. The recorder reads this independently;
+  // we only need to allow the key here so the strict() validation doesn't
+  // reject configs that have it.
+  telemetry: z.object({
+    enabled: z.boolean(),
+  }).optional(),
 }).strict();
 
 /** Inferred type for the standalone server configuration block. */
