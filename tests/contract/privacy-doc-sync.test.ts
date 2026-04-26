@@ -7,10 +7,10 @@ describe('PRIVACY.md ↔ schema sync', () => {
     const repoRoot = join(__dirname, '..', '..');
     const md = readFileSync(join(repoRoot, 'PRIVACY.md'), 'utf8');
     const expected = [
-      'installId', 'mmagentVersion', 'os', 'nodeMajor', 'language', 'tzOffsetBucket',
+      'installId', 'schemaVersion', 'mmagentVersion', 'os', 'nodeMajor', 'language', 'tzOffsetBucket',
       'route', 'client', 'terminalStatus', 'implementerModel',
       'costBucket', 'durationBucket', 'fileCountBucket',
-      'errorCode',
+      'verdict', 'errorCode',
     ];
     for (const f of expected) {
       const occurrences = (md.match(new RegExp(`\\b${f}\\b`, 'g')) || []).length;

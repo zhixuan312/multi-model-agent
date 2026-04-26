@@ -12,6 +12,7 @@ Every uploaded event belongs to one of four types: `task.completed`, `session.st
 
 ### Install metadata (sent once per batch)
 
+- **schemaVersion** — The schema version integer for forward compatibility (e.g. `1`). Public; same for everyone on the same version.
 - **installId** — A random UUIDv4 generated locally on first telemetry-eligible event. Pseudonymous; rotates every 365 days. No link to your identity, hostname, or IP.
 - **mmagentVersion** — The SemVer version of the CLI (e.g. `3.6.0`).
 - **os** — OS family: `darwin`, `linux`, `win32`, or `other`.
@@ -41,7 +42,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 - **escalated** — Whether the task escalated to a more capable model.
 - **fallbackTriggered** — Whether any fallback model overrides were used.
 - **topToolNames** — Top 5 tool names by call count, from a fixed allowlist (`readFile`, `writeFile`, `editFile`, `runShell`, `listFiles`, `grep`, `glob`, `other`).
-- **stages** — Per-stage breakdown (implementing, verifying, spec_review, spec_rework, quality_review, quality_rework, diff_review, committing). Each stage reports only structural data: whether it was entered, bucketed duration/cost, model family, and review verdicts/concerning categories. Stage-level verdicts use fixed enums (`approved`, `concerns`, `changes_required`, `error`, `skipped`, `not_applicable`). Concern categories likewise use fixed enums (`missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `other`).
+- **stages** — Per-stage breakdown (implementing, verifying, spec_review, spec_rework, quality_review, quality_rework, diff_review, committing). Each stage reports only structural data: whether it was entered, bucketed duration/cost, model family, and review verdicts/concerning categories. Review stages (spec_review, quality_review, diff_review) include a `verdict` field with fixed enum values (`approved`, `concerns`, `changes_required`, `error`, `skipped`, `not_applicable`). Concern categories likewise use fixed enums (`missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `other`).
 
 ### Session and install events
 
