@@ -337,6 +337,25 @@ describe('HeartbeatTimer', () => {
     timer.stop();
   });
 
+  // Regression: callers must not shrink stageCount below stageIndex after a
+  // post-implementing stage (verifying/diff_review/committing) auto-grew it.
+  // See reviewed-lifecycle.ts: when worker writes 0 files but autoCommit=true,
+  // verifying has already advanced stageIndex past the initial start() cap.
+  it('off policy + advance to verifying: stageCount auto-grows and is not shrunk', () => {
+    const events: ProgressEvent[] = [];
+    const timer = new HeartbeatTimer((e) => events.push(e), {
+      provider: 'test',
+      intervalMs: 10_000,
+    });
+    timer.start(1); // reviewPolicy='off' starts the pipeline at 1
+    timer.setStage('verifying', 4); // autoCommit=true path advances past cap
+    timer.stop();
+    const final = events.find(e => e.final)!;
+    expect(final.stage).toBe('verifying');
+    expect(final.stageIndex).toBe(4);
+    expect(final.stageCount).toBe(4); // auto-grown, must not be shrunk back to 1
+  });
+
   it('start() throws on invalid stageCount', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
