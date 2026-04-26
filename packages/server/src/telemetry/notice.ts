@@ -2,6 +2,30 @@ import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 import type { ConsentDecision } from '@zhixuan92/multi-model-agent-core/telemetry/consent-rules';
 
+export function firstRunNoticeText(): string {
+  return `multi-model-agent collects anonymous usage data to help improve the product.
+
+  We collect:
+    • An anonymous random ID, regenerated every 365 days
+    • mmagent version, OS family, Node.js major version, language
+    • Counts and bucketed durations/costs of tasks (no contents, no paths)
+    • Routes used (delegate, audit, review, verify, debug, execute-plan)
+
+  We never collect:
+    • Your name, email, IP address, hostname, or username
+    • File paths, project names, or repository information
+    • Any content from your prompts, model output, code, or commits
+    • Stack traces or raw error messages — only enum codes
+
+  Full policy: https://github.com/zhixuan312/multi-model-agent/blob/main/PRIVACY.md
+
+  To opt out:
+    export MMAGENT_TELEMETRY=0
+    # or in your config: telemetry.enabled = false
+    # or run: mmagent telemetry disable
+`;
+}
+
 const FLAG_FILE = 'telemetry-notice-shown';
 const HR = '────────────────────────────────────────────────────────────────────────────';
 const PRIVACY_URL = 'https://github.com/zhixuan312/multi-model-agent/blob/main/docs/PRIVACY.md';
