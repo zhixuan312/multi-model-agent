@@ -1,6 +1,7 @@
 import { gzipSync } from 'node:zlib';
 import { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
+import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
 
 export interface FlusherOptions {
@@ -197,11 +198,14 @@ export class Flusher {
   ): Promise<UploadResult> {
     const first = group.records[0];
     const events = group.records.map(r => r.event);
-    const body = gzipSync(JSON.stringify({
+    const jsonBody = JSON.stringify({
       schemaVersion: first.schemaVersion,
       install: first.install,
       events,
-    }));
+    });
+    const identity = getOrCreateIdentity(this.#dir);
+    const signature = sign(identity.privateKeyPkcs8, jsonBody);
+    const body = gzipSync(Buffer.from(jsonBody, 'utf8'));
 
     try {
       const response = await fetch(this.#endpoint, {
@@ -209,6 +213,9 @@ export class Flusher {
         headers: {
           'Content-Encoding': 'gzip',
           'Content-Type': 'application/json',
+          'X-Mmagent-Install-Id': identity.installId,
+          'X-Mmagent-Signature': signature,
+          'X-Mmagent-Pubkey': identity.publicKeyRaw,
         },
         body,
         signal,

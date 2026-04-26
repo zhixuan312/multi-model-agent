@@ -1,6 +1,14 @@
 import { describe, it, expect, vi, afterEach } from 'vitest';
 import { buildInstallMeta } from '../../packages/server/src/telemetry/install-meta.js';
 
+const orig = Date.prototype.getTimezoneOffset;
+afterEach(() => { Date.prototype.getTimezoneOffset = orig; });
+
+function withTzOffsetMinutes(min: number, fn: () => void) {
+  Date.prototype.getTimezoneOffset = () => min;
+  try { fn(); } finally { Date.prototype.getTimezoneOffset = orig; }
+}
+
 describe('install-meta builder', () => {
   it('builds os/nodeMajor/language/tzOffsetBucket from current process', () => {
     const meta = buildInstallMeta({
@@ -123,6 +131,27 @@ describe('install-meta builder', () => {
         installId: 'a'.repeat(36),
         mmagentVersion: '0.0.0',
       }).tzOffsetBucket).toBe('utc_plus_12_to_plus_15');
+    });
+
+    it('UTC-6 maps to utc_minus_6_to_0 (half-open contract)', () => {
+      withTzOffsetMinutes(360, () => {
+        const meta = buildInstallMeta({ installId: '11111111-1111-4111-8111-111111111111', mmagentVersion: '0.2.0' });
+        expect(meta.tzOffsetBucket).toBe('utc_minus_6_to_0');
+      });
+    });
+
+    it('UTC-7 still maps to utc_minus_12_to_minus_6', () => {
+      withTzOffsetMinutes(420, () => {
+        const meta = buildInstallMeta({ installId: '11111111-1111-4111-8111-111111111111', mmagentVersion: '0.2.0' });
+        expect(meta.tzOffsetBucket).toBe('utc_minus_12_to_minus_6');
+      });
+    });
+
+    it('UTC+0 maps to utc_0_to_plus_6', () => {
+      withTzOffsetMinutes(0, () => {
+        const meta = buildInstallMeta({ installId: '11111111-1111-4111-8111-111111111111', mmagentVersion: '0.2.0' });
+        expect(meta.tzOffsetBucket).toBe('utc_0_to_plus_6');
+      });
     });
   });
 });

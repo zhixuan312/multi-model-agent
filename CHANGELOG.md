@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.4] - 2026-04-27
+
+### Added
+- **Per-install Ed25519 identity, trust-on-first-use (core).** First serve generates a keypair stored at `~/.multi-model/identity/{public.pem,private.pem,install-id}`. The `installId` is now derived from the public key (TOFU) rather than a separately-allocated UUID; `recorder` uses `identity.installId` so every event is bound to the local key material.
+- **Signed telemetry uploads (server).** The `Flusher` now serializes the upload batch as canonical JSON, signs it with the install's Ed25519 private key, and sets `X-Mmagent-Public-Key`, `X-Mmagent-Signature`, and `X-Mmagent-Install-Id` headers on every POST. Receivers can verify the payload was produced by the install whose `installId` is reported, and reject tampered batches.
+- **Top-level `PRIVACY.md` (repo + npm).** Published privacy contract: every collected field, every enum value, every consent surface. A new contract test (`tests/contract/privacy-fields.test.ts`) keeps the doc honest by failing CI if a schema field is added without a matching disclosure entry.
+- **Telemetry first-run notice rewording (server).** The first-boot stderr banner now leads with "anonymous-by-design": consent surface, opt-in path, and link to PRIVACY.md — no surprises on the next boot.
+
+### Changed
+- **Strict Zod validation on `UploadBatch` and every event shape (core).** `UploadBatch` and each `TelemetryEvent` variant now use `.strict()`, so unknown fields fail closed instead of being silently accepted. Event-builders are the only producers; downstream backends can rely on the schema being exhaustive.
+
+### Fixed
+- **`bucketTz` placed UTC−6 in the wrong bucket (core).** The boundary `[−6, 0)` was being treated as `(−6, 0)`, so an offset of exactly −6h fell into `utc_minus_12_to_minus_6` instead of `utc_minus_6_to_0`. Now half-open at the lower edge per the documented enum semantics.
+
 ## [3.6.3] - 2026-04-26
 
 ### Added
@@ -847,7 +861,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...HEAD
+[3.6.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.3...v3.6.4
 [3.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.4.0...v3.5.0
 [3.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.3.0...v3.4.0

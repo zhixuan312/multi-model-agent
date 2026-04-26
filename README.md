@@ -126,8 +126,8 @@ mmagent update-skills [--dry-run] [--json]   # refresh installed skills after up
 mmagent telemetry status                    # show consent state + source (env / config / default)
 mmagent telemetry enable                    # opt in (writes ~/.multi-model/config.json)
 mmagent telemetry disable                   # opt out + delete local queue
-mmagent telemetry reset-id                  # regenerate the pseudonymous install UUID
-mmagent telemetry dump-queue                # print the locally-queued events as JSON (3.6.0 stays local)
+mmagent telemetry reset-id                  # rotate the local Ed25519 identity (new install-id next run)
+mmagent telemetry dump-queue                # print the locally-queued events as JSON (pre-upload inspection)
 ```
 
 ## Operations
@@ -173,7 +173,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 ## What's new
 
-Latest: **3.6.3** — Anonymous usage telemetry, **off by default**. Out of the box nothing leaves your machine. Run `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`) if you'd like to share anonymous usage data with the project. `mmagent telemetry status|enable|disable|reset-id|dump-queue` gives you full control. See [PRIVACY.md](./docs/PRIVACY.md) for the exhaustive field-by-field disclosure — nothing personal, no prompts, no file paths.
+Latest: **3.6.4** — Anonymous usage telemetry, **off by default**, now signed end-to-end. When opted in, every upload batch is signed with a per-install Ed25519 key (TOFU; generated on first serve, lives at `~/.multi-model/identity/`); receivers can verify each batch came from the install whose `installId` it claims. Schemas are now `.strict()` so unknown fields fail closed instead of silently leaking. `mmagent telemetry status|enable|disable|reset-id|dump-queue` still gives you full control; nothing leaves your machine until you explicitly opt in. See [PRIVACY.md](./PRIVACY.md) for the exhaustive field-by-field disclosure — nothing personal, no prompts, no file paths.
 
 Full history in [CHANGELOG](./CHANGELOG.md).
 

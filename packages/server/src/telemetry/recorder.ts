@@ -1,7 +1,8 @@
 import { existsSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { decide } from './consent.js';
-import { getOrCreateInstallId, deleteInstallId } from './install-id.js';
+import { getOrCreateIdentity } from './identity.js';
+import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
@@ -52,7 +53,7 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
 
   const resolveInstallId = (): string => {
     if (!_installId) {
-      _installId = getOrCreateInstallId(homeDir);
+      _installId = getOrCreateIdentity(homeDir).installId;
     }
     return _installId;
   };
