@@ -4,7 +4,7 @@ const homeDir = '/tmp/mma-recorder-test';
 
 const {
   decideMock,
-  getOrCreateInstallIdMock,
+  getOrCreateIdentityMock,
   buildInstallMetaMock,
   readGenerationMock,
   queueAppendMock,
@@ -18,7 +18,7 @@ const {
   unlinkSyncMock,
 } = vi.hoisted(() => ({
   decideMock: vi.fn(),
-  getOrCreateInstallIdMock: vi.fn(),
+  getOrCreateIdentityMock: vi.fn(),
   buildInstallMetaMock: vi.fn(),
   readGenerationMock: vi.fn(),
   queueAppendMock: vi.fn(),
@@ -36,8 +36,11 @@ vi.mock('../../packages/server/src/telemetry/consent.js', () => ({
   decide: decideMock,
 }));
 
+vi.mock('../../packages/server/src/telemetry/identity.js', () => ({
+  getOrCreateIdentity: getOrCreateIdentityMock,
+}));
+
 vi.mock('../../packages/server/src/telemetry/install-id.js', () => ({
-  getOrCreateInstallId: getOrCreateInstallIdMock,
   deleteInstallId: deleteInstallIdMock,
 }));
 
@@ -79,7 +82,7 @@ describe('recorder', () => {
     vi.clearAllMocks();
     // Default: consent enabled
     decideMock.mockReturnValue({ enabled: true, source: 'config' });
-    getOrCreateInstallIdMock.mockReturnValue('00000000-0000-0000-0000-000000000001');
+    getOrCreateIdentityMock.mockReturnValue({ installId: '00000000-0000-0000-0000-000000000001', generatedAt: '2025-01-01T00:00:00.000Z', privateKeyPkcs8: '', publicKeyRaw: '' });
     buildInstallMetaMock.mockReturnValue({
       installId: '00000000-0000-0000-0000-000000000001',
       mmagentVersion: '3.6.0',
@@ -111,7 +114,7 @@ describe('recorder', () => {
     // Let any fire-and-forget promises settle
     await vi.waitFor(() => expect(queueAppendMock).not.toHaveBeenCalled());
 
-    expect(getOrCreateInstallIdMock).not.toHaveBeenCalled();
+    expect(getOrCreateIdentityMock).not.toHaveBeenCalled();
     expect(buildInstallMetaMock).not.toHaveBeenCalled();
     expect(buildTaskCompletedEventMock).not.toHaveBeenCalled();
     expect(buildSessionStartedEventMock).not.toHaveBeenCalled();
@@ -128,17 +131,17 @@ describe('recorder', () => {
     // First call: should resolve install-id
     r.recordTaskCompleted({ route: 'delegate', taskSpec: {}, runResult: {} as any, client: 'claude-code', triggeringSkill: 'direct', parentModel: null });
 
-    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+    expect(getOrCreateIdentityMock).toHaveBeenCalledTimes(1);
     expect(buildInstallMetaMock).toHaveBeenCalledTimes(1);
     expect(buildInstallMetaMock).toHaveBeenCalledWith({
       installId: '00000000-0000-0000-0000-000000000001',
       mmagentVersion: '3.6.0',
     });
 
-    // Second call: install-id should be cached (no second getOrCreateInstallId call)
+    // Second call: install-id should be cached (no second getOrCreateIdentity call)
     r.recordSessionStarted({ defaultTier: 'standard', diagnosticsEnabled: false, autoUpdateSkills: false, providersConfigured: [] });
 
-    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+    expect(getOrCreateIdentityMock).toHaveBeenCalledTimes(1);
     expect(buildInstallMetaMock).toHaveBeenCalledTimes(2);
   });
 
@@ -264,8 +267,8 @@ describe('recorder', () => {
     expect(() => r.recordTaskCompleted({ route: 'delegate', taskSpec: {}, runResult: {} as any, client: 'claude-code', triggeringSkill: 'direct', parentModel: null })).not.toThrow();
 
     expect(queueAppendMock).not.toHaveBeenCalled();
-    // getOrCreateInstallId was called before buildInstallMeta threw
-    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+    // getOrCreateIdentity was called before buildInstallMeta threw
+    expect(getOrCreateIdentityMock).toHaveBeenCalledTimes(1);
   });
 
   // ── revokeIdentity ─────────────────────────────────────────────────
@@ -278,7 +281,7 @@ describe('recorder', () => {
 
     // Record an event first to set up cached install-id
     r.recordTaskCompleted({ route: 'delegate', taskSpec: {}, runResult: {} as any, client: 'claude-code', triggeringSkill: 'direct', parentModel: null });
-    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(1);
+    expect(getOrCreateIdentityMock).toHaveBeenCalledTimes(1);
 
     // revokeIdentity with deleteInstallId
     await r.revokeIdentity({ deleteInstallId: true });
@@ -300,6 +303,6 @@ describe('recorder', () => {
     // A new event after revokeIdentity gets a fresh install-id
     // (previous _installId was cleared)
     r.recordSessionStarted({ defaultTier: 'standard', diagnosticsEnabled: false, autoUpdateSkills: false, providersConfigured: [] });
-    expect(getOrCreateInstallIdMock).toHaveBeenCalledTimes(2);
+    expect(getOrCreateIdentityMock).toHaveBeenCalledTimes(2);
   });
 });
