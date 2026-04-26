@@ -123,6 +123,11 @@ mmagent logs  [--follow] [--batch=<id>]   # tail today's diagnostic log
 mmagent print-token                 # print the current auth token
 mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]
 mmagent update-skills [--dry-run] [--json]   # refresh installed skills after upgrade
+mmagent telemetry status                    # show consent state + source (env / config / default)
+mmagent telemetry enable                    # opt in (writes ~/.multi-model/config.json)
+mmagent telemetry disable                   # opt out + delete local queue
+mmagent telemetry reset-id                  # regenerate the pseudonymous install UUID
+mmagent telemetry dump-queue                # print the locally-queued events as JSON (3.6.0 stays local)
 ```
 
 ## Operations
