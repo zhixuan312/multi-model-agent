@@ -8,18 +8,25 @@ function formatElapsed(ms: number): string {
   return `${minutes}m ${seconds}s`;
 }
 
-export type HeartbeatStage = 'implementing' | 'spec_review' | 'spec_rework' | 'quality_review' | 'quality_rework';
+export type HeartbeatStage =
+  | 'implementing' | 'spec_review' | 'spec_rework'
+  | 'quality_review' | 'quality_rework'
+  | 'verifying' | 'diff_review' | 'committing' | 'terminal';
 
 const STAGE_LABELS: Record<HeartbeatStage, string> = {
-  implementing: 'Implementing',
-  spec_review: 'Spec review',
-  spec_rework: 'Spec rework',
+  implementing:   'Implementing',
+  spec_review:    'Spec review',
+  spec_rework:    'Spec rework',
   quality_review: 'Quality review',
   quality_rework: 'Quality rework',
+  verifying:      'Verifying',
+  diff_review:    'Diff review',
+  committing:     'Committing',
+  terminal:       'Done',
 };
 
 const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
-  'spec_review', 'spec_rework', 'quality_review', 'quality_rework',
+  'spec_review', 'spec_rework', 'quality_review', 'quality_rework', 'diff_review',
 ]);
 
 /**
@@ -284,9 +291,12 @@ export class HeartbeatTimer {
       throw new Error(`stageIndex must be >= 1, got ${this.stageIndex}`);
     }
 
-    // Validate stageIndex <= stageCount
+    // Auto-grow stageCount when a transition advances past the current cap.
+    // Phase 0 of 3.6.0 telemetry adds verifying/diff_review/committing/terminal
+    // stages that the original `start(stageCount)` call cannot anticipate
+    // (the count was set before those stages joined the lifecycle).
     if (this.stageIndex > this.stageCount) {
-      throw new Error(`stageIndex ${this.stageIndex} exceeds stageCount ${this.stageCount}`);
+      this.stageCount = this.stageIndex;
     }
 
     this.emit(false);

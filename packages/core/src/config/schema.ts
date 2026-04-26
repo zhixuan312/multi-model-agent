@@ -72,6 +72,12 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 
 const defaultsSchema = z.object({
   timeoutMs: z.number().int().positive().default(1_800_000),
+  // Stall watchdog: abort the in-flight runner when no LLM/tool/text event
+  // has fired for this many ms. Independent of timeoutMs (which is total
+  // task wall-clock). Default 10 minutes — long enough for the longest
+  // single tool calls (large diffs, slow shell), short enough that a
+  // model that vanishes into a thinking-loop is killed promptly.
+  stallTimeoutMs: z.number().int().positive().default(600_000),
   maxCostUSD: z.number().nonnegative().default(10),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
@@ -79,6 +85,7 @@ const defaultsSchema = z.object({
   parentModel: z.string().min(1).optional(),
 }).default(() => ({
   timeoutMs: 1_800_000,
+  stallTimeoutMs: 600_000,
   maxCostUSD: 10,
   tools: 'full' as const,
   sandboxPolicy: 'cwd-only' as const,
@@ -89,12 +96,16 @@ const defaultsSchema = z.object({
 // value here = one edit, not three. Zod 4 requires explicit defaults at each
 // wrapper level when the parent field is omitted; `.default({})` alone does
 // not cascade to fill in leaf defaults.
+
+/** Raw (possibly compressed) request body cap — 256 KiB. */
+export const COMPRESSED_BODY_LIMIT_BYTES = 256 * 1024;
+
 const DEFAULT_SERVER_AUTH = {
   tokenFile: '~/.multi-model/auth-token',
 };
 
 const DEFAULT_SERVER_LIMITS = {
-  maxBodyBytes: 10_485_760,
+  maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES,
   batchTtlMs: 3_600_000,
   idleProjectTimeoutMs: 1_800_000,
   clarificationTimeoutMs: 86_400_000,

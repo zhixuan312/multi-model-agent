@@ -1,14 +1,15 @@
 // Per-request pipeline: body cap → route match → loopback guard → auth →
-// JSON parse → cwd validation → handler dispatch. Extracted from
-// server.ts as part of Ch 7 Task 42.
+// decompress → JSON parse → cwd validation → handler dispatch.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
 import { Router } from './router.js';
 import { sendError } from './errors.js';
 import { readBody } from './middleware/body-reader.js';
+import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
 import { isLoopbackAddress } from './loopback.js';
+import { resolveCallerIdentity } from './middleware/caller-identity.js';
 import type { RequestContext } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -77,7 +78,22 @@ export async function handleRequest(
     }
   }
 
-  // ── Step 5: JSON body parse ────────────────────────────────────────────────
+  // ── Step 5: Decompress body ─────────────────────────────────────────────────
+  if (rawBody !== undefined && rawBody.length > 0) {
+    const enc = req.headers['content-encoding'];
+    if (enc !== undefined) {
+      const result = await decompressBody(rawBody, enc, {
+        maxDecompressedBytes: cfg.server.limits.maxBodyBytes,
+      });
+      if (!result.ok) {
+        sendError(res, result.statusCode, result.reason, result.message);
+        return;
+      }
+      rawBody = result.body;
+    }
+  }
+
+  // ── Step 6: JSON body parse ────────────────────────────────────────────────
   let parsedBody: unknown;
   if (rawBody !== undefined && rawBody.length > 0) {
     try {
@@ -88,7 +104,7 @@ export async function handleRequest(
     }
   }
 
-  // ── Step 6: cwd query param validation ─────────────────────────────────────
+  // ── Step 7: cwd query param validation ─────────────────────────────────────
   let cwdValue: string | undefined;
   const urlObj = new URL(rawUrl, 'http://localhost');
   const requiresCwd = pipelineCfg.cwdRequiredPaths.has(pathname) ||
@@ -106,12 +122,17 @@ export async function handleRequest(
     cwdValue = cwdResult.canonicalCwd;
   }
 
-  // ── Step 7: Hand off to matched handler ────────────────────────────────────
+  // ── Step 8: Caller identity from headers ────────────────────────────────────
+  const identity = resolveCallerIdentity(req);
+
+  // ── Step 9: Hand off to matched handler ────────────────────────────────────
   const ctx: RequestContext = {
     url: urlObj,
     cwd: cwdValue,
     body: parsedBody,
     authed: !pipelineCfg.authExemptPaths.has(pathname),
+    callerClient: identity.callerClient,
+    callerSkill: identity.callerSkill,
   };
 
   await match.handler(req, res, match.params, ctx);

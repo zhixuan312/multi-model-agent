@@ -13,5 +13,9 @@ export function buildExecutionContext(input: ExecutionContextInput): ExecutionCo
     ...(input.parentModel !== undefined && { parentModel: input.parentModel }),
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     ...(input.recordHeartbeat !== undefined && { recordHeartbeat: input.recordHeartbeat }),
+    ...(input.recorder !== undefined && { recorder: input.recorder }),
+    ...(input.route !== undefined && { route: input.route }),
+    ...(input.client !== undefined && { client: input.client }),
+    ...(input.triggeringSkill !== undefined && { triggeringSkill: input.triggeringSkill }),
   };
 }

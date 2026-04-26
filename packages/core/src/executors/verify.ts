@@ -2,7 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/verify.js';
-import type { TaskSpec } from '../types.js';
+import type { TaskSpec, RunResult } from '../types.js';
 import { runTasks } from '../run-tasks/index.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
@@ -98,7 +98,13 @@ export async function executeVerify(
     } as TaskSpec));
 
     const startMs = Date.now();
-    const results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
+    let results: RunResult[];
+    try {
+      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
+    }
     const wallClockMs = Date.now() - startMs;
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
@@ -120,7 +126,13 @@ export async function executeVerify(
   }
 
   const prompt = buildVerifyPrompt(input.work, input.filePaths, input.checklist);
-  const results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger });
+  let results: RunResult[];
+  try {
+    results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+  } catch (e) {
+    const msg = e instanceof Error ? e.message : String(e);
+    results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
+  }
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(0, results);
   const costSummary = computeAggregateCost(results);

@@ -71,12 +71,34 @@ export async function executeDelegate(
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
         ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
         logger: ctx.logger,
+        ...(ctx.recorder !== undefined && { recorder: ctx.recorder }),
+        ...(ctx.route !== undefined && { route: ctx.route }),
+        ...(ctx.client !== undefined && { client: ctx.client }),
+        ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }),
       });
       intakeResult.intakeProgress.executedDrafts = results.length;
     }
   } catch (err) {
     batchAborted = true;
-    throw err;
+    const message = err instanceof Error ? err.message : String(err);
+    const fallback: RunResult = {
+      output: '',
+      status: 'error' as RunResult['status'],
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      error: message,
+      errorCode: 'executor_error',
+      retryable: false,
+      durationMs: 0,
+      structuredError: { code: 'executor_error' as const, message, where: 'executor:delegate' },
+      workerStatus: 'failed' as const,
+    };
+    results = readySpecs.length > 0 ? readySpecs.map(() => ({ ...fallback })) : [fallback];
   } finally {
     if (batchAborted) {
       try { batchCache.abort(batchId); } catch { /* already terminal */ }

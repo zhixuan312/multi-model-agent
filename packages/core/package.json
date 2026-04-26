@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.5.2",
+  "version": "3.6.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -291,6 +291,18 @@
     "./tool-schemas/retry": {
       "types": "./dist/tool-schemas/retry.d.ts",
       "import": "./dist/tool-schemas/retry.js"
+    },
+    "./telemetry/consent-rules": {
+      "types": "./dist/telemetry/consent-rules.d.ts",
+      "import": "./dist/telemetry/consent-rules.js"
+    },
+    "./telemetry/event-builder": {
+      "types": "./dist/telemetry/event-builder.d.ts",
+      "import": "./dist/telemetry/event-builder.js"
+    },
+    "./telemetry/types": {
+      "types": "./dist/telemetry/types.d.ts",
+      "import": "./dist/telemetry/types.js"
     }
   },
   "scripts": {

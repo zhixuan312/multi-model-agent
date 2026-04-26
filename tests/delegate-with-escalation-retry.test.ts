@@ -180,4 +180,106 @@ describe('delegateWithEscalation retry', () => {
     expect(provider.run).toHaveBeenCalledTimes(1);
     expect(events.filter((e) => e.kind === 'retry')).toHaveLength(0);
   });
+
+  // -------------------------------------------------------------------------
+  // taskDeadlineMs — hard task-level wall-clock cap
+  // -------------------------------------------------------------------------
+  it('clamps per-call timeoutMs to remaining budget against taskDeadlineMs', async () => {
+    const captured: { timeoutMs?: number }[] = [];
+    const provider: Provider = {
+      name: 'p',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockImplementation((_prompt, opts) => {
+        captured.push({ timeoutMs: opts.timeoutMs });
+        return Promise.resolve(makeMockResult('ok', 'done'));
+      }),
+    };
+
+    const taskDeadlineMs = Date.now() + 500; // 500ms total budget
+    await delegateWithEscalation(
+      { prompt: 'test', timeoutMs: 60_000 } as TaskSpec,
+      [provider],
+      { taskDeadlineMs },
+    );
+
+    expect(captured[0].timeoutMs).toBeGreaterThan(0);
+    expect(captured[0].timeoutMs).toBeLessThanOrEqual(500);
+  });
+
+  it('does not retry once taskDeadlineMs is past', async () => {
+    const provider = sequenceProvider([
+      makeMockResult('api_error', 'fail 1'),
+      makeMockResult('ok', 'should not be called'),
+    ]);
+
+    const result = await delegateWithEscalation(
+      { prompt: 'test' },
+      [provider],
+      { taskDeadlineMs: Date.now() - 1000 }, // already past
+    );
+
+    expect(result.status).toBe('api_error');
+    expect(provider.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('forwards abortSignal to provider.run', async () => {
+    const captured: { abortSignal?: AbortSignal }[] = [];
+    const provider: Provider = {
+      name: 'p',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockImplementation((_prompt, opts) => {
+        captured.push({ abortSignal: opts.abortSignal });
+        return Promise.resolve(makeMockResult('ok', 'done'));
+      }),
+    };
+
+    const ctrl = new AbortController();
+    await delegateWithEscalation(
+      { prompt: 'test' },
+      [provider],
+      { abortSignal: ctrl.signal },
+    );
+
+    expect(captured[0].abortSignal).toBe(ctrl.signal);
+  });
+
+  it('does not retry once abortSignal is aborted', async () => {
+    const provider = sequenceProvider([
+      makeMockResult('api_error', 'fail 1'),
+      makeMockResult('ok', 'should not be called'),
+    ]);
+
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const result = await delegateWithEscalation(
+      { prompt: 'test' },
+      [provider],
+      { abortSignal: ctrl.signal },
+    );
+
+    expect(result.status).toBe('api_error');
+    expect(provider.run).toHaveBeenCalledTimes(1);
+  });
+
+  it('skips fallback chain once taskDeadlineMs is past', async () => {
+    const failing: Provider = {
+      name: 'first',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', 'partial')),
+    };
+    const fallback: Provider = {
+      name: 'second',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue(makeMockResult('ok', 'should not be called')),
+    };
+
+    await delegateWithEscalation(
+      { prompt: 'test' },
+      [failing, fallback],
+      { taskDeadlineMs: Date.now() - 1000 },
+    );
+
+    expect(failing.run).toHaveBeenCalledTimes(1);
+    expect(fallback.run).not.toHaveBeenCalled();
+  });
 });

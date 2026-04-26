@@ -47,6 +47,23 @@ export interface ExecutionContext {
   batchId?: string;
   /** Callback invoked on every heartbeat tick; pushes a running headline to the caller's store. */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+  /** Telemetry recorder — fire-and-forget, failures are silently dropped. */
+  recorder?: {
+    recordTaskCompleted: (ctx: {
+      route: string;
+      taskSpec: { filePaths?: string[] };
+      runResult: RunResult;
+      client: string;
+      triggeringSkill: string;
+      parentModel: string | null;
+    }) => void;
+  };
+  /** Route name for telemetry (e.g. 'delegate', 'audit'). */
+  route?: string;
+  /** Client identifier for telemetry (e.g. 'claude-code', 'cursor'). */
+  client?: string;
+  /** Triggering skill for telemetry (e.g. 'mma-delegate', 'direct'). */
+  triggeringSkill?: string;
 }
 
 export interface ExecutionContextInput {
@@ -57,6 +74,20 @@ export interface ExecutionContextInput {
   parentModel?: string;
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+  /** Telemetry recorder — fire-and-forget, failures are silently dropped. */
+  recorder?: {
+    recordTaskCompleted: (ctx: {
+      route: string;
+      taskSpec: { filePaths?: string[] };
+      runResult: RunResult;
+      client: string;
+      triggeringSkill: string;
+      parentModel: string | null;
+    }) => void;
+  };
+  route?: string;
+  client?: string;
+  triggeringSkill?: string;
 }
 
 /**

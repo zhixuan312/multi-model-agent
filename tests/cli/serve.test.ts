@@ -19,7 +19,7 @@
  */
 import { describe, it, expect } from 'vitest';
 import { spawn, type ChildProcess } from 'node:child_process';
-import { mkdtempSync, writeFileSync, mkdirSync, chmodSync } from 'node:fs';
+import { mkdtempSync, writeFileSync, mkdirSync, chmodSync, readFileSync, existsSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { tmpdir } from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -241,6 +241,65 @@ describe('serve subcommand', () => {
       expect(stderr).toContain('shutting down gracefully');
     } finally {
       if (child.exitCode === null) child.kill('SIGKILL');
+    }
+  });
+
+  // ─── Test: telemetry install.changed + session.started at serve boot ───
+
+  it('enqueues install.changed + session.started events at serve startup', async () => {
+    const homeDir = mkdtempSync(join(tmpdir(), 'mmagent-telemetry-'));
+    const tokenFile = writeTokenFile(homeDir);
+
+    // Write an old last-version so install.changed fires with 'upgrade'
+    // Must be under ~/.multi-model/last-version (telemetry data dir)
+    const mmDir = join(homeDir, '.multi-model');
+    mkdirSync(mmDir, { recursive: true });
+    writeFileSync(join(mmDir, 'last-version'), '0.0.1\n', { mode: 0o600 });
+
+    const configPath = writeConfigFile(homeDir, minimalConfig({ tokenFile }), 'config.json');
+
+    const child = spawn('node', [cliPath(), 'serve', '--config', configPath], {
+      stdio: 'pipe',
+      env: { ...process.env, HOME: homeDir, MMAGENT_TELEMETRY: '1' },
+    });
+
+    try {
+      await waitForServerReady(child, 8000);
+
+      // Queue append is fire-and-forget; poll for the queue file to appear
+      const queuePath = join(homeDir, '.multi-model', 'telemetry-queue.ndjson');
+      const deadline = Date.now() + 5000;
+      let lines: string[] = [];
+      while (Date.now() < deadline) {
+        if (existsSync(queuePath)) {
+          const content = readFileSync(queuePath, 'utf8').trim();
+          lines = content.split('\n').filter(l => l.trim());
+          if (lines.length >= 2) break; // we expect at least 2 events
+        }
+        await new Promise(r => setTimeout(r, 50));
+      }
+
+      expect(lines.length).toBeGreaterThanOrEqual(2);
+
+      const events = lines.map(l => JSON.parse(l) as { event: { type: string } });
+
+      const types = events.map(e => e.event.type);
+      expect(types).toContain('install.changed');
+      expect(types).toContain('session.started');
+
+      // Verify install.changed shape
+      const installEvent = events.find(e => e.event.type === 'install.changed')!;
+      const ie = installEvent.event as Record<string, unknown>;
+      expect(ie.fromVersion).toBe('0.0.1');
+      expect(ie.trigger).toBe('upgrade');
+
+      // Verify session.started shape
+      const sessionEvent = events.find(e => e.event.type === 'session.started')!;
+      const se = sessionEvent.event as Record<string, unknown>;
+      expect(se.configFlavor).toBeDefined();
+      expect(Array.isArray(se.providersConfigured)).toBe(true);
+    } finally {
+      await stopChild(child);
     }
   });
 

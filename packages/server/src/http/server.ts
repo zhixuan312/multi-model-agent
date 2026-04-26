@@ -22,7 +22,7 @@ function readServerVersion(): string {
   }
 }
 
-const SERVER_VERSION = readServerVersion();
+export const SERVER_VERSION = readServerVersion();
 
 export interface RunningServer {
   port: number;

@@ -185,6 +185,18 @@ describe('contract: observability', () => {
     directLogger.escalationUnavailable({ batchId: 'direct', taskIndex: 1, loop: 'spec', attempt: 2, role: 'implementer', wantedTier: 'complex', reason: 'not_configured' });
     directLogger.fallback({ batchId: 'direct', taskIndex: 2, loop: 'spec', attempt: 0, role: 'implementer', assignedTier: 'standard', usedTier: 'complex', reason: 'transport_failure', violatesSeparation: false });
     directLogger.fallbackUnavailable({ batchId: 'direct', taskIndex: 2, loop: 'spec', attempt: 0, role: 'implementer', assignedTier: 'standard', reason: 'transport_failure' });
+    directLogger.emit({
+      event: 'heartbeat',
+      batchId: 'direct',
+      taskIndex: 0,
+      elapsed: '5s',
+      stage: 'implementing',
+      tools: 0,
+      read: 0,
+      wrote: 0,
+      cost: 0.001,
+      idle_ms: 5000,
+    });
 
     const allCaptured = parseCapturedEvents(writtenLines);
     const m = manifest as ObsManifest;

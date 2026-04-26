@@ -123,6 +123,11 @@ mmagent logs  [--follow] [--batch=<id>]   # tail today's diagnostic log
 mmagent print-token                 # print the current auth token
 mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]
 mmagent update-skills [--dry-run] [--json]   # refresh installed skills after upgrade
+mmagent telemetry status                    # show consent state + source (env / config / default)
+mmagent telemetry enable                    # opt in (writes ~/.multi-model/config.json)
+mmagent telemetry disable                   # opt out + delete local queue
+mmagent telemetry reset-id                  # regenerate the pseudonymous install UUID
+mmagent telemetry dump-queue                # print the locally-queued events as JSON (3.6.0 stays local)
 ```
 
 ## Operations
@@ -168,7 +173,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 ## What's new
 
-Latest: **3.5.2** — New `claude-compatible` agent type for Anthropic-format third-party endpoints (e.g. DeepSeek's `/anthropic`). Mirrors `openai-compatible` (required `baseUrl`, optional `apiKey` / `apiKeyEnv`); preserves thinking blocks across multi-turn tool use. Bonus: DeepSeek under `openai-compatible` now auto-disables thinking so multi-turn calls don't 400.
+Latest: **3.6.0** — Anonymous usage telemetry instrumentation (off by default; **3.6.0 only collects locally — no events leave your machine**). `mmagent telemetry status|enable|disable|reset-id|dump-queue` gives you full control. When enabled, events queue to `~/.multi-model/telemetry-queue.ndjson` for local inspection. Network upload to a backend is intentionally not wired in 3.6.0 — it activates in a follow-up release once the receiving service is deployed. See [PRIVACY.md](./docs/PRIVACY.md) — nothing personal, no prompts, no file paths.
 
 Full history in [CHANGELOG](./CHANGELOG.md).
 
