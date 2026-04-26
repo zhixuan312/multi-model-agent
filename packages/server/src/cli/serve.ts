@@ -25,6 +25,8 @@ import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-mo
 import type { SessionSnapshot } from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
 import { startServer } from '../http/server.js';
 import { createRecorder } from '../telemetry/recorder.js';
+import { Flusher } from '../telemetry/flusher.js';
+import { Queue } from '../telemetry/queue.js';
 import { runUpdateSkills } from './update-skills.js';
 import { listEntries, FutureManifestError } from '../install/manifest.js';
 import { readSkillContent } from './install-skill.js';
@@ -202,6 +204,28 @@ export async function startServe(
   };
   recorder.recordSessionStarted(snapshot);
 
+  // Telemetry uploader. Default endpoint ships to the project's hosted
+  // dashboard. MMAGENT_TELEMETRY_ENDPOINT overrides for self-hosted backends;
+  // setting it to an empty string disables shipping entirely (events stay in
+  // ~/.multi-model/telemetry-queue.ndjson). The real off-switch for telemetry
+  // is the consent flag (MMAGENT_TELEMETRY=0 / config.telemetry.enabled =
+  // false) — when consent is off the recorder enqueues nothing, so the
+  // flusher's tick is a no-op even with the default endpoint set.
+  const DEFAULT_TELEMETRY_ENDPOINT = 'https://mma-telemetry-frontend.x1.lucazhang.work/v1/events';
+  const envEndpoint = process.env.MMAGENT_TELEMETRY_ENDPOINT;
+  const telemetryEndpoint = envEndpoint === undefined
+    ? DEFAULT_TELEMETRY_ENDPOINT
+    : envEndpoint.trim();
+  let flusher: Flusher | null = null;
+  if (telemetryEndpoint) {
+    flusher = new Flusher({
+      queue: new Queue(homeDir),
+      dir: homeDir,
+      endpoint: telemetryEndpoint,
+    });
+    flusher.start();
+  }
+
   // Fire once at serve startup. Lives here (not in loadConfigFromFile) so
   // print-token / info / status don't re-emit the same warning repeatedly.
   const inlineOffenders = collectInlineApiKeyOffenders(config);
@@ -222,11 +246,16 @@ export async function startServe(
     if (stopInFlight) return;
     stopInFlight = true;
     stderr(`[mmagent] received ${sig}, shutting down gracefully\u2026\n`);
-    running.stop().then(() => exit(0)).catch((err: unknown) => {
-      const msg = err instanceof Error ? err.message : String(err);
-      stderr(`[mmagent] shutdown failed: ${msg}\n`);
-      exit(1);
-    });
+    const drainTelemetry = flusher ? flusher.drain() : Promise.resolve();
+    drainTelemetry
+      .catch(() => { /* drain is best-effort */ })
+      .then(() => running.stop())
+      .then(() => exit(0))
+      .catch((err: unknown) => {
+        const msg = err instanceof Error ? err.message : String(err);
+        stderr(`[mmagent] shutdown failed: ${msg}\n`);
+        exit(1);
+      });
   };
 
   // Register handlers using named references so they can be removed correctly.
@@ -267,6 +296,9 @@ export async function startServe(
       // programmatically (i.e. not via a signal).
       if (onSigterm) process.off('SIGTERM', onSigterm);
       if (onSigint) process.off('SIGINT', onSigint);
+      if (flusher) {
+        await flusher.drain().catch(() => { /* best-effort */ });
+      }
       await running.stop();
     },
   };

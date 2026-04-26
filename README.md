@@ -173,7 +173,7 @@ rm ~/.multi-model/auth-token        # delete and restart to rotate
 
 ## What's new
 
-Latest: **3.6.0** — Anonymous usage telemetry instrumentation (off by default; **3.6.0 only collects locally — no events leave your machine**). `mmagent telemetry status|enable|disable|reset-id|dump-queue` gives you full control. When enabled, events queue to `~/.multi-model/telemetry-queue.ndjson` for local inspection. Network upload to a backend is intentionally not wired in 3.6.0 — it activates in a follow-up release once the receiving service is deployed. See [PRIVACY.md](./docs/PRIVACY.md) — nothing personal, no prompts, no file paths.
+Latest: **3.6.3** — Anonymous usage telemetry, **off by default**. Out of the box nothing leaves your machine. Run `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`) if you'd like to share anonymous usage data with the project. `mmagent telemetry status|enable|disable|reset-id|dump-queue` gives you full control. See [PRIVACY.md](./docs/PRIVACY.md) for the exhaustive field-by-field disclosure — nothing personal, no prompts, no file paths.
 
 Full history in [CHANGELOG](./CHANGELOG.md).
 

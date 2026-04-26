@@ -2,7 +2,7 @@
 
 **Last updated:** 2026-04-26  •  **Schema version:** 1  •  **Code:** [types.ts](../packages/core/src/telemetry/types.ts) · [event-builder.ts](../packages/core/src/telemetry/event-builder.ts) · [queue.ts](../packages/server/src/telemetry/queue.ts) · [consent.ts](../packages/server/src/telemetry/consent.ts)
 
-> **3.6.0 release note — local-only.** This release ships the telemetry instrumentation and CLI, but **does not upload anything over the network**. Even when you opt in (`mmagent telemetry enable`), events queue only to `~/.multi-model/telemetry-queue.ndjson` on your machine and can be inspected with `mmagent telemetry dump-queue`. The schema below describes what *would* be uploaded once the receiver service is deployed in a follow-up release. Until then, the truthful summary of "what leaves your machine" is: nothing.
+> **Default: off.** Out of the box, no events are built, no install ID is created, no queue file is written, and nothing leaves your machine. Telemetry only activates when you explicitly opt in via `mmagent telemetry enable`, `MMAGENT_TELEMETRY=1`, or `{ "telemetry": { "enabled": true } }` in `~/.multi-model/config.json`. After opting in, the schema below describes the exhaustive list of what gets sent — every field, every enum value, every bucket. Operators self-hosting the receiver service can point uploads at their own URL with `MMAGENT_TELEMETRY_ENDPOINT=<your-url>`; setting it to an empty string keeps events local-only (queued to `~/.multi-model/telemetry-queue.ndjson`, never uploaded).
 
 ## What we collect (client-submitted)
 
