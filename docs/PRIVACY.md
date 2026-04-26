@@ -192,19 +192,31 @@ that is a bug. File an issue at the repository; we will treat it as a security i
 - Aggregated daily/weekly counts: **kept indefinitely** — no install ID, no path back to a person.
 - Per-install metadata (`installs` table): kept while active; deleted after **365 days** with no activity.
 
-## How to opt out
+## Default in 3.6.0: telemetry is OFF (opt-in)
 
-Three equivalent paths, resolved in this order:
+You don't need to do anything to "opt out" — telemetry is **disabled by default in 3.6.0**. No events are built, no install ID is created, and no queue file is written until you explicitly opt in. This is intentional for the internal-testing phase. (Even after opting in, 3.6.0 stays local-only — see the release note at the top of this document.)
+
+`mmagent telemetry status` will tell you the current state and which source produced it (env / config / default).
+
+## How to opt IN (turn telemetry on)
+
+Three equivalent paths, resolved in this order (first match wins):
+
+1. **Environment variable:** Set `MMAGENT_TELEMETRY=1` (or `true`, `on`, `yes`). Takes effect on next process start.
+2. **Config file:** Set `"telemetry": { "enabled": true }` in `~/.multi-model/config.json`. Takes effect immediately (file-watch).
+3. **CLI:** Run `mmagent telemetry enable`. Writes the config block + starts the queue. Effective immediately.
+
+## How to opt OUT (if you previously opted in)
+
+Same three paths, with the inverse value:
 
 1. **Environment variable:** Set `MMAGENT_TELEMETRY=0` (or `false`, `off`, `no`). Takes effect on next process start.
 2. **Config file:** Set `"telemetry": { "enabled": false }` in `~/.multi-model/config.json`. Takes effect immediately (file-watch).
-3. **CLI:** Run `mmagent telemetry disable`. Writes config + stops flusher + deletes queue. Effective <2 seconds.
+3. **CLI:** Run `mmagent telemetry disable`. Writes config + cancels in-flight queue + deletes the queue file. Effective <2 seconds.
 
-Precedence: env var > config file > default. An unparseable env value fails closed (telemetry disabled). An unparseable config file fails closed.
+You can also delete the install identifier without disabling telemetry: `mmagent telemetry reset-id` regenerates the pseudonymous UUID; we treat the new ID as a fresh install in any future metrics.
 
-**Default for 3.6.0:** disabled (opt-in). This is intentional for the internal-testing phase.
-
-To opt in: set `MMAGENT_TELEMETRY=1`, or `"telemetry": { "enabled": true }` in config, or run `mmagent telemetry enable`.
+**Precedence:** env var > config file > default. An unparseable env value fails closed (telemetry disabled). An unparseable config file fails closed.
 
 ## Our commitments
 
