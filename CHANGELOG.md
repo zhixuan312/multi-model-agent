@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.1] - 2026-04-26
+
+### Fixed
+- **Strict config schema rejected the `telemetry` block (core).** 3.6.0 documented `~/.multi-model/config.json` as the canonical place to set `{ "telemetry": { "enabled": true } }` (per `mmagent telemetry enable` and PRIVACY.md), but the root `multiModelConfigSchema` was `.strict()` and didn't list `telemetry` as a known key. Result: `mmagent serve` errored with `Unrecognized key: "telemetry"` on any config that opted in. The schema now declares an optional `telemetry: { enabled: boolean }` block — the actual consent decision is still made in the dedicated consent loader.
+
+
 ## [3.6.0] - 2026-04-26
 
 ### Added
