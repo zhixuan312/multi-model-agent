@@ -90,7 +90,7 @@ export const InstallMetadata = z.object({
   nodeMajor: z.string().regex(/^[1-9]\d?$/).max(2), // "1".."99"; no leading zeros; cast to int when sorting
   language: Language, // bucketed from runtime locale, never raw
   tzOffsetBucket: TzOffsetBucket,
-});
+}).strict();
 
 // Allowlist of tool names that may appear in topToolNames. Anything else → 'other'.
 // This is the SDK-level tool surface from packages/core/src/tools/definitions.ts;
@@ -148,7 +148,7 @@ export const StageStats = z.object({
   agentTier: z.enum(['standard', 'complex']).nullable(),
   modelFamily: ModelFamily.nullable(),
   model: ModelIdOrOther.nullable(),
-});
+}).strict();
 
 // Reviewer stages add verdict + round + concern categories.
 export const ReviewStageStats = StageStats.extend({
@@ -223,8 +223,8 @@ export const TaskCompletedEvent = z.object({
     quality_rework: StageStats,
     diff_review: ReviewStageStats.optional(), // diff-only policy; not always present
     committing: StageStats,
-  }),
-});
+  }).strict(),
+}).strict();
 
 export const SessionStartedEvent = z.object({
   type: z.literal('session.started'),
@@ -232,29 +232,29 @@ export const SessionStartedEvent = z.object({
     defaultTier: z.enum(['standard', 'complex']),
     diagnosticsEnabled: z.boolean(),
     autoUpdateSkills: z.boolean(),
-  }),
+  }).strict(),
   providersConfigured: z
     .array(z.enum(['claude', 'openai-compatible', 'codex']))
     .max(3)
     .refine(xs => new Set(xs).size === xs.length, 'unique'),
-});
+}).strict();
 
 export const InstallChangedEvent = z.object({
   type: z.literal('install.changed'),
   fromVersion: VersionString.nullable(),
   toVersion: VersionString,
   trigger: z.enum(['fresh_install', 'upgrade', 'downgrade']),
-});
+}).strict();
 
 export const SkillInstalledEvent = z.object({
   type: z.literal('skill.installed'),
   skill: InstallableSkillId, // 'direct' is NOT a skill, rejected here
   client: ClientId,
-});
+}).strict();
 
 // Discriminated union, with eventId for at-most-once dedup within retention window.
 // .superRefine() enforces internal consistency (see 4.4 for the rules).
-const TelemetryEventBase = z.object({ eventId: z.string().uuid() });
+const TelemetryEventBase = z.object({ eventId: z.string().uuid() }).strict();
 
 export const TelemetryEvent = z
   .discriminatedUnion('type', [
@@ -405,7 +405,7 @@ export const UploadBatch = z.object({
   schemaVersion: z.literal(SCHEMA_VERSION),
   install: InstallMetadata,
   events: z.array(TelemetryEvent).min(1).max(500),
-});
+}).strict();
 
 // Inferred TS types — consumers do not depend on Zod's runtime types
 export type TelemetryEventType = z.infer<typeof TelemetryEvent>;
