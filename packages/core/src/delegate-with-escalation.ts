@@ -167,10 +167,15 @@ export async function delegateWithEscalation(
     attempts.push({ result, record });
 
     if (result.status === 'ok') {
-      return {
-        ...result,
-        escalationLog: attempts.map((a) => a.record),
+      const terminationReason: TerminationReason = {
+        cause: 'finished',
+        turnsUsed: result.turns,
+        hasFileArtifacts: result.filesWritten.length > 0,
+        usedShell: result.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
+        workerSelfAssessment: result.workerStatus ?? null,
+        wasPromoted: false,
       };
+      return { ...result, terminationReason, escalationLog: attempts.map((a) => a.record) };
     }
 
     // Skip the next provider in the fallback chain if the task-level

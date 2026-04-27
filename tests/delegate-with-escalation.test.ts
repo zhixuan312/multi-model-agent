@@ -335,6 +335,45 @@ describe('delegateWithEscalation', () => {
     expect(result.escalationLog[0].provider).toBe('pinned');
   });
 
+  it('sets terminationReason.cause=finished on success early-return', async () => {
+    const provider: Provider = {
+      name: 'test-provider',
+      config: { type: 'codex', model: 'gpt-5-codex' },
+      run: vi.fn().mockResolvedValue({
+        output: 'done',
+        status: 'ok' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0 },
+        turns: 5,
+        filesRead: [],
+        filesWritten: ['x.ts'],
+        toolCalls: ['runShell(npm test)'],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        workerStatus: 'done' as const,
+      }),
+    };
+    const result = await delegateWithEscalation(
+      { prompt: 'test' },
+      [provider],
+    );
+    expect(result.status).toBe('ok');
+    expect(result.terminationReason).toEqual(expect.objectContaining({
+      cause: 'finished',
+      hasFileArtifacts: true,
+    }));
+    expect([
+      'done',
+      'done_with_concerns',
+      'needs_context',
+      'blocked',
+      'failed',
+      'review_loop_aborted',
+      null,
+    ]).toContain(
+      (result.terminationReason as { workerSelfAssessment: unknown }).workerSelfAssessment,
+    );
+  });
+
   describe('status promotion', () => {
     it('promotes incomplete to ok when worker self-assessed done with shell verification', async () => {
       // Worker self-assessed done, ran tests via runShell, wrote no files.
