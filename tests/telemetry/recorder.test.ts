@@ -165,7 +165,7 @@ describe('recorder', () => {
     expect(queueAppendMock).toHaveBeenCalledTimes(1);
 
     const record = queueAppendMock.mock.calls[0][0];
-    expect(record.schemaVersion).toBe(1);
+    expect(record.schemaVersion).toBe(2);
     expect(record.event).toEqual({ type: 'task.completed', eventId: 'task-1' });
     expect(record.install.installId).toBe('00000000-0000-0000-0000-000000000001');
     expect(record.generation).toBe(0);

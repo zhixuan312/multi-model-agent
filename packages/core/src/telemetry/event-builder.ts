@@ -11,6 +11,7 @@ import {
   bucketDuration,
   bucketFileCount,
   bucketRoundsUsed,
+  bucketTurnCount,
 } from './bucketing.js';
 import { classifyConcern } from './concern-classifier.js';
 import { BoundedIdentifier } from './types.js';
@@ -90,6 +91,13 @@ const capabilities = rawCapabilities.map(c => KNOWN_CAPABILITIES.has(c) ? c : 'o
 
   const stages = buildStages(route, runResult);
 
+  // v2 fields
+  const tr = runResult.terminationReason;
+  const trIsObject = tr && typeof tr === 'object';
+  const escalationLog = runResult.escalationLog ?? [];
+  const distinctProviders = new Set(escalationLog.map(a => a.provider)).size;
+  const escalationCount = Math.max(0, distinctProviders - 1);
+
   return {
     type: 'task.completed',
     eventId: randomUUID(),
@@ -112,6 +120,18 @@ const capabilities = rawCapabilities.map(c => KNOWN_CAPABILITIES.has(c) ? c : 'o
     fallbackTriggered,
     topToolNames,
     stages,
+    // v2 fields
+    filesWrittenBucket: bucketFileCount(runResult.filesWritten.length),
+    c2Promoted: trIsObject ? (tr.wasPromoted ?? false) : false,
+    workerSelfAssessment: trIsObject ? (tr.workerSelfAssessment ?? null) : null,
+    concernCount: runResult.concerns?.length ?? 0,
+    escalationCount,
+    fallbackCount: runResult.agents?.fallbackOverrides?.length ?? 0,
+    turnCountBucket: bucketTurnCount(runResult.turns),
+    stallTriggered: runResult.stallTriggered ?? false,
+    clarificationRequested: runResult.lifecycleClarificationRequested ?? false,
+    parentModelFamily: deriveModelFamily(parentModel),
+    briefQualityWarningCount: runResult.briefQualityWarnings?.length ?? 0,
   } as TelemetryEventType;
 }
 

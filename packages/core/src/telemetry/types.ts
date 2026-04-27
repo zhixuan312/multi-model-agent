@@ -1,6 +1,6 @@
 import { z } from 'zod';
 
-export const SCHEMA_VERSION = 1;
+export const SCHEMA_VERSION = 2;
 
 /**
  * Permissive shape-only validation for fields whose vocabulary we don't control:
@@ -236,6 +236,18 @@ export const TaskCompletedEvent = z.object({
     diff_review: ReviewStageStats.optional(), // diff-only policy; not always present
     committing: StageStats,
   }).strict(),
+  // v2 fields
+  filesWrittenBucket: z.enum(['0','1-5','6-20','21-50','51+']),
+  c2Promoted: z.boolean(),
+  workerSelfAssessment: z.enum(['done','done_with_concerns','needs_context','blocked','failed','review_loop_aborted']).nullable(),
+  concernCount: z.number().int().min(0).max(50),
+  escalationCount: z.number().int().min(0).max(20),
+  fallbackCount: z.number().int().min(0).max(20),
+  turnCountBucket: z.enum(['1-3','4-10','11-30','31+']),
+  stallTriggered: z.boolean(),
+  clarificationRequested: z.boolean(),
+  parentModelFamily: ModelFamily,
+  briefQualityWarningCount: z.number().int().min(0).max(10),
 }).strict();
 
 export const SessionStartedEvent = z.object({

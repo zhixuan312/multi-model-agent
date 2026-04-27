@@ -98,12 +98,24 @@ function makeValidTaskCompleted(overrides: Partial<Record<string, unknown>> = {}
       },
     },
     ...overrides,
+    // v2 fields
+    filesWrittenBucket: '1-5',
+    c2Promoted: false,
+    workerSelfAssessment: 'done',
+    concernCount: 0,
+    escalationCount: 0,
+    fallbackCount: 0,
+    turnCountBucket: '1-3',
+    stallTriggered: false,
+    clarificationRequested: false,
+    parentModelFamily: 'claude',
+    briefQualityWarningCount: 0,
   };
 }
 
 describe('telemetry/types', () => {
-  it('SCHEMA_VERSION is 1 (3.6.0 baseline)', () => {
-    expect(SCHEMA_VERSION).toBe(1);
+  it('SCHEMA_VERSION is 2 (v2 baseline)', () => {
+    expect(SCHEMA_VERSION).toBe(2);
   });
 
   it('accepts a well-formed task.completed event', () => {
@@ -328,7 +340,7 @@ describe('telemetry/types', () => {
 
     // 0 events → fails
     const empty = {
-      schemaVersion: 1 as const,
+      schemaVersion: 2 as const,
       install: {
         installId: '00000000-0000-4000-a000-000000000001',
         mmagentVersion: '3.6.0',

@@ -36,6 +36,15 @@ export function bucketFileCount(n: number): FileCountBucket {
   return '51+';
 }
 
+export type TurnCountBucket = '1-3' | '4-10' | '11-30' | '31+';
+
+export function bucketTurnCount(n: number): TurnCountBucket {
+  if (n <  4)  return '1-3';
+  if (n < 11)  return '4-10';
+  if (n < 31)  return '11-30';
+  return '31+';
+}
+
 export function bucketRoundsUsed(rounds: number): RoundsUsedBucket {
   if (rounds === 0) return '0';
   if (rounds === 1) return '1';
