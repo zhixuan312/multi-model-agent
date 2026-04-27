@@ -89,7 +89,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.6",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.7",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -231,7 +231,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.6.6** — Vendor-prefixed model IDs are now recognized: `bedrock.claude-haiku-4-5`, `vertex/claude-sonnet-4-5`, `azure/gpt-5.5`, `anthropic.claude-haiku-4-5-v1:0` and their compound variants normalize to canonical names so pricing, ROI, modelFamily, and telemetry validation all work end-to-end. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.6.7** — Telemetry is now permissive on model/client/tool/skill identifiers: schema validates *shape, not vocabulary*. Anthropic 4.x, OpenAI o-series, Bedrock vendor prefixes, OpenRouter `meta-llama/...`, Ollama `llama2:7b`, custom finetunes, MCP tool names from any server — all pass through unchanged instead of being rejected or collapsed to `'other'`. `ModelFamily` enum widened 5 → 12 (added `grok`, `mistral`, `meta`, `qwen`, `zhipu`, `kimi`, `minimax`); `allowlistModel` renamed to `normalizeModelForTelemetry`. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
