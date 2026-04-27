@@ -109,7 +109,7 @@ describe('reviewed lifecycle fallback when both spec reviewer tiers are down', (
     ]);
 
     expect(result.status).toBe('ok');
-    expect(result.terminationReason).toBeUndefined();
+    expect(result.terminationReason).toMatchObject({ cause: 'finished' });
     expect(result.workerStatus).toBe('done');
     expect(result.specReviewStatus).toBe('skipped');
     expect(result.qualityReviewStatus).toBe('skipped');
