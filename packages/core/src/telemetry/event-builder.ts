@@ -464,7 +464,7 @@ export function deriveModelFamily(modelId: string | null | undefined): ModelFami
   return 'other';
 }
 
-function normalizeModelForTelemetry(modelId: string | null | undefined): string {
+export function normalizeModelForTelemetry(modelId: string | null | undefined): string {
   if (!modelId) return 'other';
   const result = BoundedIdentifier.safeParse(modelId);
   return result.success ? modelId : 'other';

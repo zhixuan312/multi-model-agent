@@ -141,14 +141,14 @@ describe('event-builder — produces R1–R5-valid events for every route × out
     expect(ev.implementerModel).toBe('claude-sonnet');
   });
 
-  it('unknown model becomes other', () => {
+  it('unknown model passes through when shape is valid', () => {
     const ev = buildTaskCompletedEvent(makeCtx({
       runResult: {
         ...fixtures.HAPPY,
         models: { implementer: 'unknown-model-xyz', specReviewer: null, qualityReviewer: null },
       },
     }));
-    expect(ev.implementerModel).toBe('other');
+    expect(ev.implementerModel).toBe('unknown-model-xyz');
   });
 });
 
@@ -347,14 +347,14 @@ describe('model name normalization for vendor-prefixed models', () => {
     expect(ev.implementerModelFamily).toBe('claude');
   });
 
-  it('returns other for unknown model after normalization', () => {
+  it('unknown model passes through when shape is valid after normalization', () => {
     const ev = buildTaskCompletedEvent(makeCtx({
       runResult: {
         ...fixtures.HAPPY,
         models: { implementer: 'unknown-model-xyz', specReviewer: null, qualityReviewer: null },
       },
     }));
-    expect(ev.implementerModel).toBe('other');
+    expect(ev.implementerModel).toBe('unknown-model-xyz');
     expect(ev.implementerModelFamily).toBe('other');
   });
 });
