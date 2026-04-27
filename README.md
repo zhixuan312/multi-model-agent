@@ -231,7 +231,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.6.8** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.7.0** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

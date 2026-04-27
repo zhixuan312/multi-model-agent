@@ -237,7 +237,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.6.8** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.7.0** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
