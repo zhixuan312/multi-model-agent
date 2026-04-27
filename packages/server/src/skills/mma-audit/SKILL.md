@@ -1,7 +1,7 @@
 ---
 name: mma-audit
-description: Use when the user asks to audit a document, spec, config, or PR description for security, correctness, performance, or style issues — and the audit can run in parallel per file with no context pollution
-when_to_use: User asks for a doc/spec/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Delegate so each file audits on its own worker; the main agent only synthesizes findings. Audit on PROSE/SPEC docs — use mma-review for source code.
+description: Use when the user asks to audit a document, spec, config, or PR description for security, correctness, performance, or style issues — and 2+ files need independent audit passes
+when_to_use: User asks for a doc/spec/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code.
 version: "0.0.0-unreleased"
 ---
 
