@@ -65,6 +65,19 @@ digraph picker {
 
 The main session is for judgment, orchestration, and dialogue with the engineer. Everything else — read, grep, audit, review, debug, implement, verify — gets delegated. If you're about to do labor in main context, you've already taken the wrong turn.
 
+### Judgment vs labor — what NEVER delegates
+
+Labor handles work whose answer is findable from the inputs. Main session keeps work whose answer is **judgment** — there is no "right answer" a worker could discover:
+
+- **Brainstorming** — exploring the problem space with the engineer before a spec exists.
+- **Spec writing** — deciding what to build, what success looks like, what's out of scope.
+- **Plan writing** — turning a spec into ordered, testable steps with the right decomposition.
+- **Architecture and design decisions** — choosing the shape of the solution.
+- **Final approval / merge decisions** — what ships.
+- **Dialogue with the engineer** — clarifying intent, negotiating tradeoffs, answering "should we?".
+
+The test: *if a worker can produce the answer from the given inputs, delegate; if the answer requires deciding what the inputs should be, it's main-session work.* Recipes A–D all keep these judgment steps in main context (e.g., Recipe C explicitly: `mma-investigate` → **write the plan (main)** → `mma-execute-plan`).
+
 ### C1 — Delegate by default, inline by exception
 
 If a task needs 3+ file reads or any grep, it goes to a worker. Inline `Read` is reserved for files already in context, single-file lookups, or 1-2 file reads with a known target.
