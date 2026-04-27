@@ -22,14 +22,16 @@ import type {
   ModelFamilyType,
 } from './types.js';
 
+const KNOWN_CAPABILITIES = new Set(['web_search', 'web_fetch']);
+
 // ── Public surface ────────────────────────────────────────────────────────
 
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry';
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
-  client: 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli' | 'other';
-  triggeringSkill: 'mma-delegate' | 'mma-audit' | 'mma-review' | 'mma-verify' | 'mma-debug' | 'mma-execute-plan' | 'mma-retry' | 'mma-investigate' | 'mma-context-blocks' | 'mma-clarifications' | 'direct' | 'other';
+  client: string;
+  triggeringSkill: string;
   parentModel: string | null;
 }
 
@@ -80,7 +82,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
   const implementerModel = normalizeModelForTelemetry(implModel);
 
   const agentType = runResult.agents?.implementer === 'complex' ? 'complex' as const : 'standard' as const;
-  const capabilities = (runResult.agents?.implementerCapabilities ?? []) as Array<'web_search' | 'web_fetch'>;
+  const rawCapabilities = runResult.agents?.implementerCapabilities ?? [];
+const capabilities = rawCapabilities.map(c => KNOWN_CAPABILITIES.has(c) ? c : 'other');
   const toolMode = (runResult.agents?.implementerToolMode ?? 'full') as 'none' | 'readonly' | 'no-shell' | 'full';
 
   const topToolNames = deriveTopToolNames(runResult.toolCalls ?? []);
@@ -92,7 +95,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
     eventId: randomUUID(),
     route,
     agentType,
-    capabilities: [...new Set(capabilities.filter(c => c === 'web_search' || c === 'web_fetch'))],
+    capabilities: [...new Set(capabilities.filter(c => c === 'web_search' || c === 'web_fetch' || c === 'other'))],
     toolMode,
     triggeredFromSkill: triggeringSkill,
     client,

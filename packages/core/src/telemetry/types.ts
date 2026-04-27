@@ -186,8 +186,8 @@ export const TaskCompletedEvent = z.object({
   route: z.enum(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry']),
   agentType: z.enum(['standard', 'complex']),
   capabilities: z
-    .array(z.enum(['web_search', 'web_fetch']))
-    .max(2)
+    .array(z.enum(['web_search', 'web_fetch', 'other']))
+    .max(3)
     .refine(xs => new Set(xs).size === xs.length, 'unique'),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
   triggeredFromSkill: BoundedIdentifier, // 'direct' for non-skill invocations
