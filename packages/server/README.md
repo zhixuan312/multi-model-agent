@@ -82,7 +82,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.4",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.5",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -237,7 +237,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.6.4** — Anonymous usage telemetry, **off by default**, now signed end-to-end with a per-install Ed25519 key (TOFU). Strict schemas fail closed on unknown fields. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.6.5** — Intake classifier no longer flags ordinary technical English ("publish docs", "send a request", "telemetry system") as needing clarification. Genuine destructive prompts (`rm -rf`, `drop table`, `force push`, `deploy to prod`, ...) still flag. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

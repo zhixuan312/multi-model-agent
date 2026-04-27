@@ -89,7 +89,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.4",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.5",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -231,7 +231,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.6.4** — Anonymous usage telemetry, **off by default**, now signed end-to-end. Per-install Ed25519 key (TOFU) signs every upload batch; strict schemas fail closed on unknown fields. Full disclosure: [PRIVACY.md](./PRIVACY.md). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.6.5** — Intake classifier no longer flags ordinary technical English ("publish docs", "send a request", "telemetry system") as needing clarification. Genuine destructive prompts (`rm -rf`, `drop table`, `force push`, `deploy to prod`, ...) still flag. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
