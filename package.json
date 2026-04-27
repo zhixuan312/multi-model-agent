@@ -32,7 +32,8 @@
     "test:watch": "vitest",
     "test:perf": "MMAGENT_PERF_CHECK=1 vitest run tests/perf/",
     "test:perf:baseline": "MMAGENT_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
-    "serve": "node packages/server/dist/cli/index.js serve"
+    "serve": "node packages/server/dist/cli/index.js serve",
+    "regen:observability-golden": "npx tsx tests/contract/regen-observability-golden.ts"
   },
   "engines": {
     "node": ">=22.0.0"

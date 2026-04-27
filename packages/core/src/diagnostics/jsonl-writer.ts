@@ -20,7 +20,7 @@ export class JsonlWriter {
   private readonly now: () => Date;
 
   constructor(opts: JsonlWriterOptions) {
-    this.dir = opts.dir;
+    this.dir = process.env.MMAGENT_LOG_DIR ?? opts.dir;
     this.openSync = opts.openSync ?? nodeFs.openSync;
     this.writeSync = opts.writeSync ?? nodeFs.writeSync;
     this.closeSync = opts.closeSync ?? nodeFs.closeSync;
