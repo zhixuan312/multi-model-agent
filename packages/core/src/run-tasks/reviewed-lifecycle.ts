@@ -306,7 +306,6 @@ export async function executeReviewedLifecycle(
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
   const verboseStream = verboseStreamRaw;
-  emitTaskEvent('worker_start', { worker: resolved.provider.config.model });
   let prevEventAtMs = verbose ? Date.now() : 0;
   // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
   // verbose stream, or verbose logger). Previously this only wrapped when
@@ -318,6 +317,13 @@ export async function executeReviewedLifecycle(
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'turn_start' || event.kind === 'text_emission' || event.kind === 'tool_call' || event.kind === 'turn_complete') {
           markRunnerEvent();
+        }
+        if (event.kind === 'worker_start') {
+          emitTaskEvent('worker_start', {
+            model: event.model,
+            providerType: event.providerType,
+            tier: event.tier,
+          });
         }
         if (event.kind === 'turn_start') {
           heartbeat?.markEvent('llm');
@@ -834,7 +840,7 @@ export async function executeReviewedLifecycle(
       call: (provider) => delegateWithEscalation(
         withDoneCondition(task),
         [provider],
-        { explicitlyPinned: false, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal },
+        { explicitlyPinned: false, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: initialDecision.impl },
       ),
     });
 
@@ -1121,7 +1127,7 @@ export async function executeReviewedLifecycle(
       heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
+      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
       if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'spec', attempt: specAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
       if (reworkCall.fallbackFired) {
         emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
@@ -1205,7 +1211,7 @@ export async function executeReviewedLifecycle(
         heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
         const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
         const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
+        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
         if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
         if (reworkCall.fallbackFired) emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
         if (reworkCall.bothUnavailable) {

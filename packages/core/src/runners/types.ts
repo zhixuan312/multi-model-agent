@@ -1,5 +1,6 @@
 import type { ContextBlockStore } from '../context/context-block-store.js';
 import type {
+  AgentType,
   Effort,
   FormatConstraints,
   SandboxPolicy,
@@ -89,6 +90,12 @@ export interface RunTasksRuntime {
 
 /** Internal progress events emitted by runners and the escalation orchestrator. */
 export type InternalRunnerEvent =
+  | {
+      kind: 'worker_start'
+      model: string
+      providerType: 'claude' | 'openai-compatible' | 'codex'
+      tier: AgentType
+    }
   | { kind: 'turn_start'; turn: number; provider: string; model: string }
   | { kind: 'tool_call'; turn: number; toolSummary: string }
   | { kind: 'text_emission'; turn: number; chars: number; preview: string }
