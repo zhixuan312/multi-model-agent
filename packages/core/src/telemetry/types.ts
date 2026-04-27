@@ -1,5 +1,4 @@
 import { z } from 'zod';
-import { ALL_MODEL_IDS } from '../routing/model-profiles.js';
 
 export const SCHEMA_VERSION = 1;
 
@@ -44,23 +43,23 @@ export const InstallableSkillId = z.enum([
 
 export const TriggeringSkillId = z.union([InstallableSkillId, z.literal('direct')]);
 
-export const ClientId = z.enum(['claude-code', 'cursor', 'codex-cli', 'gemini-cli', 'other']);
+export const ClientId = BoundedIdentifier;
 
-export const ModelFamily = z.enum(['claude', 'openai', 'gemini', 'deepseek', 'other']);
-
-// Canonical model IDs come from packages/core/src/routing/model-profiles.ts.
-// At build time, generate the union from the model-profiles. The build emits
-// `z.union([KnownModelId, z.literal('other')])` if the list is non-empty,
-// or `z.literal('other')` if the list is empty (so schema build never fails).
-// At runtime, anything not in the allowlist becomes 'other'.
-export const KnownModelId =
-  ALL_MODEL_IDS.length > 0
-    ? z.enum(ALL_MODEL_IDS as [string, ...string[]])
-    : (z.never() as z.ZodType<never>);
-export const ModelIdOrOther =
-  ALL_MODEL_IDS.length > 0
-    ? z.union([KnownModelId, z.literal('other')])
-    : z.literal('other');
+export const ModelFamily = z.enum([
+  'claude',     // Anthropic
+  'openai',     // OpenAI
+  'gemini',     // Google
+  'deepseek',   // DeepSeek
+  'grok',       // xAI
+  'mistral',    // Mistral
+  'meta',       // Meta (Llama family — covers llama2:7b, meta-llama/..., etc.)
+  'qwen',       // Alibaba
+  'zhipu',      // Z.ai (GLM family)
+  'kimi',       // Moonshot
+  'minimax',    // MiniMax
+  'other',      // catch-all — never rejected
+] as const);
+export type ModelFamilyType = z.infer<typeof ModelFamily>;
 
 export const Language = z.enum([
   'en',
@@ -160,7 +159,7 @@ export const StageStats = z.object({
   costBucket: z.enum(['$0', '<$0.01', '$0.01-$0.10', '$0.10-$1', '$1+']).nullable(),
   agentTier: z.enum(['standard', 'complex']).nullable(),
   modelFamily: ModelFamily.nullable(),
-  model: ModelIdOrOther.nullable(),
+  model: BoundedIdentifier.nullable(),
 }).strict();
 
 // Reviewer stages add verdict + round + concern categories.
@@ -191,7 +190,7 @@ export const TaskCompletedEvent = z.object({
     .max(2)
     .refine(xs => new Set(xs).size === xs.length, 'unique'),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
-  triggeredFromSkill: TriggeringSkillId, // 'direct' for non-skill invocations
+  triggeredFromSkill: BoundedIdentifier, // 'direct' for non-skill invocations
   client: ClientId, // which agent client invoked us
   // Task shape (derived from structured task metadata; never from prompt parsing or fs scanning)
   fileCountBucket: z.enum(['0', '1-5', '6-20', '21-50', '51+']),
@@ -200,7 +199,7 @@ export const TaskCompletedEvent = z.object({
   savedCostBucket: z.enum(['$0', '<$0.10', '$0.10-$1', '$1+', 'unknown']),
   // Implementer model summary (top-level convenience; per-stage detail lives in `stages`)
   implementerModelFamily: ModelFamily,
-  implementerModel: ModelIdOrOther,
+  implementerModel: BoundedIdentifier,
   // Outcome
   terminalStatus: z.enum([
     'ok',
@@ -225,7 +224,7 @@ export const TaskCompletedEvent = z.object({
   fallbackTriggered: z.boolean(),
   // Tool-call profile — top 5 distinct tool names called during this task by count
   // (allowlisted; non-listed tools become 'other'; never includes args/paths)
-  topToolNames: z.array(AllowlistedToolName).max(5),
+  topToolNames: z.array(BoundedIdentifier).max(20),
   // Per-stage breakdown — drives the lifecycle funnel + per-stage panels
   stages: z.object({
     implementing: StageStats,
