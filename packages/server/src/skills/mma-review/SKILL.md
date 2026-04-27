@@ -67,6 +67,14 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
+## Best practices
+
+This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-review`:
+
+- **Recipe A (analog) — Review-iterate-clean.** `mma-review` → fix → `mma-review` again. Same shape as the audit recipe, applied to source code. Sequential rounds; register the file(s) via `mma-context-blocks` before round 1 and reuse the same ID across rounds.
+
+Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel reviews of the same source file re-flag the same issues. Run rounds sequentially with a fix between each.
+
 ## Common pitfalls
 
 ❌ **Reviewing a plan/spec markdown with `mma-review`**
