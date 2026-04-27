@@ -196,6 +196,10 @@ export interface RunResult {
   commits?: Commit[]
   commitError?: string
   capExhausted?: 'turn' | 'cost' | 'wall_clock'
+  /** True when the orchestrator's stall watchdog fired and force-aborted
+   *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
+   *  signals "no progress" rather than "budget exhausted". */
+  stallTriggered?: boolean
   lifecycleClarificationRequested?: boolean
   workerError?: Error
   /** Per-stage raw stats (Phase 0). Bucketing happens in the telemetry event-builder. */

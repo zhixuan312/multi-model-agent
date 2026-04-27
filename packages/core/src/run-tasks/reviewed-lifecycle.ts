@@ -783,8 +783,12 @@ export async function executeReviewedLifecycle(
   // catch path. Without this, the recorder only fires on 2 of ~5 exit paths.
   let __finalRunResult: RunResult | undefined;
   const __recordOnce = (r: RunResult): RunResult => {
-    if (__finalRunResult === undefined) __finalRunResult = r;
-    return r;
+    // Stamp stallTriggered on every exit path. The watchdog flag is owned
+    // by this scope; surfacing it on the RunResult lets the caller (and
+    // telemetry) distinguish "no progress" aborts from cap exhaustion.
+    const stamped = stallFired ? { ...r, stallTriggered: true } : r;
+    if (__finalRunResult === undefined) __finalRunResult = stamped;
+    return stamped;
   };
 
   try {

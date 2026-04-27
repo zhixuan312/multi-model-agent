@@ -308,6 +308,11 @@ export class HeartbeatTimer {
 
   setStage(stage: HeartbeatStage, stageIndex: number, reviewRound?: number, attemptCap?: number): void {
     this.transition({ stage, stageIndex, reviewRound, attemptCap });
+    // Terminal is the absorbing state: clear the interval so post-terminal
+    // ticks can't fire even if the caller forgets to call stop() (P4).
+    if (stage === 'terminal') {
+      this.stop();
+    }
   }
 
   updateStageCount(stageCount: number): void {
