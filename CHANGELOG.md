@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.5] - 2026-04-27
+
+### Fixed
+- **Pre-clarification false positives in intake classifier (core).** The classifier was over-eager: ordinary technical English ("telemetry **system**", "**publish** docs", "**send** a request", "**push** the changelog to npm") tripped the multi-scope or behavior-change heuristics and wedged tasks into `awaiting_clarification` with no real safety win. Two changes: (1) drop the `multiScopeSignals` regex entirely — singular/plural matches on `module|service|component|system|layer` carried no information about destructiveness and other layers (cwd-only sandbox, cost ceilings, dirty-worktree pre-flight on `autoCommit`) cover real risk; (2) tighten `behaviorChange` to require dangerous **verb + object** combinations — `rm -rf`, `drop table/database/schema/index`, `delete (the)? table|database|files|users|...`, `deploy/publish/release to production|prod|staging|main|master`, `force push`, `push to main|master`, `migrate (the)? production|database|schema`. Bare `send`/`push`/`publish`/`migrate` no longer flag. Genuine destructive prompts still flag with the same `behavior-changing task without explicit scope` reason.
+
 ## [3.6.4] - 2026-04-27
 
 ### Added
@@ -860,7 +865,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.5...HEAD
+[3.6.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...v3.6.5
 [3.6.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.3...v3.6.4
 [3.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.0...v3.5.1
 [3.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.4.0...v3.5.0
