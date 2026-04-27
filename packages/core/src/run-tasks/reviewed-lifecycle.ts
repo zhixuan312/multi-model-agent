@@ -1017,6 +1017,9 @@ export async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
+    if (reviewPolicy === 'quality_only') {
+      throw new Error('buildEvidence is not callable for quality_only routes — read-only routes have no diff evidence');
+    }
     const evidence = isArtifactProducing
       ? await buildEvidence({ cwd, baselineHead, commits, verification, reviewPolicy })
       : { block: '', diffTruncated: false, fullDiff: '' };

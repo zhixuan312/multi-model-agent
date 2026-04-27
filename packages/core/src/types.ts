@@ -127,7 +127,7 @@ export interface TaskSpec {
   effort?: Effort
   sandboxPolicy?: SandboxPolicy
   maxCostUSD?: number
-  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off'
+  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off' | 'quality_only'
   briefQualityPolicy?: BriefQualityPolicy
   parentModel?: string
   formatConstraints?: FormatConstraints
