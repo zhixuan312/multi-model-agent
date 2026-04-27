@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import type { DiagnosticLogger } from '@zhixuan92/multi-model-agent-core/diagnostics/disconnect-log';
 import { composeTerminalHeadline } from '@zhixuan92/multi-model-agent-core/reporting/compose-terminal-headline';
 
 let specReviewCalls = 0;

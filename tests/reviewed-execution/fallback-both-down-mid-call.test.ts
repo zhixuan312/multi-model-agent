@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MultiModelConfig, Provider, RunResult } from '@zhixuan92/multi-model-agent-core';
-import type { DiagnosticLogger } from '@zhixuan92/multi-model-agent-core/diagnostics/disconnect-log';
 
 const providerCalls: string[] = [];
 let originalSetTimeout: typeof globalThis.setTimeout;
