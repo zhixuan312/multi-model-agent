@@ -82,10 +82,10 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:
 
-- **Recipe C — Investigate-plan-execute.** `mma-investigate` → write the plan → `mma-execute-plan` → `mma-retry` on failed indices. Register the plan file as a context block before the execute-plan call; retry inherits the same configuration.
+- **Recipe C — Investigate-plan-execute.** `mma-investigate` → write the plan → `mma-execute-plan` → `mma-retry` on failed indices. Register the plan file as a context block before the execute-plan call so it isn't re-inlined into every worker's prompt; retry inherits the same configuration.
 - **Recipe D — Plan-execute-retry (entry point).** `mma-execute-plan` is the producer of the `batchId` that `mma-retry` consumes. When this batch returns mixed `done` / `failed`, the next call is `mma-retry` with failed indices, NOT a re-dispatch.
 
-Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the batch returns mixed `done` / `failed`, do NOT re-run the whole task list — use `mma-retry` with the failed indices only.
+Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the batch returns mixed `done` / `failed`, do NOT re-run the whole task list — use `mma-retry` with the failed indices only. Re-running the whole list re-charges every successful task.
 
 ## Common pitfalls
 

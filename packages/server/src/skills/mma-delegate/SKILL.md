@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch one or more ad-hoc tasks to sub-agents concurrently. Each task is an independent instruction with optional file scope, acceptance criteria, and context blocks.
+Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an independent instruction with optional file scope, acceptance criteria, and context blocks.
 
 **Core principle:** Workers run on cheap providers; the main agent consumes only the structured per-task report. Parallelize freely as long as tasks don't write the same files.
 

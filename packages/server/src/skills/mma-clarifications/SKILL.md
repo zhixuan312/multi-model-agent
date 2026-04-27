@@ -1,7 +1,7 @@
 ---
 name: mma-clarifications
 description: Use when a previous mma-* batch's terminal envelope has `proposedInterpretation` as a string (not the `not_applicable` sentinel) — the service paused waiting for you to confirm or correct its read of the task
-when_to_use: A previous mma-delegate / mma-audit / mma-review / mma-execute-plan / mma-debug / mma-investigate terminal envelope has `proposedInterpretation` as a string. Read the proposal, decide whether to accept or correct it, then call this skill. The batch resumes immediately after the POST returns. A string `proposedInterpretation` is a HARD GATE — the batch is paused, not informational. The batch will not complete until the caller responds. Treating it as advisory is the clarification-as-info anti-pattern (AP5).
+when_to_use: A previous mma-delegate / mma-audit / mma-review / mma-execute-plan / mma-debug / mma-investigate terminal envelope has `proposedInterpretation` as a string. Read the proposal, decide whether to accept or correct it, then call this skill. The batch resumes immediately after the POST returns. A string `proposedInterpretation` is a hard gate — the batch is paused, not informational. The batch will not complete until the caller responds. Treating it as advisory is the clarification-as-info anti-pattern (AP5).
 version: "0.0.0-unreleased"
 ---
 

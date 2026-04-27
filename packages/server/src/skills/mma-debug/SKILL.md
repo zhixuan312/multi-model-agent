@@ -92,9 +92,9 @@ The worker explores blindly, often investigates the wrong area first. **Fix:** e
 Debug intentionally bundles `filePaths` for cross-file reasoning. Splitting defeats this. **Fix:** one call with all suspect files; if you really have N independent failures, use `mma-delegate` with N tasks.
 
 ❌ **Treating `mma-debug` as the fix step**
-Debug investigates and proposes; it doesn't necessarily write the fix. If the worker identifies a fix, dispatch `mma-delegate` to implement it (or write it inline if you understand it).
+Debug investigates and proposes; it doesn't necessarily write the fix. **Fix:** if the worker identifies a fix, dispatch `mma-delegate` to implement it (or write it inline if you understand it).
 
 ❌ **Skipping when an error message looks self-explanatory**
-Often the obvious cause isn't the real one. A 30-second debug pass costs less than a wrong fix that breaks something else.
+Often the obvious cause isn't the real one. **Fix:** a 30-second debug pass costs less than a wrong fix that breaks something else.
 
 @include _shared/error-handling.md
