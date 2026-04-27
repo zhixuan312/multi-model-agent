@@ -68,6 +68,14 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
+## Best practices
+
+This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-verify`:
+
+- **Recipe B — Debug-fix-verify.** `mma-debug` → `mma-delegate` (fix) → `mma-verify`. Verify checks acceptance criteria against the implemented work. Reuse the context block registered for the debug call.
+
+Anti-pattern alert: **`parallel-rounds-same-target`** (AP1, verify analog). Two parallel `mma-verify` calls on the unchanged checklist re-flag the same gaps. Run verify → fix → re-verify sequentially instead.
+
 ## Common pitfalls
 
 ❌ **Vague checklist items**
