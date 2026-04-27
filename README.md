@@ -231,7 +231,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.6.7** — Telemetry is now permissive on model/client/tool/skill identifiers: schema validates *shape, not vocabulary*. Anthropic 4.x, OpenAI o-series, Bedrock vendor prefixes, OpenRouter `meta-llama/...`, Ollama `llama2:7b`, custom finetunes, MCP tool names from any server — all pass through unchanged instead of being rejected or collapsed to `'other'`. `ModelFamily` enum widened 5 → 12 (added `grok`, `mistral`, `meta`, `qwen`, `zhipu`, `kimi`, `minimax`); `allowlistModel` renamed to `normalizeModelForTelemetry`. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.6.8** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
