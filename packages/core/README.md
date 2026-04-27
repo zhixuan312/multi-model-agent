@@ -18,17 +18,21 @@ Requires Node >= 22. ESM only.
 import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/load';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 
+// Uses the same ~/.multi-model/config.json as the standalone daemon —
+// agents.standard, agents.complex, defaults.parentModel, etc.
 const config = await loadConfigFromFile();
 
 const results = await runTasks([
-  { prompt: 'Refactor auth.ts to use JWT.', agentType: 'complex' },
-  { prompt: 'Write unit tests for auth module.', agentType: 'standard' },
+  { prompt: 'Refactor auth.ts to use JWT.',         agentType: 'complex' },
+  { prompt: 'Write unit tests for auth module.',    agentType: 'standard' },
 ], config);
 
 for (const r of results) {
-  console.log(r.status, r.usage.costUSD, r.output);
+  console.log(r.status, r.usage.costUSD, r.savedCostUSD, r.output);
 }
 ```
+
+`savedCostUSD` is populated when `defaults.parentModel` is set in the config — it's the difference between the agent's actual cost and what the parent model would have charged for the same input/output token count. Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
 
 ## What's inside
 
@@ -64,6 +68,9 @@ for (const r of results) {
 | `./reporting/parse-investigation-report` | `parseInvestigationReport`, `parseCitations`, `parseConfidence` (3.4.0) |
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
+| `./telemetry/types` | `TelemetryEvent`, `UploadBatch`, `InstallMetadata` Zod schemas + `SCHEMA_VERSION` |
+| `./telemetry/event-builder` | `buildTaskCompletedEvent`, `buildSessionStartedEvent`, etc. — pure event constructors |
+| `./telemetry/consent-rules` | `decideConsent` — env / config / default precedence resolver |
 
 ## Diagnostic logging
 

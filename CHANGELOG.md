@@ -270,7 +270,6 @@ No public API or HTTP surface changes. Clients and skills installed against 3.1.
 - Verbose tool_call events include `durationMs` (time since prior event); llm_turn includes per-turn duration. New `batch_completed` and `batch_failed` events fire from asyncDispatch with total batch duration and task count / error details. Stage transitions (implementing → spec_review → spec_rework → quality_review → quality_rework) emit `task_phase_change`.
 - Skill frontmatter rewrite across every mma-* skill: each describes direct user intent (audit, review, verify, debug, execute-plan, delegate) as the primary trigger and names the superpowers methodology skill it pairs with as a secondary hint. Works for users who do NOT use superpowers too.
 - Skill frontmatter `version:` field (sentinel `"0.0.0-unreleased"` in source, stamped to package.json version at build time via `packages/server/scripts/inject-skill-version.mjs`).
-- Migration guide at `docs/migration/2.x-mcp-to-3.x-rest.md`.
 
 ### Changed
 

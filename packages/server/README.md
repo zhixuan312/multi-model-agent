@@ -2,67 +2,161 @@
 
 [![npm](https://img.shields.io/npm/v/@zhixuan92/multi-model-agent?label=npm)](https://www.npmjs.com/package/@zhixuan92/multi-model-agent)
 
-Local HTTP service for delegating tool-using work to sub-agents on different LLM providers.
+Local HTTP daemon that delegates tool-using work to sub-agents on different LLM providers. One process serves Claude Code, Codex CLI, Gemini CLI, and Cursor via installable skills.
 
-*Renamed from `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — the package no longer uses MCP. See [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md#300).*
+*Renamed from `@zhixuan92/multi-model-agent-mcp` in 3.0.0 — the package no longer uses MCP. See [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).*
 
 ## Why
 
-- **Save 90%+ on implementation labor.** Mechanical work runs on cheaper standard agents; your flagship model stays on architecture and decisions.
-- **Structural quality.** Implementation and review run on different agents — different training data, different blind spots. Cross-agent review catches what self-review can't.
-- **Client-agnostic.** One daemon serves Claude Code, Gemini CLI, Codex CLI, and Cursor via installable skills. The daemon outlives any individual client session.
+Your flagship model reasoning about architecture is money well spent. That same model grepping files, writing boilerplate, and running tests is waste.
 
----
+| Project | MMA — MiniMax-M2.7 | MMA — DeepSeek V4 Pro | Flagship: Claude Opus 4.7 |
+|---|---|---|---|
+| Feature impl (30 files, ~50 tasks) | **$1.50** · **33× ROI** · ~35 min | **~$2.50** · **20× ROI** · ~15 min | $50 · 1× · *baseline* |
+| Full web SPA (59 tasks) | **$5.65** · **12× ROI** · ~50 min | **~$9** · **7.5× ROI** · ~22 min | $68 · 1× · *baseline* |
+| Backend microservice (91 tasks) | **$8.21** · **13× ROI** · ~1.5 hrs | **~$14** · **7.5× ROI** · ~40 min | $104 · 1× · *baseline* |
 
-## Quick start
+Plus structural quality: implementation and review run on **different** model families — different blind spots, catches what self-review can't.
+
+## Initial setup
+
+Four steps, in order.
+
+### 1. Install CLI + skills
 
 ```bash
-# 1. install
-npm i -g @zhixuan92/multi-model-agent     # requires Node ≥ 22
-
-# 2. write a config (~/.multi-model/config.json) — see Configuration below
-
-# 3. start the daemon
-mmagent serve                              # 127.0.0.1:7337 by default
-
-# 4. install skills for your AI client (auto-detect or pick a target)
-mmagent install-skill                      # all detected clients
-mmagent install-skill --target=claude-code # or gemini / codex / cursor
-
-# 5. verify
-curl -s http://localhost:7337/health       # → {"ok":true,"version":"3.4.0",...}
+npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
+mmagent install-skill                       # auto-detect all clients
+# or pin a specific target:
+mmagent install-skill --target=claude-code  # claude-code | gemini-cli | codex-cli | cursor
 ```
 
-Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
+| Client | Install location | Loaded |
+|---|---|---|
+| Claude Code | `~/.claude/skills/` | next session |
+| Gemini CLI | Gemini CLI skill directory | next session (requires version with external-skill support) |
+| Codex CLI | `~/.codex/skills/` | next session |
+| Cursor | Cursor extension manifest | restart Cursor |
 
-For a long-running background install, use a user service ([macOS launchd / Linux systemd templates](./scripts/README.md)).
+### 2. Choose your parent model — intentionally
 
-## Configuration
+`defaults.parentModel` is **the model you'd use without mmagent**. It's the cost baseline for every per-task headline (`$X actual / $Y saved vs <parentModel> (Z× ROI)`). Leave it unset and you lose the savings/ROI signal.
 
-Config file: `~/.multi-model/config.json`. Lookup order: `--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
+- Heavy Claude Code user → `claude-opus-4-7`
+- ChatGPT-led workflow → `gpt-5.5`
+- Gemini-led workflow → `gemini-3.1-pro`
+
+### 3. Write the config
+
+`~/.multi-model/config.json` — minimal, recommended:
 
 ```json
 {
   "agents": {
-    "standard": { "type": "codex", "model": "codex-mini-latest" },
-    "complex":  { "type": "claude", "model": "claude-sonnet-4-20250514" }
+    "standard": {
+      "type": "openai-compatible",
+      "model": "MiniMax-M2.7",
+      "baseUrl": "https://api.minimax.io/v1",
+      "apiKeyEnv": "MINIMAX_API_KEY"
+    },
+    "complex": {
+      "type": "codex",
+      "model": "gpt-5.5"
+    }
   },
   "defaults": {
-    "timeoutMs": 1800000,
-    "maxCostUSD": 10,
-    "tools": "full"
-  },
-  "server": {
-    "bind": "127.0.0.1",
-    "port": 7337,
-    "auth": { "tokenFile": "~/.multi-model/auth-token" }
+    "parentModel": "claude-opus-4-7"
   }
 }
 ```
 
-Agent types: `claude`, `codex`, `openai-compatible`, `claude-compatible`. Any OpenAI-compatible endpoint works (MiniMax, DeepSeek, Groq, Together, local vLLM) — set `baseUrl` and either `apiKey` or `apiKeyEnv`. Use `claude-compatible` (same shape) for vendors exposing an Anthropic-format endpoint such as DeepSeek's `/anthropic` — preserves thinking content blocks across multi-turn tool use, required for DeepSeek V4's hybrid reasoning models. See the main README for examples and the trade-off vs. `openai-compatible`.
+That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
-The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override the file.
+### 4. Start the daemon + verify
+
+Two ways — pick one:
+
+**Option A — let your AI client auto-spawn it.** Open your client (Claude Code / Codex CLI / etc.) and call any mma-* skill; the skill's preflight check spawns `mmagent serve` on `127.0.0.1:7337` and reuses it for every subsequent call.
+
+**Option B — start it manually.** Useful when you want the daemon up before opening a client:
+
+```bash
+mmagent serve                          # 127.0.0.1:7337 by default
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.4",...}
+```
+
+For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
+
+## Updating
+
+```bash
+npm install -g @zhixuan92/multi-model-agent@latest
+pkill -f "mmagent serve"            # stop the running daemon
+mmagent update-skills               # refresh installed skills
+# next AI-client session respawns the daemon via the skill preflight
+```
+
+A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve`.
+
+## Configuration reference
+
+### Lookup order
+
+`--config <path>` → `$MMAGENT_CONFIG` → `<cwd>/.multi-model-agent.json` → `~/.multi-model/config.json`.
+
+### Agent types
+
+| Type | Auth | When to pick |
+|---|---|---|
+| `claude` | Local Claude Code OAuth (`claude login`) | Stay on Claude end-to-end with subscription auth |
+| `codex` | Codex CLI subscription (`codex login`) | OpenAI flagship work without juggling API keys |
+| `openai-compatible` | `apiKey` or `apiKeyEnv` | Any OpenAI-compatible endpoint — MiniMax, Groq, Together, local vLLM, plus OpenAI direct |
+| `claude-compatible` | `apiKey` or `apiKeyEnv` | Vendors exposing an Anthropic-format endpoint (DeepSeek's `/anthropic`, etc.) — preserves thinking content blocks across multi-turn tool use |
+
+DeepSeek V4 Pro under `claude-compatible` keeps reasoning ON; under `openai-compatible` it works but auto-disables thinking.
+
+### Tuning
+
+Every `defaults` knob has a built-in. Override only when you need to.
+
+| Field | Default | What it does |
+|---|---|---|
+| `defaults.timeoutMs` | `1800000` (30 min) | Hard task-level wall-clock cap |
+| `defaults.stallTimeoutMs` | `600000` (10 min) | Aborts in-flight runs idle for this long |
+| `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling; returns `cost_exceeded` when hit |
+| `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full` |
+| `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd` |
+| `defaults.parentModel` | *(none)* | Cost baseline for the per-task ROI headline. **Set this on purpose.** |
+
+### Telemetry
+
+**Off by default.** Opt in via `mmagent telemetry enable` (or `MMAGENT_TELEMETRY=1`), or set in config:
+
+```json
+{
+  "agents": { "...": "..." },
+  "telemetry": { "enabled": true }
+}
+```
+
+Every upload batch is signed with a per-install Ed25519 key (TOFU; lives at `~/.multi-model/identity.json`); receivers can verify it came from the install whose `installId` it claims. Full disclosure: [PRIVACY.md](https://github.com/zhixuan312/multi-model-agent/blob/master/PRIVACY.md).
+
+### Verbose / diagnostics
+
+```json
+{
+  "agents": { "...": "..." },
+  "diagnostics": { "log": true, "verbose": true }
+}
+```
+
+Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`; large request bodies (>16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`.
+
+> **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
+
+### Auth token
+
+Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set `MMAGENT_AUTH_TOKEN` to override.
 
 ## REST API
 
@@ -78,7 +172,7 @@ The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent 
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
 | `POST /investigate?cwd=<abs>` | Codebase Q&A — structured answer with file:line citations + confidence |
-| `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending; body is the running headline) or `200 application/json` (terminal; uniform 7-field envelope). `?taskIndex=N` slices on complete state. |
+| `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
 | `POST /clarifications/confirm` | Confirm / override a clarification proposal |
@@ -88,36 +182,21 @@ The auth token is generated on first `mmagent serve`. Retrieve it with `mmagent 
 
 All tool endpoints require bearer auth: `Authorization: Bearer <token>`.
 
-## What's new in 3.5.1
-
-**Bug fixes:**
-- **Single-provider deployments no longer burn a doomed cross-tier fallback call.** When `agents.standard` and `agents.complex` resolve to the same backend (one-provider deployment) and the assigned-tier call transport-fails, the wrapper used to substitute to the alt tier — which in that configuration just hits the same backend, burning a second doomed call and surfacing as `terminationReason: 'all_tiers_unavailable'`. The original failure now flows through as the task's terminal result with the actual root-cause status. No new operator config; auto-detected via deep-equal of the effective provider config.
-- **No more `runner_crash: verbose-line: invalid key name` on fallback / rework paths.** With `diagnostics.verbose: true`, any run that hit fallback / escalation / spec_rework / quality_rework previously threw inside the verbose-stream serializer (camelCase event-param keys like `assignedTier`, `implTier`, `attemptCap` violated its snake_case-only validator) and surfaced as terminal `runner_crash` even though the model itself succeeded. The verbose-stream branch now drops `batchId` / `taskIndex` (already emitted as `batch` / `task`) and snake-cases the remaining keys; the JSONL `DiagnosticLogger` contract (camelCase `assignedTier` / `implTier` / ... on `escalation` / `fallback` events) is unchanged.
-
-## What's new in 3.5.0
-
-**Breaking changes (operators read this first):**
-- `task.maxReviewRounds` is gone — review caps now derive from policy tables (`maxReworksFor('spec') = 2`, `maxReworksFor('quality') = 2`). Remove the field from any callers.
-- `agentType` is gone from `/execute-plan` (top-level + per-task). The compiler hardcodes `agentType: 'standard'`. `/delegate` is unchanged and still accepts the field.
-- Status-level escalation inside `delegateWithEscalation` is removed. Transport failures now flow through the new `runWithFallback` wrapper in `reviewed-lifecycle.ts`.
-
-**New behavior:**
-- **Tier-escalating rework.** For standard-tier tasks, the implementation tier escalates to complex on the final rework attempt; reviewers swap to keep impl ≠ reviewer.
-- **Runtime tier fallback.** Transport failures (`api_error` / `network_error` / `timeout`) or missing configuration trigger automatic substitution of the other tier. Fallback is sticky per loop.
-- **Single-slot operators** receive reviews on the same tier (`violatesSeparation: true`); set `reviewPolicy: 'off'` to opt out.
-- **Four new diagnostic events** — `escalation`, `escalation_unavailable`, `fallback`, `fallback_unavailable` — emitted via the verbose stderr stream and JSONL log.
-- **New `agents.*History` and `agents.fallbackOverrides`** envelope fields surface tier movement; the headline composer adds `(escalated to complex; fallback fired)` style suffixes.
-
 ## Operator commands
 
 ```bash
-mmagent serve [--verbose] [--log]         # start daemon (--verbose → stderr events; --log → JSONL to ~/.multi-model/logs/)
-mmagent info  [--json]                    # cliVersion, bind/port, token fingerprint, daemon identity (offline)
-mmagent status [--json]                   # health + stats from a running daemon
-mmagent logs  [--follow] [--batch=<id>]   # tail today's diagnostic log
-mmagent print-token                       # print the current auth token
-mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]   # default installs all shipped skills
-mmagent update-skills [--dry-run] [--json]   # refresh installed skills after upgrade
+mmagent serve [--verbose] [--log]                # start daemon
+mmagent info  [--json]                           # cliVersion, bind/port, token fingerprint, daemon identity
+mmagent status [--json]                          # health + stats from a running daemon
+mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
+mmagent print-token                              # print the current auth token
+mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]
+mmagent update-skills [--dry-run] [--json]       # refresh installed skills after upgrade
+mmagent telemetry status                         # show consent state + source
+mmagent telemetry enable                         # opt in
+mmagent telemetry disable                        # opt out + delete local queue
+mmagent telemetry reset-id                       # rotate the local Ed25519 identity
+mmagent telemetry dump-queue                     # print the locally-queued events as JSON
 ```
 
 ## Shipped skills
@@ -138,43 +217,27 @@ Skills are Markdown prompts that tell your AI client when and how to call each e
 | `mma-context-blocks` | `POST/DELETE /context-blocks` |
 | `mma-clarifications` | `POST /clarifications/confirm` |
 
-## Operations
+## Architecture
 
-### Upgrading
+`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout.
 
-```bash
-npm install -g @zhixuan92/multi-model-agent@latest
-pkill -f "mmagent serve"            # stop the running daemon
-mmagent update-skills               # refresh installed skills
-# next AI-client session respawns the daemon via the skill preflight
-```
+Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md). Layer map and request lifecycle: [docs/ARCHITECTURE.md](https://github.com/zhixuan312/multi-model-agent/blob/master/docs/ARCHITECTURE.md).
 
-A drift warning prints on `mmagent serve` if installed skills are older than the daemon.
-
-### Verbose mode
-
-Enable per-run via `mmagent serve --verbose --log`, or persist in config:
-
-```json
-{ "diagnostics": { "log": true, "verbose": true } }
-```
-
-JSONL goes to `~/.multi-model/logs/mmagent-<date>.jsonl`. Large request bodies (over 16 KB UTF-8) spill to `~/.multi-model/logs/requests/<batchId>.json`. **Note:** request bodies may include prompts and file paths — disable `verbose` for production servers handling sensitive data.
-
-### Troubleshooting
+## Troubleshooting
 
 | Symptom | Fix |
 |---|---|
 | Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
-| Daemon stale after upgrade | `pkill -f "mmagent serve"`; preflight respawns |
+| Daemon stale after upgrade | `pkill -f "mmagent serve"`; the skill preflight respawns it on next client session |
 | Skill version mismatch | `mmagent update-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
+| `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
+| TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
+| Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## Architecture at a glance
+## What's new
 
-`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout.
-
-Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-agent/blob/master/DIRECTION.md).
+Latest: **3.6.4** — Anonymous usage telemetry, **off by default**, now signed end-to-end with a per-install Ed25519 key (TOFU). Strict schemas fail closed on unknown fields. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
