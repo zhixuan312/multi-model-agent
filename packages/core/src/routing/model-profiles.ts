@@ -2,6 +2,52 @@ import { z } from 'zod';
 import type { CostTier, ProviderConfig } from '../types.js';
 import profileData from '../model-profiles.json' with { type: 'json' };
 
+
+// ── Vendor prefix normalization ──────────────────────────────────────────
+
+const VENDOR_PREFIXES = [
+  "bedrock.", "bedrock/",
+  "aws.", "aws_bedrock.", "aws-bedrock/",
+  "vertex.", "vertex/", "vertex_ai/", "vertex-ai/",
+  "gcp.", "gcp/",
+  "azure.", "azure/", "azure_openai/", "azureopenai/",
+  "anthropic.", "anthropic/",
+  "openai.", "openai/",
+];
+
+const BEDROCK_VERSION_SUFFIX = /-v\d+:\d+$/i;
+
+/**
+ * Strip well-known vendor prefixes (case-insensitive) and Bedrock-style
+ * version suffixes to recover the canonical model identifier.
+ *
+ * Prefix stripping repeats until no prefix matches so compound prefixes
+ * like `vertex_ai/anthropic.` collapse correctly.
+ *
+ * Idempotent: repeated application returns the same result.
+ * Bare model names pass through unchanged.
+ */
+export function extractCanonicalModelName(raw: string): string {
+  let result = raw;
+  let changed = true;
+
+  while (changed) {
+    changed = false;
+    const lower = result.toLowerCase();
+    for (const prefix of VENDOR_PREFIXES) {
+      if (lower.startsWith(prefix)) {
+        result = result.slice(prefix.length);
+        changed = true;
+        break;
+      }
+    }
+  }
+
+  result = result.replace(BEDROCK_VERSION_SUFFIX, "");
+
+  return result;
+}
+
 const tierSchema = z.enum(['trivial', 'standard', 'reasoning']);
 const costTierSchema = z.enum(['free', 'low', 'medium', 'high']);
 
@@ -176,7 +222,8 @@ export const ALL_MODEL_IDS: readonly string[] = Object.freeze(
 );
 
 export function findModelProfile(modelId: string): ModelProfile {
-  const normalized = modelId.toLowerCase();
+  const canonical = extractCanonicalModelName(modelId);
+  const normalized = canonical.toLowerCase();
   for (const entry of PROFILE_ENTRIES) {
     if (normalized.startsWith(entry.prefix.toLowerCase())) {
       return { ...entry };

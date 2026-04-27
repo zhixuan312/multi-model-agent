@@ -31,7 +31,7 @@ import {
   isReviewTransportFailure,
   type UnavailableMap,
 } from '../escalation/fallback.js';
-import { findModelCapabilities, findModelProfile } from '../routing/model-profiles.js';
+import { findModelCapabilities, findModelProfile, extractCanonicalModelName } from '../routing/model-profiles.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -73,9 +73,18 @@ export function emptyStats(): StageStatsMap {
   };
 }
 
+const FAMILY_MAP: Record<string, string> = {
+  claude: "claude",
+  gpt: "openai", o1: "openai", o3: "openai", openai: "openai",
+  gemini: "gemini",
+  deepseek: "deepseek",
+};
+
 function modelFamily(model: string): string {
-  const dash = model.indexOf('-');
-  return dash > 0 ? model.slice(0, dash) : model;
+  const canonical = extractCanonicalModelName(model);
+  const dash = canonical.indexOf('-');
+  const raw = dash > 0 ? canonical.slice(0, dash) : canonical;
+  return FAMILY_MAP[raw.toLowerCase()] ?? 'other';
 }
 
 export function endBaseStage(

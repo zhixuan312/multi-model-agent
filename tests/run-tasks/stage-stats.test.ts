@@ -122,7 +122,7 @@ describe('endVerifyStage', () => {
     expect(stats.verifying.durationMs).toBeGreaterThanOrEqual(3000);
     expect(stats.verifying.costUSD).toBeCloseTo(0.06);
     expect(stats.verifying.agentTier).toBe('complex');
-    expect(stats.verifying.modelFamily).toBe('gpt');
+    expect(stats.verifying.modelFamily).toBe('openai');
     expect(stats.verifying.model).toBe('gpt-5.5');
   });
 
