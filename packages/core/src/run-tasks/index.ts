@@ -7,7 +7,7 @@ import type {
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
-import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
+import type { HttpServerLog } from '../diagnostics/http-server-log.js';
 import type { EventBus } from '../observability/bus.js';
 import type { BriefQualityWarning } from '../intake/types.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
@@ -31,12 +31,12 @@ export interface RunTasksOptions {
   /** Callback fired on every heartbeat tick with a state snapshot. */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   /**
-   * Optional DiagnosticLogger. When present AND `verbose` is true, the
+   * Optional HttpServerLog. When present AND `verbose` is true, the
    * runner records per-tool-call + per-LLM-turn events for post-mortem
    * diagnosis of slow tasks. Logger writes are a no-op if diagnostics.log=false,
    * so passing it is always safe.
    */
-  logger?: DiagnosticLogger;
+  logger?: HttpServerLog;
   /**
    * Enable verbose emissions. When true, each tool call and LLM turn is
    * streamed to `verboseStream` (default: process.stderr) so the operator

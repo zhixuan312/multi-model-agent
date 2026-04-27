@@ -47,6 +47,10 @@ export class JsonlWriter {
     catch { /* swallow write errors */ }
   }
 
+  get currentPath(): string {
+    return join(this.dir, this.filenameFor(this.now()));
+  }
+
   close(): void {
     if (this.fd !== null) { try { this.closeSync(this.fd); } catch { /* best effort */ } this.fd = null; }
   }

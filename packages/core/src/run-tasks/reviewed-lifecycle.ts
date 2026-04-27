@@ -55,7 +55,7 @@ import type {
   FallbackUnavailableEventParams,
   EscalationEventParams,
   EscalationUnavailableEventParams,
-} from '../diagnostics/disconnect-log.js';
+} from '../diagnostics/types.js';
 import { withDoneCondition } from './execute-task.js';
 
 const exec = promisify(execFile);
@@ -162,7 +162,7 @@ export async function executeReviewedLifecycle(
   onProgress?: RunTasksProgressCallback,
   heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void },
   diagnostics?: {
-    logger?: import('../diagnostics/disconnect-log.js').DiagnosticLogger;
+    logger?: import('../diagnostics/http-server-log.js').HttpServerLog;
     verbose?: boolean;
     verboseStream?: (line: string) => void;
   },

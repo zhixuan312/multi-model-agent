@@ -70,7 +70,7 @@ async function registerToolHandlers(
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
-  const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
+  const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
@@ -93,14 +93,16 @@ async function registerToolHandlers(
     return;
   }
 
-  const logger = createDiagnosticLogger({
+  const logDir = multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs');
+  const writer = new JsonlWriter({ dir: logDir });
+
+  const logger = createHttpServerLog({
     enabled: multiModelConfig.diagnostics?.log ?? false,
-    ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+    writer,
   });
 
-  const logDir = multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs');
   const bus = new EventBus([
-    new LocalLogSink(new JsonlWriter({ dir: logDir })),
+    new LocalLogSink(writer),
     new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
   ]);
 
@@ -147,7 +149,7 @@ async function registerControlHandlers(
   const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
   const { buildClarificationsHandler } = await import('./handlers/control/clarifications.js');
-  const { createDiagnosticLogger } = await import('@zhixuan92/multi-model-agent-core');
+  const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
     ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
@@ -155,15 +157,16 @@ async function registerControlHandlers(
 
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
+    const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
     const bus = new EventBus([
-      new LocalLogSink(new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') })),
+      new LocalLogSink(writer),
       new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
     ]);
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
-      logger: createDiagnosticLogger({
+      logger: createHttpServerLog({
         enabled: multiModelConfig.diagnostics?.log ?? false,
-        ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
+        writer,
       }),
       bus,
       projectRegistry,

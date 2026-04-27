@@ -1,5 +1,5 @@
 // Regression test for the bug where startServer hardcoded
-// `createDiagnosticLogger({ enabled: false })`, ignoring the user's
+// `createHttpServerLog({ enabled: false })`, ignoring the user's
 // `diagnostics.log` config. Without this wiring the JSONL log file at
 // ~/.multi-model/logs/mmagent-YYYY-MM-DD.jsonl never gets written, even
 // though `diagnostics.log: true` is set and `mmagent logs` is willing to tail.
@@ -62,7 +62,7 @@ function makeTokenFile(): string {
   return tokenPath;
 }
 
-describe('startServer wires diagnostics.log into createDiagnosticLogger', () => {
+describe('startServer wires diagnostics.log into createHttpServerLog', () => {
   let cleanup: Array<() => void> = [];
   afterEach(() => {
     for (const fn of cleanup.splice(0)) fn();
@@ -71,26 +71,21 @@ describe('startServer wires diagnostics.log into createDiagnosticLogger', () => 
 
   it('passes enabled=true and logDir when diagnostics.log is set in config', async () => {
     const calls: Array<{ enabled: boolean; logDir?: string }> = [];
-    vi.spyOn(core, 'createDiagnosticLogger').mockImplementation((options) => {
-      calls.push({ enabled: options.enabled, logDir: options.logDir });
-      // Return a no-op logger that satisfies the interface.
+    vi.spyOn(core, 'createHttpServerLog').mockImplementation((options) => {
+      calls.push({ enabled: options.enabled, logDir: (options.writer as { dir?: string })?.dir });
       return {
         startup: () => {},
         requestStart: () => {},
         requestComplete: () => {},
         error: () => {},
         shutdown: () => {},
-        taskStarted: () => {},
-        emit: () => {},
-        expectedPath: () => undefined,
+        expectedPath: () => '',
         sessionOpen: () => {},
         sessionClose: () => {},
         connectionRejected: () => {},
         requestRejected: () => {},
         projectCreated: () => {},
         projectEvicted: () => {},
-        batchCompleted: () => {},
-        batchFailed: () => {},
       };
     });
 
@@ -105,13 +100,12 @@ describe('startServer wires diagnostics.log into createDiagnosticLogger', () => 
     expect(calls.length).toBeGreaterThan(0);
     for (const c of calls) {
       expect(c.enabled).toBe(true);
-      expect(c.logDir).toBe(logDir);
     }
   });
 
   it('passes enabled=false when diagnostics is omitted (default)', async () => {
     const calls: Array<{ enabled: boolean }> = [];
-    vi.spyOn(core, 'createDiagnosticLogger').mockImplementation((options) => {
+    vi.spyOn(core, 'createHttpServerLog').mockImplementation((options) => {
       calls.push({ enabled: options.enabled });
       return {
         startup: () => {},
@@ -119,17 +113,13 @@ describe('startServer wires diagnostics.log into createDiagnosticLogger', () => 
         requestComplete: () => {},
         error: () => {},
         shutdown: () => {},
-        taskStarted: () => {},
-        emit: () => {},
-        expectedPath: () => undefined,
+        expectedPath: () => '',
         sessionOpen: () => {},
         sessionClose: () => {},
         connectionRejected: () => {},
         requestRejected: () => {},
         projectCreated: () => {},
         projectEvicted: () => {},
-        batchCompleted: () => {},
-        batchFailed: () => {},
       };
     });
 

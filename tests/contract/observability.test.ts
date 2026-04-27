@@ -1,17 +1,15 @@
 // Observability inspection notes from packages/core/src + packages/server/src on 2026-04-24:
-// - Structured-log sink: dedicated logger module `createDiagnosticLogger` in
-//   packages/core/src/diagnostics/disconnect-log.ts.
-// - The logger writes JSONL via its injected `writeSync` hook; this is cleaner
+// - Structured-log sink: dedicated logger module `createHttpServerLog` in
+//   packages/core/src/diagnostics/http-server-log.ts.
+// - The logger writes JSONL via an injected `JsonlWriter`; this is cleaner
 //   to intercept than patching console.*.
 // - Relevant deterministic emission sites exercised by the delegate scenario:
 //   * packages/server/src/http/async-dispatch.ts
-//       - logger.taskStarted(...)
-//       - logger.batchCompleted(...) / logger.batchFailed(...)
+//       - event emission via EventBus
 //   * packages/server/src/http/execution-context.ts
-//       - logger.taskHeartbeat(...)
-//       - logger.taskPhaseChange(...) when HeartbeatTimer reports phase changes
+//       - event emission via EventBus when HeartbeatTimer reports phase changes
 // - Current harness/server wiring builds the logger inside server startup, so
-//   this test spies on `createDiagnosticLogger` before boot and forces an
+//   this test spies on `createHttpServerLog` before boot and forces an
 //   enabled logger whose JSONL writes are captured in-memory.
 
 import { describe, it, expect, vi } from 'vitest';
@@ -110,23 +108,27 @@ function observabilityProvider(): core.Provider {
 
 // TODO(task-7-rewrite): un-skip after observability.test.ts rewrite.
 // The spy-on-logger fixture stopped working when task-event emission migrated
-// from typed DiagnosticLogger methods to EventBus.emit in commit 3.
+// from typed HttpServerLog methods to EventBus.emit in commit 3.
 describe.skip('contract: observability', () => {
   it('deterministic scenario emits every required event + field', async () => {
     const writtenLines: string[] = [];
-    const originalFactory = core.createDiagnosticLogger;
+    const originalFactory = core.createHttpServerLog;
 
-    const factorySpy = vi.spyOn(core, 'createDiagnosticLogger').mockImplementation((options) => {
-      return originalFactory({
-        ...options,
-        enabled: true,
+    const factorySpy = vi.spyOn(core, 'createHttpServerLog').mockImplementation((options) => {
+      // Inject a capturing JsonlWriter so we intercept JSONL output
+      const captureWriter = new core.JsonlWriter({
+        dir: '/tmp/obs-test',
         now: () => new Date('2023-11-14T22:13:20.000Z'),
-        writeSync: (_fd, data) => {
-          writtenLines.push(data.trim());
-        },
+        writeSync: (_fd, data) => { writtenLines.push(data.trim()); },
         openSync: () => 1,
         closeSync: () => {},
         mkdirSync: () => {},
+      });
+      return originalFactory({
+        ...options,
+        enabled: true,
+        writer: captureWriter,
+        now: () => new Date('2023-11-14T22:13:20.000Z'),
         stderrWrite: () => {},
       });
     });
@@ -173,33 +175,10 @@ describe.skip('contract: observability', () => {
     }
 
     const captured = parseCapturedEvents(writtenLines);
-    // Exercise the four lifecycle observability methods directly as a contract
-    // backstop for deterministic availability/escalation event shapes.
-    const directLogger = originalFactory({
-      enabled: true,
-      now: () => new Date('2023-11-14T22:13:20.000Z'),
-      writeSync: (_fd, data) => writtenLines.push(data.trim()),
-      openSync: () => 1,
-      closeSync: () => {},
-      mkdirSync: () => {},
-      stderrWrite: () => {},
-    });
-    directLogger.escalation({ batchId: 'direct', taskIndex: 1, loop: 'spec', attempt: 2, baseTier: 'standard', implTier: 'complex', reviewerTier: 'standard' });
-    directLogger.escalationUnavailable({ batchId: 'direct', taskIndex: 1, loop: 'spec', attempt: 2, role: 'implementer', wantedTier: 'complex', reason: 'not_configured' });
-    directLogger.fallback({ batchId: 'direct', taskIndex: 2, loop: 'spec', attempt: 0, role: 'implementer', assignedTier: 'standard', usedTier: 'complex', reason: 'transport_failure', violatesSeparation: false });
-    directLogger.fallbackUnavailable({ batchId: 'direct', taskIndex: 2, loop: 'spec', attempt: 0, role: 'implementer', assignedTier: 'standard', reason: 'transport_failure' });
-    directLogger.emit({
-      event: 'heartbeat',
-      batchId: 'direct',
-      taskIndex: 0,
-      elapsed: '5s',
-      stage: 'implementing',
-      tools: 0,
-      read: 0,
-      wrote: 0,
-      cost: 0.001,
-      idle_ms: 5000,
-    });
+    // Task events (escalation, fallback, heartbeat, etc.) now flow through
+    // EventBus.emit — no longer through typed logger methods. Contract coverage
+    // for those events lives in the EventBus integration tests.
+    // TODO(task-7-rewrite): add EventBus-based contract assertions.
 
     const allCaptured = parseCapturedEvents(writtenLines);
     const m = manifest as ObsManifest;
