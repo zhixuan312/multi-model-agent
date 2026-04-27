@@ -94,24 +94,26 @@ export function classifyDraft(draft: DraftTask): ClassificationResult {
       }
     }
 
-    if (!draft.filePaths?.length) {
-      const multiScopeSignals = [
-        /\band\b.*\b(module|service|component|system|layer)/i,
-        /\b(modules|services|components|systems|layers)\b/i,
-      ];
-      for (const pattern of multiScopeSignals) {
-        if (pattern.test(draft.prompt)) {
-          reasons.push('multiple plausible scopes detected');
-          break;
-        }
-      }
-    }
-
-    const behaviorChange = /\b(delete|remove|drop|migrate|deploy|push|publish|send)\b/i;
-    const securitySensitive = /\b(auth|credential|secret|token|permission|password|key)\b/i;
-    if (behaviorChange.test(draft.prompt) && !draft.filePaths?.length) {
+    // Behavior-change detection requires a dangerous *combination* (verb +
+    // dangerous object/target), not a bare verb. The earlier broad pattern
+    // (`delete|remove|drop|migrate|deploy|push|publish|send` alone) flagged
+    // ordinary technical English ("send a request", "publish docs") and
+    // wedged users in awaiting_clarification with no real safety win.
+    const dangerousCombos: RegExp[] = [
+      /\brm\s+-rf?\b/i,
+      /\bdrop\s+(?:the\s+)?(?:\w+\s+)?(?:table|database|schema|index)\b/i,
+      /\b(?:delete|truncate)\s+(?:the\s+)?(?:table|database|schema|all|every|everything|users|accounts|files?\b|directory|directories|repo)\b/i,
+      /\b(?:deploy|publish|release)\s+(?:to\s+)?(?:production|prod|staging|live|main|master)\b/i,
+      /\b(?:force[-\s]push|push\s+--force)\b/i,
+      /\bpush\s+(?:to\s+)?(?:main|master|origin\/(?:main|master))\b/i,
+      /\bmigrate\s+(?:the\s+)?(?:production|prod|live|database|schema)\b/i,
+    ];
+    const matchedDangerous = dangerousCombos.some(pat => pat.test(draft.prompt));
+    if (matchedDangerous && !draft.filePaths?.length) {
       reasons.push('behavior-changing task without explicit scope');
     }
+
+    const securitySensitive = /\b(auth|credential|secret|token|permission|password|key)\b/i;
     if (securitySensitive.test(draft.prompt) && !draft.done) {
       reasons.push('security-sensitive task without explicit done condition');
     }
