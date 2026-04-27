@@ -207,7 +207,6 @@ export async function executeReviewedLifecycle(
     reviewPolicy === 'spec_only' ? 3 :
     5;
   const verbose = diagnostics?.verbose ?? false;
-  let lastStageSeen: string | undefined;
   const verboseStreamRaw = verbose
     ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
     : undefined;
@@ -246,16 +245,10 @@ export async function executeReviewedLifecycle(
     ? new HeartbeatTimer(
         (event) => {
           if (event.kind === 'heartbeat') {
-            // Emit on every heartbeat tick so the operator can confirm
-            // the timer is actually firing. Stage-change lines are richer
-            // but fire only on transitions; plain ticks let you see
-            // per-5s progress inside a long-running stage.
-            if (event.stage !== lastStageSeen) {
-              if (lastStageSeen !== undefined) {
-                emitTaskEvent('stage_change', { from: lastStageSeen, to: event.stage });
-              }
-              lastStageSeen = event.stage;
-            }
+            // Emit on every heartbeat tick so the operator can confirm the
+            // timer is actually firing. Stage transitions are authoritative
+            // only via explicit emit calls at lifecycle points; the
+            // heartbeat tick no longer infers transitions (P5).
             const sinceLastMs = Date.now() - prevEventAtMs;
             emitTaskEvent('heartbeat', {
               elapsed: event.elapsed,
