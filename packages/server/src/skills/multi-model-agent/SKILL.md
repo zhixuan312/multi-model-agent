@@ -59,6 +59,52 @@ digraph picker {
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
 | `mma-clarifications` | Confirm or correct the service's proposed interpretation |
 
+## Best practices
+
+### The unifying principle
+
+The main session is for judgment, orchestration, and dialogue with the engineer. Everything else — read, grep, audit, review, debug, implement, verify — gets delegated. If you're about to do labor in main context, you've already taken the wrong turn.
+
+### C1 — Delegate by default, inline by exception
+
+If a task needs 3+ file reads or any grep, it goes to a worker. Inline `Read` is reserved for files already in context, single-file lookups, or 1-2 file reads with a known target.
+
+### C2 — Parallel for independence, sequential for iteration
+
+Independent fan-out (5 unrelated audits, 5 unrelated bugs) → parallel batch. Coupled rounds where round N's fix produces round N+1's input (audit → fix → re-audit, debug → fix → verify) → sequential.
+
+### C3 — Shared content lives in a context block, not in caller tokens
+
+Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ calls gets registered once via `mma-context-blocks` and referenced by ID.
+
+### Recipe A — Audit-iterate-clean
+
+`mma-audit` → read findings → fix (inline if 1-2 lines, else `mma-delegate`) → `mma-audit` again. Sequential rounds, NOT parallel re-audits. The fix produces new edges; round 2 catches what round 1 couldn't see. Register the doc as a context block before round 1; reuse the same ID across all rounds. The same shape applies to `mma-review` for source code (review → fix → re-review).
+
+### Recipe B — Debug-fix-verify
+
+`mma-debug` (read/reproduce/trace) → `mma-delegate` (apply the fix the hypothesis implies) → `mma-verify` (acceptance criteria checked independently). Three skills, strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse it on verify.
+
+### Recipe C — Investigate-plan-execute
+
+`mma-investigate` (codebase Q&A) → write the plan (main-context judgment task) → `mma-execute-plan` (workers implement against named plan headings) → `mma-retry` on any failed indices. Register the plan file as a context block before execute-plan; the retry call inherits the same configuration including `contextBlockIds`.
+
+### Recipe D — Plan-execute-retry
+
+When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, the next step is `mma-retry` on the failed indices only — never a full-batch re-dispatch. Pass the **original `batchId`** as input, specify the failed task indices, keep the same configuration. (`mma-retry` produces a NEW `batchId` in its response — poll that one for terminal state, not the original.) Any `contextBlockIds` registered for the original batch carry forward into retry — no need to re-register.
+
+### Anti-patterns
+
+1. **`parallel-rounds-same-target`** — Caller fans out 3 parallel calls of the same skill on the same target — `mma-audit` on one document, `mma-review` on the same source file, or `mma-verify` of the same checklist. The reports overlap heavily; later rounds never see the fix from earlier rounds, so they re-flag the same issues. Corrective: sequential rounds with a fix between each (Recipe A for audit/review; for `mma-verify`, the analog is verify → fix → re-verify, never two verify calls on the unchanged checklist in parallel).
+
+2. **`inline-labor-leakage`** — Caller does 3+ `Read` calls, or any `grep`, in main context "just to understand the situation." Main tokens get burned on labor; the answer the caller actually needs is one paragraph of synthesis. Corrective: `mma-investigate` for codebase Q&A; if the goal is implementation, jump straight to `mma-delegate` with file paths and let the worker read.
+
+3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 task prompts in one batch (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
+
+4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multi-task `mma-delegate` batches; `mma-retry` is the corrective there too.)
+
+5. **`clarification-as-info`** — Caller polls a batch, sees `proposedInterpretation` as a string, treats it as advisory, and waits for the batch to complete. The batch is paused — it will not complete until the caller responds via `mma-clarifications`. Corrective: a string `proposedInterpretation` is a hard gate, not an FYI. Either accept the proposal verbatim or correct it.
+
 ## Preflight: auto-start the daemon if it is not running
 
 ```bash
