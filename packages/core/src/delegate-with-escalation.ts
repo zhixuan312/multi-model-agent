@@ -218,7 +218,7 @@ export async function delegateWithEscalation(
     baseStatus === 'incomplete' &&
     best.workerStatus === 'done' &&
     outputIsSubstantive &&
-    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification)
+    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification || task.skipCompletionHeuristic === true)
       ? 'ok'
       : baseStatus;
 

@@ -46,5 +46,6 @@ export function resolveDraft(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     briefQualityPolicy: 'off',
     cwd: process.cwd(),
+    skipCompletionHeuristic: draft.skipCompletionHeuristic,
   };
 }

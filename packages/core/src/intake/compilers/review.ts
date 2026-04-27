@@ -32,6 +32,7 @@ export function compileReviewCode(
       } as ReviewSource,
       prompt: promptParts.join('\n\n'),
       filePaths,
+      skipCompletionHeuristic: true,
     }];
   }
 
@@ -53,6 +54,7 @@ export function compileReviewCode(
       } as ReviewSource,
       prompt: promptParts.join('\n\n'),
       filePaths: [filePath],
+      skipCompletionHeuristic: true,
     };
   });
 }
