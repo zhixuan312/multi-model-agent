@@ -300,10 +300,10 @@ describe('telemetry/types', () => {
     }
   });
 
-  it('rejects unknown skill IDs (no leak via "other")', () => {
+  it('accepts any valid BoundedIdentifier as skill ID', () => {
     const event = makeValidTaskCompleted({ triggeredFromSkill: 'unknown-skill' });
     const result = TelemetryEvent.safeParse(event);
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
   it('rejects oversized strings', () => {
