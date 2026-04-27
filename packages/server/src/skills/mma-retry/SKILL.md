@@ -80,6 +80,15 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')   # NEW batchId — not the origina
 
 @include _shared/response-shape.md
 
+## Best practices
+
+This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-retry`:
+
+- **Recipe C — Investigate-plan-execute (last step).** After `mma-execute-plan` returns mixed results, retry the failed indices to close the loop.
+- **Recipe D — Plan-execute-retry.** Pass the **original `batchId`** as input, specify the failed indices, keep the same configuration. `mma-retry` produces a NEW `batchId` in its response — poll that one for terminal state. Any `contextBlockIds` from the original carry forward.
+
+Anti-pattern alert: **`full-batch-redispatch`** (AP4). Re-dispatching the entire batch re-charges every successful task. Always retry by index.
+
 ## Common pitfalls
 
 ❌ **Retrying after the batch expired**
