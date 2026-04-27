@@ -82,7 +82,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.5",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.6",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -237,7 +237,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.6.5** — Intake classifier no longer flags ordinary technical English ("publish docs", "send a request", "telemetry system") as needing clarification. Genuine destructive prompts (`rm -rf`, `drop table`, `force push`, `deploy to prod`, ...) still flag. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.6.6** — Vendor-prefixed model IDs are now recognized: `bedrock.claude-haiku-4-5`, `vertex/claude-sonnet-4-5`, `azure/gpt-5.5`, `anthropic.claude-haiku-4-5-v1:0` and their compound variants normalize to canonical names so pricing, ROI, modelFamily, and telemetry validation all work end-to-end. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

@@ -295,4 +295,67 @@ describe('errorCode derivation', () => {
     const ev = buildTaskCompletedEvent(makeCtx({ runResult: fixtures.ERROR_API }));
     expect(ev.errorCode).toBe('api_error');
   });
+
+
 });
+
+describe('model name normalization for vendor-prefixed models', () => {
+  it('normalizes bedrock.claude-haiku-4-5 implementerModel to claude-haiku-4-5', () => {
+    const ev = buildTaskCompletedEvent(makeCtx({
+      runResult: {
+        ...fixtures.HAPPY,
+        models: { implementer: 'bedrock.claude-haiku-4-5', specReviewer: null, qualityReviewer: null },
+        stageStats: {
+          ...fixtures.HAPPY.stageStats,
+          implementing: { ...fixtures.HAPPY.stageStats!.implementing!, model: 'bedrock.claude-haiku-4-5' },
+        },
+      },
+    }));
+    expect(ev.implementerModel).toBe('claude-haiku-4-5');
+    expect(ev.implementerModelFamily).toBe('claude');
+    expect(ev.stages.implementing.model).toBe('claude-haiku-4-5');
+  });
+
+  it('normalizes azure/gpt-5.5 implementerModel to gpt-5.5', () => {
+    const ev = buildTaskCompletedEvent(makeCtx({
+      runResult: {
+        ...fixtures.HAPPY,
+        models: { implementer: 'azure/gpt-5.5', specReviewer: null, qualityReviewer: null },
+        stageStats: {
+          ...fixtures.HAPPY.stageStats,
+          implementing: { ...fixtures.HAPPY.stageStats!.implementing!, model: 'azure/gpt-5.5', modelFamily: 'openai' },
+        },
+      },
+    }));
+    expect(ev.implementerModel).toBe('gpt-5.5');
+    expect(ev.implementerModelFamily).toBe('openai');
+    expect(ev.stages.implementing.model).toBe('gpt-5.5');
+  });
+
+  it('normalizes anthropic.claude-haiku-4-5-v1:0 (compound prefix + version suffix)', () => {
+    const ev = buildTaskCompletedEvent(makeCtx({
+      runResult: {
+        ...fixtures.HAPPY,
+        models: { implementer: 'anthropic.claude-haiku-4-5-v1:0', specReviewer: null, qualityReviewer: null },
+        stageStats: {
+          ...fixtures.HAPPY.stageStats,
+          implementing: { ...fixtures.HAPPY.stageStats!.implementing!, model: 'anthropic.claude-haiku-4-5-v1:0' },
+        },
+      },
+    }));
+    expect(ev.implementerModel).toBe('claude-haiku-4-5');
+    expect(ev.implementerModelFamily).toBe('claude');
+  });
+
+  it('returns other for unknown model after normalization', () => {
+    const ev = buildTaskCompletedEvent(makeCtx({
+      runResult: {
+        ...fixtures.HAPPY,
+        models: { implementer: 'unknown-model-xyz', specReviewer: null, qualityReviewer: null },
+      },
+    }));
+    expect(ev.implementerModel).toBe('other');
+    expect(ev.implementerModelFamily).toBe('other');
+  });
+});
+

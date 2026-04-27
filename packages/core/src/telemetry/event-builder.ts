@@ -4,7 +4,7 @@ import type {
   RawStageStats,
 } from '../types.js';
 import { computeSavedCostUSD } from '../types.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { findModelProfile, extractCanonicalModelName } from '../routing/model-profiles.js';
 import {
   bucketCost,
   bucketSavedCost,
@@ -72,7 +72,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
   );
   const savedCostBucketVal = bucketSavedCost(savedCostUSDRaw);
 
-  const implModel = runResult.models?.implementer ?? null;
+  const implModelRaw = runResult.models?.implementer ?? null;
+  const implModel = implModelRaw ? extractCanonicalModelName(implModelRaw) : null;
   const implementerModelFamily = deriveModelFamily(implModel);
   const implementerModel = allowlistModel(implModel);
 
@@ -326,7 +327,7 @@ function buildStageStats(raw: RawStageStats | undefined): {
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
     modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model),
+    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
   };
 }
 
@@ -367,7 +368,7 @@ function buildVerifyStageStats(
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
     modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model),
+    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
     outcome: raw.outcome ?? 'not_applicable',
     skipReason: raw.outcome === 'skipped' ? (raw.skipReason ?? 'other') : null,
   };
@@ -441,7 +442,7 @@ function buildReviewStageStats(
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
     modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model),
+    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
     verdict,
     roundsUsed: rounds !== null ? bucketRoundsUsed(rounds) : '1',
     concernCategories: categories.length > 0 ? categories : [],

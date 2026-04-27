@@ -260,7 +260,10 @@ describe('serve subcommand', () => {
 
     const child = spawn('node', [cliPath(), 'serve', '--config', configPath], {
       stdio: 'pipe',
-      env: { ...process.env, HOME: homeDir, MMAGENT_TELEMETRY: '1' },
+      // MMAGENT_TELEMETRY_ENDPOINT='' disables the upload flusher so the
+      // test doesn't ship its events to the live hosted backend (the test
+      // only asserts on the local queue file, never on a remote receiver).
+      env: { ...process.env, HOME: homeDir, MMAGENT_TELEMETRY: '1', MMAGENT_TELEMETRY_ENDPOINT: '' },
     });
 
     try {

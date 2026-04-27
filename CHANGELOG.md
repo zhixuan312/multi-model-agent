@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.6] - 2026-04-27
+
+### Fixed
+- **Vendor-prefixed model IDs are now recognized (core).** Configs that route Anthropic models via AWS Bedrock (`bedrock.claude-haiku-4-5`, `anthropic.claude-haiku-4-5-v1:0`), GCP Vertex (`vertex/claude-sonnet-4-5`, `vertex_ai/...`), Azure (`azure/gpt-5.5`, `azure_openai/...`), or `anthropic.`-namespaced names previously fell through to the empty default profile — no pricing, broken `savedCostUSD` / ROI, and a `modelFamily` of `"bedrock.claude"` (not in the canonical enum) that caused server-side `.strict()` validation to silently 400-drop every `task.completed` event with no daemon-side observability. New `extractCanonicalModelName()` strips known vendor prefixes (idempotently, repeated for compound prefixes like `vertex_ai/anthropic.`) plus the Bedrock `-vN:M` revision suffix; integrated into `findModelProfile()`, `modelFamily()` (which also now maps raw prefixes like `gpt` to canonical families like `openai`), and the telemetry event-builder so on-the-wire `implementerModel` is always the canonical form. Tests pin every vendor variant + bare-name passthrough + idempotence + case-insensitive prefix matching.
+
 ## [3.6.5] - 2026-04-27
 
 ### Fixed
@@ -865,7 +870,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.5...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.6...HEAD
+[3.6.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.5...v3.6.6
 [3.6.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...v3.6.5
 [3.6.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.3...v3.6.4
 [3.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.5.0...v3.5.1
