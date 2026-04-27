@@ -130,13 +130,7 @@ describe('reviewPolicy=off initial implementation fallback', () => {
       makeConfig(),
       {
         batchId: 'batch-reviewpolicy-off-fallback',
-        logger: {
-          fallback: (event: unknown) => fallbackEvents.push(event as Record<string, unknown>),
-          fallbackUnavailable: vi.fn(),
-          escalation: vi.fn(),
-          escalationUnavailable: vi.fn(),
-          emit: (event: unknown) => emittedEvents.push(event as Record<string, unknown>),
-        } as any,
+        bus: { emit: (event: any) => { emittedEvents.push(event); if (event.event === 'fallback') fallbackEvents.push(event); } },
       },
     );
 

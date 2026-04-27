@@ -149,13 +149,7 @@ describe('reviewPolicy=diff_only fallback', () => {
       makeConfig(),
       {
         batchId: 'batch-diff-only-fallback',
-        logger: {
-          fallback: (event: unknown) => fallbackEvents.push(event as Record<string, unknown>),
-          fallbackUnavailable: vi.fn(),
-          escalation: vi.fn(),
-          escalationUnavailable: vi.fn(),
-          emit: vi.fn(),
-        } as any,
+        bus: { emit: (event: any) => { if (event.event === 'fallback') fallbackEvents.push(event); } },
       },
     );
 

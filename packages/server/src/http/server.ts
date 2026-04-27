@@ -2,12 +2,15 @@ import { createServer } from 'node:http';
 import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
+import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import { EventBus, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
 import { Router } from './router.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import type { ProjectRegistry } from './project-registry.js';
 import { handleRequest } from './request-pipeline.js';
+import { getRecorder } from '../telemetry/recorder.js';
 
 /** Server package version — read once at module load time from package.json. */
 function readServerVersion(): string {
@@ -95,9 +98,16 @@ async function registerToolHandlers(
     ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
   });
 
+  const logDir = multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs');
+  const bus = new EventBus([
+    new LocalLogSink(new JsonlWriter({ dir: logDir })),
+    new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+  ]);
+
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
+    bus,
     projectRegistry,
     batchRegistry,
   };
@@ -145,12 +155,17 @@ async function registerControlHandlers(
 
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
+    const bus = new EventBus([
+      new LocalLogSink(new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') })),
+      new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+    ]);
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createDiagnosticLogger({
         enabled: multiModelConfig.diagnostics?.log ?? false,
         ...(multiModelConfig.diagnostics?.logDir ? { logDir: multiModelConfig.diagnostics.logDir } : {}),
       }),
+      bus,
       projectRegistry,
       batchRegistry,
     };

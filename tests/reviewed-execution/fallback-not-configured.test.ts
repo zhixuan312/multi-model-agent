@@ -129,16 +129,7 @@ describe('reviewed lifecycle fallback when escalated tier is not configured', ()
       config,
       {
         batchId: 'batch-fallback-not-configured',
-        logger: {
-          startup: () => {}, requestStart: () => {}, requestComplete: () => {}, error: () => {}, shutdown: () => {}, expectedPath: () => undefined,
-          sessionOpen: () => {}, sessionClose: () => {}, connectionRejected: () => {}, requestRejected: () => {}, projectCreated: () => {}, projectEvicted: () => {},
-          taskStarted: () => {}, batchCompleted: () => {}, batchFailed: () => {},
-          escalation: (p) => events.push({ event: 'escalation', ...p }),
-          escalationUnavailable: (p) => events.push({ event: 'escalation_unavailable', ...p }),
-          fallback: (p) => events.push({ event: 'fallback', ...p }),
-          fallbackUnavailable: (p) => events.push({ event: 'fallback_unavailable', ...p }),
-          emit: (p) => events.push(p),
-        },
+        bus: { emit: (event: any) => events.push(event) },
       },
     );
 

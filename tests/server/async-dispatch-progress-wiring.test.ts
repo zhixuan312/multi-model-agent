@@ -23,6 +23,7 @@ function stubDeps(batchRegistry: BatchRegistry): HandlerDeps {
   return {
     config: {} as HandlerDeps['config'],
     logger,
+    bus: { emit: vi.fn() } as HandlerDeps['bus'],
     projectRegistry: {} as HandlerDeps['projectRegistry'],
     batchRegistry,
   };

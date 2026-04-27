@@ -139,13 +139,7 @@ describe('reviewed lifecycle fallback on complex task transport failure', () => 
       makeConfig(),
       {
         batchId: 'batch-fallback-on-complex-task',
-        logger: {
-          fallback: (event: unknown) => fallbackEvents.push(event as Record<string, unknown>),
-          fallbackUnavailable: vi.fn(),
-          escalation: vi.fn(),
-          escalationUnavailable: vi.fn(),
-          emit: vi.fn(),
-        } as any,
+        bus: { emit: (event: any) => { if (event.event === 'fallback') fallbackEvents.push(event); } },
       },
     );
 

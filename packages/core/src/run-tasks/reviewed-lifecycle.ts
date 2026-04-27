@@ -179,6 +179,7 @@ export async function executeReviewedLifecycle(
   _route?: string,
   _client?: string,
   _triggeringSkill?: string,
+  bus?: import('../observability/bus.js').EventBus,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -212,15 +213,14 @@ export async function executeReviewedLifecycle(
     : undefined;
   const verboseBatchIdEarly = heartbeatWiring?.batchId;
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
-  const taskEventLogger = diagnostics?.logger;
   type EventField = string | number | boolean | null | undefined;
   const emitTaskEvent = (event: string, fields: Record<string, EventField>): void => {
-    if (taskEventLogger && verboseBatchIdEarly !== undefined) {
+    if (bus && verboseBatchIdEarly !== undefined) {
       const cleaned: Record<string, EventField> = {};
       for (const [key, value] of Object.entries(fields)) {
         if (value !== undefined) cleaned[key] = value;
       }
-      taskEventLogger.emit({ event, batchId: verboseBatchIdEarly, taskIndex, ...cleaned });
+      bus.emit({ event, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
     }
     if (verboseStreamRaw) {
       verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));
@@ -236,7 +236,8 @@ export async function executeReviewedLifecycle(
     onProgress !== undefined ||
     verbose ||
     heartbeatWiring?.recordHeartbeat !== undefined ||
-    diagnostics?.logger !== undefined;
+    diagnostics?.logger !== undefined ||
+    bus !== undefined;
   // Synthesize an onProgress sink when the caller didn't pass one — the
   // heartbeat needs a place to emit heartbeat events so the stage-change
   // detector below fires. Discards events if there is no external consumer.
@@ -440,11 +441,9 @@ export async function executeReviewedLifecycle(
   const runningCostUSD = () => taskCostUSD();
   const policyEscalated: { spec: boolean; quality: boolean; diff: boolean } = { spec: false, quality: false, diff: false };
   const emitFallback = (p: FallbackEventParams) => {
-    diagnostics?.logger?.fallback(p);
     emitTaskEvent('fallback', p as unknown as Record<string, EventField>);
   };
   const emitFallbackUnavailable = (p: FallbackUnavailableEventParams) => {
-    diagnostics?.logger?.fallbackUnavailable(p);
     emitTaskEvent('fallback_unavailable', p as unknown as Record<string, EventField>);
   };
   const emitEscalationEvent = (
@@ -456,12 +455,10 @@ export async function executeReviewedLifecycle(
       batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop, attempt,
       baseTier: resolved.slot, implTier: decision.impl, reviewerTier: decision.reviewer,
     };
-    diagnostics?.logger?.escalation(p);
     emitTaskEvent('escalation', p as unknown as Record<string, EventField>);
     policyEscalated[loop] = true;
   };
   const emitEscalationUnavailable = (p: EscalationUnavailableEventParams) => {
-    diagnostics?.logger?.escalationUnavailable(p);
     emitTaskEvent('escalation_unavailable', p as unknown as Record<string, EventField>);
   };
   // When the review loop aborts mid-flight, preserve any review-status info already set

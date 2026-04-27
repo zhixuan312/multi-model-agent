@@ -196,6 +196,26 @@
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
     },
+    "./observability/bus": {
+      "types": "./dist/observability/bus.d.ts",
+      "import": "./dist/observability/bus.js"
+    },
+    "./observability/events": {
+      "types": "./dist/observability/events.d.ts",
+      "import": "./dist/observability/events.js"
+    },
+    "./observability/local-log-sink": {
+      "types": "./dist/observability/local-log-sink.d.ts",
+      "import": "./dist/observability/local-log-sink.js"
+    },
+    "./observability/telemetry-sink": {
+      "types": "./dist/observability/telemetry-sink.d.ts",
+      "import": "./dist/observability/telemetry-sink.js"
+    },
+    "./diagnostics/jsonl-writer": {
+      "types": "./dist/diagnostics/jsonl-writer.d.ts",
+      "import": "./dist/diagnostics/jsonl-writer.js"
+    },
     "./auto-commit": {
       "types": "./dist/auto-commit.d.ts",
       "import": "./dist/auto-commit.js"

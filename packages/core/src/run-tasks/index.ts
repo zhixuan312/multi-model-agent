@@ -8,6 +8,7 @@ import type {
 import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
 import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
+import type { EventBus } from '../observability/bus.js';
 import type { BriefQualityWarning } from '../intake/types.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
@@ -62,6 +63,8 @@ export interface RunTasksOptions {
   client?: string;
   /** Triggering skill for telemetry (e.g. 'mma-delegate', 'direct'). */
   triggeringSkill?: string;
+  /** EventBus for structured observability events. */
+  bus?: EventBus;
 }
 
 export async function runTasks(
@@ -176,7 +179,7 @@ export async function runTasks(
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
         verboseStream: options.verboseStream,
-      }, options.recorder, options.route, options.client, options.triggeringSkill).then(
+      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };

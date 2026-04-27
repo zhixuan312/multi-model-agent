@@ -155,3 +155,14 @@ export type {
   ShutdownCause,
   CreateDiagnosticLoggerOptions,
 } from './diagnostics/disconnect-log.js';
+
+// Observability
+export { EventBus } from './observability/bus.js';
+export type { EventSink } from './observability/bus.js';
+export { LocalLogSink } from './observability/local-log-sink.js';
+export { TelemetrySink } from './observability/telemetry-sink.js';
+export type { Recorder } from './observability/telemetry-sink.js';
+export { Event, CLOUD_EVENT_NAMES } from './observability/events.js';
+export type { EventType } from './observability/events.js';
+export { JsonlWriter } from './diagnostics/jsonl-writer.js';
+export type { JsonlWriterOptions } from './diagnostics/jsonl-writer.js';

@@ -5,6 +5,7 @@ import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
 import type { ContextBlockStore } from '../context/context-block-store.js';
 import type { NotApplicable } from '../reporting/not-applicable.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
+import type { EventBus } from '../observability/bus.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {
@@ -40,6 +41,8 @@ export interface ExecutionContext {
    * through the same scoped logger.
    */
   logger: DiagnosticLogger;
+  /** EventBus for structured observability events — dual-sink: local JSONL + cloud telemetry. */
+  bus?: EventBus;
   contextBlockStore: ContextBlockStore;
   /** The parent model name, resolved from env at context-build time. */
   parentModel?: string;
@@ -70,6 +73,7 @@ export interface ExecutionContextInput {
   projectContext: ProjectContext;
   config: MultiModelConfig;
   logger: DiagnosticLogger;
+  bus?: EventBus;
   contextBlockStore: ContextBlockStore;
   parentModel?: string;
   batchId?: string;

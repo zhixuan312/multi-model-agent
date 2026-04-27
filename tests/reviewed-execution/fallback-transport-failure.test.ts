@@ -171,13 +171,7 @@ describe('reviewed lifecycle fallback on transport failure', () => {
       makeConfig(),
       {
         batchId: 'batch-fallback-transport',
-        logger: {
-          fallback: (event: unknown) => fallbackEvents.push(event as Record<string, unknown>),
-          fallbackUnavailable: vi.fn(),
-          escalation: vi.fn(),
-          escalationUnavailable: vi.fn(),
-          emit: vi.fn(),
-        } as any,
+        bus: { emit: (event: any) => { if (event.event === 'fallback') fallbackEvents.push(event); } },
       },
     );
 
@@ -224,7 +218,6 @@ describe('reviewed lifecycle fallback on transport failure', () => {
         assignedTier: 'standard',
         usedTier: 'complex',
         reason: 'transport_failure',
-        triggeringStatus: undefined,
       }),
     ]);
   });

@@ -110,28 +110,13 @@ const config: MultiModelConfig = {
   },
 };
 
-function makeLogger(escalations: Array<{ loop: string; attempt: number }>): DiagnosticLogger {
+function makeBus(escalations: Array<{ loop: string; attempt: number }>): { emit: (event: any) => void } {
   return {
-    startup: () => {},
-    requestStart: () => {},
-    requestComplete: () => {},
-    error: () => {},
-    shutdown: () => {},
-    expectedPath: () => undefined,
-    sessionOpen: () => {},
-    sessionClose: () => {},
-    connectionRejected: () => {},
-    requestRejected: () => {},
-    projectCreated: () => {},
-    projectEvicted: () => {},
-    taskStarted: () => {},
-    emit: () => {},
-    batchCompleted: () => {},
-    batchFailed: () => {},
-    escalation: (params) => { escalations.push({ loop: params.loop, attempt: params.attempt }); },
-    escalationUnavailable: () => {},
-    fallback: () => {},
-    fallbackUnavailable: () => {},
+    emit: (event: any) => {
+      if (event.event === 'escalation') {
+        escalations.push({ loop: event.loop, attempt: event.attempt });
+      }
+    },
   };
 }
 
@@ -143,7 +128,7 @@ describe('reviewed execution spec-loop escalation', () => {
     const [result] = await runTasks(
       [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'spec_only' }],
       config,
-      { batchId: 'batch-escalation-spec-loop', logger: makeLogger(escalationEvents) },
+      { batchId: 'batch-escalation-spec-loop', bus: makeBus(escalationEvents) },
     );
 
     expect(result.status).toBe('ok');
