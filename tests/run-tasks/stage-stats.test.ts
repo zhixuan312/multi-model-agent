@@ -1,4 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { execSync } from 'node:child_process';
+import { mkdtempSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import {
   emptyStats,
   endBaseStage,
@@ -8,6 +12,19 @@ import {
 } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 import type { StageStatsMap, MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
+
+// Initialize a fresh, clean git repo in a temp dir so executeReviewedLifecycle's
+// pre-flight `git status --porcelain` check passes. Without this, the test
+// runs against process.cwd() (the mmagent repo) and aborts with
+// errorCode='dirty_worktree' whenever the repo has uncommitted changes —
+// e.g., during a normal dev-loop edit. (Pattern lifted from commit-stage.test.ts.)
+function initCleanRepo(): string {
+  const cwd = mkdtempSync(join(tmpdir(), 'mma-stagestats-'));
+  execSync('git init -q && git config user.email t@e && git config user.name T && git config commit.gpgsign false', { cwd });
+  writeFileSync(join(cwd, 'README.md'), '# fixture');
+  execSync('git add . && git commit -q -m "init"', { cwd });
+  return cwd;
+}
 
 function makeConfig(opts?: { defaultTools?: 'none' | 'readonly' | 'no-shell' | 'full' }): MultiModelConfig {
   return {
@@ -290,11 +307,15 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
 
   it('records verifying stage when autoCommit is true and verifyCommand is set', async () => {
     const config = makeConfig();
+    // autoCommit requires a clean git worktree at task.cwd. Use a fresh temp
+    // repo so the test is independent of the runner's working tree state.
+    const cwd = initCleanRepo();
     const task: TaskSpec = {
       prompt: 'test',
       reviewPolicy: 'off',
       autoCommit: true,
       verifyCommand: ['true'],
+      cwd,
     };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
