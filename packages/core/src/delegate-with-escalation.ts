@@ -4,7 +4,7 @@
 // This function only handles transient retries (api_error / network_error).
 // Rename to delegateWithRetries deferred to 3.6.0.
 
-import type { TaskSpec, RunResult, Provider } from './types.js';
+import type { TaskSpec, RunResult, Provider, AgentType } from './types.js';
 import type {
   AttemptRecord,
   InternalRunnerEvent,
@@ -39,6 +39,12 @@ export interface DelegateOptions {
    * fallback loops short-circuit so the user gets *something* back.
    */
   abortSignal?: AbortSignal;
+  /**
+   * Tier the caller is invoking this delegate for. Forwarded onto the
+   * per-attempt `worker_start` runner event so observability can attribute
+   * each provider attempt to its assigned tier.
+   */
+  assignedTier?: AgentType;
 }
 
 const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'network_error']);
@@ -113,6 +119,21 @@ export async function delegateWithEscalation(
             : remainingClamped;
       }
 
+      // ProviderConfig.type is one of: 'claude' | 'claude-compatible' | 'openai-compatible' | 'codex'.
+      // InternalRunnerEvent.providerType only allows the three runner families;
+      // map 'claude-compatible' onto 'claude' (same runner backend).
+      const cfgType = provider.config.type;
+      const providerTypeName: 'claude' | 'openai-compatible' | 'codex' =
+        cfgType === 'claude' || cfgType === 'claude-compatible' ? 'claude' :
+        cfgType === 'codex' ? 'codex' :
+        'openai-compatible';
+      safeSink?.({
+        kind: 'worker_start',
+        model: provider.config.model,
+        providerType: providerTypeName,
+        tier: options.assignedTier ?? 'standard',
+      });
+
       result = await provider.run(task.prompt, {
         tools: task.tools,
         timeoutMs: effectiveTimeoutMs,
@@ -167,10 +188,15 @@ export async function delegateWithEscalation(
     attempts.push({ result, record });
 
     if (result.status === 'ok') {
-      return {
-        ...result,
-        escalationLog: attempts.map((a) => a.record),
+      const terminationReason: TerminationReason = {
+        cause: 'finished',
+        turnsUsed: result.turns,
+        hasFileArtifacts: result.filesWritten.length > 0,
+        usedShell: result.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
+        workerSelfAssessment: result.workerStatus ?? null,
+        wasPromoted: false,
       };
+      return { ...result, terminationReason, escalationLog: attempts.map((a) => a.record) };
     }
 
     // Skip the next provider in the fallback chain if the task-level
@@ -213,7 +239,7 @@ export async function delegateWithEscalation(
     baseStatus === 'incomplete' &&
     best.workerStatus === 'done' &&
     outputIsSubstantive &&
-    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification)
+    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification || task.skipCompletionHeuristic === true)
       ? 'ok'
       : baseStatus;
 

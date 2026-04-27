@@ -22,6 +22,7 @@ export interface Recorder {
   recordSessionStarted(snap: SessionSnapshot): void;
   recordInstallChanged(from: string | null, to: string, trigger: string): void;
   recordSkillInstalled(skillId: string, client: string): void;
+  enqueue(event: Record<string, unknown>): void;
   revokeIdentity(options?: { deleteInstallId?: boolean }): Promise<void>;
 }
 
@@ -88,6 +89,8 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
     get signal() {
       return controller.signal;
     },
+
+    enqueue,
 
     recordTaskCompleted(ctx) {
       try {

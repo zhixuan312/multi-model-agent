@@ -1,6 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import type { DiagnosticLogger } from '@zhixuan92/multi-model-agent-core/diagnostics/disconnect-log';
 
 const calls: Array<{ slot: string; kind: 'implement' | 'spec_review' | 'quality_review'; prompt: string }> = [];
 
@@ -108,28 +107,13 @@ const config: MultiModelConfig = {
   defaults: { timeoutMs: 600_000, maxCostUSD: 10, tools: 'full', sandboxPolicy: 'none' },
 };
 
-function makeLogger(escalations: Array<{ loop: string; attempt: number }>): DiagnosticLogger {
+function makeBus(escalations: Array<{ loop: string; attempt: number }>): { emit: (event: any) => void } {
   return {
-    startup: () => {},
-    requestStart: () => {},
-    requestComplete: () => {},
-    error: () => {},
-    shutdown: () => {},
-    expectedPath: () => undefined,
-    sessionOpen: () => {},
-    sessionClose: () => {},
-    connectionRejected: () => {},
-    requestRejected: () => {},
-    projectCreated: () => {},
-    projectEvicted: () => {},
-    taskStarted: () => {},
-    emit: () => {},
-    batchCompleted: () => {},
-    batchFailed: () => {},
-    escalation: (params) => { escalations.push({ loop: params.loop, attempt: params.attempt }); },
-    escalationUnavailable: () => {},
-    fallback: () => {},
-    fallbackUnavailable: () => {},
+    emit: (event: any) => {
+      if (event.event === 'escalation') {
+        escalations.push({ loop: event.loop, attempt: event.attempt });
+      }
+    },
   };
 }
 
@@ -143,7 +127,7 @@ describe('reviewed lifecycle no-progress break before spec escalation', () => {
     const [result] = await runTasks(
       [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'spec_only' }],
       config,
-      { batchId: 'batch-no-progress-before-escalation', logger: makeLogger(escalationEvents) },
+      { batchId: 'batch-no-progress-before-escalation', bus: makeBus(escalationEvents) as any },
     );
 
     expect(result.status).toBe('incomplete');

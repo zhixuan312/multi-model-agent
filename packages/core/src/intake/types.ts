@@ -43,6 +43,7 @@ export interface DraftTask {
   confirmed?: boolean;
   contextBlockIds?: string[];
   reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off';
+  skipCompletionHeuristic?: boolean;
 }
 
 export interface StoredDraft {

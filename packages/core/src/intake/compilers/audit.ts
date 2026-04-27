@@ -36,6 +36,7 @@ export function compileAuditDocument(
       } as AuditSource,
       prompt: promptParts.join('\n\n'),
       filePaths,
+      skipCompletionHeuristic: true,
     }];
   }
 
@@ -62,6 +63,7 @@ export function compileAuditDocument(
       } as AuditSource,
       prompt: promptParts.join('\n\n'),
       filePaths: [filePath],
+      skipCompletionHeuristic: true,
     };
   });
 }

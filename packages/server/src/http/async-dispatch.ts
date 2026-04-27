@@ -60,7 +60,7 @@ export function asyncDispatch<TResult>(
   setImmediate(() => {
     void (async () => {
       try {
-        deps.logger.taskStarted({ batchId, taskIndex: 0 });
+        deps.bus.emit({ event: 'task_started', ts: new Date().toISOString(), batchId, taskIndex: 0, route: tool, cwd: projectCwd } as any);
         // Mark the batch as running so composeRunningHeadline shows
         // "1/1 running, Xs elapsed" instead of "1/1 queued" forever.
         // tasksTotal is a coarse proxy for "some work is underway"; the
@@ -77,12 +77,7 @@ export function asyncDispatch<TResult>(
         batchRegistry.complete(batchId, result);
         const resultObj = result as { results?: unknown[] } | undefined;
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
-        deps.logger.batchCompleted({
-          batchId,
-          tool,
-          durationMs: Date.now() - startedAtMs,
-          taskCount,
-        });
+        deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, taskCount } as any);
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
@@ -91,13 +86,7 @@ export function asyncDispatch<TResult>(
           message,
           ...(stack !== undefined && { stack }),
         });
-        deps.logger.batchFailed({
-          batchId,
-          tool,
-          durationMs: Date.now() - startedAtMs,
-          errorCode: 'executor_error',
-          errorMessage: message,
-        });
+        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, errorCode: 'executor_error', errorMessage: message } as any);
       }
     })();
   });

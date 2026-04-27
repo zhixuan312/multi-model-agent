@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.6.7",
+  "version": "3.7.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -55,10 +55,6 @@
     "./run-tasks": {
       "types": "./dist/run-tasks/index.d.ts",
       "import": "./dist/run-tasks/index.js"
-    },
-    "./diagnostics/disconnect-log": {
-      "types": "./dist/diagnostics/disconnect-log.d.ts",
-      "import": "./dist/diagnostics/disconnect-log.js"
     },
     "./diagnostics/verbose-line": {
       "types": "./dist/diagnostics/verbose-line.d.ts",
@@ -195,6 +191,26 @@
     "./intake/draft-id": {
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
+    },
+    "./observability/bus": {
+      "types": "./dist/observability/bus.d.ts",
+      "import": "./dist/observability/bus.js"
+    },
+    "./observability/events": {
+      "types": "./dist/observability/events.d.ts",
+      "import": "./dist/observability/events.js"
+    },
+    "./observability/local-log-sink": {
+      "types": "./dist/observability/local-log-sink.d.ts",
+      "import": "./dist/observability/local-log-sink.js"
+    },
+    "./observability/telemetry-sink": {
+      "types": "./dist/observability/telemetry-sink.d.ts",
+      "import": "./dist/observability/telemetry-sink.js"
+    },
+    "./diagnostics/jsonl-writer": {
+      "types": "./dist/diagnostics/jsonl-writer.d.ts",
+      "import": "./dist/diagnostics/jsonl-writer.js"
     },
     "./auto-commit": {
       "types": "./dist/auto-commit.d.ts",

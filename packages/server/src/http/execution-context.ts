@@ -55,6 +55,7 @@ export function buildExecutionContext(
     projectContext: pc,
     config: deps.config,
     logger: deps.logger,
+    bus: deps.bus,
     contextBlockStore: pc.contextBlocks,
     parentModel: process.env['PARENT_MODEL_NAME'],
     batchId,

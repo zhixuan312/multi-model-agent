@@ -1,6 +1,7 @@
 // packages/server/src/http/handler-deps.ts
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import type { DiagnosticLogger } from '@zhixuan92/multi-model-agent-core';
+import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
+import type { EventBus } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
@@ -11,7 +12,9 @@ import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 export interface HandlerDeps {
   /** Full multi-model config (agents + defaults). May be undefined in unit tests. */
   config: MultiModelConfig;
-  logger: DiagnosticLogger;
+  logger: HttpServerLog;
+  /** EventBus for structured observability — dual-sink: local JSONL + cloud telemetry. */
+  bus: EventBus;
   projectRegistry: ProjectRegistry;
   batchRegistry: BatchRegistry;
 }

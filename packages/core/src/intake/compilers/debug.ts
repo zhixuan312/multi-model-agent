@@ -36,5 +36,6 @@ export function compileDebugTask(
     } as DebugSource,
     prompt: promptParts.join(''),
     filePaths: input.filePaths,
+    skipCompletionHeuristic: true,
   }];
 }

@@ -2,31 +2,304 @@
   "events": [
     {
       "name": "task_started",
-      "requiredFields": ["event", "ts", "batchId", "taskIndex"]
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "route",
+        "cwd"
+      ]
+    },
+    {
+      "name": "stage_change",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "from",
+        "to"
+      ]
     },
     {
       "name": "heartbeat",
-      "requiredFields": ["event", "ts", "batchId", "taskIndex", "elapsed", "stage", "tools", "read", "wrote", "cost", "idle_ms"]
-    },
-    {
-      "name": "batch_completed",
-      "requiredFields": ["event", "ts", "batchId", "tool", "durationMs", "taskCount"]
-    },
-    {
-      "name": "escalation",
-      "requiredFields": ["loop", "attempt", "baseTier", "implTier", "reviewerTier"]
-    },
-    {
-      "name": "escalation_unavailable",
-      "requiredFields": ["loop", "attempt", "role", "wantedTier", "reason"]
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "elapsed",
+        "stage",
+        "tools",
+        "read",
+        "wrote",
+        "text",
+        "cost",
+        "idleMs"
+      ]
     },
     {
       "name": "fallback",
-      "requiredFields": ["loop", "attempt", "role", "assignedTier", "usedTier", "reason", "violatesSeparation"]
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "loop",
+        "attempt",
+        "role",
+        "assignedTier",
+        "usedTier",
+        "reason",
+        "violatesSeparation"
+      ]
     },
     {
       "name": "fallback_unavailable",
-      "requiredFields": ["loop", "attempt", "role", "assignedTier", "reason"]
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "loop",
+        "attempt",
+        "role",
+        "assignedTier",
+        "reason"
+      ]
+    },
+    {
+      "name": "escalation",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "loop",
+        "attempt",
+        "baseTier",
+        "implTier",
+        "reviewerTier"
+      ]
+    },
+    {
+      "name": "escalation_unavailable",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "loop",
+        "attempt",
+        "role",
+        "wantedTier",
+        "reason"
+      ]
+    },
+    {
+      "name": "review_decision",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "stage",
+        "verdict",
+        "round"
+      ]
+    },
+    {
+      "name": "verify_step",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "command",
+        "status",
+        "durationMs"
+      ]
+    },
+    {
+      "name": "verify_skipped",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "reason",
+        "stage"
+      ]
+    },
+    {
+      "name": "stall_abort",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "idleMs",
+        "thresholdMs"
+      ]
+    },
+    {
+      "name": "batch_completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "tool",
+        "durationMs",
+        "taskCount"
+      ]
+    },
+    {
+      "name": "batch_failed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "tool",
+        "durationMs",
+        "errorCode",
+        "errorMessage"
+      ]
+    },
+    {
+      "name": "task_completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "status",
+        "workerStatus",
+        "turns",
+        "durationMs",
+        "filesRead",
+        "filesWritten",
+        "toolCalls",
+        "inputTokens",
+        "outputTokens",
+        "costUSD"
+      ]
+    },
+    {
+      "name": "worker_start",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "model",
+        "providerType",
+        "tier"
+      ]
+    },
+    {
+      "name": "turn_start",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "turnIndex",
+        "providerType",
+        "model"
+      ]
+    },
+    {
+      "name": "turn_complete",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "turnIndex",
+        "inputTokens",
+        "outputTokens",
+        "costUSD",
+        "durationMs",
+        "providerType",
+        "model"
+      ]
+    },
+    {
+      "name": "tool_call",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "tool",
+        "turnIndex"
+      ]
+    },
+    {
+      "name": "text_emission",
+      "requiredFields": [
+        "event",
+        "ts",
+        "batchId",
+        "taskIndex",
+        "chars",
+        "turnIndex"
+      ]
+    },
+    {
+      "name": "task.completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "route",
+        "agentType",
+        "capabilities",
+        "toolMode",
+        "triggeredFromSkill",
+        "client",
+        "fileCountBucket",
+        "durationBucket",
+        "costBucket",
+        "savedCostBucket",
+        "implementerModelFamily",
+        "implementerModel",
+        "terminalStatus",
+        "workerStatus",
+        "errorCode",
+        "escalated",
+        "fallbackTriggered",
+        "topToolNames",
+        "stages"
+      ]
+    },
+    {
+      "name": "session.started",
+      "requiredFields": [
+        "event",
+        "ts",
+        "configFlavor",
+        "providersConfigured"
+      ]
+    },
+    {
+      "name": "install.changed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "fromVersion",
+        "toVersion",
+        "trigger"
+      ]
+    },
+    {
+      "name": "skill.installed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "skill",
+        "client"
+      ]
     }
   ]
 }

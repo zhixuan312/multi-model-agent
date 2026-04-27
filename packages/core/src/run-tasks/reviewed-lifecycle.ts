@@ -55,7 +55,7 @@ import type {
   FallbackUnavailableEventParams,
   EscalationEventParams,
   EscalationUnavailableEventParams,
-} from '../diagnostics/disconnect-log.js';
+} from '../diagnostics/types.js';
 import { withDoneCondition } from './execute-task.js';
 
 const exec = promisify(execFile);
@@ -162,7 +162,7 @@ export async function executeReviewedLifecycle(
   onProgress?: RunTasksProgressCallback,
   heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void },
   diagnostics?: {
-    logger?: import('../diagnostics/disconnect-log.js').DiagnosticLogger;
+    logger?: import('../diagnostics/http-server-log.js').HttpServerLog;
     verbose?: boolean;
     verboseStream?: (line: string) => void;
   },
@@ -179,6 +179,7 @@ export async function executeReviewedLifecycle(
   _route?: string,
   _client?: string,
   _triggeringSkill?: string,
+  bus?: import('../observability/bus.js').EventBus,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
@@ -206,21 +207,19 @@ export async function executeReviewedLifecycle(
     reviewPolicy === 'spec_only' ? 3 :
     5;
   const verbose = diagnostics?.verbose ?? false;
-  let lastStageSeen: string | undefined;
   const verboseStreamRaw = verbose
     ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
     : undefined;
   const verboseBatchIdEarly = heartbeatWiring?.batchId;
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
-  const taskEventLogger = diagnostics?.logger;
   type EventField = string | number | boolean | null | undefined;
   const emitTaskEvent = (event: string, fields: Record<string, EventField>): void => {
-    if (taskEventLogger && verboseBatchIdEarly !== undefined) {
+    if (bus && verboseBatchIdEarly !== undefined) {
       const cleaned: Record<string, EventField> = {};
       for (const [key, value] of Object.entries(fields)) {
         if (value !== undefined) cleaned[key] = value;
       }
-      taskEventLogger.emit({ event, batchId: verboseBatchIdEarly, taskIndex, ...cleaned });
+      bus.emit({ event, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
     }
     if (verboseStreamRaw) {
       verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));
@@ -236,7 +235,8 @@ export async function executeReviewedLifecycle(
     onProgress !== undefined ||
     verbose ||
     heartbeatWiring?.recordHeartbeat !== undefined ||
-    diagnostics?.logger !== undefined;
+    diagnostics?.logger !== undefined ||
+    bus !== undefined;
   // Synthesize an onProgress sink when the caller didn't pass one — the
   // heartbeat needs a place to emit heartbeat events so the stage-change
   // detector below fires. Discards events if there is no external consumer.
@@ -245,16 +245,10 @@ export async function executeReviewedLifecycle(
     ? new HeartbeatTimer(
         (event) => {
           if (event.kind === 'heartbeat') {
-            // Emit on every heartbeat tick so the operator can confirm
-            // the timer is actually firing. Stage-change lines are richer
-            // but fire only on transitions; plain ticks let you see
-            // per-5s progress inside a long-running stage.
-            if (event.stage !== lastStageSeen) {
-              if (lastStageSeen !== undefined) {
-                emitTaskEvent('stage_change', { from: lastStageSeen, to: event.stage });
-              }
-              lastStageSeen = event.stage;
-            }
+            // Emit on every heartbeat tick so the operator can confirm the
+            // timer is actually firing. Stage transitions are authoritative
+            // only via explicit emit calls at lifecycle points; the
+            // heartbeat tick no longer infers transitions (P5).
             const sinceLastMs = Date.now() - prevEventAtMs;
             emitTaskEvent('heartbeat', {
               elapsed: event.elapsed,
@@ -305,7 +299,6 @@ export async function executeReviewedLifecycle(
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
   const verboseStream = verboseStreamRaw;
-  emitTaskEvent('worker_start', { worker: resolved.provider.config.model });
   let prevEventAtMs = verbose ? Date.now() : 0;
   // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
   // verbose stream, or verbose logger). Previously this only wrapped when
@@ -317,6 +310,13 @@ export async function executeReviewedLifecycle(
     ? (event: InternalRunnerEvent) => {
         if (event.kind === 'turn_start' || event.kind === 'text_emission' || event.kind === 'tool_call' || event.kind === 'turn_complete') {
           markRunnerEvent();
+        }
+        if (event.kind === 'worker_start') {
+          emitTaskEvent('worker_start', {
+            model: event.model,
+            providerType: event.providerType,
+            tier: event.tier,
+          });
         }
         if (event.kind === 'turn_start') {
           heartbeat?.markEvent('llm');
@@ -440,11 +440,9 @@ export async function executeReviewedLifecycle(
   const runningCostUSD = () => taskCostUSD();
   const policyEscalated: { spec: boolean; quality: boolean; diff: boolean } = { spec: false, quality: false, diff: false };
   const emitFallback = (p: FallbackEventParams) => {
-    diagnostics?.logger?.fallback(p);
     emitTaskEvent('fallback', p as unknown as Record<string, EventField>);
   };
   const emitFallbackUnavailable = (p: FallbackUnavailableEventParams) => {
-    diagnostics?.logger?.fallbackUnavailable(p);
     emitTaskEvent('fallback_unavailable', p as unknown as Record<string, EventField>);
   };
   const emitEscalationEvent = (
@@ -456,12 +454,10 @@ export async function executeReviewedLifecycle(
       batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop, attempt,
       baseTier: resolved.slot, implTier: decision.impl, reviewerTier: decision.reviewer,
     };
-    diagnostics?.logger?.escalation(p);
     emitTaskEvent('escalation', p as unknown as Record<string, EventField>);
     policyEscalated[loop] = true;
   };
   const emitEscalationUnavailable = (p: EscalationUnavailableEventParams) => {
-    diagnostics?.logger?.escalationUnavailable(p);
     emitTaskEvent('escalation_unavailable', p as unknown as Record<string, EventField>);
   };
   // When the review loop aborts mid-flight, preserve any review-status info already set
@@ -787,8 +783,12 @@ export async function executeReviewedLifecycle(
   // catch path. Without this, the recorder only fires on 2 of ~5 exit paths.
   let __finalRunResult: RunResult | undefined;
   const __recordOnce = (r: RunResult): RunResult => {
-    if (__finalRunResult === undefined) __finalRunResult = r;
-    return r;
+    // Stamp stallTriggered on every exit path. The watchdog flag is owned
+    // by this scope; surfacing it on the RunResult lets the caller (and
+    // telemetry) distinguish "no progress" aborts from cap exhaustion.
+    const stamped = stallFired ? { ...r, stallTriggered: true } : r;
+    if (__finalRunResult === undefined) __finalRunResult = stamped;
+    return stamped;
   };
 
   try {
@@ -837,7 +837,7 @@ export async function executeReviewedLifecycle(
       call: (provider) => delegateWithEscalation(
         withDoneCondition(task),
         [provider],
-        { explicitlyPinned: false, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal },
+        { explicitlyPinned: false, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: initialDecision.impl },
       ),
     });
 
@@ -1124,7 +1124,7 @@ export async function executeReviewedLifecycle(
       heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
+      const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
       if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'spec', attempt: specAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
       if (reworkCall.fallbackFired) {
         emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
@@ -1208,7 +1208,7 @@ export async function executeReviewedLifecycle(
         heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
         const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
         const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal }) });
+        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
         if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
         if (reworkCall.fallbackFired) emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
         if (reworkCall.bothUnavailable) {

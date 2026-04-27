@@ -1,10 +1,11 @@
 // packages/core/src/executors/types.ts
 import type { ProjectContext } from '../project-context.js';
 import type { RunResult, MultiModelConfig } from '../types.js';
-import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
+import type { HttpServerLog } from '../diagnostics/http-server-log.js';
 import type { ContextBlockStore } from '../context/context-block-store.js';
 import type { NotApplicable } from '../reporting/not-applicable.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
+import type { EventBus } from '../observability/bus.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {
@@ -39,7 +40,9 @@ export interface ExecutionContext {
    * executor-internal events (e.g. mid-flight aborts, partial-progress signals) can flow
    * through the same scoped logger.
    */
-  logger: DiagnosticLogger;
+  logger: HttpServerLog;
+  /** EventBus for structured observability events — dual-sink: local JSONL + cloud telemetry. */
+  bus?: EventBus;
   contextBlockStore: ContextBlockStore;
   /** The parent model name, resolved from env at context-build time. */
   parentModel?: string;
@@ -69,7 +72,8 @@ export interface ExecutionContext {
 export interface ExecutionContextInput {
   projectContext: ProjectContext;
   config: MultiModelConfig;
-  logger: DiagnosticLogger;
+  logger: HttpServerLog;
+  bus?: EventBus;
   contextBlockStore: ContextBlockStore;
   parentModel?: string;
   batchId?: string;

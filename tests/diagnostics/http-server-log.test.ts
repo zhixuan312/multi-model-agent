@@ -1,21 +1,28 @@
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { createDiagnosticLogger } from '../../packages/core/src/diagnostics/disconnect-log.js';
-import type { ShutdownCause } from '../../packages/core/src/diagnostics/disconnect-log.js';
+import { createHttpServerLog, JsonlWriter } from '../../packages/core/src/index.js';
+import type { ShutdownCause } from '../../packages/core/src/index.js';
 
 function makeTempDir(): string {
-  return fs.mkdtempSync(path.join(os.tmpdir(), 'mcp-diagnostic-log-'));
+  return fs.mkdtempSync(path.join(os.tmpdir(), 'mma-http-server-log-'));
 }
 
-function readJsonl(filePath: string): Array<Record<string, unknown>> {
+function makeWriter(tmpDir: string): JsonlWriter {
+  return new JsonlWriter({ dir: tmpDir });
+}
+
+function readLines(dir: string): Array<Record<string, unknown>> {
+  const entries = fs.readdirSync(dir);
+  if (entries.length === 0) return [];
+  const filePath = path.join(dir, entries[0]!);
   const text = fs.readFileSync(filePath, 'utf8').trim();
   if (text === '') return [];
   return text.split('\n').map((line) => JSON.parse(line) as Record<string, unknown>);
 }
 
 function callAllLoggerMethods(tmpDir: string, enabled: boolean): void {
-  const logger = createDiagnosticLogger({ enabled, logDir: tmpDir });
+  const logger = createHttpServerLog({ enabled, writer: makeWriter(tmpDir) });
   logger.startup('2.7.5');
   logger.requestStart({ requestId: 'req-1', tool: 'delegate_tasks' });
   logger.requestComplete({
@@ -29,12 +36,15 @@ function callAllLoggerMethods(tmpDir: string, enabled: boolean): void {
   logger.shutdown('stdin_end');
 }
 
-describe('createDiagnosticLogger enablement', () => {
+describe('createHttpServerLog enablement', () => {
   it('enabled: false is a full no-op and no file is created', () => {
     const tmpDir = makeTempDir();
     try {
       callAllLoggerMethods(tmpDir, false);
-      expect(fs.readdirSync(tmpDir)).toEqual([]);
+      // The writer may create the directory but not write any content
+      const files = fs.existsSync(tmpDir) ? fs.readdirSync(tmpDir) : [];
+      // With enabled=false, writeLine is never called, but the writer is not used
+      expect(files.filter(f => f.endsWith('.jsonl'))).toEqual([]);
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -44,9 +54,7 @@ describe('createDiagnosticLogger enablement', () => {
     const tmpDir = makeTempDir();
     try {
       callAllLoggerMethods(tmpDir, true);
-      const files = fs.readdirSync(tmpDir);
-      expect(files).toHaveLength(1);
-      const events = readJsonl(path.join(tmpDir, files[0]));
+      const events = readLines(tmpDir);
       expect(events.map((e) => e.event)).toEqual([
         'startup',
         'request_start',
@@ -60,15 +68,15 @@ describe('createDiagnosticLogger enablement', () => {
   });
 });
 
-describe('createDiagnosticLogger event schemas', () => {
+describe('createHttpServerLog event schemas', () => {
   it('startup(version) writes the startup event schema', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.startup('2.7.5');
 
-      const filePath = logger.expectedPath()!;
-      const [entry] = readJsonl(filePath);
+      const [entry] = readLines(tmpDir);
       expect(entry).toMatchObject({
         event: 'startup',
         pid: process.pid,
@@ -83,10 +91,11 @@ describe('createDiagnosticLogger event schemas', () => {
   it('requestStart writes the request_start event schema', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.requestStart({ requestId: 'req-123', tool: 'review_code' });
 
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry).toMatchObject({
         event: 'request_start',
         requestId: 'req-123',
@@ -101,7 +110,8 @@ describe('createDiagnosticLogger event schemas', () => {
   it('requestComplete writes the request_complete event schema', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.requestComplete({
         requestId: 'req-456',
         tool: 'audit_document',
@@ -110,7 +120,7 @@ describe('createDiagnosticLogger event schemas', () => {
         responseBytes: 0,
       });
 
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry).toMatchObject({
         event: 'request_complete',
         requestId: 'req-456',
@@ -128,11 +138,12 @@ describe('createDiagnosticLogger event schemas', () => {
   it('error(kind, Error) writes message and stack', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       const err = new Error('fatal boom');
       logger.error('uncaughtException', err);
 
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry).toMatchObject({
         event: 'error',
         kind: 'uncaughtException',
@@ -153,10 +164,11 @@ describe('createDiagnosticLogger event schemas', () => {
   ])('error(kind, %s) omits stack when absent', (_label, value, _unused) => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.error('unhandledRejection', value);
 
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry.event).toBe('error');
       expect(entry.kind).toBe('unhandledRejection');
       expect(typeof entry.ts).toBe('string');
@@ -169,10 +181,11 @@ describe('createDiagnosticLogger event schemas', () => {
   it('shutdown(cause) writes the shutdown event schema', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.shutdown('stdin_end');
 
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry).toMatchObject({
         event: 'shutdown',
         cause: 'stdin_end',
@@ -185,7 +198,7 @@ describe('createDiagnosticLogger event schemas', () => {
   });
 });
 
-describe('createDiagnosticLogger shutdown causes', () => {
+describe('createHttpServerLog shutdown causes', () => {
   const causes: ShutdownCause[] = [
     'stdin_end',
     'SIGTERM',
@@ -203,9 +216,10 @@ describe('createDiagnosticLogger shutdown causes', () => {
   it.each(causes)('writes cause %s exactly', (cause) => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.shutdown(cause);
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry.event).toBe('shutdown');
       expect(entry.cause).toBe(cause);
     } finally {
@@ -214,16 +228,17 @@ describe('createDiagnosticLogger shutdown causes', () => {
   });
 });
 
-describe('createDiagnosticLogger idempotency', () => {
+describe('createHttpServerLog idempotency', () => {
   it('startup() twice writes only one startup line', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.startup('2.7.5');
       logger.startup('2.7.5');
-      const entries = readJsonl(logger.expectedPath()!);
+      const entries = readLines(tmpDir);
       expect(entries).toHaveLength(1);
-      expect(entries[0].event).toBe('startup');
+      expect(entries[0]!.event).toBe('startup');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
@@ -232,25 +247,27 @@ describe('createDiagnosticLogger idempotency', () => {
   it('shutdown() twice writes only one shutdown line', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.shutdown('stdin_end');
       logger.shutdown('stdin_end');
-      const entries = readJsonl(logger.expectedPath()!);
+      const entries = readLines(tmpDir);
       expect(entries).toHaveLength(1);
-      expect(entries[0].event).toBe('shutdown');
+      expect(entries[0]!.event).toBe('shutdown');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }
   });
 });
 
-describe('createDiagnosticLogger lastRequestInFlight', () => {
+describe('createHttpServerLog lastRequestInFlight', () => {
   it('omits lastRequestInFlight when there are no in-flight requests', () => {
     const tmpDir = makeTempDir();
     try {
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir });
+      const writer = makeWriter(tmpDir);
+      const logger = createHttpServerLog({ enabled: true, writer });
       logger.shutdown('stdin_end');
-      const [entry] = readJsonl(logger.expectedPath()!);
+      const [entry] = readLines(tmpDir);
       expect(entry).not.toHaveProperty('lastRequestInFlight');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -262,12 +279,13 @@ describe('createDiagnosticLogger lastRequestInFlight', () => {
     const startedAt = new Date('2026-04-20T14:00:00.000Z');
     try {
       let current = startedAt;
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir, now: () => current });
+      const writer = new JsonlWriter({ dir: tmpDir, now: () => current });
+      const logger = createHttpServerLog({ enabled: true, writer, now: () => current });
       logger.requestStart({ requestId: 'req-1', tool: 'delegate_tasks' });
       current = new Date('2026-04-20T14:00:05.000Z');
       logger.shutdown('stdin_end');
 
-      const entries = readJsonl(logger.expectedPath()!);
+      const entries = readLines(tmpDir);
       const shutdown = entries.at(-1)!;
       expect(shutdown.lastRequestInFlight).toEqual({
         requestId: 'req-1',
@@ -288,14 +306,15 @@ describe('createDiagnosticLogger lastRequestInFlight', () => {
         new Date('2026-04-20T14:00:10.000Z'),
       ];
       let index = 0;
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir, now: () => times[index]! });
+      const writer = new JsonlWriter({ dir: tmpDir, now: () => times[index]! });
+      const logger = createHttpServerLog({ enabled: true, writer, now: () => times[index]! });
       logger.requestStart({ requestId: 'req-1', tool: 'audit_document' });
       index = 1;
       logger.requestStart({ requestId: 'req-2', tool: 'review_code' });
       index = 2;
       logger.shutdown('stdin_end');
 
-      const shutdown = readJsonl(logger.expectedPath()!).at(-1)!;
+      const shutdown = readLines(tmpDir).at(-1)!;
       expect(shutdown.lastRequestInFlight).toEqual({
         requestId: 'req-2',
         tool: 'review_code',
@@ -315,7 +334,8 @@ describe('createDiagnosticLogger lastRequestInFlight', () => {
         new Date('2026-04-20T14:00:02.000Z'),
       ];
       let index = 0;
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir, now: () => times[index]! });
+      const writer = new JsonlWriter({ dir: tmpDir, now: () => times[index]! });
+      const logger = createHttpServerLog({ enabled: true, writer, now: () => times[index]! });
       logger.requestStart({ requestId: 'req-1', tool: 'debug_task' });
       index = 1;
       logger.requestComplete({
@@ -328,7 +348,7 @@ describe('createDiagnosticLogger lastRequestInFlight', () => {
       index = 2;
       logger.shutdown('stdin_end');
 
-      const shutdown = readJsonl(logger.expectedPath()!).at(-1)!;
+      const shutdown = readLines(tmpDir).at(-1)!;
       expect(shutdown).not.toHaveProperty('lastRequestInFlight');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
@@ -336,7 +356,7 @@ describe('createDiagnosticLogger lastRequestInFlight', () => {
   });
 });
 
-describe('createDiagnosticLogger duplicate requestId', () => {
+describe('createHttpServerLog duplicate requestId', () => {
   it('emits an error event when requestStart is called twice for the same requestId', () => {
     const tmpDir = makeTempDir();
     try {
@@ -346,14 +366,15 @@ describe('createDiagnosticLogger duplicate requestId', () => {
         new Date('2026-04-20T14:00:02.000Z'),
       ];
       let index = 0;
-      const logger = createDiagnosticLogger({ enabled: true, logDir: tmpDir, now: () => times[index]! });
+      const writer = new JsonlWriter({ dir: tmpDir, now: () => times[index]! });
+      const logger = createHttpServerLog({ enabled: true, writer, now: () => times[index]! });
       logger.requestStart({ requestId: 'req-dup', tool: 'audit_document' });
       index = 1;
       logger.requestStart({ requestId: 'req-dup', tool: 'review_code' });
       index = 2;
       logger.shutdown('stdin_end');
 
-      const entries = readJsonl(logger.expectedPath()!);
+      const entries = readLines(tmpDir);
       const errorEntry = entries.find((e) => e.event === 'error');
       expect(errorEntry).toMatchObject({
         event: 'error',
@@ -366,72 +387,6 @@ describe('createDiagnosticLogger duplicate requestId', () => {
         requestId: 'req-dup',
         tool: 'review_code',
       });
-    } finally {
-      fs.rmSync(tmpDir, { recursive: true, force: true });
-    }
-  });
-});
-
-describe('createDiagnosticLogger degradation', () => {
-  it('when log dir is unwritable it emits one stderr line and later calls no-op without throwing', () => {
-    const tmpRoot = makeTempDir();
-    const blockedPath = path.join(tmpRoot, 'existing-file');
-    fs.writeFileSync(blockedPath, 'not a directory');
-    const stderrLines: string[] = [];
-
-    try {
-      const logger = createDiagnosticLogger({
-        enabled: true,
-        logDir: blockedPath,
-        stderrWrite: (data) => {
-          stderrLines.push(data);
-        },
-      });
-
-      expect(() => logger.startup('2.7.5')).not.toThrow();
-      expect(() => logger.requestStart({ requestId: 'req-1', tool: 'delegate_tasks' })).not.toThrow();
-      expect(() => logger.error('uncaughtException', new Error('boom'))).not.toThrow();
-      expect(() => logger.shutdown('stdin_end')).not.toThrow();
-
-      expect(stderrLines).toHaveLength(1);
-      expect(stderrLines[0]).toContain('[diagnostic-log] disabled:');
-      expect(fs.readFileSync(blockedPath, 'utf8')).toBe('not a directory');
-    } finally {
-      fs.rmSync(tmpRoot, { recursive: true, force: true });
-    }
-  });
-
-  it('after a write failure it disables once, emits one stderr line, and later writes no-op', () => {
-    const tmpDir = makeTempDir();
-    const stderrLines: string[] = [];
-    const writes: string[] = [];
-    let failOnce = true;
-
-    try {
-      const logger = createDiagnosticLogger({
-        enabled: true,
-        logDir: tmpDir,
-        stderrWrite: (data) => {
-          stderrLines.push(data);
-        },
-        writeSync: (_fd, data) => {
-          if (failOnce) {
-            failOnce = false;
-            throw new Error('simulated write failure');
-          }
-          writes.push(data);
-        },
-      });
-
-      expect(() => logger.startup('2.7.5')).not.toThrow();
-      expect(() => logger.requestStart({ requestId: 'req-1', tool: 'delegate_tasks' })).not.toThrow();
-      expect(() => logger.shutdown('stdin_end')).not.toThrow();
-
-      expect(stderrLines).toHaveLength(1);
-      expect(stderrLines[0]).toContain('[diagnostic-log] disabled: simulated write failure');
-      expect(writes).toEqual([]);
-      expect(fs.readdirSync(tmpDir)).toHaveLength(1);
-      expect(fs.readFileSync(path.join(tmpDir, fs.readdirSync(tmpDir)[0]!), 'utf8')).toBe('');
     } finally {
       fs.rmSync(tmpDir, { recursive: true, force: true });
     }

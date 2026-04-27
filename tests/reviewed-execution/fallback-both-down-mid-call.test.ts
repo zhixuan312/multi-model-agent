@@ -1,6 +1,5 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import type { MultiModelConfig, Provider, RunResult } from '@zhixuan92/multi-model-agent-core';
-import type { DiagnosticLogger } from '@zhixuan92/multi-model-agent-core/diagnostics/disconnect-log';
 
 const providerCalls: string[] = [];
 let originalSetTimeout: typeof globalThis.setTimeout;
@@ -68,40 +67,20 @@ const config: MultiModelConfig = {
 describe('reviewed lifecycle fallback when both providers go down mid-call', () => {
   it('emits fallback + fallback_unavailable and records one bothUnavailable override', async () => {
     providerCalls.length = 0;
-    const fallback = vi.fn();
-    const fallbackUnavailable = vi.fn();
-    const logger = {
-      fallback,
-      fallbackUnavailable,
-      emit: vi.fn(),
-      startup: vi.fn(),
-      requestStart: vi.fn(),
-      requestComplete: vi.fn(),
-      error: vi.fn(),
-      shutdown: vi.fn(),
-      expectedPath: vi.fn(),
-      sessionOpen: vi.fn(),
-      sessionClose: vi.fn(),
-      connectionRejected: vi.fn(),
-      requestRejected: vi.fn(),
-      projectCreated: vi.fn(),
-      projectEvicted: vi.fn(),
-      taskStarted: vi.fn(),
-      batchCompleted: vi.fn(),
-      batchFailed: vi.fn(),
-      escalation: vi.fn(),
-      escalationUnavailable: vi.fn(),
-    } as unknown as DiagnosticLogger;
+    const busEmit = vi.fn();
 
     const [result] = await runTasks(
       [{ prompt: 'implement something', agentType: 'standard', reviewPolicy: 'off', skipCompletionHeuristic: true }],
       config,
-      { batchId: 'batch-t31', logger },
+      { batchId: 'batch-t31', bus: { emit: busEmit } },
     );
 
+    const fallbackCalls = busEmit.mock.calls.filter(([e]) => e.event === 'fallback');
+    const fallbackUnavailableCalls = busEmit.mock.calls.filter(([e]) => e.event === 'fallback_unavailable');
+
     expect(providerCalls).toEqual(['standard', 'complex']);
-    expect(fallback).toHaveBeenCalledTimes(1);
-    expect(fallback).toHaveBeenCalledWith(expect.objectContaining({
+    expect(fallbackCalls).toHaveLength(1);
+    expect(fallbackCalls[0][0]).toMatchObject({
       batchId: 'batch-t31',
       taskIndex: 0,
       loop: 'spec',
@@ -112,9 +91,9 @@ describe('reviewed lifecycle fallback when both providers go down mid-call', () 
       reason: 'transport_failure',
       triggeringStatus: 'api_error',
       violatesSeparation: false,
-    }));
-    expect(fallbackUnavailable).toHaveBeenCalledTimes(1);
-    expect(fallbackUnavailable).toHaveBeenCalledWith(expect.objectContaining({
+    });
+    expect(fallbackUnavailableCalls).toHaveLength(1);
+    expect(fallbackUnavailableCalls[0][0]).toMatchObject({
       batchId: 'batch-t31',
       taskIndex: 0,
       loop: 'spec',
@@ -122,12 +101,14 @@ describe('reviewed lifecycle fallback when both providers go down mid-call', () 
       role: 'implementer',
       assignedTier: 'standard',
       reason: 'transport_failure',
-    }));
+    });
 
     expect(result.status).toBe('incomplete');
     expect(result.terminationReason).toBe('all_tiers_unavailable');
 
-    const fallbackOverrides = fallback.mock.calls.map(([event]) => ({
+    const fallbackOverrides = busEmit.mock.calls
+      .filter(([e]) => e.event === 'fallback')
+      .map(([event]) => ({
       role: event.role,
       loop: event.loop,
       attempt: event.attempt,

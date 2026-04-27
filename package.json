@@ -1,6 +1,6 @@
 {
   "name": "multi-model-agent",
-  "version": "3.6.7",
+  "version": "3.7.0",
   "private": true,
   "license": "MIT",
   "description": "Local HTTP service that delegates tool-using work to sub-agents on different LLM providers (Claude, Codex, OpenAI-compatible). Routes by capability, quality tier, and cost.",
@@ -32,7 +32,8 @@
     "test:watch": "vitest",
     "test:perf": "MMAGENT_PERF_CHECK=1 vitest run tests/perf/",
     "test:perf:baseline": "MMAGENT_PERF_SUITE=1 vitest run tests/perf/record-baseline.test.ts",
-    "serve": "node packages/server/dist/cli/index.js serve"
+    "serve": "node packages/server/dist/cli/index.js serve",
+    "regen:observability-golden": "npx tsx tests/contract/regen-observability-golden.ts"
   },
   "engines": {
     "node": ">=22.0.0"

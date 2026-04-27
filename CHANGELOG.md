@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.7.0] - 2026-04-28
+
+### Added
+- **observability.** Single `EventBus` with `LocalLogSink` + `TelemetrySink`. Zod-typed event taxonomy in `core/observability/events.ts`.
+- **telemetry (v2).** SCHEMA_VERSION 1 → 2 with 11 new fields on `TaskCompletedEvent`: `filesWrittenBucket`, `c2Promoted`, `workerSelfAssessment`, `concernCount`, `escalationCount`, `fallbackCount`, `turnCountBucket`, `stallTriggered`, `clarificationRequested`, `parentModelFamily`, `briefQualityWarningCount`.
+- **delegate.** `task_completed` local event mirrors the cloud-bound payload for per-task debugging.
+
+### Fixed
+- **delegate (P1).** `terminationReason.cause = 'finished'` is now set on the success early-return path; previously every successful task was reported with `terminalStatus='incomplete'` in cloud telemetry.
+- **delegate (P2).** C2 promotion now honors `task.skipCompletionHeuristic`; audit/review/debug tasks (no file writes) can promote `incomplete → ok` when the worker reports `done` with substantive output.
+- **observability (P3).** `fallback`/`escalation` events no longer double-emit. The dual `logger.fallback() + emitTaskEvent()` path is replaced by a single `bus.emit()` call.
+- **heartbeat (P4).** `setStage('terminal')` now auto-stops the timer; post-stop `emit()` is a no-op.
+- **observability (P5).** Heartbeat-side `stage_change` emission removed; explicit lifecycle calls are authoritative.
+
+### Changed (BREAKING)
+- **local-log field naming.** All field names normalized to camelCase. `idle_ms`→`idleMs`, `input_tokens`→`inputTokens`, `output_tokens`→`outputTokens`, `duration_ms`→`durationMs`, `exit_code`→`exitCode`, `error_message`→`errorMessage`. The `mmagent logs` CLI is unaffected (streams lines as-is).
+- **event taxonomy.** Removed: `task_phase_change` (folded into `stage_change`), `task_heartbeat` (folded into `heartbeat`), `heartbeat_timer` (deleted; lifecycle inferable from first/last `heartbeat`), `llm_turn` (folded into `turn_complete`).
+- **DiagnosticLogger.** `disconnect-log.ts` renamed to `http-server-log.ts`; task methods (`taskStarted`, `taskHeartbeat`, `taskPhaseChange`, `escalation*`, `fallback*`, `batchCompleted`, `batchFailed`) deleted. HTTP/server-lifecycle methods retained.
+
 ## [3.6.7] - 2026-04-27
 
 ### Added

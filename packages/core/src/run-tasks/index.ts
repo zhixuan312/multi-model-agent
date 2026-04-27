@@ -7,7 +7,8 @@ import type {
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
-import type { DiagnosticLogger } from '../diagnostics/disconnect-log.js';
+import type { HttpServerLog } from '../diagnostics/http-server-log.js';
+import type { EventBus } from '../observability/bus.js';
 import type { BriefQualityWarning } from '../intake/types.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
@@ -30,12 +31,12 @@ export interface RunTasksOptions {
   /** Callback fired on every heartbeat tick with a state snapshot. */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   /**
-   * Optional DiagnosticLogger. When present AND `verbose` is true, the
+   * Optional HttpServerLog. When present AND `verbose` is true, the
    * runner records per-tool-call + per-LLM-turn events for post-mortem
    * diagnosis of slow tasks. Logger writes are a no-op if diagnostics.log=false,
    * so passing it is always safe.
    */
-  logger?: DiagnosticLogger;
+  logger?: HttpServerLog;
   /**
    * Enable verbose emissions. When true, each tool call and LLM turn is
    * streamed to `verboseStream` (default: process.stderr) so the operator
@@ -62,6 +63,8 @@ export interface RunTasksOptions {
   client?: string;
   /** Triggering skill for telemetry (e.g. 'mma-delegate', 'direct'). */
   triggeringSkill?: string;
+  /** EventBus for structured observability events. */
+  bus?: EventBus;
 }
 
 export async function runTasks(
@@ -176,7 +179,7 @@ export async function runTasks(
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
         verboseStream: options.verboseStream,
-      }, options.recorder, options.route, options.client, options.triggeringSkill).then(
+      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };

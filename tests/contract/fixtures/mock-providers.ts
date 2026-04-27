@@ -16,6 +16,7 @@ import type {
   RunStatus,
   TokenUsage,
   AttemptRecord,
+  WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
 
 export type Stage =
@@ -26,11 +27,22 @@ export type Stage =
   | 'clarification'
   | 'review-rework';
 
+export interface SequenceItem {
+  status?: RunStatus;
+  output?: string;
+  filesWritten?: string[];
+  workerStatus?: WorkerStatus;
+  specReviewStatus?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
+  qualityReviewStatus?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
+}
+
 export interface MockProviderOptions {
   stage?: Stage;
   output?: string;
   cost?: number;
   onPrompt?: (prompt: string) => void;
+  sequence?: SequenceItem[];
+  delayMs?: number;
 }
 
 const STUB_CONFIG: ProviderConfig = {
@@ -206,7 +218,37 @@ function buildReviewRework(opts: MockProviderOptions): RunResult {
   };
 }
 
+function buildFromSequenceItem(item: SequenceItem): RunResult {
+  const cost = 0.001;
+  return {
+    output: item.output ?? 'mocked sequence item',
+    status: item.status ?? 'ok',
+    usage: usage(cost),
+    turns: 1,
+    filesRead: [],
+    filesWritten: item.filesWritten ?? [],
+    toolCalls: [],
+    outputIsDiagnostic: item.status !== 'ok',
+    escalationLog: [attempt(item.status ?? 'ok', 1, cost)],
+    durationMs: 0,
+    directoriesListed: [],
+    workerStatus: item.workerStatus ?? 'done',
+    specReviewStatus: item.specReviewStatus,
+    qualityReviewStatus: item.qualityReviewStatus,
+    terminationReason: {
+      cause: item.status === 'ok' ? 'finished' : item.status ?? 'finished',
+      turnsUsed: 1,
+      hasFileArtifacts: (item.filesWritten?.length ?? 0) > 0,
+      usedShell: false,
+      workerSelfAssessment: item.workerStatus ?? 'done',
+      wasPromoted: false,
+    },
+  };
+}
+
 export function mockProvider(opts: MockProviderOptions): Provider {
+  let seqIdx = 0;
+
   const runner = (): RunResult => {
     const stage = opts.stage ?? 'ok';
     switch (stage) {
@@ -223,6 +265,14 @@ export function mockProvider(opts: MockProviderOptions): Provider {
     config: STUB_CONFIG,
     async run(prompt: string): Promise<RunResult> {
       opts.onPrompt?.(prompt);
+      if (opts.delayMs) {
+        await new Promise((resolve) => setTimeout(resolve, opts.delayMs));
+      }
+      if (opts.sequence) {
+        const item = opts.sequence[seqIdx] ?? opts.sequence[opts.sequence.length - 1];
+        seqIdx++;
+        return buildFromSequenceItem(item);
+      }
       return runner();
     },
   };
@@ -295,8 +345,53 @@ export function throwingProvider(err: Error): Provider {
   };
 }
 
-export function failProvider(message = 'mocked failure'): Provider {
-  return throwingProvider(new Error(message));
+export interface FailProviderOptions {
+  status?: RunStatus;
+  errorCode?: string;
+}
+
+export function failProvider(messageOrOpts: string | FailProviderOptions = 'mocked failure'): Provider {
+  const opts: FailProviderOptions = typeof messageOrOpts === 'string'
+    ? { status: 'api_error', errorCode: messageOrOpts }
+    : messageOrOpts;
+  if (opts.status && opts.status !== 'ok') {
+    return {
+      name: 'mock-fail',
+      config: STUB_CONFIG,
+      async run(): Promise<RunResult> {
+        return {
+          output: `failure: ${opts.errorCode ?? opts.status}`,
+          status: opts.status,
+          usage: usage(null),
+          turns: 1,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [attempt(opts.status, 1, null)],
+          durationMs: 0,
+          directoriesListed: [],
+          workerStatus: 'failed',
+          terminationReason: {
+            cause: opts.status,
+            turnsUsed: 1,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: 'failed',
+            wasPromoted: false,
+          },
+          structuredError: { code: opts.errorCode ?? 'api_error', message: opts.errorCode ?? opts.status },
+        };
+      },
+    };
+  }
+  return {
+    name: 'mock-throw',
+    config: STUB_CONFIG,
+    async run(): Promise<RunResult> {
+      throw new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
+    },
+  };
 }
 
 // Patches global fetch so any outbound network call from a contract test is

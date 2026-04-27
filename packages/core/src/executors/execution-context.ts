@@ -17,5 +17,6 @@ export function buildExecutionContext(input: ExecutionContextInput): ExecutionCo
     ...(input.route !== undefined && { route: input.route }),
     ...(input.client !== undefined && { client: input.client }),
     ...(input.triggeringSkill !== undefined && { triggeringSkill: input.triggeringSkill }),
+    ...(input.bus !== undefined && { bus: input.bus }),
   };
 }
