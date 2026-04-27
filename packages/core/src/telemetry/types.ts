@@ -3,6 +3,19 @@ import { ALL_MODEL_IDS } from '../routing/model-profiles.js';
 
 export const SCHEMA_VERSION = 1;
 
+/**
+ * Permissive shape-only validation for fields whose vocabulary we don't control:
+ * model IDs, client names, MCP tool names, skill IDs. Charset accommodates every
+ * model namespace observed in the wild (Anthropic, OpenAI, Bedrock prefixes,
+ * OpenRouter `meta-llama/...`, Ollama `model:tag`). Length cap prevents PII
+ * smuggling. The schema validates SHAPE, not VOCABULARY.
+ */
+export const BoundedIdentifier = z
+  .string()
+  .min(1)
+  .max(120)
+  .regex(/^[A-Za-z0-9._:/\-]+$/);
+
 const MAX_STR = 64;
 const MAX_VERSION_STR = 64;
 
