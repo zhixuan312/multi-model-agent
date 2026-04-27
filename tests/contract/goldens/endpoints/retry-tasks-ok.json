@@ -95,7 +95,7 @@
           "durationMs": "<DETERMINISTIC>",
           "entered": true,
           "model": "mock",
-          "modelFamily": "mock",
+          "modelFamily": "other",
           "stage": "implementing"
         },
         "committing": {
