@@ -70,6 +70,14 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
+## Best practices
+
+This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-debug`:
+
+- **Recipe B — Debug-fix-verify.** `mma-debug` → `mma-delegate` (apply fix) → `mma-verify`. Strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse on verify.
+
+Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're about to read 3+ files in main context to "understand the bug," that's the labor we delegate — call `mma-debug` with the hypothesis instead.
+
 ## Common pitfalls
 
 ❌ **Vague `problem`**
