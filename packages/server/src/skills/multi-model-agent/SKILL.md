@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Local HTTP service that fans out tool-using work to sub-agents on different LLM providers (Claude, OpenAI-compatible, Codex). Workers run on cheap models; the main agent stays on judgment.
+Local HTTP service that fans out tool-using work to workers on different LLM providers (Claude, OpenAI-compatible, Codex). Workers run on cheap models; the main agent stays on judgment.
 
 **Core principle:** Pick the most specific `mma-*` skill that fits the task. Specificity reduces input — specialized skills know their route, schema, and defaults so you write less.
 
