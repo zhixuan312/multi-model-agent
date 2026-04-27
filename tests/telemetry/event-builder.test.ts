@@ -65,13 +65,15 @@ describe('event-builder — produces R1–R5-valid events for every route × out
       },
     }));
     const names = ev.topToolNames;
-    // Top 5 by count (readFile=2, listFiles=2, runShell=1, editFile=1, grep=1, glob=1, foo_bar=1 → other=1)
-    // Expect readFile, listFiles, and 3 of {runShell, editFile, grep, glob, other}
+    // Permissive vocabulary (0.3.0+): top-20 by count, no allowlist filter.
+    // snake_case → camelCase normalization still happens (read_file → readFile,
+    // list_files → listFiles), so those collapse with any camelCase counterparts.
+    // Tool names that pass BoundedIdentifier shape — including 'foo_bar' — pass
+    // through unchanged; they are NOT collapsed to 'other'.
     expect(names).toContain('readFile');
     expect(names).toContain('listFiles');
-    expect(names.length).toBeLessThanOrEqual(5);
-    // foo_bar is not allowlisted
-    expect(names).not.toContain('foo_bar' as unknown);
+    expect(names.length).toBeLessThanOrEqual(20);
+    expect(names).toContain('foo_bar'); // shape-valid → passes through (was mapped to 'other' pre-0.3.0)
   });
 
   it('escalated is true when escalationLog has >1 entries', () => {
