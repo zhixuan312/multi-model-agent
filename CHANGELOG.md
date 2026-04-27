@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.6.7] - 2026-04-27
+
+### Added
+- **`BoundedIdentifier` schema (core).** Permissive shape-only validator for fields whose vocabulary the CLI doesn't control: any string matching `[A-Za-z0-9._:/\-]+` and 1–120 chars. Replaces the strict allowlist enums on `implementerModel`, every `stages.*.model`, `client`, `topToolNames`, and `triggeredFromSkill`. The schema validates **shape, not vocabulary** — Anthropic 4.x, OpenAI o-series, Bedrock vendor prefixes, OpenRouter `meta-llama/...`, Ollama `llama2:7b`, custom finetunes, and arbitrary MCP tool names all pass through verbatim instead of being rejected or collapsed to `'other'`. Length cap prevents PII smuggling; charset rejects spaces/quotes/`@`/control chars.
+- **`ModelFamily` enum widened from 5 to 12 values (core).** `claude`, `openai`, `gemini`, `deepseek`, `grok`, `mistral`, `meta`, `qwen`, `zhipu`, `kimi`, `minimax`, `other`. `deriveModelFamily` is now exported and covers the 12 families with prefix matching (incl. `o1`, `o3`, `o4`, bare `openai` for the openai family). Hosting/routing layers (Ollama, OpenRouter) deliberately not added — the underlying model classifies on its own (e.g. `llama2:7b` → `meta`).
+- **`'other'` capability fallback (core).** `Capability` enum gains `'other'`; `event-builder` maps unknown capability strings to `'other'` so future model-profiles entries don't force a backend update before they ship.
+
+### Changed
+- **`allowlistModel` → `normalizeModelForTelemetry` (core).** Renamed and rewritten: validate shape via `BoundedIdentifier`, return input unchanged if valid, fall back to `'other'` only for null/empty/shape-violating inputs. Defensive normalization, not vocabulary gating. Five call sites updated.
+- **`deriveTopToolNames` is now permissive (core).** `ALLOWLISTED_TOOL` set deleted; tool names that pass `BoundedIdentifier` shape pass through unchanged (no longer collapsed to `'other'`). `SNAKE_TO_CAMEL` normalization preserved (`read_file` → `readFile` etc.). Top-N bumped from 5 to 20 to match the new schema cap.
+- **`BuildContext` field types widened (core).** `client` and `triggeringSkill` now typed as `string` instead of narrow unions, matching the new permissive wire shape — TypeScript no longer rejects real-world client/skill identifiers at the call-site boundary.
+- **`ALL_MODEL_IDS` documented as cost-only (core).** Docstring clarifies the constant is for cost/profile lookup, NOT a telemetry allowlist. Adding/removing entries here does not affect what telemetry accepts.
+- **`PRIVACY.md` updated (repo + npm).** New "About model identifiers" section: we don't filter or reject your model name — Anthropic, OpenAI, Google, locally-hosted Ollama, custom fine-tunes, corporate proxy aliases all pass through unchanged. Field classification table updated to mark these fields as "Public (bounded string)" rather than "Public (enum)".
+
+### Removed
+- **`KnownModelId`, `ModelIdOrOther` Zod schemas (core).** Replaced by `BoundedIdentifier`. The `import { ALL_MODEL_IDS } from '../routing/model-profiles.js'` line in `types.ts` is gone — telemetry types no longer depend on the model-profiles cost table.
+- **`ALLOWLISTED_TOOL` set (core).** The 8-entry hardcoded tool allowlist is gone; permissive shape validation replaces it.
+
+### Fixed
+- **`stage-stats.test.ts` was environmentally coupled to runner cwd (core).** The `records verifying stage when autoCommit=true` test used `process.cwd()` (the mmagent repo) and `executeReviewedLifecycle`'s pre-flight `git status --porcelain` check aborted with `errorCode='dirty_worktree'` whenever the repo had any uncommitted change, making the test appear flaky. The test now initializes a fresh git repo in `mkdtempSync()` and passes it as `task.cwd` — verified consistent pass over five consecutive runs and across full-suite runs (1833/1833).
+- **DeepSeek-V4-Pro pricing reflects the limited-time 75% off discount (core).** Updated `model-profiles.json` per the official pricing page: input `$0.435`, output `$0.87` (was `$1.74` / `$3.48`), valid until 2026-05-05 15:59 UTC. Annotated for revert in the `bestFor` field. Flash pricing unchanged.
+
 ## [3.6.6] - 2026-04-27
 
 ### Fixed
@@ -870,7 +892,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.6...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.7...HEAD
+[3.6.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.6...v3.6.7
 [3.6.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.5...v3.6.6
 [3.6.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...v3.6.5
 [3.6.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.3...v3.6.4

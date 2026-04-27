@@ -215,6 +215,12 @@ const PROFILE_ENTRIES: ModelProfile[] = (() => {
   return [...resolved.values()].sort((a, b) => b.prefix.length - a.prefix.length);
 })();
 
+/**
+ * Used for model COST/PROFILE lookup only — NOT a telemetry allowlist.
+ * Adding/removing entries here does NOT affect what telemetry accepts.
+ * Telemetry uses BoundedIdentifier (telemetry/types.ts) and accepts any
+ * reasonable string identifier; see PRIVACY.md for the wire-shape rules.
+ */
 export const ALL_MODEL_IDS: readonly string[] = Object.freeze(
   PROFILE_ENTRIES
     .map(p => p.prefix)

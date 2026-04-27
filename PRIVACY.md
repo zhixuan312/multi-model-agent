@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Updated:** 2026-04-26 · **Schema version:** 1
+**Schema version:** 1 (wire format unchanged from 0.2.0; accepted-value space widened) · **Last revised:** 2026-04-27 — 0.3.0
 
 multi-model-agent collects anonymous, low-cardinality usage statistics to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -9,6 +9,20 @@ multi-model-agent collects anonymous, low-cardinality usage statistics to help i
 ## What we collect
 
 Every uploaded event belongs to one of four types: `task.completed`, `session.started`, `install.changed`, or `skill.installed`. All fields are either pseudonymous, bucketed, derived, or public — no raw content ever crosses the wire.
+
+### A note about model identifiers
+
+mmagent does not filter or reject your model name. Whatever your CLI is configured
+to use — official Anthropic/OpenAI/Google models, locally-hosted Ollama models,
+custom fine-tunes, corporate proxy aliases — telemetry accepts the identifier
+as-is. We classify it into a model family for aggregate analysis, but the exact
+identifier travels through unchanged. Model identifiers are public information
+(Anthropic, OpenAI, Google publish theirs; custom names are non-identifying since
+we don't know who any user is).
+
+The schema validates **shape, not vocabulary**: charset (alphanumeric + `.`, `_`,
+`:`, `/`, `-`) and length (≤120 chars). This applies to model IDs, client names,
+tool names, and skill IDs.
 
 ### Install metadata (sent once per batch)
 
@@ -28,20 +42,20 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 - **agentType** — `standard` or `complex`.
 - **capabilities** — Whether `web_search` or `web_fetch` was used.
 - **toolMode** — Tool access level: `none`, `readonly`, `no-shell`, or `full`.
-- **triggeredFromSkill** — Which skill triggered the task, or `direct`.
-- **client** — Which client invoked mmagent: `claude-code`, `cursor`, `codex-cli`, `gemini-cli`, or `other`.
+- **triggeredFromSkill** — Any reasonable skill identifier (same shape) or `direct`.
+- **client** — Any reasonable client identifier (same shape as implementerModel).
 - **fileCountBucket** — Number of files touched, bucketed into one of five ranges (`0`, `1-5`, `6-20`, `21-50`, `51+`). Never the actual count.
 - **durationBucket** — Task duration, bucketed (`<10s`, `10s-1m`, `1m-5m`, `5m-30m`, `30m+`). Never the raw duration.
 - **costBucket** — Task cost, bucketed (`$0`, `<$0.01`, `$0.01-$0.10`, `$0.10-$1`, `$1+`). Never the raw cost.
 - **savedCostBucket** — Estimated cost saved vs. doing the work manually, bucketed.
 - **implementerModelFamily** — Provider family: `claude`, `openai`, `gemini`, `deepseek`, or `other`.
-- **implementerModel** — Canonical model ID from a known allowlist, or `other`. Custom model aliases are never sent.
+- **implementerModel** — Any reasonable model identifier (alphanumeric, dots, dashes, slashes, colons, underscores; ≤120 chars). Whatever your CLI is configured to use, including Anthropic/OpenAI/Google models, Ollama-hosted models, custom finetunes, or proxy aliases.
 - **terminalStatus** — How the task ended: `ok`, `incomplete`, `timeout`, `error`, `cost_exceeded`, `brief_too_vague`, `unavailable`.
 - **workerStatus** — Worker outcome: `done`, `done_with_concerns`, `needs_context`, `blocked`, `failed`, `review_loop_aborted`.
 - **errorCode** — Pre-defined error category (e.g. `api_error`, `network_error`, `verify_command_error`). Raw error messages and stack traces are **never** transmitted.
 - **escalated** — Whether the task escalated to a more capable model.
 - **fallbackTriggered** — Whether any fallback model overrides were used.
-- **topToolNames** — Top 5 tool names by call count, from a fixed allowlist (`readFile`, `writeFile`, `editFile`, `runShell`, `listFiles`, `grep`, `glob`, `other`).
+- **topToolNames** — Top 20 tool names from the run, by call frequency. Each name validated against shape (alphanumeric + delimiters); covers MCP server tool names.
 - **stages** — Per-stage breakdown (implementing, verifying, spec_review, spec_rework, quality_review, quality_rework, diff_review, committing). Each stage reports only structural data: whether it was entered, bucketed duration/cost, model family, and review verdicts/concerning categories. Review stages (spec_review, quality_review, diff_review) include a `verdict` field with fixed enum values (`approved`, `concerns`, `changes_required`, `error`, `skipped`, `not_applicable`). Concern categories likewise use fixed enums (`missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `other`).
 
 ### Session and install events

@@ -4,7 +4,7 @@ import type {
   RawStageStats,
 } from '../types.js';
 import { computeSavedCostUSD } from '../types.js';
-import { findModelProfile, extractCanonicalModelName } from '../routing/model-profiles.js';
+import { extractCanonicalModelName } from '../routing/model-profiles.js';
 import {
   bucketCost,
   bucketSavedCost,
@@ -13,12 +13,16 @@ import {
   bucketRoundsUsed,
 } from './bucketing.js';
 import { classifyConcern } from './concern-classifier.js';
+import { BoundedIdentifier } from './types.js';
 import type {
   TelemetryEventType,
   TaskCompletedEventType,
   SkillInstalledEventType,
   ErrorCodeType,
+  ModelFamilyType,
 } from './types.js';
+
+const KNOWN_CAPABILITIES = new Set(['web_search', 'web_fetch']);
 
 // ── Public surface ────────────────────────────────────────────────────────
 
@@ -26,8 +30,8 @@ export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry';
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
-  client: 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli' | 'other';
-  triggeringSkill: 'mma-delegate' | 'mma-audit' | 'mma-review' | 'mma-verify' | 'mma-debug' | 'mma-execute-plan' | 'mma-retry' | 'mma-investigate' | 'mma-context-blocks' | 'mma-clarifications' | 'direct' | 'other';
+  client: string;
+  triggeringSkill: string;
   parentModel: string | null;
 }
 
@@ -75,10 +79,11 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
   const implModelRaw = runResult.models?.implementer ?? null;
   const implModel = implModelRaw ? extractCanonicalModelName(implModelRaw) : null;
   const implementerModelFamily = deriveModelFamily(implModel);
-  const implementerModel = allowlistModel(implModel);
+  const implementerModel = normalizeModelForTelemetry(implModel);
 
   const agentType = runResult.agents?.implementer === 'complex' ? 'complex' as const : 'standard' as const;
-  const capabilities = (runResult.agents?.implementerCapabilities ?? []) as Array<'web_search' | 'web_fetch'>;
+  const rawCapabilities = runResult.agents?.implementerCapabilities ?? [];
+const capabilities = rawCapabilities.map(c => KNOWN_CAPABILITIES.has(c) ? c : 'other');
   const toolMode = (runResult.agents?.implementerToolMode ?? 'full') as 'none' | 'readonly' | 'no-shell' | 'full';
 
   const topToolNames = deriveTopToolNames(runResult.toolCalls ?? []);
@@ -90,7 +95,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TelemetryEventType {
     eventId: randomUUID(),
     route,
     agentType,
-    capabilities: [...new Set(capabilities.filter(c => c === 'web_search' || c === 'web_fetch'))],
+    capabilities: [...new Set(capabilities.filter(c => c === 'web_search' || c === 'web_fetch' || c === 'other'))],
     toolMode,
     triggeredFromSkill: triggeringSkill,
     client,
@@ -221,39 +226,27 @@ const SNAKE_TO_CAMEL: Record<string, string> = {
   list_files: 'listFiles',
 };
 
-const ALLOWLISTED_TOOL = new Set([
-  'readFile', 'writeFile', 'editFile', 'runShell', 'listFiles', 'grep', 'glob',
-]);
-
-function deriveTopToolNames(toolCalls: string[]): Array<'readFile' | 'writeFile' | 'editFile' | 'runShell' | 'listFiles' | 'grep' | 'glob' | 'other'> {
-  // Count occurrences with normalized names
+/**
+ * Top-N selection of tool names by call frequency.
+ * Pipeline:
+ *   1. snake_case → camelCase normalization (so adapters emitting either form
+ *      collapse to the same tool name in counts)
+ *   2. shape validation against BoundedIdentifier (any name that passes is
+ *      counted; names that fail shape are dropped — NOT collapsed to 'other')
+ *   3. top 20 by frequency (matches schema max(20))
+ */
+export function deriveTopToolNames(toolCalls: string[]): string[] {
   const counts = new Map<string, number>();
-  for (const raw of toolCalls) {
-    const normalized = SNAKE_TO_CAMEL[raw] ?? raw;
-    counts.set(normalized, (counts.get(normalized) ?? 0) + 1);
-  }
-
-  // Sort by count desc, then by name asc for determinism
-  const sorted = [...counts.entries()]
-    .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-    .slice(0, 5)
-    .map(([name]) => ALLOWLISTED_TOOL.has(name) ? name : 'other');
-
-  // De-dupe 'other' entries while preserving order
-  const result: string[] = [];
-  let hasOther = false;
-  for (const name of sorted) {
-    if (name === 'other') {
-      if (!hasOther) {
-        result.push('other');
-        hasOther = true;
-      }
-    } else {
-      result.push(name);
+  for (const name of toolCalls) {
+    const canonical = SNAKE_TO_CAMEL[name] ?? name;
+    if (BoundedIdentifier.safeParse(canonical).success) {
+      counts.set(canonical, (counts.get(canonical) ?? 0) + 1);
     }
   }
-
-  return result as Array<'readFile' | 'writeFile' | 'editFile' | 'runShell' | 'listFiles' | 'grep' | 'glob' | 'other'>;
+  return Array.from(counts.entries())
+    .sort((a, b) => b[1] - a[1])
+    .slice(0, 20)
+    .map(([name]) => name);
 }
 
 function buildStages(
@@ -307,7 +300,7 @@ function buildStageStats(raw: RawStageStats | undefined): {
   durationBucket: '<10s' | '10s-1m' | '1m-5m' | '5m-30m' | '30m+' | null;
   costBucket: '$0' | '<$0.01' | '$0.01-$0.10' | '$0.10-$1' | '$1+' | null;
   agentTier: 'standard' | 'complex' | null;
-  modelFamily: 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null;
+  modelFamily: ModelFamilyType | null;
   model: string | null;
 } {
   if (!raw || !raw.entered) {
@@ -326,8 +319,8 @@ function buildStageStats(raw: RawStageStats | undefined): {
     durationBucket: bucketDuration(raw.durationMs ?? 0),
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
-    modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
+    modelFamily: raw.modelFamily as ModelFamilyType | null,
+    model: normalizeModelForTelemetry(raw.model ? extractCanonicalModelName(raw.model) : null),
   };
 }
 
@@ -367,8 +360,8 @@ function buildVerifyStageStats(
     durationBucket: bucketDuration(raw.durationMs ?? 0),
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
-    modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
+    modelFamily: raw.modelFamily as ModelFamilyType | null,
+    model: normalizeModelForTelemetry(raw.model ? extractCanonicalModelName(raw.model) : null),
     outcome: raw.outcome ?? 'not_applicable',
     skipReason: raw.outcome === 'skipped' ? (raw.skipReason ?? 'other') : null,
   };
@@ -387,7 +380,7 @@ function buildReviewStageStats(
   durationBucket: '<10s' | '10s-1m' | '1m-5m' | '5m-30m' | '30m+' | null;
   costBucket: '$0' | '<$0.01' | '$0.01-$0.10' | '$0.10-$1' | '$1+' | null;
   agentTier: 'standard' | 'complex' | null;
-  modelFamily: 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null;
+  modelFamily: ModelFamilyType | null;
   model: string | null;
   verdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable' | null;
   roundsUsed: '0' | '1' | '2+' | null;
@@ -441,8 +434,8 @@ function buildReviewStageStats(
     durationBucket: bucketDuration(raw.durationMs ?? 0),
     costBucket: bucketCost(raw.costUSD ?? 0),
     agentTier: raw.agentTier,
-    modelFamily: raw.modelFamily as 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' | null,
-    model: allowlistModel(raw.model ? extractCanonicalModelName(raw.model) : null),
+    modelFamily: raw.modelFamily as ModelFamilyType | null,
+    model: normalizeModelForTelemetry(raw.model ? extractCanonicalModelName(raw.model) : null),
     verdict,
     roundsUsed: rounds !== null ? bucketRoundsUsed(rounds) : '1',
     concernCategories: categories.length > 0 ? categories : [],
@@ -451,20 +444,31 @@ function buildReviewStageStats(
 
 // ── Model helpers ──────────────────────────────────────────────────────────
 
-function deriveModelFamily(modelId: string | null | undefined): 'claude' | 'openai' | 'gemini' | 'deepseek' | 'other' {
+export function deriveModelFamily(modelId: string | null | undefined): ModelFamilyType {
   if (!modelId) return 'other';
-  const lower = modelId.toLowerCase();
-  if (lower.startsWith('claude')) return 'claude';
-  if (lower.startsWith('gpt') || lower.startsWith('o1') || lower.startsWith('o3') || lower.startsWith('openai')) return 'openai';
-  if (lower.startsWith('gemini')) return 'gemini';
-  if (lower.startsWith('deepseek')) return 'deepseek';
+  const m = modelId.toLowerCase();
+  if (m.startsWith('claude'))                                              return 'claude';
+  if (
+    m.startsWith('gpt')      ||
+    m.startsWith('openai')   ||
+    m.startsWith('o1')       ||
+    m.startsWith('o3')       ||
+    m.startsWith('o4')
+  )                                                                        return 'openai';
+  if (m.startsWith('gemini'))                                              return 'gemini';
+  if (m.startsWith('deepseek'))                                            return 'deepseek';
+  if (m.startsWith('grok'))                                                return 'grok';
+  if (m.startsWith('mistral'))                                             return 'mistral';
+  if (m.startsWith('llama') || m.startsWith('meta-llama/'))                return 'meta';
+  if (m.startsWith('qwen'))                                                return 'qwen';
+  if (m.startsWith('glm'))                                                 return 'zhipu';
+  if (m.startsWith('kimi'))                                                return 'kimi';
+  if (m.startsWith('minimax'))                                             return 'minimax';
   return 'other';
 }
 
-function allowlistModel(modelId: string | null | undefined): string {
+export function normalizeModelForTelemetry(modelId: string | null | undefined): string {
   if (!modelId) return 'other';
-  const profile = findModelProfile(modelId);
-  // DEFAULT_PROFILE has empty prefix — indicates no known model matched
-  if (profile.prefix === '') return 'other';
-  return modelId;
+  const result = BoundedIdentifier.safeParse(modelId);
+  return result.success ? modelId : 'other';
 }

@@ -76,12 +76,12 @@
     "provider": "deepseek",
     "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
-    "rateLookupDate": "2026-04-25",
+    "rateLookupDate": "2026-04-27",
     "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "deepseek",          "tier": "standard",  "cost": "low",   "input": 0.3,   "output": 0.5,  "bestFor": "cost-effective coding and reasoning" },
       { "prefix": "deepseek-v4-flash",                                       "input": 0.14,  "output": 0.28, "bestFor": "cheapest DeepSeek V4 with 1M context", "inputTokenSoftLimit": 1000000 },
-      { "prefix": "deepseek-v4-pro",   "tier": "reasoning", "cost": "medium", "input": 1.74,  "output": 3.48, "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context", "inputTokenSoftLimit": 1000000 }
+      { "prefix": "deepseek-v4-pro",   "tier": "reasoning", "cost": "medium", "input": 0.435, "output": 0.87, "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context (limited-time 75% off until 2026-05-05 15:59 UTC; full price input=1.74 output=3.48)", "inputTokenSoftLimit": 1000000 }
     ]
   },
   {
