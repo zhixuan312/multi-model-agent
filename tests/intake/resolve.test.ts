@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { resolveDraft } from '../../packages/core/src/intake/resolve.js';
+import { resolveDraft, OUTPUT_CONTRACT_CLAUSES, ROUTE_DEFAULTS } from '../../packages/core/src/intake/resolve.js';
 import type { DraftTask, DelegateSource } from '../../packages/core/src/intake/types.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
@@ -41,5 +41,29 @@ describe('resolve', () => {
     };
     const resolved = resolveDraft(draft, CONFIG);
     expect(resolved.prompt).toBe('say hello');
+  });
+});
+
+describe('OUTPUT_CONTRACT_CLAUSES', () => {
+  it('instructs all 5 read-only routes to emit findings[]', () => {
+    for (const route of ['audit_document', 'review_code', 'verify_work', 'investigate_codebase', 'debug_task']) {
+      const clause = OUTPUT_CONTRACT_CLAUSES[route];
+      expect(clause).toBeDefined();
+      expect(clause).toMatch(/findings\[\]/);
+      expect(clause).toMatch(/severity/);
+    }
+  });
+});
+
+describe('ROUTE_DEFAULTS', () => {
+  it('sets reviewPolicy to quality_only for all 5 read-only routes', () => {
+    for (const route of ['audit_document', 'review_code', 'verify_work', 'investigate_codebase', 'debug_task']) {
+      expect(ROUTE_DEFAULTS[route].reviewPolicy).toBe('quality_only');
+    }
+  });
+
+  it('leaves artifact-route reviewPolicy unchanged', () => {
+    expect(ROUTE_DEFAULTS.delegate_tasks.reviewPolicy).not.toBe('quality_only');
+    expect(ROUTE_DEFAULTS.execute_plan.reviewPolicy).not.toBe('quality_only');
   });
 });
