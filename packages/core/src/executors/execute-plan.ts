@@ -6,6 +6,7 @@ import type { TaskSpec, RunResult } from '../types.js';
 import { runTasks, extractPlanSection } from '../run-tasks/index.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 
 /**
@@ -104,7 +105,7 @@ export async function executeExecutePlan(
     briefQualityPolicy: 'off',
     done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
     tools: config.defaults?.tools ?? 'full',
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,

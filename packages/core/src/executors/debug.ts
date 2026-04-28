@@ -10,6 +10,7 @@ import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.
 import { buildDebugQualityPrompt } from '../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/debug-task.ts ---
 
@@ -56,7 +57,7 @@ export async function executeDebug(
     briefQualityPolicy: 'off',
     done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
     tools: config.defaults?.tools ?? 'full',
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,

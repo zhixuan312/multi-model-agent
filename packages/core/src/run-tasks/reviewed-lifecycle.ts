@@ -33,6 +33,7 @@ import {
 } from '../escalation/fallback.js';
 import { findModelCapabilities, findModelProfile, extractCanonicalModelName } from '../routing/model-profiles.js';
 import { HeartbeatTimer } from '../heartbeat.js';
+import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
@@ -421,13 +422,13 @@ export async function executeReviewedLifecycle(
   // any in-flight call gets a per-call timeoutMs clamped to remaining
   // budget so it returns its salvage promptly. The user gets *something*
   // back instead of an open-ended retry storm.
-  const taskTimeoutMs = task.timeoutMs ?? config.defaults.timeoutMs ?? 1_800_000;
+  const taskTimeoutMs = task.timeoutMs ?? config.defaults.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS;
   const taskDeadlineMs = taskStartMs + taskTimeoutMs;
   // Stall watchdog: when no LLM / tool / text event has fired for this
   // many ms, the in-flight runner is force-aborted via `stallController`.
   // Catches "model is silently thinking forever" and "transport hung" —
   // both invisible to the wall-clock cap until the very end.
-  const stallTimeoutMs = config.defaults.stallTimeoutMs ?? 600_000;
+  const stallTimeoutMs = config.defaults.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS;
   const stallController = new AbortController();
   let lastRunnerEventAtMs = taskStartMs;
   let stallFired = false;
@@ -557,7 +558,7 @@ export async function executeReviewedLifecycle(
     const verification = await runVerifyStage({
       cwd,
       verifyCommand: task.verifyCommand,
-      taskTimeoutMs: task.timeoutMs ?? config.defaults.timeoutMs ?? 1_800_000,
+      taskTimeoutMs: task.timeoutMs ?? config.defaults.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
       taskStartMs,
     });
     latestVerification = verification;

@@ -3,6 +3,20 @@ import type {
   MultiModelConfig,
 } from '../types.js';
 
+/** Total wall-clock cap per task — 60 min. Bumped from 30 min in v3.9.0
+ * after the 32-min hang on batch 1574b3a2 showed reviewers had no cap
+ * at all. The right number is "long enough that legitimate slow tasks
+ * don't false-trigger; short enough that a hung reviewer doesn't camp
+ * forever." Tune via per-stage telemetry once we have a few hundred runs
+ * with the new fields. */
+export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
+
+/** Idle-gap watchdog — 20 min. No `turn_start | text_emission | tool_call
+ * | turn_complete` event for this long → force-abort the in-flight call.
+ * Bumped from 10 min in v3.9.0 — the prior value occasionally fired on
+ * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
+export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
+
 // === Shared field schemas ===
 
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
@@ -71,21 +85,16 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 // === MultiModelConfig schema ===
 
 const defaultsSchema = z.object({
-  timeoutMs: z.number().int().positive().default(1_800_000),
-  // Stall watchdog: abort the in-flight runner when no LLM/tool/text event
-  // has fired for this many ms. Independent of timeoutMs (which is total
-  // task wall-clock). Default 10 minutes — long enough for the longest
-  // single tool calls (large diffs, slow shell), short enough that a
-  // model that vanishes into a thinking-loop is killed promptly.
-  stallTimeoutMs: z.number().int().positive().default(600_000),
+  timeoutMs: z.number().int().positive().default(DEFAULT_TASK_TIMEOUT_MS),
+  stallTimeoutMs: z.number().int().positive().default(DEFAULT_STALL_TIMEOUT_MS),
   maxCostUSD: z.number().nonnegative().default(10),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
   parentModel: z.string().min(1).optional(),
 }).default(() => ({
-  timeoutMs: 1_800_000,
-  stallTimeoutMs: 600_000,
+  timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
+  stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
   maxCostUSD: 10,
   tools: 'full' as const,
   sandboxPolicy: 'cwd-only' as const,

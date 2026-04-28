@@ -12,6 +12,7 @@ import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/review-code.ts ---
 
@@ -127,7 +128,7 @@ export async function executeReview(
     briefQualityPolicy: 'off',
     done: resolveReviewDoneCondition(input.focus, hasContextBlocks),
     tools: config.defaults?.tools ?? 'full',
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
