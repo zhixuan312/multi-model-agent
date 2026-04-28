@@ -3,7 +3,11 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/verify.js';
 import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
+import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
+import { resolveAgent } from '../routing/resolve-agent.js';
+import { expandContextBlocks } from '../context/expand-context-blocks.js';
+import { buildVerifyQualityPrompt } from '../review/quality-only-prompts.js';
+import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
@@ -73,8 +77,8 @@ export async function executeVerify(
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
-    agentType: 'standard',
-    reviewPolicy: 'spec_only',
+    agentType: 'complex',
+    reviewPolicy: 'quality_only',
     briefQualityPolicy: 'off',
     done: `Every checklist item (${input.checklist.length} total) has a pass/fail verdict with supporting evidence from the code.`,
     tools: config.defaults?.tools ?? 'full',
@@ -85,7 +89,22 @@ export async function executeVerify(
     contextBlockIds: input.contextBlockIds,
     parentModel,
   };
-  const runtime = contextBlockStore ? { contextBlockStore } : undefined;
+
+  function resolved() {
+    return resolveAgent('complex', [], config);
+  }
+
+  function expand(task: TaskSpec) {
+    return expandContextBlocks(task, contextBlockStore);
+  }
+
+  const lifecycleOptions = {
+    batchId: ctx.batchId,
+    recordHeartbeat: ctx.recordHeartbeat,
+  };
+  const diagnostics = {
+    logger: ctx.logger,
+  };
 
   const mode = resolveDispatchMode(input.work, input.filePaths);
 
@@ -100,7 +119,23 @@ export async function executeVerify(
     const startMs = Date.now();
     let results: RunResult[];
     try {
-      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+      results = await Promise.all(tasks.map((task, idx) =>
+        executeReviewedLifecycle(
+          expand(task),
+          resolved(),
+          config,
+          idx,
+          undefined,
+          lifecycleOptions,
+          diagnostics,
+          ctx.recorder,
+          ctx.route ?? 'verify',
+          ctx.client,
+          ctx.triggeringSkill,
+          ctx.bus,
+          buildVerifyQualityPrompt,
+        ),
+      ));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
@@ -109,6 +144,10 @@ export async function executeVerify(
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
     const costSummary = computeAggregateCost(results);
+
+    const first = results[0];
+    const killSwitch = false;
+    const verdicts = mapReviewVerdicts(first, killSwitch);
 
     return {
       headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
@@ -121,21 +160,46 @@ export async function executeVerify(
       batchId: randomUUID(),
       wallClockMs,
       parentModel,
+      specReviewVerdict: verdicts.specReviewVerdict,
+      qualityReviewVerdict: verdicts.qualityReviewVerdict,
+      roundsUsed: verdicts.roundsUsed,
       ...(ctxId !== undefined && { contextBlockId: ctxId }),
     };
   }
 
   const prompt = buildVerifyPrompt(input.work, input.filePaths, input.checklist);
+  const taskSpec = { ...baseTaskSpec, prompt } as TaskSpec;
   let results: RunResult[];
+  const startMs = Date.now();
   try {
-    results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+    const result = await executeReviewedLifecycle(
+      expand(taskSpec),
+      resolved(),
+      config,
+      0,
+      undefined,
+      lifecycleOptions,
+      diagnostics,
+      ctx.recorder,
+      ctx.route ?? 'verify',
+      ctx.client,
+      ctx.triggeringSkill,
+      ctx.bus,
+      buildVerifyQualityPrompt,
+    );
+    results = [result];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
   }
+  const wallClockMs = Date.now() - startMs;
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-  const batchTimings = computeTimings(0, results);
+  const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
+
+  const first = results[0];
+  const killSwitch = false;
+  const verdicts = mapReviewVerdicts(first, killSwitch);
 
   return {
     headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
@@ -146,8 +210,11 @@ export async function executeVerify(
     error: notApplicable('batch succeeded'),
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
-    wallClockMs: 0,
+    wallClockMs,
     parentModel,
+    specReviewVerdict: verdicts.specReviewVerdict,
+    qualityReviewVerdict: verdicts.qualityReviewVerdict,
+    roundsUsed: verdicts.roundsUsed,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),
   };
 }

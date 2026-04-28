@@ -19,7 +19,7 @@
       "outputIsDiagnostic": true,
       "escalationLog": [
         {
-          "provider": "standard",
+          "provider": "complex",
           "status": "error",
           "turns": 0,
           "inputTokens": 0,
@@ -65,7 +65,7 @@
       },
       "filePathsSkipped": false,
       "agents": {
-        "implementer": "standard",
+        "implementer": "complex",
         "specReviewer": "not_applicable",
         "qualityReviewer": "not_applicable",
         "implementerToolMode": "full",
@@ -85,7 +85,7 @@
       },
       "stageStats": {
         "implementing": {
-          "agentTier": "standard",
+          "agentTier": "complex",
           "costUSD": null,
           "durationMs": "<DETERMINISTIC>",
           "entered": true,
@@ -188,6 +188,9 @@
     "kind": "not_applicable",
     "reason": "batch not awaiting clarification"
   },
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1,
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>"
 }
