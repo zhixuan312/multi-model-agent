@@ -60,6 +60,10 @@ import { withDoneCondition } from './execute-task.js';
 
 const exec = promisify(execFile);
 
+const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
+  'audit', 'review', 'verify', 'investigate', 'debug',
+]);
+
 export function emptyStats(): StageStatsMap {
   return {
     implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
@@ -182,6 +186,15 @@ export async function executeReviewedLifecycle(
   bus?: import('../observability/bus.js').EventBus,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
+  const routeKey = _route ?? '';
+
+  if (reviewPolicy === 'quality_only' && !READ_ONLY_TOOL_NAMES.has(routeKey as string)) {
+    throw new Error(
+      `reviewPolicy 'quality_only' is only valid for read-only routes; received '${routeKey}'. ` +
+      `Use 'full', 'spec_only', 'diff_only', or 'off' for artifact-producing routes.`,
+    );
+  }
+
   const otherSlot: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
   let escalationProvider: Provider | undefined;
   try {
@@ -205,6 +218,7 @@ export async function executeReviewedLifecycle(
   const stageCount =
     reviewPolicy === 'off' ? 1 :
     reviewPolicy === 'spec_only' ? 3 :
+    reviewPolicy === 'quality_only' ? 3 :
     5;
   const verbose = diagnostics?.verbose ?? false;
   const verboseStreamRaw = verbose
@@ -475,7 +489,7 @@ export async function executeReviewedLifecycle(
       error: `runWithFallback: both tiers unavailable (loop=${loop}, attempt=${attempt}, role=implementer)`,
       agents: agentEnvelope(
         specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
-        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
       ),
       stageStats: stats,
     } as RunResult;
@@ -521,7 +535,7 @@ export async function executeReviewedLifecycle(
     qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
     agents: agentEnvelope(
       specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
-      qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+      qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
     ),
     stageStats: stats,
   });
@@ -1017,10 +1031,7 @@ export async function executeReviewedLifecycle(
 
     const effectiveImplReport = implReport ?? buildFallbackImplReport(implResult);
 
-    if (reviewPolicy === 'quality_only') {
-      throw new Error('buildEvidence is not callable for quality_only routes — read-only routes have no diff evidence');
-    }
-    const evidence = isArtifactProducing
+    const evidence = (isArtifactProducing && reviewPolicy !== 'quality_only')
       ? await buildEvidence({ cwd, baselineHead, commits, verification, reviewPolicy })
       : { block: '', diffTruncated: false, fullDiff: '' };
 
@@ -1081,11 +1092,14 @@ export async function executeReviewedLifecycle(
     let specStatus: string;
     let specReport: typeof effectiveImplReport | undefined;
     let specReviewReason: string | undefined;
+    let specReviewT0 = 0;
+    let specReviewC0: number | null = null;
 
+    if (reviewPolicy !== 'quality_only') {
     heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows });
     const initialReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
-    const specReviewT0 = Date.now();
-    const specReviewC0 = runningCostUSD();
+    specReviewT0 = Date.now();
+    specReviewC0 = runningCostUSD();
     const initialSpecReview = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({
       assigned: initialReviewerTier,
       providerFor,
@@ -1169,15 +1183,21 @@ export async function executeReviewedLifecycle(
       if (currentFindings === prevFindings && currentFindings !== '') break;
       prevSpecFindings = [...(specResult.findings ?? [])];
     }
+    } else {
+      specResult = { status: 'skipped', report: undefined, findings: [], reason: 'all_tiers_unavailable' };
+      specStatus = 'not_applicable';
+      specReport = undefined;
+      specReviewReason = 'skipped: reviewPolicy is quality_only';
+    }
 
-    let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: reviewPolicy === 'full' ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
+    let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
     // Hoisted so endReviewStage (called after this block) can read them on the
     // success path. When the quality review is skipped (`reviewPolicy !== 'full'`),
     // the values stay at 0/null and the corresponding stage entry remains in its
     // `entered: false` default — endReviewStage is never called.
     let qualityReviewT0 = 0;
     let qualityReviewC0: number | null = null;
-    if (reviewPolicy === 'full') {
+    if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
       heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows });
@@ -1269,8 +1289,11 @@ export async function executeReviewedLifecycle(
       });
     }
 
-    const specAggregateStatus = (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+    const specAggregateStatus = reviewPolicy === 'quality_only'
+      ? 'skipped' as const
+      : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
+    if (reviewPolicy !== 'quality_only') {
     endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(),
       specStatus === 'approved' ? 'approved'
         : specStatus === 'changes_required' ? 'changes_required'
@@ -1278,6 +1301,7 @@ export async function executeReviewedLifecycle(
         : specStatus === 'not_applicable' ? 'not_applicable'
         : 'error',
       specAttemptIndex - 1);
+    }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
     endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(),
@@ -1321,6 +1345,7 @@ export async function executeReviewedLifecycle(
       specReviewStatus: specEnvelopeStatus,
       qualityReviewStatus: qualityEnvelopeStatus,
       stageStats: stats,
+      reviewRounds: reviewRounds(),
       specReviewReason: 'errorReason' in specResult ? specResult.errorReason : undefined,
       qualityReviewReason: 'errorReason' in qualityResult ? qualityResult.errorReason : undefined,
       structuredReport: aggregated,
@@ -1330,12 +1355,12 @@ export async function executeReviewedLifecycle(
       filePathsSkipped,
       agents: agentEnvelope(
         specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
-        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? (reviewPolicy === 'full' ? 'not_applicable' : 'skipped'),
+        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
       ),
       models: {
         implementer: implModel,
-        specReviewer: reviewModel,
-        qualityReviewer: reviewPolicy === 'full' ? reviewModel : null,
+        specReviewer: reviewPolicy !== 'quality_only' ? reviewModel : null,
+        qualityReviewer: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? reviewModel : null,
       },
       fileArtifactsMissing,
       commits,
