@@ -1217,6 +1217,20 @@ export async function executeReviewedLifecycle(
         }
       }
       qualityResult = initialQuality.result;
+      if (reviewPolicy === 'quality_only') {
+        emitTaskEvent('read_only_review.quality', {
+          route: routeKey,
+          verdict: qualityResult.status === 'approved' ? 'approved'
+            : qualityResult.status === 'changes_required' ? 'changes_required'
+            : qualityResult.status === 'skipped' ? 'skipped'
+            : 'error',
+          iterationIndex: 1,
+          findingsReviewed: qualityResult.findings?.length ?? 0,
+          findingsFlagged: qualityResult.status === 'changes_required' ? (qualityResult.findings?.length ?? 0) : 0,
+          durationMs: Date.now() - qualityReviewT0,
+          costUSD: runningCostUSD() !== null && qualityReviewC0 !== null ? runningCostUSD()! - qualityReviewC0! : null,
+        });
+      }
       let prevQualityFindings = [...(qualityResult.findings ?? [])];
       qualityAttemptIndex = 1;
       while (qualityResult.status === 'changes_required') {
@@ -1229,6 +1243,13 @@ export async function executeReviewedLifecycle(
         const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
         if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
         emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
+        if (reviewPolicy === 'quality_only') {
+          emitTaskEvent('read_only_review.rework', {
+            route: routeKey,
+            iterationIndex: qualityAttemptIndex,
+            triggeringIssues: qualityResult.findings?.length ?? 0,
+          });
+        }
         heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
         const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
         const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
@@ -1247,6 +1268,8 @@ export async function executeReviewedLifecycle(
         finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
         fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
         heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows });
+        const reworkQualityT0 = Date.now();
+        const reworkQualityC0 = runningCostUSD();
         const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output) });
         if (reviewCall.bothUnavailable) {
           emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -1260,6 +1283,20 @@ export async function executeReviewedLifecycle(
           }
         }
         qualityResult = reviewCall.result;
+        if (reviewPolicy === 'quality_only') {
+          emitTaskEvent('read_only_review.quality', {
+            route: routeKey,
+            verdict: qualityResult.status === 'approved' ? 'approved'
+              : qualityResult.status === 'changes_required' ? 'changes_required'
+              : qualityResult.status === 'skipped' ? 'skipped'
+              : 'error',
+            iterationIndex: qualityAttemptIndex + 1,
+            findingsReviewed: qualityResult.findings?.length ?? 0,
+            findingsFlagged: qualityResult.status === 'changes_required' ? (qualityResult.findings?.length ?? 0) : 0,
+            durationMs: Date.now() - reworkQualityT0,
+            costUSD: runningCostUSD() !== null && reworkQualityC0 !== null ? runningCostUSD()! - reworkQualityC0! : null,
+          });
+        }
         if (reviewDidNotReject(qualityResult.status)) lastNonRejectedImpl = { tier: implementerHistory[implementerHistory.length - 1]!, result: finalImplResult };
         qualityAttemptIndex++;
         if (qualityResult.status === 'approved' || qualityResult.status === 'skipped') break;
@@ -1369,9 +1406,31 @@ export async function executeReviewedLifecycle(
       verification,
     };
 
+    if (reviewPolicy === 'quality_only') {
+      emitTaskEvent('read_only_review.terminal', {
+        route: routeKey,
+        roundsUsed: qualityAttemptIndex,
+        finalQualityVerdict: qualityResult.status === 'approved' ? 'approved'
+          : qualityResult.status === 'changes_required' ? 'changes_required'
+          : qualityResult.status === 'skipped' ? 'skipped'
+          : 'error',
+        costUSD: taskCostUSD(),
+        durationMs: Date.now() - taskStartMs,
+      });
+    }
+
     return __recordOnce(runResult);
   } catch (err) {
     const errorRunResult = withVerification(workerErrorResult(err));
+    if (reviewPolicy === 'quality_only') {
+      emitTaskEvent('read_only_review.terminal', {
+        route: routeKey,
+        roundsUsed: qualityAttemptIndex,
+        finalQualityVerdict: 'error',
+        costUSD: taskCostUSD(),
+        durationMs: Date.now() - taskStartMs,
+      });
+    }
     return __recordOnce(errorRunResult);
   } finally {
     // Fire telemetry recorder once across every exit path. Bedrock invariant:
