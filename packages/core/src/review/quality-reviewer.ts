@@ -159,11 +159,14 @@ export async function runQualityReview(
   evidenceBlock?: string,
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: WorkerFinding[] }) => string,
   workerOutput?: string,
+  taskDeadlineMs?: number,
+  abortSignal?: AbortSignal,
+  onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
 ): Promise<QualityReviewResult> {
   // Read-only annotation path: triggered when caller passed a prompt builder
   // (these are the per-route quality_only prompts in quality-only-prompts.ts).
   if (qualityReviewPromptBuilder && workerOutput !== undefined) {
-    return runAnnotationReview(reviewerProvider, packet, workerOutput, qualityReviewPromptBuilder);
+    return runAnnotationReview(reviewerProvider, packet, workerOutput, qualityReviewPromptBuilder, taskDeadlineMs, abortSignal, onProgress);
   }
 
   // Artifact-route gating path: unchanged from prior behavior.
@@ -180,7 +183,7 @@ export async function runQualityReview(
     result = await delegateWithEscalation(
       { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
-      { explicitlyPinned: true },
+      { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
   } catch (err) {
     return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
@@ -202,7 +205,7 @@ export async function runQualityReview(
           agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000,
         },
         [reviewerProvider],
-        { explicitlyPinned: true },
+        { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
       );
       if (retryResult.status === 'ok') report = parseStructuredReport(retryResult.output);
     } catch { /* fall through */ }
@@ -228,6 +231,9 @@ async function runAnnotationReview(
   packet: { prompt: string; scope: string[]; doneCondition: string },
   workerOutput: string,
   qualityReviewPromptBuilder: (ctx: { workerOutput: string; brief: string; workerFindings: WorkerFinding[] }) => string,
+  taskDeadlineMs?: number,
+  abortSignal?: AbortSignal,
+  onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
 ): Promise<QualityReviewResult> {
   // Step 1: extract worker findings from worker output.
   const workerFindings = extractWorkerFindings(workerOutput);
@@ -258,7 +264,7 @@ async function runAnnotationReview(
     result = await delegateWithEscalation(
       { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
-      { explicitlyPinned: true },
+      { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
   } catch (err) {
     return {
