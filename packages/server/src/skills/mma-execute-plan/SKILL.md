@@ -54,6 +54,7 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 | `context` | string | no | Short additional context not in the plan |
 | `filePaths` | string[] | no | Plan file + relevant source files. Required: the plan file itself. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
+| `maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted. |
 | `verifyCommand` | string[] | no | See verify-and-review snippet below |
 | `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | See verify-and-review snippet below. Default `"full"`. |
 

@@ -66,8 +66,9 @@ digraph when_to_use {
 | `question` | string | yes | Natural-language investigation question |
 | `filePaths` | string[] | no | Anchor paths the worker starts from. Worker may grep beyond. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta investigation |
-| `agentType` | `'standard' \| 'complex'` | no | Caller override of the route default (`'complex'`) |
 | `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'no-shell'` and `'full'` are rejected — investigation is read-only |
+
+> Worker tier for `mma-investigate` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
 
 **Anchor narrow questions with `filePaths`:**
 
