@@ -67,14 +67,14 @@ const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
 
 export function emptyStats(): StageStatsMap {
   return {
-    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, outcome: null, skipReason: null },
-    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
-    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
-    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: null, roundsUsed: null },
+    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
+    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
+    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
+    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
+    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, outcome: null, skipReason: null },
+    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
+    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
+    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
   };
 }
 
@@ -99,6 +99,7 @@ export function endBaseStage(
   c0: number | null,
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
+  idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
 ): void {
   // Cast through unknown — TS can't narrow stats[name] on a union-typed index;
   // the runtime invariant (set name's slot to its matching variant) is enforced
@@ -111,6 +112,9 @@ export function endBaseStage(
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
+    maxIdleMs: idle?.maxIdleMs ?? null,
+    totalIdleMs: idle?.totalIdleMs ?? null,
+    activityEvents: idle?.activityEvents ?? null,
   };
 }
 
@@ -121,6 +125,7 @@ export function endReviewStage(
   c0: number | null,
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
+  idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
   verdict: ReviewVerdict,
   roundsUsed: number,
 ): void {
@@ -132,6 +137,9 @@ export function endReviewStage(
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
+    maxIdleMs: idle?.maxIdleMs ?? null,
+    totalIdleMs: idle?.totalIdleMs ?? null,
+    activityEvents: idle?.activityEvents ?? null,
     verdict,
     roundsUsed,
   };
@@ -143,6 +151,7 @@ export function endVerifyStage(
   c0: number | null,
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
+  idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
   outcome: VerifyOutcome,
   skipReason: VerifySkipReason | null,
 ): void {
@@ -154,6 +163,9 @@ export function endVerifyStage(
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
+    maxIdleMs: idle?.maxIdleMs ?? null,
+    totalIdleMs: idle?.totalIdleMs ?? null,
+    activityEvents: idle?.activityEvents ?? null,
     outcome,
     skipReason,
   } as StageStatsMap['verifying'];
@@ -563,7 +575,7 @@ export async function executeReviewedLifecycle(
     });
     latestVerification = verification;
     endVerifyStage(stats, overallVerificationStart, verifyCostStart,
-      implementerAgentInfo, runningCostUSD(),
+      implementerAgentInfo, runningCostUSD(), null,
       verification.status === 'passed' ? 'passed'
         : verification.status === 'failed' ? 'failed'
         : verification.status === 'skipped' ? 'skipped'
@@ -794,7 +806,7 @@ export async function executeReviewedLifecycle(
       const commitC0 = runningCostUSD();
       const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
       commits.push(c);
-      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD());
+      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD(), null);
     }
   }
 
@@ -901,7 +913,7 @@ export async function executeReviewedLifecycle(
     lastNonRejectedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     implementerHistory.push(initialImpl.usedTier as AgentType);
 
-    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD());
+    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), null);
     specAttemptIndex = 1;
 
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
@@ -1079,7 +1091,7 @@ export async function executeReviewedLifecycle(
           : 'skipped',
         round: 1,
       });
-      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(),
+      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(), null,
         // Diff review uses 'approve' | 'concerns' | 'reject' | 'transport_failure' (DiffReviewVerdict),
         // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
         'kind' in verdict
@@ -1337,7 +1349,7 @@ export async function executeReviewedLifecycle(
       : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
     if (reviewPolicy !== 'quality_only') {
-    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(),
+    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(), null,
       specStatus === 'approved' ? 'approved'
         : specStatus === 'changes_required' ? 'changes_required'
         : specStatus === 'skipped' ? 'skipped'
@@ -1347,7 +1359,7 @@ export async function executeReviewedLifecycle(
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
-    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(),
+    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(), null,
       qualityResult.status === 'approved' ? 'approved'
         : qualityResult.status === 'changes_required' ? 'changes_required'
         : qualityResult.status === 'annotated' ? 'annotated'

@@ -30,12 +30,18 @@ export type StageName =
   | 'quality_review' | 'quality_rework' | 'diff_review' | 'committing';
 
 interface BaseStageStats {
-  entered:     boolean;
-  durationMs:  number | null;
-  costUSD:     number | null;
-  agentTier:   'standard' | 'complex' | null;
-  modelFamily: string | null;
-  model:       string | null;
+  entered:       boolean;
+  durationMs:    number | null;
+  costUSD:       number | null;
+  agentTier:     'standard' | 'complex' | null;
+  modelFamily:   string | null;
+  model:         string | null;
+  // New in v3.9.0 — populated by the per-stage idle tracker; null when the
+  // stage was never entered (so consumers can distinguish "not run" from
+  // "ran with zero activity").
+  maxIdleMs:     number | null;
+  totalIdleMs:   number | null;
+  activityEvents:number | null;
 }
 
 export type ReviewVerdict =

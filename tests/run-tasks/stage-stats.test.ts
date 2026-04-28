@@ -101,7 +101,7 @@ describe('endBaseStage', () => {
     const stats = emptyStats();
     const t0 = Date.now() - 5000;
     const c0 = 0.01;
-    endBaseStage(stats, 'implementing', t0, c0, agent, 0.05);
+    endBaseStage(stats, 'implementing', t0, c0, agent, 0.05, null);
     expect(stats.implementing.entered).toBe(true);
     expect(stats.implementing.durationMs).toBeGreaterThanOrEqual(5000);
     expect(stats.implementing.costUSD).toBeCloseTo(0.04);
@@ -113,14 +113,14 @@ describe('endBaseStage', () => {
   it('records committing stage correctly', () => {
     const stats = emptyStats();
     const t0 = Date.now() - 1000;
-    endBaseStage(stats, 'committing', t0, 0, agent, 0);
+    endBaseStage(stats, 'committing', t0, 0, agent, 0, null);
     expect(stats.committing.entered).toBe(true);
     expect(stats.committing.durationMs).toBeGreaterThanOrEqual(1000);
   });
 
   it('handles null costs', () => {
     const stats = emptyStats();
-    endBaseStage(stats, 'implementing', Date.now() - 1000, null as any, agent, null);
+    endBaseStage(stats, 'implementing', Date.now() - 1000, null as any, agent, null, null);
     expect(stats.implementing.entered).toBe(true);
     expect(stats.implementing.costUSD).toBeNull();
   });
@@ -132,7 +132,7 @@ describe('endVerifyStage', () => {
   it('records passed verification', () => {
     const stats = emptyStats();
     const t0 = Date.now() - 3000;
-    endVerifyStage(stats, t0, 0.02, agent, 0.08, 'passed', null);
+    endVerifyStage(stats, t0, 0.02, agent, 0.08, null, 'passed', null);
     expect(stats.verifying.entered).toBe(true);
     expect(stats.verifying.outcome).toBe('passed');
     expect(stats.verifying.skipReason).toBeNull();
@@ -145,7 +145,7 @@ describe('endVerifyStage', () => {
 
   it('records skipped verification with skipReason', () => {
     const stats = emptyStats();
-    endVerifyStage(stats, Date.now(), 0, agent, 0, 'skipped', 'no_command');
+    endVerifyStage(stats, Date.now(), 0, agent, 0, null, 'skipped', 'no_command');
     expect(stats.verifying.entered).toBe(true);
     expect(stats.verifying.outcome).toBe('skipped');
     expect(stats.verifying.skipReason).toBe('no_command');
@@ -153,13 +153,13 @@ describe('endVerifyStage', () => {
 
   it('records failed verification', () => {
     const stats = emptyStats();
-    endVerifyStage(stats, Date.now(), 0, agent, 0, 'failed', null);
+    endVerifyStage(stats, Date.now(), 0, agent, 0, null, 'failed', null);
     expect(stats.verifying.outcome).toBe('failed');
   });
 
   it('records not_applicable verification', () => {
     const stats = emptyStats();
-    endVerifyStage(stats, Date.now(), 0, agent, 0, 'not_applicable', null);
+    endVerifyStage(stats, Date.now(), 0, agent, 0, null, 'not_applicable', null);
     expect(stats.verifying.outcome).toBe('not_applicable');
   });
 });
@@ -170,7 +170,7 @@ describe('endReviewStage', () => {
   it('records approved spec_review with roundsUsed', () => {
     const stats = emptyStats();
     const t0 = Date.now() - 10000;
-    endReviewStage(stats, 'spec_review', t0, 0.05, agent, 0.10, 'approved', 0);
+    endReviewStage(stats, 'spec_review', t0, 0.05, agent, 0.10, null, 'approved', 0);
     expect(stats.spec_review.entered).toBe(true);
     expect(stats.spec_review.verdict).toBe('approved');
     expect(stats.spec_review.roundsUsed).toBe(0);
@@ -179,7 +179,7 @@ describe('endReviewStage', () => {
 
   it('records changes_required quality_review', () => {
     const stats = emptyStats();
-    endReviewStage(stats, 'quality_review', Date.now(), 0, agent, 0.05, 'changes_required', 2);
+    endReviewStage(stats, 'quality_review', Date.now(), 0, agent, 0.05, null, 'changes_required', 2);
     expect(stats.quality_review.entered).toBe(true);
     expect(stats.quality_review.verdict).toBe('changes_required');
     expect(stats.quality_review.roundsUsed).toBe(2);
@@ -187,14 +187,14 @@ describe('endReviewStage', () => {
 
   it('records diff_review with skipped verdict', () => {
     const stats = emptyStats();
-    endReviewStage(stats, 'diff_review', Date.now(), 0, agent, 0, 'skipped', 0);
+    endReviewStage(stats, 'diff_review', Date.now(), 0, agent, 0, null, 'skipped', 0);
     expect(stats.diff_review.entered).toBe(true);
     expect(stats.diff_review.verdict).toBe('skipped');
   });
 
   it('records error verdict for diff_review', () => {
     const stats = emptyStats();
-    endReviewStage(stats, 'diff_review', Date.now(), 0, agent, 0, 'error', 0);
+    endReviewStage(stats, 'diff_review', Date.now(), 0, agent, 0, null, 'error', 0);
     expect(stats.diff_review.verdict).toBe('error');
   });
 });
@@ -209,11 +209,11 @@ describe('StageStatsMap type safety', () => {
     expect(stats.verifying.entered).toBe(false);
 
     // After: populated
-    endBaseStage(stats, 'implementing', Date.now() - 100, 0, agent, 0.01);
+    endBaseStage(stats, 'implementing', Date.now() - 100, 0, agent, 0.01, null);
     expect(stats.implementing.entered).toBe(true);
     expect(stats.implementing.durationMs).not.toBeNull();
 
-    endVerifyStage(stats, Date.now() - 100, 0, agent, 0.01, 'passed', null);
+    endVerifyStage(stats, Date.now() - 100, 0, agent, 0.01, null, 'passed', null);
     expect(stats.verifying.entered).toBe(true);
     expect(stats.verifying.outcome).toBe('passed');
   });
