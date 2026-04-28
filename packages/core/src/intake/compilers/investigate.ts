@@ -1,13 +1,12 @@
 import type { TaskSpec } from '../../types.js';
 import type { Input } from '../../tool-schemas/investigate.js';
-import { OUTPUT_CONTRACT_CLAUSES, ROUTE_DEFAULTS } from '../resolve.js';
+import { OUTPUT_CONTRACT_CLAUSES } from '../resolve.js';
 
 export interface ResolvedContextBlock {
   id: string;
   content: string;
 }
 
-const DEFAULTS = ROUTE_DEFAULTS['investigate_codebase'];
 
 export function compileInvestigate(
   input: Input,
@@ -46,8 +45,8 @@ export function compileInvestigate(
       filePaths: canonicalizedFilePaths,
     } as unknown as Record<string, unknown>,
     question: input.question,
-    agentType: input.agentType ?? (DEFAULTS.agentType as 'standard' | 'complex'),
-    reviewPolicy: 'off',
+    agentType: 'complex' as const,
+    reviewPolicy: 'quality_only',
     tools: input.tools ?? 'readonly',
     filePaths: canonicalizedFilePaths,
     sandboxPolicy: 'cwd-only',

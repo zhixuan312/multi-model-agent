@@ -3,10 +3,15 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/review.js';
 import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
+import { resolveAgent } from '../routing/resolve-agent.js';
+import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
+import { buildReviewQualityPrompt } from '../review/quality-only-prompts.js';
+import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { expandContextBlocks } from '../context/expand-context-blocks.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 // --- Ported from packages/mcp/src/tools/review-code.ts ---
 
@@ -78,20 +83,33 @@ function resolveDispatchMode(
   return 'single';
 }
 
-function autoRegisterContextBlock(
-  results: import('../types.js').RunResult[],
-  store: import('../context/context-block-store.js').ContextBlockStore | undefined,
-): string | undefined {
-  if (!store) return undefined;
-  const usable = results.filter(r => !r.outputIsDiagnostic && r.output.trim().length > 0);
-  if (usable.length === 0) return undefined;
-  const combined = usable.map(r => r.output).join('\n\n---\n\n');
-  const { id } = store.register(combined);
-  return id;
-}
-
 export interface ReviewOutput extends ExecutorOutput {
   contextBlockId?: string;
+}
+
+async function runSingleReview(
+  task: TaskSpec,
+  agentType: 'standard' | 'complex',
+  config: ExecutionContext['config'],
+  ctx: ExecutionContext,
+  taskIndex: number,
+): Promise<RunResult> {
+  const resolved = resolveAgent(agentType, [], config);
+  return executeReviewedLifecycle(
+    task,
+    resolved,
+    config,
+    taskIndex,
+    undefined,
+    { batchId: ctx.batchId, recordHeartbeat: ctx.recordHeartbeat },
+    { logger: ctx.logger },
+    ctx.recorder,
+    ctx.route ?? 'review',
+    ctx.client,
+    ctx.triggeringSkill,
+    ctx.bus,
+    buildReviewQualityPrompt,
+  );
 }
 
 export async function executeReview(
@@ -105,7 +123,7 @@ export async function executeReview(
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
-    reviewPolicy: 'full',
+    reviewPolicy: 'quality_only',
     briefQualityPolicy: 'off',
     done: resolveReviewDoneCondition(input.focus, hasContextBlocks),
     tools: config.defaults?.tools ?? 'full',
@@ -116,60 +134,64 @@ export async function executeReview(
     contextBlockIds: input.contextBlockIds,
     parentModel,
   };
-  const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
   const mode = resolveDispatchMode(input.code, input.filePaths);
 
+  // Build the list of tasks (fan_out creates one per file path, single creates one)
+  let taskSpecs: TaskSpec[];
   if (mode === 'fan_out') {
     const validPaths = input.filePaths!.filter(p => p.trim().length > 0);
     const promptTemplate = buildReviewPrompt(undefined, undefined, input.focus, hasContextBlocks);
-    const tasks: TaskSpec[] = validPaths.map(fp => ({
+    taskSpecs = validPaths.map(fp => ({
       ...baseTaskSpec,
       prompt: buildPerFilePrompt(fp, promptTemplate),
     } as TaskSpec));
+  } else {
+    const prompt = buildReviewPrompt(input.code, input.filePaths, input.focus, hasContextBlocks);
+    taskSpecs = [{ ...baseTaskSpec, prompt } as TaskSpec];
+  }
 
-    const startMs = Date.now();
-    let results: RunResult[];
+  // Expand context blocks for each task
+  const expandedTasks: TaskSpec[] = taskSpecs.map(task => {
     try {
-      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+      return expandContextBlocks(task, contextBlockStore) as TaskSpec;
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:review' }, workerStatus: 'failed' as const }];
+      ctx.logger.error('expandContextBlocks_failed_review', e);
+      return task;
     }
-    const wallClockMs = Date.now() - startMs;
-    const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-    const batchTimings = computeTimings(wallClockMs, results);
-    const costSummary = computeAggregateCost(results);
+  });
 
-    return {
-      headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
-      results,
-      batchTimings,
-      costSummary,
-      structuredReport: notApplicable('no structured report emitted by this executor'),
-      error: notApplicable('batch succeeded'),
-      proposedInterpretation: notApplicable('batch not awaiting clarification'),
-      batchId: randomUUID(),
-      wallClockMs,
-      parentModel,
-      ...(ctxId !== undefined && { contextBlockId: ctxId }),
-    };
-  }
+  const startMs = Date.now();
+  const results = await Promise.all(
+    expandedTasks.map((task, i) =>
+      runSingleReview(task, task.agentType ?? 'complex', config, ctx, i).catch((e): RunResult => {
+        const msg = e instanceof Error ? e.message : String(e);
+        return {
+          output: '', status: 'error' as const,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          turns: 0, filesRead: [], filesWritten: [], toolCalls: [],
+          outputIsDiagnostic: false, escalationLog: [],
+          error: msg, errorCode: 'executor_error', retryable: false,
+          durationMs: 0,
+          structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:review' },
+          workerStatus: 'failed' as const,
+        };
+      }),
+    ),
+  );
+  const wallClockMs = Date.now() - startMs;
 
-  const prompt = buildReviewPrompt(input.code, input.filePaths, input.focus, hasContextBlocks);
-  let results: RunResult[];
-  try {
-    results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
-  } catch (e) {
-    const msg = e instanceof Error ? e.message : String(e);
-    results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:review' }, workerStatus: 'failed' as const }];
-  }
-  const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-  const batchTimings = computeTimings(0, results);
+  const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
 
+  // Surface review verdicts from the lifecycle
+  const primaryResult = results[0];
+  const flag = resolveReadOnlyReviewFlag();
+  const useQualityReview = flag.isEnabledFor('review_code');
+  const verdicts = mapReviewVerdicts(primaryResult ?? {}, !useQualityReview);
+
   return {
-    headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
+    headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: taskSpecs.length, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
@@ -177,8 +199,10 @@ export async function executeReview(
     error: notApplicable('batch succeeded'),
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
-    wallClockMs: 0,
+    wallClockMs,
     parentModel,
-    ...(ctxId !== undefined && { contextBlockId: ctxId }),
+    specReviewVerdict: verdicts.specReviewVerdict,
+    qualityReviewVerdict: verdicts.qualityReviewVerdict,
+    roundsUsed: verdicts.roundsUsed,
   };
 }

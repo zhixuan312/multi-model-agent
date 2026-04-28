@@ -61,9 +61,9 @@ describe('contract: POST /investigate handler-level', () => {
     expect(r.status).toBe(202);
   });
 
-  it('7. agentType=standard → 202', async () => {
+  it('7. agentType=standard → 400 (agentType removed from schema)', async () => {
     const r = await fetch(url, { method: 'POST', headers: headers(), body: JSON.stringify({ question: 'q', agentType: 'standard' }) });
-    expect(r.status).toBe(202);
+    expect(r.status).toBe(400);
   });
 
   it('8. contextBlockIds=[nonexistent] → 400 context_block_not_found', async () => {

@@ -82,7 +82,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.6.7",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.8.0",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -237,7 +237,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.7.0** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.8.0** — read-only reviewed lifecycle: all 5 read-only routes (audit, review, verify, investigate, debug) now run a single `quality_only` review with bounded rework, structured `findings[]` worker output, and forced cross-tier review (worker complex, reviewer standard). Verify worker tier upgraded to complex. `MMAGENT_READ_ONLY_REVIEW` kill switch for rollback. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

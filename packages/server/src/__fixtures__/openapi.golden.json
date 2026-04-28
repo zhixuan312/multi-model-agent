@@ -712,13 +712,6 @@
               "schema": {
                 "additionalProperties": false,
                 "properties": {
-                  "agentType": {
-                    "enum": [
-                      "standard",
-                      "complex"
-                    ],
-                    "type": "string"
-                  },
                   "contextBlockIds": {
                     "items": {
                       "minLength": 1,

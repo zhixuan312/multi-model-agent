@@ -4,9 +4,14 @@ import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/audit.js';
 import type { TaskSpec, RunResult } from '../types.js';
 import { runTasks } from '../run-tasks/index.js';
+import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
+import { resolveAgent } from '../routing/resolve-agent.js';
+import { buildAuditQualityPrompt } from '../review/quality-only-prompts.js';
+import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 // --- Ported from packages/mcp/src/tools/audit-document.ts ---
 
@@ -115,7 +120,7 @@ export async function executeAudit(
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
-    reviewPolicy: 'off',
+    reviewPolicy: 'quality_only',
     briefQualityPolicy: 'off',
     done: resolveAuditDoneCondition(input.auditType, hasContextBlocks),
     tools: config.defaults?.tools ?? 'full',
@@ -142,7 +147,7 @@ export async function executeAudit(
     const startMs = Date.now();
     let results: RunResult[];
     try {
-      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }), qualityReviewPromptBuilder: buildAuditQualityPrompt });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const }];
@@ -151,6 +156,9 @@ export async function executeAudit(
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
     const costSummary = computeAggregateCost(results);
+    const flag = resolveReadOnlyReviewFlag();
+    const useQualityReview = flag.isEnabledFor('audit_document');
+    const verdicts = mapReviewVerdicts(results[0], !useQualityReview);
 
     return {
       headline: composeTerminalHeadline({ tool: 'audit', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
@@ -163,6 +171,7 @@ export async function executeAudit(
       batchId: randomUUID(),
       wallClockMs,
       parentModel,
+      ...verdicts,
       ...(ctxId !== undefined && { contextBlockId: ctxId }),
     };
   }
@@ -170,16 +179,36 @@ export async function executeAudit(
   // Single-task mode
   const auditTypeText = resolveAuditTypeText(input.auditType);
   const prompt = buildAuditPrompt(auditTypeText, input.document, input.filePaths, hasContextBlocks);
-  let results: RunResult[];
+  const task = { ...baseTaskSpec, prompt } as TaskSpec;
+  let result: RunResult;
   try {
-    results = await runTasks([{ ...baseTaskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+    const resolved = resolveAgent('complex', [], config);
+    result = await executeReviewedLifecycle(
+      task,
+      resolved,
+      config,
+      0,
+      undefined,
+      { batchId: ctx.batchId, recordHeartbeat: ctx.recordHeartbeat },
+      { logger: ctx.logger, verbose: config.diagnostics?.verbose ?? false },
+      ctx.recorder,
+      ctx.route ?? 'audit',
+      ctx.client,
+      ctx.triggeringSkill,
+      ctx.bus,
+      buildAuditQualityPrompt,
+    );
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const }];
+    result = { output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const };
   }
+  const results = [result];
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(0, results);
   const costSummary = computeAggregateCost(results);
+  const flag2 = resolveReadOnlyReviewFlag();
+  const useQualityReview2 = flag2.isEnabledFor('audit_document');
+  const verdicts = mapReviewVerdicts(result, !useQualityReview2);
 
   return {
     headline: composeTerminalHeadline({ tool: 'audit', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
@@ -192,6 +221,7 @@ export async function executeAudit(
     batchId: randomUUID(),
     wallClockMs: 0,
     parentModel,
+    ...verdicts,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),
   };
 }

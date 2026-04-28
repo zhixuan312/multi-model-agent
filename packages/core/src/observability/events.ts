@@ -152,6 +152,33 @@ export const VerifySkippedEvent = TaskBase.extend({
   stage: z.string(),
 }).strict();
 
+export const ReadOnlyReviewQualityEvent = TaskBase.extend({
+  event: z.literal('read_only_review.quality'),
+  route: z.string(),
+  verdict: ReviewVerdictEnum,
+  iterationIndex: z.number().int().min(1),
+  findingsReviewed: z.number().int().min(0),
+  findingsFlagged: z.number().int().min(0),
+  durationMs: z.number().int().min(0),
+  costUSD: z.number().min(0).nullable(),
+}).strict();
+
+export const ReadOnlyReviewReworkEvent = TaskBase.extend({
+  event: z.literal('read_only_review.rework'),
+  route: z.string(),
+  iterationIndex: z.number().int().min(1),
+  triggeringIssues: z.number().int().min(0),
+}).strict();
+
+export const ReadOnlyReviewTerminalEvent = TaskBase.extend({
+  event: z.literal('read_only_review.terminal'),
+  route: z.string(),
+  roundsUsed: z.number().int().min(0),
+  finalQualityVerdict: ReviewVerdictEnum,
+  costUSD: z.number().min(0).nullable(),
+  durationMs: z.number().int().min(0),
+}).strict();
+
 export const StallAbortEvent = TaskBase.extend({
   event: z.literal('stall_abort'),
   idleMs: z.number().int().min(0),
@@ -303,6 +330,9 @@ export const Event = z.discriminatedUnion('event', [
   ReviewDecisionEvent,
   VerifyStepEvent,
   VerifySkippedEvent,
+  ReadOnlyReviewQualityEvent,
+  ReadOnlyReviewReworkEvent,
+  ReadOnlyReviewTerminalEvent,
   StallAbortEvent,
   BatchCompletedEvent,
   BatchFailedEvent,

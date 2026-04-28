@@ -24,13 +24,17 @@ export async function runQualityReview(
   toolCallLog: string[],
   filesWritten: string[],
   evidenceBlock?: string,
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
+  workerOutput?: string,
 ): Promise<LegacyQualityReviewResult> {
-  if (filesWritten.length === 0) {
+  if (filesWritten.length === 0 && !qualityReviewPromptBuilder) {
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 
-  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
-    buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
+  const corePrompt = qualityReviewPromptBuilder && workerOutput !== undefined
+    ? qualityReviewPromptBuilder({ workerOutput, brief: packet.prompt })
+    : buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
+  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') + corePrompt;
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   let result;

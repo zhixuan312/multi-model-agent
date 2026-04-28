@@ -3,7 +3,8 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../tool-schemas/investigate.js';
 import type { RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
+import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
+import { resolveAgent } from '../routing/resolve-agent.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import {
@@ -13,6 +14,8 @@ import {
 import { parseInvestigationReport, type ParsedInvestigation } from '../reporting/parse-investigation-report.js';
 import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-status.js';
 import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
+import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 export interface InvestigateExecutorInput {
   input: Input;
@@ -38,25 +41,36 @@ export async function executeInvestigate(
 
   const taskSpec = {
     ...spec,
+    agentType: 'complex' as const,
+    reviewPolicy: 'quality_only' as const,
     timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-    briefQualityPolicy: 'off' as const,
   };
 
+  const resolved = resolveAgent('complex', [], config);
+
   const startMs = Date.now();
-  let results: RunResult[];
+  let result: RunResult;
   let runtimeError: Error | undefined;
   try {
-    results = await runTasks([taskSpec as any], config, {
-      ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-      ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
-      logger: ctx.logger,
-      ...(ctx.recorder !== undefined && { recorder: ctx.recorder }),
-      ...(ctx.route !== undefined && { route: ctx.route }),
-      ...(ctx.client !== undefined && { client: ctx.client }),
-      ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }),
-    });
+    result = await executeReviewedLifecycle(
+      taskSpec as any,
+      resolved,
+      config,
+      0,
+      undefined,
+      {
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
+      },
+      { logger: ctx.logger },
+      ctx.recorder,
+      ctx.route ?? 'investigate',
+      ctx.client,
+      ctx.triggeringSkill,
+      ctx.bus,
+    );
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));
     const msg = runtimeError.message;
@@ -90,12 +104,11 @@ export async function executeInvestigate(
       },
       workerStatus: 'failed' as const,
     } as unknown as RunResult;
-    results = [fallback];
+    result = fallback;
   }
   const wallClockMs = Date.now() - startMs;
-  const result = results[0];
 
-  // Pull lifecycle signals (set by the lifecycle in Task 13a).
+  // Pull lifecycle signals (set by executeReviewedLifecycle).
   const capExhausted = (result as any)?.capExhausted as 'turn' | 'cost' | 'wall_clock' | undefined;
   const workerError = runtimeError ?? ((result as any)?.workerError as Error | undefined);
   const lifecycleClarificationRequested = Boolean((result as any)?.lifecycleClarificationRequested);
@@ -141,16 +154,23 @@ export async function executeInvestigate(
     ...(derived.incompleteReason !== undefined && { incompleteReason: derived.incompleteReason }),
   });
 
+  const flag = resolveReadOnlyReviewFlag();
+  const useQualityReview = flag.isEnabledFor('investigate_codebase');
+  const reviewVerdicts = mapReviewVerdicts(result, !useQualityReview);
+
   return {
     headline,
-    results,
-    batchTimings: computeTimings(wallClockMs, results),
-    costSummary: computeAggregateCost(results),
+    results: [result],
+    batchTimings: computeTimings(wallClockMs, [result]),
+    costSummary: computeAggregateCost([result]),
     structuredReport: notApplicable('per-task structured report carried on result'),
     error: notApplicable('batch succeeded'),
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
-    batchId: ctx.batchId ?? randomUUID(),   // Prefer dispatch-supplied batchId; fall back only if absent.
+    batchId: ctx.batchId ?? randomUUID(),
     wallClockMs,
     parentModel: ctx.parentModel ?? config.defaults?.parentModel,
+    specReviewVerdict: reviewVerdicts.specReviewVerdict,
+    qualityReviewVerdict: reviewVerdicts.qualityReviewVerdict,
+    roundsUsed: reviewVerdicts.roundsUsed,
   };
 }

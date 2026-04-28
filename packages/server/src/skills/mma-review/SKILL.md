@@ -67,6 +67,20 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
+## Reading the review verdicts
+
+The terminal envelope now includes:
+- `specReviewVerdict: 'not_applicable'` — read-only routes have no spec review stage.
+- `qualityReviewVerdict` — verdict from the cross-agent quality review.
+- `roundsUsed` — number of worker attempts (`1` = approved on first try; `2`+ = rework rounds; `0` = review topology disabled via env var).
+
+Action per `qualityReviewVerdict`:
+- `'approved'` — findings are grounded; act on them.
+- `'changes_required'` — the worker reworked but couldn't fully satisfy the reviewer at the rework cap. Drill into individually flagged findings before acting.
+- `'concerns'` — non-blocking issues raised; proceed but read the per-finding feedback.
+- `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW`) disabled review for this route. Treat output as today.
+- `'error'` — reviewer call failed (transport, rate-limit). No attestation; fall back to caution.
+
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-review`:

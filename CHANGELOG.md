@@ -5,7 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.7.0] - 2026-04-28
+## [3.8.0] - 2026-04-28
+
+### Added
+- **read-only review lifecycle.** All 5 read-only routes (`audit`, `review`, `verify`, `investigate`, `debug`) now run a single `quality_only` review stage with bounded rework. The lifecycle skips spec_review and runs quality_review only, capped by `maxReworksFor('quality')`. Worker tier is forced `complex`; reviewer tier is forced `standard` — cross-tier review is mandatory for these routes.
+- **structured `findings[]` schema (core).** New `findingSchema` in `executors/_shared/findings-schema.ts` defines the canonical worker output: `{id, severity ('high'|'medium'|'low'), file (string|null), line (1-indexed|null), claim, sourceQuote?, suggestedFix?}`. All 5 read-only routes' OUTPUT_CONTRACT_CLAUSES now require this shape.
+- **5 per-route quality review prompts (core).** `review/quality-only-prompts.ts` exports `buildAuditQualityPrompt` / `buildReviewQualityPrompt` / `buildVerifyQualityPrompt` / `buildInvestigateQualityPrompt` / `buildDebugQualityPrompt`. Each is route-aware and consumes the worker's `findings[]` for per-finding judgments.
+- **envelope verdict fields.** `ExecutorOutput` and `buildOutputEnvelopeSchema` gain `specReviewVerdict`, `qualityReviewVerdict`, `roundsUsed`. Read-only routes emit `specReviewVerdict: 'not_applicable'` plus the actual quality verdict (`approved` / `concerns` / `changes_required` / `error` / `skipped`).
+- **HTTP cross-tier guard (server).** `cross-tier-guard.ts` rejects requests with HTTP 400 when both `standard` and `complex` agent slots aren't configured for read-only routes. Wired into all 5 read-only handlers.
+- **`MMAGENT_READ_ONLY_REVIEW` kill switch (core).** Env var disables read-only review (per-route via `MMAGENT_READ_ONLY_REVIEW_AUDIT=disabled` etc., or globally via `MMAGENT_READ_ONLY_REVIEW=disabled`). Falls back to today's behavior — emit `qualityReviewVerdict: 'skipped'` and `roundsUsed: 0`. Documented rollback path.
+- **read-only review telemetry events.** `read_only_review.quality`, `read_only_review.rework`, `read_only_review.terminal` events emitted from the lifecycle for end-to-end visibility into quality-stage progress and rework rounds.
+
+### Changed (BREAKING)
+- **`verify_work` worker tier `standard → complex`.** Per-item verify cost grows ~5–10x; required for cross-tier review guarantee. ROUTE_DEFAULTS for `verify_work` updated; executor's hardcoded slot raised.
+- **`investigate` input schema removes `agentType`.** Per spec G2, `agentType` is no longer caller-configurable for `investigate` — hardcoded `complex` inside the executor. HTTP requests with `agentType` now return 400. ROUTE_DEFAULTS for `investigate_codebase` keeps `complex`.
+- **`review_code` and `debug_task` review policy `full → quality_only`.** Deliberate downgrade per spec G1 — spec compliance is a subset of quality grounding for findings-shaped output. `audit_document`, `verify_work`, `investigate_codebase` ROUTE_DEFAULTS likewise change to `quality_only`.
+- **`reviewPolicy` union widened.** `TaskSpec.reviewPolicy` and `DraftTask.reviewPolicy` accept `'quality_only'` (in addition to `'full' | 'spec_only' | 'diff_only' | 'off'`). Artifact-route Zod enums (`delegate`, `execute-plan`) deliberately NOT widened — `'quality_only'` is rejected at the HTTP boundary for artifact routes; runtime guard in `executeReviewedLifecycle` catches internal misuse.
+
+### Fixed
+- **stale tests aligned with new topology.** `resolve-investigate.test.ts` (ROUTE_DEFAULTS expectations), `investigate.test.ts` handler test 7 (now expects 400 for `agentType`), `reviewed-execution/investigate.test.ts` test 25 (summary now wrapped with `[Reviewed]` prefix), OpenAPI goldens regenerated.
+- **date-rollover bug in `local-log-sink.test.ts`.** Test was hardcoded to `2026-04-27` filename; now derives the date from `now()`.
+
+
 
 ### Added
 - **observability.** Single `EventBus` with `LocalLogSink` + `TelemetrySink`. Zod-typed event taxonomy in `core/observability/events.ts`.
@@ -911,7 +932,9 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.7...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.0...HEAD
+[3.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.7.0...v3.8.0
+[3.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.7...v3.7.0
 [3.6.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.6...v3.6.7
 [3.6.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.5...v3.6.6
 [3.6.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.4...v3.6.5
