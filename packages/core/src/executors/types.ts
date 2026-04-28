@@ -1,6 +1,6 @@
 // packages/core/src/executors/types.ts
 import type { ProjectContext } from '../project-context.js';
-import type { RunResult, MultiModelConfig } from '../types.js';
+import type { RunResult, MultiModelConfig, ReviewVerdict } from '../types.js';
 import type { HttpServerLog } from '../diagnostics/http-server-log.js';
 import type { ContextBlockStore } from '../context/context-block-store.js';
 import type { NotApplicable } from '../reporting/not-applicable.js';
@@ -117,4 +117,7 @@ export interface ExecutorOutput {
   clarificationId?: string;
   wallClockMs?: number;
   parentModel?: string;
+  specReviewVerdict?: ReviewVerdict;
+  qualityReviewVerdict?: ReviewVerdict;
+  roundsUsed?: number;
 }

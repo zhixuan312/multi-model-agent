@@ -13,6 +13,10 @@ export const batchTimingsSchema = z.object({}).passthrough();
 export const costSummarySchema = z.object({}).passthrough();
 export const structuredReportSchema = z.object({}).passthrough();
 
+const REVIEW_VERDICT_SCHEMA = z.enum([
+  'approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable',
+]);
+
 // Envelope builder — single source of truth.
 export function buildOutputEnvelopeSchema(resultItemSchema: z.ZodTypeAny = z.unknown()) {
   return z.object({
@@ -23,5 +27,8 @@ export function buildOutputEnvelopeSchema(resultItemSchema: z.ZodTypeAny = z.unk
     structuredReport: z.union([structuredReportSchema, notApplicableSchema]),
     error: z.union([errorSchema, notApplicableSchema]),
     proposedInterpretation: z.union([z.string().min(1), notApplicableSchema]),
+    specReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
+    qualityReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
+    roundsUsed: z.number().int().min(0).optional(),
   }).passthrough();
 }
