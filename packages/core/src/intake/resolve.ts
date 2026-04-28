@@ -1,6 +1,7 @@
 import type { TaskSpec } from '../types.js';
 import type { MultiModelConfig } from '../types.js';
 import type { DraftTask, SourceRoute } from './types.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 
 // 3.8.1 worker contract: each finding object has fields {id, severity, claim, evidence, suggestion?}.
 // `evidence` is REQUIRED and must be ≥20 chars — embed file:line as prose plus a
@@ -56,7 +57,7 @@ export function resolveDraft(
     agentType: agentType as 'standard' | 'complex',
     reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
     tools: config.defaults?.tools ?? 'full',
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     briefQualityPolicy: 'off',

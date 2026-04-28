@@ -12,6 +12,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -83,7 +84,7 @@ export async function executeVerify(
     briefQualityPolicy: 'off',
     done: `Every checklist item (${input.checklist.length} total) has a pass/fail verdict with supporting evidence from the code.`,
     tools: config.defaults?.tools ?? 'full',
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,

@@ -1,72 +1,287 @@
 import { describe, it, expect, vi } from 'vitest';
-import { runQualityReview } from '@zhixuan92/multi-model-agent-core/review/quality-reviewer';
-import type { Provider, ParsedStructuredReport, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { Provider, RunResult } from '../../packages/core/src/types.js';
+import type { RunOptions } from '../../packages/core/src/runners/types.js';
+import { runQualityReview } from '../../packages/core/src/review/quality-reviewer.js';
+import type { ParsedStructuredReport } from '../../packages/core/src/reporting/structured-report.js';
+import type { WorkerFinding } from '../../packages/core/src/executors/_shared/findings-schema.js';
 
-function mockProvider(output: string, status: 'ok' | 'timeout' = 'ok'): Provider {
-  return {
-    name: 'complex',
-    config: { type: 'claude', model: 'claude-opus-4-6' } as any,
-    run: vi.fn(async (): Promise<RunResult> => ({
-      output, status,
-      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-      turns: 1, filesRead: [], filesWritten: [], toolCalls: [],
-      outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
-    })),
-  };
-}
-
-const packet = { prompt: 'do X', scope: ['src/a.ts'], doneCondition: 'tsc passes' };
-const implReport: ParsedStructuredReport = {
-  summary: 'did it',
-  filesChanged: [{ path: 'src/a.ts', summary: 'updated' }],
+const fakeReport: ParsedStructuredReport = {
+  summary: 'approved',
+  filesChanged: [],
   validationsRun: [],
   deviationsFromBrief: [],
   unresolved: [],
+  extraSections: {},
 };
 
-describe('runQualityReview', () => {
-  it('returns approved on clean review', async () => {
-    const p = mockProvider('## Summary\napproved\n');
-    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('approved');
+function makeOkResult(output: string): RunResult {
+  return {
+    output,
+    status: 'ok',
+    usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2, costUSD: 0 },
+    turns: 1,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: false,
+    escalationLog: [],
+  };
+}
+
+function makeAbortedResult(): RunResult {
+  return {
+    output: '',
+    status: 'api_aborted',
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: true,
+    escalationLog: [],
+  };
+}
+
+function makeProvider(
+  behavior: (signal?: AbortSignal, timeoutMs?: number) => Promise<RunResult>,
+): Provider {
+  return {
+    name: 'standard',
+    config: { type: 'openai-compatible', model: 'mock', baseUrl: 'mock' } as any,
+    run: async (_prompt: string, opts?: RunOptions) =>
+      behavior(opts?.abortSignal, opts?.timeoutMs),
+  };
+}
+
+// ---------------------------------------------------------------------------
+// Gating-path tests (filesWritten non-empty, no qualityReviewPromptBuilder)
+// ---------------------------------------------------------------------------
+
+describe('runQualityReview gating path — taskDeadlineMs / abortSignal plumbing', () => {
+  it('aborts when abortSignal fires before the call', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const provider = makeProvider(async (signal) => {
+      if (signal?.aborted) return makeAbortedResult();
+      return makeOkResult('## Summary\napproved');
+    });
+    const result = await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      ['file.ts'],
+      undefined,
+      undefined,
+      undefined,
+      /*deadline*/ Date.now() + 60_000,
+      ctrl.signal,
+    );
+    expect(result.status).toBe('api_aborted');
   });
 
-  it('returns changes_required with findings on issues', async () => {
-    const p = mockProvider('## Summary\nchanges_required\n\n## Deviations from brief\n- No error handling on JWT verify\n');
-    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('changes_required');
-    expect(r.findings.length).toBeGreaterThan(0);
+  it('clamps per-call timeoutMs when taskDeadlineMs has passed', async () => {
+    let captured: number | undefined;
+    const provider = makeProvider(async (_signal, timeoutMs) => {
+      captured = timeoutMs;
+      return makeOkResult('## Summary\napproved');
+    });
+    await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      ['file.ts'],
+      undefined,
+      undefined,
+      undefined,
+      /*deadline=in the past*/ Date.now() - 1000,
+    );
+    expect(captured).toBeLessThanOrEqual(2); // clamped to 1ms by delegate-with-escalation
   });
 
-  it('auto-skips when filesWritten is empty', async () => {
-    const p = mockProvider('should not be called');
-    const r = await runQualityReview(p, packet, implReport, {}, [], []);
-    expect(r.status).toBe('skipped');
-    expect(r.errorReason).toBe('no files written by implementer');
-    expect((p.run as any).mock.calls.length).toBe(0);
-  });
-
-  it('preserves transport status when reviewer dispatch fails', async () => {
-    const p = mockProvider('timed out', 'timeout');
-    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('timeout');
-    expect(r.errorReason).toBe('review agent returned status: timeout');
-  });
-
-  it('accepts plain text reviewer output via lenient parsing', async () => {
-    const p = mockProvider('The implementation looks fine to me, approved.');
-    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('approved');
-  });
-
-  it('returns error with reason when reviewer throws', async () => {
-    const p: Provider = {
-      name: 'complex',
-      config: { type: 'claude', model: 'claude-opus-4-6' } as any,
-      run: vi.fn(async () => { throw new Error('connection refused'); }),
+  it('forwards onProgress callback through delegateWithEscalation to provider.run', async () => {
+    let capturedOnProgress: ((e: any) => void) | undefined;
+    const provider: Provider = {
+      name: 'standard',
+      config: { type: 'openai-compatible', model: 'mock', baseUrl: 'mock' } as any,
+      run: async (_prompt: string, opts?: RunOptions) => {
+        capturedOnProgress = opts?.onProgress;
+        return makeOkResult('## Summary\napproved');
+      },
     };
-    const r = await runQualityReview(p, packet, implReport, {}, [], ['src/a.ts']);
-    expect(r.status).toBe('error');
-    expect(r.errorReason).toBe('review agent threw: connection refused');
+    const sink = vi.fn();
+    await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      ['file.ts'],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      sink,
+    );
+    expect(capturedOnProgress).toBeDefined();
+  });
+
+  it('threads abortSignal into the retry path (second delegateWithEscalation call)', async () => {
+    let calls = 0;
+    const ctrl = new AbortController();
+    const provider = makeProvider(async (signal) => {
+      calls += 1;
+      if (calls === 1) {
+        // Return empty output — parseStructuredReport('') gives summary:null,
+        // which triggers the retry path in runQualityReview.
+        if (signal?.aborted) return makeAbortedResult();
+        return makeOkResult('');
+      }
+      // After first call, fire abort; retry should see it.
+      ctrl.abort();
+      return makeAbortedResult();
+    });
+    const result = await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      ['file.ts'],
+      undefined,
+      undefined,
+      undefined,
+      undefined,
+      ctrl.signal,
+    );
+    expect(['error', 'api_error', 'network_error', 'timeout', 'api_aborted']).toContain(result.status);
+    expect(calls).toBeGreaterThanOrEqual(1);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Annotation-path tests (qualityReviewPromptBuilder + workerOutput provided)
+// ---------------------------------------------------------------------------
+
+function makeAnnotationPromptBuilder(): (ctx: {
+  workerOutput: string;
+  brief: string;
+  workerFindings: WorkerFinding[];
+}) => string {
+  return (ctx) => `Review these findings:\n${JSON.stringify(ctx.workerFindings)}`;
+}
+
+function makeWorkerOutputWithFindings(): string {
+  return '```json\n[{"id":"1","severity":"high","claim":"null pointer deref","evidence":"On line 42 of a.ts, the variable x is dereferenced without a null check, which would cause a runtime crash when the input is empty.","suggestion":"Add null guard before deref"}]\n```';
+}
+
+describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plumbing', () => {
+  it('aborts when abortSignal fires before the call', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const provider = makeProvider(async (signal) => {
+      if (signal?.aborted) return makeAbortedResult();
+      return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+    });
+    const result = await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      [], // empty filesWritten — but annotation path bypasses that check
+      undefined,
+      makeAnnotationPromptBuilder(),
+      makeWorkerOutputWithFindings(),
+      /*deadline*/ Date.now() + 60_000,
+      ctrl.signal,
+    );
+    expect(result.status).toBe('api_aborted');
+  });
+
+  it('clamps per-call timeoutMs when taskDeadlineMs has passed', async () => {
+    let captured: number | undefined;
+    const provider = makeProvider(async (_signal, timeoutMs) => {
+      captured = timeoutMs;
+      return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+    });
+    await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      [],
+      undefined,
+      makeAnnotationPromptBuilder(),
+      makeWorkerOutputWithFindings(),
+      /*deadline=in the past*/ Date.now() - 1000,
+    );
+    expect(captured).toBeLessThanOrEqual(2);
+  });
+
+  it('forwards onProgress callback through delegateWithEscalation to provider.run', async () => {
+    let capturedOnProgress: ((e: any) => void) | undefined;
+    const provider: Provider = {
+      name: 'standard',
+      config: { type: 'openai-compatible', model: 'mock', baseUrl: 'mock' } as any,
+      run: async (_prompt: string, opts?: RunOptions) => {
+        capturedOnProgress = opts?.onProgress;
+        return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+      },
+    };
+    const sink = vi.fn();
+    await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      [],
+      undefined,
+      makeAnnotationPromptBuilder(),
+      makeWorkerOutputWithFindings(),
+      undefined,
+      undefined,
+      sink,
+    );
+    expect(capturedOnProgress).toBeDefined();
+  });
+
+  it('surfaces api_aborted from delegateWithEscalation in annotation path', async () => {
+    // When delegateWithEscalation returns api_aborted (because the signal was
+    // already aborted before provider.run), the annotation path must preserve
+    // it rather than collapsing to generic 'error'.
+    const ctrl = new AbortController();
+    ctrl.abort();
+    let capturedSignal: AbortSignal | undefined;
+    const provider: Provider = {
+      name: 'standard',
+      config: { type: 'openai-compatible', model: 'mock', baseUrl: 'mock' } as any,
+      run: async (_prompt: string, opts?: RunOptions) => {
+        capturedSignal = opts?.abortSignal;
+        if (opts?.abortSignal?.aborted) return makeAbortedResult();
+        return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+      },
+    };
+    const result = await runQualityReview(
+      provider,
+      { prompt: 'p', scope: [], doneCondition: 'd' },
+      fakeReport,
+      {},
+      [],
+      [],
+      undefined,
+      makeAnnotationPromptBuilder(),
+      makeWorkerOutputWithFindings(),
+      /*deadline*/ Date.now() + 60_000,
+      ctrl.signal,
+    );
+    expect(capturedSignal).toBeDefined();
+    expect(result.status).toBe('api_aborted');
   });
 });

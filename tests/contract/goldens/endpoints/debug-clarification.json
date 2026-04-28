@@ -54,7 +54,10 @@
           "costUSD": null,
           "agentTier": "complex",
           "modelFamily": "other",
-          "model": "mock"
+          "model": "mock",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "spec_rework": {
           "stage": "spec_rework",
@@ -63,7 +66,10 @@
           "costUSD": null,
           "agentTier": null,
           "modelFamily": null,
-          "model": null
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "quality_rework": {
           "stage": "quality_rework",
@@ -72,7 +78,10 @@
           "costUSD": null,
           "agentTier": null,
           "modelFamily": null,
-          "model": null
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "committing": {
           "stage": "committing",
@@ -81,7 +90,10 @@
           "costUSD": null,
           "agentTier": null,
           "modelFamily": null,
-          "model": null
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "verifying": {
           "stage": "verifying",
@@ -91,6 +103,9 @@
           "agentTier": null,
           "modelFamily": null,
           "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
           "outcome": null,
           "skipReason": null
         },
@@ -102,6 +117,9 @@
           "agentTier": null,
           "modelFamily": null,
           "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
           "verdict": null,
           "roundsUsed": null
         },
@@ -113,6 +131,9 @@
           "agentTier": "complex",
           "modelFamily": "other",
           "model": "mock",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
           "verdict": "error",
           "roundsUsed": 0
         },
@@ -124,6 +145,9 @@
           "agentTier": null,
           "modelFamily": null,
           "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
           "verdict": null,
           "roundsUsed": null
         }
@@ -170,7 +194,8 @@
         "steps": [],
         "totalDurationMs": 0,
         "skipReason": "no_command"
-      }
+      },
+      "taskMaxIdleMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {

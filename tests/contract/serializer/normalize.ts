@@ -27,6 +27,11 @@ const VOLATILE_KEYS = new Set([
   'version',
   'id',
   'retryBatchId',
+  // v3.9.0 — per-stage idle telemetry varies with wall-clock timing
+  'maxIdleMs',
+  'totalIdleMs',
+  'activityEvents',
+  'taskMaxIdleMs',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);

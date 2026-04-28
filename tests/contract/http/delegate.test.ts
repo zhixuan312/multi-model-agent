@@ -57,8 +57,18 @@ describe('contract: POST /delegate', () => {
         expect(dispatch.status).toBe(202);
         const { batchId } = (await dispatch.json()) as { batchId: string };
         const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
-        const expected = (await import(`../goldens/endpoints/delegate-${stage}.json`, { with: { type: 'json' } })).default;
-        expect(normalize(terminal)).toEqual(expected);
+        const normalized = normalize(terminal);
+        const goldenRel = `../goldens/endpoints/delegate-${stage}.json`;
+        if (process.env.CAPTURE_GOLDEN === '1') {
+          const { writeFileSync } = await import('node:fs');
+          const { resolve, dirname } = await import('node:path');
+          const { fileURLToPath } = await import('node:url');
+          const here = dirname(fileURLToPath(import.meta.url));
+          writeFileSync(resolve(here, goldenRel), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+        } else {
+          const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
+          expect(normalized).toEqual(expected);
+        }
       } finally {
         await h.close();
       }

@@ -23,12 +23,16 @@ export async function runSpecReview(
   toolCallLog: string[],
   planContext?: string,
   evidenceBlock?: string,
+  taskDeadlineMs?: number,
+  abortSignal?: AbortSignal,
+  onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
 ): Promise<SpecReviewResult> {
   const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
     buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
 
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
+  const delegateOpts = { explicitlyPinned: true as const, taskDeadlineMs, abortSignal, onProgress };
   let result;
   try {
     result = await delegateWithEscalation(
@@ -39,7 +43,7 @@ export async function runSpecReview(
         timeoutMs: 120_000,
       },
       [reviewerProvider],
-      { explicitlyPinned: true },
+      delegateOpts,
     );
   } catch (err) {
     return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
@@ -68,7 +72,7 @@ export async function runSpecReview(
           timeoutMs: 120_000,
         },
         [reviewerProvider],
-        { explicitlyPinned: true },
+        delegateOpts,
       );
       if (retryResult.status === 'ok') {
         report = parseStructuredReport(retryResult.output);

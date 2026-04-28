@@ -82,12 +82,15 @@ export const HeartbeatEvent = TaskBase.extend({
   event: z.literal('heartbeat'),
   elapsed: z.string(),
   stage: z.string(),
+  round: z.number().int().min(0).optional(),
+  cap: z.number().int().min(0).optional(),
   tools: z.number().int().min(0),
   read: z.number().int().min(0),
   wrote: z.number().int().min(0),
   text: z.number().int().min(0),
   cost: z.number().min(0).nullable(),
-  idleMs: z.number().int().min(0),
+  idle_ms: z.number().int().min(0),
+  stage_idle_ms: z.number().int().min(0),
 }).strict();
 
 export const FallbackEvent = TaskBase.extend({
@@ -176,8 +179,8 @@ export const ReadOnlyReviewTerminalEvent = TaskBase.extend({
 
 export const StallAbortEvent = TaskBase.extend({
   event: z.literal('stall_abort'),
-  idleMs: z.number().int().min(0),
-  thresholdMs: z.number().int().min(0),
+  idle_ms: z.number().int().min(0),
+  threshold_ms: z.number().int().min(0),
 }).strict();
 
 export const BatchCompletedEvent = BatchBase.extend({
@@ -195,6 +198,47 @@ export const BatchFailedEvent = BatchBase.extend({
   errorMessage: z.string(),
 }).strict();
 
+// Per-stage stats embedded in TaskCompletedLocalEvent.stages.
+// Mirrors core/src/types.ts RawStageStats variants. Local schema is
+// strict; cloud TaskCompletedCloudEvent.stages stays z.record(...) and
+// inherits no contract changes this release.
+const BaseStageStatsSchema = z.object({
+  entered: z.boolean(),
+  durationMs: z.number().int().min(0).nullable(),
+  costUSD: z.number().min(0).nullable(),
+  agentTier: z.enum(['standard', 'complex']).nullable(),
+  modelFamily: z.string().nullable(),
+  model: z.string().nullable(),
+  maxIdleMs: z.number().int().min(0).nullable(),
+  totalIdleMs: z.number().int().min(0).nullable(),
+  activityEvents: z.number().int().min(0).nullable(),
+});
+
+const ReviewVerdictNullable = ReviewVerdictEnum.nullable();
+const RoundsUsedNullable = z.number().int().min(0).nullable();
+const VerifyOutcomeNullable = VerifyOutcomeEnum.nullable();
+const VerifySkipReasonNullable = VerifySkipReasonEnum.nullable();
+
+const ImplementingStageStatsSchema   = BaseStageStatsSchema.extend({ stage: z.literal('implementing') });
+const SpecReworkStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('spec_rework') });
+const QualityReworkStageStatsSchema  = BaseStageStatsSchema.extend({ stage: z.literal('quality_rework') });
+const CommittingStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('committing') });
+const VerifyingStageStatsSchema      = BaseStageStatsSchema.extend({ stage: z.literal('verifying'), outcome: VerifyOutcomeNullable, skipReason: VerifySkipReasonNullable });
+const SpecReviewStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('spec_review'),    verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
+const QualityReviewStageStatsSchema  = BaseStageStatsSchema.extend({ stage: z.literal('quality_review'), verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
+const DiffReviewStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('diff_review'),    verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
+
+export const StageStatsMapSchema = z.object({
+  implementing:   ImplementingStageStatsSchema,
+  spec_rework:    SpecReworkStageStatsSchema,
+  quality_rework: QualityReworkStageStatsSchema,
+  committing:     CommittingStageStatsSchema,
+  verifying:      VerifyingStageStatsSchema,
+  spec_review:    SpecReviewStageStatsSchema,
+  quality_review: QualityReviewStageStatsSchema,
+  diff_review:    DiffReviewStageStatsSchema,
+});
+
 export const TaskCompletedLocalEvent = TaskBase.extend({
   event: z.literal('task_completed'),
   status: z.string(),
@@ -207,6 +251,10 @@ export const TaskCompletedLocalEvent = TaskBase.extend({
   inputTokens: z.number().int().min(0),
   outputTokens: z.number().int().min(0),
   costUSD: z.number().min(0).nullable(),
+  // New in v3.9.0
+  taskMaxIdleMs: z.number().int().min(0).nullable(),
+  stallTriggered: z.boolean(),
+  stages: z.string(),  // JSON-stringified StageStatsMap; parse with StageStatsMapSchema
 }).passthrough();
 
 // ---------------------------------------------------------------------------

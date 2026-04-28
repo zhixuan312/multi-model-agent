@@ -89,7 +89,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.8.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.9.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -205,8 +205,8 @@ Every `defaults` knob has a sane built-in. Override only when you have a reason.
 
 | Field | Default | What it does |
 |---|---|---|
-| `defaults.timeoutMs` | `1800000` (30 min) | Hard task-level wall-clock cap. Per-runner-call timeouts are clamped to remaining budget. |
-| `defaults.stallTimeoutMs` | `600000` (10 min) | Aborts in-flight runs that have no LLM / tool / text activity for this long. Force-salvages and returns. |
+| `defaults.timeoutMs` | `3600000` (60 min) | Hard task-level wall-clock cap. Per-runner-call timeouts are clamped to remaining budget. Bumped from 30 min in 3.9.0. |
+| `defaults.stallTimeoutMs` | `1200000` (20 min) | Aborts in-flight runs that have no LLM / tool / text activity for this long. Force-salvages and returns. Bumped from 10 min in 3.9.0. |
 | `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling. Returns `cost_exceeded` when hit. |
 | `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full`. |
 | `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd`. |
@@ -292,7 +292,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.8.1** — read-only review becomes annotation, not gating. The 5 read-only routes (audit, review, verify, investigate, debug) now run a single reviewer pass that annotates each worker finding with `reviewerConfidence` (0-100) and an optional `reviewerSeverity` correction — no rework loop, restoring 3.7.0-comparable wall-clock. `Finding` schema simplified (drop `file`/`line`/`sourceQuote`; required `evidence`; rename `suggestedFix` → `suggestion`). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.9.0** — watchdog hardening + per-stage idle telemetry. The reviewer entry points (`runSpecReview` / `runQualityReview` / `runDiffReview`) now thread `taskDeadlineMs` + `abortSignal` + `onProgress`, closing the leak that allowed reviewer hangs to run past the documented cap. Total wall-clock cap bumped 30 → 60 min, stall watchdog 10 → 20 min, both via named constants. New `StageIdleTracker` records `maxIdleMs`/`totalIdleMs`/`activityEvents` per stage and surfaces them on `task_completed` + the heartbeat (`stage_idle_ms`). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

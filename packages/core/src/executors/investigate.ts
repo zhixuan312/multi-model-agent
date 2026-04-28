@@ -16,6 +16,7 @@ import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-s
 import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
 import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 import { buildInvestigateQualityPrompt } from '../review/quality-only-prompts.js';
 
 export interface InvestigateExecutorInput {
@@ -44,7 +45,7 @@ export async function executeInvestigate(
     ...spec,
     agentType: 'complex' as const,
     reviewPolicy: 'quality_only' as const,
-    timeoutMs: config.defaults?.timeoutMs ?? 1_800_000,
+    timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
   };

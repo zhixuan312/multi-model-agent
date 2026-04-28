@@ -5,6 +5,25 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.9.0] - 2026-04-29
+
+### Added
+- **per-stage idle telemetry (core).** New `StageIdleTracker` records per-stage `maxIdleMs`, `totalIdleMs`, and `activityEvents` on every reviewed-lifecycle stage; rolled up to a task-level `taskMaxIdleMs`. Surfaced on `RunResult.stageStats` (per-stage), on the local `task_completed` JSONL event, and on the heartbeat as `stage_idle_ms` (distinct from the existing global `idle_ms`).
+- **`transitionStage` lifecycle helper (core).** Wraps all 12 stage transitions in `reviewed-lifecycle.ts` so the idle tracker resets on every transition (not just the 6 sites that emit JSONL `stage_change`). Eliminates a class of bug where reworks/loop-back transitions silently inherited prior-stage idle counters.
+- **local `task_completed` JSONL emission (core).** Schema-defined but never emitted prior; now fires from the lifecycle's `finally` block with the new `taskMaxIdleMs`, `stallTriggered`, and JSON-stringified `stages` map. Cloud `task.completed` payload unchanged.
+- **integration tests for watchdog behavior (tests).** `watchdog-reviewer-stall.test.ts` and `watchdog-total-cap.test.ts` exercise the full stall-abort and total-cap paths against the reviewed-lifecycle harness.
+
+### Fixed
+- **stall watchdog now actually catches reviewer hangs (core).** All three reviewer entry points — `runSpecReview`, `runQualityReview` (gating + retry + annotation), `runDiffReview` — now thread `taskDeadlineMs`, `abortSignal`, and `onProgress` through their internal `delegateWithEscalation` calls. Caller-side wiring at all 5 reviewer call sites in `reviewed-lifecycle.ts` passes the orchestrator's stall controller through. Closes the leak that produced the 32-min hang on batch `1574b3a2` despite the documented 30-min cap.
+- **`markRunnerEvent` fires unconditionally (core).** Previously gated on telemetry-consumer presence (`needHeartbeat`); when no consumer was wired (CLI / unit-test contexts), the watchdog counter stayed frozen at `taskStartMs` and the stall watchdog tripped at exactly `stallTimeoutMs` regardless of activity. The watchdog is a safety mechanism, not a telemetry feature.
+- **`prevEventAtMs` initialized + updated unconditionally (core).** Was gated on `verbose`; when `verbose=false` but a heartbeat consumer was wired (HTTP request paths with `bus`), the JSONL `idle_ms` field reported `Date.now() - 0 ≈ 1.77 trillion`. Now initialized to `Date.now()` at start and advanced on every `turn_start | text_emission | tool_call | turn_complete` event regardless of `verbose`.
+- **Zod event schemas aligned with wire format (core).** `HeartbeatEvent` renamed `idleMs → idle_ms`, added `round`/`cap`/`stage_idle_ms` fields. `StallAbortEvent` renamed `idleMs → idle_ms`, `thresholdMs → threshold_ms`. `review_decision` emit at the diff-review path now maps `verdict.kind` (`approve`/`reject`/`transport_failure`) to enum values (`approved`/`changes_required`/`error`), matching the same mapping the adjacent `endReviewStage` call already used.
+
+### Changed
+- **task wall-clock cap bumped 30 → 60 min, stall watchdog bumped 10 → 20 min (core).** New named constants `DEFAULT_TASK_TIMEOUT_MS = 3_600_000` and `DEFAULT_STALL_TIMEOUT_MS = 1_200_000` in `config/schema.ts` are the single source of truth; 9 inline `?? 1_800_000` fallback sites and 1 `?? 600_000` fallback updated to reference them. The unrelated 30-min `idleProjectTimeoutMs` (server project eviction) and the 30-min telemetry bucket boundary in `bucketing.ts` are intentionally unchanged.
+- **`StageStats` schema extended (core).** `BaseStageStats` adds `maxIdleMs`, `totalIdleMs`, `activityEvents` (each `number | null`; null when stage was never entered). `endBaseStage`, `endReviewStage`, `endVerifyStage` helpers gain an `idle` parameter; `emptyStats()` initializes the new fields to `null`.
+- **`HeartbeatTickInfo` adds `stageIdleMs` (core).** `HeartbeatTimer` tracks a per-stage `stageLastEventMs` cursor (reset on stage transitions) distinct from the existing global `lastLlmMs`/`lastToolMs`/`lastTextMs`. Operators watching the JSONL stream can now distinguish "current stage is silent" from "global counter remembers an old gap from a prior stage."
+
 ## [3.8.1] - 2026-04-28
 
 ### Changed (BREAKING)
@@ -946,7 +965,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.9.0...HEAD
+[3.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.1...v3.9.0
 [3.8.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.7...v3.7.0
