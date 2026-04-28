@@ -56,6 +56,8 @@ export interface HeartbeatTickInfo {
   };
   costUSD: number | null;
   savedCostUSD: number | null;
+  /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
+  stageIdleMs: number;
   /**
    * Rich per-stage headline composed by HeartbeatTimer, e.g.
    *   "[1/5] Implementing (openai) — 45s, $0.12 saved (3.2x), 2 read, 3 written, 7 tool calls"
@@ -107,6 +109,7 @@ export class HeartbeatTimer {
   private lastLlmMs = 0;
   private lastToolMs = 0;
   private lastTextMs = 0;
+  private stageLastEventMs = 0;
   private started = false;
   private stopped = false;
 
@@ -177,6 +180,7 @@ export class HeartbeatTimer {
       },
       costUSD: this.costUSD,
       savedCostUSD: this.savedCostUSD,
+      stageIdleMs: this.stageLastEventMs > 0 ? now - this.stageLastEventMs : 0,
       headline: this.composeHeadline(formatElapsed(elapsedMs)),
       ...(phaseChange !== undefined && { phaseChange }),
     };
@@ -197,6 +201,7 @@ export class HeartbeatTimer {
     this.lastLlmMs = this.startTime;
     this.lastToolMs = this.startTime;
     this.lastTextMs = this.startTime;
+    this.stageLastEventMs = this.startTime;
     this.stage = 'implementing';
     this.stageIndex = 1;
     this.stageCount = stageCount;
@@ -251,6 +256,7 @@ export class HeartbeatTimer {
       if (prevStage !== fields.stage) {
         this.phaseChangeFrom = prevStage;
         this.phaseChangeTo = fields.stage;
+        this.stageLastEventMs = Date.now();
       }
 
       // Auto-clear review fields for implementing
@@ -339,6 +345,7 @@ export class HeartbeatTimer {
   markEvent(kind: 'llm' | 'tool' | 'text'): void {
     if (!this.started || this.stopped) return;
     const now = Date.now();
+    this.stageLastEventMs = now;
     if (kind === 'llm') {
       this.lastLlmMs = now;
     } else if (kind === 'tool') {

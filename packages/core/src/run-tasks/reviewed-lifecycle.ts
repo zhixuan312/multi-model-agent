@@ -280,6 +280,7 @@ export async function executeReviewedLifecycle(
             // only via explicit emit calls at lifecycle points; the
             // heartbeat tick no longer infers transitions (P5).
             const sinceLastMs = Date.now() - prevEventAtMs;
+            const tickInfo = heartbeat?.getHeartbeatTickInfo();
             emitTaskEvent('heartbeat', {
               elapsed: event.elapsed,
               stage: event.stage,
@@ -291,6 +292,7 @@ export async function executeReviewedLifecycle(
               text: textEmissionChars,
               cost: event.costUSD,
               idle_ms: sinceLastMs,
+              stage_idle_ms: tickInfo?.stageIdleMs ?? sinceLastMs,
             });
           }
           synthOnProgress(taskIndex, event);

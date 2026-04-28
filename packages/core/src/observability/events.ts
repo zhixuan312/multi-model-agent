@@ -90,6 +90,7 @@ export const HeartbeatEvent = TaskBase.extend({
   text: z.number().int().min(0),
   cost: z.number().min(0).nullable(),
   idle_ms: z.number().int().min(0),
+  stage_idle_ms: z.number().int().min(0),
 }).strict();
 
 export const FallbackEvent = TaskBase.extend({
