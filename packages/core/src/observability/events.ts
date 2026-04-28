@@ -82,12 +82,14 @@ export const HeartbeatEvent = TaskBase.extend({
   event: z.literal('heartbeat'),
   elapsed: z.string(),
   stage: z.string(),
+  round: z.number().int().min(0).optional(),
+  cap: z.number().int().min(0).optional(),
   tools: z.number().int().min(0),
   read: z.number().int().min(0),
   wrote: z.number().int().min(0),
   text: z.number().int().min(0),
   cost: z.number().min(0).nullable(),
-  idleMs: z.number().int().min(0),
+  idle_ms: z.number().int().min(0),
 }).strict();
 
 export const FallbackEvent = TaskBase.extend({
@@ -176,8 +178,8 @@ export const ReadOnlyReviewTerminalEvent = TaskBase.extend({
 
 export const StallAbortEvent = TaskBase.extend({
   event: z.literal('stall_abort'),
-  idleMs: z.number().int().min(0),
-  thresholdMs: z.number().int().min(0),
+  idle_ms: z.number().int().min(0),
+  threshold_ms: z.number().int().min(0),
 }).strict();
 
 export const BatchCompletedEvent = BatchBase.extend({

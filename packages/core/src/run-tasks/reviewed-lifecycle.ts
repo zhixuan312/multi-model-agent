@@ -1068,7 +1068,16 @@ export async function executeReviewedLifecycle(
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'diff', attempt: 0, role: 'diffReviewer', assignedTier: diffReviewerTier, reason: diffCall.unavailableReason! });
       }
       const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable || isReviewTransportFailure(diffCall.result) ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
-      emitTaskEvent('review_decision', { stage: 'diff_review', verdict: 'kind' in verdict ? verdict.kind : 'skipped', round: 1 });
+      emitTaskEvent('review_decision', {
+        stage: 'diff_review',
+        verdict: 'kind' in verdict
+          ? (verdict.kind === 'approve' ? 'approved'
+            : verdict.kind === 'concerns' ? 'concerns'
+            : verdict.kind === 'reject' ? 'changes_required'
+            : 'error') // verdict.kind === 'transport_failure'
+          : 'skipped',
+        round: 1,
+      });
       endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(),
         // Diff review uses 'approve' | 'concerns' | 'reject' | 'transport_failure' (DiffReviewVerdict),
         // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
