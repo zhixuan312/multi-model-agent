@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.7.0** — observability redesign: EventBus + sinks, SCHEMA_VERSION 2 with 11 new task.completed fields, P1–P5 reliability fixes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.8.0** — read-only reviewed lifecycle: all 5 read-only routes (audit, review, verify, investigate, debug) now run a single `quality_only` review with bounded rework, structured `findings[]` worker output, and forced cross-tier review (worker complex, reviewer standard). Verify worker tier upgraded to complex. `MMAGENT_READ_ONLY_REVIEW` kill switch for rollback. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
