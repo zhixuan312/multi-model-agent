@@ -851,10 +851,16 @@ export async function executeReviewedLifecycle(
   // catch path. Without this, the recorder only fires on 2 of ~5 exit paths.
   let __finalRunResult: RunResult | undefined;
   const __recordOnce = (r: RunResult): RunResult => {
-    // Stamp stallTriggered on every exit path. The watchdog flag is owned
-    // by this scope; surfacing it on the RunResult lets the caller (and
-    // telemetry) distinguish "no progress" aborts from cap exhaustion.
-    const stamped = stallFired ? { ...r, stallTriggered: true } : r;
+    // Stamp stallTriggered and taskMaxIdleMs on every exit path.
+    // The watchdog flag is owned by this scope; surfacing it on the
+    // RunResult lets the caller (and telemetry) distinguish "no progress"
+    // aborts from cap exhaustion. taskMaxIdleMs is always populated so the
+    // task_completed JSONL event has it regardless of early return.
+    const stamped: RunResult = {
+      ...r,
+      ...(stallFired ? { stallTriggered: true } : {}),
+      taskMaxIdleMs,
+    };
     if (__finalRunResult === undefined) __finalRunResult = stamped;
     return stamped;
   };
@@ -1494,6 +1500,28 @@ export async function executeReviewedLifecycle(
           parentModel: task.parentModel ?? null,
         });
       } catch { /* silent */ }
+
+      // NEW in v3.9.0: local JSONL emit. Distinct from cloud — local is
+      // for verbose/observability consumers; cloud is for telemetry sink.
+      try {
+        const r = __finalRunResult;
+        emitTaskEvent('task_completed', {
+          status: r.status,
+          workerStatus: r.workerStatus ?? null,
+          turns: r.turns,
+          durationMs: r.durationMs ?? null,
+          filesRead: r.filesRead?.length ?? 0,
+          filesWritten: r.filesWritten?.length ?? 0,
+          toolCalls: r.toolCalls?.length ?? 0,
+          inputTokens: r.usage.inputTokens,
+          outputTokens: r.usage.outputTokens,
+          costUSD: r.usage.costUSD,
+          taskMaxIdleMs: r.taskMaxIdleMs ?? null,
+          stallTriggered: r.stallTriggered ?? false,
+          // JSON-stringify so verbose-stream primitives check passes
+          stages: JSON.stringify(r.stageStats ?? emptyStats()),
+        });
+      } catch { /* silent — never break the user task */ }
     }
     transitionStage(currentStage, 'terminal', { stage: 'terminal', stageIndex: 8 }, null);
     heartbeat?.stop();

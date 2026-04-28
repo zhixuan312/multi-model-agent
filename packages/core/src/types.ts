@@ -206,6 +206,9 @@ export interface RunResult {
    *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
    *  signals "no progress" rather than "budget exhausted". */
   stallTriggered?: boolean
+  /** Longest silent gap between LLM/tool/text activity events seen anywhere
+   *  in the lifecycle (across all stages). Use to retro-tune stallTimeoutMs. */
+  taskMaxIdleMs?: number | null
   lifecycleClarificationRequested?: boolean
   workerError?: Error
   /** Per-stage raw stats (Phase 0). Bucketing happens in the telemetry event-builder. */
