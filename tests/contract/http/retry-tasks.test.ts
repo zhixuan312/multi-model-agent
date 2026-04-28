@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import { boot, type HarnessHandle } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
 import { normalize } from '../serializer/index.js';
-import okGolden from '../goldens/endpoints/retry-tasks-ok.json' with { type: 'json' };
 
 async function pollToTerminal(h: HarnessHandle, batchId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 60; i++) {
@@ -54,7 +53,18 @@ describe('contract: POST /retry', () => {
       // Poll the retry batch to terminal
       const terminal = await pollToTerminal(h, newBatchId);
 
-      expect(normalize(terminal)).toEqual(okGolden);
+      const normalized = normalize(terminal);
+      const goldenRel = '../goldens/endpoints/retry-tasks-ok.json';
+      if (process.env.CAPTURE_GOLDEN === '1') {
+        const { writeFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const here = dirname(fileURLToPath(import.meta.url));
+        writeFileSync(resolve(here, goldenRel), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+      } else {
+        const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
+        expect(normalized).toEqual(expected);
+      }
     } finally {
       await h.close();
     }

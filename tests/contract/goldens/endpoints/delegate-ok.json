@@ -52,24 +52,24 @@
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
-        "extraSections": {},
-        "unresolved": []
+        "unresolved": [],
+        "extraSections": {}
       },
       "structuredReport": {
         "summary": "[No artifacts] task produced no file artifacts to review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
-        "extraSections": {},
-        "unresolved": []
+        "unresolved": [],
+        "extraSections": {}
       },
       "filePathsSkipped": false,
       "agents": {
         "implementer": "standard",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable",
         "implementerToolMode": "full",
-        "implementerCapabilities": []
+        "implementerCapabilities": [],
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
       },
       "models": {
         "implementer": "mock",
@@ -85,84 +85,108 @@
       },
       "stageStats": {
         "implementing": {
-          "agentTier": "standard",
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
+          "stage": "implementing",
           "entered": true,
-          "model": "mock",
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
           "modelFamily": "other",
-          "stage": "implementing"
-        },
-        "committing": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "stage": "committing"
-        },
-        "diff_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "diff_review",
-          "verdict": null
-        },
-        "quality_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "quality_review",
-          "verdict": null
-        },
-        "quality_rework": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "stage": "quality_rework"
-        },
-        "spec_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "spec_review",
-          "verdict": null
+          "model": "mock",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "spec_rework": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
+          "stage": "spec_rework",
           "entered": false,
-          "model": null,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
           "modelFamily": null,
-          "stage": "spec_rework"
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
+        },
+        "quality_rework": {
+          "stage": "quality_rework",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
+        },
+        "committing": {
+          "stage": "committing",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>"
         },
         "verifying": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
+          "stage": "verifying",
           "entered": false,
-          "model": null,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
           "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
           "outcome": null,
-          "skipReason": null,
-          "stage": "verifying"
+          "skipReason": null
+        },
+        "spec_review": {
+          "stage": "spec_review",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "verdict": null,
+          "roundsUsed": null
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "verdict": null,
+          "roundsUsed": null
+        },
+        "diff_review": {
+          "stage": "diff_review",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "verdict": null,
+          "roundsUsed": null
         }
       }
     }
@@ -193,13 +217,13 @@
     {
       "prompt": "golden delegate test prompt — please just echo ok",
       "agentType": "standard",
+      "reviewPolicy": "full",
       "tools": "full",
       "timeoutMs": 1800000,
       "maxCostUSD": 10,
       "sandboxPolicy": "cwd-only",
       "briefQualityPolicy": "off",
-      "cwd": "<REPO>",
-      "reviewPolicy": "full"
+      "cwd": "<REPO>"
     }
   ],
   "wallClockMs": "<DETERMINISTIC>"

@@ -16,7 +16,7 @@ describe('parseConfig', () => {
       },
     });
     expect(result.agents.standard.model).toBe('test-model');
-    expect(result.defaults.timeoutMs).toBe(1_800_000);
+    expect(result.defaults.timeoutMs).toBe(3_600_000);
     expect(result.defaults.tools).toBe('full');
   });
 

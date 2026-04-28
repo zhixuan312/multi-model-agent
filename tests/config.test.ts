@@ -52,7 +52,7 @@ describe('loadConfigFromFile', () => {
 
     expect(config.agents.standard.type).toBe('openai-compatible');
     expect(config.agents.standard.model).toBe('deepseek-r1');
-    expect(config.defaults.timeoutMs).toBe(1_800_000);
+    expect(config.defaults.timeoutMs).toBe(3_600_000);
     expect(config.defaults.tools).toBe('full');
   });
 
@@ -371,7 +371,7 @@ describe('server config block', () => {
     expect(cfg.server.limits.projectCap).toBe(200);
     expect(cfg.server.limits.shutdownDrainMs).toBe(30_000);
     expect(cfg.server.limits.maxBodyBytes).toBe(262144);
-    expect(cfg.defaults.stallTimeoutMs).toBe(600_000);
+    expect(cfg.defaults.stallTimeoutMs).toBe(1_200_000);
   });
 
   it('accepts server block with overrides', () => {
