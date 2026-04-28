@@ -253,8 +253,9 @@ export async function executeReviewedLifecycle(
     diagnostics?.logger !== undefined ||
     bus !== undefined;
   // Synthesize an onProgress sink when the caller didn't pass one — the
-  // heartbeat needs a place to emit heartbeat events so the stage-change
-  // detector below fires. Discards events if there is no external consumer.
+  // heartbeat needs a place to emit heartbeat events. Discards events if
+  // there is no external consumer. wrappedOnProgress (defined below) is
+  // ALWAYS defined and feeds the stall watchdog regardless of consumers.
   const synthOnProgress: RunTasksProgressCallback = onProgress ?? (() => {});
   const heartbeat = needHeartbeat
     ? new HeartbeatTimer(
@@ -321,12 +322,17 @@ export async function executeReviewedLifecycle(
   // pass onProgress) silently dropped every tool_call / turn_complete event.
   let textEmissionChars = 0;
   const markRunnerEvent = (): void => { lastRunnerEventAtMs = Date.now(); };
-  const wrappedOnProgress = needHeartbeat
-    ? (event: InternalRunnerEvent) => {
-        if (event.kind === 'turn_start' || event.kind === 'text_emission' || event.kind === 'tool_call' || event.kind === 'turn_complete') {
-          markRunnerEvent();
-        }
-        if (event.kind === 'worker_start') {
+  const wrappedOnProgress = (event: InternalRunnerEvent): void => {
+    // Watchdog: fire on every activity event regardless of telemetry consumers.
+    // Without this, a no-consumer caller leaves lastRunnerEventAtMs frozen at
+    // taskStartMs and the stall watchdog fires at stallTimeoutMs regardless of
+    // actual LLM activity.
+    if (event.kind === 'turn_start' || event.kind === 'text_emission' || event.kind === 'tool_call' || event.kind === 'turn_complete') {
+      markRunnerEvent();
+    }
+    if (!needHeartbeat) return;
+
+    if (event.kind === 'worker_start') {
           emitTaskEvent('worker_start', {
             model: event.model,
             providerType: event.providerType,
@@ -405,8 +411,7 @@ export async function executeReviewedLifecycle(
             });
           }
         }
-      }
-    : undefined;
+      };
 
   const cwd = task.cwd ?? process.cwd();
   const taskStartMs = Date.now();
