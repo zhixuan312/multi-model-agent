@@ -5,7 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [3.8.0] - 2026-04-28
+## [3.8.1] - 2026-04-28
+
+### Changed (BREAKING)
+- **read-only review is annotation, not gating.** All 5 read-only routes (`audit`, `review`, `verify`, `investigate`, `debug`) replace the gating `quality_only` review with a single annotation pass. The reviewer no longer returns `'approved'` / `'changes_required'`; it returns a JSON array of `{id, reviewerConfidence, reviewerSeverity?}` annotations matched to worker findings by `id`. The lifecycle merges annotations into the envelope's `findings[]` and exits — no rework loop. This restores ~10–15 min audit wall-clock (3.7.0 baseline) versus ~30 min in 3.8.0.
+- **`Finding` schema simplified.** Drop `file`, `line`, `sourceQuote`. Rename `suggestedFix` → `suggestion` (more general — works for investigate's follow-up questions too). Add required `evidence: string` (≥20 chars; embed `file:line` as prose plus a one-sentence explanation of what the cited code shows). Add reviewer-emitted `reviewerConfidence: number` (integer 0-100) and optional `reviewerSeverity: 'high'|'medium'|'low'`. Worker emits `WorkerFinding`; reviewer annotation produces `AnnotatedFinding` (which is what ends up in the envelope).
+- **Verdict simplification.** For read-only routes `qualityReviewVerdict` replaces `'approved'`/`'changes_required'` with `'annotated'`. `'error'` and `'skipped'` carry forward. `roundsUsed ∈ {0, 1}`. Artifact-route gating (`reviewPolicy: 'full'`) is unchanged.
+- **`read_only_review.rework` telemetry event removed entirely** (no rework path exists for read-only routes anymore). `ReadOnlyReviewQualityEvent` gains `severityCorrections` (count) and `meanConfidence` (0-100, nullable) so dashboards keep meaningful signal under the new model.
+
+### Added
+- **`mma-investigate` per-route prompt wired (bug fix).** `buildInvestigateQualityPrompt` was defined in 3.8.0 but never passed to `executeReviewedLifecycle` from `investigate.ts` — investigate fell through to the generic gating prompt. Now wired correctly, matching the other 4 read-only executors.
+
+### Fixed
+- **`mma-execute-plan` SKILL.md no longer documents an `agentType` field.** The server's Zod schema for `/execute-plan` does not accept `agentType` (and intentionally so — tier should come from the plan, not the dispatcher). The doc-vs-server drift had been silently producing 400s. SKILL.md updated; readers needing direct tier control are pointed at `mma-delegate`.
+
+
 
 ### Added
 - **read-only review lifecycle.** All 5 read-only routes (`audit`, `review`, `verify`, `investigate`, `debug`) now run a single `quality_only` review stage with bounded rework. The lifecycle skips spec_review and runs quality_review only, capped by `maxReworksFor('quality')`. Worker tier is forced `complex`; reviewer tier is forced `standard` — cross-tier review is mandatory for these routes.
@@ -932,7 +946,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.1...HEAD
+[3.8.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.0...v3.8.1
 [3.8.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.7.0...v3.8.0
 [3.7.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.7...v3.7.0
 [3.6.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.6.6...v3.6.7

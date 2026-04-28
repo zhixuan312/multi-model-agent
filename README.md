@@ -89,7 +89,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.8.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.8.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -292,7 +292,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.8.0** — read-only reviewed lifecycle: all 5 read-only routes (audit, review, verify, investigate, debug) now run a single `quality_only` review with bounded rework, structured `findings[]` worker output, and forced cross-tier review (worker complex, reviewer standard). Verify worker tier upgraded to complex. `MMAGENT_READ_ONLY_REVIEW` kill switch for rollback. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.8.1** — read-only review becomes annotation, not gating. The 5 read-only routes (audit, review, verify, investigate, debug) now run a single reviewer pass that annotates each worker finding with `reviewerConfidence` (0-100) and an optional `reviewerSeverity` correction — no rework loop, restoring 3.7.0-comparable wall-clock. `Finding` schema simplified (drop `file`/`line`/`sourceQuote`; required `evidence`; rename `suggestedFix` → `suggestion`). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
