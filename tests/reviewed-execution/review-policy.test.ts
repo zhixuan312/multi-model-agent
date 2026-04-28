@@ -146,5 +146,8 @@ describe('reviewPolicy branching', () => {
     expect(result.qualityReviewStatus).toBe('skipped');
     expect(specReviewCalls).toBe(1);
     expect(qualityReviewCalls).toBe(0);
+    expect(result.reviewRounds).toBeDefined();
+    expect(result.reviewRounds!.spec).toBeGreaterThanOrEqual(1);
+    expect(result.reviewRounds!.quality).toBe(0);
   });
 });

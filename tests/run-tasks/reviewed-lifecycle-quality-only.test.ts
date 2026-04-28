@@ -202,4 +202,55 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(result.models!.specReviewer).toBeNull();
     expect(result.models!.qualityReviewer).toBeTruthy();
   });
+
+  it('uses qualityReviewPromptBuilder when provided', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = {
+      prompt: 'audit this code',
+      agentType: 'complex' as const,
+      reviewPolicy: 'quality_only' as const,
+    };
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: async () => ({
+          output: '## Summary\ndone\n\n## Files changed\n- report.md: added\n\n## Validations run\n- lint: passed\n\n## Deviations from brief\n\n## Unresolved\n',
+          status: 'ok' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/a.ts'],
+          filesWritten: ['report.md'],
+          toolCalls: ['writeFile(report.md)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        }),
+      },
+      capabilityOverride: false,
+    };
+
+    let builderCalled = false;
+    let receivedWorkerOutput = '';
+    let receivedBrief = '';
+
+    const builder = (ctx: { workerOutput: string; brief: string }) => {
+      builderCalled = true;
+      receivedWorkerOutput = ctx.workerOutput;
+      receivedBrief = ctx.brief;
+      return 'CUSTOM_QUALITY_PROMPT_PREFIX\n' + ctx.workerOutput;
+    };
+
+    const result = await executeReviewedLifecycle(
+      task, resolved, config, 0,
+      undefined, undefined, undefined, undefined, 'audit',
+      undefined, undefined, undefined,
+      builder,
+    );
+
+    expect(builderCalled).toBe(true);
+    expect(receivedBrief).toBe('audit this code');
+    expect(receivedWorkerOutput).toContain('## Summary');
+    expect(result.stageStats!.quality_review.entered).toBe(true);
+  });
 });
