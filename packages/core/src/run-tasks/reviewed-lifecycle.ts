@@ -184,7 +184,7 @@ export async function executeReviewedLifecycle(
   _client?: string,
   _triggeringSkill?: string,
   bus?: import('../observability/bus.js').EventBus,
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: import('../executors/_shared/findings-schema.js').WorkerFinding[] }) => string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const routeKey = _route ?? '';

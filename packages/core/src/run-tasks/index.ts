@@ -66,7 +66,7 @@ export interface RunTasksOptions {
   /** EventBus for structured observability events. */
   bus?: EventBus;
   /** Per-route quality review prompt builder (for quality_only reviewPolicy). */
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: import('../executors/_shared/findings-schema.js').WorkerFinding[] }) => string;
 }
 
 export async function runTasks(

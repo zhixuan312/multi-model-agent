@@ -1,119 +1,169 @@
 /**
- * Quality-only review prompts for the 5 read-only mma-* routes.
+ * Quality-only review prompts for the 5 read-only mma-* routes (3.8.1+).
  *
- * Each prompt asks the reviewer:
- *   (a) Schema check: confirm worker emitted a well-formed findings[] array.
- *   (b) Per-finding judgment: is the finding the kind requested AND grounded?
+ * Each prompt asks the reviewer to ANNOTATE every worker finding with:
+ *  - reviewerConfidence: integer 0–100, how confident YOU (reviewer) are that
+ *    this finding is correct, on-brief, and well-grounded in the evidence.
+ *  - reviewerSeverity (optional): only set when you disagree with the worker's
+ *    severity. Workers tend to inflate; use this to dial down.
  *
- * If schema check fails, return changes_required immediately and skip per-finding review.
+ * The reviewer returns a single ```json fenced block containing a JSON array
+ * of {id, reviewerConfidence, reviewerSeverity?} objects, one per worker
+ * finding (matched by id). NO verdict, NO gate, NO rework signal.
  */
+
+import type { WorkerFinding } from '../executors/_shared/findings-schema.js';
 
 interface PromptContext {
   workerOutput: string;
   brief: string;
+  workerFindings: WorkerFinding[];
 }
 
-const SCHEMA_PREAMBLE = `
-First, confirm the worker's output includes a well-formed \`findings[]\` array (a JSON array, possibly empty if the worker found nothing, but present as a parseable structure). If the array is missing, malformed, or returned as prose only, return \`changes_required\` with the reason "missing or malformed findings array" and do NOT proceed to per-finding review.
+const RUBRIC = `
+## How to score \`reviewerConfidence\` (integer 0-100)
+
+You are scoring whether YOU would defend this finding if pushed. Not severity.
+Not the worker's self-confidence.
+
+  80-100: evidence directly supports the claim, on-brief, defend without hesitation
+  60-79:  evidence supports claim with minor gaps, on-brief, plausible
+  40-59:  claim plausible but evidence thin, partial, or requires inference
+  20-39:  claim weak, evidence does not back it up, OR off-brief
+   0-19:  unsupported, contradicted, fabricated, OR completely off-brief
+
+## How to use \`reviewerSeverity\` (optional)
+
+Only set when you DISAGREE with the worker's \`severity\`. Workers tend to
+inflate ("everything is high"); use \`reviewerSeverity\` to dial down. Omit
+when you agree.
+
+## Output format (REQUIRED)
+
+Respond with exactly one fenced JSON code block. The block must contain a
+JSON array of objects, one entry per worker finding (matched by \`id\`). Example:
+
+\`\`\`json
+[
+  { "id": "F1", "reviewerConfidence": 85 },
+  { "id": "F2", "reviewerConfidence": 35, "reviewerSeverity": "low" },
+  { "id": "F3", "reviewerConfidence": 70 }
+]
+\`\`\`
+
+Every worker finding id must appear exactly once. No extra ids. No missing
+ids. Surrounding prose is allowed but ignored by the parser.
 `.trim();
 
-const COMMON_TAIL = `
-When re-reading files, treat \`findings[].line\` as 1-indexed (matches editor convention). For multi-line findings, \`line\` points to the start of the cited region; use \`sourceQuote\` (when present) for the full text.
-
-Output a single verdict: \`approved\` (if every finding is on-brief and grounded) or \`changes_required\` (with per-finding feedback identifying which findings failed which check).
-`.trim();
+function renderFindings(findings: WorkerFinding[]): string {
+  return JSON.stringify(findings, null, 2);
+}
 
 export function buildAuditQualityPrompt(ctx: PromptContext): string {
-  return `${SCHEMA_PREAMBLE}
+  return `You are reviewing an audit produced by a worker.
 
 The user requested an audit. The brief was:
 
 ${ctx.brief}
 
-The worker produced a \`findings[]\` array. For each finding:
-(a) Is it of the requested audit type? (e.g., security audit -> security finding, not style nit)
-(b) Re-read the cited file at \`findings[].file\` (the audit target document) at the given \`findings[].line\`. Is the worker's claim true about that text?
+## On-brief check (per finding)
 
-Flag findings that are off-type, vague, unsupported, or misread the source.
+For each worker finding, ask: is this the kind of issue the audit asked for?
+A security audit should produce security findings, not style nits.
 
-${COMMON_TAIL}
+## Worker findings to annotate
 
-Worker output:
-${ctx.workerOutput}`;
+\`\`\`json
+${renderFindings(ctx.workerFindings)}
+\`\`\`
+
+${RUBRIC}`;
 }
 
 export function buildReviewQualityPrompt(ctx: PromptContext): string {
-  return `${SCHEMA_PREAMBLE}
+  return `You are reviewing a code review produced by a worker.
 
 The user requested a code review. The brief was:
 
 ${ctx.brief}
 
-The worker produced a \`findings[]\` array. For each finding:
-(a) Is it within the requested focus area? (e.g., security review -> security finding, not formatting nit)
-(b) Re-read the cited file/line. Does the worker's claim correctly describe the code's behavior?
+## On-brief check (per finding)
 
-Flag findings that misread the code or stretch beyond what the cited lines support.
+For each worker finding, ask: is this within the requested focus area?
+A security review should produce security findings, not formatting nits.
 
-${COMMON_TAIL}
+## Worker findings to annotate
 
-Worker output:
-${ctx.workerOutput}`;
+\`\`\`json
+${renderFindings(ctx.workerFindings)}
+\`\`\`
+
+${RUBRIC}`;
 }
 
 export function buildVerifyQualityPrompt(ctx: PromptContext): string {
-  return `${SCHEMA_PREAMBLE}
+  return `You are reviewing a verification report produced by a worker.
 
 The user provided a checklist of acceptance criteria. The brief was:
 
 ${ctx.brief}
 
-The worker produced a \`findings[]\` array, where each finding maps to one checklist item the worker judged as either met (no finding emitted, or a 'low'-severity confirmation) or unmet (a 'high'/'medium'-severity finding describing what's missing). For each finding:
-(a) Does the finding correspond to a real checklist item from the brief?
-(b) Re-read the cited evidence in \`findings[].file\` and \`findings[].sourceQuote\` (when present). Does the cited evidence actually demonstrate the worker's claim about that checklist item?
+## On-brief check (per finding)
 
-Also: confirm every checklist item from the brief is accounted for — if any checklist item has no corresponding entry in \`findings[]\` (and no implicit "met" claim), flag it.
+Each finding should map to one checklist item with evidence the criterion was
+met or unmet. Flag findings that don't correspond to any checklist item, or
+whose evidence doesn't actually demonstrate the claimed pass/fail status.
 
-${COMMON_TAIL}
+## Worker findings to annotate
 
-Worker output:
-${ctx.workerOutput}`;
+\`\`\`json
+${renderFindings(ctx.workerFindings)}
+\`\`\`
+
+${RUBRIC}`;
 }
 
 export function buildInvestigateQualityPrompt(ctx: PromptContext): string {
-  return `${SCHEMA_PREAMBLE}
+  return `You are reviewing a codebase investigation produced by a worker.
 
 The user asked a question. The brief was:
 
 ${ctx.brief}
 
-The worker produced a synthesis with \`findings[]\` (each finding may have \`file\`, \`line\`, or both null for project-level claims). For each finding:
-(a) Is the finding relevant to the question?
-(b) When \`findings[].file\` is non-null, confirm the file exists. When \`findings[].line\` is also non-null, treat it as 1-indexed and re-read that location. Does the cited content support the finding's \`claim\`?
+## On-brief check (per finding)
 
-Flag findings whose citations are fabricated, misquoted, or stretched beyond what the source supports. Also flag claims that aren't backed by any cited evidence.
+Each finding should be relevant to the question. Findings may be code-level
+(file:line cited in evidence) or project-level synthesis (what was searched,
+what was not found). Flag findings whose evidence does not support the claim
+or whose claim drifts from the question.
 
-${COMMON_TAIL}
+## Worker findings to annotate
 
-Worker output:
-${ctx.workerOutput}`;
+\`\`\`json
+${renderFindings(ctx.workerFindings)}
+\`\`\`
+
+${RUBRIC}`;
 }
 
 export function buildDebugQualityPrompt(ctx: PromptContext): string {
-  return `${SCHEMA_PREAMBLE}
+  return `You are reviewing a debugging hypothesis produced by a worker.
 
 The user reported a failure. The brief was:
 
 ${ctx.brief}
 
-The worker produced a hypothesis and findings about cited evidence (reproducer, error pattern, code paths). For each cited piece of evidence:
-(a) Is it relevant to the reported failure?
-(b) Does the hypothesis logically follow from the evidence, or does it exceed what the trace actually shows?
+## On-brief check (per finding)
 
-Flag claims that aren't supported by the cited evidence.
+Each finding should be a hypothesis, root-cause claim, or evidence
+(reproducer, error pattern, code path). Flag findings that don't logically
+follow from cited evidence or that exceed what the trace actually shows.
 
-${COMMON_TAIL}
+## Worker findings to annotate
 
-Worker output:
-${ctx.workerOutput}`;
+\`\`\`json
+${renderFindings(ctx.workerFindings)}
+\`\`\`
+
+${RUBRIC}`;
 }

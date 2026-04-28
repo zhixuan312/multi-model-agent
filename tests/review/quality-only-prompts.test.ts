@@ -6,9 +6,25 @@ import {
   buildInvestigateQualityPrompt,
   buildDebugQualityPrompt,
 } from '../../packages/core/src/review/quality-only-prompts.js';
+import type { WorkerFinding } from '../../packages/core/src/executors/_shared/findings-schema.js';
 
-describe('quality-only review prompts', () => {
-  const buildersAndContexts: Array<[string, (ctx: any) => string]> = [
+const SAMPLE_FINDINGS: WorkerFinding[] = [
+  {
+    id: 'F1',
+    severity: 'high',
+    claim: 'Missing null check on req.body.user',
+    evidence: 'src/auth/login.ts:89 — the access of req.body.user.id is unguarded',
+  },
+];
+
+const ctx = (route: string) => ({
+  workerOutput: 'sample worker output',
+  brief: `please ${route} this`,
+  workerFindings: SAMPLE_FINDINGS,
+});
+
+describe('quality-only review prompts (annotation)', () => {
+  const builders: Array<[string, (c: any) => string]> = [
     ['audit', buildAuditQualityPrompt],
     ['review', buildReviewQualityPrompt],
     ['verify', buildVerifyQualityPrompt],
@@ -16,22 +32,43 @@ describe('quality-only review prompts', () => {
     ['debug', buildDebugQualityPrompt],
   ];
 
-  for (const [name, builder] of buildersAndContexts) {
-    it(`${name} prompt includes the schema-parse-failure preamble`, () => {
-      const prompt = builder({ workerOutput: 'x', brief: 'y' } as any);
-      expect(prompt).toMatch(/well-formed `findings\[\]` array/i);
-      expect(prompt).toMatch(/missing or malformed findings array/i);
+  for (const [route, builder] of builders) {
+    it(`${route} prompt embeds the rubric for reviewerConfidence (0-100 bands)`, () => {
+      const out = builder(ctx(route));
+      expect(out).toMatch(/reviewerConfidence/);
+      expect(out).toMatch(/0-100/);
+      expect(out).toMatch(/80-100/);
+      expect(out).toMatch(/0-19/);
     });
 
-    it(`${name} prompt instructs 1-indexed line numbers`, () => {
-      const prompt = builder({ workerOutput: 'x', brief: 'y' } as any);
-      expect(prompt).toMatch(/1-indexed/i);
+    it(`${route} prompt explains reviewerSeverity is only-on-disagreement`, () => {
+      const out = builder(ctx(route));
+      expect(out).toMatch(/reviewerSeverity/);
+      expect(out).toMatch(/disagree|inflate|dial down/i);
     });
 
-    it(`${name} prompt asks the reviewer to return approved or changes_required`, () => {
-      const prompt = builder({ workerOutput: 'x', brief: 'y' } as any);
-      expect(prompt).toMatch(/approved/);
-      expect(prompt).toMatch(/changes_required/);
+    it(`${route} prompt instructs a single \`\`\`json fenced block output`, () => {
+      const out = builder(ctx(route));
+      expect(out).toMatch(/```json/);
+      expect(out).toMatch(/JSON array/i);
+    });
+
+    it(`${route} prompt embeds the worker findings as a json block`, () => {
+      const out = builder(ctx(route));
+      expect(out).toContain('"id": "F1"');
+      expect(out).toContain('"severity": "high"');
+    });
+
+    it(`${route} prompt does NOT ask for approved/changes_required (no gating)`, () => {
+      const out = builder(ctx(route));
+      expect(out).not.toMatch(/changes_required/);
+      // 'approved' may appear in unrelated context but should not be requested as a verdict
+      expect(out).not.toMatch(/return\s+`?approved`?/i);
+    });
+
+    it(`${route} prompt names the route's brief context`, () => {
+      const out = builder(ctx(route));
+      expect(out.toLowerCase()).toContain(route);
     });
   }
 });
