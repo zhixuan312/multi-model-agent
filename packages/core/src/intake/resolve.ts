@@ -2,13 +2,28 @@ import type { TaskSpec } from '../types.js';
 import type { MultiModelConfig } from '../types.js';
 import type { DraftTask, SourceRoute } from './types.js';
 
+// 3.8.1 worker contract: each finding object has fields {id, severity, claim, evidence, suggestion?}.
+// `evidence` is REQUIRED and must be ≥20 chars — embed file:line as prose plus a
+// one-sentence explanation of what the cited code shows. Reviewer-emitted fields
+// (reviewerConfidence, reviewerSeverity) are added in the annotation pass; the
+// worker MUST NOT include them.
+const FINDINGS_BASE = [
+  'Your output MUST include a single ```json fenced code block containing a `findings[]` array.',
+  'Each finding object has these fields:',
+  '- `id` (string, unique within the array)',
+  '- `severity` (\'high\' | \'medium\' | \'low\')',
+  '- `claim` (string, what is wrong / what is true)',
+  '- `evidence` (string, REQUIRED, at least 20 characters): embed `file:line` as prose plus a one-sentence explanation of what the cited code or text actually shows. For project-level findings, describe what was searched/checked instead.',
+  '- `suggestion?` (string, optional): a fix, follow-up step, or recommendation',
+].join('\n');
+
 export const OUTPUT_CONTRACT_CLAUSES: Partial<Record<SourceRoute, string>> = {
-  review_code: 'Your output MUST include a `findings[]` array (JSON, alongside any prose). Each finding has: `id` (string), `severity` (\'high\'|\'medium\'|\'low\'), `file` (string|null), `line` (number 1-indexed|null), `claim` (string), `sourceQuote?` (string), `suggestedFix?` (string). For project-level findings (no specific file), set `file` and `line` to null. For multi-line findings, point `line` at the start of the cited region and use `sourceQuote` for the full text. Each finding should describe a code-level concern with a suggested fix where applicable.',
-  debug_task: 'Your output MUST include a `findings[]` array (JSON, alongside any prose). Each finding has: `id` (string), `severity` (\'high\'|\'medium\'|\'low\'), `file` (string|null), `line` (number 1-indexed|null), `claim` (string), `sourceQuote?` (string), `suggestedFix?` (string). For project-level findings (no specific file), set `file` and `line` to null. For multi-line findings, point `line` at the start of the cited region and use `sourceQuote` for the full text. Use hypothesis-driven debugging: each finding should identify a root cause and propose a fix.',
-  verify_work: 'Your output MUST include a `findings[]` array (JSON, alongside any prose). Each finding has: `id` (string), `severity` (\'high\'|\'medium\'|\'low\'), `file` (string|null), `line` (number 1-indexed|null), `claim` (string), `sourceQuote?` (string), `suggestedFix?` (string). For project-level findings (no specific file), set `file` and `line` to null. For multi-line findings, point `line` at the start of the cited region and use `sourceQuote` for the full text. Map each checklist item to a finding: pass/fail with evidence linked to the relevant file and line.',
-  audit_document: 'Your output MUST include a `findings[]` array (JSON, alongside any prose). Each finding has: `id` (string), `severity` (\'high\'|\'medium\'|\'low\'), `file` (string|null), `line` (number 1-indexed|null), `claim` (string), `sourceQuote?` (string), `suggestedFix?` (string). For project-level findings (no specific file), set `file` and `line` to null. For multi-line findings, point `line` at the start of the cited region and use `sourceQuote` for the full text. Each finding should describe an issue discovered in the document with its severity.',
+  review_code: `${FINDINGS_BASE}\nEach finding should describe a code-level concern (correctness, security, performance, style as applicable to the focus). Embed the file:line in evidence; the reader will jump to the source from your prose.`,
+  debug_task: `${FINDINGS_BASE}\nUse hypothesis-driven debugging: each finding should identify a root cause and propose a fix in \`suggestion\`. Evidence should quote the relevant trace, log line, or code path.`,
+  verify_work: `${FINDINGS_BASE}\nMap each checklist item from the brief to a finding: pass (low severity, evidence shows the criterion was met) or fail (high/medium severity, evidence shows what is missing). One finding per checklist item.`,
+  audit_document: `${FINDINGS_BASE}\nEach finding should describe an issue discovered in the audited document. Severity reflects impact if the issue stands.`,
   execute_plan: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
-  investigate_codebase: 'Your output MUST include a `findings[]` array (JSON, alongside any prose). Each finding has: `id` (string), `severity` (\'high\'|\'medium\'|\'low\'), `file` (string|null), `line` (number 1-indexed|null), `claim` (string), `sourceQuote?` (string), `suggestedFix?` (string). For project-level findings (no specific file), set `file` and `line` to null. For multi-line findings, point `line` at the start of the cited region and use `sourceQuote` for the full text. State your confidence level (`high`, `medium`, or `low`) for each finding and list any questions you could not resolve from the available evidence.',
+  investigate_codebase: `${FINDINGS_BASE}\nFor an investigation, \`suggestion\` is optional and may be a follow-up question or angle to explore rather than a code fix. Evidence may be a file:line citation or a description of what was searched (e.g., "Searched src/middleware/, src/auth/ — no auth middleware found").`,
 };
 
 export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
