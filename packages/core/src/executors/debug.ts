@@ -7,6 +7,8 @@ import { runTasks } from '../run-tasks/index.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { buildDebugQualityPrompt } from '../review/quality-only-prompts.js';
+import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 
 // --- Ported from packages/mcp/src/tools/debug-task.ts ---
 
@@ -49,7 +51,7 @@ export async function executeDebug(
 
   const taskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
-    reviewPolicy: 'full',
+    reviewPolicy: 'quality_only',
     briefQualityPolicy: 'off',
     done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
     tools: config.defaults?.tools ?? 'full',
@@ -65,7 +67,7 @@ export async function executeDebug(
 
   let results: RunResult[];
   try {
-    results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }) });
+    results = await runTasks([{ ...taskSpec, prompt } as TaskSpec], config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }), qualityReviewPromptBuilder: buildDebugQualityPrompt });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:debug' }, workerStatus: 'failed' as const }];
@@ -73,6 +75,8 @@ export async function executeDebug(
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(0, results);
   const costSummary = computeAggregateCost(results);
+  const killSwitchActive = process.env['MMAGENT_READ_ONLY_REVIEW'] === 'disabled';
+  const verdicts = mapReviewVerdicts(results[0], killSwitchActive);
 
   return {
     headline: composeTerminalHeadline({ tool: 'debug', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
@@ -85,6 +89,9 @@ export async function executeDebug(
     batchId: randomUUID(),
     wallClockMs: 0,
     parentModel,
+    specReviewVerdict: verdicts.specReviewVerdict,
+    qualityReviewVerdict: verdicts.qualityReviewVerdict,
+    roundsUsed: verdicts.roundsUsed,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),
   };
 }
