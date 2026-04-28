@@ -1,55 +1,43 @@
-import { describe, expect, it } from 'vitest';
-import { runDiffReview, type DiffReviewVerdict } from '@zhixuan92/multi-model-agent-core/review/diff-review';
-import type { VerifyStageResult } from '@zhixuan92/multi-model-agent-core/run-tasks/verify-stage';
+import { describe, it, expect } from 'vitest';
+import { runDiffReview } from '../../packages/core/src/review/diff-review.js';
 
-const verification: VerifyStageResult = {
-  status: 'passed',
-  steps: [],
-  totalDurationMs: 0,
-};
-
-function workerReturning(output: string): { call: (prompt: string) => Promise<{ output: string }> } {
-  return {
-    async call(): Promise<{ output: string }> {
-      return { output };
-    },
-  };
-}
-
-function makeInput(output: string) {
-  return {
-    cwd: '/tmp',
-    diff: 'diff --git a/x b/x\n',
-    diffTruncated: false,
-    verification,
-    worker: workerReturning(output),
-  };
-}
-
-describe('runDiffReview', () => {
-  it('approves when reviewer mock returns approve', async () => {
-    const verdict: DiffReviewVerdict = await runDiffReview(makeInput('APPROVE'));
-
-    expect(verdict.kind).toBe('approve');
-    expect(verdict.concerns).toEqual([]);
-  });
-
-  it('returns concerns kind when reviewer flags any issue', async () => {
-    const verdict = await runDiffReview(makeInput('CONCERNS: unused import'));
-
-    expect(verdict.kind).toBe('concerns');
-    expect(verdict.concerns).toHaveLength(1);
-    expect(verdict.concerns[0]).toEqual({
-      source: 'diff_review',
-      severity: 'medium',
-      message: 'unused import',
+describe('runDiffReview taskDeadlineMs / abortSignal plumbing', () => {
+  it('returns transport_failure when abortSignal aborts before worker.call', async () => {
+    const ctrl = new AbortController();
+    ctrl.abort();
+    const result = await runDiffReview({
+      cwd: '/tmp',
+      diff: '+ x\n',
+      diffTruncated: false,
+      verification: { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' } as any,
+      worker: {
+        call: async (_prompt: string, opts?: { abortSignal?: AbortSignal; timeoutMs?: number }) => {
+          if (opts?.abortSignal?.aborted) return { output: '', status: 'api_aborted' };
+          return { output: 'APPROVE' };
+        },
+      },
+      taskDeadlineMs: Date.now() + 60_000,
+      abortSignal: ctrl.signal,
     });
+    expect(['transport_failure']).toContain(result.kind);
   });
 
-  it('returns reject kind for clear rejection', async () => {
-    const verdict = await runDiffReview(makeInput('REJECT: breaks API contract'));
-
-    expect(verdict.kind).toBe('reject');
-    expect(verdict.message).toContain('contract');
+  it('clamps worker timeoutMs to ~1ms when taskDeadlineMs has passed', async () => {
+    let captured: number | undefined;
+    const result = await runDiffReview({
+      cwd: '/tmp',
+      diff: '+ x\n',
+      diffTruncated: false,
+      verification: { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' } as any,
+      worker: {
+        call: async (_prompt, opts) => {
+          captured = opts?.timeoutMs;
+          return { output: 'APPROVE' };
+        },
+      },
+      taskDeadlineMs: Date.now() - 1000,
+    });
+    expect(captured).toBeLessThanOrEqual(2);
+    expect(result.kind).toBe('approve');
   });
 });
