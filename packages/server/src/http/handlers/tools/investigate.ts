@@ -11,7 +11,7 @@ import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
 import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag.js';
+import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
 
 export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
   return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
