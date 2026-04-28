@@ -89,7 +89,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.9.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.9.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -292,7 +292,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.9.0** — watchdog hardening + per-stage idle telemetry. The reviewer entry points (`runSpecReview` / `runQualityReview` / `runDiffReview`) now thread `taskDeadlineMs` + `abortSignal` + `onProgress`, closing the leak that allowed reviewer hangs to run past the documented cap. Total wall-clock cap bumped 30 → 60 min, stall watchdog 10 → 20 min, both via named constants. New `StageIdleTracker` records `maxIdleMs`/`totalIdleMs`/`activityEvents` per stage and surfaces them on `task_completed` + the heartbeat (`stage_idle_ms`). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.9.1** — Codex skill installs now use Codex's native `~/.codex/skills/<skillName>/SKILL.md` layout, so all MMA skills load independently in new Codex sessions. The installer also removes the legacy MMA-managed `AGENTS.md` block while preserving user-authored `AGENTS.md` content. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.9.0** — watchdog hardening + per-stage idle telemetry. The three reviewer entry points (`runSpecReview` / `runQualityReview` / `runDiffReview`) now accept and thread `taskDeadlineMs` + `abortSignal` + `onProgress` through their internal `delegateWithEscalation` calls, closing the leak that let reviewer hangs run past the cap. Defaults bumped: `timeoutMs` 30 → 60 min, `stallTimeoutMs` 10 → 20 min, via named constants. `StageStats` gains `maxIdleMs`/`totalIdleMs`/`activityEvents` per stage; `RunResult` gains `taskMaxIdleMs`. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.9.1** — no core runtime API changes; this patch release ships the server package's Codex native skill-install fix while keeping the 3.9.0 watchdog and per-stage idle telemetry behavior unchanged. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
