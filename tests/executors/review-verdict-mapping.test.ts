@@ -29,4 +29,20 @@ describe('mapReviewVerdicts', () => {
     expect(r.qualityReviewVerdict).toBe('not_applicable');
     expect(r.roundsUsed).toBe(1);
   });
+
+  it('maps lifecycle annotated → envelope annotated (3.8.1)', () => {
+    const r = mapReviewVerdicts(
+      { specReviewStatus: 'not_applicable', qualityReviewStatus: 'annotated', reviewRounds: { spec: 0, quality: 1, metadata: 0, cap: 2 } } as any,
+      false,
+    );
+    expect(r).toEqual({ specReviewVerdict: 'not_applicable', qualityReviewVerdict: 'annotated', roundsUsed: 1 });
+  });
+
+  it('roundsUsed is 1 for annotated path (no rework loop)', () => {
+    const r = mapReviewVerdicts(
+      { specReviewStatus: 'not_applicable', qualityReviewStatus: 'annotated', reviewRounds: { spec: 0, quality: 1, metadata: 0, cap: 1 } } as any,
+      false,
+    );
+    expect(r.roundsUsed).toBe(1);
+  });
 });
