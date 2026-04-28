@@ -1,26 +1,44 @@
 import { z } from 'zod';
 
 /**
- * Structured finding shape emitted by all 5 read-only mma-* workers.
- * Used by the quality-review stage to iterate per-finding judgments.
+ * Finding shape emitted by all 5 read-only mma-* workers, then annotated by
+ * the quality-review stage with reviewer fields.
  *
- * - `severity` is lowercase to match RunResult.concerns[].severity.
- * - `file` and `line` are independently nullable: project-level findings
- *   have both null; multi-line findings keep `line` pointing at the start
- *   of the cited region and use `sourceQuote` for the full text.
- * - `line` is 1-indexed (editor convention).
- * - `sourceQuote` and `suggestedFix` are optional.
+ * Two phases:
+ * - WorkerFinding: what the worker emits (no reviewer fields).
+ * - AnnotatedFinding: WorkerFinding + reviewer-added confidence and optional
+ *   severity-correction. This is what ends up in the executor envelope.
+ *
+ * - severity: lowercase to match RunResult.concerns[].severity.
+ * - evidence: required, ≥20 chars. Embed file:line as prose plus a one-sentence
+ *   explanation of what the cited code shows. Forces grounding so reviewer
+ *   confidence is meaningful.
+ * - suggestion: optional. For investigate, may be a follow-up question rather
+ *   than a code fix.
+ * - reviewerConfidence: integer 0-100. Reviewer's confidence that the finding
+ *   is correct, on-brief, and well-grounded in the worker's evidence.
+ * - reviewerSeverity: only present when the reviewer disagrees with the
+ *   worker's severity (workers tend to inflate; reviewer can dial down).
  */
-export const findingSchema = z.object({
+export const workerFindingSchema = z.object({
   id: z.string().min(1),
   severity: z.enum(['high', 'medium', 'low']),
-  file: z.string().nullable(),
-  line: z.number().int().min(1).nullable(),
   claim: z.string().min(1),
-  sourceQuote: z.string().optional(),
-  suggestedFix: z.string().optional(),
-});
+  evidence: z.string().min(20),
+  suggestion: z.string().optional(),
+}).strict();
 
-export const findingsSchema = z.array(findingSchema);
+export const workerFindingsSchema = z.array(workerFindingSchema).refine(
+  (arr) => new Set(arr.map(f => f.id)).size === arr.length,
+  { message: 'duplicate finding id within array' },
+);
 
-export type Finding = z.infer<typeof findingSchema>;
+export const annotatedFindingSchema = workerFindingSchema.extend({
+  reviewerConfidence: z.number().int().min(0).max(100),
+  reviewerSeverity: z.enum(['high', 'medium', 'low']).optional(),
+}).strict();
+
+export const annotatedFindingsSchema = z.array(annotatedFindingSchema);
+
+export type WorkerFinding = z.infer<typeof workerFindingSchema>;
+export type AnnotatedFinding = z.infer<typeof annotatedFindingSchema>;
