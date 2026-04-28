@@ -86,9 +86,6 @@ export interface ReviewOutput extends ExecutorOutput {
   contextBlockId?: string;
 }
 
-/** Kill switch: set MMA_QUALITY_ONLY_REVIEW=0 to revert to pre-migration behavior. */
-const KILL_SWITCH_ACTIVE = process.env.MMA_QUALITY_ONLY_REVIEW === '0';
-
 async function runSingleReview(
   task: TaskSpec,
   agentType: 'standard' | 'complex',
@@ -106,7 +103,7 @@ async function runSingleReview(
     { batchId: ctx.batchId, recordHeartbeat: ctx.recordHeartbeat },
     { logger: ctx.logger },
     ctx.recorder,
-    'review',
+    ctx.route ?? 'review',
     ctx.client,
     ctx.triggeringSkill,
     ctx.bus,
@@ -157,7 +154,8 @@ export async function executeReview(
   const expandedTasks: TaskSpec[] = taskSpecs.map(task => {
     try {
       return expandContextBlocks(task, contextBlockStore) as TaskSpec;
-    } catch {
+    } catch (e) {
+      ctx.logger.warn('expandContextBlocks failed for review task', { error: e instanceof Error ? e.message : String(e) });
       return task;
     }
   });
@@ -185,9 +183,9 @@ export async function executeReview(
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
 
-  // Surface review verdicts from the lifecycle (kill-switch sentinels when disabled)
+  // Surface review verdicts from the lifecycle
   const primaryResult = results[0];
-  const verdicts = mapReviewVerdicts(primaryResult ?? {}, KILL_SWITCH_ACTIVE);
+  const verdicts = mapReviewVerdicts(primaryResult ?? {}, false);
 
   return {
     headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: taskSpecs.length, tasksCompleted: results.length }),
