@@ -105,6 +105,70 @@ mmagent update-skills               # refresh installed skills
 
 A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve` (a new token is regenerated on boot).
 
+## Skills
+
+Skills are the surface your AI client sees. Installing them with `mmagent install-skill` adds the table below to the client's skill index; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
+
+### Work-delegation skills
+
+| Skill | Use when |
+|---|---|
+| `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
+| `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
+| `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
+| `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
+| `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
+| `mma-audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
+| `mma-verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
+
+### Plumbing skills
+
+| Skill | Use when |
+|---|---|
+| `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
+| `mma-clarifications` | A previous batch's terminal envelope returned a `proposedInterpretation` string — the service is paused waiting for you to confirm or correct its read. |
+| `mma-retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
+
+### Two generic usage samples
+
+**Sample 1 — implement a feature from a plan**
+
+```
+You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
+↓
+Client picks mma-execute-plan (plan file on disk, multiple independent tasks)
+↓
+mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M2.7),
+each runs cross-agent review on the complex agent, returns a structured report.
+↓
+You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-7 (30× ROI)"
+```
+
+**Sample 2 — debug a failing test (multiple skills chained)**
+
+```
+You: "tests/auth/session.test.ts is failing intermittently after the token-refresh refactor — figure it out and fix it"
+↓
+Step 1 — mma-context-blocks
+  The failing test output + the refactor diff are ~8 KB and will be referenced by every
+  downstream call. Register once, get a contextBlockId, reuse it.
+↓
+Step 2 — mma-debug
+  Worker reproduces the failure, traces across session.ts + token-refresh.ts, returns a
+  root-cause hypothesis: "race between refresh-in-flight and session.invalidate()".
+  Main agent stays on the hypothesis, decides the fix shape.
+↓
+Step 3 — mma-delegate
+  Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
+  fix, runs the failing test 20× to confirm the race is gone.
+↓
+Step 4 — mma-verify
+  One worker per acceptance criterion: (a) failing test now passes, (b) no other
+  auth tests regressed, (c) refresh path still emits the expected telemetry.
+↓
+Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
+```
+
 ## Configuration reference
 
 ### Lookup order
@@ -187,10 +251,6 @@ Or per-run via `mmagent serve --verbose --log`. JSONL goes to `~/.multi-model/lo
 
 > **Note:** verbose logs may include prompts, file paths, and other task content — disable for production servers handling sensitive data.
 
-## REST API
-
-15 endpoints. Tool endpoints are async: they return `202 { batchId, statusUrl }` immediately; poll `GET /batch/:id` for the terminal envelope. Full table and request/response shapes in [packages/server/README.md](./packages/server/README.md#rest-api).
-
 ## Operator commands
 
 ```bash
@@ -210,9 +270,10 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout.
+`mmagent serve` runs a loopback HTTP server exposing 15 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
+- [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
 - [DIRECTION.md](./DIRECTION.md) — product north star
 - [packages/core/README.md](./packages/core/README.md) — embedding the runtime as a library (no HTTP server)
 - [packages/server/README.md](./packages/server/README.md) — daemon, REST API, and skills detail
