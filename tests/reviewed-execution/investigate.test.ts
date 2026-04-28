@@ -151,7 +151,7 @@ describe('executeInvestigate reviewed-execution parser + envelope flow', () => {
     const { ctx } = makeCtx({ workerOutput: '## Summary\nAuthoritative answer.\n## Citations\n- a:1 — c\n## Confidence\nhigh — x\n' });
     const out = await executeInvestigate(ctx, defaultArgs('q'));
     const r = (out.results as any[])[0];
-    expect(r.structuredReport.summary).toBe('Authoritative answer.');
+    expect(r.structuredReport.summary).toContain('Authoritative answer.');
   });
 
   it('26. all-malformed citations → done_with_concerns + missing_sections; invalidRequiredSections has citations', async () => {

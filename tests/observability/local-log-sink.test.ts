@@ -10,8 +10,10 @@ describe('LocalLogSink', () => {
     const dir = mkdtempSync(join(tmpdir(), 'lls-'));
     const writer = new JsonlWriter({ dir });
     const sink = new LocalLogSink(writer);
-    sink.emit({ event: 'task_started', ts: '2026-04-27T00:00:00Z', batchId: 'b', taskIndex: 0, route: 'delegate', cwd: '/' } as any);
-    const file = readFileSync(join(dir, 'mmagent-2026-04-27.jsonl'), 'utf8');
+    const now = new Date();
+    const today = `${now.getUTCFullYear()}-${String(now.getUTCMonth() + 1).padStart(2, '0')}-${String(now.getUTCDate()).padStart(2, '0')}`;
+    sink.emit({ event: 'task_started', ts: now.toISOString(), batchId: 'b', taskIndex: 0, route: 'delegate', cwd: '/' } as any);
+    const file = readFileSync(join(dir, `mmagent-${today}.jsonl`), 'utf8');
     expect(file).toMatch(/"event":"task_started"/);
     rmSync(dir, { recursive: true });
   });
