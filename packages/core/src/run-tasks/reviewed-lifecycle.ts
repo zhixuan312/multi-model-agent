@@ -456,6 +456,27 @@ export async function executeReviewedLifecycle(
   let stageIdle: StageIdleTracker = newStageIdleTracker(taskStartMs);
   let taskMaxIdleMs = 0;
   let stallFired = false;
+
+  type HeartbeatTransitionPayload = Parameters<NonNullable<typeof heartbeat>['transition']>[0];
+
+  // Track the current stage so the terminal transition can pass an accurate
+  // `from`. Initialized to 'implementing' (matching HeartbeatTimer.start's
+  // initial stage). Updated on every transitionStage call.
+  let currentStage: import('../heartbeat.js').HeartbeatStage = 'implementing';
+
+  function transitionStage(
+    from: import('../types.js').StageName | 'terminal',
+    to:   import('../heartbeat.js').HeartbeatStage,
+    heartbeatPayload: HeartbeatTransitionPayload | null,
+    jsonlPayload: Record<string, EventField> | null,
+  ): void {
+    if (heartbeatPayload !== null) heartbeat?.transition(heartbeatPayload);
+    if (jsonlPayload !== null) {
+      emitTaskEvent('stage_change', { from, to, ...jsonlPayload });
+    }
+    stageIdle = newStageIdleTracker(Date.now());
+    currentStage = to;
+  }
   const commits: Commit[] = [];
   let commitError: string | undefined;
   let specAttemptIndex = 0;
@@ -575,8 +596,7 @@ export async function executeReviewedLifecycle(
   let latestVerification: VerifyStageResult = defaultVerification;
 
   async function runVerificationStage(): Promise<VerifyStageResult> {
-    emitTaskEvent('stage_change', { from: 'implementing', to: 'verifying' });
-    heartbeat?.setStage('verifying', 4);
+    transitionStage('implementing', 'verifying', { stage: 'verifying', stageIndex: 4 }, {});
     const overallVerificationStart = Date.now();
     const verifyCostStart = runningCostUSD();
     const verification = await runVerifyStage({
@@ -587,7 +607,7 @@ export async function executeReviewedLifecycle(
     });
     latestVerification = verification;
     endVerifyStage(stats, overallVerificationStart, verifyCostStart,
-      implementerAgentInfo, runningCostUSD(), null,
+      implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
       verification.status === 'passed' ? 'passed'
         : verification.status === 'failed' ? 'failed'
         : verification.status === 'skipped' ? 'skipped'
@@ -813,12 +833,12 @@ export async function executeReviewedLifecycle(
     if (treeDirty) {
       const validCommit = implReport?.commit ?? await repairCommitMetadata(implReport?.commitDiagnostic ?? 'no commit block emitted');
       if (!validCommit) return;
-      heartbeat?.setStage('committing', 7);
+      transitionStage('verifying', 'committing', { stage: 'committing', stageIndex: 7 }, null);
       const commitT0 = Date.now();
       const commitC0 = runningCostUSD();
       const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
       commits.push(c);
-      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD(), null);
+      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle));
     }
   }
 
@@ -925,7 +945,7 @@ export async function executeReviewedLifecycle(
     lastNonRejectedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     implementerHistory.push(initialImpl.usedTier as AgentType);
 
-    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), null);
+    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle));
     specAttemptIndex = 1;
 
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
@@ -948,7 +968,7 @@ export async function executeReviewedLifecycle(
 
     if (implResult.filesWritten.length === 0 && reviewPolicy !== 'quality_only') {
       if (reviewPolicy === 'off') {
-        emitTaskEvent('stage_change', { from: 'verifying', to: 'terminal' });
+        transitionStage('verifying', 'terminal', null, {});
         const terminal = resolveOffTerminal({
           ...implResult,
           workerStatus,
@@ -1031,7 +1051,7 @@ export async function executeReviewedLifecycle(
     }
 
     if (reviewPolicy === 'off') {
-      emitTaskEvent('stage_change', { from: 'verifying', to: 'terminal' });
+      transitionStage('verifying', 'terminal', null, {});
       const terminal = resolveOffTerminal({
         ...implResult,
         workerStatus,
@@ -1070,10 +1090,9 @@ export async function executeReviewedLifecycle(
     if (reviewPolicy === 'diff_only') {
       const diffUnavailable: UnavailableMap = new Map();
       const diffReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
-      emitTaskEvent('stage_change', { from: 'verifying', to: 'diff_review' });
+      transitionStage('verifying', 'diff_review', { stage: 'diff_review', stageIndex: 2, reviewRound: 1, attemptCap: 1 }, {});
       const diffReviewT0 = Date.now();
     const diffReviewC0 = runningCostUSD();
-    heartbeat?.transition({ stage: 'diff_review' as never, stageIndex: 2, reviewRound: 1, attemptCap: 1 });
       const diffReviewT0_commit = Date.now();
     const diffReviewC0_commit = runningCostUSD();
     const diffCall = await runWithFallback<DiffReviewOrSkipped>({
@@ -1103,7 +1122,7 @@ export async function executeReviewedLifecycle(
           : 'skipped',
         round: 1,
       });
-      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(), null,
+      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
         // Diff review uses 'approve' | 'concerns' | 'reject' | 'transport_failure' (DiffReviewVerdict),
         // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
         'kind' in verdict
@@ -1137,7 +1156,7 @@ export async function executeReviewedLifecycle(
     let specReviewC0: number | null = null;
 
     if (reviewPolicy !== 'quality_only') {
-    heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows });
+    transitionStage('verifying', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows }, null);
     const initialReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
     specReviewT0 = Date.now();
     specReviewC0 = runningCostUSD();
@@ -1178,8 +1197,7 @@ export async function executeReviewedLifecycle(
       }
       const decision = pickEscalation({ loop: 'spec', attemptIndex: specAttemptIndex, baseTier: resolved.slot });
       if (decision.isEscalated) emitEscalationEvent('spec', specAttemptIndex, decision);
-      emitTaskEvent('stage_change', { from: 'spec_review', to: 'spec_rework', attempt: specAttemptIndex, attemptCap: maxSpecRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
-      heartbeat?.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows });
+      transitionStage('spec_review', 'spec_rework', { stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows }, { attempt: specAttemptIndex, attemptCap: maxSpecRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
       const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
@@ -1199,7 +1217,7 @@ export async function executeReviewedLifecycle(
       const reworkReport = parseStructuredReport(finalImplResult.output);
       finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
       fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
-      heartbeat?.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows });
+      transitionStage('spec_rework', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows }, null);
       const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block) });
       if (reviewCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -1241,7 +1259,7 @@ export async function executeReviewedLifecycle(
     if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
-      heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows });
+      transitionStage(currentStage, 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows }, null);
       qualityReviewT0 = Date.now();
       qualityReviewC0 = runningCostUSD();
       const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output) });
@@ -1293,8 +1311,7 @@ export async function executeReviewedLifecycle(
           }
           const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
           if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
-          emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
-          heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
+          transitionStage('quality_review', 'quality_rework', { stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows }, { attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
           const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
           const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
           const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
@@ -1311,7 +1328,7 @@ export async function executeReviewedLifecycle(
           const reworkReport = parseStructuredReport(finalImplResult.output);
           finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
           fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
-          heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows });
+          transitionStage('quality_rework', 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows }, null);
           const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output) });
           if (reviewCall.bothUnavailable) {
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -1361,7 +1378,7 @@ export async function executeReviewedLifecycle(
       : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
     if (reviewPolicy !== 'quality_only') {
-    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(), null,
+    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
       specStatus === 'approved' ? 'approved'
         : specStatus === 'changes_required' ? 'changes_required'
         : specStatus === 'skipped' ? 'skipped'
@@ -1371,7 +1388,7 @@ export async function executeReviewedLifecycle(
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
-    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(), null,
+    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
       qualityResult.status === 'approved' ? 'approved'
         : qualityResult.status === 'changes_required' ? 'changes_required'
         : qualityResult.status === 'annotated' ? 'annotated'
@@ -1476,7 +1493,7 @@ export async function executeReviewedLifecycle(
         });
       } catch { /* silent */ }
     }
-    heartbeat?.setStage('terminal', 8);
+    transitionStage(currentStage, 'terminal', { stage: 'terminal', stageIndex: 8 }, null);
     heartbeat?.stop();
     clearInterval(stallWatchdogInterval);
   }
