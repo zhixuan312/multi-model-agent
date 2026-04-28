@@ -1217,93 +1217,82 @@ export async function executeReviewedLifecycle(
         }
       }
       qualityResult = initialQuality.result;
+      qualityAttemptIndex = 1;
+      if (reviewDidNotReject(qualityResult.status)) lastNonRejectedImpl = { tier: implementerHistory[implementerHistory.length - 1]!, result: finalImplResult };
+
       if (reviewPolicy === 'quality_only') {
+        // Annotation model: emit one quality event per pass with severity-correction
+        // and mean-confidence summary fields. Then we are done — no rework loop.
+        const annotated = qualityResult.annotatedFindings ?? [];
+        const severityCorrections = annotated.filter(f => f.reviewerSeverity !== undefined).length;
+        const meanConfidence = annotated.length > 0
+          ? Math.round((annotated.reduce((s, f) => s + f.reviewerConfidence, 0) / annotated.length) * 100) / 100
+          : null;
         emitTaskEvent('read_only_review.quality', {
           route: routeKey,
-          verdict: qualityResult.status === 'approved' ? 'approved'
-            : qualityResult.status === 'changes_required' ? 'changes_required'
+          verdict: qualityResult.status === 'annotated' ? 'annotated'
             : qualityResult.status === 'skipped' ? 'skipped'
             : 'error',
           iterationIndex: 1,
-          findingsReviewed: qualityResult.findings?.length ?? 0,
-          findingsFlagged: qualityResult.status === 'changes_required' ? (qualityResult.findings?.length ?? 0) : 0,
+          findingsReviewed: annotated.length,
+          findingsFlagged: severityCorrections,
+          severityCorrections,
+          meanConfidence,
           durationMs: Date.now() - qualityReviewT0,
           costUSD: runningCostUSD() !== null && qualityReviewC0 !== null ? runningCostUSD()! - qualityReviewC0! : null,
         });
-      }
-      let prevQualityFindings = [...(qualityResult.findings ?? [])];
-      qualityAttemptIndex = 1;
-      while (qualityResult.status === 'changes_required') {
-        if (qualityAttemptIndex >= maxQualityRows) return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework', 'quality');
-        const currentCostUSD = taskCostUSD();
-        if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
-          emitTaskEvent('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
-          return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
-        }
-        const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
-        if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
-        emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
-        if (reviewPolicy === 'quality_only') {
-          emitTaskEvent('read_only_review.rework', {
-            route: routeKey,
-            iterationIndex: qualityAttemptIndex,
-            triggeringIssues: qualityResult.findings?.length ?? 0,
-          });
-        }
-        heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
-        const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
-        const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
-        const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
-        if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
-        if (reworkCall.fallbackFired) emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
-        if (reworkCall.bothUnavailable) {
-          emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
-          if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
-          return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex));
-        }
-        finalImplResult = reworkCall.result;
-        latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };
-        implementerHistory.push(reworkCall.usedTier as AgentType);
-        const reworkReport = parseStructuredReport(finalImplResult.output);
-        finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
-        fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
-        heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows });
-        const reworkQualityT0 = Date.now();
-        const reworkQualityC0 = runningCostUSD();
-        const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output) });
-        if (reviewCall.bothUnavailable) {
-          emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
-          fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
-          qualityReviewerHistory.push('skipped');
-        } else {
-          qualityReviewerHistory.push(reviewCall.usedTier as AgentType);
-          if (reviewCall.fallbackFired) {
-            emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, usedTier: reviewCall.usedTier as AgentType, reason: reviewCall.fallbackReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, violatesSeparation: reviewCall.usedTier === implementerHistory[implementerHistory.length - 1] });
-            fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.fallbackReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: false });
+      } else {
+        // Artifact-route gating model — keep the rework loop.
+        let prevQualityFindings = [...(qualityResult.findings ?? [])];
+        while (qualityResult.status === 'changes_required') {
+          if (qualityAttemptIndex >= maxQualityRows) return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework', 'quality');
+          const currentCostUSD = taskCostUSD();
+          if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
+            emitTaskEvent('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
+            return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
           }
+          const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
+          if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
+          emitTaskEvent('stage_change', { from: 'quality_review', to: 'quality_rework', attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
+          heartbeat?.transition({ stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows });
+          const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
+          const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
+          const reworkCall = await runWithFallback<RunResult>({ assigned: decision.impl, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined, getStatus: (r) => r.status, makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'), call: (provider) => delegateWithEscalation(reworkTask, [provider], { explicitlyPinned: true, onProgress: wrappedOnProgress, taskDeadlineMs, abortSignal: stallController.signal, assignedTier: decision.impl }) });
+          if (reworkCall.fallbackFired || reworkCall.bothUnavailable) fallbackOverrides.push({ role: 'implementer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.impl, used: reworkCall.usedTier, reason: (reworkCall.fallbackReason ?? reworkCall.unavailableReason)!, triggeringStatus: reworkCall.fallbackTriggeringStatus, bothUnavailable: reworkCall.bothUnavailable });
+          if (reworkCall.fallbackFired) emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, usedTier: reworkCall.usedTier as AgentType, reason: reworkCall.fallbackReason!, triggeringStatus: reworkCall.fallbackTriggeringStatus, violatesSeparation: false });
+          if (reworkCall.bothUnavailable) {
+            emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
+            if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
+            return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex));
+          }
+          finalImplResult = reworkCall.result;
+          latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };
+          implementerHistory.push(reworkCall.usedTier as AgentType);
+          const reworkReport = parseStructuredReport(finalImplResult.output);
+          finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
+          fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
+          heartbeat?.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows });
+          const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output) });
+          if (reviewCall.bothUnavailable) {
+            emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
+            fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
+            qualityReviewerHistory.push('skipped');
+          } else {
+            qualityReviewerHistory.push(reviewCall.usedTier as AgentType);
+            if (reviewCall.fallbackFired) {
+              emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, usedTier: reviewCall.usedTier as AgentType, reason: reviewCall.fallbackReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, violatesSeparation: reviewCall.usedTier === implementerHistory[implementerHistory.length - 1] });
+              fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.fallbackReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: false });
+            }
+          }
+          qualityResult = reviewCall.result;
+          if (reviewDidNotReject(qualityResult.status)) lastNonRejectedImpl = { tier: implementerHistory[implementerHistory.length - 1]!, result: finalImplResult };
+          qualityAttemptIndex++;
+          if (qualityResult.status === 'approved' || qualityResult.status === 'skipped') break;
+          const currentFindings = [...(qualityResult.findings ?? [])].sort().join('\0');
+          const prevFindings = [...prevQualityFindings].sort().join('\0');
+          if (currentFindings === prevFindings && currentFindings !== '') break;
+          prevQualityFindings = [...(qualityResult.findings ?? [])];
         }
-        qualityResult = reviewCall.result;
-        if (reviewPolicy === 'quality_only') {
-          emitTaskEvent('read_only_review.quality', {
-            route: routeKey,
-            verdict: qualityResult.status === 'approved' ? 'approved'
-              : qualityResult.status === 'changes_required' ? 'changes_required'
-              : qualityResult.status === 'skipped' ? 'skipped'
-              : 'error',
-            iterationIndex: qualityAttemptIndex + 1,
-            findingsReviewed: qualityResult.findings?.length ?? 0,
-            findingsFlagged: qualityResult.status === 'changes_required' ? (qualityResult.findings?.length ?? 0) : 0,
-            durationMs: Date.now() - reworkQualityT0,
-            costUSD: runningCostUSD() !== null && reworkQualityC0 !== null ? runningCostUSD()! - reworkQualityC0! : null,
-          });
-        }
-        if (reviewDidNotReject(qualityResult.status)) lastNonRejectedImpl = { tier: implementerHistory[implementerHistory.length - 1]!, result: finalImplResult };
-        qualityAttemptIndex++;
-        if (qualityResult.status === 'approved' || qualityResult.status === 'skipped') break;
-        const currentFindings = [...(qualityResult.findings ?? [])].sort().join('\0');
-        const prevFindings = [...prevQualityFindings].sort().join('\0');
-        if (currentFindings === prevFindings && currentFindings !== '') break;
-        prevQualityFindings = [...(qualityResult.findings ?? [])];
       }
     }
 
@@ -1340,11 +1329,12 @@ export async function executeReviewedLifecycle(
         : 'error',
       specAttemptIndex - 1);
     }
-    const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+    const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
     endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(),
       qualityResult.status === 'approved' ? 'approved'
         : qualityResult.status === 'changes_required' ? 'changes_required'
+        : qualityResult.status === 'annotated' ? 'annotated'
         : qualityResult.status === 'skipped' ? 'skipped'
         : 'error',
       qualityAttemptIndex - 1);
@@ -1410,8 +1400,7 @@ export async function executeReviewedLifecycle(
       emitTaskEvent('read_only_review.terminal', {
         route: routeKey,
         roundsUsed: qualityAttemptIndex,
-        finalQualityVerdict: qualityResult.status === 'approved' ? 'approved'
-          : qualityResult.status === 'changes_required' ? 'changes_required'
+        finalQualityVerdict: qualityResult.status === 'annotated' ? 'annotated'
           : qualityResult.status === 'skipped' ? 'skipped'
           : 'error',
         costUSD: taskCostUSD(),

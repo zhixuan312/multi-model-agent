@@ -3,6 +3,7 @@ import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 type ReviewAggregateStatus =
   | 'approved'
   | 'changes_required'
+  | 'annotated'
   | 'skipped'
   | 'error'
   | 'api_error'
