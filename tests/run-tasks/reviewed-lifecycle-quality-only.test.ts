@@ -203,20 +203,45 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(result.models!.qualityReviewer).toBeTruthy();
   });
 
-  it('uses qualityReviewPromptBuilder when provided', async () => {
+  it('uses qualityReviewPromptBuilder when provided (annotation model)', async () => {
     const config = makeConfig();
     const task: TaskSpec = {
       prompt: 'audit this code',
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
+    const VALID_EVIDENCE = 'src/a.ts:10 — the function silently swallows errors and returns null';
+    const workerFindings = [
+      { id: 'F1', severity: 'high' as const, claim: 'silent error swallowing', evidence: VALID_EVIDENCE },
+    ];
+    const workerOutputWithFindings = [
+      '## Summary',
+      'done',
+      '',
+      '## Findings',
+      '```json',
+      JSON.stringify(workerFindings),
+      '```',
+      '',
+      '## Files changed',
+      '- report.md: added',
+      '',
+      '## Validations run',
+      '- lint: passed',
+      '',
+      '## Deviations from brief',
+      '',
+      '## Unresolved',
+      '',
+    ].join('\n');
+
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: async () => ({
-          output: '## Summary\ndone\n\n## Files changed\n- report.md: added\n\n## Validations run\n- lint: passed\n\n## Deviations from brief\n\n## Unresolved\n',
+          output: workerOutputWithFindings,
           status: 'ok' as const,
           usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
           turns: 1,
@@ -231,14 +256,15 @@ describe('executeReviewedLifecycle — quality_only', () => {
     };
 
     let builderCalled = false;
-    let receivedWorkerOutput = '';
     let receivedBrief = '';
+    let receivedFindingsCount = 0;
 
-    const builder = (ctx: { workerOutput: string; brief: string }) => {
+    const builder = (ctx: { workerOutput: string; brief: string; workerFindings: typeof workerFindings }) => {
       builderCalled = true;
-      receivedWorkerOutput = ctx.workerOutput;
       receivedBrief = ctx.brief;
-      return 'CUSTOM_QUALITY_PROMPT_PREFIX\n' + ctx.workerOutput;
+      receivedFindingsCount = ctx.workerFindings.length;
+      // Reviewer needs to return a JSON annotation block so parseAndMergeAnnotations succeeds.
+      return 'CUSTOM_PROMPT';
     };
 
     const result = await executeReviewedLifecycle(
@@ -250,7 +276,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
 
     expect(builderCalled).toBe(true);
     expect(receivedBrief).toBe('audit this code');
-    expect(receivedWorkerOutput).toContain('## Summary');
+    expect(receivedFindingsCount).toBe(1);
     expect(result.stageStats!.quality_review.entered).toBe(true);
   });
 });

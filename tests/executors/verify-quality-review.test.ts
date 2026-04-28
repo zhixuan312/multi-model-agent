@@ -18,11 +18,32 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
     run: async (prompt: string) => {
       callState.callCount++;
       callState.lastPrompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
-      // First call(s) are implementer — return artifact-producing result
-      // to pass the filesWritten.length === 0 guard in the lifecycle.
-      if (callState.callCount <= 3) {
+      // Discriminate by prompt content: the annotation reviewer prompt embeds
+      // the rubric "reviewerConfidence". Anything else is the implementer.
+      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      if (!isReviewer) {
         return {
-          output: '## Summary\ndone\n\n## Files changed\n- test.txt: created\n\n## Validations run\n\n## Deviations from brief\n\n## Unresolved\n',
+          output: [
+            '## Summary',
+            'done',
+            '',
+            '## Findings',
+            '```json',
+            JSON.stringify([
+              { id: 'F1', severity: 'low', claim: 'criterion met', evidence: 'test.txt:1 — file exists with the expected contents on disk' },
+            ]),
+            '```',
+            '',
+            '## Files changed',
+            '- test.txt: created',
+            '',
+            '## Validations run',
+            '',
+            '## Deviations from brief',
+            '',
+            '## Unresolved',
+            '',
+          ].join('\n'),
           status: 'ok' as const,
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: 0.001 },
           turns: 1,
@@ -34,9 +55,14 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
           workerStatus: 'done' as const,
         };
       }
-      // Quality reviewer call(s)
+      // Quality reviewer call(s) — annotation model returns a JSON annotation array
       return {
-        output: '## Summary\napproved\n\n## Deviations from brief\n\n## Unresolved\n',
+        output: [
+          'Annotated.',
+          '```json',
+          JSON.stringify([{ id: 'F1', reviewerConfidence: 80 }]),
+          '```',
+        ].join('\n'),
         status: 'ok' as const,
         usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: 0.001 },
         turns: 1,
@@ -88,7 +114,7 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
 
     expect(out.qualityReviewVerdict).toBeDefined();
     // With a mock that writes files, the quality reviewer runs and approves
-    expect(out.qualityReviewVerdict).toBe('approved');
+    expect(out.qualityReviewVerdict).toBe('annotated');
     expect(out.specReviewVerdict).toBeDefined();
     expect(out.specReviewVerdict).toBe('not_applicable');
   });
@@ -105,7 +131,7 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
     expect(r.workerStatus).toBeDefined();
     expect(r.qualityReviewStatus).toBeDefined();
     // With a mock that writes files, quality review runs and returns approved
-    expect(r.qualityReviewStatus).toBe('approved');
+    expect(r.qualityReviewStatus).toBe('annotated');
   });
 
   it('populates specReviewVerdict and roundsUsed in addition to qualityReviewVerdict', async () => {
