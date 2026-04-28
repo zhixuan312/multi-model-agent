@@ -134,7 +134,7 @@
         "metadata": 0,
         "cap": 3
       },
-      "qualityReviewReason": "review agent returned status: error",
+      "qualityReviewReason": "worker output missing or invalid findings[] JSON block",
       "structuredReport": {
         "summary": "[Reviewed] Sub-agent error: Connection error.",
         "filesChanged": [],

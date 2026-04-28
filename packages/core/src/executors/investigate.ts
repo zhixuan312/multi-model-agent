@@ -16,6 +16,7 @@ import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-s
 import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
 import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
+import { buildInvestigateQualityPrompt } from '../review/quality-only-prompts.js';
 
 export interface InvestigateExecutorInput {
   input: Input;
@@ -70,6 +71,7 @@ export async function executeInvestigate(
       ctx.client,
       ctx.triggeringSkill,
       ctx.bus,
+      buildInvestigateQualityPrompt,
     );
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));

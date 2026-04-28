@@ -44,8 +44,7 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
     "/project/docs/plan.md",
     "/project/src/auth/login.ts"
   ],
-  "contextBlockIds": [],
-  "agentType": "standard"
+  "contextBlockIds": []
 }
 ```
 
@@ -55,11 +54,13 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 | `context` | string | no | Short additional context not in the plan |
 | `filePaths` | string[] | no | Plan file + relevant source files. Required: the plan file itself. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `agentType` | `"standard"` / `"complex"` | no | Default `"standard"`. Use `"complex"` for tasks too large for the standard tier — reads many files, produces many edits, or the last run came back with `filesWritten: 0`. |
+| `maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted. |
 | `verifyCommand` | string[] | no | See verify-and-review snippet below |
 | `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | See verify-and-review snippet below. Default `"full"`. |
 
 @include _shared/verify-and-review.md
+
+> **No `agentType` here.** Worker tier is set by the plan and per-route defaults. For ad-hoc work where you need direct tier control, use `mma-delegate`.
 
 If the batch reaches `awaiting_clarification`, use `mma-clarifications` to confirm or correct the proposed interpretation.
 
