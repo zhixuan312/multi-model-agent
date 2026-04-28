@@ -159,15 +159,10 @@ export const ReadOnlyReviewQualityEvent = TaskBase.extend({
   iterationIndex: z.number().int().min(1),
   findingsReviewed: z.number().int().min(0),
   findingsFlagged: z.number().int().min(0),
+  severityCorrections: z.number().int().min(0),
+  meanConfidence: z.number().min(0).max(100).nullable(),
   durationMs: z.number().int().min(0),
   costUSD: z.number().min(0).nullable(),
-}).strict();
-
-export const ReadOnlyReviewReworkEvent = TaskBase.extend({
-  event: z.literal('read_only_review.rework'),
-  route: z.string(),
-  iterationIndex: z.number().int().min(1),
-  triggeringIssues: z.number().int().min(0),
 }).strict();
 
 export const ReadOnlyReviewTerminalEvent = TaskBase.extend({
@@ -331,7 +326,6 @@ export const Event = z.discriminatedUnion('event', [
   VerifyStepEvent,
   VerifySkippedEvent,
   ReadOnlyReviewQualityEvent,
-  ReadOnlyReviewReworkEvent,
   ReadOnlyReviewTerminalEvent,
   StallAbortEvent,
   BatchCompletedEvent,
