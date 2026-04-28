@@ -98,6 +98,72 @@ mmagent update-skills               # refresh installed skills
 
 A drift warning prints on `mmagent serve` if installed skills are older than the daemon. To rotate the auth token: `rm ~/.multi-model/auth-token && mmagent serve`.
 
+## Skills
+
+Skills are the surface your AI client sees. `mmagent install-skill` writes them to the client's skill directory; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it to the matching skill, the skill calls the matching REST endpoint.
+
+### Work-delegation skills
+
+| Skill | Target endpoint | Use when |
+|---|---|---|
+| `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
+| `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
+| `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
+| `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
+| `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
+| `mma-audit` | `POST /audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
+| `mma-verify` | `POST /verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
+
+### Plumbing skills
+
+| Skill | Target endpoint | Use when |
+|---|---|---|
+| `mma-context-blocks` | `POST/DELETE /context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
+| `mma-clarifications` | `POST /clarifications/confirm` | A previous batch's terminal envelope returned a `proposedInterpretation` string — the service is paused waiting for you to confirm or correct its read. |
+| `mma-retry` | `POST /retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
+
+The `multi-model-agent` skill (no `mma-` prefix) is a top-level overview your client reads first to pick which `mma-*` skill applies.
+
+### Two generic usage samples
+
+**Sample 1 — implement a feature from a plan**
+
+```
+You: "Execute tasks 3, 4, and 5 from docs/plans/auth-rewrite.md"
+↓
+Client picks mma-execute-plan (plan file on disk, multiple independent tasks)
+↓
+mmagent dispatches 3 workers in parallel on the standard agent (e.g. MiniMax-M2.7),
+each runs cross-agent review on the complex agent, returns a structured report.
+↓
+You see one consolidated headline: "$0.04 actual / $1.20 saved vs claude-opus-4-7 (30× ROI)"
+```
+
+**Sample 2 — debug a failing test (multiple skills chained)**
+
+```
+You: "tests/auth/session.test.ts is failing intermittently after the token-refresh refactor — figure it out and fix it"
+↓
+Step 1 — mma-context-blocks
+  The failing test output + the refactor diff are ~8 KB and will be referenced by every
+  downstream call. Register once, get a contextBlockId, reuse it.
+↓
+Step 2 — mma-debug
+  Worker reproduces the failure, traces across session.ts + token-refresh.ts, returns a
+  root-cause hypothesis: "race between refresh-in-flight and session.invalidate()".
+  Main agent stays on the hypothesis, decides the fix shape.
+↓
+Step 3 — mma-delegate
+  Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
+  fix, runs the failing test 20× to confirm the race is gone.
+↓
+Step 4 — mma-verify
+  One worker per acceptance criterion: (a) failing test now passes, (b) no other
+  auth tests regressed, (c) refresh path still emits the expected telemetry.
+↓
+Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
+```
+
 ## Configuration reference
 
 ### Lookup order
@@ -198,24 +264,6 @@ mmagent telemetry disable                        # opt out + delete local queue
 mmagent telemetry reset-id                       # rotate the local Ed25519 identity
 mmagent telemetry dump-queue                     # print the locally-queued events as JSON
 ```
-
-## Shipped skills
-
-Skills are Markdown prompts that tell your AI client when and how to call each endpoint. `mmagent install-skill` inlines the shared auth/polling patterns at install time.
-
-| Skill | Target endpoint |
-|---|---|
-| `multi-model-agent` | Overview + skill map (read first to pick the right `mma-*` skill) |
-| `mma-delegate` | `POST /delegate` |
-| `mma-audit` | `POST /audit` |
-| `mma-review` | `POST /review` |
-| `mma-verify` | `POST /verify` |
-| `mma-debug` | `POST /debug` |
-| `mma-execute-plan` | `POST /execute-plan` |
-| `mma-retry` | `POST /retry` |
-| `mma-investigate` | `POST /investigate` |
-| `mma-context-blocks` | `POST/DELETE /context-blocks` |
-| `mma-clarifications` | `POST /clarifications/confirm` |
 
 ## Architecture
 
