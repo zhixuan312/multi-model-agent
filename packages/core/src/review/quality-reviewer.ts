@@ -27,7 +27,7 @@ export async function runQualityReview(
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
   workerOutput?: string,
 ): Promise<LegacyQualityReviewResult> {
-  if (filesWritten.length === 0) {
+  if (filesWritten.length === 0 && !qualityReviewPromptBuilder) {
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 

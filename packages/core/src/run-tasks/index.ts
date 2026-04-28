@@ -65,6 +65,8 @@ export interface RunTasksOptions {
   triggeringSkill?: string;
   /** EventBus for structured observability events. */
   bus?: EventBus;
+  /** Per-route quality review prompt builder (for quality_only reviewPolicy). */
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
 }
 
 export async function runTasks(
@@ -179,7 +181,7 @@ export async function runTasks(
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
         verboseStream: options.verboseStream,
-      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus).then(
+      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus, options.qualityReviewPromptBuilder).then(
         (result) => {
           if (readiness && readiness.briefQualityWarnings.length > 0) {
             return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
