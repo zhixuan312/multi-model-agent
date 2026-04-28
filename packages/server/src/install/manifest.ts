@@ -24,7 +24,7 @@ export const ALL_CLIENTS: readonly Client[] = ['claude-code', 'gemini', 'codex',
  * Checks for evidence of each known client:
  * - claude-code: ~/.claude/ directory present (installs skills under ~/.claude/skills/)
  * - gemini:       ~/.gemini/extensions/ directory present
- * - codex:        ~/.codex/AGENTS.md file present
+ * - codex:        ~/.codex/ directory present (installs skills under ~/.codex/skills/)
  * - cursor:       ~/.cursor/rules/ directory present
  *
  * The claude-code check deliberately accepts ~/.claude/ as sufficient signal
@@ -34,7 +34,7 @@ export function detectClients(homeDir: string): Client[] {
   const detected: Client[] = [];
   if (fs.existsSync(path.join(homeDir, '.claude'))) detected.push('claude-code');
   if (fs.existsSync(path.join(homeDir, '.gemini', 'extensions'))) detected.push('gemini');
-  if (fs.existsSync(path.join(homeDir, '.codex', 'AGENTS.md'))) detected.push('codex');
+  if (fs.existsSync(path.join(homeDir, '.codex'))) detected.push('codex');
   if (fs.existsSync(path.join(homeDir, '.cursor', 'rules'))) detected.push('cursor');
   return detected;
 }

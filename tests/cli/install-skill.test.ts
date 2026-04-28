@@ -312,11 +312,10 @@ describe('install-skill CLI: detectClients', () => {
     }
   });
 
-  it('detects codex when .codex/AGENTS.md exists', () => {
+  it('detects codex when .codex exists', () => {
     const home = makeFakeHome();
     try {
       fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
-      fs.writeFileSync(path.join(home, '.codex', 'AGENTS.md'), 'content', 'utf-8');
       expect(detectClients(home)).toContain('codex');
     } finally {
       removeFakeHome(home);
@@ -338,12 +337,13 @@ describe('install-skill CLI: detectClients', () => {
     try {
       fs.mkdirSync(path.join(home, '.claude', 'skills'), { recursive: true });
       fs.mkdirSync(path.join(home, '.gemini', 'extensions'), { recursive: true });
+      fs.mkdirSync(path.join(home, '.codex'), { recursive: true });
       fs.mkdirSync(path.join(home, '.cursor', 'rules'), { recursive: true });
       const detected = detectClients(home);
       expect(detected).toContain('claude-code');
       expect(detected).toContain('gemini');
+      expect(detected).toContain('codex');
       expect(detected).toContain('cursor');
-      expect(detected).not.toContain('codex');
     } finally {
       removeFakeHome(home);
     }
