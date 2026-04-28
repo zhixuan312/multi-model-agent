@@ -315,7 +315,7 @@ export async function executeReviewedLifecycle(
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
   const verboseStream = verboseStreamRaw;
-  let prevEventAtMs = verbose ? Date.now() : 0;
+  let prevEventAtMs = Date.now();
   // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
   // verbose stream, or verbose logger). Previously this only wrapped when
   // the caller passed onProgress, so --verbose + HTTP handlers (which don't
@@ -341,7 +341,7 @@ export async function executeReviewedLifecycle(
         }
         if (event.kind === 'turn_start') {
           heartbeat?.markEvent('llm');
-          if (verbose) prevEventAtMs = Date.now();
+          prevEventAtMs = Date.now();
           if (verbose) {
             emitTaskEvent('turn_start', {
               turn: event.turn,
@@ -351,6 +351,7 @@ export async function executeReviewedLifecycle(
           }
         }
         if (event.kind === 'text_emission') {
+          prevEventAtMs = Date.now();
           heartbeat?.markEvent('text');
           textEmissionChars += event.chars;
           if (verbose && event.chars > 0) {
@@ -374,9 +375,9 @@ export async function executeReviewedLifecycle(
             progressCounters.filesWritten++;
           }
           heartbeat?.updateProgress(progressCounters.filesRead, progressCounters.filesWritten, progressCounters.toolCalls);
-          const now = verbose ? Date.now() : 0;
-          const sincePrevMs = verbose ? now - prevEventAtMs : 0;
-          if (verbose) prevEventAtMs = now;
+          const now = Date.now();
+          const sincePrevMs = now - prevEventAtMs;
+          prevEventAtMs = now;
           if (verbose) {
             emitTaskEvent('tool_call', {
               tool: event.toolSummary,
@@ -398,9 +399,9 @@ export async function executeReviewedLifecycle(
             task.parentModel,
           );
           heartbeat?.updateCost(costUSD, savedCostUSD);
-          const nowTurn = verbose ? Date.now() : 0;
-          const turnDurMs = verbose ? nowTurn - prevEventAtMs : 0;
-          if (verbose) prevEventAtMs = nowTurn;
+          const nowTurn = Date.now();
+          const turnDurMs = nowTurn - prevEventAtMs;
+          prevEventAtMs = nowTurn;
           if (verbose) {
             emitTaskEvent('turn_complete', {
               input_tokens: event.cumulativeInputTokens,
