@@ -43,7 +43,7 @@ const RunStatusEnum = z.enum([
 ]);
 
 const ReviewVerdictEnum = z.enum([
-  'approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable',
+  'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
 ]);
 
 const VerifyOutcomeEnum = z.enum(['passed', 'failed', 'skipped', 'not_applicable']);

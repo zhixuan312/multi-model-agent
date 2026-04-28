@@ -39,7 +39,7 @@ interface BaseStageStats {
 }
 
 export type ReviewVerdict =
-  | 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'not_applicable';
+  | 'approved' | 'concerns' | 'changes_required' | 'annotated' | 'error' | 'skipped' | 'not_applicable';
 
 export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable';
 export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other';
@@ -210,7 +210,7 @@ export interface RunResult {
   // The spec says "always present" — that invariant holds at the lifecycle boundary;
   // here the type is permissive to keep migration mechanical.
   verification?: VerifyStageResult
-  qualityReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
+  qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   agents?: {

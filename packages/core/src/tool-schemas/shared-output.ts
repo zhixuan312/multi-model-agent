@@ -14,7 +14,7 @@ export const costSummarySchema = z.object({}).passthrough();
 export const structuredReportSchema = z.object({}).passthrough();
 
 const REVIEW_VERDICT_SCHEMA = z.enum([
-  'approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable',
+  'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
 ]);
 
 // Envelope builder — single source of truth.
