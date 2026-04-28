@@ -916,7 +916,7 @@ export async function executeReviewedLifecycle(
     const filePathsSkipped = !filePathsInteracted;
 
     if (implResult.filesWritten.length === 0) {
-      if (reviewPolicy === 'off') {
+      if (reviewPolicy === 'off' || reviewPolicy === 'quality_only') {
         emitTaskEvent('stage_change', { from: 'verifying', to: 'terminal' });
         const terminal = resolveOffTerminal({
           ...implResult,

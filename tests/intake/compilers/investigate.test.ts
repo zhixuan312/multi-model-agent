@@ -4,14 +4,14 @@ describe('compileInvestigate', () => {
   it('produces a single TaskSpec with the right route and review policy', () => {
     const spec = compileInvestigate({ question: 'How does X work?' }, [], [], [], '/cwd');
     expect(spec.route).toBe('investigate_codebase');
-    expect(spec.reviewPolicy).toBe('off');
+    expect(spec.reviewPolicy).toBe('quality_only');
     expect(spec.agentType).toBe('complex');
     expect(spec.tools).toBe('readonly');
   });
 
-  it('honours caller agentType=standard', () => {
-    const spec = compileInvestigate({ question: 'q', agentType: 'standard' }, [], [], [], '/cwd');
-    expect(spec.agentType).toBe('standard');
+  it('always uses agentType=complex regardless of input (hardcoded per G2)', () => {
+    const spec = compileInvestigate({ question: 'q' } as any, [], [], [], '/cwd');
+    expect(spec.agentType).toBe('complex');
   });
 
   it('honours caller tools=none', () => {

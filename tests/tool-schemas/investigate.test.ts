@@ -33,9 +33,17 @@ describe('investigate inputSchema', () => {
     expect(inputSchema.safeParse({ question: 'q', tools: 'no-shell' }).success).toBe(false);
   });
 
-  it('accepts agentType=standard and agentType=complex', () => {
-    expect(inputSchema.safeParse({ question: 'q', agentType: 'standard' }).success).toBe(true);
-    expect(inputSchema.safeParse({ question: 'q', agentType: 'complex' }).success).toBe(true);
+  it('rejects agentType in input (removed per spec)', () => {
+    const result = inputSchema.safeParse({
+      question: 'x',
+      agentType: 'standard',
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('accepts input without agentType after removal', () => {
+    const result = inputSchema.safeParse({ question: 'x' });
+    expect(result.success).toBe(true);
   });
 
   it('rejects unknown fields (strict)', () => {
