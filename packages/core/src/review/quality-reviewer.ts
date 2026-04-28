@@ -31,7 +31,7 @@ import {
  * - 'skipped' — kill switch, no provider, or worker emitted no findings.
  */
 export interface QualityReviewResult {
-  status: 'approved' | 'changes_required' | 'annotated' | 'error' | 'api_error' | 'network_error' | 'timeout' | 'skipped';
+  status: 'approved' | 'changes_required' | 'annotated' | 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted' | 'skipped';
   annotatedFindings?: AnnotatedFinding[];
   report?: ParsedStructuredReport;
   findings: string[];
@@ -190,7 +190,7 @@ export async function runQualityReview(
   }
 
   if (result.status !== 'ok') {
-    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
       return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
     }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
@@ -275,6 +275,9 @@ async function runAnnotationReview(
   }
 
   if (result.status !== 'ok') {
+    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
+      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
+    }
     return {
       status: 'error',
       findings: [],
