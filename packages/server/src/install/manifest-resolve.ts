@@ -66,7 +66,7 @@ export function removeSkillFromClient(
       uninstallGeminiCli(homeDir);
       break;
     case 'codex':
-      uninstallCodexCli(homeDir);
+      uninstallCodexCli(skillName, homeDir);
       break;
     case 'cursor':
       uninstallCursor(cwd);
