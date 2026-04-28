@@ -52,7 +52,7 @@
   },
   "dependencies": {
     "@asteasolutions/zod-to-openapi": "^8.5.0",
-    "@zhixuan92/multi-model-agent-core": "^3.8.1",
+    "@zhixuan92/multi-model-agent-core": "^3.9.0",
     "gray-matter": "^4.0.3",
     "minimist": "^1.2.8",
     "proper-lockfile": "^4.1.2",
