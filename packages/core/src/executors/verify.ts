@@ -11,6 +11,7 @@ import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -146,8 +147,9 @@ export async function executeVerify(
     const costSummary = computeAggregateCost(results);
 
     const first = results[0];
-    const killSwitch = false;
-    const verdicts = mapReviewVerdicts(first, killSwitch);
+    const flag = resolveReadOnlyReviewFlag();
+    const useQualityReview = flag.isEnabledFor('verify_work');
+    const verdicts = mapReviewVerdicts(first, !useQualityReview);
 
     return {
       headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
@@ -198,8 +200,9 @@ export async function executeVerify(
   const costSummary = computeAggregateCost(results);
 
   const first = results[0];
-  const killSwitch = false;
-  const verdicts = mapReviewVerdicts(first, killSwitch);
+  const flag2 = resolveReadOnlyReviewFlag();
+  const useQualityReview2 = flag2.isEnabledFor('verify_work');
+  const verdicts = mapReviewVerdicts(first, !useQualityReview2);
 
   return {
     headline: composeTerminalHeadline({ tool: 'verify', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),

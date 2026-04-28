@@ -40,6 +40,10 @@
       "types": "./dist/config/load.d.ts",
       "import": "./dist/config/load.js"
     },
+    "./config/read-only-review-flag": {
+      "types": "./dist/config/read-only-review-flag.d.ts",
+      "import": "./dist/config/read-only-review-flag.js"
+    },
     "./routing/model-profiles": {
       "types": "./dist/routing/model-profiles.d.ts",
       "import": "./dist/routing/model-profiles.js"

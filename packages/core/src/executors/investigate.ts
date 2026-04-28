@@ -15,6 +15,7 @@ import { parseInvestigationReport, type ParsedInvestigation } from '../reporting
 import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-status.js';
 import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
 import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 export interface InvestigateExecutorInput {
   input: Input;
@@ -153,7 +154,9 @@ export async function executeInvestigate(
     ...(derived.incompleteReason !== undefined && { incompleteReason: derived.incompleteReason }),
   });
 
-  const reviewVerdicts = mapReviewVerdicts(result, false);
+  const flag = resolveReadOnlyReviewFlag();
+  const useQualityReview = flag.isEnabledFor('investigate_codebase');
+  const reviewVerdicts = mapReviewVerdicts(result, !useQualityReview);
 
   return {
     headline,

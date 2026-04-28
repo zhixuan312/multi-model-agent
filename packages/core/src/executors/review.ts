@@ -11,6 +11,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
+import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 
 // --- Ported from packages/mcp/src/tools/review-code.ts ---
 
@@ -185,7 +186,9 @@ export async function executeReview(
 
   // Surface review verdicts from the lifecycle
   const primaryResult = results[0];
-  const verdicts = mapReviewVerdicts(primaryResult ?? {}, false);
+  const flag = resolveReadOnlyReviewFlag();
+  const useQualityReview = flag.isEnabledFor('review_code');
+  const verdicts = mapReviewVerdicts(primaryResult ?? {}, !useQualityReview);
 
   return {
     headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: taskSpecs.length, tasksCompleted: results.length }),
