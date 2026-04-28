@@ -33,6 +33,7 @@ import {
 } from '../escalation/fallback.js';
 import { findModelCapabilities, findModelProfile, extractCanonicalModelName } from '../routing/model-profiles.js';
 import { HeartbeatTimer } from '../heartbeat.js';
+import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
 import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -334,7 +335,16 @@ export async function executeReviewedLifecycle(
   // the caller passed onProgress, so --verbose + HTTP handlers (which don't
   // pass onProgress) silently dropped every tool_call / turn_complete event.
   let textEmissionChars = 0;
-  const markRunnerEvent = (): void => { lastRunnerEventAtMs = Date.now(); };
+  const markRunnerEvent = (): void => {
+    const now = Date.now();
+    const gap = now - stageIdle.stageLastEventMs;
+    if (gap > stageIdle.stageMaxIdleMs) stageIdle.stageMaxIdleMs = gap;
+    if (gap > taskMaxIdleMs) taskMaxIdleMs = gap;
+    if (gap > 1000) stageIdle.stageTotalIdleMs += gap;
+    stageIdle.stageActivityCount += 1;
+    stageIdle.stageLastEventMs = now;
+    lastRunnerEventAtMs = now;
+  };
   const wrappedOnProgress = (event: InternalRunnerEvent): void => {
     // Watchdog: fire on every activity event regardless of telemetry consumers.
     // Without this, a no-consumer caller leaves lastRunnerEventAtMs frozen at
@@ -443,6 +453,8 @@ export async function executeReviewedLifecycle(
   const stallTimeoutMs = config.defaults.stallTimeoutMs ?? DEFAULT_STALL_TIMEOUT_MS;
   const stallController = new AbortController();
   let lastRunnerEventAtMs = taskStartMs;
+  let stageIdle: StageIdleTracker = newStageIdleTracker(taskStartMs);
+  let taskMaxIdleMs = 0;
   let stallFired = false;
   const commits: Commit[] = [];
   let commitError: string | undefined;
