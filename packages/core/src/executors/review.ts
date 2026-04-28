@@ -155,7 +155,7 @@ export async function executeReview(
     try {
       return expandContextBlocks(task, contextBlockStore) as TaskSpec;
     } catch (e) {
-      ctx.logger.warn('expandContextBlocks failed for review task', { error: e instanceof Error ? e.message : String(e) });
+      ctx.logger.error('expandContextBlocks_failed_review', e);
       return task;
     }
   });
