@@ -43,38 +43,126 @@
       "errorCode": "error",
       "retryable": false,
       "workerStatus": "done",
+      "concerns": [],
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
+      "qualityReviewStatus": "error",
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": "other",
+          "model": "mock"
+        },
+        "spec_rework": {
+          "stage": "spec_rework",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null
+        },
+        "quality_rework": {
+          "stage": "quality_rework",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null
+        },
+        "committing": {
+          "stage": "committing",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null
+        },
+        "verifying": {
+          "stage": "verifying",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "outcome": null,
+          "skipReason": null
+        },
+        "spec_review": {
+          "stage": "spec_review",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "verdict": null,
+          "roundsUsed": null
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": "other",
+          "model": "mock",
+          "verdict": "error",
+          "roundsUsed": 0
+        },
+        "diff_review": {
+          "stage": "diff_review",
+          "entered": false,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "verdict": null,
+          "roundsUsed": null
+        }
+      },
+      "reviewRounds": {
+        "spec": 1,
+        "quality": 1,
+        "metadata": 0,
+        "cap": 3
+      },
+      "qualityReviewReason": "review agent returned status: error",
+      "structuredReport": {
+        "summary": "[Reviewed] Sub-agent error: Connection error.",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
       "implementationReport": {
         "summary": "Sub-agent error: Connection error.",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
-        "extraSections": {},
-        "unresolved": []
-      },
-      "structuredReport": {
-        "summary": "[No artifacts] task produced no file artifacts to review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "extraSections": {},
-        "unresolved": []
+        "unresolved": [],
+        "extraSections": {}
       },
       "filePathsSkipped": false,
       "agents": {
         "implementer": "complex",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable",
         "implementerToolMode": "full",
-        "implementerCapabilities": []
+        "implementerCapabilities": [],
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "standard"
       },
       "models": {
         "implementer": "mock",
         "specReviewer": null,
-        "qualityReviewer": null
+        "qualityReviewer": "mock"
       },
       "commits": [],
       "verification": {
@@ -82,88 +170,6 @@
         "steps": [],
         "totalDurationMs": 0,
         "skipReason": "no_command"
-      },
-      "stageStats": {
-        "implementing": {
-          "agentTier": "complex",
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": true,
-          "model": "mock",
-          "modelFamily": "other",
-          "stage": "implementing"
-        },
-        "committing": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "stage": "committing"
-        },
-        "diff_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "diff_review",
-          "verdict": null
-        },
-        "quality_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "quality_review",
-          "verdict": null
-        },
-        "quality_rework": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "stage": "quality_rework"
-        },
-        "spec_review": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "roundsUsed": null,
-          "stage": "spec_review",
-          "verdict": null
-        },
-        "spec_rework": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "stage": "spec_rework"
-        },
-        "verifying": {
-          "agentTier": null,
-          "costUSD": null,
-          "durationMs": "<DETERMINISTIC>",
-          "entered": false,
-          "model": null,
-          "modelFamily": null,
-          "outcome": null,
-          "skipReason": null,
-          "stage": "verifying"
-        }
       }
     }
   ],
@@ -188,9 +194,9 @@
     "kind": "not_applicable",
     "reason": "batch not awaiting clarification"
   },
-  "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
   "batchId": "<DETERMINISTIC>",
-  "wallClockMs": "<DETERMINISTIC>"
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "error",
+  "roundsUsed": 1
 }
