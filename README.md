@@ -230,7 +230,9 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 }
 ```
 
-When opted in, every upload batch is signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`); receivers can verify the batch came from the install whose `installId` it claims. Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
+When opted in, every upload batch carries one `task.completed` event per task with exact integer counts (tokens, tool calls, files, turns, durations in ms) and cost estimates in USD — no bucketed fields, no session/install/skill events. Batches are signed with a per-install Ed25519 key (TOFU; generated at `~/.multi-model/identity.json`). Full disclosure of every collected field in [PRIVACY.md](./PRIVACY.md).
+
+**V2→V3 upgrade note:** Previous V2 opt-ins are cleared on upgrade to 3.10.0+. Run `mmagent telemetry enable` to opt in to schema v3.
 
 ### Verbose / diagnostics
 

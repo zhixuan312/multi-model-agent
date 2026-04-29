@@ -9,19 +9,12 @@ import { readGeneration, bumpGeneration } from './generation.js';
 import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 import {
   buildTaskCompletedEvent,
-  buildSessionStartedEvent,
-  buildInstallChangedEvent,
-  buildSkillInstalledEvent,
   type BuildContext,
-  type SessionSnapshot,
 } from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
 
 export interface Recorder {
   readonly signal: AbortSignal;
   recordTaskCompleted(ctx: BuildContext): void;
-  recordSessionStarted(snap: SessionSnapshot): void;
-  recordInstallChanged(from: string | null, to: string, trigger: string): void;
-  recordSkillInstalled(skillId: string, client: string): void;
   enqueue(event: Record<string, unknown>): void;
   revokeIdentity(options?: { deleteInstallId?: boolean }): Promise<void>;
 }
@@ -67,16 +60,12 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
 
       queue.append({
         schemaVersion: SCHEMA_VERSION,
-        install: {
-          installId: meta.installId,
-          mmagentVersion: meta.mmagentVersion,
-          os: meta.os,
-          nodeMajor: meta.nodeMajor,
-          language: meta.language,
-          tzOffsetBucket: meta.tzOffsetBucket,
-        },
+        installId: meta.installId,
+        mmagentVersion: meta.mmagentVersion,
+        os: meta.os,
+        nodeMajor: meta.nodeMajor,
         generation: gen,
-        event,
+        events: [event],
       }).catch(() => {
         dropped++;
       });
@@ -97,36 +86,6 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
         const d = decide(homeDir);
         if (!d.enabled) return;
         enqueue(buildTaskCompletedEvent(ctx));
-      } catch {
-        dropped++;
-      }
-    },
-
-    recordSessionStarted(snap) {
-      try {
-        const d = decide(homeDir);
-        if (!d.enabled) return;
-        enqueue(buildSessionStartedEvent(snap));
-      } catch {
-        dropped++;
-      }
-    },
-
-    recordInstallChanged(from, to, trigger) {
-      try {
-        const d = decide(homeDir);
-        if (!d.enabled) return;
-        enqueue(buildInstallChangedEvent(from, to, trigger as 'fresh_install' | 'upgrade' | 'downgrade'));
-      } catch {
-        dropped++;
-      }
-    },
-
-    recordSkillInstalled(skillId, client) {
-      try {
-        const d = decide(homeDir);
-        if (!d.enabled) return;
-        enqueue(buildSkillInstalledEvent(skillId, client));
       } catch {
         dropped++;
       }

@@ -20,20 +20,14 @@ function resetCapWarning(): void {
   capWarned = false;
 }
 
-interface QueueInstall {
-  installId: string;
-  mmagentVersion: string;
-  os: string;
-  nodeMajor: string;
-  language: string;
-  tzOffsetBucket: string;
-}
-
 export interface QueueRecord {
   schemaVersion: number;
-  install: QueueInstall;
+  installId: string;
+  mmagentVersion: string;
+  os: 'darwin' | 'linux' | 'win32' | 'other';
+  nodeMajor: number;
   generation: number;
-  event: Record<string, unknown>;
+  events: Record<string, unknown>[];
 }
 
 export interface RecordMeta {

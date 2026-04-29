@@ -206,6 +206,17 @@ export interface RunResult {
    *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
    *  signals "no progress" rather than "budget exhausted". */
   stallTriggered?: boolean
+  /** Number of times the stall watchdog fired across this task's lifecycle.
+   *  V3 replacement for the V2 boolean — multiple stalls in a single task
+   *  are possible when the watchdog resets across stage transitions. */
+  stallCount?: number
+  /** Per-stage token allocation (optional — populated when runner tracks per-stage).
+   *  Keyed by stage name; stages that didn't run have no entry. */
+  perStageTokens?: Partial<Record<string, { input: number; output: number; cached: number; reasoning: number }>>
+  /** Per-stage turn count (optional — populated when orchestration tags turns). */
+  turnsByStage?: Partial<Record<string, number>>
+  /** Per-stage sandbox violation count. */
+  sandboxViolationCount?: number
   /** Longest silent gap between LLM/tool/text activity events seen anywhere
    *  in the lifecycle (across all stages). Use to retro-tune stallTimeoutMs. */
   taskMaxIdleMs?: number | null
@@ -241,26 +252,107 @@ export interface RunResult {
 
 export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult> }
 
-export function computeCostUSD(inputTokens: number, outputTokens: number, config: ProviderConfig): number | null {
-  const explicitRates = resolveRatePair(config.inputCostPerMTok, config.outputCostPerMTok);
-  if (explicitRates !== null) return (inputTokens * explicitRates.input + outputTokens * explicitRates.output) / 1_000_000;
-  const profile = findModelProfile(config.model);
-  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
-  if (profileRates === null) return null;
-  return (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000;
+export interface CostBreakdown {
+  inputCost: number;
+  cachedInputCost: number;
+  outputCost: number;
+  reasoningCost: number;
+  total: number;
 }
 
-export function computeSavedCostUSD(actualCostUSD: number | null, inputTokens: number, outputTokens: number, parentModel: string | undefined): number | null {
+/**
+ * Compute cost using the V3 4-term formula with subset semantics:
+ *   cost = (input - cached) × inputRate
+ *        + cached × cachedRate
+ *        + (output - reasoning) × outputRate
+ *        + reasoning × reasoningRate
+ *
+ * Cached rate fallback: profile.cachedInputCostPerMTok ?? inputRate × 0.1
+ * Reasoning rate fallback: profile.reasoningCostPerMTok ?? outputRate
+ *
+ * Returns float USD with no rounding — the single rounding boundary is at
+ * backend ingest (micro-USD conversion).
+ */
+export function computeCostUSD(
+  inputTokens: number,
+  outputTokens: number,
+  config: ProviderConfig,
+  cachedTokens = 0,
+  reasoningTokens = 0,
+): number | null {
+  const breakdown = computeCostBreakdown(inputTokens, outputTokens, config, cachedTokens, reasoningTokens);
+  return breakdown?.total ?? null;
+}
+
+/** Per-bucket cost breakdown for use by event-builder per-stage emit. */
+export function computeCostBreakdown(
+  inputTokens: number,
+  outputTokens: number,
+  config: ProviderConfig,
+  cachedTokens = 0,
+  reasoningTokens = 0,
+): CostBreakdown | null {
+  const rates = resolveCostRates(config);
+  if (!rates) return null;
+
+  const inputPart = (inputTokens - cachedTokens) * rates.input;
+  const cachedPart = cachedTokens * rates.cachedInput;
+  const outputPart = (outputTokens - reasoningTokens) * rates.output;
+  const reasoningPart = reasoningTokens * rates.reasoning;
+
+  const total = (inputPart + cachedPart + outputPart + reasoningPart) / 1_000_000;
+
+  return {
+    inputCost: Math.max(0, inputPart / 1_000_000),
+    cachedInputCost: Math.max(0, cachedPart / 1_000_000),
+    outputCost: Math.max(0, outputPart / 1_000_000),
+    reasoningCost: Math.max(0, reasoningPart / 1_000_000),
+    total: Math.max(0, total),
+  };
+}
+
+function resolveCostRates(config: ProviderConfig): { input: number; cachedInput: number; output: number; reasoning: number } | null {
+  const explicitInput = config.inputCostPerMTok;
+  const explicitOutput = config.outputCostPerMTok;
+  if (explicitInput !== undefined && explicitOutput !== undefined && Number.isFinite(explicitInput) && Number.isFinite(explicitOutput) && explicitInput >= 0 && explicitOutput >= 0) {
+    const profile = findModelProfile(config.model);
+    const cachedInput = profile.cachedInputCostPerMTok ?? explicitInput * 0.1;
+    const reasoning = profile.reasoningCostPerMTok ?? explicitOutput;
+    return { input: explicitInput, cachedInput, output: explicitOutput, reasoning };
+  }
+
+  const profile = findModelProfile(config.model);
+  const input = profile.inputCostPerMTok;
+  const output = profile.outputCostPerMTok;
+  if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
+  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
+  const reasoning = profile.reasoningCostPerMTok ?? output;
+  return { input, cachedInput, output, reasoning };
+}
+
+export function computeSavedCostUSD(
+  actualCostUSD: number | null,
+  inputTokens: number,
+  outputTokens: number,
+  parentModel: string | undefined,
+  cachedTokens = 0,
+  reasoningTokens = 0,
+): number | null {
   if (actualCostUSD === null || parentModel === undefined) return null;
   const profile = findModelProfile(parentModel);
-  const profileRates = resolveRatePair(profile.inputCostPerMTok, profile.outputCostPerMTok);
-  if (profileRates === null) return null;
-  return (inputTokens * profileRates.input + outputTokens * profileRates.output) / 1_000_000 - actualCostUSD;
-}
+  const input = profile.inputCostPerMTok;
+  const output = profile.outputCostPerMTok;
+  if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
+  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
+  const reasoning = profile.reasoningCostPerMTok ?? output;
 
-function resolveRatePair(inputCostPerMTok: number | undefined, outputCostPerMTok: number | undefined): { input: number; output: number } | null {
-  if (inputCostPerMTok !== undefined && outputCostPerMTok !== undefined && Number.isFinite(inputCostPerMTok) && Number.isFinite(outputCostPerMTok) && inputCostPerMTok >= 0 && outputCostPerMTok >= 0) return { input: inputCostPerMTok, output: outputCostPerMTok };
-  return null;
+  const parentCost =
+    ((inputTokens - cachedTokens) * input +
+     cachedTokens * cachedInput +
+     (outputTokens - reasoningTokens) * output +
+     reasoningTokens * reasoning) / 1_000_000;
+
+  return parentCost - actualCostUSD;
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController, externalSignal?: AbortSignal): Promise<T> {

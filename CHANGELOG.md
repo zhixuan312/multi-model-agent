@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.0] - 2026-04-29
+
+### Added
+- **V3 telemetry schema (core).** `SCHEMA_VERSION` bumped to 3. New wire format with exact integer/numeric fields replacing bucket-based approximations: `totalDurationMs`, `totalCostUSD`, `totalSavedCostUSD`, per-stage `maxIdleMs`/`totalIdleMs`, top-level `taskMaxIdleMs`, `stallCount`, `sandboxViolationCount`, `briefQualityWarningCount`. Stage entries are a discriminated-union array (`stages[]`) replacing the fixed-key stage map. Batch wrapper carries `installId`/`mmagentVersion`/`os`/`nodeMajor` inline (no separate session/install/skill events).
+- **33-family model profile registry (core).** `model-profiles.json` expanded to cover all 33 model families: claude, openai, gemini, deepseek, llama, mistral, qwen, grok, cohere, phi, gemma, yi, kimi, sonar, nova, glm, minimax, jamba, granite, nemotron, dbrx, arctic, reka, olmo, hermes, wizardlm, starcoder, dolphin, openchat, vicuna, internlm, baichuan, other. Every profile carries a `family` field; new optional pricing fields `cachedInputCostPerMTok` and `reasoningCostPerMTok` with documented 10%-of-input-rate fallback for cache and output-rate fallback for reasoning.
+- **Model normalization (core).** `extractCanonicalModelName` rewrites vendor-prefix stripping with a 5-step algorithm (namespace strip → variant-preserving match → trailing-marker strip → longest-prefix match → fallback). `normalizeModel()` in `telemetry/normalize.ts` returns `{ canonical, family }` from a single call. `deriveModelFamily` and hardcoded `FAMILY_MAP` deleted.
+- **Cost compute V3 formula (core).** `computeCostUSD` now uses the 4-term formula: `(input - cached) × inputRate + cached × cachedRate + (output - reasoning) × outputRate + reasoning × reasoningRate`, with subset semantics (reasoning ⊆ output, cached ⊆ input). `computeCostBreakdown` returns per-bucket object.
+- **V3 contract goldens (tests).** 16 V3 envelope contract tests covering delegate, audit, review, verify, debug, investigate, execute-plan, retry routes and all terminal statuses, validated against `ValidatedTaskCompletedEventSchema` with R1–R15 superRefine rules.
+- **CLI consent re-confirmation (server).** V2 opt-ins do not auto-migrate to V3. On first daemon start after upgrade, `consentSchemaVersion < 3` clears the telemetry flag and prints a notice. `mmagent telemetry enable` now writes `consentSchemaVersion: 3` atomically.
+
+### Changed
+- **Event builder rewritten for V3 (core).** `buildTaskCompletedEvent` now emits V3-shaped events: stages array with discriminated-union entries, exact integer/numeric fields, `reviewPolicy`/`verifyCommandPresent`/`parentModelFamily` wired from task context. Bucket fields (`durationBucket`, `costBucket`, etc.), `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted`, `escalated`/`fallbackTriggered` booleans dropped from wire.
+- **`reviewedRoutes` expanded from 2 to 7 routes.** Quality review stages now emitted for audit, review, verify, debug, and investigate routes in addition to delegate and execute-plan.
+- **Queue format updated (server).** Queue records now store batch-wrapper fields inline (`installId`, `mmagentVersion`, `os`, `nodeMajor`, `events[]`) instead of nested `install` object with `language`/`tzOffsetBucket`.
+
+### Removed
+- **Deprecated event types deleted.** `session.started`, `install.changed`, `skill.installed` event types and their emitters/builders removed. Install liveness tracked server-side via batch wrapper; skill usage visible via route distribution on `task.completed`.
+- **`FAMILY_MAP` and `deriveModelFamily` deleted.** Replaced by profile-driven `normalizeModel().family` lookup. `BoundedIdentifier` deleted; replaced by `STRICT_ID_REGEX`.
+- **`deriveTopToolNames` and `normalizeModelForTelemetry` deleted.** `topToolNames` field removed from V3 wire format.
+
 ## [3.9.1] - 2026-04-29
 
 ### Fixed

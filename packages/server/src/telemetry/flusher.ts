@@ -21,10 +21,13 @@ const INITIAL_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
 
 function groupKey(record: {
   schemaVersion: number;
-  install: { installId: string; mmagentVersion: string; os: string; nodeMajor: string; language: string; tzOffsetBucket: string };
+  installId: string;
+  mmagentVersion: string;
+  os: string;
+  nodeMajor: number;
   generation: number;
 }): string {
-  return `${record.schemaVersion}|${record.install.installId}|${record.install.mmagentVersion}|${record.install.os}|${record.install.nodeMajor}|${record.install.language}|${record.install.tzOffsetBucket}|${record.generation}`;
+  return `${record.schemaVersion}|${record.installId}|${record.mmagentVersion}|${record.os}|${record.nodeMajor}|${record.generation}`;
 }
 
 interface UploadResult {
@@ -197,10 +200,13 @@ export class Flusher {
     signal: AbortSignal,
   ): Promise<UploadResult> {
     const first = group.records[0];
-    const events = group.records.map(r => r.event);
+    const events = group.records.flatMap(r => r.events);
     const jsonBody = JSON.stringify({
       schemaVersion: first.schemaVersion,
-      install: first.install,
+      installId: first.installId,
+      mmagentVersion: first.mmagentVersion,
+      os: first.os,
+      nodeMajor: first.nodeMajor,
       events,
     });
     const identity = getOrCreateIdentity(this.#dir);

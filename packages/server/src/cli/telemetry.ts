@@ -99,11 +99,12 @@ async function runEnable(deps: TelemetryDeps): Promise<number> {
 
   const telemetry = (cfg.telemetry ?? {}) as Record<string, unknown>;
   telemetry.enabled = true;
+  (telemetry as any).consentSchemaVersion = 3;
   cfg.telemetry = telemetry;
 
   try {
     writeConfigObj(deps.homeDir, cfg);
-    stdout('Telemetry enabled (config.telemetry.enabled = true)\n');
+    stdout('Telemetry enabled (config.telemetry.enabled = true, schema v3)\n');
     return 0;
   } catch (err) {
     stderr(`mmagent telemetry enable: ${err instanceof Error ? err.message : String(err)}\n`);
