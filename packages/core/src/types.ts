@@ -206,6 +206,17 @@ export interface RunResult {
    *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
    *  signals "no progress" rather than "budget exhausted". */
   stallTriggered?: boolean
+  /** Number of times the stall watchdog fired across this task's lifecycle.
+   *  V3 replacement for the V2 boolean — multiple stalls in a single task
+   *  are possible when the watchdog resets across stage transitions. */
+  stallCount?: number
+  /** Per-stage token allocation (optional — populated when runner tracks per-stage).
+   *  Keyed by stage name; stages that didn't run have no entry. */
+  perStageTokens?: Partial<Record<string, { input: number; output: number; cached: number; reasoning: number }>>
+  /** Per-stage turn count (optional — populated when orchestration tags turns). */
+  turnsByStage?: Partial<Record<string, number>>
+  /** Per-stage sandbox violation count. */
+  sandboxViolationCount?: number
   /** Longest silent gap between LLM/tool/text activity events seen anywhere
    *  in the lifecycle (across all stages). Use to retro-tune stallTimeoutMs. */
   taskMaxIdleMs?: number | null

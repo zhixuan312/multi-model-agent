@@ -84,7 +84,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
-    stallCount: Math.min(runResult.stallTriggered ? 1 : 0, 20),
+    stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? null,
     clarificationRequested: runResult.lifecycleClarificationRequested ?? false,
     briefQualityWarningCount: Math.min(runResult.briefQualityWarnings?.length ?? 0, 20),
