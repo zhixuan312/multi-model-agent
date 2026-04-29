@@ -4,7 +4,7 @@
     "naming": "claude-{tier}-{major}-{minor} | claude-{major}-{tier}-{date} (3.x legacy)",
     "rateSource": "https://docs.anthropic.com/en/docs/about-claude/models",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": true, "inputTokenSoftLimit": 150000, "capabilities": ["web_search", "web_fetch"] },
+    "defaults": { "family": "claude", "supportsEffort": true, "inputTokenSoftLimit": 150000, "capabilities": ["web_search", "web_fetch"] },
     "profiles": [
       { "prefix": "claude",          "tier": "standard",  "cost": "medium", "input": 3,     "output": 15,   "bestFor": "general Claude tasks (catch-all, Sonnet rates)" },
       { "prefix": "claude-opus",     "tier": "reasoning", "cost": "high",   "input": 5,     "output": 25,   "bestFor": "high-ambiguity tasks where error cost is high" },
@@ -21,7 +21,7 @@
     "naming": "gpt-{major}.{minor}[-{size}] — sizes: pro, mini, nano (no suffix = base)",
     "rateSource": "https://developers.openai.com/api/docs/pricing",
     "rateLookupDate": "2026-04-25",
-    "defaults": { "supportsEffort": true, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "openai", "supportsEffort": true, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "gpt",             "tier": "standard",  "cost": "medium", "input": 2.5,   "output": 15,   "bestFor": "general GPT family tasks (catch-all)" },
       { "prefix": "gpt-5",           "tier": "reasoning",                                                    "bestFor": "reasoning-tier coding and agentic workflows", "inputTokenSoftLimit": 1000000, "capabilities": ["web_search"] },
@@ -40,7 +40,7 @@
     "naming": "gemini-{major}[.{minor}]-{tier}-{suffix} — tiers: pro ($2/$12), flash ($0.50/$3)",
     "rateSource": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 200000, "capabilities": ["web_search"] },
+    "defaults": { "family": "gemini", "supportsEffort": false, "inputTokenSoftLimit": 200000, "capabilities": ["web_search"] },
     "profiles": [
       { "prefix": "gemini",          "tier": "standard",  "cost": "low",   "input": 0.5,   "output": 3,    "bestFor": "general Gemini tasks (catch-all, Flash rates)" },
       { "prefix": "gemini-3.1-pro",  "tier": "reasoning", "cost": "medium", "input": 2,     "output": 12,   "bestFor": "long-context reasoning with large documents" },
@@ -53,7 +53,7 @@
     "naming": "grok-{major}[.{minor}]-{variant} — fast variant is ~15x cheaper than base",
     "rateSource": "https://docs.x.ai/developers/models",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 200000, "capabilities": ["web_search"] },
+    "defaults": { "family": "grok", "supportsEffort": false, "inputTokenSoftLimit": 200000, "capabilities": ["web_search"] },
     "profiles": [
       { "prefix": "grok",            "tier": "standard",  "cost": "low",   "input": 0.2,   "output": 0.5,  "bestFor": "general Grok tasks (catch-all, fast-tier rates)" },
       { "prefix": "grok-4",          "tier": "reasoning", "cost": "medium", "input": 3,     "output": 15,   "bestFor": "reasoning and analysis tasks" },
@@ -65,7 +65,7 @@
     "naming": "mistral-{tier}-{version} — tiers: large ($0.50/$1.50), small ($0.10/$0.30)",
     "rateSource": "https://mistral.ai/pricing",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "mistral", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "mistral",         "tier": "standard",  "cost": "low",   "input": 0.5,   "output": 1.5,  "bestFor": "general Mistral tasks (catch-all, Large rates)" },
       { "prefix": "mistral-large",                                                                            "bestFor": "cost-effective frontier-class coding" },
@@ -77,7 +77,7 @@
     "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
     "rateLookupDate": "2026-04-27",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "deepseek", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "deepseek",          "tier": "standard",  "cost": "low",   "input": 0.3,   "output": 0.5,  "bestFor": "cost-effective coding and reasoning" },
       { "prefix": "deepseek-v4-flash",                                       "input": 0.14,  "output": 0.28, "bestFor": "cheapest DeepSeek V4 with 1M context", "inputTokenSoftLimit": 1000000 },
@@ -89,7 +89,7 @@
     "naming": "llama-{major}-{variant} | meta-llama/llama-{major}-{variant} (OpenRouter)",
     "rateSource": "https://openrouter.ai/models",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "llama", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "llama",           "tier": "standard",  "cost": "low",   "input": 0.15,  "output": 0.6,  "bestFor": "general open-weight model tasks" },
       { "prefix": "llama-4",                                                                                  "bestFor": "cost-effective open-weight coding" },
@@ -101,7 +101,7 @@
     "naming": "qwen{major}[.{minor}]-{tier} — no separator after 'qwen'",
     "rateSource": "https://openrouter.ai/qwen/qwen3.5-plus-02-15",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "qwen", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "qwen",            "tier": "standard",  "cost": "low",   "input": 0.26,  "output": 1.56, "bestFor": "cost-effective coding and multilingual tasks" }
     ]
@@ -111,7 +111,7 @@
     "naming": "glm-{major}[.{minor}] — GLM-5 is ~30% more expensive than GLM-4",
     "rateSource": "https://docs.z.ai/guides/overview/pricing",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "glm", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "glm",             "tier": "standard",  "cost": "medium", "input": 1,     "output": 3.2,  "bestFor": "general GLM/Zhipu family tasks" },
       { "prefix": "glm-5",                                                                                    "bestFor": "bilingual Chinese/English coding" },
@@ -123,7 +123,7 @@
     "naming": "kimi-k{generation}[.{minor}] | kimi-k{generation}-{variant}",
     "rateSource": "https://platform.kimi.ai/docs/pricing/chat",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "defaults": { "family": "kimi", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
     "profiles": [
       { "prefix": "kimi",            "tier": "standard",  "cost": "low",   "input": 0.6,   "output": 3,    "bestFor": "long-context tasks and coding" }
     ]
@@ -133,7 +133,7 @@
     "naming": "command-r[-plus] — plus variant is flagship",
     "rateSource": "https://cohere.com/pricing",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": ["web_search"] },
+    "defaults": { "family": "cohere", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": ["web_search"] },
     "profiles": [
       { "prefix": "command-r",       "tier": "standard",  "cost": "medium", "input": 2.5,   "output": 10,   "bestFor": "RAG workflows and grounded generation" }
     ]
@@ -143,9 +143,198 @@
     "naming": "MiniMax-M{major}.{minor}[-highspeed] — case-sensitive prefix",
     "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
     "rateLookupDate": "2026-04-17",
-    "defaults": { "supportsEffort": true, "inputTokenSoftLimit": 200000, "capabilities": [] },
+    "defaults": { "family": "minimax", "supportsEffort": true, "inputTokenSoftLimit": 200000, "capabilities": [] },
     "profiles": [
       { "prefix": "MiniMax-M2",      "tier": "standard",  "cost": "low",   "input": 0.3,   "output": 1.2,  "bestFor": "well-scoped coding and agent loops where cost matters", "avoidFor": "highest-stakes ambiguous work that needs top-tier judgment" }
+    ]
+  },
+  {
+    "provider": "microsoft",
+    "naming": "phi-{major}[-{variant}]",
+    "rateSource": "https://azure.microsoft.com/en-us/pricing/details/cognitive-services/openai-service/",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "phi", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "phi",            "tier": "standard",  "cost": "low",    "bestFor": "efficient open-weight Microsoft models" }
+    ]
+  },
+  {
+    "provider": "google-open",
+    "naming": "gemma-{major}[.{minor}] — open-weight Gemma family",
+    "rateSource": "https://ai.google.dev/gemma",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "gemma", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "gemma",          "tier": "standard",  "cost": "low",    "bestFor": "lightweight open-weight Google models" }
+    ]
+  },
+  {
+    "provider": "yi-01",
+    "naming": "yi-{tier}[-{version}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "yi", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "yi",             "tier": "standard",  "cost": "low",    "bestFor": "bilingual Chinese/English open-weight models" }
+    ]
+  },
+  {
+    "provider": "perplexity",
+    "naming": "sonar[-{variant}] — Perplexity's online-grounded models",
+    "rateSource": "https://docs.perplexity.ai/guides/pricing",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "sonar", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": ["web_search"] },
+    "profiles": [
+      { "prefix": "sonar",          "tier": "standard",  "cost": "low",    "bestFor": "online-grounded search-augmented tasks" }
+    ]
+  },
+  {
+    "provider": "amazon",
+    "naming": "nova[-{tier}][-{version}] — Amazon Bedrock native models",
+    "rateSource": "https://aws.amazon.com/bedrock/nova/pricing/",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "nova", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "nova",           "tier": "standard",  "cost": "low",    "bestFor": "Amazon Bedrock native multimodal models" }
+    ]
+  },
+  {
+    "provider": "ai21",
+    "naming": "jamba-{major}[.{minor}] — Mamba-transformer hybrid",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "jamba", "supportsEffort": false, "inputTokenSoftLimit": 256000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "jamba",          "tier": "standard",  "cost": "low",    "bestFor": "long-context Mamba-transformer hybrid" }
+    ]
+  },
+  {
+    "provider": "ibm",
+    "naming": "granite-{major}[.{minor}]-{variant}",
+    "rateSource": "https://www.ibm.com/granite",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "granite", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "granite",        "tier": "standard",  "cost": "low",    "bestFor": "enterprise open-weight IBM models" }
+    ]
+  },
+  {
+    "provider": "nvidia",
+    "naming": "nemotron-{major}[-{variant}]",
+    "rateSource": "https://build.nvidia.com/explore/discover",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "nemotron", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "nemotron",       "tier": "standard",  "cost": "low",    "bestFor": "NVIDIA-optimized open-weight models" }
+    ]
+  },
+  {
+    "provider": "databricks",
+    "naming": "dbrx[-{variant}]",
+    "rateSource": "https://www.databricks.com/dbrx",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "dbrx", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "dbrx",           "tier": "standard",  "cost": "low",    "bestFor": "mixture-of-experts enterprise models" }
+    ]
+  },
+  {
+    "provider": "snowflake",
+    "naming": "arctic[-{variant}]",
+    "rateSource": "https://www.snowflake.com/en/blog/snowflake-arctic-open-efficient-foundation-language-models-snowflake/",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "arctic", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "arctic",         "tier": "standard",  "cost": "low",    "bestFor": "Dense-MoE hybrid Snowflake models" }
+    ]
+  },
+  {
+    "provider": "reka",
+    "naming": "reka-{tier}[-{version}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "reka", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "reka",           "tier": "standard",  "cost": "low",    "bestFor": "multimodal frontier models" }
+    ]
+  },
+  {
+    "provider": "ai2",
+    "naming": "olmo-{major}[.{minor}][-{variant}] — fully open (data + code + weights)",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "olmo", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "olmo",           "tier": "standard",  "cost": "low",    "bestFor": "fully open research models from AI2" }
+    ]
+  },
+  {
+    "provider": "nous-research",
+    "naming": "hermes-{major}[.{minor}][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "hermes", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "hermes",         "tier": "standard",  "cost": "low",    "bestFor": "fine-tuned open-weight reasoning models" }
+    ]
+  },
+  {
+    "provider": "microsoft-wizardlm",
+    "naming": "wizardlm-{major}[.{minor}][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "wizardlm", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "wizardlm",       "tier": "standard",  "cost": "low",    "bestFor": "instruction-following open-weight models" }
+    ]
+  },
+  {
+    "provider": "bigcode",
+    "naming": "starcoder{generation}[-{variant}]",
+    "rateSource": "https://huggingface.co/bigcode",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "starcoder", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "starcoder",      "tier": "standard",  "cost": "low",    "bestFor": "code-generation open-weight models" }
+    ]
+  },
+  {
+    "provider": "cognitive-computations",
+    "naming": "dolphin-{major}[.{minor}][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "dolphin", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "dolphin",        "tier": "standard",  "cost": "low",    "bestFor": "uncensored open-weight models" }
+    ]
+  },
+  {
+    "provider": "openchat",
+    "naming": "openchat-{major}[.{minor}][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "openchat", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "openchat",       "tier": "standard",  "cost": "low",    "bestFor": "open-source chat-tuned models" }
+    ]
+  },
+  {
+    "provider": "lmsys",
+    "naming": "vicuna-{major}[b][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "vicuna", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "vicuna",         "tier": "standard",  "cost": "low",    "bestFor": "LLaMA-finetuned chat models from LMSYS" }
+    ]
+  },
+  {
+    "provider": "shanghai-ai-lab",
+    "naming": "internlm{major}[.{minor}][-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "internlm", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "internlm",       "tier": "standard",  "cost": "low",    "bestFor": "multilingual Chinese/English open-weight models" }
+    ]
+  },
+  {
+    "provider": "baichuan",
+    "naming": "baichuan{generation}[-{variant}]",
+    "rateLookupDate": "2026-04-29",
+    "defaults": { "family": "baichuan", "supportsEffort": false, "inputTokenSoftLimit": 128000, "capabilities": [] },
+    "profiles": [
+      { "prefix": "baichuan",       "tier": "standard",  "cost": "low",    "bestFor": "Chinese-language open-weight models" }
     ]
   }
 ]

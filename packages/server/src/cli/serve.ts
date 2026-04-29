@@ -22,7 +22,6 @@ import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
-import type { SessionSnapshot } from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
 import { startServer } from '../http/server.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
@@ -159,9 +158,33 @@ export async function startServe(
   // endpoints returned 503 'no_agent_config' even when agents were set.
   const running = await startServer(config as Parameters<typeof startServer>[0]);
 
-  // ── Telemetry: install.changed + session.started ─────────────────────
+  // ── Telemetry: consent re-confirmation + recorder ─────────────────────
   const homeDir = path.join(os.homedir(), '.multi-model');
   const mmagentVersion = readServerVersion();
+
+  // V2→V3 consent re-confirmation (§7.6): V2 opt-ins do NOT auto-migrate.
+  // When telemetry is enabled but consent schemaVersion is < 3,
+  // clear the flag and prompt the user to re-confirm.
+  const configPath = path.join(homeDir, 'config.json');
+  try {
+    const raw = fs.readFileSync(configPath, 'utf8');
+    const cfg = JSON.parse(raw) as Record<string, unknown>;
+    const telemetry = (cfg.telemetry ?? {}) as Record<string, unknown>;
+    if (telemetry.enabled === true) {
+      const consentVersion = (telemetry as any).consentSchemaVersion as number | undefined;
+      if ((consentVersion ?? 0) < 3) {
+        telemetry.enabled = false;
+        (telemetry as any).consentSchemaVersion = 3;
+        cfg.telemetry = telemetry;
+        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
+        stderr('mmagent: telemetry schema upgraded to v3; previous opt-in cleared.\n');
+        stderr('Run "mmagent telemetry enable" to opt in to schema v3.\n');
+      }
+    }
+  } catch {
+    // no config file, first run — nothing to migrate
+  }
+
   const recorder = createRecorder({ homeDir, mmagentVersion });
 
   const lastVersionPath = path.join(homeDir, 'last-version');
@@ -179,7 +202,6 @@ export async function startServe(
         : compareSemver(lastVersion, mmagentVersion) < 0
           ? 'upgrade'
           : 'downgrade';
-    recorder.recordInstallChanged(lastVersion, mmagentVersion, trigger);
     try {
       fs.mkdirSync(homeDir, { recursive: true });
       fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });
@@ -187,22 +209,6 @@ export async function startServe(
       stderr(`[mmagent] warning: failed to write last-version at ${lastVersionPath}: ${err instanceof Error ? err.message : String(err)}\n`);
     }
   }
-
-  const providersConfigured = new Set<'claude' | 'openai-compatible' | 'codex'>();
-  for (const agent of Object.values(config.agents)) {
-    const t = agent.type;
-    if (t === 'claude' || t === 'claude-compatible') providersConfigured.add('claude');
-    else if (t === 'openai-compatible') providersConfigured.add('openai-compatible');
-    else if (t === 'codex') providersConfigured.add('codex');
-  }
-
-  const snapshot: SessionSnapshot = {
-    defaultTier: 'standard',
-    diagnosticsEnabled: config.diagnostics?.log ?? false,
-    autoUpdateSkills: config.server.autoUpdateSkills,
-    providersConfigured: [...providersConfigured],
-  };
-  recorder.recordSessionStarted(snapshot);
 
   // Telemetry uploader. Default endpoint ships to the project's hosted
   // dashboard. MMAGENT_TELEMETRY_ENDPOINT overrides for self-hosted backends;
