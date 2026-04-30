@@ -26,20 +26,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  // Token sums across stages
-  const tokenSums = stages.reduce(
-    (acc, s) => ({
-      input: acc.input + s.inputTokens,
-      output: acc.output + s.outputTokens,
-      cached: acc.cached + s.cachedTokens,
-      reasoning: acc.reasoning + s.reasoningTokens,
-    }),
-    { input: 0, output: 0, cached: 0, reasoning: 0 },
-  );
-
-  // Cost sums
-  const totalCostUSD = stages.reduce((s, st) => s + st.costUSD, 0);
-  const totalDurationMs = stages.reduce((s, st) => s + st.durationMs, 0);
+  const totalDurationMs = runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0);
 
   const savedCostUSD = computeSavedCostUSD(
     runResult.usage?.costUSD ?? null,
@@ -74,12 +61,12 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
     parentModelFamily: parentModel ? normalizeModel(parentModel).family : 'other',
-    inputTokens: tokenSums.input,
-    outputTokens: tokenSums.output,
-    cachedTokens: tokenSums.cached,
-    reasoningTokens: tokenSums.reasoning,
+    inputTokens: runResult.usage?.inputTokens ?? 0,
+    outputTokens: runResult.usage?.outputTokens ?? 0,
+    cachedTokens: (runResult.usage as any)?.cachedTokens ?? 0,
+    reasoningTokens: (runResult.usage as any)?.reasoningTokens ?? 0,
     totalDurationMs,
-    totalCostUSD,
+    totalCostUSD: runResult.usage?.costUSD ?? 0,
     totalSavedCostUSD: savedCostUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
@@ -143,21 +130,27 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
   return result.slice(0, 8);
 }
 
-function extractStageData(raw: RawStageStats | undefined) {
+function extractStageData(
+  raw: RawStageStats | undefined,
+  rr: RunResult,
+  stageName: string,
+) {
   if (!raw || !raw.entered) return null;
+  const pt = (rr as any).perStageTokens?.[stageName];
+  const turnsByStage = (rr as any).turnsByStage?.[stageName];
   return {
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
     agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
     durationMs: Math.min(raw.durationMs ?? 0, 3_600_000),
     costUSD: Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000,
-    inputTokens: 0,
-    outputTokens: 0,
-    cachedTokens: 0,
-    reasoningTokens: 0,
+    inputTokens: pt?.input ?? 0,
+    outputTokens: pt?.output ?? 0,
+    cachedTokens: pt?.cached ?? 0,
+    reasoningTokens: pt?.reasoning ?? 0,
     toolCallCount: 0,
     filesReadCount: 0,
     filesWrittenCount: 0,
-    turnCount: 0,
+    turnCount: turnsByStage ?? 0,
     maxIdleMs: raw.maxIdleMs ?? null,
     totalIdleMs: raw.totalIdleMs ?? null,
   };
@@ -165,7 +158,7 @@ function extractStageData(raw: RawStageStats | undefined) {
 
 function buildImplStage(rr: RunResult): StageEntryType | null {
   const ss = rr.stageStats?.implementing;
-  const base = extractStageData(ss);
+  const base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
   return { name: 'implementing', ...base } as StageEntryType;
 }
@@ -177,7 +170,7 @@ function buildReviewStage(
   rounds: number | null,
 ): StageEntryType | null {
   const ss = rr.stageStats?.[name] as RawStageStats | undefined;
-  const base = extractStageData(ss);
+  const base = extractStageData(ss, rr, name);
   if (!base) return null;
 
   const concernSource = name;
@@ -214,7 +207,7 @@ function buildReworkStage(
   rr: RunResult,
 ): StageEntryType | null {
   const ss = rr.stageStats?.[name] as RawStageStats | undefined;
-  const base = extractStageData(ss);
+  const base = extractStageData(ss, rr, name);
   if (!base) return null;
 
   const concernSource = name === 'spec_rework' ? 'spec_review' : 'quality_review';
@@ -230,7 +223,7 @@ function buildReworkStage(
 
 function buildVerifyStage(rr: RunResult): StageEntryType | null {
   const ss = rr.stageStats?.verifying as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
-  const base = extractStageData(ss);
+  const base = extractStageData(ss, rr, 'verifying');
   if (!base) return null;
 
   return {
@@ -243,7 +236,7 @@ function buildVerifyStage(rr: RunResult): StageEntryType | null {
 
 function buildCommitStage(rr: RunResult): StageEntryType | null {
   const ss = rr.stageStats?.committing;
-  const base = extractStageData(ss);
+  const base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
 
   return {
