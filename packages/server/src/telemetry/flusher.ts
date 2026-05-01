@@ -3,6 +3,7 @@ import { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
 import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
+import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 
 export interface FlusherOptions {
   queue: Queue;
@@ -118,8 +119,27 @@ export class Flusher {
 
     try {
       // Step 1: read up to 500 records + capture generation snapshot
-      const batch: ReadBatchResult = await this.#queue.readBatch(MAX_BATCH);
+      let batch: ReadBatchResult = await this.#queue.readBatch(MAX_BATCH);
       if (batch.records.length === 0) return;
+
+      // Step 1a: drop any legacy-schema prefix at the head. Records with
+      // schemaVersion < SCHEMA_VERSION used a different wrapper shape that
+      // the current backend rejects with 401 — non-droppable in our 204/400/413
+      // ack contract, so they would permanently block the queue head.
+      let legacyHead = 0;
+      while (
+        legacyHead < batch.records.length &&
+        batch.records[legacyHead].schemaVersion < SCHEMA_VERSION
+      ) {
+        legacyHead++;
+      }
+      if (legacyHead > 0) {
+        await this.#queue.truncate(batch.meta.slice(0, legacyHead));
+        this.#dropped += legacyHead;
+        // Re-read so subsequent meta byteOffsets reflect the post-truncate file layout.
+        batch = await this.#queue.readBatch(MAX_BATCH);
+        if (batch.records.length === 0) return;
+      }
 
       const genSnapshot = readGeneration(this.#dir);
 

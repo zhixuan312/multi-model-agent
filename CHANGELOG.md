@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.7] - 2026-05-01
+
+### Fixed
+- **Telemetry queue head-of-line block on legacy-schema records** (server, critical hotfix). Records with `schemaVersion < SCHEMA_VERSION` (V1 / V2) used the older wrapper shape with `installId` nested under `body.install.installId`. The current backend `verify-signature` middleware reads `body.installId` at top level (V3-only) and returns **401 `install_id_mismatch`** for legacy payloads — non-droppable in the flusher's `204/400/413` ack contract, so legacy records sat at the queue head forever, and every newer V3 record behind them never reached the wire. Real-world impact: users upgraded across a schema bump saw a continuous stream of 401s on `/v1/events` every 5 minutes and `~/.multi-model/telemetry-queue.ndjson` grew without ever draining. Fix: at the start of each flush, detect a contiguous prefix of records with `schemaVersion < SCHEMA_VERSION`, truncate them locally via the existing `queue.truncate(meta)` path, then re-read so byte offsets reflect the new file layout. Self-heals every existing user's stuck queue at the next flush — no backend deploy, no manual queue surgery, no user action required beyond upgrading.
+
 ## [3.10.6] - 2026-05-01
 
 ### Fixed
@@ -1076,7 +1081,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.6...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.7...HEAD
+[3.10.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.6...v3.10.7
 [3.10.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...v3.10.6
 [3.10.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.4...v3.10.5
 [3.10.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.3...v3.10.4
