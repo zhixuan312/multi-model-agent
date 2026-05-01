@@ -1,4 +1,5 @@
 import type { ProgressEvent } from './runners/types.js';
+import type { HeadlineSnapshot } from './batch-registry.js';
 
 function formatElapsed(ms: number): string {
   const rounded = Math.round(ms / 1000);
@@ -33,7 +34,7 @@ const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
  * Lightweight state snapshot passed to `recordHeartbeat` on every tick (including
  * the final flush).  The server uses this — combined with the BatchRegistry entry
  * it already holds — to compose the running headline and push it via
- * `BatchRegistry.updateRunningHeadline`.
+ * `BatchRegistry.updateRunningHeadlineSnapshot`.
  *
  * HeartbeatTimer has no knowledge of BatchRegistry; it only emits this payload.
  */
@@ -66,6 +67,8 @@ export interface HeartbeatTickInfo {
    * "running, 47s elapsed" summary.
    */
   headline: string;
+  /** Lightweight state snapshot for BatchRegistry.updateRunningHeadlineSnapshot. */
+  snapshot: HeadlineSnapshot;
   /** Populated only on the tick immediately following a stage change. */
   phaseChange?: { from: HeartbeatStage; to: HeartbeatStage };
 }
@@ -182,6 +185,7 @@ export class HeartbeatTimer {
       savedCostUSD: this.savedCostUSD,
       stageIdleMs: this.stageLastEventMs > 0 ? now - this.stageLastEventMs : 0,
       headline: this.composeHeadline(formatElapsed(elapsedMs)),
+      snapshot: this.getHeadlineSnapshot(),
       ...(phaseChange !== undefined && { phaseChange }),
     };
   }
@@ -397,6 +401,8 @@ export class HeartbeatTimer {
       savedCostUSD: this.savedCostUSD,
       final,
       headline: this.composeHeadline(elapsed),
+      stageIdleMs: this.stageLastEventMs > 0 ? Date.now() - this.stageLastEventMs : 0,
+      snapshot: this.getHeadlineSnapshot(),
     });
 
     // Push a tick snapshot so the server can recompose the running headline

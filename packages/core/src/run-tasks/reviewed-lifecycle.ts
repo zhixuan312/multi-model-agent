@@ -400,7 +400,6 @@ export async function executeReviewedLifecycle(
             prevCostBucket = costBucket;
             lastNoOpEmitMs = Date.now();
             const sinceLastMs = Date.now() - prevEventAtMs;
-            const tickInfo = heartbeat?.getHeartbeatTickInfo();
             emitTaskEvent('heartbeat', {
               elapsed: event.elapsed,
               stage: event.stage,
@@ -412,7 +411,7 @@ export async function executeReviewedLifecycle(
               text: textEmissionChars,
               cost: event.costUSD,
               idle_ms: sinceLastMs,
-              stage_idle_ms: tickInfo?.stageIdleMs ?? sinceLastMs,
+              stage_idle_ms: event.stageIdleMs,
             });
           }
           synthOnProgress(taskIndex, event);
