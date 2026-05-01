@@ -33,6 +33,8 @@ import {
   removeSkillFromClient,
   getSkillsRoot,
 } from './install-skill.js';
+import { findMissingSkills } from '../install/missing-skills.js';
+import { SUPPORTED_SKILLS } from '../install/discover.js';
 
 export interface UpdateSkillsDeps {
   homeDir?: string;
@@ -144,6 +146,33 @@ export async function runUpdateSkills(deps: UpdateSkillsDeps = {}): Promise<numb
       appendEntry(entry.name, newSkillVersion, entry.targets, homeDir);
     }
     summary.updated.push(entry.name);
+  }
+
+  // Backfill: install skills that are in SUPPORTED_SKILLS but missing from the
+  // manifest (e.g. mma-investigate added in a later release). Targets are the
+  // union of all client targets already opted into.
+  const postEntries = listEntries(homeDir);
+  const missing = findMissingSkills(postEntries, SUPPORTED_SKILLS as unknown as readonly string[]);
+  for (const m of missing) {
+    const content = readSkillContent(m.name, skillsRoot);
+    if (content === null) continue;
+    const skillVersion = versionFromSkillContent(content);
+    if (!silent) logInfo(`[mmagent] installing missing skill: ${m.name} → ${m.targets.join(', ')}\n`);
+    for (const target of m.targets) {
+      try {
+        writeSkillToClient(m.name, content, target, homeDir, skillsRoot, skillVersion);
+      } catch (err) {
+        summary.errors.push({
+          skill: m.name,
+          target,
+          reason: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }
+    if (!dryRun) {
+      appendEntry(m.name, skillVersion, m.targets, homeDir);
+    }
+    summary.updated.push(m.name);
   }
 
   if (json) {

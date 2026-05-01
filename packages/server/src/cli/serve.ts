@@ -29,6 +29,8 @@ import { Queue } from '../telemetry/queue.js';
 import { runUpdateSkills } from './update-skills.js';
 import { listEntries, FutureManifestError } from '../install/manifest.js';
 import { readSkillContent } from './install-skill.js';
+import { findMissingSkills } from '../install/missing-skills.js';
+import { SUPPORTED_SKILLS } from '../install/discover.js';
 import matter from 'gray-matter';
 
 function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
@@ -43,7 +45,7 @@ function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
   }
 }
 
-async function maybeAutoUpdateSkills(
+export async function maybeAutoUpdateSkills(
   config: MultiModelConfig,
   stderr: (s: string) => boolean,
 ): Promise<void> {
@@ -59,13 +61,22 @@ async function maybeAutoUpdateSkills(
   }
 
   const behind = entries.filter((e) => isSkillBehind(e.name, e.skillVersion));
-  if (behind.length === 0) return;
+  const missing = findMissingSkills(entries, SUPPORTED_SKILLS as unknown as readonly string[]);
+  if (behind.length === 0 && missing.length === 0) return;
 
   if (!config.server.autoUpdateSkills) {
-    stderr(
-      `[mmagent] ${behind.length} skill(s) out of date: ${behind.map((e) => e.name).join(', ')}. ` +
-      `Run 'mmagent update-skills' to refresh (or set server.autoUpdateSkills=true in config).\n`,
-    );
+    if (behind.length > 0) {
+      stderr(
+        `[mmagent] ${behind.length} skill(s) out of date: ${behind.map((e) => e.name).join(', ')}. ` +
+        `Run 'mmagent update-skills' to refresh (or set server.autoUpdateSkills=true in config).\n`,
+      );
+    }
+    if (missing.length > 0) {
+      stderr(
+        `[mmagent] ${missing.length} new skill(s) available: ${missing.map((m) => m.name).join(', ')}. ` +
+        `Run 'mmagent install-skill --all' to install.\n`,
+      );
+    }
     return;
   }
 
@@ -75,7 +86,8 @@ async function maybeAutoUpdateSkills(
       runUpdateSkills({ silent: true, bestEffort: true }),
       new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
     ]);
-    process.stdout.write(`[mmagent] auto-updated ${behind.length} skill(s)\n`);
+    if (behind.length > 0) process.stdout.write(`[mmagent] auto-updated ${behind.length} skill(s)\n`);
+    if (missing.length > 0) process.stdout.write(`[mmagent] auto-installed ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
   }
