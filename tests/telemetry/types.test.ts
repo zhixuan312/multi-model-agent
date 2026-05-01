@@ -592,3 +592,77 @@ describe('StageEntrySchema', () => {
     expect(result.success).toBe(true);
   });
 });
+
+// ── Nullable cachedTokens / reasoningTokens (§3.6) ───────────────────────
+
+describe('nullable cachedTokens and reasoningTokens', () => {
+  it('StageEntrySchema accepts null cachedTokens and reasoningTokens', () => {
+    const stage = makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null });
+    const result = StageEntrySchema.safeParse(stage);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cachedTokens).toBeNull();
+      expect(result.data.reasoningTokens).toBeNull();
+    }
+  });
+
+  it('TaskCompletedEventSchema accepts null cachedTokens and reasoningTokens', () => {
+    const event = makeValidEvent({
+      cachedTokens: null,
+      reasoningTokens: null,
+      stages: [
+        makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('spec_review', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('quality_review', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('verifying', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('committing', { cachedTokens: null, reasoningTokens: null }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cachedTokens).toBeNull();
+      expect(result.data.reasoningTokens).toBeNull();
+    }
+  });
+
+  it('R5 validation uses ?? 0 for null tokens (honest-null treats missing as zero for aggregate checks)', () => {
+    // null cached/reasoning at both top-level and stage level passes R5
+    const event = makeValidEvent({
+      cachedTokens: null,
+      reasoningTokens: null,
+      inputTokens: 200,
+      outputTokens: 100,
+      stages: [
+        makeValidStage('implementing', {
+          inputTokens: 200,
+          outputTokens: 100,
+          cachedTokens: null,
+          reasoningTokens: null,
+        }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+  });
+
+  it('R5b and R6 skip validation when tokens are null', () => {
+    // reasoningTokens=null with outputTokens=1 should not trigger R5b
+    const event = makeValidEvent({
+      inputTokens: 200,
+      outputTokens: 1,
+      cachedTokens: null,
+      reasoningTokens: null,
+      stages: [
+        makeValidStage('implementing', {
+          inputTokens: 200,
+          outputTokens: 1,
+          cachedTokens: null,
+          reasoningTokens: null,
+        }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+  });
+});

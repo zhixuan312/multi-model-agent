@@ -11,7 +11,7 @@ export function makeEmptyUsage(): CanonicalUsage {
 
 export function mergeUsage(acc: CanonicalUsage, turn: CanonicalUsage): CanonicalUsage {
   return {
-    inputTokens:  acc.inputTokens  + turn.inputTokens,
+    inputTokens: acc.inputTokens + turn.inputTokens,
     outputTokens: acc.outputTokens + turn.outputTokens,
     cachedTokens: acc.cachedTokens === null && turn.cachedTokens === null
       ? null
