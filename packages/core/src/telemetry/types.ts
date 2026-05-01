@@ -52,13 +52,14 @@ export const ErrorCode = z.enum([
   'other',
 ]);
 
-export const SeverityBin = z.enum(['high', 'medium', 'low', 'style']);
+export const SeverityBin = z.enum(['critical', 'high', 'medium', 'low', 'style']);
 
 export const FindingsBySeveritySchema = z.object({
-  high: z.number().int().min(0).max(50),
-  medium: z.number().int().min(0).max(50),
-  low: z.number().int().min(0).max(50),
-  style: z.number().int().min(0).max(50),
+  critical: z.number().int().min(0).max(200),
+  high: z.number().int().min(0).max(200),
+  medium: z.number().int().min(0).max(200),
+  low: z.number().int().min(0).max(200),
+  style: z.number().int().min(0).max(200),
 }).strict();
 
 // ── Stage entry (§3.3) ───────────────────────────────────────────────────
