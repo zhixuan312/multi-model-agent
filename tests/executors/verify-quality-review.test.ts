@@ -26,7 +26,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
           output: [
             '# Verify Report',
             '### 1. Email field is present',
-            'Severity: low',
+            'Severity: high',
             'Location: src/app.ts',
             'The login form contains an email input field with proper validation attributes.',
             '',
@@ -51,7 +51,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
         output: [
           '```json',
           JSON.stringify([{
-            id: 'F1', severity: 'low',
+            id: 'F1', severity: 'high',
             claim: 'email field is present',
             evidence: 'The login form contains an email input field with proper validation attributes.',
             reviewerConfidence: 80,
@@ -116,7 +116,7 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
     const findings = out.results[0].annotatedFindings;
     expect(findings).toBeDefined();
     expect(findings!.length).toBeGreaterThanOrEqual(1);
-    expect(findings![0]!.severity).toBe('low');
+    expect(findings![0]!.severity).toBe('high');
     expect(findings![0]!.reviewerConfidence).toBe(80);
     expect(findings![0]!.evidenceGrounded).toBe(true);
   });

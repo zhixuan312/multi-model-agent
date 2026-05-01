@@ -38,7 +38,7 @@ const NARRATIVE_WORKER_OUTPUT = [
 const REVIEWER_OUTPUT = [
   '```json',
   JSON.stringify([
-    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', reviewerConfidence: 85 },
+    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', reviewerConfidence: 80 },
     { id: 'F2', severity: 'medium', claim: 'unguarded property access', evidence: 'The property access is unguarded against undefined req.body.user and will throw in production.', reviewerConfidence: 40 },
   ]),
   '```',
@@ -126,7 +126,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     expect(result.annotatedFindings).toBeDefined();
     expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
     expect(result.annotatedFindings![0]!.severity).toBe('high');
-    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(85);
+    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
     expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
 
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
@@ -139,8 +139,8 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       findingsReviewed: 2,
       findingsFlagged: 0,
       severityCorrections: 0,
-      // meanConfidence: (85 + 40) / 2 = 62.5
-      meanConfidence: 62.5,
+      // meanConfidence: (80 + 40) / 2 = 60
+      meanConfidence: 60,
     });
   });
 

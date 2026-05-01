@@ -292,4 +292,67 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
     expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
   });
+
+  it('funnels annotated findings into concerns[] and V3 findingsBySeverity roll-up', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = {
+      prompt: 'audit this code',
+      agentType: 'complex' as const,
+      reviewPolicy: 'quality_only' as const,
+    };
+
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: async () => ({
+          output: NARRATIVE_WORKER_OUTPUT,
+          status: 'ok' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/a.ts'],
+          filesWritten: ['report.md'],
+          toolCalls: ['writeFile(report.md)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        }),
+      },
+      capabilityOverride: false,
+    };
+
+    const builder = (ctx: { workerOutput: string; brief: string }) =>
+      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+
+    const result = await executeReviewedLifecycle(
+      task, resolved, config, 0,
+      undefined, undefined, undefined, undefined, 'audit',
+      undefined, undefined, undefined,
+      builder,
+    );
+
+    // Concerns populated from annotated findings with source='quality_review'
+    expect(result.concerns).toBeDefined();
+    const qrConcerns = result.concerns!.filter(c => c.source === 'quality_review');
+    expect(qrConcerns.length).toBeGreaterThanOrEqual(1);
+    expect(qrConcerns[0]!.severity).toBe('high');
+    expect(qrConcerns[0]!.message).toContain('[F1]');
+    expect(qrConcerns[0]!.message).toContain('silent error swallowing');
+
+    // V3 telemetry: buildTaskCompletedEvent rolls concerns into findingsBySeverity
+    const { buildTaskCompletedEvent } = await import('../../packages/core/src/telemetry/event-builder.js');
+    const event = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: result,
+      client: 'test-client',
+      parentModel: null,
+      reviewPolicy: 'quality_only',
+    });
+
+    const qrStage = event.stages.find(s => s.name === 'quality_review');
+    expect(qrStage).toBeDefined();
+    expect(qrStage!.findingsBySeverity).toBeDefined();
+    expect(qrStage!.findingsBySeverity.high).toBeGreaterThanOrEqual(1);
+  });
 });
