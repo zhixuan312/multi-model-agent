@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.10.4** — review stages were recording the implementer's model instead of the actual reviewer's model, so R3 (V3 cross-model invariant) tripped on every reviewed task regardless of config. Now records the actual reviewer agent. Plus: telemetry validation is fully warn-only — events never drop, and cross-field warnings include actual offending values (model, tokens, totals) so config issues vs lifecycle bugs are distinguishable at a glance. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.10.6** — Skill docs corrected to match code. The router skill claimed `mma-execute-plan` accepts `agentType` (it doesn't — schema is strict, rejects with HTTP 400) and that `mma-verify` defaults to standard tier (it defaults to complex). Fixed: only `mma-delegate` accepts `agentType` per task; every other route hardcodes its tier (`/execute-plan` → standard; `/audit` / `/review` / `/debug` / `/verify` / `/investigate` → complex). Also documented the previously-undocumented `inferEffort()` heuristics that auto-route reasoning effort within a tier. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

@@ -147,13 +147,34 @@ Every request requires `Authorization: Bearer $MMAGENT_AUTH_TOKEN`. The token ro
 
 ## Worker tier: `agentType`
 
-`mma-delegate` and `mma-execute-plan` accept `agentType: "standard" | "complex"`. Default is `"standard"` (cheaper, faster). Pick `"complex"` when:
+Only `mma-delegate` accepts `agentType: "standard" | "complex"` per task — default `"standard"` (cheaper, faster). Pick `"complex"` when:
 
 - The task touches many files or requires multi-step reasoning a standard-tier model cannot hold in context.
 - A prior standard run came back with `filesWritten: 0` or `incompleteReason: "turn_cap"` / `"cost_cap"` / `"timeout"`.
 - The task is security-sensitive or ambiguous enough that being wrong is costly.
 
-`mma-audit`, `mma-review`, `mma-debug`, `mma-investigate` already default to complex; `mma-verify` already defaults to standard. These are not caller-configurable.
+Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
+
+| Route | Hardcoded tier |
+|---|---|
+| `mma-execute-plan` | `standard` |
+| `mma-audit` | `complex` |
+| `mma-review` | `complex` |
+| `mma-debug` | `complex` |
+| `mma-verify` | `complex` |
+| `mma-investigate` | `complex` |
+
+If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
+
+## Reasoning effort: auto-inferred
+
+Independent of tier, every task runs through `inferEffort(prompt)` (`run-tasks/index.ts`) when `effort` is undefined:
+
+- Code block > 20 lines in the prompt → `low` (treated as exact-write).
+- File path + action verb (`edit`/`modify`/`update`/`fix`/`refactor`/`replace`) → `medium`.
+- Otherwise → falls through to provider config default.
+
+This is automatic and not caller-overridable from any `mma-*` skill — it shapes how hard the worker thinks within its tier.
 
 ## General flow
 

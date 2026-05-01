@@ -5,6 +5,18 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.6] - 2026-05-01
+
+### Fixed
+- **Skill docs misrepresented agentType / effort routing** (skills, doc rot). The router skill (`multi-model-agent/SKILL.md`) claimed `mma-execute-plan` accepts `agentType` (false — schema is `.strict()` and rejects with HTTP 400; `executors/execute-plan.ts:104` hardcodes `'standard'`) and that `mma-verify` defaults to `standard` (false — `executors/verify.ts:89` hardcodes `'complex'`). `mma-execute-plan/SKILL.md` claimed worker tier was "set by the plan and per-route defaults" (false — locked to `standard` regardless of plan content). Real-world impact: callers reading the docs would write `agentType: 'complex'` into `/execute-plan` requests and get 400s, then fall back to `mma-delegate` without understanding why.
+
+### Changed
+- **Router skill rewritten with accurate tier table** (skills). `multi-model-agent/SKILL.md` now states only `mma-delegate` accepts `agentType` per task, and gives a complete table of every other route's hardcoded tier (`/execute-plan` → `standard`; `/audit`, `/review`, `/debug`, `/verify`, `/investigate` → `complex`). Recommended escalation path documented: dispatch via `mma-delegate` with the plan task as the prompt and `agentType: 'complex'` when `complex` tier is needed for plan-style work.
+- **Per-route SKILL.md tier disclosures** (skills). Added a one-line "Worker tier hardcoded; `agentType` rejected with HTTP 400" note to `mma-audit`, `mma-review`, `mma-debug`, `mma-verify`, matching the precedent already in `mma-investigate`. Each per-route skill is now self-sufficient — readers don't need to cross-reference the router skill to learn that tier is fixed.
+
+### Added
+- **"Reasoning effort: auto-inferred" section in router skill** (skills, previously undocumented behavior). Documents `inferEffort()` heuristics from `effort-inference.ts:11-25`: code block > 20 lines → `low`, file path + action verb (`edit|modify|update|fix|refactor|replace`) → `medium`, otherwise provider default. Effort is auto-routed independently of tier and is not caller-overridable from any `mma-*` skill — surfacing this lets callers reason about why the same prompt rephrasing produces different worker behavior.
+
 ## [3.10.5] - 2026-05-01
 
 ### Fixed
@@ -1064,7 +1076,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.6...HEAD
+[3.10.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...v3.10.6
 [3.10.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.4...v3.10.5
 [3.10.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.3...v3.10.4
 [3.10.3]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.2...v3.10.3

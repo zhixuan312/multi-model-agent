@@ -52,6 +52,8 @@ Send code files to workers for structured review. Each file is reviewed independ
 
 Either `code` or `filePaths` (or both) must be provided.
 
+> Worker tier for `mma-review` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+
 ## Full example
 
 ```bash
