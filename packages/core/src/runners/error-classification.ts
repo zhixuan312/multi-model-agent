@@ -26,6 +26,37 @@ import type { RunStatus } from './types.js';
  */
 
 /**
+ * Detect whether an error represents a provider-side context-limit
+ * violation. Pattern-matches known provider error signatures for
+ * context-window exceeded conditions.
+ *
+ * Used by every runner to set errorCode='provider_context_limit' so the
+ * escalation orchestrator and downstream observers can distinguish
+ * context-limit failures from other API errors without string-matching
+ * the error field.
+ */
+export function isProviderContextLimit(err: unknown): boolean {
+  const e = (err ?? {}) as { message?: unknown; error?: unknown; bodyText?: unknown };
+  const message = typeof e.message === 'string' ? e.message : '';
+  const error = typeof e.error === 'string' ? e.error : '';
+  const bodyText = typeof e.bodyText === 'string' ? e.bodyText : '';
+
+  const combined = `${message} ${error} ${bodyText}`;
+
+  // Known provider context-limit signatures:
+  //   - OpenAI/Codex: "context_length_exceeded"
+  //   - Anthropic: "maximum context length"
+  //   - Generic: "context window", "reduce the length"
+  if (/context.length/i.test(combined)) return true;
+  if (/context.window/i.test(combined)) return true;
+  if (/maximum context/i.test(combined)) return true;
+  if (/reduce the length/i.test(combined)) return true;
+  if (/too many tokens/i.test(combined)) return true;
+
+  return false;
+}
+
+/**
  * Detect whether an error represents a provider-side rate limit (HTTP 429
  * or equivalent). Used by every runner to surface a structured
  * `rate_limit_exceeded` code so the escalation orchestrator and downstream

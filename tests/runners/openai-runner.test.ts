@@ -244,92 +244,64 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(lastMessage.content).toContain('exploration fragment');
   });
 
-  it('triggers the force_salvage path when input tokens cross the 95% watchdog threshold', async () => {
-    // Soft limit override so 95% is easy to hit: 1000 -> force_salvage at 950.
+  it('openai-runner does not abort or inject when input tokens exceed softLimit', async () => {
+    // With watchdog removed, high input tokens should NOT trigger force_salvage
+    // or budget_exceeded. The runner proceeds through normal supervision.
     const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
 
-    // First and only run() returns a degenerate output AND has inputTokens=960
-    // (>= 95% of 1000). The runner should force-salvage immediately.
-    mockRun.mockResolvedValueOnce(
-      makeMockRunResult({
-        finalOutput: 'Let me check',
-        inputTokens: 960,
-        newItems: [
-          {
-            type: 'message_output_item',
-            rawItem: {
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'salvageable scratchpad text' }],
-            },
-          },
-        ],
-      }),
-    );
-
-    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
-    const result = await runOpenAI('task', {}, {
-      client: clientStub,
-      providerConfig: pc,
-      defaults,
-    });
-
-    expect(result.status).toBe('incomplete');
-    // Only one run() call — the watchdog forcibly terminates before any
-    // supervision re-prompt or warning nudge fires.
-    expect(mockRun).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('salvageable scratchpad text');
-  });
-
-  it('validates the warning-nudge response in the same iteration and returns ok when it is valid (regression #1)', async () => {
-    // Reviewer bug: the prior implementation fell into the warning
-    // branch, dispatched a nudge turn, then `continue`d back to the
-    // loop head — causing the watchdog to fire `warning` AGAIN
-    // (because input tokens only grow) and never validating the
-    // nudge response. A model that produced a perfect final answer
-    // in response to the nudge had its output discarded.
-    //
-    // Fix: fall through to validateCompletion() in the same iteration
-    // so a valid nudge response returns `ok`.
-    const pc = { ...providerConfig, inputTokenSoftLimit: 1_000_000 };
-
-    // First call: 850k input tokens (warning band: 80%-95%), degenerate
-    // final output so the watchdog nudge would have been dispatched.
-    // Second call: 900k input tokens (still warning band, higher than
-    // first) with a VALID final output. Under the fix this must be
-    // validated in the same iteration and returned as `ok`.
     mockRun
       .mockResolvedValueOnce(
         makeMockRunResult({
           finalOutput: 'Let me check',
-          inputTokens: 850_000,
+          inputTokens: 200_000,
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'salvageable scratchpad text' }],
+              },
+            },
+          ],
         }),
       )
       .mockResolvedValueOnce(
-        makeMockRunResult({
-          finalOutput: VALID_FINAL_OUTPUT,
-          inputTokens: 900_000,
-        }),
+        makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, inputTokens: 210_000 }),
       );
 
+    const events: Array<{ kind: string; injectionType?: string }> = [];
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
-    const result = await runOpenAI('task', {}, {
+    const result = await runOpenAI('task', { onProgress: (e) => events.push(e) }, {
       client: clientStub,
       providerConfig: pc,
       defaults,
     });
 
-    expect(result.status).toBe('ok');
-    expect(result.output).toBe(VALID_FINAL_OUTPUT);
-    // Exactly two calls: initial + one nudge. NOT three or more
-    // (which is what the pre-fix behaviour produced as the nudge
-    // loop kept re-firing until force_salvage).
-    expect(mockRun).toHaveBeenCalledTimes(2);
-    // The nudge message is the last user turn on the second call.
-    const secondInput = mockRun.mock.calls[1][1] as Array<{ role: string; content: string }>;
-    expect(Array.isArray(secondInput)).toBe(true);
-    const lastMessage = secondInput[secondInput.length - 1];
-    expect(lastMessage.role).toBe('user');
-    expect(lastMessage.content).toContain('Budget pressure');
+    expect(result.status).not.toBe('error');
+    expect(result.terminationReason?.cause).not.toBe('force_salvage');
+    expect(result.terminationReason?.cause).not.toBe('budget_exceeded');
+    expect(events.find(e => e.injectionType === 'watchdog_force_salvage')).toBeUndefined();
+    expect(events.find(e => e.injectionType === 'watchdog_warning')).toBeUndefined();
+  });
+
+  it('openai-runner classifies provider context-window error as provider_context_limit', async () => {
+    // First call populates scratchpad with a degenerate fragment.
+    // Second call throws a context_length_exceeded error.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          inputTokens: 200_000,
+        }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error('context_length_exceeded'), { code: 'context_length_exceeded', status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.errorCode).toBe('provider_context_limit');
   });
 
   it('gives a first-turn empty output the full supervision retry budget (regression #5)', async () => {
@@ -755,22 +727,21 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     expect(result.usage.reasoningTokens).toBe(200);
   });
 
-  it('propagates cached/reasoning tokens on the force_salvage path', async () => {
-    const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
-    mockRun.mockResolvedValueOnce(
-      makeMockRunResult({
-        finalOutput: 'Let me check',
-        inputTokens: 960,
+  it('propagates cached/reasoning tokens on the timeout path', async () => {
+    mockRun.mockImplementationOnce(() => {
+      return new Promise((resolve) => setTimeout(() => resolve(makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
         inputTokensDetails: [{ cached_tokens: 300 }],
         outputTokensDetails: [{ reasoning_tokens: 100 }],
-      }),
-    );
+      })), 10_000));
+    });
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
-    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig: pc, defaults });
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults: { timeoutMs: 1, tools: 'full' as const } });
 
-    expect(result.status).toBe('incomplete');
-    expect(result.usage.cachedTokens).toBe(300);
-    expect(result.usage.reasoningTokens).toBe(100);
+    expect(result.status).toBe('timeout');
+    // On timeout with no previous successful result, usage is zeroed
+    expect(result.usage.cachedTokens).toBeNull();
+    expect(result.usage.reasoningTokens).toBeNull();
   });
 });

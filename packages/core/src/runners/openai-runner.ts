@@ -49,7 +49,6 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
-  buildBudgetPressureNudge,
   buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
@@ -57,9 +56,6 @@ import {
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
-  resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  logWatchdogEvent,
   THINKING_DIAGNOSTIC_MARKER,
   hasCompletedWork,
   MAX_DEGENERATE_RETRIES,
@@ -67,12 +63,10 @@ import {
   detectToolCallLoop,
   hasNewFileActivity,
 } from './supervision.js';
-import { classifyError, isRateLimit } from './error-classification.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { classifyError, isRateLimit, isProviderContextLimit } from './error-classification.js';
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
-  buildForceSalvageResult as sharedBuildForceSalvageResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
 import { type CanonicalUsage } from './base/usage-accumulator.js';
@@ -271,14 +265,9 @@ export async function runOpenAI(
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
   });
 
-  // --- Watchdog: resolve the input-token soft limit once per run ---
-  const profile = findModelProfile(runner.providerConfig.model);
-  const softLimit = resolveInputTokenSoftLimit(runner.providerConfig, profile);
-
   // --- Scratchpad: buffers assistant text across every agentRun() call so
-  // that every termination path (ok/incomplete/max_turns/error/timeout/
-  // force_salvage) can return the best text we heard, even if the final
-  // message is junk. ---
+  // that every termination path (ok/incomplete/max_turns/error/timeout)
+  // can return the best text we heard, even if the final message is junk. ---
   const scratchpad = new TextScratchpad();
 
   /**
@@ -379,13 +368,6 @@ export async function runOpenAI(
       // would cause `sameDegenerateOutput('', '')` to fire on a first-
       // turn empty output and break the loop before retries run.
       let lastDegenerateOutput: string | null = null;
-      // Track the input-token count at which we last fired a warning
-      // nudge. This prevents nudging twice in a row for the same
-      // `currentResult` when validation still fails after a nudge
-      // response: the next loop iteration will see
-      // `currentInputTokens <= lastWarnedInputTokens` and fall through
-      // to validation / re-prompt instead of re-issuing the nudge.
-      let lastWarnedInputTokens = -1;
       let lastValidationKind: string | undefined = undefined;
 
       /**
@@ -442,86 +424,12 @@ export async function runOpenAI(
       }
 
       // Supervision loop. On each iteration we:
-      //   1. Check the watchdog (may force-terminate or nudge)
-      //   2. Validate the final message (may re-prompt)
-      //   3. Inject re-grounding every RE_GROUNDING_INTERVAL_TURNS turns
+      //   1. Validate the final message (may re-prompt)
+      //   2. Inject re-grounding every RE_GROUNDING_INTERVAL_TURNS turns
       // A single pass where validateCompletion returns `valid` is the clean
       // exit. Otherwise we either re-prompt (and loop) or salvage.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        // --- Watchdog check ---
-        const currentInputTokens = currentResult.state.usage.inputTokens;
-        const watchdogStatus = checkWatchdogThreshold(currentInputTokens, softLimit);
-
-        if (watchdogStatus !== 'ok') {
-          logWatchdogEvent(watchdogStatus, {
-            provider: 'openai-compatible',
-            model: runner.providerConfig.model,
-            turn: currentResult.state.usage.requests,
-            inputTokens: currentInputTokens,
-            softLimit,
-            scratchpadChars: scratchpad.toString().length,
-          });
-        }
-
-        if (watchdogStatus === 'force_salvage') {
-          // `watchdog_force_salvage` is not an injected message — no
-          // re-prompt is sent — but observers still want to see exactly
-          // why the run is being killed. We emit the event with a
-          // `contentLengthChars` of 0 to reflect the "nothing was
-          // injected, we just terminated" semantics.
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_force_salvage',
-            turn: currentResult.state.usage.requests,
-            contentLengthChars: 0,
-          });
-          const salvaged = buildForceSalvageResult(
-            currentResult,
-            scratchpad,
-            tracker,
-            runner.providerConfig,
-            softLimit,
-            Date.now() - taskStartMs,
-            parentModel,
-          );
-          emit({ kind: 'done', status: salvaged.status });
-          return salvaged;
-        }
-
-        // Warning-band nudge: fire at most once per distinct input-token
-        // level. We dispatch the nudge turn, append to the scratchpad,
-        // record the new high-watermark, and then FALL THROUGH to the
-        // validation block below — the nudge response might itself be a
-        // perfectly valid final answer, so we must validate it in the
-        // SAME iteration. Without the fall-through, a valid nudge
-        // response would be thrown away and the loop would grind until
-        // force_salvage (pre-fix bug #1).
-        if (watchdogStatus === 'warning' && currentInputTokens > lastWarnedInputTokens) {
-          const warning = buildBudgetPressureNudge({
-            inputTokens: currentInputTokens,
-            softLimit,
-          });
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_warning',
-            turn: currentResult.state.usage.requests,
-            contentLengthChars: warning.length,
-          });
-          lastWarnedInputTokens = currentInputTokens;
-          if (!canAffordNextTurn()) {
-            const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
-            emit({ kind: 'done', status: costExceeded.status });
-            return costExceeded;
-          }
-          const warningCont = await runContinuationTurn(currentResult, warning);
-          if (!warningCont.ok) {
-            supervisionExhausted = true;
-            break;
-          }
-          currentResult = warningCont.result;
-        }
-
         // --- Validation check ---
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateSubAgentOutput(stripped, {
@@ -760,6 +668,9 @@ export async function runOpenAI(
         ...(isRateLimit(err) && {
           structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:openai-compatible' },
         }),
+        ...(isProviderContextLimit(err) && {
+          errorCode: 'provider_context_limit',
+        }),
       };
     }
   };
@@ -888,26 +799,6 @@ function buildSupervisionExhaustedResult(
     durationMs,
     reason: opts?.reason,
     stampExhausted: true,
-  });
-}
-
-function buildForceSalvageResult(
-  currentResult: AgentRunOutput,
-  scratchpad: TextScratchpad,
-  tracker: FileTracker,
-  providerConfig: ProviderConfig,
-  softLimit: number,
-  durationMs: number,
-  parentModel?: string,
-): RunResult {
-  return sharedBuildForceSalvageResult({
-    providerLabel: 'openai-compatible',
-    usage: openAIUsage(currentResult, providerConfig, parentModel),
-    turns: currentResult.state.usage.requests,
-    tracker,
-    scratchpad,
-    softLimit,
-    durationMs,
   });
 }
 
