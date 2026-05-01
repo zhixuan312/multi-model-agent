@@ -1,6 +1,5 @@
 import type { TaskSpec } from '../../types.js';
 import type { Input } from '../../tool-schemas/investigate.js';
-import { OUTPUT_CONTRACT_CLAUSES } from '../resolve.js';
 
 export interface ResolvedContextBlock {
   id: string;
@@ -20,7 +19,9 @@ export function compileInvestigate(
   }
 
   const promptParts: string[] = [];
-  promptParts.push(OUTPUT_CONTRACT_CLAUSES['investigate_codebase']!);
+  promptParts.push(
+    'Produce a narrative investigation report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state Severity: critical|high|medium|low, then a one-paragraph explanation citing file:line for code-level claims (or describing what was searched for project-level claims). Optional Suggestion line. The reviewer will extract structured findings — do NOT emit JSON.',
+  );
   for (const block of resolvedContextBlocks) {
     promptParts.push(block.content);
   }

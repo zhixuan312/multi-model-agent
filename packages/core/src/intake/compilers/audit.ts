@@ -19,11 +19,14 @@ export function compileAuditDocument(
     if (input.auditType) promptParts.push(`Audit type: ${input.auditType}`);
     if (filePaths.length) promptParts.push(`\nFiles to audit: ${filePaths.join(', ')}`);
     promptParts.push(
-      'Begin your response with a one-line findings count: "N findings" for first-round audits, or "N findings (M new, K fixed from prior round)" for delta audits.',
-      '',
       'You MUST re-read all target files before comparing against prior findings. Do not audit from the context block alone — the context block contains the prior round\'s findings, not the current file contents.',
       '',
-      'Provide a structured audit report with findings and severity.',
+      'Produce a narrative audit report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state:',
+      '  Severity: critical | high | medium | low',
+      '  Location: file:line (when applicable)',
+      '  Issue: one-paragraph explanation',
+      '  Suggestion: one-line fix recommendation',
+      'The reviewer will extract structured findings from your report — do NOT emit JSON.',
     );
 
     return [{
@@ -46,11 +49,14 @@ export function compileAuditDocument(
     promptParts.push(`Audit this file: ${filePath}`);
     if (input.auditType) promptParts.push(`Audit type: ${input.auditType}`);
     promptParts.push(
-      'Begin your response with a one-line findings count: "N findings" for first-round audits, or "N findings (M new, K fixed from prior round)" for delta audits.',
-      '',
       'You MUST re-read all target files before comparing against prior findings. Do not audit from the context block alone — the context block contains the prior round\'s findings, not the current file contents.',
       '',
-      'Provide a structured audit report with findings and severity.',
+      'Produce a narrative audit report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state:',
+      '  Severity: critical | high | medium | low',
+      '  Location: file:line (when applicable)',
+      '  Issue: one-paragraph explanation',
+      '  Suggestion: one-line fix recommendation',
+      'The reviewer will extract structured findings from your report — do NOT emit JSON.',
     );
 
     return {

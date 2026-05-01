@@ -20,15 +20,15 @@ describe('audit compiler', () => {
 
   it('includes output contract in prompt', () => {
     const drafts = compileAuditDocument({ auditType: 'security' }, 'req');
-    expect(drafts[0].prompt).toContain('structured audit report');
+    expect(drafts[0].prompt).toContain('narrative audit report');
   });
 
-  it('prompt includes findings count instruction', () => {
+  it('prompt instructs worker not to emit JSON', () => {
     const drafts = compileAuditDocument(
       { filePaths: ['spec.md'], auditType: 'correctness' },
       'req-1',
     );
-    expect(drafts[0].prompt).toContain('Begin your response with a one-line findings count');
+    expect(drafts[0].prompt).toContain('do NOT emit JSON');
   });
 
   it('prompt includes re-read instruction for delta audits', () => {
