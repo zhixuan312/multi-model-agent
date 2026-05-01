@@ -287,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.10.4** — review stages were recording the implementer's model (V3 R3 violation root cause). Now record the actual reviewer's resolved tier + model. Plus: telemetry validation is fully warn-only — events never drop, and cross-field warnings now include actual offending values (model, tokens, totals) so config issues vs lifecycle bugs are distinguishable at a glance. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.6** — Skill docs now match executor code. Only `mma-delegate` accepts `agentType` per task — every other route hardcodes its tier and rejects `agentType` with HTTP 400 (`/execute-plan` → standard; `/audit` / `/review` / `/debug` / `/verify` / `/investigate` → complex). The router skill previously claimed `mma-execute-plan` accepts `agentType` (false) and that `mma-verify` defaults to standard (also false; defaults to complex). Also added a new "Reasoning effort: auto-inferred" section documenting the `inferEffort()` heuristics. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

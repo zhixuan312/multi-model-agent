@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.10.4** — `endReviewStage` was always called with `implementerAgentInfo`, so `spec_review.model` / `quality_review.model` / `diff_review.model` recorded the implementer's model — V3 R3 (review.model ≠ implementerModel) then fired by construction regardless of config. Fixed: build `reviewerAgentInfoFor(tier)` from the resolved provider per tier; pass the last-used reviewer tier from `specReviewerHistory` / `qualityReviewerHistory` (reflecting any escalation). 24 contract goldens regenerated. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.6** — Skill content packaged in `@zhixuan92/multi-model-agent-core/skills` was corrected: the router skill (`multi-model-agent/SKILL.md`) and `mma-execute-plan/SKILL.md` had drifted from the executor code. Only `delegate.ts` schema accepts `agentType`; every other tool-schema is `.strict()` and rejects it with HTTP 400. Per-route hardcoded tiers (`executors/*.ts:agentType`) are now accurately documented. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
