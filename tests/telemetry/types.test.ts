@@ -44,7 +44,7 @@ function makeValidStage(name: string, overrides: Record<string, unknown> = {}): 
         verdict: 'approved',
         roundsUsed: 1,
         concernCategories: [],
-        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0, style: 0 },
+        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       },
       ...overrides,
     };
@@ -543,7 +543,7 @@ describe('StageEntrySchema', () => {
   it('accepts review stage with findingsBySeverity', () => {
     const result = StageEntrySchema.safeParse(
       makeValidStage('quality_review', {
-        findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3, style: 1 },
+        findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3 },
       }),
     );
     expect(result.success).toBe(true);

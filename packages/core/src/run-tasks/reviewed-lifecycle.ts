@@ -1490,8 +1490,6 @@ export async function executeReviewedLifecycle(
             : 'error',
           iterationIndex: 1,
           findingsReviewed: annotated.length,
-          findingsFlagged: 0, // legacy field — severity correction tracked elsewhere now
-          severityCorrections: 0, // reviewerSeverity field removed in 3.10.5
           meanConfidence,
           durationMs: Date.now() - qualityReviewT0,
           costUSD: runningCostUSD() !== null && qualityReviewC0 !== null ? runningCostUSD()! - qualityReviewC0! : null,

@@ -38,7 +38,7 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
 
 const COMMON_STAGE_COVERAGE: Record<string, FieldCoverage> = {
   model:               { kind: 'derived', source: 'stageStats[name].model' },
-  agentTier:           { kind: 'derived', source: 'stageStats[name].agentTier' },
+  agentTier:           { kind: 'derived', source: 'stageStats[name].agentTier' },  // values: 'standard' | 'complex'
   durationMs:          { kind: 'derived', source: 'stageStats[name].durationMs' },
   costUSD:             { kind: 'derived', source: 'stageStats[name].costUSD' },
   inputTokens:         { kind: 'derived', source: 'stageStats[name].inputTokens' },

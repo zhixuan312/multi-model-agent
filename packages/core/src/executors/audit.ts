@@ -188,6 +188,7 @@ export async function executeAudit(
   const auditTypeText = resolveAuditTypeText(input.auditType);
   const prompt = buildAuditPrompt(auditTypeText, input.document, input.filePaths, hasContextBlocks);
   const task = { ...baseTaskSpec, prompt } as TaskSpec;
+  const startMs = Date.now();
   let result: RunResult;
   try {
     const resolved = resolveAgent('complex', [], config);
@@ -210,9 +211,10 @@ export async function executeAudit(
     const msg = e instanceof Error ? e.message : String(e);
     result = { output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const };
   }
+  const wallClockMs = Date.now() - startMs;
   const results = [result];
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
-  const batchTimings = computeTimings(0, results);
+  const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
   const flag2 = resolveReadOnlyReviewFlag();
   const useQualityReview2 = flag2.isEnabledFor('audit_document');
@@ -227,7 +229,7 @@ export async function executeAudit(
     error: notApplicable('batch succeeded'),
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
-    wallClockMs: 0,
+    wallClockMs,
     parentModel,
     ...verdicts,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),

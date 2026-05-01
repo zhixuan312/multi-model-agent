@@ -143,8 +143,6 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       verdict: 'annotated',
       iterationIndex: 1,
       findingsReviewed: 2,
-      findingsFlagged: 0,
-      severityCorrections: 0,
       // meanConfidence: (80 + 40) / 2 = 60
       meanConfidence: 60,
     });
@@ -231,6 +229,25 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 });
 
+describe('read_only_review.quality event has no findingsFlagged or severityCorrections', () => {
+  it('does not emit findingsFlagged or severityCorrections (dead fields removed per §3.10)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
+    resetCaptured();
+
+    const { bus } = makeBus();
+    await runTasks(
+      [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
+      config,
+      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000006', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+    );
+
+    const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
+    expect(qualityEvents).toHaveLength(1);
+    expect(qualityEvents[0]).not.toHaveProperty('findingsFlagged');
+    expect(qualityEvents[0]).not.toHaveProperty('severityCorrections');
+  });
+});
+
 describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
   it('accepts meanConfidence=null (all-fallback path)', () => {
     const sample = {
@@ -244,8 +261,6 @@ describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
       verdict: 'annotated' as const,
       iterationIndex: 1,
       findingsReviewed: 2,
-      findingsFlagged: 0,
-      severityCorrections: 0,
       meanConfidence: null,
       durationMs: 1234,
       costUSD: 0.05,

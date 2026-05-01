@@ -161,8 +161,6 @@ export const ReadOnlyReviewQualityEvent = TaskBase.extend({
   verdict: ReviewVerdictEnum,
   iterationIndex: z.number().int().min(1),
   findingsReviewed: z.number().int().min(0),
-  findingsFlagged: z.number().int().min(0),
-  severityCorrections: z.number().int().min(0),
   meanConfidence: z.number().min(0).max(100).nullable(),
   durationMs: z.number().int().min(0),
   costUSD: z.number().min(0).nullable(),

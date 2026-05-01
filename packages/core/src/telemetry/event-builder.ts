@@ -170,7 +170,7 @@ function extractStageData(
   if (!raw || !raw.entered) return null;
   return {
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
-    agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
+    agentTier: raw.agentTier as 'standard' | 'complex',
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
@@ -206,7 +206,7 @@ function buildReviewStage(
   const concernSource = name;
   const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
-  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0, style: 0 };
+  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const c of stageConcerns) {
     const sev = (c as any).severity ?? 'medium';
     if (sev in findingsBySeverity) {
