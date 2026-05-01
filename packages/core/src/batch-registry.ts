@@ -4,7 +4,20 @@ export function isTerminal(s: BatchState): boolean {
   return s === 'complete' || s === 'failed' || s === 'expired';
 }
 
-// Input accepted by register() — runningHeadline OPTIONAL here so existing callers don't break.
+export interface HeadlineSnapshot {
+  /** Static prefix of the headline up to but not including the live elapsed slot.
+   *  Example: `[3/5] Quality review (round 2/3, deepseek-v4-pro) — ` */
+  prefix: string;
+  /** Stats clause to append after live elapsed, or empty string when no counter
+   *  has fired yet. Example: `, $0.10 saved (2.5x), 4 read, 1 tool call` */
+  statsClause: string;
+  /** ms since epoch — used to compute live elapsed at request time. */
+  dispatchedAt: number;
+  /** Optional fallback headline string for queue / pre-dispatch phases. */
+  fallback: string;
+}
+
+// Input accepted by register() — runningHeadlineSnapshot OPTIONAL here so existing callers don't break.
 export interface BatchEntryInput<Result = unknown> {
   batchId: string;
   projectCwd: string;
@@ -20,7 +33,7 @@ export interface BatchEntryInput<Result = unknown> {
   blockIds: string[];
   blocksReleased: boolean;
   expiredAt?: number;
-  runningHeadline?: string;
+  runningHeadlineSnapshot?: HeadlineSnapshot;
   tasksTotal?: number;
   tasksStarted?: number;
   tasksCompleted?: number;
@@ -28,9 +41,9 @@ export interface BatchEntryInput<Result = unknown> {
   running?: Array<{ worker: string; turn: number }>;
 }
 
-// Stored entry — runningHeadline REQUIRED (string, defaulting to '').
+// Stored entry — runningHeadlineSnapshot REQUIRED.
 export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
-  runningHeadline: string;
+  runningHeadlineSnapshot: HeadlineSnapshot;
 }
 
 export interface BatchRegistryOptions {
@@ -66,7 +79,15 @@ export class BatchRegistry {
   }
 
   register(input: BatchEntryInput): void {
-    if (input.runningHeadline === undefined) input.runningHeadline = '';
+    if (!input.runningHeadlineSnapshot) {
+      const N = input.tasksTotal ?? 1;
+      input.runningHeadlineSnapshot = {
+        prefix: '',
+        statsClause: '',
+        dispatchedAt: Date.now(),
+        fallback: `0/${N} queued`,
+      };
+    }
     const entry = input as BatchEntry;
     this.map.set(entry.batchId, entry);
     if (this.deps.contextBlockStore) {
@@ -80,11 +101,11 @@ export class BatchRegistry {
     return this.map.get(batchId);
   }
 
-  updateRunningHeadline(batchId: string, headline: string): void {
+  updateRunningHeadlineSnapshot(batchId: string, snapshot: HeadlineSnapshot): void {
     const entry = this.map.get(batchId);
     if (!entry) return;
     if (isTerminal(entry.state)) return;
-    entry.runningHeadline = headline;
+    entry.runningHeadlineSnapshot = snapshot;
   }
 
   delete(batchId: string): boolean {
@@ -193,7 +214,7 @@ export class BatchRegistry {
   }
 
   private release(entry: BatchEntry): void {
-    entry.runningHeadline = '';
+    entry.runningHeadlineSnapshot = { prefix: '', statsClause: '', dispatchedAt: 0, fallback: '' };
     entry.tasksTotal = undefined;
     entry.tasksStarted = undefined;
     entry.tasksCompleted = undefined;
