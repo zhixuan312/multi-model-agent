@@ -225,7 +225,10 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     ctx.addIssue({ code: 'custom', message: 'R4: sum of stage durationMs must not exceed totalDurationMs' });
   }
 
-  // R5: top-level token counts = sum of stage token counts
+  // R5: top-level token counts must not exceed the sum of stage token counts.
+  // Clamping may reduce the top-level total below the stage sum (e.g. when
+  // every stage is at its per-stage cap and the sum exceeds the top-level
+  // schema bound). The invariant is: top-level ≤ sum of stages.
   const tokenSum = event.stages.reduce(
     (acc, st) => ({
       input: acc.input + st.inputTokens,
@@ -236,12 +239,12 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     { input: 0, output: 0, cached: 0, reasoning: 0 },
   );
   if (
-    tokenSum.input !== event.inputTokens ||
-    tokenSum.output !== event.outputTokens ||
-    tokenSum.cached !== event.cachedTokens ||
-    tokenSum.reasoning !== event.reasoningTokens
+    tokenSum.input < event.inputTokens ||
+    tokenSum.output < event.outputTokens ||
+    tokenSum.cached < event.cachedTokens ||
+    tokenSum.reasoning < event.reasoningTokens
   ) {
-    ctx.addIssue({ code: 'custom', message: 'R5: token sums must equal top-level totals' });
+    ctx.addIssue({ code: 'custom', message: 'R5: top-level token counts must not exceed sum of stage token counts' });
   }
 
   // R5b: per stage, reasoningTokens ≤ outputTokens (subset semantics)
