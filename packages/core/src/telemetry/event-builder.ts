@@ -248,11 +248,19 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
   const base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
 
+  const commits = Array.isArray(rr.commits) ? rr.commits : [];
+  const allFiles = commits.flatMap((c) =>
+    Array.isArray(c?.filesChanged)
+      ? c.filesChanged.filter((f: unknown): f is string => typeof f === 'string')
+      : []
+  );
+  const filesCommittedCount = Math.min(new Set(allFiles).size, 1000);
+
   return {
     name: 'committing',
     ...base,
-    filesCommittedCount: 0,
-    branchCreated: false,
+    filesCommittedCount,
+    branchCreated: false, // TODO(3.10.3): wire branch-creation tracking — name-diff is unreliable
   } as StageEntryType;
 }
 
