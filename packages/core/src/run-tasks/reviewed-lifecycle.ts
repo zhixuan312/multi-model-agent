@@ -158,6 +158,91 @@ export function endReviewStage(
   };
 }
 
+// Per-iteration aggregator for spec_rework / quality_rework. Each rework loop
+// can run multiple iterations; the stage map only has one slot per stage, so
+// we sum metrics across iterations and overwrite the slot after each one.
+// Writing per-iteration (rather than once after the loop) means abort paths
+// (round_cap, cost_ceiling) still preserve completed-iteration data.
+export interface ReworkAccumulator {
+  occurred: boolean;
+  durationMs: number;
+  costUSD: number;
+  inputTokens: number;
+  outputTokens: number;
+  cachedTokens: number;
+  reasoningTokens: number;
+  turnCount: number;
+  toolCallCount: number;
+  filesReadCount: number;
+  filesWrittenCount: number;
+  maxIdleMs: number;
+  totalIdleMs: number;
+  activityEvents: number;
+}
+
+export function emptyReworkAcc(): ReworkAccumulator {
+  return {
+    occurred: false,
+    durationMs: 0, costUSD: 0,
+    inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0,
+    turnCount: 0, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+    maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0,
+  };
+}
+
+export function accumulateReworkIteration(
+  acc: ReworkAccumulator,
+  result: { usage?: { inputTokens?: number | null; outputTokens?: number | null; costUSD?: number | null; cachedTokens?: number | null; reasoningTokens?: number | null } | null; turns?: number; toolCalls?: unknown[]; filesRead?: unknown[]; filesWritten?: unknown[] },
+  iterDurationMs: number,
+  idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
+): void {
+  acc.occurred = true;
+  acc.durationMs += iterDurationMs;
+  acc.costUSD += result.usage?.costUSD ?? 0;
+  acc.inputTokens += result.usage?.inputTokens ?? 0;
+  acc.outputTokens += result.usage?.outputTokens ?? 0;
+  acc.cachedTokens += (result.usage as { cachedTokens?: number } | null | undefined)?.cachedTokens ?? 0;
+  acc.reasoningTokens += (result.usage as { reasoningTokens?: number } | null | undefined)?.reasoningTokens ?? 0;
+  acc.turnCount += result.turns ?? 0;
+  acc.toolCallCount += result.toolCalls?.length ?? 0;
+  acc.filesReadCount += result.filesRead?.length ?? 0;
+  acc.filesWrittenCount += result.filesWritten?.length ?? 0;
+  if (idle) {
+    if (idle.maxIdleMs > acc.maxIdleMs) acc.maxIdleMs = idle.maxIdleMs;
+    acc.totalIdleMs += idle.totalIdleMs;
+    acc.activityEvents += idle.activityEvents;
+  }
+}
+
+export function commitReworkStage(
+  stats: StageStatsMap,
+  name: 'spec_rework' | 'quality_rework',
+  acc: ReworkAccumulator,
+  agent: { tier: 'standard' | 'complex'; model: string },
+): void {
+  if (!acc.occurred) return;
+  (stats as Record<string, unknown>)[name] = {
+    stage: name,
+    entered: true,
+    durationMs: acc.durationMs,
+    costUSD: acc.costUSD,
+    agentTier: agent.tier,
+    modelFamily: modelFamily(agent.model),
+    model: agent.model,
+    maxIdleMs: acc.maxIdleMs,
+    totalIdleMs: acc.totalIdleMs,
+    activityEvents: acc.activityEvents,
+    inputTokens: acc.inputTokens,
+    outputTokens: acc.outputTokens,
+    cachedTokens: acc.cachedTokens,
+    reasoningTokens: acc.reasoningTokens,
+    turnCount: acc.turnCount,
+    toolCallCount: acc.toolCallCount,
+    filesReadCount: acc.filesReadCount,
+    filesWrittenCount: acc.filesWrittenCount,
+  };
+}
+
 export function endVerifyStage(
   stats: StageStatsMap,
   t0: number,
@@ -1225,6 +1310,7 @@ export async function executeReviewedLifecycle(
     specReport = 'report' in specResult ? specResult.report : undefined;
     specReviewReason = specStatus === 'skipped' ? 'all_tiers_unavailable' : ('errorReason' in specResult ? specResult.errorReason : undefined);
     let prevSpecFindings = [...(specResult.findings ?? [])];
+    const specReworkAcc = emptyReworkAcc();
 
     while (specStatus === 'changes_required') {
       if (specAttemptIndex >= maxSpecRows) return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before spec rework', 'spec');
@@ -1235,6 +1321,7 @@ export async function executeReviewedLifecycle(
       }
       const decision = pickEscalation({ loop: 'spec', attemptIndex: specAttemptIndex, baseTier: resolved.slot });
       if (decision.isEscalated) emitEscalationEvent('spec', specAttemptIndex, decision);
+      const specReworkIterStart = Date.now();
       transitionStage('spec_review', 'spec_rework', { stage: 'spec_rework', stageIndex: 3, reviewRound: specAttemptIndex, attemptCap: maxSpecRows }, { attempt: specAttemptIndex, attemptCap: maxSpecRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
       const feedback = specResult.findings.length > 0 ? `\n\n## Spec Review Feedback (round ${specAttemptIndex}):\n${specResult.findings.map(f => `- ${f}`).join('\n')}` : '';
       const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
@@ -1255,6 +1342,8 @@ export async function executeReviewedLifecycle(
       const reworkReport = parseStructuredReport(finalImplResult.output);
       finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
       fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
+      accumulateReworkIteration(specReworkAcc, finalImplResult, Date.now() - specReworkIterStart, snapshotIdle(stageIdle));
+      commitReworkStage(stats, 'spec_rework', specReworkAcc, implementerAgentInfo);
       transitionStage('spec_rework', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows }, null);
       const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
       if (reviewCall.bothUnavailable) {
@@ -1340,6 +1429,7 @@ export async function executeReviewedLifecycle(
       } else {
         // Artifact-route gating model — keep the rework loop.
         let prevQualityFindings = [...(qualityResult.findings ?? [])];
+        const qualityReworkAcc = emptyReworkAcc();
         while (qualityResult.status === 'changes_required') {
           if (qualityAttemptIndex >= maxQualityRows) return abortReviewLoop(finalImplResult, 'round_cap', 'review round cap reached before quality rework', 'quality');
           const currentCostUSD = taskCostUSD();
@@ -1349,6 +1439,7 @@ export async function executeReviewedLifecycle(
           }
           const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
           if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
+          const qualityReworkIterStart = Date.now();
           transitionStage('quality_review', 'quality_rework', { stage: 'quality_rework', stageIndex: 5, reviewRound: qualityAttemptIndex, attemptCap: maxQualityRows }, { attempt: qualityAttemptIndex, attemptCap: maxQualityRows, implTier: decision.impl, reviewerTier: decision.reviewer, escalated: decision.isEscalated });
           const feedback = qualityResult.findings.length > 0 ? `\n\n## Quality Review Feedback (round ${qualityAttemptIndex}):\n${qualityResult.findings.map(f => `- ${f}`).join('\n')}` : '';
           const reworkTask = withDoneCondition({ ...task, prompt: `${task.prompt}${feedback}` });
@@ -1366,6 +1457,8 @@ export async function executeReviewedLifecycle(
           const reworkReport = parseStructuredReport(finalImplResult.output);
           finalImplReport = reworkReport.summary ? reworkReport : buildFallbackImplReport(finalImplResult);
           fileContents = await readImplementerFileContents(finalImplResult.filesWritten, task.cwd);
+          accumulateReworkIteration(qualityReworkAcc, finalImplResult, Date.now() - qualityReworkIterStart, snapshotIdle(stageIdle));
+          commitReworkStage(stats, 'quality_rework', qualityReworkAcc, implementerAgentInfo);
           transitionStage('quality_rework', 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows }, null);
           const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
           if (reviewCall.bothUnavailable) {
@@ -1422,7 +1515,7 @@ export async function executeReviewedLifecycle(
         : specStatus === 'skipped' ? 'skipped'
         : specStatus === 'not_applicable' ? 'not_applicable'
         : 'error',
-      specAttemptIndex - 1,
+      specAttemptIndex,
       (specResult as any).metrics);
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
@@ -1433,7 +1526,7 @@ export async function executeReviewedLifecycle(
         : qualityResult.status === 'annotated' ? 'annotated'
         : qualityResult.status === 'skipped' ? 'skipped'
         : 'error',
-      qualityAttemptIndex - 1,
+      qualityAttemptIndex,
       (qualityResult as any).metrics);
     const aggregated = aggregateResult(
       finalReport,

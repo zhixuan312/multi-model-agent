@@ -5,6 +5,23 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.2] - 2026-05-01
+
+### Fixed
+- **Top-level token/cost totals now sum every stage** (core). Pre-3.10.2, `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`, and `totalCostUSD` on V3 events were sourced from `runResult.usage`, which only carries the LAST implementer attempt — losing reviewer cost and earlier-impl rounds entirely. Real-world delegate-with-rework batches were under-reporting cost ~24×. Top-level totals now compute as `stages.reduce(...)`.
+- **Rework stages appear in `stages[]`** (core). `spec_rework` / `quality_rework` entries previously stayed at `entered:false` even when the rework loop ran — silently dropping the entry from the V3 wire payload. New `endReworkStage` / `accumulateReworkIteration` / `commitReworkStage` helpers aggregate metrics across iterations into a single stage entry per the V3 spec's R9 invariant (stage-name uniqueness).
+- **Per-stage `roundsUsed` off-by-one** (core). `endReviewStage` was passed `specAttemptIndex - 1` and `qualityAttemptIndex - 1`, dropping the count by one. The wire `reviewRounds` was already correct via `rr.reviewRounds`; only the in-memory `runResult.stageStats.{review}.roundsUsed` was wrong. 24 contract goldens regenerated.
+- **`committing.filesCommittedCount` is wired** (core). Pre-3.10.2 always 0 — `runResult.commits[]` carried `filesChanged: string[]` but `buildCommitStage` ignored it. Now counts unique files across all commits, defensive against malformed input (non-array `commits`, missing `filesChanged`, non-string entries), clamped to schema max 1000. `committing.branchCreated` deferred to 3.10.3 (no reliable signal — branch-name diff produces false positives).
+
+### Added
+- **Per-stage and top-level value clamping** (core). `extractStageData` clamps every numeric field to its V3 schema cap (turnCount→250, durationMs→3.6M ms, costUSD→100, tokens→5M/500K caps, toolCallCount/filesReadCount/filesWrittenCount→5000). Top-level totals also clamp at the wire bounds (totalCostUSD→800, tokens→5M/500K, totalDurationMs→86.4M). Real-world long-running tasks no longer fail server-side schema validation by exceeding caps; tests assert exact ceiling values, not loose `<= max`.
+- **V3 schema validation enforced at emit time** (core, server). `ValidatedTaskCompletedEventSchema.safeParse` now runs on every constructed `task.completed` event before queueing for upload. Events that violate R1–R11 superRefine rules (e.g. R3: review.model identical to implementerModel — observed in real 3.10.1 audit data) are dropped client-side with a `telemetry.event.invalid` diagnostic, instead of silently shipping degenerate rows to the backend via passthrough. R3 was previously a comment in the validator; now an enforced rule.
+- **`field-coverage.ts` manifest** (core). Machine-readable classification of every V3 event field as `derived` / `constant` / `unavailable` / `not_applicable`. Replaces the inline-comment audit pass that earlier proposals considered, with an executable contract that the new completeness ratchet test enforces.
+- **V3 completeness contract test** (tests). New `tests/contract/telemetry/v3-completeness.test.ts` plus rich-fixture asserts every derived field on the rich `RunResult` produces a non-default value, every clamp hits its exact ceiling on oversized inputs, and the resulting event passes `ValidatedTaskCompletedEventSchema.safeParse`.
+
+### Changed
+- **R5 super-refine relaxed** from strict equality (`Σ stage.X === top-level X`) to `top-level ≤ Σ stage.X` (core, schema). Required because per-stage and top-level schema caps don't compose: 8 stages × 5M token cap = 40M, while top-level cap is 5M. Strict equality cannot hold when stage sum exceeds top cap. The relaxation preserves R5's intent (no daemon-overhead leakage to top) while tolerating realistic clamp behavior.
+
 ## [3.10.1] - 2026-05-01
 
 ### Fixed

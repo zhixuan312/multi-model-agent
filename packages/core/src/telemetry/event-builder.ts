@@ -26,12 +26,23 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  const totalDurationMs = runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0);
+  const totalDurationMs = Math.min(runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0), 86_400_000);
+
+  // Top-level totals are summed across all stages (impl + reviewers + reworks +
+  // verify + commit) so the dashboard's `total_cost_cents` reflects the true
+  // task cost. runResult.usage only carries the LAST implementer attempt and
+  // ignores reviewer + earlier-impl rounds — using it would systematically
+  // under-report cost (~24× in real-world rework cases).
+  const totalCostUSD = Math.min(stages.reduce((s, st) => s + (st.costUSD ?? 0), 0), 800);
+  const totalInputTokens = Math.min(stages.reduce((s, st) => s + ((st as { inputTokens?: number }).inputTokens ?? 0), 0), 5_000_000);
+  const totalOutputTokens = Math.min(stages.reduce((s, st) => s + ((st as { outputTokens?: number }).outputTokens ?? 0), 0), 500_000);
+  const totalCachedTokens = Math.min(stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0), 5_000_000);
+  const totalReasoningTokens = Math.min(stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0), 500_000);
 
   const savedCostUSD = computeSavedCostUSD(
-    runResult.usage?.costUSD ?? null,
-    runResult.usage?.inputTokens ?? 0,
-    runResult.usage?.outputTokens ?? 0,
+    totalCostUSD,
+    totalInputTokens,
+    totalOutputTokens,
     parentModel ?? undefined,
   );
 
@@ -61,12 +72,12 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
     parentModelFamily: parentModel ? normalizeModel(parentModel).family : 'other',
-    inputTokens: runResult.usage?.inputTokens ?? 0,
-    outputTokens: runResult.usage?.outputTokens ?? 0,
-    cachedTokens: (runResult.usage as any)?.cachedTokens ?? 0,
-    reasoningTokens: (runResult.usage as any)?.reasoningTokens ?? 0,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    cachedTokens: totalCachedTokens,
+    reasoningTokens: totalReasoningTokens,
     totalDurationMs,
-    totalCostUSD: runResult.usage?.costUSD ?? 0,
+    totalCostUSD,
     totalSavedCostUSD: savedCostUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
@@ -140,15 +151,15 @@ function extractStageData(
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
     agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
     durationMs: Math.min(raw.durationMs ?? 0, 3_600_000),
-    costUSD: Math.max(0, Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000),
-    inputTokens: (raw as any).inputTokens ?? 0,
-    outputTokens: (raw as any).outputTokens ?? 0,
-    cachedTokens: (raw as any).cachedTokens ?? 0,
-    reasoningTokens: (raw as any).reasoningTokens ?? 0,
-    toolCallCount: (raw as any).toolCallCount ?? 0,
-    filesReadCount: (raw as any).filesReadCount ?? 0,
-    filesWrittenCount: (raw as any).filesWrittenCount ?? 0,
-    turnCount: (raw as any).turnCount ?? 0,
+    costUSD: Math.max(0, Math.min(Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000, 100)),
+    inputTokens: Math.min((raw as any).inputTokens ?? 0, 5_000_000),
+    outputTokens: Math.min((raw as any).outputTokens ?? 0, 500_000),
+    cachedTokens: Math.min((raw as any).cachedTokens ?? 0, 5_000_000),
+    reasoningTokens: Math.min((raw as any).reasoningTokens ?? 0, 500_000),
+    toolCallCount: Math.min((raw as any).toolCallCount ?? 0, 5000),
+    filesReadCount: Math.min((raw as any).filesReadCount ?? 0, 5000),
+    filesWrittenCount: Math.min((raw as any).filesWrittenCount ?? 0, 5000),
+    turnCount: Math.min((raw as any).turnCount ?? 0, 250),
     maxIdleMs: raw.maxIdleMs ?? null,
     totalIdleMs: raw.totalIdleMs ?? null,
   };
@@ -237,11 +248,19 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
   const base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
 
+  const commits = Array.isArray(rr.commits) ? rr.commits : [];
+  const allFiles = commits.flatMap((c) =>
+    Array.isArray(c?.filesChanged)
+      ? c.filesChanged.filter((f: unknown): f is string => typeof f === 'string')
+      : []
+  );
+  const filesCommittedCount = Math.min(new Set(allFiles).size, 1000);
+
   return {
     name: 'committing',
     ...base,
-    filesCommittedCount: 0,
-    branchCreated: false,
+    filesCommittedCount,
+    branchCreated: false, // TODO(3.10.3): wire branch-creation tracking — name-diff is unreliable
   } as StageEntryType;
 }
 

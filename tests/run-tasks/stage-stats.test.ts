@@ -8,6 +8,9 @@ import {
   endBaseStage,
   endVerifyStage,
   endReviewStage,
+  emptyReworkAcc,
+  accumulateReworkIteration,
+  commitReworkStage,
   executeReviewedLifecycle,
 } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
@@ -385,5 +388,64 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
     expect(keys).toContain('quality_rework');
     expect(keys).toContain('diff_review');
     expect(keys).toContain('committing');
+  });
+});
+
+describe('rework stage aggregation', () => {
+  function fakeIterResult(opts: { input: number; output: number; cost: number; turns: number; toolCalls?: number; filesRead?: number; filesWritten?: number }) {
+    return {
+      usage: { inputTokens: opts.input, outputTokens: opts.output, costUSD: opts.cost, cachedTokens: 0, reasoningTokens: 0 },
+      turns: opts.turns,
+      toolCalls: new Array(opts.toolCalls ?? 0).fill('t'),
+      filesRead: new Array(opts.filesRead ?? 0).fill('r'),
+      filesWritten: new Array(opts.filesWritten ?? 0).fill('w'),
+    };
+  }
+
+  it('accumulator stays empty when no iterations occur', () => {
+    const stats = emptyStats();
+    const acc = emptyReworkAcc();
+    commitReworkStage(stats, 'spec_rework', acc, { tier: 'standard', model: 'gpt-5' });
+    expect(stats.spec_rework.entered).toBe(false);
+    expect(stats.spec_rework.durationMs).toBeNull();
+    expect(stats.spec_rework.costUSD).toBeNull();
+  });
+
+  it('single iteration commits with that iteration\'s metrics', () => {
+    const stats = emptyStats();
+    const acc = emptyReworkAcc();
+    accumulateReworkIteration(acc, fakeIterResult({ input: 1000, output: 200, cost: 0.05, turns: 4, toolCalls: 2, filesWritten: 1 }), 5000, { maxIdleMs: 100, totalIdleMs: 500, activityEvents: 5 });
+    commitReworkStage(stats, 'quality_rework', acc, { tier: 'standard', model: 'gpt-5' });
+    expect(stats.quality_rework.entered).toBe(true);
+    expect(stats.quality_rework.durationMs).toBe(5000);
+    expect(stats.quality_rework.costUSD).toBe(0.05);
+    expect((stats.quality_rework as { inputTokens: number }).inputTokens).toBe(1000);
+    expect((stats.quality_rework as { outputTokens: number }).outputTokens).toBe(200);
+    expect((stats.quality_rework as { turnCount: number }).turnCount).toBe(4);
+    expect((stats.quality_rework as { toolCallCount: number }).toolCallCount).toBe(2);
+    expect((stats.quality_rework as { filesWrittenCount: number }).filesWrittenCount).toBe(1);
+    expect(stats.quality_rework.maxIdleMs).toBe(100);
+    expect(stats.quality_rework.totalIdleMs).toBe(500);
+    expect(stats.quality_rework.activityEvents).toBe(5);
+    expect(stats.quality_rework.model).toBe('gpt-5');
+    expect(stats.quality_rework.agentTier).toBe('standard');
+  });
+
+  it('multi-iteration sums tokens/cost/turns and takes max idle', () => {
+    const stats = emptyStats();
+    const acc = emptyReworkAcc();
+    accumulateReworkIteration(acc, fakeIterResult({ input: 1000, output: 200, cost: 0.05, turns: 4 }), 5000, { maxIdleMs: 100, totalIdleMs: 500, activityEvents: 5 });
+    accumulateReworkIteration(acc, fakeIterResult({ input: 2000, output: 400, cost: 0.10, turns: 8 }), 7000, { maxIdleMs: 250, totalIdleMs: 800, activityEvents: 7 });
+    commitReworkStage(stats, 'quality_rework', acc, { tier: 'complex', model: 'gpt-5.2' });
+    expect(stats.quality_rework.entered).toBe(true);
+    expect(stats.quality_rework.durationMs).toBe(12000);
+    expect(stats.quality_rework.costUSD).toBeCloseTo(0.15, 5);
+    expect((stats.quality_rework as { inputTokens: number }).inputTokens).toBe(3000);
+    expect((stats.quality_rework as { outputTokens: number }).outputTokens).toBe(600);
+    expect((stats.quality_rework as { turnCount: number }).turnCount).toBe(12);
+    expect(stats.quality_rework.maxIdleMs).toBe(250);
+    expect(stats.quality_rework.totalIdleMs).toBe(1300);
+    expect(stats.quality_rework.activityEvents).toBe(12);
+    expect(stats.quality_rework.agentTier).toBe('complex');
   });
 });

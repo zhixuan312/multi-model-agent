@@ -91,7 +91,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.2",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.10.1** — fixes a V3 telemetry collection bug where top-level token totals (`inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`) and `totalCostUSD` always reported 0, and per-stage token/turn/tool/file counts were never populated. Also clamps per-stage `costUSD` ≥ 0 (previously raced negative under heartbeat cost-delta updates). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.10.2** — telemetry data-correctness patch. Top-level token/cost totals now sum every stage instead of just the last implementer attempt (real-world delegate-with-rework batches were under-reporting cost ~24×). `spec_rework` / `quality_rework` entries now appear in `stages[]` when the rework loop runs. `committing.filesCommittedCount` is wired (was hardcoded 0). Per-stage and top-level value clamping at V3 schema caps. V3 superRefine validation enforced at emit time — invalid events (e.g. R3: review.model identical to implementerModel) are now dropped client-side instead of silently shipped. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
