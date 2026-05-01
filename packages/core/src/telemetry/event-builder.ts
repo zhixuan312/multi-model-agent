@@ -8,7 +8,7 @@ import type { TaskCompletedEventType, StageEntryType, ConcernCategoryType } from
 const KNOWN_CAPABILITIES = new Set(['web_search', 'web_fetch']);
 
 export interface BuildContext {
-  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry';
+  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry' | 'investigate';
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
   client: string;

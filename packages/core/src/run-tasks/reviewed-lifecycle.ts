@@ -982,7 +982,7 @@ export async function executeReviewedLifecycle(
       toolCallCount: implResult.toolCalls?.length ?? 0,
       filesReadCount: implResult.filesRead?.length ?? 0,
       filesWrittenCount: implResult.filesWritten?.length ?? 0,
-      costUSD: implResult.usage?.costUSD ?? 0,
+      costUSD: implResult.usage?.costUSD ?? undefined,
     });
     specAttemptIndex = 1;
 
