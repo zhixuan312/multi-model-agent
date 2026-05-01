@@ -84,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.2",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -287,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.10.1** — fixes a V3 telemetry collection bug where top-level token totals and `totalCostUSD` always reported 0, and per-stage token/turn/tool/file counts were never populated. Also clamps per-stage `costUSD` ≥ 0. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.2** — telemetry data-correctness patch. Top-level token/cost totals now sum every stage in the V3 event (no longer drop reviewer + earlier-impl rounds). `spec_rework` / `quality_rework` entries appear in `stages[]` when the rework loop runs. `committing.filesCommittedCount` is wired (was hardcoded 0). Per-stage and top-level value clamping at V3 schema caps. V3 superRefine validation (R3, R10b) enforced at emit time — invalid events are dropped client-side. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

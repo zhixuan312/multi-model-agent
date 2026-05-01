@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.10.1** — V3 telemetry fixes in `event-builder.ts` and `reviewed-lifecycle.ts`: top-level token totals and `totalCostUSD` now read from `runResult.usage` (previously summed across hardcoded-zero stages and always emitted 0); per-stage `BaseStageStats` gains `inputTokens`/`outputTokens`/`cachedTokens`/`reasoningTokens`/`turnCount`/`toolCallCount`/`filesReadCount`/`filesWrittenCount` populated from runner usage and reviewer metrics; per-stage `costUSD` clamped ≥ 0. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.2** — telemetry data-correctness patch in `event-builder.ts` and `reviewed-lifecycle.ts`: top-level totals now sum every stage entry (no longer drop reviewer + earlier-impl rounds via `runResult.usage`); `spec_rework` / `quality_rework` entries emit when the loop ran via new `accumulateReworkIteration` / `commitReworkStage` aggregator; `committing.filesCommittedCount` derives from `runResult.commits` (was hardcoded 0); `extractStageData` clamps every numeric to its V3 schema cap; `ValidatedTaskCompletedEventSchema` is enforced at emit time (R3 / R10b violations dropped with a `telemetry.event.invalid` diagnostic). New `field-coverage.ts` manifest enables a completeness contract ratchet. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
