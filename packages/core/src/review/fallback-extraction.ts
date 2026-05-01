@@ -1,0 +1,154 @@
+import {
+  normalizeWhitespace,
+  type AnnotatedFinding,
+} from '../executors/_shared/findings-schema.js';
+
+type Severity = 'critical' | 'high' | 'medium' | 'low';
+
+/**
+ * Map a worker-emitted severity string (case-insensitive, may be "mid")
+ * to the canonical 4-tier value. Default 'medium' on unknown.
+ */
+function mapSeverity(raw: string): Severity {
+  const s = raw.trim().toLowerCase();
+  if (s === 'critical') return 'critical';
+  if (s === 'high') return 'high';
+  if (s === 'medium' || s === 'mid') return 'medium';
+  if (s === 'low') return 'low';
+  return 'medium';
+}
+
+/**
+ * Match numbered/finding-shaped headings — broad enough to catch the most
+ * common Markdown patterns workers actually produce (Round-2 #5):
+ *   "## 1. Title"           — h2 with number
+ *   "### 2. Title"          — h3 with number
+ *   "#### 3: Title"         — h4 with number+colon
+ *   "### [4] Title"         — bracketed number
+ *   "### Finding 5 — Title" — "Finding N" form
+ *
+ * Plain `### Summary` / `### Performance Notes` are ignored on purpose
+ * so the fallback does not invent findings out of structural sections.
+ *
+ * Capture group 1 is the bracketed number (when [N] form), 2 is the bare
+ * number (otherwise). At least one is always set when this regex matches.
+ */
+const SECTION_RE = /^#{2,6}\s+(?:Finding\s+)?(?:\[(\d+)\]|(\d+))\s*[\.\:\)\-\—\–]?\s+(.+)$/gim;
+const SEVERITY_RE = /^Severity:\s*(critical|high|medium|mid|low)\s*$/gim;
+
+interface RawSection {
+  startIdx: number;
+  endIdx: number;
+  workerNumber: string;
+  title: string;
+}
+
+/** Single-pass section iteration (Round-1 P3). */
+function findSections(workerOutput: string): RawSection[] {
+  const sections: RawSection[] = [];
+  SECTION_RE.lastIndex = 0;
+  let prev: { startIdx: number; workerNumber: string; title: string } | null = null;
+  let match: RegExpExecArray | null;
+  while ((match = SECTION_RE.exec(workerOutput)) !== null) {
+    const startIdx = match.index;
+    if (prev) {
+      sections.push({ ...prev, endIdx: startIdx });
+    }
+    // capture[1] = [N] bracketed number; capture[2] = bare number; capture[3] = title.
+    const workerNumber = match[1] ?? match[2] ?? '';
+    prev = {
+      startIdx,
+      workerNumber,
+      title: (match[3] ?? '').trim(),
+    };
+  }
+  if (prev) sections.push({ ...prev, endIdx: workerOutput.length });
+  return sections;
+}
+
+/**
+ * Detect explicit "no findings" language so fallback returns [] instead of
+ * a synthetic catch-all when a clean codebase produces a clean narrative
+ * but the reviewer happens to fail JSON parse (Round-2 #6).
+ */
+const NO_FINDINGS_RE = /\b(?:no\s+(?:findings|issues|problems)\s+(?:found|detected|reported)?|nothing\s+to\s+report|0\s+findings|zero\s+findings)\b/i;
+
+function severityFromSection(section: string): Severity {
+  SEVERITY_RE.lastIndex = 0;
+  const m = SEVERITY_RE.exec(section);
+  if (!m) return 'medium';
+  return mapSeverity(m[1]!);
+}
+
+/**
+ * Build meaningful synthetic evidence (Round-1 #8):
+ * - Prefer the section body (first 240 chars after the heading).
+ * - If the body is too short, build a meaningful sentence from the title,
+ *   not a space-padded string.
+ *
+ * Worker-stated number is preserved in the evidence prose, not in the id
+ * (Round-1 #2 — ids must always be unique sequential).
+ */
+function buildEvidence(sectionText: string, title: string, workerNumber: string): string {
+  const body = sectionText.split('\n').slice(1).join('\n').trim();
+  if (body.length >= 20) return body.slice(0, 240);
+  const synth = `Worker finding #${workerNumber} (${title}): no detailed body provided in implementer report.`;
+  return synth.length >= 20 ? synth : `${synth} fallback-synthesized.`;
+}
+
+/**
+ * Deterministic regex extractor — runs when the LLM reviewer's JSON output
+ * fails parse twice. Synthesizes AnnotatedFinding[] so telemetry always has
+ * something to count.
+ *
+ * Confidence is null. Ids are always sequential `F${i+1}` (never use the
+ * worker's number — duplicates would violate annotatedFindingsSchema).
+ * evidenceGrounded reflects the actual substring check on the normalized
+ * worker output.
+ *
+ * If the worker output has zero parseable numbered sections and no explicit
+ * "no findings" language, emits a single catch-all finding so downstream
+ * telemetry never sees an empty list.
+ */
+export function fallbackExtractFindings(workerOutput: string): AnnotatedFinding[] {
+  const normalizedWorker = normalizeWhitespace(workerOutput);
+  const sections = findSections(workerOutput);
+
+  // Round-2 #6: respect explicit "no findings" worker output.
+  if (sections.length === 0 && NO_FINDINGS_RE.test(workerOutput)) {
+    return [];
+  }
+
+  if (sections.length === 0) {
+    const trimmed = workerOutput.trim();
+    // Use real worker text when long enough — preserves evidenceGrounded=true.
+    // Otherwise fall back to a meaningful synthetic sentence (knowingly ungrounded).
+    const evidence = trimmed.length >= 20
+      ? trimmed.slice(0, 240)
+      : `Worker output had no parseable findings (length ${trimmed.length}). Fallback emitted catch-all so telemetry has at least one entry.`;
+    const eNorm = normalizeWhitespace(evidence);
+    return [{
+      id: 'F1',
+      severity: 'medium',
+      claim: 'reviewer parse failed; deterministic fallback emitted single catch-all from worker output',
+      evidence,
+      reviewerConfidence: null,
+      evidenceGrounded: eNorm.length >= 20 && normalizedWorker.includes(eNorm),
+    }];
+  }
+
+  return sections.map((section, i) => {
+    const sectionText = workerOutput.slice(section.startIdx, section.endIdx);
+    const severity = severityFromSection(sectionText);
+    const evidence = buildEvidence(sectionText, section.title, section.workerNumber);
+    const eNorm = normalizeWhitespace(evidence);
+    return {
+      id: `F${i + 1}`,
+      severity,
+      claim: section.title || `Finding ${i + 1}`,
+      evidence,
+      reviewerConfidence: null,
+      evidenceGrounded: eNorm.length >= 20 && normalizedWorker.includes(eNorm),
+    };
+  });
+}
