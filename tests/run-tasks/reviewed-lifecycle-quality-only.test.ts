@@ -257,13 +257,10 @@ describe('executeReviewedLifecycle — quality_only', () => {
 
     let builderCalled = false;
     let receivedBrief = '';
-    let receivedFindingsCount = 0;
 
-    const builder = (ctx: { workerOutput: string; brief: string; workerFindings: typeof workerFindings }) => {
+    const builder = (ctx: { workerOutput: string; brief: string }) => {
       builderCalled = true;
       receivedBrief = ctx.brief;
-      receivedFindingsCount = ctx.workerFindings.length;
-      // Reviewer needs to return a JSON annotation block so parseAndMergeAnnotations succeeds.
       return 'CUSTOM_PROMPT';
     };
 
@@ -276,7 +273,6 @@ describe('executeReviewedLifecycle — quality_only', () => {
 
     expect(builderCalled).toBe(true);
     expect(receivedBrief).toBe('audit this code');
-    expect(receivedFindingsCount).toBe(1);
     expect(result.stageStats!.quality_review.entered).toBe(true);
   });
 });

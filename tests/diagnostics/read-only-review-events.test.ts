@@ -43,8 +43,8 @@ const REVIEWER_ANNOTATION_OUTPUT = [
   'Annotated.',
   '```json',
   JSON.stringify([
-    { id: 'F1', reviewerConfidence: 85 },
-    { id: 'F2', reviewerConfidence: 40, reviewerSeverity: 'low' },
+    { id: 'F1', severity: 'high', claim: 'Issue A', evidence: VALID_EVIDENCE, reviewerConfidence: 85 },
+    { id: 'F2', severity: 'low', claim: 'Issue B', evidence: VALID_EVIDENCE, suggestion: 'wrap it', reviewerConfidence: 40 },
   ]),
   '```',
 ].join('\n');
@@ -134,7 +134,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       verdict: 'annotated',
       iterationIndex: 1,
       findingsReviewed: 2,
-      severityCorrections: 1,
+      severityCorrections: 2,
       // meanConfidence: (85 + 40) / 2 = 62.5
       meanConfidence: 62.5,
     });

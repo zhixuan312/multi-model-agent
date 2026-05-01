@@ -40,7 +40,7 @@
       },
       "concerns": [],
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "error",
+      "qualityReviewStatus": "annotated",
       "stageStats": {
         "implementing": {
           "stage": "implementing",
@@ -170,22 +170,22 @@
           "stage": "quality_review",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0.002,
           "agentTier": "standard",
           "modelFamily": "other",
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": null,
-          "outputTokens": null,
+          "inputTokens": 20,
+          "outputTokens": 40,
           "cachedTokens": null,
           "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
+          "turnCount": 2,
+          "toolCallCount": 0,
           "filesReadCount": null,
           "filesWrittenCount": null,
-          "verdict": "error",
+          "verdict": "annotated",
           "roundsUsed": 1
         },
         "diff_review": {
@@ -217,7 +217,6 @@
         "metadata": 0,
         "cap": 3
       },
-      "qualityReviewReason": "worker output missing or invalid findings[] JSON block",
       "structuredReport": {
         "summary": "[Reviewed] mocked ok",
         "filesChanged": [],
@@ -281,6 +280,6 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "error",
+  "qualityReviewVerdict": "annotated",
   "roundsUsed": 1
 }

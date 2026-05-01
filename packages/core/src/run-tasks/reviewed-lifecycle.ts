@@ -309,7 +309,7 @@ export async function executeReviewedLifecycle(
   _client?: string,
   _triggeringSkill?: string,
   bus?: import('../observability/bus.js').EventBus,
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: import('../executors/_shared/findings-schema.js').WorkerFinding[] }) => string,
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const routeKey = _route ?? '';
@@ -1456,9 +1456,10 @@ export async function executeReviewedLifecycle(
         // Annotation model: emit one quality event per pass with severity-correction
         // and mean-confidence summary fields. Then we are done — no rework loop.
         const annotated = qualityResult.annotatedFindings ?? [];
-        const severityCorrections = annotated.filter(f => f.reviewerSeverity !== undefined).length;
-        const meanConfidence = annotated.length > 0
-          ? Math.round((annotated.reduce((s, f) => s + f.reviewerConfidence, 0) / annotated.length) * 100) / 100
+        const severityCorrections = annotated.length;
+        const confidences = annotated.filter(f => f.reviewerConfidence !== null).map(f => f.reviewerConfidence as number);
+        const meanConfidence = confidences.length > 0
+          ? Math.round((confidences.reduce((s, c) => s + c, 0) / confidences.length) * 100) / 100
           : null;
         emitTaskEvent('read_only_review.quality', {
           route: routeKey,

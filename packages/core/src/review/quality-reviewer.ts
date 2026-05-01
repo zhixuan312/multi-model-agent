@@ -1,14 +1,14 @@
-import { z } from 'zod';
 import type { Provider } from '../types.js';
 import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import { buildQualityReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
-import {
-  workerFindingsSchema,
-  type WorkerFinding,
-  type AnnotatedFinding,
-} from '../executors/_shared/findings-schema.js';
+import type { AnnotatedFinding } from '../executors/_shared/findings-schema.js';
+import { parseReviewerFindings } from './parse-reviewer-findings.js';
+import { fallbackExtractFindings } from './fallback-extraction.js';
+
+export { parseReviewerFindings } from './parse-reviewer-findings.js';
+export { fallbackExtractFindings } from './fallback-extraction.js';
 
 /**
  * Result of the read-only annotation review pass.
@@ -72,113 +72,6 @@ function addMetrics(a: QualityReviewMetrics, b: QualityReviewMetrics): QualityRe
 /** Backward-compat alias kept until reviewed-lifecycle is migrated to the new shape (Task 6). */
 export type LegacyQualityReviewResult = QualityReviewResult;
 
-const annotationItemSchema = z.object({
-  id: z.string().min(1),
-  reviewerConfidence: z.number().int().min(0).max(100),
-  reviewerSeverity: z.enum(['high', 'medium', 'low']).optional(),
-}).strict();
-
-const annotationsArraySchema = z.array(annotationItemSchema);
-
-/**
- * Extract the first ```json fenced code block from a string, or `null` if none found.
- */
-function extractJsonBlock(output: string): string | null {
-  const match = output.match(/```json\s*\n([\s\S]*?)\n```/);
-  return match ? match[1] : null;
-}
-
-/**
- * Parse worker findings from the worker's raw output. Looks for a ```json block whose
- * content is an array passing workerFindingsSchema. Returns null if absent or invalid.
- */
-export function extractWorkerFindings(workerOutput: string): WorkerFinding[] | null {
-  // Try the first json block; if absent, also try matching multiple blocks for
-  // resilience against workers that emit example JSON before the real findings.
-  const blocks = [...workerOutput.matchAll(/```json\s*\n([\s\S]*?)\n```/g)].map(m => m[1]);
-  for (const raw of blocks) {
-    try {
-      const parsed = JSON.parse(raw);
-      if (!Array.isArray(parsed)) continue;
-      const validated = workerFindingsSchema.safeParse(parsed);
-      if (validated.success) return validated.data;
-    } catch { /* try next block */ }
-  }
-  return null;
-}
-
-interface AnnotationParseOk {
-  ok: true;
-  annotated: AnnotatedFinding[];
-}
-interface AnnotationParseErr {
-  ok: false;
-  reason: string;
-}
-
-/**
- * Parse the reviewer's response, validate against the worker's findings,
- * and merge to produce AnnotatedFinding[].
- *
- * Validation:
- * - Reviewer output must contain exactly one ```json fenced block (we take the first).
- * - Block content must be a JSON array passing annotationsArraySchema.
- * - Annotation ids must be a permutation of worker ids: no missing, no duplicate, no extra.
- */
-export function parseAndMergeAnnotations(
-  reviewerOutput: string,
-  workerFindings: WorkerFinding[],
-): AnnotationParseOk | AnnotationParseErr {
-  const block = extractJsonBlock(reviewerOutput);
-  if (block === null) {
-    return { ok: false, reason: 'reviewer output missing ```json fenced block' };
-  }
-  let parsed: unknown;
-  try {
-    parsed = JSON.parse(block);
-  } catch (err) {
-    return { ok: false, reason: `reviewer JSON parse failed: ${err instanceof Error ? err.message : String(err)}` };
-  }
-  const validated = annotationsArraySchema.safeParse(parsed);
-  if (!validated.success) {
-    return { ok: false, reason: `annotation array validation failed: ${validated.error.message}` };
-  }
-  const annotations = validated.data;
-
-  const workerIds = new Set(workerFindings.map(f => f.id));
-  const reviewerIds = annotations.map(a => a.id);
-  const reviewerIdSet = new Set(reviewerIds);
-
-  if (reviewerIds.length !== reviewerIdSet.size) {
-    return { ok: false, reason: 'duplicate id in reviewer annotations' };
-  }
-  if (reviewerIdSet.size !== workerIds.size) {
-    return { ok: false, reason: `annotation count ${reviewerIdSet.size} does not match worker findings count ${workerIds.size}` };
-  }
-  for (const id of reviewerIdSet) {
-    if (!workerIds.has(id)) {
-      return { ok: false, reason: `reviewer annotated unknown id: ${id}` };
-    }
-  }
-  for (const id of workerIds) {
-    if (!reviewerIdSet.has(id)) {
-      return { ok: false, reason: `reviewer missing annotation for worker id: ${id}` };
-    }
-  }
-
-  const byId = new Map(annotations.map(a => [a.id, a]));
-  const merged: AnnotatedFinding[] = workerFindings.map(wf => {
-    const ann = byId.get(wf.id)!;
-    const out: AnnotatedFinding = {
-      ...wf,
-      reviewerConfidence: ann.reviewerConfidence,
-    };
-    if (ann.reviewerSeverity !== undefined) out.reviewerSeverity = ann.reviewerSeverity;
-    return out;
-  });
-  return { ok: true, annotated: merged };
-}
-
 export async function runQualityReview(
   reviewerProvider: Provider,
   packet: { prompt: string; scope: string[]; doneCondition: string },
@@ -187,7 +80,7 @@ export async function runQualityReview(
   toolCallLog: string[],
   filesWritten: string[],
   evidenceBlock?: string,
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: WorkerFinding[] }) => string,
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
   workerOutput?: string,
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
@@ -264,74 +157,81 @@ async function runAnnotationReview(
   reviewerProvider: Provider,
   packet: { prompt: string; scope: string[]; doneCondition: string },
   workerOutput: string,
-  qualityReviewPromptBuilder: (ctx: { workerOutput: string; brief: string; workerFindings: WorkerFinding[] }) => string,
+  qualityReviewPromptBuilder: (ctx: { workerOutput: string; brief: string }) => string,
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
   onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
 ): Promise<QualityReviewResult> {
-  // Step 1: extract worker findings from worker output.
-  const workerFindings = extractWorkerFindings(workerOutput);
-  if (workerFindings === null) {
-    return {
-      status: 'error',
-      findings: [],
-      errorReason: 'worker output missing or invalid findings[] JSON block',
-    };
-  }
-
-  // Step 2: short-circuit when worker found nothing — nothing to annotate.
-  if (workerFindings.length === 0) {
-    return {
-      status: 'annotated',
-      annotatedFindings: [],
-      findings: [],
-    };
-  }
-
-  // Step 3: build the route-specific prompt and call the reviewer.
-  const prompt = qualityReviewPromptBuilder({ workerOutput, brief: packet.prompt, workerFindings });
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
 
-  let result;
+  const basePrompt = qualityReviewPromptBuilder({ workerOutput, brief: packet.prompt });
   let metrics: QualityReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
-  try {
-    result = await delegateWithEscalation(
-      { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
-      [reviewerProvider],
-      { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
-    );
-    metrics = extractMetrics(result);
-  } catch (err) {
+
+  // Attempt 1
+  const attempt1 = await callReviewer(basePrompt);
+  if (attempt1.kind === 'transport') {
+    return { status: attempt1.status, findings: [], errorReason: attempt1.errorReason, metrics: attempt1.metrics };
+  }
+  metrics = addMetrics(metrics, attempt1.metrics);
+  const parsed1 = parseReviewerFindings(attempt1.output, workerOutput);
+  if (parsed1.ok) {
+    return successResult(parsed1.findings, metrics);
+  }
+
+  // Attempt 2 — strict reminder
+  const reminderPrompt = `${basePrompt}\n\nIMPORTANT: Your previous response was not parseable (${parsed1.reason}). Emit ONLY the findings JSON array now, in a single \`\`\`json fenced code block as the LAST block in your response. No surrounding prose required.`;
+  const attempt2 = await callReviewer(reminderPrompt);
+  // Round-2 finding #1: transport failure on retry MUST propagate as error, not
+  // silently fall back. Fallback is for parse failure of a real response,
+  // never for infrastructure failure. Otherwise telemetry hides outages.
+  if (attempt2.kind === 'transport') {
+    metrics = addMetrics(metrics, attempt2.metrics);
+    return { status: attempt2.status, findings: [], errorReason: attempt2.errorReason, metrics };
+  }
+  metrics = addMetrics(metrics, attempt2.metrics);
+  const parsed2 = parseReviewerFindings(attempt2.output, workerOutput);
+  if (parsed2.ok) {
+    return successResult(parsed2.findings, metrics);
+  }
+
+  // Both LLM attempts failed parse — deterministic fallback. Verdict stays
+  // 'annotated' so telemetry never sees 'error' from a parseable worker output.
+  const fallback = fallbackExtractFindings(workerOutput);
+  return successResult(fallback, metrics);
+
+  // ── helpers ────────────────────────────────────────────────────────────
+
+  function successResult(findings: AnnotatedFinding[], m: QualityReviewMetrics): QualityReviewResult {
     return {
-      status: 'error',
+      status: 'annotated',
+      annotatedFindings: findings,
       findings: [],
-      errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}`,
+      metrics: m,
     };
   }
 
-  if (result.status !== 'ok') {
-    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
-      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };
+  type CallOk = { kind: 'ok'; output: string; metrics: QualityReviewMetrics };
+  type CallTransport = { kind: 'transport'; status: 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted'; errorReason: string; metrics: QualityReviewMetrics };
+
+  async function callReviewer(prompt: string): Promise<CallOk | CallTransport> {
+    let result;
+    try {
+      result = await delegateWithEscalation(
+        { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
+        [reviewerProvider],
+        { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
+      );
+    } catch (err) {
+      return { kind: 'transport', status: 'error', errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}`, metrics: { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 } };
     }
-    return {
-      status: 'error',
-      findings: [],
-      errorReason: `review agent returned status: ${result.status}`,
-      metrics,
-    };
+    const m = extractMetrics(result);
+    if (result.status !== 'ok') {
+      if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
+        return { kind: 'transport', status: result.status, errorReason: `review agent returned status: ${result.status}`, metrics: m };
+      }
+      return { kind: 'transport', status: 'error', errorReason: `review agent returned status: ${result.status}`, metrics: m };
+    }
+    return { kind: 'ok', output: result.output, metrics: m };
   }
-
-  // Step 4: parse + validate + merge annotations.
-  const merged = parseAndMergeAnnotations(result.output, workerFindings);
-  if (!merged.ok) {
-    return { status: 'error', findings: [], errorReason: merged.reason, metrics };
-  }
-
-  return {
-    status: 'annotated',
-    annotatedFindings: merged.annotated,
-    findings: [],
-    metrics,
-  };
 }
