@@ -896,6 +896,8 @@ function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConf
     totalTokens: u.totalTokens,
     costUSD,
     costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    cachedTokens: null,
+    reasoningTokens: null,
   };
 }
 

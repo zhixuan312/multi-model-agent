@@ -64,6 +64,8 @@ describe('contract: runCodex RunResult shape', () => {
         totalTokens: 36,
         costUSD: 0.000055,
         costDeltaVsParentUSD: null,
+        cachedTokens: null,
+        reasoningTokens: null,
       },
       turns: 1,
       filesRead: [],

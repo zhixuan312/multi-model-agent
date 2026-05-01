@@ -958,6 +958,8 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
     totalTokens: inputTokens + outputTokens,
     costUSD,
     costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
+    cachedTokens: null,
+    reasoningTokens: null,
   };
 }
 

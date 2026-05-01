@@ -83,8 +83,8 @@ const StageEntryBase = z.object({
   costUSD: z.number().min(0).max(100),
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
-  cachedTokens: z.number().int().min(0).max(5_000_000),
-  reasoningTokens: z.number().int().min(0).max(500_000),
+  cachedTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
   toolCallCount: z.number().int().min(0).max(5000),
   filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
@@ -157,8 +157,8 @@ export const TaskCompletedEventSchema = z.object({
   // Token economics
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
-  cachedTokens: z.number().int().min(0).max(5_000_000),
-  reasoningTokens: z.number().int().min(0).max(500_000),
+  cachedTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
 
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
@@ -237,30 +237,32 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     (acc, st) => ({
       input: acc.input + st.inputTokens,
       output: acc.output + st.outputTokens,
-      cached: acc.cached + st.cachedTokens,
-      reasoning: acc.reasoning + st.reasoningTokens,
+      cached: acc.cached + (st.cachedTokens ?? 0),
+      reasoning: acc.reasoning + (st.reasoningTokens ?? 0),
     }),
     { input: 0, output: 0, cached: 0, reasoning: 0 },
   );
   if (
     tokenSum.input < event.inputTokens ||
     tokenSum.output < event.outputTokens ||
-    tokenSum.cached < event.cachedTokens ||
-    tokenSum.reasoning < event.reasoningTokens
+    tokenSum.cached < (event.cachedTokens ?? 0) ||
+    tokenSum.reasoning < (event.reasoningTokens ?? 0)
   ) {
     ctx.addIssue({ code: 'custom', message: 'R5: top-level token counts must not exceed sum of stage token counts' });
   }
 
-  // R5b: per stage, reasoningTokens ≤ outputTokens (subset semantics)
+  // R5b: per stage, reasoningTokens ≤ outputTokens (subset semantics).
+  // When reasoningTokens is null the provider didn't expose it; skip validation.
   for (const st of event.stages) {
-    if (st.reasoningTokens > st.outputTokens) {
+    if (st.reasoningTokens !== null && st.reasoningTokens > st.outputTokens) {
       ctx.addIssue({ code: 'custom', message: 'R5b: reasoningTokens must not exceed outputTokens per stage' });
     }
   }
 
-  // R6: per stage, cachedTokens ≤ inputTokens (cached is subset of input)
+  // R6: per stage, cachedTokens ≤ inputTokens (cached is subset of input).
+  // When cachedTokens is null the provider didn't expose it; skip validation.
   for (const st of event.stages) {
-    if (st.cachedTokens > st.inputTokens) {
+    if (st.cachedTokens !== null && st.cachedTokens > st.inputTokens) {
       ctx.addIssue({ code: 'custom', message: 'R6: cachedTokens must not exceed inputTokens per stage' });
     }
   }

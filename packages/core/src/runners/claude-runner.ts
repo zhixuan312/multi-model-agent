@@ -847,6 +847,8 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     totalTokens: inputTokens + outputTokens,
     costUSD,
     costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
+    cachedTokens: null,
+    reasoningTokens: null,
   };
 }
 

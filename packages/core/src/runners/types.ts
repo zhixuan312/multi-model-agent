@@ -27,6 +27,10 @@ export interface TokenUsage {
   costUSD: number | null
   /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
   costDeltaVsParentUSD?: number | null
+  /** Input tokens served from cache rather than computed. null = provider does not expose this dimension. */
+  cachedTokens?: number | null
+  /** Output tokens attributed to reasoning/thinking. null = provider does not expose this dimension. */
+  reasoningTokens?: number | null
 }
 
 export interface TerminationReason {

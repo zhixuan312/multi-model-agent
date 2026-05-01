@@ -75,6 +75,8 @@ describe('contract: runClaude RunResult shape', () => {
         totalTokens: 34,
         costUSD: 0.000055,
         costDeltaVsParentUSD: null,
+        cachedTokens: null,
+        reasoningTokens: null,
       },
       turns: 1,
       filesRead: [],

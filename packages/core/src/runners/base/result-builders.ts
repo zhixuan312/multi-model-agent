@@ -19,6 +19,8 @@ export interface SharedResultUsage {
   totalTokens: number;
   costUSD: number | null;
   costDeltaVsParentUSD: number | null;
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
 }
 
 export interface ReviewedRunResultFields {
@@ -36,6 +38,8 @@ function usageShape(u: SharedResultUsage): TokenUsage {
     totalTokens: u.totalTokens,
     costUSD: u.costUSD,
     costDeltaVsParentUSD: u.costDeltaVsParentUSD,
+    cachedTokens: u.cachedTokens,
+    reasoningTokens: u.reasoningTokens,
   };
 }
 
