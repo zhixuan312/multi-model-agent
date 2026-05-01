@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.4] - 2026-05-01
+
+### Fixed
+- **Review stages recorded the wrong agent's model** (core, R3 violation root cause). `endReviewStage` was always called with `implementerAgentInfo`, so `spec_review.model`, `quality_review.model`, and `diff_review.model` always equaled `implementerModel`. R3 (V3 spec: review.model MUST differ from implementerModel) then fired by construction for every reviewed task, regardless of config. Even with a correctly cross-tier setup (e.g. standard=deepseek-v4-pro + complex=gpt-5.5/codex) where the reviewer ran on gpt-5.5, the stage stat recorded deepseek-v4-pro. Fix: build `reviewerAgentInfoFor(tier)` from the actually-resolved provider per tier, and pass the *last-used* reviewer tier (from `specReviewerHistory` / `qualityReviewerHistory`, reflecting any escalation) to `endReviewStage`. 24 contract goldens regenerated.
+
+### Changed
+- **Telemetry validation is now warn-only** (server, recorder.ts). 3.10.3 still dropped events that failed the BASE schema (caps/types/enums). 3.10.4 NEVER drops — both base-schema and cross-field violations log a warning and the event still ships. Backend uses `passthrough` so degenerate rows store either way; dropping at the daemon means data is lost forever with no visibility. **Cross-field warnings now include the offending values** (`implementerModel`, per-stage `model` map, top-level totals) alongside the rule name, so the operator can tell at a glance whether the cause is their config or a lifecycle bug — like the R3 case above where the rule name pointed at config but the bug was in our code.
+
 ## [3.10.3] - 2026-05-01
 
 ### Fixed

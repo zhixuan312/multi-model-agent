@@ -91,7 +91,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.4",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.10.3** — critical telemetry hotfix + UX polish. **3.10.2 silently dropped every emitted event** because the new V3 emit-time validation tripped on a 1ms clock-skew between `runResult.durationMs` and per-stage `durationMs` (R4 violation). Fixed: `totalDurationMs = max(runResult.durationMs, Σ stage.durationMs)` enforces R4 by construction. Also adds: skill manifest backfill on upgrade (resolves "mma-investigate not registered" for users who upgraded across v3.4.0), live-elapsed polling headlines (no more stale `— 10s` between heartbeats), tiered server stdout (default-quiet, `--verbose` for firehose). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.10.4** — review stages were recording the implementer's model instead of the actual reviewer's model, so R3 (V3 cross-model invariant) tripped on every reviewed task regardless of config. Now records the actual reviewer agent. Plus: telemetry validation is fully warn-only — events never drop, and cross-field warnings include actual offending values (model, tokens, totals) so config issues vs lifecycle bugs are distinguishable at a glance. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

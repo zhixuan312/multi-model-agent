@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.10.3** — critical telemetry hotfix in `event-builder.ts` plus polling-headline + summary-rendering work. R4 superRefine (Σ stage.durationMs ≤ totalDurationMs) was violated by 1ms in 3.10.2 due to clock-skew between `runResult.durationMs` and per-stage measurements, dropping every event at emit time. Fixed: `totalDurationMs = max(runResult.durationMs, stageSum)` enforces R4 by construction. New `derive-terminal-status.ts` and `clamp.ts` shared helpers eliminate drift between the in-process `TaskCompletionSummary` (used for end-of-task summary lines) and the V3 wire event. `HeartbeatTimer.getHeadlineSnapshot()` returns the prefix/statsClause split that the polling endpoint composes live. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.4** — `endReviewStage` was always called with `implementerAgentInfo`, so `spec_review.model` / `quality_review.model` / `diff_review.model` recorded the implementer's model — V3 R3 (review.model ≠ implementerModel) then fired by construction regardless of config. Fixed: build `reviewerAgentInfoFor(tier)` from the resolved provider per tier; pass the last-used reviewer tier from `specReviewerHistory` / `qualityReviewerHistory` (reflecting any escalation). 24 contract goldens regenerated. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

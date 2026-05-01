@@ -86,29 +86,46 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
         const d = decide(homeDir);
         if (!d.enabled) return;
         const event = buildTaskCompletedEvent(ctx);
-        // Validate against the BASE schema (caps, types, enums) — these are
-        // non-negotiable wire-format constraints. Drop only on those failures.
-        // SuperRefine cross-field rules (R1–R11) are checked separately and
-        // logged as warnings, but do NOT drop the event: backend uses
-        // passthrough so degenerate rows can be filtered at query time, and
-        // 3.10.2's drop-on-superRefine behaviour silently lost real telemetry
-        // on 1ms clock-skew (R4) and other measurement-precision edge cases.
+        // Validation is INFORMATIONAL ONLY — never block emit. Backend uses
+        // passthrough so it stores everything; if mma drops events here, that
+        // data is gone forever and the user has no visibility into what was
+        // suppressed. 3.10.2's drop-on-fail design hid real telemetry from
+        // both operator and dashboard.
         const baseParsed = TaskCompletedEventSchema.safeParse(event);
         if (!baseParsed.success) {
-          console.warn('mma-telemetry: dropping schema-invalid event', {
+          console.warn('mma-telemetry: schema warning (event still emitted)', {
             eventId: event.eventId,
             issues: baseParsed.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
           });
-          return;
         }
-        const refined = ValidatedTaskCompletedEventSchema.safeParse(baseParsed.data);
+        const refined = ValidatedTaskCompletedEventSchema.safeParse(event);
         if (!refined.success) {
-          console.warn('mma-telemetry: cross-field validation warning (event still emitted)', {
+          // Surface the actual offending values alongside the rule name so the
+          // operator can tell at a glance whether the cause is config (wrong
+          // values) or code (lifecycle bug). Tag the most informative
+          // top-level fields plus per-stage models for the common R3/R5/R6
+          // cross-field cases.
+          const stageModelsByName = (event.stages ?? []).reduce(
+            (acc: Record<string, string>, s: { name: string; model?: string }) => {
+              if (s.name && s.model) acc[s.name] = s.model;
+              return acc;
+            },
+            {},
+          );
+          console.warn('mma-telemetry: cross-field warning (event still emitted)', {
             eventId: event.eventId,
-            issues: refined.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
+            implementerModel: event.implementerModel,
+            stageModels: stageModelsByName,
+            totalDurationMs: event.totalDurationMs,
+            inputTokens: event.inputTokens,
+            outputTokens: event.outputTokens,
+            issues: refined.error.issues.map((e) => ({
+              rule: e.message,
+              path: e.path.join('.'),
+            })),
           });
         }
-        enqueue(baseParsed.data as Record<string, unknown>);
+        enqueue(event as unknown as Record<string, unknown>);
       } catch {
         dropped++;
       }
