@@ -90,7 +90,7 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 |-------|------|
 | `name` | enum: `implementing`, `spec_review`, `spec_rework`, `quality_review`, `quality_rework`, `diff_review`, `verifying`, `committing` |
 | `model` | string — the model used for this stage |
-| `agentTier` | enum: `standard`, `reasoning` |
+| `agentTier` | enum: `standard`, `complex` |
 | `durationMs` | integer — exact elapsed time for this stage |
 | `costUSD` | float — cost estimate for this stage |
 | `inputTokens` | integer |
