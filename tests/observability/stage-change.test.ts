@@ -71,14 +71,13 @@ describe('stage_change emissions (P5)', () => {
     const source = readFileSync(sourcePath, 'utf8');
 
     // Locate the heartbeat-tick branch and assert no stage_change emit inside it.
-    const heartbeatBranchStart = source.indexOf("if (event.kind === 'heartbeat')");
+    const heartbeatBranchStart = source.indexOf("if (event.kind !== 'heartbeat')");
     expect(heartbeatBranchStart).toBeGreaterThan(-1);
 
-    // The branch is bounded by the next sibling kind-handler. Search forward
-    // for the next `if (event.kind === ` sibling — the branch ends before it.
-    const nextKindCheck = source.indexOf("if (event.kind === ", heartbeatBranchStart + 1);
-    const branchEnd = nextKindCheck > 0 ? nextKindCheck : source.length;
-    const branchBody = source.slice(heartbeatBranchStart, branchEnd);
+    // The branch is bounded by the HeartbeatTimer options object. Search forward
+    // for the next `provider:` line after the heartbeat branch.
+    const branchEnd = source.indexOf('\n        {', heartbeatBranchStart + 1);
+    const branchBody = source.slice(heartbeatBranchStart, branchEnd > 0 ? branchEnd : source.length);
 
     expect(branchBody).not.toMatch(/emitTaskEvent\(\s*['"]stage_change['"]/);
   });
