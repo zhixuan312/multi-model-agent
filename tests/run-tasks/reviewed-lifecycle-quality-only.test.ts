@@ -210,29 +210,12 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const VALID_EVIDENCE = 'src/a.ts:10 — the function silently swallows errors and returns null';
-    const workerFindings = [
-      { id: 'F1', severity: 'high' as const, claim: 'silent error swallowing', evidence: VALID_EVIDENCE },
-    ];
-    const workerOutputWithFindings = [
-      '## Summary',
-      'done',
-      '',
-      '## Findings',
-      '```json',
-      JSON.stringify(workerFindings),
-      '```',
-      '',
-      '## Files changed',
-      '- report.md: added',
-      '',
-      '## Validations run',
-      '- lint: passed',
-      '',
-      '## Deviations from brief',
-      '',
-      '## Unresolved',
-      '',
+    const NARRATIVE_WORKER_OUTPUT = [
+      '# Audit Report',
+      '### 1. Silent error swallowing in parseConfig',
+      'Severity: high',
+      'Location: src/a.ts:10',
+      'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
     ].join('\n');
 
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
@@ -241,7 +224,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
         name: 'mock-standard',
         config: config.agents.standard,
         run: async () => ({
-          output: workerOutputWithFindings,
+          output: NARRATIVE_WORKER_OUTPUT,
           status: 'ok' as const,
           usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
           turns: 1,

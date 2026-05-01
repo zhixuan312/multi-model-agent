@@ -3,6 +3,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 import { EventBus } from '../../packages/core/src/observability/bus.js';
 import type { EventType, EventSink } from '../../packages/core/src/observability/bus.js';
+import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
 
 const capturedEvents: EventType[] = [];
 
@@ -17,34 +18,28 @@ function resetCaptured(): void {
   capturedEvents.length = 0;
 }
 
-const VALID_EVIDENCE = 'src/auth/login.ts:89 — the property access is unguarded against undefined req.body.user';
+const VALID_EVIDENCE = 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.';
 
-// Worker output that the runtime feeds to the implementer mock — embeds a valid
-// findings[] JSON block that the annotation-path reviewer will extract.
-const WORKER_OUTPUT_WITH_FINDINGS = [
-  '## Summary',
-  'analysis complete',
+// Worker output as a narrative report — the runtime feeds this to the
+// implementer mock, and the annotation-path reviewer extracts findings from it.
+const NARRATIVE_WORKER_OUTPUT = [
+  '# Audit Report',
+  '### 1. Silent error swallowing in parseConfig',
+  'Severity: high',
+  'Location: src/auth/login.ts:89',
+  'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
   '',
-  '## Findings',
-  '```json',
-  JSON.stringify([
-    { id: 'F1', severity: 'high', claim: 'Issue A', evidence: VALID_EVIDENCE },
-    { id: 'F2', severity: 'medium', claim: 'Issue B', evidence: VALID_EVIDENCE, suggestion: 'wrap it' },
-  ]),
-  '```',
-  '',
-  '## Deviations from brief',
-  '',
-  '## Unresolved',
-  '',
+  '### 2. Unguarded property access',
+  'Severity: medium',
+  'Location: src/auth/login.ts:100',
+  'The property access is unguarded against undefined req.body.user and will throw in production.',
 ].join('\n');
 
-const REVIEWER_ANNOTATION_OUTPUT = [
-  'Annotated.',
+const REVIEWER_OUTPUT = [
   '```json',
   JSON.stringify([
-    { id: 'F1', severity: 'high', claim: 'Issue A', evidence: VALID_EVIDENCE, reviewerConfidence: 85 },
-    { id: 'F2', severity: 'low', claim: 'Issue B', evidence: VALID_EVIDENCE, suggestion: 'wrap it', reviewerConfidence: 40 },
+    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', reviewerConfidence: 85 },
+    { id: 'F2', severity: 'medium', claim: 'unguarded property access', evidence: 'The property access is unguarded against undefined req.body.user and will throw in production.', reviewerConfidence: 40 },
   ]),
   '```',
 ].join('\n');
@@ -54,11 +49,11 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: vi.fn(async (prompt: string) => {
-      // The reviewer prompts include the rubric "How to score `reviewerConfidence`"
+      // The reviewer prompts include the rubric "reviewerConfidence"
       const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
       if (isReviewer) {
         return {
-          output: REVIEWER_ANNOTATION_OUTPUT,
+          output: REVIEWER_OUTPUT,
           status: 'ok' as const,
           usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
           turns: 1,
@@ -71,7 +66,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       }
       // implementer
       return {
-        output: WORKER_OUTPUT_WITH_FINDINGS,
+        output: NARRATIVE_WORKER_OUTPUT,
         status: 'ok' as const,
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
         turns: 1,
@@ -134,7 +129,8 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       verdict: 'annotated',
       iterationIndex: 1,
       findingsReviewed: 2,
-      severityCorrections: 2,
+      findingsFlagged: 0,
+      severityCorrections: 0,
       // meanConfidence: (85 + 40) / 2 = 62.5
       meanConfidence: 62.5,
     });
@@ -189,5 +185,30 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       .filter((n) => n.startsWith('read_only_review.'));
 
     expect(rorEventNames).toEqual(['read_only_review.quality', 'read_only_review.terminal']);
+  });
+});
+
+describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
+  it('accepts meanConfidence=null (all-fallback path)', () => {
+    const sample = {
+      // TaskBase fields
+      ts: '2026-05-01T12:00:00.000+00:00',
+      batchId: '550e8400-e29b-41d4-a716-446655440001',
+      taskIndex: 0,
+      // Per-event fields
+      event: 'read_only_review.quality' as const,
+      route: 'audit',
+      verdict: 'annotated' as const,
+      iterationIndex: 1,
+      findingsReviewed: 2,
+      findingsFlagged: 0,
+      severityCorrections: 0,
+      meanConfidence: null,
+      durationMs: 1234,
+      costUSD: 0.05,
+    };
+    const result = ReadOnlyReviewQualityEvent.safeParse(sample);
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error(`schema rejected null meanConfidence: ${result.error.message}`);
   });
 });

@@ -1456,11 +1456,32 @@ export async function executeReviewedLifecycle(
         // Annotation model: emit one quality event per pass with severity-correction
         // and mean-confidence summary fields. Then we are done — no rework loop.
         const annotated = qualityResult.annotatedFindings ?? [];
-        const severityCorrections = annotated.length;
-        const confidences = annotated.filter(f => f.reviewerConfidence !== null).map(f => f.reviewerConfidence as number);
-        const meanConfidence = confidences.length > 0
-          ? Math.round((confidences.reduce((s, c) => s + c, 0) / confidences.length) * 100) / 100
+        // meanConfidence skips null entries (fallback path); null when ALL are null.
+        const numericConfidences = annotated
+          .map(f => f.reviewerConfidence)
+          .filter((c): c is number => c !== null);
+        const meanConfidence = numericConfidences.length > 0
+          ? Math.round((numericConfidences.reduce((s, c) => s + c, 0) / numericConfidences.length) * 100) / 100
           : null;
+
+        // STEP A: Funnel annotated findings into concerns[] so V3
+        // findingsBySeverity (built later in event-builder.ts:buildReviewStage)
+        // rolls them up. MUST happen before any path that records the task,
+        // and before emitTaskEvent below since downstream consumers may
+        // observe finalImplResult during emit.
+        if (annotated.length > 0) {
+          const findingsAsConcerns = annotated.map((f) => ({
+            source: 'quality_review' as const,
+            severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
+            message: `[${f.id}] ${f.claim}`,
+          }));
+          finalImplResult = {
+            ...finalImplResult,
+            concerns: [...(finalImplResult.concerns ?? []), ...findingsAsConcerns],
+          };
+        }
+
+        // STEP B: Emit per-pass annotation event (no rework loop in quality_only).
         emitTaskEvent('read_only_review.quality', {
           route: routeKey,
           verdict: qualityResult.status === 'annotated' ? 'annotated'
@@ -1468,8 +1489,8 @@ export async function executeReviewedLifecycle(
             : 'error',
           iterationIndex: 1,
           findingsReviewed: annotated.length,
-          findingsFlagged: severityCorrections,
-          severityCorrections,
+          findingsFlagged: 0, // legacy field — severity correction tracked elsewhere now
+          severityCorrections: 0, // reviewerSeverity field removed in 3.10.5
           meanConfidence,
           durationMs: Date.now() - qualityReviewT0,
           costUSD: runningCostUSD() !== null && qualityReviewC0 !== null ? runningCostUSD()! - qualityReviewC0! : null,
