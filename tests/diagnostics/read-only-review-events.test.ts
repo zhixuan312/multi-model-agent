@@ -44,6 +44,11 @@ const REVIEWER_OUTPUT = [
   '```',
 ].join('\n');
 
+const reviewerOutputState = vi.hoisted(() => ({
+  output: '',
+}));
+reviewerOutputState.output = REVIEWER_OUTPUT;
+
 vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: string) => ({
     name: slot,
@@ -53,7 +58,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
       if (isReviewer) {
         return {
-          output: REVIEWER_OUTPUT,
+          output: reviewerOutputState.output,
           status: 'ok' as const,
           usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
           turns: 1,
@@ -111,6 +116,7 @@ function makeBus(): { bus: EventBus; sink: CaptureSink } {
 
 describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   it('emits read_only_review.quality with verdict=annotated and annotation summary fields', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -145,6 +151,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 
   it('does NOT emit read_only_review.rework anymore (rework loop deleted in 3.8.1)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -159,6 +166,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 
   it('emits read_only_review.terminal with roundsUsed=1 and finalQualityVerdict=annotated', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -179,6 +187,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 
   it('event order is implementing → quality → terminal (no rework slot in between)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -193,6 +202,32 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       .filter((n) => n.startsWith('read_only_review.'));
 
     expect(rorEventNames).toEqual(['read_only_review.quality', 'read_only_review.terminal']);
+  });
+
+  it('emits meanConfidence=null when deterministic fallback annotates every finding', async () => {
+    reviewerOutputState.output = 'not parseable as reviewer JSON';
+    resetCaptured();
+
+    const { bus } = makeBus();
+    const [result] = await runTasks(
+      [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
+      config,
+      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings!.every((f) => f.reviewerConfidence === null)).toBe(true);
+
+    const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
+    expect(qualityEvents).toHaveLength(1);
+    expect(qualityEvents[0]).toMatchObject({
+      event: 'read_only_review.quality',
+      route: 'audit',
+      verdict: 'annotated',
+      meanConfidence: null,
+    });
   });
 });
 

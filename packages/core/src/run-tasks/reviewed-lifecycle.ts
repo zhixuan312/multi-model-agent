@@ -1470,14 +1470,11 @@ export async function executeReviewedLifecycle(
         // and before emitTaskEvent below since downstream consumers may
         // observe finalImplResult during emit.
         if (annotated.length > 0) {
-          const VALID_CONCERN_SEVERITIES = new Set(['critical', 'high', 'medium', 'low'] as const);
-          const findingsAsConcerns = annotated
-            .filter(f => VALID_CONCERN_SEVERITIES.has(f.severity))
-            .map((f) => ({
-              source: 'quality_review' as const,
-              severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
-              message: `[${f.id}] ${f.claim}`,
-            }));
+          const findingsAsConcerns = annotated.map((f) => ({
+            source: 'quality_review' as const,
+            severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
+            message: `[${f.id}] ${f.claim}`,
+          }));
           finalImplResult = {
             ...finalImplResult,
             concerns: [...(finalImplResult.concerns ?? []), ...findingsAsConcerns],
