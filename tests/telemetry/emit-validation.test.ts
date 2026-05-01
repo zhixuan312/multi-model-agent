@@ -3,25 +3,27 @@ import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
 import { richRunResult } from '../contract/telemetry/fixtures/rich-runresult.js';
 
-describe('emit-time V3 validation', () => {
-  it('emit path rejects R3-violating events (review.model === implementerModel)', () => {
+describe('V3 cross-field validation (warn-only since 3.10.3)', () => {
+  // 3.10.3 reverted 3.10.2's drop-on-superRefine behaviour: cross-field rule
+  // violations now emit a warning but the event still ships. Schema-level
+  // bounds (caps, types, enums) still drop. These tests verify the schema
+  // CAN detect the violations — what the recorder does with that signal
+  // (drop vs warn vs emit) is a separate policy. See recorder.ts comments.
+
+  it('R3 detection: review.model === implementerModel produces a schema warning', () => {
     const rr = richRunResult();
-    // Force violation: make spec_review.model match implementerModel
     rr.stageStats!.spec_review.model = rr.models!.implementer;
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(false);
     if (!parsed.success) {
-      const r3 = parsed.error.issues.find(
-        (e) => e.message.toLowerCase().includes('r3'),
-      );
+      const r3 = parsed.error.issues.find((e) => e.message.toLowerCase().includes('r3'));
       expect(r3).toBeDefined();
     }
   });
 
-  it('R10b: rework stage on quality_only route is rejected', () => {
+  it('R10b detection: rework stage on quality_only route produces a schema warning', () => {
     const rr = richRunResult();
-    // Already has spec_rework and quality_rework entered; emit on `audit` route which is quality_only.
     const ev = buildTaskCompletedEvent({ route: 'audit', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(false);

@@ -84,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.3",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -287,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.10.2** — telemetry data-correctness patch. Top-level token/cost totals now sum every stage in the V3 event (no longer drop reviewer + earlier-impl rounds). `spec_rework` / `quality_rework` entries appear in `stages[]` when the rework loop runs. `committing.filesCommittedCount` is wired (was hardcoded 0). Per-stage and top-level value clamping at V3 schema caps. V3 superRefine validation (R3, R10b) enforced at emit time — invalid events are dropped client-side. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.3** — critical telemetry hotfix + UX polish. **3.10.2 silently dropped every emitted event** because the new emit-time R4 validation tripped on a 1ms clock-skew between `runResult.durationMs` and per-stage `durationMs`. Fixed by enforcing R4 by construction in the event builder. Also: skill manifest backfill on upgrade (resolves the "mma-investigate not registered" bug for users who upgraded across v3.4.0); live-elapsed polling headlines (no more stale repeated elapsed between heartbeats); tiered server stdout (default-quiet, `--verbose` for full firehose with throttled heartbeats). Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

@@ -6,7 +6,7 @@ import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
-import { SCHEMA_VERSION, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/telemetry/types';
+import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 import {
   buildTaskCompletedEvent,
   type BuildContext,
@@ -86,15 +86,29 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
         const d = decide(homeDir);
         if (!d.enabled) return;
         const event = buildTaskCompletedEvent(ctx);
-        const parsed = ValidatedTaskCompletedEventSchema.safeParse(event);
-        if (!parsed.success) {
-          console.warn('mma-telemetry: dropping invalid event', {
+        // Validate against the BASE schema (caps, types, enums) — these are
+        // non-negotiable wire-format constraints. Drop only on those failures.
+        // SuperRefine cross-field rules (R1–R11) are checked separately and
+        // logged as warnings, but do NOT drop the event: backend uses
+        // passthrough so degenerate rows can be filtered at query time, and
+        // 3.10.2's drop-on-superRefine behaviour silently lost real telemetry
+        // on 1ms clock-skew (R4) and other measurement-precision edge cases.
+        const baseParsed = TaskCompletedEventSchema.safeParse(event);
+        if (!baseParsed.success) {
+          console.warn('mma-telemetry: dropping schema-invalid event', {
             eventId: event.eventId,
-            issues: parsed.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
+            issues: baseParsed.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
           });
           return;
         }
-        enqueue(parsed.data as Record<string, unknown>);
+        const refined = ValidatedTaskCompletedEventSchema.safeParse(baseParsed.data);
+        if (!refined.success) {
+          console.warn('mma-telemetry: cross-field validation warning (event still emitted)', {
+            eventId: event.eventId,
+            issues: refined.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
+          });
+        }
+        enqueue(baseParsed.data as Record<string, unknown>);
       } catch {
         dropped++;
       }

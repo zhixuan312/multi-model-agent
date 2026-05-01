@@ -91,7 +91,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.3",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.10.2** — telemetry data-correctness patch. Top-level token/cost totals now sum every stage instead of just the last implementer attempt (real-world delegate-with-rework batches were under-reporting cost ~24×). `spec_rework` / `quality_rework` entries now appear in `stages[]` when the rework loop runs. `committing.filesCommittedCount` is wired (was hardcoded 0). Per-stage and top-level value clamping at V3 schema caps. V3 superRefine validation enforced at emit time — invalid events (e.g. R3: review.model identical to implementerModel) are now dropped client-side instead of silently shipped. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.10.3** — critical telemetry hotfix + UX polish. **3.10.2 silently dropped every emitted event** because the new V3 emit-time validation tripped on a 1ms clock-skew between `runResult.durationMs` and per-stage `durationMs` (R4 violation). Fixed: `totalDurationMs = max(runResult.durationMs, Σ stage.durationMs)` enforces R4 by construction. Also adds: skill manifest backfill on upgrade (resolves "mma-investigate not registered" for users who upgraded across v3.4.0), live-elapsed polling headlines (no more stale `— 10s` between heartbeats), tiered server stdout (default-quiet, `--verbose` for firehose). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
