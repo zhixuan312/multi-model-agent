@@ -41,7 +41,13 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  const totalDurationMs = clampDurationMsTotal(runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0));
+  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs. runResult.durationMs and per-stage
+  // durations are sampled at different `Date.now()` ticks, so a per-stage measurement can land 1ms
+  // longer than the task-level total. Take the max of (runResult.durationMs, stage-sum) to enforce
+  // R4 by construction; without this guarantee, every event with millisecond-precision drift gets
+  // dropped by the V3 emit-time validator.
+  const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
+  const totalDurationMs = clampDurationMsTotal(Math.max(runResult.durationMs ?? 0, stageDurationsSum));
 
   // Top-level totals are summed across all stages (impl + reviewers + reworks +
   // verify + commit) so the dashboard's `total_cost_cents` reflects the true

@@ -11,6 +11,22 @@ describe('V3 completeness ratchet', () => {
     expect(result.success).toBe(true);
   });
 
+  it('R4: totalDurationMs >= sum of stage.durationMs even when runResult.durationMs lags by 1ms (clock-skew regression)', () => {
+    // Reproduces the 3.10.2 production bug: implementing.durationMs measured
+    // 1ms longer than runResult.durationMs because they sample Date.now() at
+    // different ticks. Pre-fix, every emitted event got dropped at validation
+    // because R4 (sum-of-stages <= total) was violated by 1ms. Builder must
+    // enforce R4 by construction with Math.max(runResult.durationMs, stageSum).
+    const rr = richRunResult();
+    rr.durationMs = 154897;
+    rr.stageStats!.implementing.durationMs = 154898;
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const stageSum = ev.stages.reduce((s, st) => s + st.durationMs, 0);
+    expect(ev.totalDurationMs).toBeGreaterThanOrEqual(stageSum);
+    const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(parsed.success).toBe(true);
+  });
+
   it('top-level totals exactly equal sum of stage costs/tokens', () => {
     const rr = richRunResult();
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
