@@ -113,6 +113,8 @@ function makeMockRunResult(overrides: {
   outputTokens?: number;
   requests?: number;
   history?: unknown[];
+  inputTokensDetails?: Array<Record<string, number>>;
+  outputTokensDetails?: Array<Record<string, number>>;
 }) {
   const assistantText = overrides.finalOutput ?? VALID_FINAL_OUTPUT;
   return {
@@ -133,6 +135,8 @@ function makeMockRunResult(overrides: {
         outputTokens: overrides.outputTokens ?? 200,
         totalTokens: (overrides.inputTokens ?? 1000) + (overrides.outputTokens ?? 200),
         requests: overrides.requests ?? 3,
+        inputTokensDetails: overrides.inputTokensDetails,
+        outputTokensDetails: overrides.outputTokensDetails,
       },
     },
   };
@@ -616,5 +620,157 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     // gets enough budget to complete, not throw, and we get ok
     expect(result.status).toBe('ok');
     expect(mockRun).toHaveBeenCalledTimes(2); // initial + 1 continuation
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3.6: CanonicalUsage — cached/reasoning token propagation
+// ---------------------------------------------------------------------------
+
+describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRun.mockReset();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('propagates cached tokens from inputTokensDetails', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 500 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(500);
+  });
+
+  it('propagates reasoning tokens from outputTokensDetails', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        outputTokensDetails: [{ reasoning_tokens: 300 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.reasoningTokens).toBe(300);
+  });
+
+  it('preserves 0 values for cached and reasoning tokens', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 0 }],
+        outputTokensDetails: [{ reasoning_tokens: 0 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(0);
+    expect(result.usage.reasoningTokens).toBe(0);
+  });
+
+  it('returns null when inputTokensDetails is absent', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBeNull();
+    expect(result.usage.reasoningTokens).toBeNull();
+  });
+
+  it('returns null when outputTokensDetails is absent', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 100 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(100);
+    expect(result.usage.reasoningTokens).toBeNull();
+  });
+
+  it('sums cached tokens across multiple detail entries', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [
+          { cached_tokens: 200 },
+          { cached_tokens: 300 },
+        ],
+        outputTokensDetails: [
+          { reasoning_tokens: 100 },
+          { reasoning_tokens: 150 },
+        ],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(500);
+    expect(result.usage.reasoningTokens).toBe(250);
+  });
+
+  it('propagates cached/reasoning tokens on the error path', async () => {
+    // First call populates scratchpad with cached details, second throws.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          inputTokensDetails: [{ cached_tokens: 400 }],
+          outputTokensDetails: [{ reasoning_tokens: 200 }],
+        }),
+      )
+      .mockRejectedValueOnce(new Error('upstream API exploded'));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('error');
+    expect(result.usage.cachedTokens).toBe(400);
+    expect(result.usage.reasoningTokens).toBe(200);
+  });
+
+  it('propagates cached/reasoning tokens on the force_salvage path', async () => {
+    const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: 'Let me check',
+        inputTokens: 960,
+        inputTokensDetails: [{ cached_tokens: 300 }],
+        outputTokensDetails: [{ reasoning_tokens: 100 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig: pc, defaults });
+
+    expect(result.status).toBe('incomplete');
+    expect(result.usage.cachedTokens).toBe(300);
+    expect(result.usage.reasoningTokens).toBe(100);
   });
 });

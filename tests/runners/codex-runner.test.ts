@@ -683,6 +683,69 @@ describe('runCodex', () => {
   });
 
   // ---------------------------------------------------------------------------
+  // Task B2: CanonicalUsage — cached/reasoning token extraction
+  // ---------------------------------------------------------------------------
+  it('extracts cached_input_tokens to cachedTokens and reasoning_tokens to reasoningTokens', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    mockResponsesCreate.mockImplementationOnce(() => {
+      return (async function* () {
+        yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+        yield {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            usage: { input_tokens: 1000, output_tokens: 500, cached_input_tokens: 100, reasoning_tokens: 50 },
+          },
+        };
+      })();
+    });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(100);
+    expect(result.usage.reasoningTokens).toBe(50);
+  });
+
+  it('emits cachedTokens=null when provider does not include cached_input_tokens', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    mockResponsesCreate.mockImplementationOnce(() => {
+      return (async function* () {
+        yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+        yield {
+          type: 'response.completed',
+          response: {
+            status: 'completed',
+            usage: { input_tokens: 1000, output_tokens: 500 },
+          },
+        };
+      })();
+    });
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBeNull();
+    expect(result.usage.reasoningTokens).toBeNull();
+  });
+
+  // ---------------------------------------------------------------------------
   // Task 11: progress event emission
   // ---------------------------------------------------------------------------
   describe('codex-runner — progress event emission', () => {

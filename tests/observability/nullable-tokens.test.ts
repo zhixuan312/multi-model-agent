@@ -29,7 +29,7 @@ describe('observability event schemas — nullable cachedTokens/reasoningTokens'
     expect(result.success).toBe(true);
   });
 
-  it('TurnCompleteEvent accepts omitted cachedTokens and reasoningTokens', () => {
+  it('TurnCompleteEvent rejects omitted cachedTokens and reasoningTokens (must be present per §3.6)', () => {
     const result = TurnCompleteEvent.safeParse({
       ...baseTaskFields,
       event: 'turn_complete',
@@ -41,7 +41,8 @@ describe('observability event schemas — nullable cachedTokens/reasoningTokens'
       providerType: 'openai-compatible',
       model: 'gpt-5',
     });
-    expect(result.success).toBe(true);
+    // Per §3.6 honest-null: fields must always be present (null = unexposed by provider; number = real value)
+    expect(result.success).toBe(false);
   });
 
   it('TurnCompleteEvent accepts zero cachedTokens (real observed value)', () => {
@@ -84,7 +85,7 @@ describe('observability event schemas — nullable cachedTokens/reasoningTokens'
     expect(result.success).toBe(true);
   });
 
-  it('TaskCompletedLocalEvent accepts omitted cachedTokens and reasoningTokens', () => {
+  it('TaskCompletedLocalEvent rejects omitted cachedTokens and reasoningTokens (must be present per §3.6)', () => {
     const result = TaskCompletedLocalEvent.safeParse({
       ...baseTaskFields,
       event: 'task_completed',
@@ -102,6 +103,6 @@ describe('observability event schemas — nullable cachedTokens/reasoningTokens'
       stallTriggered: false,
       stages: '{}',
     });
-    expect(result.success).toBe(true);
+    expect(result.success).toBe(false);
   });
 });

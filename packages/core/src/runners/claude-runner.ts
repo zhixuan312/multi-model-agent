@@ -46,6 +46,7 @@ import {
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { type CanonicalUsage, makeEmptyUsage, mergeUsage } from './base/usage-accumulator.js';
 
 
 
@@ -154,8 +155,7 @@ export async function runClaude(
   // calls for that turn. That means `turns` already holds the current
   // turn number when the tracker callback fires mid-tool-loop, so we
   // attribute tool calls to `turns` directly (no +1 offset).
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let usage = makeEmptyUsage();
   let costUSD: number | null = null;
   let turns = 0;
 
@@ -188,18 +188,18 @@ export async function runClaude(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
       usage: {
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.inputTokens + usage.outputTokens,
         costUSD: finalCostUSD,
         costDeltaVsParentUSD,
-        cachedTokens: null,
+        cachedTokens: usage.cachedTokens,
         reasoningTokens: null,
       },
       turns,
@@ -428,19 +428,19 @@ export async function runClaude(
           }
 
           // --- Watchdog check (assistant-message cadence). We check
-          // `inputTokens` as accumulated from prior `result` messages.
+          // `usage.inputTokens` as accumulated from prior `result` messages.
           // On the very first assistant message inputTokens is 0 and no
           // threshold can fire; that's correct. This is also the ONLY
           // site that handles `warning` — it logs AND pushes the nudge
           // as one action. The post-result site only handles
           // force_salvage. ---
-          const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
+          const watchdogStatus = checkWatchdogThreshold(usage.inputTokens, softLimit);
           if (watchdogStatus !== 'ok') {
             logWatchdogEvent(watchdogStatus, {
               provider: providerConfig.type,
               model: providerConfig.model,
               turn: turns,
-              inputTokens,
+              inputTokens: usage.inputTokens,
               softLimit,
               scratchpadChars: scratchpad.toString().length,
             });
@@ -462,8 +462,7 @@ export async function runClaude(
               scratchpad,
               providerConfig,
               sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
+              usage,
               turns,
               softLimit,
               durationMs: Date.now() - taskStartMs,
@@ -480,9 +479,9 @@ export async function runClaude(
           // the supervision loop on the NEXT `result` message will return
           // `ok`. High-watermark guard prevents re-nudging if inputTokens
           // stays the same across two assistant messages.
-          if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
-            lastWarnedInputTokens = inputTokens;
-            const warning = buildBudgetPressureNudge({ inputTokens, softLimit });
+          if (watchdogStatus === 'warning' && usage.inputTokens > lastWarnedInputTokens) {
+            lastWarnedInputTokens = usage.inputTokens;
+            const warning = buildBudgetPressureNudge({ inputTokens: usage.inputTokens, softLimit });
             emit({
               kind: 'injection',
               injectionType: 'watchdog_warning',
@@ -528,7 +527,7 @@ export async function runClaude(
           const hitMaxTurns = 'subtype' in msg && msg.subtype === 'error_max_turns';
 
           // Extract usage from modelUsage or usage, then ACCUMULATE into
-          // the running inputTokens/outputTokens. Supervision retries in
+          // the running CanonicalUsage accumulator. Supervision retries in
           // streaming-input mode push a new user message into the queue
           // and the SDK emits a fresh `result` message per top-level user
           // turn — we want the cumulative usage across every result we
@@ -547,8 +546,29 @@ export async function runClaude(
             turnInputTokens = u['input_tokens'] ?? 0;
             turnOutputTokens = u['output_tokens'] ?? 0;
           }
-          inputTokens += turnInputTokens;
-          outputTokens += turnOutputTokens;
+
+          // --- CanonicalUsage: extract claude-specific cache fields ---
+          // cache_read_input_tokens + cache_creation_input_tokens are
+          // Claude's per-request cache counters; we sum them into
+          // cachedTokens (nullable: null when the API exposes neither).
+          let cacheRead: number | undefined;
+          let cacheCreate: number | undefined;
+          if ('usage' in msg && msg.usage) {
+            const u = msg.usage as unknown as Record<string, number | undefined>;
+            cacheRead = u['cache_read_input_tokens'] ?? undefined;
+            cacheCreate = u['cache_creation_input_tokens'] ?? undefined;
+          }
+          const turnCachedTokens = (cacheRead === undefined && cacheCreate === undefined)
+            ? null
+            : (cacheRead ?? 0) + (cacheCreate ?? 0);
+
+          const turnUsage: CanonicalUsage = {
+            inputTokens: turnInputTokens,
+            outputTokens: turnOutputTokens,
+            cachedTokens: turnCachedTokens,
+            reasoningTokens: null, // claude API does not document reasoning tokens (§10)
+          };
+          usage = mergeUsage(usage, turnUsage);
 
           if ('total_cost_usd' in msg && typeof msg.total_cost_usd === 'number') {
             costUSD = msg.total_cost_usd;
@@ -561,8 +581,8 @@ export async function runClaude(
           emit({
             kind: 'turn_complete',
             turn: turns,
-            cumulativeInputTokens: inputTokens,
-            cumulativeOutputTokens: outputTokens,
+            cumulativeInputTokens: usage.inputTokens,
+            cumulativeOutputTokens: usage.outputTokens,
           });
 
           // Track cost for this turn (Task 25)
@@ -579,13 +599,13 @@ export async function runClaude(
           // above is the single place that logs warnings AND pushes the
           // nudge into the queue. Logging `warning` here without pushing a
           // nudge would be misleading (suggests action that didn't happen).
-          const postResultWatchdog = checkWatchdogThreshold(inputTokens, softLimit);
+          const postResultWatchdog = checkWatchdogThreshold(usage.inputTokens, softLimit);
           if (postResultWatchdog === 'force_salvage') {
             logWatchdogEvent(postResultWatchdog, {
               provider: providerConfig.type,
               model: providerConfig.model,
               turn: turns,
-              inputTokens,
+              inputTokens: usage.inputTokens,
               softLimit,
               scratchpadChars: scratchpad.toString().length,
             });
@@ -600,8 +620,7 @@ export async function runClaude(
               scratchpad,
               providerConfig,
               sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
+              usage,
               turns,
               softLimit,
               durationMs: Date.now() - taskStartMs,
@@ -620,8 +639,7 @@ export async function runClaude(
               scratchpad,
               providerConfig,
               sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
+              usage,
               turns,
               lastOutput: output,
               reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns`,
@@ -648,8 +666,7 @@ export async function runClaude(
               scratchpad,
               providerConfig,
               sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
+              usage,
               turns,
               output,
               durationMs: Date.now() - taskStartMs,
@@ -670,8 +687,7 @@ export async function runClaude(
               scratchpad,
               providerConfig,
               sdkCostUSD: costUSD,
-              inputTokens,
-              outputTokens,
+              usage,
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
@@ -691,8 +707,7 @@ export async function runClaude(
                 scratchpad,
                 providerConfig,
                 sdkCostUSD: costUSD,
-                inputTokens,
-                outputTokens,
+                usage,
                 turns,
                 reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
                 durationMs: Date.now() - taskStartMs,
@@ -728,18 +743,18 @@ export async function runClaude(
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
         usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD: finalCostUSD,
           costDeltaVsParentUSD,
-          cachedTokens: null,
+          cachedTokens: usage.cachedTokens,
           reasoningTokens: null,
         },
         turns,
@@ -771,8 +786,7 @@ export async function runClaude(
       scratchpad,
       providerConfig,
       sdkCostUSD: costUSD,
-      inputTokens,
-      outputTokens,
+      usage,
       turns,
       durationMs: Date.now() - taskStartMs,
       parentModel,
@@ -787,8 +801,8 @@ export async function runClaude(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
@@ -797,12 +811,12 @@ export async function runClaude(
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD: finalCostUSD,
           costDeltaVsParentUSD,
-          cachedTokens: null,
+          cachedTokens: usage.cachedTokens,
           reasoningTokens: null,
         },
         turns,
@@ -829,8 +843,7 @@ interface ClaudeResultCommonArgs {
   scratchpad: TextScratchpad;
   providerConfig: ProviderConfig;
   sdkCostUSD: number | null;
-  inputTokens: number;
-  outputTokens: number;
+  usage: CanonicalUsage;
   turns: number;
 }
 
@@ -845,16 +858,16 @@ function effectiveClaudeCost(
 }
 
 function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, sdkCostUSD, inputTokens, outputTokens, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, sdkCostUSD);
+  const { providerConfig, sdkCostUSD, usage, parentModel } = args;
+  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD);
   return {
-    inputTokens,
-    outputTokens,
-    totalTokens: inputTokens + outputTokens,
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    totalTokens: usage.inputTokens + usage.outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
-    cachedTokens: null,
-    reasoningTokens: null,
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel),
+    cachedTokens: usage.cachedTokens,
+    reasoningTokens: usage.reasoningTokens,
   };
 }
 

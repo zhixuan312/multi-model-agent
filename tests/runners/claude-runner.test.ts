@@ -634,4 +634,110 @@ describe('runClaude', () => {
       expect(captured.options?.env).toBeUndefined();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // CanonicalUsage (§3.6) — cache-token extraction + reasoning=null
+  // ---------------------------------------------------------------------------
+  describe('CanonicalUsage (§3.6)', () => {
+    /**
+     * Build a result message that includes a `usage` field with claude-
+     * specific cache token fields alongside the standard modelUsage entries.
+     */
+    function resultMsgWithUsage(opts: {
+      result: string;
+      inputTokens?: number;
+      outputTokens?: number;
+      cacheReadInputTokens?: number;
+      cacheCreationInputTokens?: number;
+      includeUsage?: boolean;
+    }) {
+      const usageFields: Record<string, number> = {
+        input_tokens: opts.inputTokens ?? 0,
+        output_tokens: opts.outputTokens ?? 0,
+      };
+      if (opts.cacheReadInputTokens !== undefined) {
+        usageFields['cache_read_input_tokens'] = opts.cacheReadInputTokens;
+      }
+      if (opts.cacheCreationInputTokens !== undefined) {
+        usageFields['cache_creation_input_tokens'] = opts.cacheCreationInputTokens;
+      }
+      return {
+        type: 'result' as const,
+        result: opts.result,
+        modelUsage: {
+          'claude-sonnet-4-6': {
+            inputTokens: opts.inputTokens ?? 0,
+            outputTokens: opts.outputTokens ?? 0,
+          },
+        },
+        ...(opts.includeUsage !== false ? { usage: usageFields } : {}),
+      };
+    }
+
+    it('sums cache_read_input_tokens + cache_creation_input_tokens into cachedTokens', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsgWithUsage({
+            result: VALID_FINAL_OUTPUT,
+            inputTokens: 1000,
+            outputTokens: 500,
+            cacheReadInputTokens: 80,
+            cacheCreationInputTokens: 20,
+          });
+        })(),
+      );
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('ok');
+      expect(result.usage.inputTokens).toBe(1000);
+      expect(result.usage.outputTokens).toBe(500);
+      expect(result.usage.cachedTokens).toBe(100); // 80 + 20
+    });
+
+    it('emits reasoningTokens=null (claude API does not document this field)', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsgWithUsage({
+            result: VALID_FINAL_OUTPUT,
+            inputTokens: 1000,
+            outputTokens: 500,
+          });
+        })(),
+      );
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('ok');
+      expect(result.usage.reasoningTokens).toBeNull();
+    });
+
+    it('emits cachedTokens=null when neither cache field is present in usage', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsgWithUsage({
+            result: VALID_FINAL_OUTPUT,
+            inputTokens: 1000,
+            outputTokens: 500,
+            includeUsage: true,
+            // neither cacheReadInputTokens nor cacheCreationInputTokens set
+          });
+        })(),
+      );
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('ok');
+      expect(result.usage.cachedTokens).toBeNull();
+    });
+  });
 });

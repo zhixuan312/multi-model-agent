@@ -34,7 +34,7 @@ import { injectionTypeFor } from './injection-type.js';
  * the call sites rather than here — which is exactly what we want.
  */
 interface AgentRunOutput {
-  state: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
+  state: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number; inputTokensDetails?: Array<Record<string, number>>; outputTokensDetails?: Array<Record<string, number>> } };
   history: AgentInputItem[];
   finalOutput?: string;
   newItems: RunItem[];
@@ -75,6 +75,7 @@ import {
   buildForceSalvageResult as sharedBuildForceSalvageResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { type CanonicalUsage } from './base/usage-accumulator.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
@@ -726,96 +727,6 @@ export async function runOpenAI(
         };
       }
 
-      function buildSupervisionExhaustedResult(
-        currentResult: AgentRunOutput,
-        scratchpad: TextScratchpad,
-        tracker: FileTracker,
-        providerConfig: ProviderConfig,
-        durationMs: number,
-        parentModel?: string,
-        opts?: { reason?: string },
-      ): RunResult {
-        const usage = currentResult.state.usage;
-        const filesRead = tracker.getReads();
-        const filesWritten = tracker.getWrites();
-        const toolCalls = tracker.getToolCalls();
-        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-        const hasSalvage = !scratchpad.isEmpty();
-        return {
-          output: hasSalvage
-            ? scratchpad.latest()
-            : buildIncompleteDiagnostic({
-                providerLabel: 'openai-compatible',
-                turns: usage.requests,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                filesRead,
-                filesWritten,
-              }),
-          status: 'incomplete',
-          errorCode: 'degenerate_exhausted',
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            totalTokens: usage.totalTokens,
-            costUSD,
-            costDeltaVsParentUSD,
-            cachedTokens: null,
-            reasoningTokens: null,
-          },
-          turns: usage.requests,
-          filesRead,
-          directoriesListed: tracker.getDirectoriesListed(),
-          filesWritten,
-          toolCalls,
-          outputIsDiagnostic: !hasSalvage,
-          escalationLog: [],
-          ...(opts?.reason && { error: opts.reason }),
-          durationMs,
-        };
-      }
-
-      function buildForceSalvageResult(
-        currentResult: AgentRunOutput,
-        scratchpad: TextScratchpad,
-        tracker: FileTracker,
-        providerConfig: ProviderConfig,
-        softLimit: number,
-        durationMs: number,
-        parentModel?: string,
-      ): RunResult {
-        const usage = currentResult.state.usage;
-        const filesRead = tracker.getReads();
-        const filesWritten = tracker.getWrites();
-        const toolCalls = tracker.getToolCalls();
-        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-        const hasSalvage = !scratchpad.isEmpty();
-        return {
-          output: hasSalvage
-            ? scratchpad.latest()
-            : `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-          status: 'incomplete',
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            totalTokens: usage.totalTokens,
-            costUSD,
-            costDeltaVsParentUSD,
-            cachedTokens: null,
-            reasoningTokens: null,
-          },
-          turns: usage.requests,
-          filesRead,
-          directoriesListed: tracker.getDirectoriesListed(),
-          filesWritten,
-          toolCalls,
-          outputIsDiagnostic: !hasSalvage,
-          escalationLog: [],
-          durationMs,
-        };
-      }
       // Classify the thrown error into a finer-grained RunStatus so the
       // escalation orchestrator (and downstream observers) can distinguish
       // abort / network / HTTP-error / generic failure modes. We still
@@ -891,17 +802,54 @@ export async function runOpenAI(
 
 // --- Helpers: canonical return-shape builders -------------------------------
 
+/**
+ * Extract cached/reasoning tokens into {@link CanonicalUsage} shape (§3.6).
+ *
+ * The @openai/agents SDK stores per-request detail records in
+ * `inputTokensDetails: Array<Record<string, number>>` and
+ * `outputTokensDetails: Array<Record<string, number>>`. The OpenAI API
+ * returns `cached_tokens` and `reasoning_tokens` as snake_case keys
+ * inside those detail objects. We sum across all requests; if the provider
+ * never exposed the detail field the result is null.
+ */
+function extractCanonicalTokens(usage: {
+  inputTokensDetails?: Array<Record<string, number>>;
+  outputTokensDetails?: Array<Record<string, number>>;
+}): Pick<CanonicalUsage, 'cachedTokens' | 'reasoningTokens'> {
+  let cachedTokens = 0;
+  let hasCached = false;
+  for (const d of usage.inputTokensDetails ?? []) {
+    if (typeof d.cached_tokens === 'number') {
+      cachedTokens += d.cached_tokens;
+      hasCached = true;
+    }
+  }
+  let reasoningTokens = 0;
+  let hasReasoning = false;
+  for (const d of usage.outputTokensDetails ?? []) {
+    if (typeof d.reasoning_tokens === 'number') {
+      reasoningTokens += d.reasoning_tokens;
+      hasReasoning = true;
+    }
+  }
+  return {
+    cachedTokens: hasCached ? cachedTokens : null,
+    reasoningTokens: hasReasoning ? reasoningTokens : null,
+  };
+}
+
 function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
   const u = currentResult.state.usage;
   const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig);
+  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(u);
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
     costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
-    cachedTokens: null,
-    reasoningTokens: null,
+    cachedTokens,
+    reasoningTokens,
   };
 }
 
@@ -1017,13 +965,14 @@ function partialUsage(
     return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null };
   }
   const usage = result.state.usage;
+  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(usage);
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
     costDeltaVsParentUSD: null,
-    cachedTokens: null,
-    reasoningTokens: null,
+    cachedTokens,
+    reasoningTokens,
   };
 }
