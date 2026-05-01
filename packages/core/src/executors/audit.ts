@@ -74,7 +74,14 @@ function buildAuditPrompt(
       '- End with a **Fixed** summary listing which prior findings were resolved.',
     );
   } else {
-    parts.push('Provide a structured audit report with findings and severity.');
+    parts.push(
+      'Produce a narrative audit report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state:',
+      '  Severity: critical | high | medium | low',
+      '  Location: file:line (when applicable)',
+      '  Issue: one-paragraph explanation',
+      '  Suggestion: one-line fix recommendation',
+      'The reviewer will extract structured findings from your report — do NOT emit JSON.',
+    );
   }
   return parts.join('\n\n');
 }

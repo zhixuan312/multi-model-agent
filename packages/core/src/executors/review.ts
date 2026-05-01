@@ -65,7 +65,14 @@ function buildReviewPrompt(
       '- End with a **Fixed** summary listing which prior findings were resolved.',
     );
   } else {
-    parts.push('Provide a structured review with findings and recommendations.');
+    parts.push(
+      'Produce a narrative code review. Number each finding (1, 2, 3, ...). For each, on its own line, state:',
+      '  Severity: critical | high | medium | low',
+      '  Location: file:line',
+      '  Issue: one-paragraph explanation',
+      '  Suggestion: one-line fix recommendation',
+      'The reviewer will extract structured findings — do NOT emit JSON.',
+    );
   }
   return parts.join('\n\n');
 }

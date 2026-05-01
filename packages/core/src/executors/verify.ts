@@ -36,7 +36,14 @@ function buildVerifyPrompt(
   if (fileSection) parts.push(fileSection);
   const checklistText = checklist.map((item, i) => `${i + 1}. ${item}`).join('\n');
   parts.push(`Checklist:\n${checklistText}`);
-  parts.push('For each checklist item, indicate pass/fail and provide evidence.');
+  parts.push(
+    'For each checklist item, write one numbered section with:',
+    '  Severity: critical | high | medium | low (low = pass; high/medium = fail)',
+    '  Item: the criterion text',
+    '  Result: PASS or FAIL',
+    '  Evidence: file:line + what it shows, OR command + output',
+    'The reviewer will extract structured findings — do NOT emit JSON.',
+  );
   return parts.join('\n\n');
 }
 
