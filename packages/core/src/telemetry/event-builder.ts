@@ -132,25 +132,23 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
 
 function extractStageData(
   raw: RawStageStats | undefined,
-  rr: RunResult,
-  stageName: string,
+  _rr: RunResult,
+  _stageName: string,
 ) {
   if (!raw || !raw.entered) return null;
-  const pt = (rr as any).perStageTokens?.[stageName];
-  const turnsByStage = (rr as any).turnsByStage?.[stageName];
   return {
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
     agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
     durationMs: Math.min(raw.durationMs ?? 0, 3_600_000),
-    costUSD: Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000,
-    inputTokens: pt?.input ?? 0,
-    outputTokens: pt?.output ?? 0,
-    cachedTokens: pt?.cached ?? 0,
-    reasoningTokens: pt?.reasoning ?? 0,
-    toolCallCount: 0,
-    filesReadCount: 0,
-    filesWrittenCount: 0,
-    turnCount: turnsByStage ?? 0,
+    costUSD: Math.max(0, Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000),
+    inputTokens: (raw as any).inputTokens ?? 0,
+    outputTokens: (raw as any).outputTokens ?? 0,
+    cachedTokens: (raw as any).cachedTokens ?? 0,
+    reasoningTokens: (raw as any).reasoningTokens ?? 0,
+    toolCallCount: (raw as any).toolCallCount ?? 0,
+    filesReadCount: (raw as any).filesReadCount ?? 0,
+    filesWrittenCount: (raw as any).filesWrittenCount ?? 0,
+    turnCount: (raw as any).turnCount ?? 0,
     maxIdleMs: raw.maxIdleMs ?? null,
     totalIdleMs: raw.totalIdleMs ?? null,
   };

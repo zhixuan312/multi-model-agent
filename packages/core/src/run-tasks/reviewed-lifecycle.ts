@@ -66,16 +66,18 @@ const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
   'audit', 'review', 'verify', 'investigate', 'debug',
 ]);
 
+const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null } as const;
+
 export function emptyStats(): StageStatsMap {
   return {
-    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
-    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
-    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
-    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null },
-    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, outcome: null, skipReason: null },
-    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
-    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
-    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null },
+    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, ..._emptyMetrics },
+    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, ..._emptyMetrics },
+    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, ..._emptyMetrics },
+    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, ..._emptyMetrics },
+    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, outcome: null, skipReason: null, ..._emptyMetrics },
+    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null, ..._emptyMetrics },
+    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null, ..._emptyMetrics },
+    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, verdict: null, roundsUsed: null, ..._emptyMetrics },
   };
 }
 
@@ -91,6 +93,7 @@ export function endBaseStage(
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
 ): void {
   // Cast through unknown — TS can't narrow stats[name] on a union-typed index;
   // the runtime invariant (set name's slot to its matching variant) is enforced
@@ -99,13 +102,22 @@ export function endBaseStage(
     stage: name,
     entered: true,
     durationMs: Date.now() - t0,
-    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
+    costUSD: metrics?.costUSD !== undefined ? metrics.costUSD
+      : finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
     maxIdleMs: idle?.maxIdleMs ?? null,
     totalIdleMs: idle?.totalIdleMs ?? null,
     activityEvents: idle?.activityEvents ?? null,
+    inputTokens: metrics?.inputTokens ?? null,
+    outputTokens: metrics?.outputTokens ?? null,
+    cachedTokens: metrics?.cachedTokens ?? null,
+    reasoningTokens: metrics?.reasoningTokens ?? null,
+    turnCount: metrics?.turnCount ?? null,
+    toolCallCount: metrics?.toolCallCount ?? null,
+    filesReadCount: metrics?.filesReadCount ?? null,
+    filesWrittenCount: metrics?.filesWrittenCount ?? null,
   };
 }
 
@@ -119,18 +131,28 @@ export function endReviewStage(
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
   verdict: ReviewVerdict,
   roundsUsed: number,
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
 ): void {
   (stats as Record<string, unknown>)[name] = {
     stage: name,
     entered: true,
     durationMs: Date.now() - t0,
-    costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
+    costUSD: metrics?.costUSD !== undefined ? metrics.costUSD
+      : finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
     maxIdleMs: idle?.maxIdleMs ?? null,
     totalIdleMs: idle?.totalIdleMs ?? null,
     activityEvents: idle?.activityEvents ?? null,
+    inputTokens: metrics?.inputTokens ?? null,
+    outputTokens: metrics?.outputTokens ?? null,
+    cachedTokens: metrics?.cachedTokens ?? null,
+    reasoningTokens: metrics?.reasoningTokens ?? null,
+    turnCount: metrics?.turnCount ?? null,
+    toolCallCount: metrics?.toolCallCount ?? null,
+    filesReadCount: metrics?.filesReadCount ?? null,
+    filesWrittenCount: metrics?.filesWrittenCount ?? null,
     verdict,
     roundsUsed,
   };
@@ -157,6 +179,14 @@ export function endVerifyStage(
     maxIdleMs: idle?.maxIdleMs ?? null,
     totalIdleMs: idle?.totalIdleMs ?? null,
     activityEvents: idle?.activityEvents ?? null,
+    inputTokens: null,
+    outputTokens: null,
+    cachedTokens: null,
+    reasoningTokens: null,
+    turnCount: null,
+    toolCallCount: null,
+    filesReadCount: null,
+    filesWrittenCount: null,
     outcome,
     skipReason,
   } as StageStatsMap['verifying'];
@@ -943,7 +973,17 @@ export async function executeReviewedLifecycle(
     lastNonRejectedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     implementerHistory.push(initialImpl.usedTier as AgentType);
 
-    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle));
+    endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle), {
+      inputTokens: implResult.usage?.inputTokens ?? 0,
+      outputTokens: implResult.usage?.outputTokens ?? 0,
+      cachedTokens: (implResult.usage as any)?.cachedTokens ?? 0,
+      reasoningTokens: (implResult.usage as any)?.reasoningTokens ?? 0,
+      turnCount: implResult.turns,
+      toolCallCount: implResult.toolCalls?.length ?? 0,
+      filesReadCount: implResult.filesRead?.length ?? 0,
+      filesWrittenCount: implResult.filesWritten?.length ?? 0,
+      costUSD: implResult.usage?.costUSD ?? 0,
+    });
     specAttemptIndex = 1;
 
     const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
@@ -1382,7 +1422,8 @@ export async function executeReviewedLifecycle(
         : specStatus === 'skipped' ? 'skipped'
         : specStatus === 'not_applicable' ? 'not_applicable'
         : 'error',
-      specAttemptIndex - 1);
+      specAttemptIndex - 1,
+      (specResult as any).metrics);
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
@@ -1392,7 +1433,8 @@ export async function executeReviewedLifecycle(
         : qualityResult.status === 'annotated' ? 'annotated'
         : qualityResult.status === 'skipped' ? 'skipped'
         : 'error',
-      qualityAttemptIndex - 1);
+      qualityAttemptIndex - 1,
+      (qualityResult as any).metrics);
     const aggregated = aggregateResult(
       finalReport,
       specReport,
