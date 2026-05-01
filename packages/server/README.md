@@ -84,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.4",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -287,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.10.3** — critical telemetry hotfix + UX polish. **3.10.2 silently dropped every emitted event** because the new emit-time R4 validation tripped on a 1ms clock-skew between `runResult.durationMs` and per-stage `durationMs`. Fixed by enforcing R4 by construction in the event builder. Also: skill manifest backfill on upgrade (resolves the "mma-investigate not registered" bug for users who upgraded across v3.4.0); live-elapsed polling headlines (no more stale repeated elapsed between heartbeats); tiered server stdout (default-quiet, `--verbose` for full firehose with throttled heartbeats). Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.4** — review stages were recording the implementer's model (V3 R3 violation root cause). Now record the actual reviewer's resolved tier + model. Plus: telemetry validation is fully warn-only — events never drop, and cross-field warnings now include actual offending values (model, tokens, totals) so config issues vs lifecycle bugs are distinguishable at a glance. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
