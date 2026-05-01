@@ -121,6 +121,14 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     );
 
     expect(result.status).toBe('ok');
+
+    // Annotated findings populated on the RunResult
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings![0]!.severity).toBe('high');
+    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(85);
+    expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
+
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
     expect(qualityEvents).toHaveLength(1);
     expect(qualityEvents[0]).toMatchObject({

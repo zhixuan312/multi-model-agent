@@ -1478,6 +1478,7 @@ export async function executeReviewedLifecycle(
           finalImplResult = {
             ...finalImplResult,
             concerns: [...(finalImplResult.concerns ?? []), ...findingsAsConcerns],
+            annotatedFindings: annotated,
           };
         }
 

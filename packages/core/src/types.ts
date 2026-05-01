@@ -241,6 +241,7 @@ export interface RunResult {
   verification?: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
+  annotatedFindings?: import('./executors/_shared/findings-schema.js').AnnotatedFinding[]
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   agents?: {
     implementer: 'standard' | 'complex' | 'not_run'

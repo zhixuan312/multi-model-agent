@@ -6,23 +6,58 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
+const NARRATIVE_WORKER_OUTPUT = [
+  '# Audit Report',
+  '### 1. Silent error swallowing in parseConfig',
+  'Severity: high',
+  'Location: src/a.ts:10',
+  'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
+].join('\n');
+
+const REVIEWER_OUTPUT = [
+  '```json',
+  JSON.stringify([{
+    id: 'F1', severity: 'high',
+    claim: 'silent error swallowing in parseConfig',
+    evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
+    reviewerConfidence: 80,
+  }]),
+  '```',
+].join('\n');
+
 // Mock the provider factory so every tier created during escalation gets a mock.
 // Pattern adapted from tests/reviewed-execution/review-policy.test.ts.
 vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
-    run: async () => ({
-      output: '## Summary\napproved\n\n## Files changed\n\n## Validations run\n\n## Deviations from brief\n\n## Unresolved\n',
-      status: 'ok' as const,
-      usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
-      turns: 1,
-      filesRead: [],
-      filesWritten: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [],
-    }),
+    run: async (prompt: string) => {
+      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      if (isReviewer) {
+        return {
+          output: REVIEWER_OUTPUT,
+          status: 'ok' as const,
+          usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
+          turns: 1,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        };
+      }
+      return {
+        output: NARRATIVE_WORKER_OUTPUT,
+        status: 'ok' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+        turns: 1,
+        filesRead: ['src/a.ts'],
+        filesWritten: ['report.md'],
+        toolCalls: ['readFile(src/a.ts)', 'writeFile(report.md)'],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+      };
+    },
   }),
 }));
 
@@ -210,13 +245,6 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const NARRATIVE_WORKER_OUTPUT = [
-      '# Audit Report',
-      '### 1. Silent error swallowing in parseConfig',
-      'Severity: high',
-      'Location: src/a.ts:10',
-      'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
-    ].join('\n');
 
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
@@ -244,7 +272,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     const builder = (ctx: { workerOutput: string; brief: string }) => {
       builderCalled = true;
       receivedBrief = ctx.brief;
-      return 'CUSTOM_PROMPT';
+      return `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
     };
 
     const result = await executeReviewedLifecycle(
@@ -257,5 +285,11 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(builderCalled).toBe(true);
     expect(receivedBrief).toBe('audit this code');
     expect(result.stageStats!.quality_review.entered).toBe(true);
+    // Annotated findings from the annotation path
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings![0]!.severity).toBe('high');
+    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
   });
 });

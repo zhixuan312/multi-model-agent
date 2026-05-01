@@ -112,6 +112,13 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
     expect(out.qualityReviewVerdict).toBe('annotated');
     expect(out.specReviewVerdict).toBeDefined();
     expect(out.specReviewVerdict).toBe('not_applicable');
+    // Annotated findings are funneled onto the RunResult
+    const findings = out.results[0].annotatedFindings;
+    expect(findings).toBeDefined();
+    expect(findings!.length).toBeGreaterThanOrEqual(1);
+    expect(findings![0]!.severity).toBe('low');
+    expect(findings![0]!.reviewerConfidence).toBe(80);
+    expect(findings![0]!.evidenceGrounded).toBe(true);
   });
 
   it('worker result carries qualityReviewStatus from the lifecycle', async () => {
