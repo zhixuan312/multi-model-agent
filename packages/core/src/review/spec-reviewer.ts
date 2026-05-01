@@ -11,9 +11,39 @@ export interface SpecReviewResult {
   findings: string[];
   errorReason?: string;
   reason?: string;
+  /** Per-stage telemetry metrics from the review provider call. */
+  metrics?: SpecReviewMetrics;
+}
+
+export interface SpecReviewMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  turnCount: number;
+  toolCallCount: number;
+  costUSD: number;
 }
 
 export type SpecReviewOrSkipped = SpecReviewResult | SkippedReviewResult;
+
+function extractMetrics(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): SpecReviewMetrics {
+  return {
+    inputTokens: r.usage?.inputTokens ?? 0,
+    outputTokens: r.usage?.outputTokens ?? 0,
+    turnCount: r.turns ?? 0,
+    toolCallCount: r.toolCalls?.length ?? 0,
+    costUSD: r.usage?.costUSD ?? 0,
+  };
+}
+
+function addMetrics(a: SpecReviewMetrics, b: SpecReviewMetrics): SpecReviewMetrics {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    turnCount: a.turnCount + b.turnCount,
+    toolCallCount: a.toolCallCount + b.toolCallCount,
+    costUSD: a.costUSD + b.costUSD,
+  };
+}
 
 export async function runSpecReview(
   reviewerProvider: Provider,
@@ -33,6 +63,7 @@ export async function runSpecReview(
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   const delegateOpts = { explicitlyPinned: true as const, taskDeadlineMs, abortSignal, onProgress };
+  let metrics: SpecReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
   let result;
   try {
     result = await delegateWithEscalation(
@@ -45,6 +76,7 @@ export async function runSpecReview(
       [reviewerProvider],
       delegateOpts,
     );
+    metrics = extractMetrics(result);
   } catch (err) {
     return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -53,7 +85,7 @@ export async function runSpecReview(
     if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
       return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
     }
-    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
+    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };
   }
 
   // Design note: we only check summary presence, not full structured format.
@@ -74,13 +106,14 @@ export async function runSpecReview(
         [reviewerProvider],
         delegateOpts,
       );
+      metrics = addMetrics(metrics, extractMetrics(retryResult));
       if (retryResult.status === 'ok') {
         report = parseStructuredReport(retryResult.output);
       }
     } catch { /* fall through to error */ }
 
     if (!report.summary) {
-      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)' };
+      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)', metrics };
     }
   }
 
@@ -91,8 +124,9 @@ export async function runSpecReview(
       status: 'changes_required',
       report,
       findings: [...(report.deviationsFromBrief ?? []), ...(report.unresolved ?? [])],
+      metrics,
     };
   }
 
-  return { status: 'approved', report, findings: [] };
+  return { status: 'approved', report, findings: [], metrics };
 }

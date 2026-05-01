@@ -37,6 +37,36 @@ export interface QualityReviewResult {
   findings: string[];
   errorReason?: string;
   reason?: string;
+  /** Per-stage telemetry metrics from the review provider call. */
+  metrics?: QualityReviewMetrics;
+}
+
+export interface QualityReviewMetrics {
+  inputTokens: number;
+  outputTokens: number;
+  turnCount: number;
+  toolCallCount: number;
+  costUSD: number;
+}
+
+function extractMetrics(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): QualityReviewMetrics {
+  return {
+    inputTokens: r.usage?.inputTokens ?? 0,
+    outputTokens: r.usage?.outputTokens ?? 0,
+    turnCount: r.turns ?? 0,
+    toolCallCount: r.toolCalls?.length ?? 0,
+    costUSD: r.usage?.costUSD ?? 0,
+  };
+}
+
+function addMetrics(a: QualityReviewMetrics, b: QualityReviewMetrics): QualityReviewMetrics {
+  return {
+    inputTokens: a.inputTokens + b.inputTokens,
+    outputTokens: a.outputTokens + b.outputTokens,
+    turnCount: a.turnCount + b.turnCount,
+    toolCallCount: a.toolCallCount + b.toolCallCount,
+    costUSD: a.costUSD + b.costUSD,
+  };
 }
 
 /** Backward-compat alias kept until reviewed-lifecycle is migrated to the new shape (Task 6). */
@@ -178,6 +208,7 @@ export async function runQualityReview(
   const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') + corePrompt;
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
+  let metrics: QualityReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
   let result;
   try {
     result = await delegateWithEscalation(
@@ -185,6 +216,7 @@ export async function runQualityReview(
       [reviewerProvider],
       { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
+    metrics = extractMetrics(result);
   } catch (err) {
     return { status: 'error', findings: [], errorReason: `review agent threw: ${err instanceof Error ? err.message : String(err)}` };
   }
@@ -193,7 +225,7 @@ export async function runQualityReview(
     if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
       return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
     }
-    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}` };
+    return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };
   }
 
   let report = parseStructuredReport(result.output);
@@ -207,11 +239,12 @@ export async function runQualityReview(
         [reviewerProvider],
         { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
       );
+      metrics = addMetrics(metrics, extractMetrics(retryResult));
       if (retryResult.status === 'ok') report = parseStructuredReport(retryResult.output);
     } catch { /* fall through */ }
 
     if (!report.summary) {
-      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)' };
+      return { status: 'error', findings: [], errorReason: 'reviewer output missing ## Summary section (after retry)', metrics };
     }
   }
 
@@ -221,9 +254,10 @@ export async function runQualityReview(
       status: 'changes_required',
       report,
       findings: [...(report.deviationsFromBrief ?? []), ...(report.unresolved ?? [])],
+      metrics,
     };
   }
-  return { status: 'approved', report, findings: [] };
+  return { status: 'approved', report, findings: [], metrics };
 }
 
 async function runAnnotationReview(
@@ -260,12 +294,14 @@ async function runAnnotationReview(
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
 
   let result;
+  let metrics: QualityReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
   try {
     result = await delegateWithEscalation(
       { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
       { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
+    metrics = extractMetrics(result);
   } catch (err) {
     return {
       status: 'error',
@@ -276,24 +312,26 @@ async function runAnnotationReview(
 
   if (result.status !== 'ok') {
     if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
-      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
+      return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };
     }
     return {
       status: 'error',
       findings: [],
       errorReason: `review agent returned status: ${result.status}`,
+      metrics,
     };
   }
 
   // Step 4: parse + validate + merge annotations.
   const merged = parseAndMergeAnnotations(result.output, workerFindings);
   if (!merged.ok) {
-    return { status: 'error', findings: [], errorReason: merged.reason };
+    return { status: 'error', findings: [], errorReason: merged.reason, metrics };
   }
 
   return {
     status: 'annotated',
     annotatedFindings: merged.annotated,
     findings: [],
+    metrics,
   };
 }

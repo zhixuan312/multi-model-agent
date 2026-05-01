@@ -94,7 +94,15 @@
           "model": "mock",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>"
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cachedTokens": 0,
+          "reasoningTokens": 0,
+          "turnCount": 0,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
         },
         "spec_rework": {
           "stage": "spec_rework",
@@ -106,7 +114,15 @@
           "model": null,
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>"
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "quality_rework": {
           "stage": "quality_rework",
@@ -118,7 +134,15 @@
           "model": null,
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>"
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "committing": {
           "stage": "committing",
@@ -130,7 +154,15 @@
           "model": null,
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>"
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "verifying": {
           "stage": "verifying",
@@ -144,7 +176,15 @@
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
           "outcome": null,
-          "skipReason": null
+          "skipReason": null,
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "spec_review": {
           "stage": "spec_review",
@@ -158,7 +198,15 @@
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
           "verdict": null,
-          "roundsUsed": null
+          "roundsUsed": null,
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "quality_review": {
           "stage": "quality_review",
@@ -172,7 +220,15 @@
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
           "verdict": null,
-          "roundsUsed": null
+          "roundsUsed": null,
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         },
         "diff_review": {
           "stage": "diff_review",
@@ -186,7 +242,15 @@
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
           "verdict": null,
-          "roundsUsed": null
+          "roundsUsed": null,
+          "inputTokens": null,
+          "outputTokens": null,
+          "cachedTokens": null,
+          "reasoningTokens": null,
+          "turnCount": null,
+          "toolCallCount": null,
+          "filesReadCount": null,
+          "filesWrittenCount": null
         }
       }
     }

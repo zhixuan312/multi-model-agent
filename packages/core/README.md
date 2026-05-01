@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.9.1** — no core runtime API changes; this patch release ships the server package's Codex native skill-install fix while keeping the 3.9.0 watchdog and per-stage idle telemetry behavior unchanged. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.1** — V3 telemetry fixes in `event-builder.ts` and `reviewed-lifecycle.ts`: top-level token totals and `totalCostUSD` now read from `runResult.usage` (previously summed across hardcoded-zero stages and always emitted 0); per-stage `BaseStageStats` gains `inputTokens`/`outputTokens`/`cachedTokens`/`reasoningTokens`/`turnCount`/`toolCallCount`/`filesReadCount`/`filesWrittenCount` populated from runner usage and reviewer metrics; per-stage `costUSD` clamped ≥ 0. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

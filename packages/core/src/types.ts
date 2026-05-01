@@ -42,6 +42,15 @@ interface BaseStageStats {
   maxIdleMs:     number | null;
   totalIdleMs:   number | null;
   activityEvents:number | null;
+  // Per-stage telemetry metrics — populated at stage completion.
+  inputTokens:        number | null;
+  outputTokens:       number | null;
+  cachedTokens:       number | null;
+  reasoningTokens:    number | null;
+  turnCount:          number | null;
+  toolCallCount:      number | null;
+  filesReadCount:     number | null;
+  filesWrittenCount:  number | null;
 }
 
 export type ReviewVerdict =
