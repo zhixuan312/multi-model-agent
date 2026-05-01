@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { CanonicalUsage, mergeUsage, makeEmptyUsage } from '../../../packages/core/src/runners/base/usage-accumulator.js';
+import { mergeUsage, makeEmptyUsage } from '../../../packages/core/src/runners/base/usage-accumulator.js';
+import type { CanonicalUsage } from '../../../packages/core/src/runners/base/usage-accumulator.js';
 
 describe('CanonicalUsage', () => {
   it('empty accumulator has zero numbers and null gap fields', () => {

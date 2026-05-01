@@ -5,6 +5,9 @@ export interface CanonicalUsage {
   reasoningTokens: number | null;
 }
 
+// CanonicalUsage is a normalized internal shape. Runtime validation of provider
+// payloads is handled at provider parsing / Zod schema boundaries; this helper is
+// intentionally a pure accumulator that preserves null-as-unexposed semantics.
 export function makeEmptyUsage(): CanonicalUsage {
   return { inputTokens: 0, outputTokens: 0, cachedTokens: null, reasoningTokens: null };
 }
