@@ -267,7 +267,7 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0.002,
-    "costDeltaVsParentUSD": 0
+    "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
