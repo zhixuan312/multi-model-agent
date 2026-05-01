@@ -270,3 +270,35 @@ describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
     if (!result.success) throw new Error(`schema rejected null meanConfidence: ${result.error.message}`);
   });
 });
+
+describe('ReadOnlyReviewQualityEvent — rejects dead fields (§3.10)', () => {
+  const validSample = {
+    ts: '2026-05-01T12:00:00.000+00:00',
+    batchId: '550e8400-e29b-41d4-a716-446655440001',
+    taskIndex: 0,
+    event: 'read_only_review.quality' as const,
+    route: 'audit',
+    verdict: 'annotated' as const,
+    iterationIndex: 1,
+    findingsReviewed: 2,
+    meanConfidence: 80,
+    durationMs: 1234,
+    costUSD: 0.05,
+  };
+
+  it('rejects payload with findingsFlagged (dead field)', () => {
+    const result = ReadOnlyReviewQualityEvent.safeParse({
+      ...validSample,
+      findingsFlagged: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects payload with severityCorrections (dead field)', () => {
+    const result = ReadOnlyReviewQualityEvent.safeParse({
+      ...validSample,
+      severityCorrections: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+});

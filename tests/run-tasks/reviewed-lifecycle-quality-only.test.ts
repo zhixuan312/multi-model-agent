@@ -1,6 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
+import type { EventSink } from '../../packages/core/src/observability/bus.js';
+import { EventBus } from '../../packages/core/src/observability/bus.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
@@ -291,6 +294,79 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(result.annotatedFindings![0]!.severity).toBe('high');
     expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
     expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
+  });
+
+  it('read_only_review.quality event has no findingsFlagged or severityCorrections', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = {
+      prompt: 'audit this code',
+      agentType: 'complex' as const,
+      reviewPolicy: 'quality_only' as const,
+    };
+
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: async () => ({
+          output: NARRATIVE_WORKER_OUTPUT,
+          status: 'ok' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/a.ts'],
+          filesWritten: ['report.md'],
+          toolCalls: ['writeFile(report.md)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        }),
+      },
+      capabilityOverride: false,
+    };
+
+    const events: unknown[] = [];
+    const sink: EventSink = {
+      name: 'capture',
+      emit: event => { events.push(event); },
+    };
+    const bus = new EventBus([sink]);
+    const builder = (ctx: { workerOutput: string; brief: string }) =>
+      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+
+    await executeReviewedLifecycle(
+      task, resolved, config, 0,
+      undefined,
+      { batchId: '00000000-0000-4000-8000-000000000000' },
+      undefined, undefined, 'audit',
+      undefined, undefined,
+      bus,
+      builder,
+    );
+
+    const reviewEvent = events.find(e => (e as { event?: string }).event === 'read_only_review.quality');
+    expect(reviewEvent).toBeDefined();
+    expect(reviewEvent!).not.toHaveProperty('findingsFlagged');
+    expect(reviewEvent!).not.toHaveProperty('severityCorrections');
+  });
+
+  it('read_only_review.quality schema rejects removed legacy fields', () => {
+    const payload = {
+      event: 'read_only_review.quality',
+      ts: '2026-05-01T00:00:00.000Z',
+      batchId: '00000000-0000-4000-8000-000000000000',
+      taskIndex: 0,
+      route: 'audit',
+      verdict: 'annotated',
+      iterationIndex: 1,
+      findingsReviewed: 1,
+      meanConfidence: 80,
+      durationMs: 10,
+      costUSD: 0.01,
+    };
+
+    expect(ReadOnlyReviewQualityEvent.safeParse(payload).success).toBe(true);
+    expect(ReadOnlyReviewQualityEvent.safeParse({ ...payload, findingsFlagged: 0 }).success).toBe(false);
+    expect(ReadOnlyReviewQualityEvent.safeParse({ ...payload, severityCorrections: 0 }).success).toBe(false);
   });
 
   it('funnels annotated findings into concerns[] and V3 findingsBySeverity roll-up', async () => {
