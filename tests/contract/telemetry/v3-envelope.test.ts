@@ -2,9 +2,12 @@ import { describe, it, expect } from 'vitest';
 import { ValidatedTaskCompletedEventSchema, UploadBatchSchema } from '../../../packages/core/src/telemetry/types.js';
 
 function makeStage(name: string, overrides: Record<string, unknown> = {}) {
+  // R3: review stages must use a different model than implementerModel.
+  const model = name === 'implementing' ? 'claude-sonnet' : 'gpt-5';
+
   const base: Record<string, unknown> = {
     name,
-    model: 'claude-sonnet',
+    model,
     agentTier: 'standard' as const,
     durationMs: 5000,
     costUSD: 0.01,

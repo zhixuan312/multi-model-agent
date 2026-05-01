@@ -6,7 +6,7 @@ import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
-import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/telemetry/types';
+import { SCHEMA_VERSION, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 import {
   buildTaskCompletedEvent,
   type BuildContext,
@@ -85,7 +85,16 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
       try {
         const d = decide(homeDir);
         if (!d.enabled) return;
-        enqueue(buildTaskCompletedEvent(ctx));
+        const event = buildTaskCompletedEvent(ctx);
+        const parsed = ValidatedTaskCompletedEventSchema.safeParse(event);
+        if (!parsed.success) {
+          console.warn('mma-telemetry: dropping invalid event', {
+            eventId: event.eventId,
+            issues: parsed.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
+          });
+          return;
+        }
+        enqueue(parsed.data as Record<string, unknown>);
       } catch {
         dropped++;
       }

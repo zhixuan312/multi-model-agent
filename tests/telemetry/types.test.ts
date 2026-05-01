@@ -13,9 +13,13 @@ import {
 const Schema = ValidatedTaskCompletedEventSchema;
 
 function makeValidStage(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
+  // R3: review stages MUST use a different model than the implementer.
+  // implementerModel is 'claude-sonnet', so review/rework/verify/commit stages use 'gpt-5'.
+  const model = (name === 'implementing') ? 'claude-sonnet' : 'gpt-5';
+
   const base = {
     name,
-    model: 'claude-sonnet',
+    model,
     agentTier: 'standard',
     durationMs: 1000,
     costUSD: 0.01,
