@@ -132,12 +132,17 @@ export function endReviewStage(
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
   verdict: ReviewVerdict,
   roundsUsed: number,
-  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
+  // metrics.durationMs OVERRIDES the t0-based fallback. Use this when the
+  // stage runs in multiple discrete invocations (initial + rework re-reviews
+  // for spec_review and quality_review) — the caller accumulates per-call
+  // wall time and passes the sum, instead of `Date.now() - t0` which would
+  // span the entire review block including subsequent stages.
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
 ): void {
   (stats as Record<string, unknown>)[name] = {
     stage: name,
     entered: true,
-    durationMs: Date.now() - t0,
+    durationMs: metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0,
     costUSD: metrics?.costUSD !== undefined ? metrics.costUSD
       : finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
     agentTier: agent.tier,
@@ -304,7 +309,7 @@ export async function executeReviewedLifecycle(
   _client?: string,
   _triggeringSkill?: string,
   bus?: import('../observability/bus.js').EventBus,
-  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string; workerFindings: import('../executors/_shared/findings-schema.js').WorkerFinding[] }) => string,
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
   const routeKey = _route ?? '';
@@ -1301,12 +1306,21 @@ export async function executeReviewedLifecycle(
     let specReviewReason: string | undefined;
     let specReviewT0 = 0;
     let specReviewC0: number | null = null;
+    // Delta-only timing: accumulate per-call wall durations across the
+    // initial spec_review + every spec_rework round's re-review. This
+    // replaces the `Date.now() - specReviewT0` fallback at endReviewStage,
+    // which over-counts because endReviewStage runs AFTER spec_rework,
+    // quality_review, AND quality_rework all complete. No absolute
+    // timestamps go on the wire — Date.now() is used only as a local
+    // delta source. Privacy.md guarantees ms-deltas only.
+    let specReviewDurationMs = 0;
 
     if (reviewPolicy !== 'quality_only') {
     transitionStage('verifying', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows }, null);
     const initialReviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier: resolved.slot });
     specReviewT0 = Date.now();
     specReviewC0 = runningCostUSD();
+    const initialSpecReviewIterStart = Date.now();
     const initialSpecReview = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({
       assigned: initialReviewerTier,
       providerFor,
@@ -1316,6 +1330,7 @@ export async function executeReviewedLifecycle(
       makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
       call: (provider) => runSpecReview(provider, packet, effectiveImplReport, fileContents, implResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress),
     });
+    specReviewDurationMs += Date.now() - initialSpecReviewIterStart;
     if (initialSpecReview.bothUnavailable) {
       emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: 0, role: 'specReviewer', assignedTier: initialReviewerTier, reason: initialSpecReview.unavailableReason! });
       fallbackOverrides.push({ role: 'specReviewer', loop: 'spec', attempt: 0, assigned: initialReviewerTier, used: initialSpecReview.usedTier, reason: initialSpecReview.unavailableReason!, triggeringStatus: initialSpecReview.fallbackTriggeringStatus, bothUnavailable: true });
@@ -1369,7 +1384,9 @@ export async function executeReviewedLifecycle(
       accumulateReworkIteration(specReworkAcc, finalImplResult, Date.now() - specReworkIterStart, snapshotIdle(stageIdle));
       commitReworkStage(stats, 'spec_rework', specReworkAcc, implementerAgentInfo);
       transitionStage('spec_rework', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows }, null);
+      const reReviewIterStart = Date.now();
       const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+      specReviewDurationMs += Date.now() - reReviewIterStart;
       if (reviewCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
         fallbackOverrides.push({ role: 'specReviewer', loop: 'spec', attempt: specAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
@@ -1407,13 +1424,19 @@ export async function executeReviewedLifecycle(
     // `entered: false` default — endReviewStage is never called.
     let qualityReviewT0 = 0;
     let qualityReviewC0: number | null = null;
+    // Same delta-only timing pattern as spec_review — accumulate per-call
+    // wall durations across initial + each rework round's re-review. No
+    // raw timestamps cross the wire.
+    let qualityReviewDurationMs = 0;
     if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
       transitionStage(currentStage, 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: maxQualityRows }, null);
       qualityReviewT0 = Date.now();
       qualityReviewC0 = runningCostUSD();
+      const initialQualityIterStart = Date.now();
       const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+      qualityReviewDurationMs += Date.now() - initialQualityIterStart;
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
         fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: 0, assigned: qualityReviewerTier, used: initialQuality.usedTier, reason: initialQuality.unavailableReason!, triggeringStatus: initialQuality.fallbackTriggeringStatus, bothUnavailable: true });
@@ -1433,10 +1456,33 @@ export async function executeReviewedLifecycle(
         // Annotation model: emit one quality event per pass with severity-correction
         // and mean-confidence summary fields. Then we are done — no rework loop.
         const annotated = qualityResult.annotatedFindings ?? [];
-        const severityCorrections = annotated.filter(f => f.reviewerSeverity !== undefined).length;
-        const meanConfidence = annotated.length > 0
-          ? Math.round((annotated.reduce((s, f) => s + f.reviewerConfidence, 0) / annotated.length) * 100) / 100
+        // meanConfidence skips null entries (fallback path); null when ALL are null.
+        const numericConfidences = annotated
+          .map(f => f.reviewerConfidence)
+          .filter((c): c is number => c !== null);
+        const meanConfidence = numericConfidences.length > 0
+          ? Math.round((numericConfidences.reduce((s, c) => s + c, 0) / numericConfidences.length) * 100) / 100
           : null;
+
+        // STEP A: Funnel annotated findings into concerns[] so V3
+        // findingsBySeverity (built later in event-builder.ts:buildReviewStage)
+        // rolls them up. MUST happen before any path that records the task,
+        // and before emitTaskEvent below since downstream consumers may
+        // observe finalImplResult during emit.
+        if (annotated.length > 0) {
+          const findingsAsConcerns = annotated.map((f) => ({
+            source: 'quality_review' as const,
+            severity: f.severity as 'critical' | 'high' | 'medium' | 'low',
+            message: `[${f.id}] ${f.claim}`,
+          }));
+          finalImplResult = {
+            ...finalImplResult,
+            concerns: [...(finalImplResult.concerns ?? []), ...findingsAsConcerns],
+            annotatedFindings: annotated,
+          };
+        }
+
+        // STEP B: Emit per-pass annotation event (no rework loop in quality_only).
         emitTaskEvent('read_only_review.quality', {
           route: routeKey,
           verdict: qualityResult.status === 'annotated' ? 'annotated'
@@ -1444,8 +1490,8 @@ export async function executeReviewedLifecycle(
             : 'error',
           iterationIndex: 1,
           findingsReviewed: annotated.length,
-          findingsFlagged: severityCorrections,
-          severityCorrections,
+          findingsFlagged: 0, // legacy field — severity correction tracked elsewhere now
+          severityCorrections: 0, // reviewerSeverity field removed in 3.10.5
           meanConfidence,
           durationMs: Date.now() - qualityReviewT0,
           costUSD: runningCostUSD() !== null && qualityReviewC0 !== null ? runningCostUSD()! - qualityReviewC0! : null,
@@ -1484,7 +1530,9 @@ export async function executeReviewedLifecycle(
           accumulateReworkIteration(qualityReworkAcc, finalImplResult, Date.now() - qualityReworkIterStart, snapshotIdle(stageIdle));
           commitReworkStage(stats, 'quality_rework', qualityReworkAcc, implementerAgentInfo);
           transitionStage('quality_rework', 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows }, null);
+          const qReReviewIterStart = Date.now();
           const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+          qualityReviewDurationMs += Date.now() - qReReviewIterStart;
           if (reviewCall.bothUnavailable) {
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
             fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
@@ -1546,6 +1594,13 @@ export async function executeReviewedLifecycle(
       ? implementerAgentInfo
       : reviewerAgentInfoFor(lastQualityReviewerEntry);
 
+    // Merge accumulated review-stage wall durations into the metrics
+    // override. endReviewStage uses the override when present and falls
+    // back to `Date.now() - t0` otherwise (which over-counts review-block
+    // span across rework + later stages).
+    const specMetrics = { ...((specResult as any).metrics ?? {}), durationMs: specReviewDurationMs };
+    const qualityMetrics = { ...((qualityResult as any).metrics ?? {}), durationMs: qualityReviewDurationMs };
+
     if (reviewPolicy !== 'quality_only') {
     endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, specReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
       specStatus === 'approved' ? 'approved'
@@ -1554,7 +1609,7 @@ export async function executeReviewedLifecycle(
         : specStatus === 'not_applicable' ? 'not_applicable'
         : 'error',
       specAttemptIndex,
-      (specResult as any).metrics);
+      specMetrics);
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
@@ -1565,7 +1620,7 @@ export async function executeReviewedLifecycle(
         : qualityResult.status === 'skipped' ? 'skipped'
         : 'error',
       qualityAttemptIndex,
-      (qualityResult as any).metrics);
+      qualityMetrics);
     const aggregated = aggregateResult(
       finalReport,
       specReport,

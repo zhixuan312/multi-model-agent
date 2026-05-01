@@ -45,13 +45,14 @@ describe('resolve', () => {
 });
 
 describe('OUTPUT_CONTRACT_CLAUSES', () => {
-  it('instructs all 5 read-only routes to emit findings[]', () => {
+  it('does NOT define contract clauses for read-only routes', () => {
     for (const route of ['audit_document', 'review_code', 'verify_work', 'investigate_codebase', 'debug_task']) {
-      const clause = OUTPUT_CONTRACT_CLAUSES[route];
-      expect(clause).toBeDefined();
-      expect(clause).toMatch(/findings\[\]/);
-      expect(clause).toMatch(/severity/);
+      expect(OUTPUT_CONTRACT_CLAUSES[route]).toBeUndefined();
     }
+  });
+
+  it('still defines a contract clause for execute_plan', () => {
+    expect(OUTPUT_CONTRACT_CLAUSES['execute_plan']).toBeDefined();
   });
 });
 

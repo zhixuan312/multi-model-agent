@@ -188,6 +188,22 @@ describe('endReviewStage', () => {
     expect(stats.quality_review.roundsUsed).toBe(2);
   });
 
+  it('uses metrics.durationMs override instead of Date.now() - t0 fallback', () => {
+    // Regression: pre-3.10.5, spec_review.durationMs and quality_review.durationMs
+    // were computed as Date.now() - t0 where t0 was captured at FIRST review-call
+    // start, but endReviewStage was called AFTER all rework + re-review completed.
+    // This over-counted by 2-3x on tasks with rework. Fix: caller accumulates
+    // per-call wall durations and passes via metrics.durationMs.
+    const stats = emptyStats();
+    const t0 = Date.now() - 600_000; // pretend 10 minutes have passed since t0
+    const accumulatedDurationMs = 14_000; // but actual review-call time was 14s
+    endReviewStage(stats, 'spec_review', t0, 0, agent, 0.05, null, 'approved', 1, {
+      durationMs: accumulatedDurationMs,
+      inputTokens: 9000, outputTokens: 600,
+    });
+    expect(stats.spec_review.durationMs).toBe(14_000); // override wins, not 600_000
+  });
+
   it('records diff_review with skipped verdict', () => {
     const stats = emptyStats();
     endReviewStage(stats, 'diff_review', Date.now(), 0, agent, 0, null, 'skipped', 0);

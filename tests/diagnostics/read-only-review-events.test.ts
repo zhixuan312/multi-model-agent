@@ -3,6 +3,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 import { EventBus } from '../../packages/core/src/observability/bus.js';
 import type { EventType, EventSink } from '../../packages/core/src/observability/bus.js';
+import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
 
 const capturedEvents: EventType[] = [];
 
@@ -17,48 +18,47 @@ function resetCaptured(): void {
   capturedEvents.length = 0;
 }
 
-const VALID_EVIDENCE = 'src/auth/login.ts:89 — the property access is unguarded against undefined req.body.user';
+const VALID_EVIDENCE = 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.';
 
-// Worker output that the runtime feeds to the implementer mock — embeds a valid
-// findings[] JSON block that the annotation-path reviewer will extract.
-const WORKER_OUTPUT_WITH_FINDINGS = [
-  '## Summary',
-  'analysis complete',
+// Worker output as a narrative report — the runtime feeds this to the
+// implementer mock, and the annotation-path reviewer extracts findings from it.
+const NARRATIVE_WORKER_OUTPUT = [
+  '# Audit Report',
+  '### 1. Silent error swallowing in parseConfig',
+  'Severity: high',
+  'Location: src/auth/login.ts:89',
+  'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
   '',
-  '## Findings',
-  '```json',
-  JSON.stringify([
-    { id: 'F1', severity: 'high', claim: 'Issue A', evidence: VALID_EVIDENCE },
-    { id: 'F2', severity: 'medium', claim: 'Issue B', evidence: VALID_EVIDENCE, suggestion: 'wrap it' },
-  ]),
-  '```',
-  '',
-  '## Deviations from brief',
-  '',
-  '## Unresolved',
-  '',
+  '### 2. Unguarded property access',
+  'Severity: medium',
+  'Location: src/auth/login.ts:100',
+  'The property access is unguarded against undefined req.body.user and will throw in production.',
 ].join('\n');
 
-const REVIEWER_ANNOTATION_OUTPUT = [
-  'Annotated.',
+const REVIEWER_OUTPUT = [
   '```json',
   JSON.stringify([
-    { id: 'F1', reviewerConfidence: 85 },
-    { id: 'F2', reviewerConfidence: 40, reviewerSeverity: 'low' },
+    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', reviewerConfidence: 80 },
+    { id: 'F2', severity: 'medium', claim: 'unguarded property access', evidence: 'The property access is unguarded against undefined req.body.user and will throw in production.', reviewerConfidence: 40 },
   ]),
   '```',
 ].join('\n');
+
+const reviewerOutputState = vi.hoisted(() => ({
+  output: '',
+}));
+reviewerOutputState.output = REVIEWER_OUTPUT;
 
 vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: vi.fn(async (prompt: string) => {
-      // The reviewer prompts include the rubric "How to score `reviewerConfidence`"
+      // The reviewer prompts include the rubric "reviewerConfidence"
       const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
       if (isReviewer) {
         return {
-          output: REVIEWER_ANNOTATION_OUTPUT,
+          output: reviewerOutputState.output,
           status: 'ok' as const,
           usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
           turns: 1,
@@ -71,7 +71,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       }
       // implementer
       return {
-        output: WORKER_OUTPUT_WITH_FINDINGS,
+        output: NARRATIVE_WORKER_OUTPUT,
         status: 'ok' as const,
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
         turns: 1,
@@ -116,6 +116,7 @@ function makeBus(): { bus: EventBus; sink: CaptureSink } {
 
 describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   it('emits read_only_review.quality with verdict=annotated and annotation summary fields', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -126,6 +127,14 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     );
 
     expect(result.status).toBe('ok');
+
+    // Annotated findings populated on the RunResult
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings![0]!.severity).toBe('high');
+    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
+
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
     expect(qualityEvents).toHaveLength(1);
     expect(qualityEvents[0]).toMatchObject({
@@ -134,13 +143,15 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       verdict: 'annotated',
       iterationIndex: 1,
       findingsReviewed: 2,
-      severityCorrections: 1,
-      // meanConfidence: (85 + 40) / 2 = 62.5
-      meanConfidence: 62.5,
+      findingsFlagged: 0,
+      severityCorrections: 0,
+      // meanConfidence: (80 + 40) / 2 = 60
+      meanConfidence: 60,
     });
   });
 
   it('does NOT emit read_only_review.rework anymore (rework loop deleted in 3.8.1)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -155,6 +166,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 
   it('emits read_only_review.terminal with roundsUsed=1 and finalQualityVerdict=annotated', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -175,6 +187,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 
   it('event order is implementing → quality → terminal (no rework slot in between)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
     resetCaptured();
 
     const { bus } = makeBus();
@@ -189,5 +202,56 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       .filter((n) => n.startsWith('read_only_review.'));
 
     expect(rorEventNames).toEqual(['read_only_review.quality', 'read_only_review.terminal']);
+  });
+
+  it('emits meanConfidence=null when deterministic fallback annotates every finding', async () => {
+    reviewerOutputState.output = 'not parseable as reviewer JSON';
+    resetCaptured();
+
+    const { bus } = makeBus();
+    const [result] = await runTasks(
+      [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
+      config,
+      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+    );
+
+    expect(result.status).toBe('ok');
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings!.every((f) => f.reviewerConfidence === null)).toBe(true);
+
+    const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
+    expect(qualityEvents).toHaveLength(1);
+    expect(qualityEvents[0]).toMatchObject({
+      event: 'read_only_review.quality',
+      route: 'audit',
+      verdict: 'annotated',
+      meanConfidence: null,
+    });
+  });
+});
+
+describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
+  it('accepts meanConfidence=null (all-fallback path)', () => {
+    const sample = {
+      // TaskBase fields
+      ts: '2026-05-01T12:00:00.000+00:00',
+      batchId: '550e8400-e29b-41d4-a716-446655440001',
+      taskIndex: 0,
+      // Per-event fields
+      event: 'read_only_review.quality' as const,
+      route: 'audit',
+      verdict: 'annotated' as const,
+      iterationIndex: 1,
+      findingsReviewed: 2,
+      findingsFlagged: 0,
+      severityCorrections: 0,
+      meanConfidence: null,
+      durationMs: 1234,
+      costUSD: 0.05,
+    };
+    const result = ReadOnlyReviewQualityEvent.safeParse(sample);
+    expect(result.success).toBe(true);
+    if (!result.success) throw new Error(`schema rejected null meanConfidence: ${result.error.message}`);
   });
 });

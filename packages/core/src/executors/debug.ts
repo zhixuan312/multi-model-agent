@@ -46,7 +46,14 @@ export async function executeDebug(
   if (input.hypothesis) parts.push(`Initial hypothesis: ${input.hypothesis}`);
   const fileSection = buildFilePathsPrompt(input.filePaths);
   if (fileSection) parts.push(fileSection);
-  parts.push('Use hypothesis-driven debugging: identify root cause, propose fix, verify.');
+  parts.push(
+    'Use hypothesis-driven debugging. Number each finding (1, 2, 3, ...). For each, on its own line, state:',
+    '  Severity: critical | high | medium | low',
+    '  Hypothesis: the candidate cause',
+    '  Evidence: trace, log, or code path with file:line',
+    '  Fix: proposed change',
+    'The reviewer will extract structured findings — do NOT emit JSON.',
+  );
   const prompt = parts.join('\n\n');
 
   const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;

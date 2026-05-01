@@ -3,7 +3,6 @@ import type { Provider, RunResult } from '../../packages/core/src/types.js';
 import type { RunOptions } from '../../packages/core/src/runners/types.js';
 import { runQualityReview } from '../../packages/core/src/review/quality-reviewer.js';
 import type { ParsedStructuredReport } from '../../packages/core/src/reporting/structured-report.js';
-import type { WorkerFinding } from '../../packages/core/src/executors/_shared/findings-schema.js';
 
 const fakeReport: ParsedStructuredReport = {
   summary: 'approved',
@@ -170,13 +169,27 @@ describe('runQualityReview gating path — taskDeadlineMs / abortSignal plumbing
 function makeAnnotationPromptBuilder(): (ctx: {
   workerOutput: string;
   brief: string;
-  workerFindings: WorkerFinding[];
 }) => string {
-  return (ctx) => `Review these findings:\n${JSON.stringify(ctx.workerFindings)}`;
+  return (ctx) => `Review this worker output:\n${ctx.workerOutput}\n\nBrief: ${ctx.brief}`;
 }
 
 function makeWorkerOutputWithFindings(): string {
   return '```json\n[{"id":"1","severity":"high","claim":"null pointer deref","evidence":"On line 42 of a.ts, the variable x is dereferenced without a null check, which would cause a runtime crash when the input is empty.","suggestion":"Add null guard before deref"}]\n```';
+}
+
+function validReviewerJson(): string {
+  return JSON.stringify([{
+    id: 'F1',
+    severity: 'high',
+    claim: 'null pointer deref',
+    evidence: 'On line 42 of a.ts, the variable x is dereferenced without a null check, which would cause a runtime crash when the input is empty.',
+    suggestion: 'Add null guard before deref',
+    reviewerConfidence: 80,
+  }]);
+}
+
+function makeValidReviewerOutput(): string {
+  return '```json\n' + validReviewerJson() + '\n```';
 }
 
 describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plumbing', () => {
@@ -185,7 +198,7 @@ describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plum
     ctrl.abort();
     const provider = makeProvider(async (signal) => {
       if (signal?.aborted) return makeAbortedResult();
-      return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+      return makeOkResult(makeValidReviewerOutput());
     });
     const result = await runQualityReview(
       provider,
@@ -207,7 +220,7 @@ describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plum
     let captured: number | undefined;
     const provider = makeProvider(async (_signal, timeoutMs) => {
       captured = timeoutMs;
-      return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+      return makeOkResult(makeValidReviewerOutput());
     });
     await runQualityReview(
       provider,
@@ -231,7 +244,7 @@ describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plum
       config: { type: 'openai-compatible', model: 'mock', baseUrl: 'mock' } as any,
       run: async (_prompt: string, opts?: RunOptions) => {
         capturedOnProgress = opts?.onProgress;
-        return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+        return makeOkResult(makeValidReviewerOutput());
       },
     };
     const sink = vi.fn();
@@ -265,7 +278,7 @@ describe('runQualityReview annotation path — taskDeadlineMs / abortSignal plum
       run: async (_prompt: string, opts?: RunOptions) => {
         capturedSignal = opts?.abortSignal;
         if (opts?.abortSignal?.aborted) return makeAbortedResult();
-        return makeOkResult('```json\n[{"id":"1","reviewerConfidence":80}]\n```');
+        return makeOkResult(makeValidReviewerOutput());
       },
     };
     const result = await runQualityReview(

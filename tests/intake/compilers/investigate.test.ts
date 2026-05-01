@@ -21,7 +21,7 @@ describe('compileInvestigate', () => {
 
   it('embeds the output contract clause in the prompt', () => {
     const spec = compileInvestigate({ question: 'How does X?' }, [], [], [], '/cwd');
-    expect(spec.prompt).toContain('cite');
+    expect(spec.prompt).toContain('narrative investigation report');
     expect(spec.prompt).toContain('Question: How does X?');
   });
 

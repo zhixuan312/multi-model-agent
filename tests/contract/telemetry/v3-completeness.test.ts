@@ -195,6 +195,22 @@ describe('V3 clamping ratchet', () => {
     expect(parsed.success).toBe(true);
   });
 
+  it('clamps findingsBySeverity counts at 200 not 50 (Round-3 fix)', () => {
+    // Round-3: raised per-bin clamp from 50 → 200 so counts between 51 and
+    // 200 pass through. 60 high-severity concerns should NOT be clamped to 50.
+    const rr = richRunResult();
+    const concerns: Array<{ source: 'quality_review'; severity: 'high'; message: string }> = [];
+    for (let i = 0; i < 60; i++) {
+      concerns.push({ source: 'quality_review', severity: 'high', message: `concern-${i}` });
+    }
+    rr.concerns = concerns as any;
+    rr.qualityReviewStatus = 'changes_required';
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const qr = ev.stages.find(s => s.name === 'quality_review');
+    expect(qr).toBeDefined();
+    expect((qr as any).findingsBySeverity.high).toBe(60);
+  });
+
   it('clamps top-level totalDurationMs to schema max', () => {
     const rr = richRunResult();
     rr.durationMs = 100_000_000; // way over 86_400_000

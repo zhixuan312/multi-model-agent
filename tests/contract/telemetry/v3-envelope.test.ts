@@ -42,7 +42,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
         verdict: 'approved' as const,
         roundsUsed: 1,
         concernCategories: [] as string[],
-        findingsBySeverity: { high: 0, medium: 0, low: 0, style: 0 },
+        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0, style: 0 },
         ...overrides,
         name,
       } as const;

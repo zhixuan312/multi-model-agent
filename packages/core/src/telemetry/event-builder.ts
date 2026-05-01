@@ -206,12 +206,12 @@ function buildReviewStage(
   const concernSource = name;
   const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
-  const findingsBySeverity = { high: 0, medium: 0, low: 0, style: 0 };
+  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0, style: 0 };
   for (const c of stageConcerns) {
     const sev = (c as any).severity ?? 'medium';
     if (sev in findingsBySeverity) {
       findingsBySeverity[sev as keyof typeof findingsBySeverity] =
-        Math.min(findingsBySeverity[sev as keyof typeof findingsBySeverity] + 1, 50);
+        Math.min(findingsBySeverity[sev as keyof typeof findingsBySeverity] + 1, 200);
     }
   }
 

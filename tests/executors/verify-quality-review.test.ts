@@ -24,25 +24,16 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       if (!isReviewer) {
         return {
           output: [
-            '## Summary',
-            'done',
+            '# Verify Report',
+            '### 1. Email field is present',
+            'Severity: high',
+            'Location: src/app.ts',
+            'The login form contains an email input field with proper validation attributes.',
             '',
-            '## Findings',
-            '```json',
-            JSON.stringify([
-              { id: 'F1', severity: 'low', claim: 'criterion met', evidence: 'test.txt:1 — file exists with the expected contents on disk' },
-            ]),
-            '```',
-            '',
-            '## Files changed',
-            '- test.txt: created',
-            '',
-            '## Validations run',
-            '',
-            '## Deviations from brief',
-            '',
-            '## Unresolved',
-            '',
+            '### 2. Password field is present',
+            'Severity: low',
+            'Location: src/app.ts',
+            'The login form contains a password input field with proper masking behavior.',
           ].join('\n'),
           status: 'ok' as const,
           usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: 0.001 },
@@ -58,9 +49,13 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       // Quality reviewer call(s) — annotation model returns a JSON annotation array
       return {
         output: [
-          'Annotated.',
           '```json',
-          JSON.stringify([{ id: 'F1', reviewerConfidence: 80 }]),
+          JSON.stringify([{
+            id: 'F1', severity: 'high',
+            claim: 'email field is present',
+            evidence: 'The login form contains an email input field with proper validation attributes.',
+            reviewerConfidence: 80,
+          }]),
           '```',
         ].join('\n'),
         status: 'ok' as const,
@@ -117,6 +112,13 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
     expect(out.qualityReviewVerdict).toBe('annotated');
     expect(out.specReviewVerdict).toBeDefined();
     expect(out.specReviewVerdict).toBe('not_applicable');
+    // Annotated findings are funneled onto the RunResult
+    const findings = out.results[0].annotatedFindings;
+    expect(findings).toBeDefined();
+    expect(findings!.length).toBeGreaterThanOrEqual(1);
+    expect(findings![0]!.severity).toBe('high');
+    expect(findings![0]!.reviewerConfidence).toBe(80);
+    expect(findings![0]!.evidenceGrounded).toBe(true);
   });
 
   it('worker result carries qualityReviewStatus from the lifecycle', async () => {

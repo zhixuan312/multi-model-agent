@@ -81,7 +81,7 @@ describe('executeAudit — quality_only review', () => {
     const result = await executeAudit(ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
-    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped']).toContain(result.qualityReviewVerdict);
+    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated']).toContain(result.qualityReviewVerdict);
     expect(typeof result.roundsUsed).toBe('number');
     expect(result.roundsUsed).toBeGreaterThanOrEqual(1);
   });
@@ -180,7 +180,7 @@ describe('executeAudit — quality_only review', () => {
     const result = await executeAudit(ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
-    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped']).toContain(result.qualityReviewVerdict);
+    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated']).toContain(result.qualityReviewVerdict);
     expect(typeof result.roundsUsed).toBe('number');
   });
 });

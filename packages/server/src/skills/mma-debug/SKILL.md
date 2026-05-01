@@ -70,26 +70,42 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
-## Reading the review verdicts (annotation model — 3.8.1+)
+## Reading the findings (3.10.5+)
 
-The terminal envelope includes:
-- `specReviewVerdict: 'not_applicable'` — read-only routes have no spec review stage.
-- `qualityReviewVerdict` — outcome of the single annotation pass.
-- `roundsUsed` — `1` when reviewer ran (annotated or errored), `0` when reviewer was skipped.
+The terminal envelope's `results[N].annotatedFindings` is a list of structured
+findings the reviewer extracted and scored from the implementer's narrative.
+Every finding has the same shape:
 
-There is no rework loop. The reviewer annotates each finding in place and exits — never gates, never causes the worker to re-run.
+| Field | Type | Notes |
+|---|---|---|
+| `id` | string | Reviewer-assigned, e.g. `F1`, `F2`. |
+| `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
+| `claim` | string | One-sentence summary. |
+| `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
+| `suggestion?` | string | Optional fix recommendation. |
+| `reviewerConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
+| `evidenceGrounded` | boolean | True when `evidence` is a verbatim substring of worker output. |
 
-Action per `qualityReviewVerdict`:
-- `'annotated'` — every finding in `findings[]` has `reviewerConfidence` (integer 0-100) and possibly `reviewerSeverity`. Sort or filter by confidence; treat low-confidence findings with skepticism.
-- `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW=disabled` or per-route `MMAGENT_READ_ONLY_REVIEW_DEBUG=disabled`) bypassed the reviewer. Findings carry no reviewer fields; treat as raw worker output.
-- `'error'` — reviewer call or response parsing failed. Findings have no reviewer fields; fall back to caution.
+### Verdict states (`qualityReviewVerdict`)
 
-### Per-finding reviewer fields
+- `'annotated'` — every finding is structured. May be reviewer-emitted (with
+  numeric `reviewerConfidence`) or deterministic-fallback (with
+  `reviewerConfidence: null`). The route ALWAYS reaches `'annotated'` unless
+  the reviewer call itself fails transport.
+- `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW=disabled`).
+- `'error'` — only when the reviewer call fails transport (network / 5xx).
 
-Every finding the worker emits has the standard fields (`id`, `severity`, `claim`, `evidence`, `suggestion?`). After a successful annotation pass, two more fields are added:
+### Recommended rendering by the main agent
 
-- `reviewerConfidence` (integer 0-100): how confident the reviewer is that the finding is correct, on-brief, and grounded. Use as a filter (`>=70`) or a sort key for triage.
-- `reviewerSeverity?` (`'high' | 'medium' | 'low'`): only present when the reviewer disagrees with the worker's `severity`. Workers tend to inflate severity; use this to dial down. Trust `reviewerSeverity` over `severity` when present.
+1. Show ALL findings — never silently drop. Confidence and grounding are
+   soft signals, not gates.
+2. Default sort: severity (critical → low) then `reviewerConfidence` desc
+   (nulls last).
+3. `severity` is the reviewer's authoritative final value — use it directly.
+4. Mark findings with `evidenceGrounded: false` or
+   `reviewerConfidence < 70` as "lower-trust" (collapsed section, lighter
+   color, or `(low confidence)` annotation). User decides what to do.
+5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
 
 ## Best practices
 

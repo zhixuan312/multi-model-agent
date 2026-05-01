@@ -6,23 +6,58 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
+const NARRATIVE_WORKER_OUTPUT = [
+  '# Audit Report',
+  '### 1. Silent error swallowing in parseConfig',
+  'Severity: high',
+  'Location: src/a.ts:10',
+  'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
+].join('\n');
+
+const REVIEWER_OUTPUT = [
+  '```json',
+  JSON.stringify([{
+    id: 'F1', severity: 'high',
+    claim: 'silent error swallowing in parseConfig',
+    evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
+    reviewerConfidence: 80,
+  }]),
+  '```',
+].join('\n');
+
 // Mock the provider factory so every tier created during escalation gets a mock.
 // Pattern adapted from tests/reviewed-execution/review-policy.test.ts.
 vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
-    run: async () => ({
-      output: '## Summary\napproved\n\n## Files changed\n\n## Validations run\n\n## Deviations from brief\n\n## Unresolved\n',
-      status: 'ok' as const,
-      usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
-      turns: 1,
-      filesRead: [],
-      filesWritten: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [],
-    }),
+    run: async (prompt: string) => {
+      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      if (isReviewer) {
+        return {
+          output: REVIEWER_OUTPUT,
+          status: 'ok' as const,
+          usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
+          turns: 1,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        };
+      }
+      return {
+        output: NARRATIVE_WORKER_OUTPUT,
+        status: 'ok' as const,
+        usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+        turns: 1,
+        filesRead: ['src/a.ts'],
+        filesWritten: ['report.md'],
+        toolCalls: ['readFile(src/a.ts)', 'writeFile(report.md)'],
+        outputIsDiagnostic: false,
+        escalationLog: [],
+      };
+    },
   }),
 }));
 
@@ -210,30 +245,6 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const VALID_EVIDENCE = 'src/a.ts:10 — the function silently swallows errors and returns null';
-    const workerFindings = [
-      { id: 'F1', severity: 'high' as const, claim: 'silent error swallowing', evidence: VALID_EVIDENCE },
-    ];
-    const workerOutputWithFindings = [
-      '## Summary',
-      'done',
-      '',
-      '## Findings',
-      '```json',
-      JSON.stringify(workerFindings),
-      '```',
-      '',
-      '## Files changed',
-      '- report.md: added',
-      '',
-      '## Validations run',
-      '- lint: passed',
-      '',
-      '## Deviations from brief',
-      '',
-      '## Unresolved',
-      '',
-    ].join('\n');
 
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
@@ -241,7 +252,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
         name: 'mock-standard',
         config: config.agents.standard,
         run: async () => ({
-          output: workerOutputWithFindings,
+          output: NARRATIVE_WORKER_OUTPUT,
           status: 'ok' as const,
           usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
           turns: 1,
@@ -257,14 +268,11 @@ describe('executeReviewedLifecycle — quality_only', () => {
 
     let builderCalled = false;
     let receivedBrief = '';
-    let receivedFindingsCount = 0;
 
-    const builder = (ctx: { workerOutput: string; brief: string; workerFindings: typeof workerFindings }) => {
+    const builder = (ctx: { workerOutput: string; brief: string }) => {
       builderCalled = true;
       receivedBrief = ctx.brief;
-      receivedFindingsCount = ctx.workerFindings.length;
-      // Reviewer needs to return a JSON annotation block so parseAndMergeAnnotations succeeds.
-      return 'CUSTOM_PROMPT';
+      return `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
     };
 
     const result = await executeReviewedLifecycle(
@@ -276,7 +284,75 @@ describe('executeReviewedLifecycle — quality_only', () => {
 
     expect(builderCalled).toBe(true);
     expect(receivedBrief).toBe('audit this code');
-    expect(receivedFindingsCount).toBe(1);
     expect(result.stageStats!.quality_review.entered).toBe(true);
+    // Annotated findings from the annotation path
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
+    expect(result.annotatedFindings![0]!.severity).toBe('high');
+    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
+  });
+
+  it('funnels annotated findings into concerns[] and V3 findingsBySeverity roll-up', async () => {
+    const config = makeConfig();
+    const task: TaskSpec = {
+      prompt: 'audit this code',
+      agentType: 'complex' as const,
+      reviewPolicy: 'quality_only' as const,
+    };
+
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: {
+        name: 'mock-standard',
+        config: config.agents.standard,
+        run: async () => ({
+          output: NARRATIVE_WORKER_OUTPUT,
+          status: 'ok' as const,
+          usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+          turns: 1,
+          filesRead: ['src/a.ts'],
+          filesWritten: ['report.md'],
+          toolCalls: ['writeFile(report.md)'],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+        }),
+      },
+      capabilityOverride: false,
+    };
+
+    const builder = (ctx: { workerOutput: string; brief: string }) =>
+      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+
+    const result = await executeReviewedLifecycle(
+      task, resolved, config, 0,
+      undefined, undefined, undefined, undefined, 'audit',
+      undefined, undefined, undefined,
+      builder,
+    );
+
+    // Concerns populated from annotated findings with source='quality_review'
+    expect(result.concerns).toBeDefined();
+    const qrConcerns = result.concerns!.filter(c => c.source === 'quality_review');
+    expect(qrConcerns.length).toBeGreaterThanOrEqual(1);
+    expect(qrConcerns[0]!.severity).toBe('high');
+    expect(qrConcerns[0]!.message).toContain('[F1]');
+    expect(qrConcerns[0]!.message).toContain('silent error swallowing');
+
+    // V3 telemetry: buildTaskCompletedEvent rolls concerns into findingsBySeverity
+    const { buildTaskCompletedEvent } = await import('../../packages/core/src/telemetry/event-builder.js');
+    const event = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: result,
+      client: 'test-client',
+      parentModel: null,
+      reviewPolicy: 'quality_only',
+    });
+
+    const qrStage = event.stages.find(s => s.name === 'quality_review');
+    expect(qrStage).toBeDefined();
+    expect(qrStage!.findingsBySeverity).toBeDefined();
+    expect(qrStage!.findingsBySeverity.high).toBeGreaterThanOrEqual(1);
   });
 });
