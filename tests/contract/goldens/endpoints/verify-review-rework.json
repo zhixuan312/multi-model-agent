@@ -191,7 +191,7 @@
           "filesReadCount": null,
           "filesWrittenCount": null,
           "verdict": "error",
-          "roundsUsed": 0
+          "roundsUsed": 1
         },
         "diff_review": {
           "stage": "diff_review",

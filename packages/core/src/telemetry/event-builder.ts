@@ -28,10 +28,21 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const totalDurationMs = runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0);
 
+  // Top-level totals are summed across all stages (impl + reviewers + reworks +
+  // verify + commit) so the dashboard's `total_cost_cents` reflects the true
+  // task cost. runResult.usage only carries the LAST implementer attempt and
+  // ignores reviewer + earlier-impl rounds — using it would systematically
+  // under-report cost (~24× in real-world rework cases).
+  const totalCostUSD = stages.reduce((s, st) => s + (st.costUSD ?? 0), 0);
+  const totalInputTokens = stages.reduce((s, st) => s + ((st as { inputTokens?: number }).inputTokens ?? 0), 0);
+  const totalOutputTokens = stages.reduce((s, st) => s + ((st as { outputTokens?: number }).outputTokens ?? 0), 0);
+  const totalCachedTokens = stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0);
+  const totalReasoningTokens = stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0);
+
   const savedCostUSD = computeSavedCostUSD(
-    runResult.usage?.costUSD ?? null,
-    runResult.usage?.inputTokens ?? 0,
-    runResult.usage?.outputTokens ?? 0,
+    totalCostUSD,
+    totalInputTokens,
+    totalOutputTokens,
     parentModel ?? undefined,
   );
 
@@ -61,12 +72,12 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
     parentModelFamily: parentModel ? normalizeModel(parentModel).family : 'other',
-    inputTokens: runResult.usage?.inputTokens ?? 0,
-    outputTokens: runResult.usage?.outputTokens ?? 0,
-    cachedTokens: (runResult.usage as any)?.cachedTokens ?? 0,
-    reasoningTokens: (runResult.usage as any)?.reasoningTokens ?? 0,
+    inputTokens: totalInputTokens,
+    outputTokens: totalOutputTokens,
+    cachedTokens: totalCachedTokens,
+    reasoningTokens: totalReasoningTokens,
     totalDurationMs,
-    totalCostUSD: runResult.usage?.costUSD ?? 0,
+    totalCostUSD,
     totalSavedCostUSD: savedCostUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
