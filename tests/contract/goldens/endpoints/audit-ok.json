@@ -38,7 +38,23 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "concerns": [],
+      "concerns": [
+        {
+          "source": "quality_review",
+          "severity": "medium",
+          "message": "[F1] reviewer parse failed; deterministic fallback emitted single catch-all from worker output"
+        }
+      ],
+      "annotatedFindings": [
+        {
+          "id": "<DETERMINISTIC>",
+          "severity": "medium",
+          "claim": "reviewer parse failed; deterministic fallback emitted single catch-all from worker output",
+          "evidence": "Worker output had no parseable findings (length 9). Fallback emitted catch-all so telemetry has at least one entry.",
+          "reviewerConfidence": null,
+          "evidenceGrounded": false
+        }
+      ],
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "annotated",
       "stageStats": {

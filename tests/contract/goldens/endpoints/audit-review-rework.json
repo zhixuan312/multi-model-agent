@@ -40,7 +40,23 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "concerns": [],
+      "concerns": [
+        {
+          "source": "quality_review",
+          "severity": "medium",
+          "message": "[F1] reviewer parse failed; deterministic fallback emitted single catch-all from worker output"
+        }
+      ],
+      "annotatedFindings": [
+        {
+          "id": "<DETERMINISTIC>",
+          "severity": "medium",
+          "claim": "reviewer parse failed; deterministic fallback emitted single catch-all from worker output",
+          "evidence": "needs rework per review",
+          "reviewerConfidence": null,
+          "evidenceGrounded": true
+        }
+      ],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
