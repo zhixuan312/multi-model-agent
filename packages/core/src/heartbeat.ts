@@ -1,6 +1,7 @@
 import type { ProgressEvent } from './runners/types.js';
+import type { HeadlineSnapshot } from './batch-registry.js';
 
-function formatElapsed(ms: number): string {
+export function formatElapsed(ms: number): string {
   const rounded = Math.round(ms / 1000);
   if (rounded < 60) return `${rounded}s`;
   const minutes = Math.floor(rounded / 60);
@@ -33,7 +34,7 @@ const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
  * Lightweight state snapshot passed to `recordHeartbeat` on every tick (including
  * the final flush).  The server uses this — combined with the BatchRegistry entry
  * it already holds — to compose the running headline and push it via
- * `BatchRegistry.updateRunningHeadline`.
+ * `BatchRegistry.updateRunningHeadlineSnapshot`.
  *
  * HeartbeatTimer has no knowledge of BatchRegistry; it only emits this payload.
  */
@@ -66,6 +67,8 @@ export interface HeartbeatTickInfo {
    * "running, 47s elapsed" summary.
    */
   headline: string;
+  /** Lightweight state snapshot for BatchRegistry.updateRunningHeadlineSnapshot. */
+  snapshot: HeadlineSnapshot;
   /** Populated only on the tick immediately following a stage change. */
   phaseChange?: { from: HeartbeatStage; to: HeartbeatStage };
 }
@@ -182,6 +185,7 @@ export class HeartbeatTimer {
       savedCostUSD: this.savedCostUSD,
       stageIdleMs: this.stageLastEventMs > 0 ? now - this.stageLastEventMs : 0,
       headline: this.composeHeadline(formatElapsed(elapsedMs)),
+      snapshot: this.getHeadlineSnapshot(),
       ...(phaseChange !== undefined && { phaseChange }),
     };
   }
@@ -342,6 +346,22 @@ export class HeartbeatTimer {
     this.savedCostUSD = savedCostUSD;
   }
 
+  recordFileRead(): void {
+    if (!this.started || this.stopped) return;
+    this.filesRead++;
+  }
+
+  recordToolCall(): void {
+    if (!this.started || this.stopped) return;
+    this.toolCalls++;
+  }
+
+  applyCost(cost: { costUSD: number; savedCostUSD: number }): void {
+    if (!this.started || this.stopped) return;
+    this.costUSD = cost.costUSD;
+    this.savedCostUSD = cost.savedCostUSD;
+  }
+
   markEvent(kind: 'llm' | 'tool' | 'text'): void {
     if (!this.started || this.stopped) return;
     const now = Date.now();
@@ -381,6 +401,8 @@ export class HeartbeatTimer {
       savedCostUSD: this.savedCostUSD,
       final,
       headline: this.composeHeadline(elapsed),
+      stageIdleMs: this.stageLastEventMs > 0 ? Date.now() - this.stageLastEventMs : 0,
+      snapshot: this.getHeadlineSnapshot(),
     });
 
     // Push a tick snapshot so the server can recompose the running headline
@@ -419,5 +441,47 @@ export class HeartbeatTimer {
       return `$${this.costUSD.toFixed(2)}`;
     }
     return null;
+  }
+
+  public getHeadlineSnapshot(): import('./batch-registry.js').HeadlineSnapshot {
+    const prefix = this.composeHeadlinePrefix();
+    const statsClause = this.composeStatsClause();
+    const dispatchedAt = Number.isFinite(this.startTime) && this.startTime > 0
+      ? this.startTime
+      : Date.now();
+    return {
+      prefix,
+      statsClause,
+      dispatchedAt,
+      fallback: prefix.trim() || '1/1 queued',
+    };
+  }
+
+  private composeHeadlinePrefix(): string {
+    const head = `[${this.stageIndex}/${this.stageCount}] ${STAGE_LABELS[this.stage]}`;
+    const roundSuffix = this.reviewRound !== undefined && this.attemptCap !== undefined
+      ? ` (round ${this.reviewRound}/${this.attemptCap})`
+      : '';
+    const providerClause = ` (${this.provider})`;
+    return `${head}${roundSuffix}${providerClause} — `;
+  }
+
+  private composeStatsClause(): string {
+    const parts: string[] = [];
+    const cost = this.composeCostClauseSafe();
+    if (cost) parts.push(cost);
+    if (this.filesRead > 0) parts.push(`${this.filesRead} read`);
+    if (this.filesWritten > 0) parts.push(`${this.filesWritten} written`);
+    if (this.toolCalls > 0) parts.push(`${this.toolCalls} tool ${this.toolCalls === 1 ? 'call' : 'calls'}`);
+    return parts.length === 0 ? '' : `, ${parts.join(', ')}`;
+  }
+
+  private composeCostClauseSafe(): string | null {
+    if (this.savedCostUSD === null || !Number.isFinite(this.savedCostUSD) || this.savedCostUSD <= 0) return null;
+    if (this.costUSD !== null && Number.isFinite(this.costUSD) && this.costUSD > 0) {
+      const roi = (this.costUSD + this.savedCostUSD) / this.costUSD;
+      return `$${this.savedCostUSD.toFixed(2)} saved (${roi.toFixed(1)}x)`;
+    }
+    return `$${this.savedCostUSD.toFixed(2)} saved`;
   }
 }

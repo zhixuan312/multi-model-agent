@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.10.2** — telemetry data-correctness patch in `event-builder.ts` and `reviewed-lifecycle.ts`: top-level totals now sum every stage entry (no longer drop reviewer + earlier-impl rounds via `runResult.usage`); `spec_rework` / `quality_rework` entries emit when the loop ran via new `accumulateReworkIteration` / `commitReworkStage` aggregator; `committing.filesCommittedCount` derives from `runResult.commits` (was hardcoded 0); `extractStageData` clamps every numeric to its V3 schema cap; `ValidatedTaskCompletedEventSchema` is enforced at emit time (R3 / R10b violations dropped with a `telemetry.event.invalid` diagnostic). New `field-coverage.ts` manifest enables a completeness contract ratchet. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.3** — critical telemetry hotfix in `event-builder.ts` plus polling-headline + summary-rendering work. R4 superRefine (Σ stage.durationMs ≤ totalDurationMs) was violated by 1ms in 3.10.2 due to clock-skew between `runResult.durationMs` and per-stage measurements, dropping every event at emit time. Fixed: `totalDurationMs = max(runResult.durationMs, stageSum)` enforces R4 by construction. New `derive-terminal-status.ts` and `clamp.ts` shared helpers eliminate drift between the in-process `TaskCompletionSummary` (used for end-of-task summary lines) and the V3 wire event. `HeartbeatTimer.getHeadlineSnapshot()` returns the prefix/statsClause split that the polling endpoint composes live. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

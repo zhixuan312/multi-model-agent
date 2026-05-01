@@ -3,7 +3,7 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
 import type { RawHandler } from '../../router.js';
-import { notApplicable, type BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import { notApplicable, type BatchRegistry, formatElapsed } from '@zhixuan92/multi-model-agent-core';
 
 export interface BatchHandlerDeps {
   batchRegistry: BatchRegistry;
@@ -41,8 +41,13 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
 
     // Pending → 202 text/plain progress line
     if (entry.state === 'pending') {
+      const snap = entry.runningHeadlineSnapshot;
+      const elapsedMs = Date.now() - snap.dispatchedAt;
+      const headline = snap.prefix
+        ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+        : snap.fallback;
       res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end(entry.runningHeadline || '1/1 queued');
+      res.end(headline);
       return;
     }
 

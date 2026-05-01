@@ -2,7 +2,21 @@ import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig }
 import type { RunOptions } from './runners/types.js';
 import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
 
+let coreTestProviderOverride: Provider | null = null;
+
+function assertTestProviderEnabled(): void {
+  if (process.env.MMAGENT_TEST_PROVIDER_OVERRIDE !== '1') {
+    throw new Error('MMAGENT_TEST_PROVIDER_OVERRIDE must be set to 1 to use the test provider override');
+  }
+}
+
+export function __setCoreTestProviderOverride(provider: Provider | null): void {
+  assertTestProviderEnabled();
+  coreTestProviderOverride = provider;
+}
+
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
+  if (coreTestProviderOverride) return coreTestProviderOverride;
   const agentConfig = config.agents[slot];
   if (!agentConfig) {
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);

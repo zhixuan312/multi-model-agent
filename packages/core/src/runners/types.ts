@@ -149,4 +149,8 @@ export type ProgressEvent = {
   savedCostUSD: number | null
   final: boolean
   headline: string
+  /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
+  stageIdleMs: number
+  /** Lightweight state snapshot for use by recordHeartbeat to update BatchRegistry. */
+  snapshot: import('../batch-registry.js').HeadlineSnapshot
 }

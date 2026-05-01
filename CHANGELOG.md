@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.3] - 2026-05-01
+
+### Fixed
+- **R4 violation drops every event** (core, critical hotfix). 3.10.2 shipped strict V3 superRefine enforcement at emit time, which exposed a measurement-precision bug: `runResult.durationMs` and per-stage `durationMs` are sampled at different `Date.now()` ticks, so a stage measurement can land 1ms longer than the task-level total. R4 (`Σ stage.durationMs ≤ totalDurationMs`) was then violated by 1ms and **every emitted event got dropped client-side** with `telemetry.event.invalid`. Net effect since 3.10.2: real-world telemetry was silently going nowhere. Fix: `totalDurationMs = max(runResult.durationMs, Σ stage.durationMs)` enforces R4 by construction. Includes a regression test reproducing the production case.
+- **Reverted strict drop-on-superRefine emit gate** (server). 3.10.2's `recordTaskCompleted` dropped any event that failed the V3 cross-field rules. In practice this hid real telemetry from the operator AND the backend (which uses `passthrough` and would store it anyway), with no visibility into what was suppressed. New policy: schema-level violations (caps, types, enums — the things backend ingest would actually reject) still drop with a `mma-telemetry: dropping schema-invalid event` warning. Cross-field superRefine violations (R1–R11) now log a `mma-telemetry: cross-field validation warning (event still emitted)` line and the event is shipped. Degenerate rows are filterable at query time on the dashboard side.
+
+### Added
+- **Skill manifest backfill on upgrade** (server). When mma is upgraded to a version with newly-bundled skills (e.g. `mma-investigate` added in v3.4.0), `mmagent serve` (with `autoUpdateSkills=true`) and `mmagent update-skills` now install missing skills to whatever client targets the user already opted into. Closes the bug where users on pre-v3.4.0 installs upgraded to v3.9+ and never saw `mma-investigate` registered with their client harness. Skill installation flow is now upsert: existing skills get version-refresh, missing skills get backfilled. Empty-manifest gate prevents push to users who never opted in. Target-scoping prevents widening to clients the user never used.
+- **Live-elapsed polling headlines** (server). `GET /batch/:id` 202 responses now compose elapsed time at request time (`Date.now() - dispatchedAt`) rather than reading the frozen string set at the last 5s heartbeat tick. Polling at 1-2s intervals no longer shows the same `— 10s` twice in a row. The `runningHeadline: string` field on `BatchEntry` is replaced with `runningHeadlineSnapshot: HeadlineSnapshot` ({prefix, statsClause, dispatchedAt, fallback}). Stats clause is suppressed when all activity counters are zero.
+- **Tiered server stdout** (server). Default `mmagent serve` is now quiet — only stage transitions, dispatch/request metadata, warnings, errors, and a one-line `task_done_summary` per task. `--verbose` keeps the previous firehose, with two corrections: (a) heartbeats are dedup-throttled (emit only on counter change OR every 60s for liveness, with `Number.isFinite` guard on the cost bucket), (b) the inline `stages={...}` JSON on `task_completed` is replaced with `stages_json=<jsonl-path>` pointing at the diagnostic file. The `task_done_summary` event always fires exactly once per task (try/catch + `summaryEmitted` flag covers failure paths). Verbose `task_completed` and `task_done_summary` derive from the same `TaskCompletionSummary` so their numeric fields cannot disagree.
+- **Shared helpers** (core). `derive-terminal-status.ts` and `clamp.ts` extracted from `event-builder.ts` so `task-completion-summary.ts` and the event builder share identical clamp/round/derivation rules (no drift between the in-process summary and the wire event).
+
+### Changed
+- **`runningHeadline` → `runningHeadlineSnapshot`** on `BatchEntry` (core, breaking only for direct BatchRegistry consumers — no public-API change). The polling endpoint composes the headline string from the snapshot at request time.
+
 ## [3.10.2] - 2026-05-01
 
 ### Fixed

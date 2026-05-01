@@ -2,45 +2,43 @@
   "headline": "debug: 1/1 tasks complete",
   "results": [
     {
-      "output": "Sub-agent error: Connection error.",
-      "status": "error",
+      "output": "mock salvage",
+      "status": "degenerate_exhausted",
       "usage": {
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "totalTokens": 0,
-        "costUSD": null,
-        "savedCostUSD": null
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "totalTokens": 30,
+        "costUSD": 0.001
       },
-      "turns": 0,
+      "turns": 1,
       "filesRead": [],
-      "directoriesListed": [],
       "filesWritten": [],
       "toolCalls": [],
-      "outputIsDiagnostic": true,
+      "outputIsDiagnostic": false,
       "escalationLog": [
         {
-          "provider": "complex",
-          "status": "error",
-          "turns": 0,
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "costUSD": null,
-          "initialPromptLengthChars": 3826,
-          "initialPromptHash": "d8ce0c9f4b0fc61fda13ee2788436a4ae8beb1df8804b444500b7df70a7350f3",
-          "reason": "Connection error."
+          "provider": "mock",
+          "status": "degenerate_exhausted",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": 0.001,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": "",
+          "reason": "status=degenerate_exhausted"
         }
       ],
-      "error": "Connection error.",
       "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
       "terminationReason": {
-        "cause": "error",
-        "turnsUsed": 0,
+        "cause": "degenerate_exhausted",
+        "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": null,
         "wasPromoted": false
       },
-      "errorCode": "error",
+      "errorCode": "degenerate_exhausted",
       "retryable": false,
       "workerStatus": "done",
       "concerns": [],
@@ -51,18 +49,18 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0.001,
           "agentTier": "complex",
           "modelFamily": "other",
           "model": "mock",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
+          "inputTokens": 10,
+          "outputTokens": 20,
           "cachedTokens": 0,
           "reasoningTokens": 0,
-          "turnCount": 0,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -224,7 +222,7 @@
       },
       "qualityReviewReason": "worker output missing or invalid findings[] JSON block",
       "structuredReport": {
-        "summary": "[Reviewed] Sub-agent error: Connection error.",
+        "summary": "[Reviewed] mock salvage",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -232,7 +230,7 @@
         "extraSections": {}
       },
       "implementationReport": {
-        "summary": "Sub-agent error: Connection error.",
+        "summary": "mock salvage",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -248,9 +246,9 @@
         "qualityReviewer": "standard"
       },
       "models": {
-        "implementer": "mock",
+        "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": "mock"
+        "qualityReviewer": "mock-model"
       },
       "commits": [],
       "verification": {
@@ -268,7 +266,7 @@
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "totalActualCostUSD": 0,
+    "totalActualCostUSD": 0.001,
     "totalSavedCostUSD": 0
   },
   "structuredReport": {
@@ -287,5 +285,6 @@
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "error",
-  "roundsUsed": 1
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

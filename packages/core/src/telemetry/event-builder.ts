@@ -4,6 +4,21 @@ import { computeSavedCostUSD } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import type { TaskCompletedEventType, StageEntryType, ConcernCategoryType } from './types.js';
+import { deriveTerminalStatus } from '../run-tasks/derive-terminal-status.js';
+import {
+  clampStageCost,
+  clampTaskCost,
+  clampInputTokens,
+  clampOutputTokens,
+  clampCachedTokens,
+  clampReasoningTokens,
+  clampToolCallCount,
+  clampFilesReadCount,
+  clampFilesWrittenCount,
+  clampTurnCount,
+  clampDurationMsStage,
+  clampDurationMsTotal,
+} from './clamp.js';
 
 const KNOWN_CAPABILITIES = new Set(['web_search', 'web_fetch']);
 
@@ -26,18 +41,24 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  const totalDurationMs = Math.min(runResult.durationMs ?? stages.reduce((s, st) => s + st.durationMs, 0), 86_400_000);
+  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs. runResult.durationMs and per-stage
+  // durations are sampled at different `Date.now()` ticks, so a per-stage measurement can land 1ms
+  // longer than the task-level total. Take the max of (runResult.durationMs, stage-sum) to enforce
+  // R4 by construction; without this guarantee, every event with millisecond-precision drift gets
+  // dropped by the V3 emit-time validator.
+  const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
+  const totalDurationMs = clampDurationMsTotal(Math.max(runResult.durationMs ?? 0, stageDurationsSum));
 
   // Top-level totals are summed across all stages (impl + reviewers + reworks +
   // verify + commit) so the dashboard's `total_cost_cents` reflects the true
   // task cost. runResult.usage only carries the LAST implementer attempt and
   // ignores reviewer + earlier-impl rounds — using it would systematically
   // under-report cost (~24× in real-world rework cases).
-  const totalCostUSD = Math.min(stages.reduce((s, st) => s + (st.costUSD ?? 0), 0), 800);
-  const totalInputTokens = Math.min(stages.reduce((s, st) => s + ((st as { inputTokens?: number }).inputTokens ?? 0), 0), 5_000_000);
-  const totalOutputTokens = Math.min(stages.reduce((s, st) => s + ((st as { outputTokens?: number }).outputTokens ?? 0), 0), 500_000);
-  const totalCachedTokens = Math.min(stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0), 5_000_000);
-  const totalReasoningTokens = Math.min(stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0), 500_000);
+  const totalCostUSD = clampTaskCost(stages.reduce((s, st) => s + (st.costUSD ?? 0), 0));
+  const totalInputTokens = clampInputTokens(stages.reduce((s, st) => s + ((st as { inputTokens?: number }).inputTokens ?? 0), 0));
+  const totalOutputTokens = clampOutputTokens(stages.reduce((s, st) => s + ((st as { outputTokens?: number }).outputTokens ?? 0), 0));
+  const totalCachedTokens = clampCachedTokens(stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0));
+  const totalReasoningTokens = clampReasoningTokens(stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0));
 
   const savedCostUSD = computeSavedCostUSD(
     totalCostUSD,
@@ -150,16 +171,16 @@ function extractStageData(
   return {
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
     agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
-    durationMs: Math.min(raw.durationMs ?? 0, 3_600_000),
-    costUSD: Math.max(0, Math.min(Math.round((raw.costUSD ?? 0) * 1_000_000) / 1_000_000, 100)),
-    inputTokens: Math.min((raw as any).inputTokens ?? 0, 5_000_000),
-    outputTokens: Math.min((raw as any).outputTokens ?? 0, 500_000),
-    cachedTokens: Math.min((raw as any).cachedTokens ?? 0, 5_000_000),
-    reasoningTokens: Math.min((raw as any).reasoningTokens ?? 0, 500_000),
-    toolCallCount: Math.min((raw as any).toolCallCount ?? 0, 5000),
-    filesReadCount: Math.min((raw as any).filesReadCount ?? 0, 5000),
-    filesWrittenCount: Math.min((raw as any).filesWrittenCount ?? 0, 5000),
-    turnCount: Math.min((raw as any).turnCount ?? 0, 250),
+    durationMs: clampDurationMsStage(raw.durationMs ?? 0),
+    costUSD: clampStageCost(raw.costUSD ?? 0),
+    inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
+    outputTokens: clampOutputTokens((raw as any).outputTokens ?? 0),
+    cachedTokens: clampCachedTokens((raw as any).cachedTokens ?? 0),
+    reasoningTokens: clampReasoningTokens((raw as any).reasoningTokens ?? 0),
+    toolCallCount: clampToolCallCount((raw as any).toolCallCount ?? 0),
+    filesReadCount: clampFilesReadCount((raw as any).filesReadCount ?? 0),
+    filesWrittenCount: clampFilesWrittenCount((raw as any).filesWrittenCount ?? 0),
+    turnCount: clampTurnCount((raw as any).turnCount ?? 0),
     maxIdleMs: raw.maxIdleMs ?? null,
     totalIdleMs: raw.totalIdleMs ?? null,
   };
@@ -265,27 +286,6 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
 }
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
-
-function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['terminalStatus'] {
-  const tr = rr.terminationReason;
-  if (tr === 'all_tiers_unavailable') return 'unavailable';
-  if (tr === 'cost_ceiling') return 'cost_exceeded';
-  if (tr === 'round_cap') return 'incomplete';
-  if (!tr || typeof tr !== 'object') return 'incomplete';
-  switch (tr.cause) {
-    case 'finished': return 'ok';
-    case 'incomplete':
-    case 'degenerate_exhausted': return 'incomplete';
-    case 'timeout': return 'timeout';
-    case 'cost_exceeded': return 'cost_exceeded';
-    case 'brief_too_vague': return 'brief_too_vague';
-    case 'api_error':
-    case 'network_error':
-    case 'api_aborted':
-    case 'error': return 'error';
-    default: return 'incomplete';
-  }
-}
 
 function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
   if (rr.structuredError?.code) return rr.structuredError.code as any;

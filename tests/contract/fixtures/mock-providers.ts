@@ -25,7 +25,8 @@ export type Stage =
   | 'force-salvage'
   | 'max-turns'
   | 'clarification'
-  | 'review-rework';
+  | 'review-rework'
+  | 'slow';
 
 export interface SequenceItem {
   status?: RunStatus;
@@ -218,6 +219,31 @@ function buildReviewRework(opts: MockProviderOptions): RunResult {
   };
 }
 
+function buildSlow(opts: MockProviderOptions & { suppressProgress?: boolean }): RunResult {
+  return {
+    output: opts.output ?? 'mocked slow ok',
+    status: 'ok',
+    usage: usage(opts.cost ?? 0.001),
+    turns: 1,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: false,
+    escalationLog: [attempt('ok', 1, opts.cost ?? 0.001)],
+    durationMs: 0,
+    directoriesListed: [],
+    workerStatus: 'done',
+    terminationReason: {
+      cause: 'finished',
+      turnsUsed: 1,
+      hasFileArtifacts: false,
+      usedShell: false,
+      workerSelfAssessment: 'done',
+      wasPromoted: false,
+    },
+  };
+}
+
 function buildFromSequenceItem(item: SequenceItem): RunResult {
   const cost = 0.001;
   return {
@@ -258,6 +284,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
       case 'clarification': return buildClarificationNeeded(opts as MockProviderOptions & { stage: Stage });
       case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
+      case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
     }
   };
   return {

@@ -29,6 +29,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
+import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '@zhixuan92/multi-model-agent/server';
 import { __setTestProviderOverride } from '../../../packages/server/src/http/test-provider-override.js';
 import { freezeClock } from './deterministic-clock.js';
@@ -65,6 +66,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   freezeClock();
   process.env.MMAGENT_TEST_INTROSPECTION = '1';
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+  __setCoreTestProviderOverride(opts.provider);
   __setTestProviderOverride(opts.provider);
 
   const token = randomUUID();
@@ -119,6 +121,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     token,
     async close(): Promise<void> {
       await server.stop();
+      __setCoreTestProviderOverride(null);
       __setTestProviderOverride(null);
       await unlink(tokenPath).catch(() => undefined);
     },

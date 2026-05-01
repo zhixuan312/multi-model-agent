@@ -2,53 +2,48 @@
   "headline": "delegate: 2/2 tasks complete",
   "results": [
     {
-      "output": "Sub-agent error: Connection error.",
-      "status": "error",
+      "output": "mocked ok",
+      "status": "ok",
       "usage": {
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "totalTokens": 0,
-        "costUSD": null,
-        "savedCostUSD": null
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "totalTokens": 30,
+        "costUSD": 0.001
       },
-      "turns": 0,
+      "turns": 1,
       "filesRead": [],
-      "directoriesListed": [],
       "filesWritten": [],
       "toolCalls": [],
-      "outputIsDiagnostic": true,
+      "outputIsDiagnostic": false,
       "escalationLog": [
         {
-          "provider": "standard",
-          "status": "error",
-          "turns": 0,
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "costUSD": null,
-          "initialPromptLengthChars": 3752,
-          "initialPromptHash": "c879d94cf1cb0fa1da27bbd67a680871d085681e5d67111bd5e2bb7168ce8d85",
-          "reason": "Connection error."
+          "provider": "mock",
+          "status": "ok",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": 0.001,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": ""
         }
       ],
-      "error": "Connection error.",
       "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
+      "workerStatus": "done",
       "terminationReason": {
-        "cause": "error",
-        "turnsUsed": 0,
+        "cause": "finished",
+        "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": null,
+        "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "errorCode": "error",
-      "retryable": false,
-      "workerStatus": "done",
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
-        "summary": "Sub-agent error: Connection error.",
+        "summary": "mocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -72,10 +67,11 @@
         "qualityReviewer": "not_applicable"
       },
       "models": {
-        "implementer": "mock",
+        "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
       },
+      "fileArtifactsMissing": false,
       "commits": [],
       "verification": {
         "status": "skipped",
@@ -88,18 +84,18 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0.001,
           "agentTier": "standard",
           "modelFamily": "other",
           "model": "mock",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
+          "inputTokens": 10,
+          "outputTokens": 20,
           "cachedTokens": 0,
           "reasoningTokens": 0,
-          "turnCount": 0,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -261,7 +257,7 @@
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "totalActualCostUSD": 0,
+    "totalActualCostUSD": 0.002,
     "totalSavedCostUSD": 0
   },
   "structuredReport": {

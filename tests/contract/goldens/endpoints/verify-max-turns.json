@@ -2,45 +2,43 @@
   "headline": "verify: 1/1 tasks complete",
   "results": [
     {
-      "output": "Sub-agent error: Connection error.",
-      "status": "error",
+      "output": "mock max turns",
+      "status": "incomplete",
       "usage": {
-        "inputTokens": 0,
-        "outputTokens": 0,
-        "totalTokens": 0,
-        "costUSD": null,
-        "savedCostUSD": null
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "totalTokens": 30,
+        "costUSD": 0.002
       },
-      "turns": 0,
+      "turns": 99,
       "filesRead": [],
-      "directoriesListed": [],
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": true,
       "escalationLog": [
         {
-          "provider": "complex",
-          "status": "error",
-          "turns": 0,
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "costUSD": null,
-          "initialPromptLengthChars": 3812,
-          "initialPromptHash": "f27fadc79e8d2feb0aa65a4adbbac8467b8cd8638c28e61e45c83c26b263929a",
-          "reason": "Connection error."
+          "provider": "mock",
+          "status": "incomplete",
+          "turns": 99,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": 0.002,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": "",
+          "reason": "status=incomplete"
         }
       ],
-      "error": "Connection error.",
       "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
       "terminationReason": {
-        "cause": "error",
-        "turnsUsed": 0,
+        "cause": "incomplete",
+        "turnsUsed": 99,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": null,
         "wasPromoted": false
       },
-      "errorCode": "error",
+      "errorCode": "incomplete",
       "retryable": false,
       "workerStatus": "done",
       "concerns": [],
@@ -51,18 +49,18 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0.002,
           "agentTier": "complex",
           "modelFamily": "other",
           "model": "mock",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
+          "inputTokens": 10,
+          "outputTokens": 20,
           "cachedTokens": 0,
           "reasoningTokens": 0,
-          "turnCount": 0,
+          "turnCount": 99,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -224,7 +222,7 @@
       },
       "qualityReviewReason": "worker output missing or invalid findings[] JSON block",
       "structuredReport": {
-        "summary": "[Reviewed] Sub-agent error: Connection error.",
+        "summary": "[Reviewed] mock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -232,7 +230,7 @@
         "extraSections": {}
       },
       "implementationReport": {
-        "summary": "Sub-agent error: Connection error.",
+        "summary": "mock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -248,9 +246,9 @@
         "qualityReviewer": "standard"
       },
       "models": {
-        "implementer": "mock",
+        "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": "mock"
+        "qualityReviewer": "mock-model"
       },
       "commits": [],
       "verification": {
@@ -268,7 +266,7 @@
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "totalActualCostUSD": 0,
+    "totalActualCostUSD": 0.002,
     "totalSavedCostUSD": 0
   },
   "structuredReport": {

@@ -52,6 +52,7 @@ import type { RunTasksProgressCallback } from './index.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
 import { composeVerboseLine, toVerboseFields } from '../diagnostics/verbose-line.js';
+import { computeTaskCompletionSummary, formatTaskDoneLine } from './task-completion-summary.js';
 import type {
   FallbackEventParams,
   FallbackUnavailableEventParams,
@@ -341,10 +342,15 @@ export async function executeReviewedLifecycle(
     reviewPolicy === 'quality_only' ? 3 :
     5;
   const verbose = diagnostics?.verbose ?? false;
-  const verboseStreamRaw = verbose
-    ? (diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); }))
-    : undefined;
+  const verboseStreamRaw = diagnostics?.verboseStream ?? ((line: string) => { process.stderr.write(line + '\n'); });
   const verboseBatchIdEarly = heartbeatWiring?.batchId;
+  const DEFAULT_MODE_EVENTS = new Set([
+    'stage_change',
+    'task_done_summary',
+    'fallback', 'fallback_unavailable',
+    'escalation', 'escalation_unavailable',
+    'stall_abort', 'cost_check',
+  ]);
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
   type EventField = string | number | boolean | null | undefined;
   const emitTaskEvent = (event: string, fields: Record<string, EventField>): void => {
@@ -355,7 +361,7 @@ export async function executeReviewedLifecycle(
       }
       bus.emit({ event, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
     }
-    if (verboseStreamRaw) {
+    if (verboseStreamRaw && (verbose || DEFAULT_MODE_EVENTS.has(event))) {
       verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));
     }
   };
@@ -376,16 +382,24 @@ export async function executeReviewedLifecycle(
   // there is no external consumer. wrappedOnProgress (defined below) is
   // ALWAYS defined and feeds the stall watchdog regardless of consumers.
   const synthOnProgress: RunTasksProgressCallback = onProgress ?? (() => {});
+  let prevCostBucket: number | null | undefined = undefined;
+  let prevCounters = { tools: 0, read: 0, wrote: 0 };
+  let lastNoOpEmitMs = 0;
   const heartbeat = needHeartbeat
     ? new HeartbeatTimer(
         (event) => {
-          if (event.kind === 'heartbeat') {
-            // Emit on every heartbeat tick so the operator can confirm the
-            // timer is actually firing. Stage transitions are authoritative
-            // only via explicit emit calls at lifecycle points; the
-            // heartbeat tick no longer infers transitions (P5).
+          if (event.kind !== 'heartbeat') { synthOnProgress(taskIndex, event); return; }
+          const tools = event.progress.toolCalls;
+          const read = event.progress.filesRead;
+          const wrote = event.progress.filesWritten;
+          const costBucket = Number.isFinite(event.costUSD) ? Math.round(event.costUSD! * 10000) : null;
+          const changed = tools !== prevCounters.tools || read !== prevCounters.read || wrote !== prevCounters.wrote || !Object.is(costBucket, prevCostBucket);
+          const since = Date.now() - lastNoOpEmitMs;
+          if (changed || since >= 60_000) {
+            prevCounters = { tools, read, wrote };
+            prevCostBucket = costBucket;
+            lastNoOpEmitMs = Date.now();
             const sinceLastMs = Date.now() - prevEventAtMs;
-            const tickInfo = heartbeat?.getHeartbeatTickInfo();
             emitTaskEvent('heartbeat', {
               elapsed: event.elapsed,
               stage: event.stage,
@@ -397,7 +411,7 @@ export async function executeReviewedLifecycle(
               text: textEmissionChars,
               cost: event.costUSD,
               idle_ms: sinceLastMs,
-              stage_idle_ms: tickInfo?.stageIdleMs ?? sinceLastMs,
+              stage_idle_ms: event.stageIdleMs,
             });
           }
           synthOnProgress(taskIndex, event);
@@ -435,7 +449,6 @@ export async function executeReviewedLifecycle(
   const implModel = resolved.provider.config.model;
 
   const progressCounters = { filesRead: 0, filesWritten: 0, toolCalls: 0 };
-  const verboseStream = verboseStreamRaw;
   let prevEventAtMs = Date.now();
   // Wrap whenever we have ANY consumer for InternalRunnerEvent (heartbeat,
   // verbose stream, or verbose logger). Previously this only wrapped when
@@ -1643,10 +1656,30 @@ export async function executeReviewedLifecycle(
           costUSD: r.usage.costUSD,
           taskMaxIdleMs: r.taskMaxIdleMs ?? null,
           stallTriggered: r.stallTriggered ?? false,
-          // JSON-stringify so verbose-stream primitives check passes
-          stages: JSON.stringify(r.stageStats ?? emptyStats()),
+          stages_json: diagnostics?.logger?.expectedPath() ?? null,
         });
       } catch { /* silent — never break the user task */ }
+
+      try {
+        const summary = computeTaskCompletionSummary({
+          runResult: __finalRunResult,
+          taskIndexZero: taskIndex,
+          totalTasks: 1,
+          batchId: heartbeatWiring?.batchId ?? '',
+        });
+        emitTaskEvent('task_done_summary', {
+          message: formatTaskDoneLine(summary),
+          status: summary.terminalStatus,
+          duration_ms: summary.totalDurationMs,
+          cost_usd: summary.totalCostUSD,
+          input_tokens: summary.totalInputTokens,
+          output_tokens: summary.totalOutputTokens,
+          turns: summary.turns,
+          files_written: summary.filesWrittenCount,
+          spec_verdict: summary.specReviewVerdict,
+          quality_verdict: summary.qualityReviewVerdict,
+        });
+      } catch { /* silent */ }
     }
     transitionStage(currentStage, 'terminal', { stage: 'terminal', stageIndex: 8 }, null);
     heartbeat?.stop();
