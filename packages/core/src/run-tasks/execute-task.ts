@@ -11,7 +11,7 @@ export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
     status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
     turns: 0,
     filesRead: [],
     filesWritten: [],

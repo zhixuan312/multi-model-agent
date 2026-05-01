@@ -786,7 +786,7 @@ export async function executeReviewedLifecycle(
     return signalize({
       output: '',
       status: 'error',
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
       turns: 0,
       filesRead: [],
       filesWritten: [],
@@ -1014,7 +1014,7 @@ export async function executeReviewedLifecycle(
         return withVerification({
           output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
           status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
           turns: 0,
           filesRead: [],
           filesWritten: [],

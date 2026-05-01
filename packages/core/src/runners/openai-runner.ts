@@ -761,6 +761,8 @@ export async function runOpenAI(
             totalTokens: usage.totalTokens,
             costUSD,
             costDeltaVsParentUSD,
+            cachedTokens: null,
+            reasoningTokens: null,
           },
           turns: usage.requests,
           filesRead,
@@ -801,6 +803,8 @@ export async function runOpenAI(
             totalTokens: usage.totalTokens,
             costUSD,
             costDeltaVsParentUSD,
+            cachedTokens: null,
+            reasoningTokens: null,
           },
           turns: usage.requests,
           filesRead,
@@ -1010,7 +1014,7 @@ function partialUsage(
   providerConfig: ProviderConfig,
 ): RunResult['usage'] {
   if (!result) {
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null };
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null };
   }
   const usage = result.state.usage;
   return {
@@ -1018,5 +1022,8 @@ function partialUsage(
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+    costDeltaVsParentUSD: null,
+    cachedTokens: null,
+    reasoningTokens: null,
   };
 }
