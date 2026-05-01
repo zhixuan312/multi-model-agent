@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.5] - 2026-05-01
+
+### Fixed
+- **Read-only audits silently failed quality review** (core, critical bug fix). The 5 read-only routes (audit / review / verify / debug / investigate) advertised a `findings[]` JSON contract via `intake/resolve.ts:OUTPUT_CONTRACT_CLAUSES`, but four of the five executors (`executors/audit.ts`, `executors/review.ts`, `executors/verify.ts`, `executors/debug.ts`) built worker prompts inline and bypassed both the intake pipeline and the manual clause-inlining that `compileInvestigate` did. The worker was never told to emit JSON; the reviewer's `extractWorkerFindings` then parsed nothing and returned `qualityReviewVerdict: 'error'` — every audit/review/verify/debug call routed through gpt-5.5/codex degraded to verdict=error with `findings_reviewed=0`, regardless of how good the worker's narrative was. Real-world impact: $0.30+ audits returning "error" with rich markdown findings sitting unparsed in `result.output`.
+
+### Changed
+- **Worker emits free-form narrative; reviewer extracts and scores findings in one pass** (core, breaking for read-only-route consumers — but the path was already broken). New architecture: implementer produces a numbered narrative report tagged with `Severity: critical | high | medium | low`. The reviewer reads the narrative, extracts every distinct issue, normalizes severity to 4-tier, scores `reviewerConfidence` (0–100), and emits one fenced JSON `AnnotatedFinding[]` block. The reviewer is now the sole producer of structured findings — workers never serialize. New files: `packages/core/src/review/parse-reviewer-findings.ts` (permissive fence regex, single-pass extract, `evidenceGrounded` substring annotation, never drops findings) and `packages/core/src/review/fallback-extraction.ts` (deterministic regex fallback for #{2,6}-numbered headings, `[N]` brackets, `Severity: X` lines, "no findings" detection).
+- **Always succeeds**: `runAnnotationReview` now retries on parse failure (one round, with stricter "JSON ONLY" reminder). After two parse failures, deterministic regex fallback synthesizes `AnnotatedFinding[]` from the worker's numbered sections so V3 `findingsBySeverity` always has counts to roll up — `reviewerConfidence: null` flags fallback findings. Verdict stays `'annotated'`. Transport failures (network/timeout/api_error) on retry propagate as error so ops outages remain visible.
+- **`AnnotatedFinding` schema collapse** (core, breaking — read-only routes). `WorkerFinding` deleted. Single `AnnotatedFinding` shape: `{id, severity, claim, evidence, suggestion?, reviewerConfidence: number | null, evidenceGrounded: boolean}`. **`reviewerSeverity` field removed** — `severity` is the reviewer's authoritative final value (workers' severity is a hint, not a separate field). `id` is reviewer-assigned sequential `F1`, `F2`, ... — no cross-call id-permutation.
+
+### Added
+- **`critical` severity tier** (core, V3 telemetry, additive). `SeverityBin` extended from `{high, medium, low, style}` → `{critical, high, medium, low, style}`. `FindingsBySeveritySchema` adds `critical: z.number().int().min(0).max(200)`. **Per-bin cap raised from 50 → 200** so single-pass audits with many findings of one severity no longer silently clamp at 50. Event-builder accumulator clamp follows.
+- **`evidenceGrounded` soft trust signal** (core). Each finding gets `evidenceGrounded: boolean` — true when reviewer's quote (whitespace-normalized) appears as a substring of the worker's output. Never drops findings; main agent / dashboard renders ungrounded ones as "lower trust" but always shows them. Anti-hallucination guard without silent data loss.
+- **Annotated findings funnel into V3 `concerns[]`** (lifecycle). After the per-event `read_only_review.quality` emit, `finalImplResult.concerns` is mutated with one entry per annotated finding (source: `quality_review`, severity: 4-tier). V3 `findingsBySeverity` rolls them up at task completion, so the dashboard sees real per-tier counts for read-only routes.
+
+### Removed
+- **Worker `findings[]` JSON contract** for the 5 read-only routes (`intake/resolve.ts:OUTPUT_CONTRACT_CLAUSES`). The clause is no longer registered for `audit_document`, `review_code`, `verify_work`, `debug_task`, or `investigate_codebase`. `execute_plan` still has its narrative contract.
+- **`reviewerSeverity` field** on `AnnotatedFinding`. Severity is reviewer-authoritative; no separate worker-severity field.
+- **`extractWorkerFindings` and `parseAndMergeAnnotations`** helpers (`review/quality-reviewer.ts`). Replaced by `parseReviewerFindings` (no id-permutation merge required since reviewer assigns ids fresh).
+
+### BREAKING
+- **`AnnotatedFinding` shape changed**: `reviewerSeverity` removed, `evidenceGrounded` added (required), `reviewerConfidence` becomes `number | null`. Consumers reading `result.annotatedFindings[*]` from `/audit`, `/review`, `/verify`, `/debug`, `/investigate` must update.
+- **V3 `findingsBySeverity` adds `critical` field** with per-bin cap raised to 200. Telemetry consumers that hardcoded the 4-key shape `{high, medium, low, style}` need to add `critical`. Per-bin cap of 50 was raised to 200; consumers asserting "≤ 50" will need to relax.
+- **Worker output for read-only routes is now narrative-only.** Any external tooling that grep'd for `\`\`\`json findings[]` blocks in worker output will find nothing. Findings live in `result.annotatedFindings`, sourced from the reviewer.
+
 ## [3.10.4] - 2026-05-01
 
 ### Fixed
@@ -1039,7 +1064,13 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.9.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...HEAD
+[3.10.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.4...v3.10.5
+[3.10.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.3...v3.10.4
+[3.10.3]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.2...v3.10.3
+[3.10.2]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.1...v3.10.2
+[3.10.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.0...v3.10.1
+[3.10.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.9.1...v3.10.0
 [3.9.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.9.0...v3.9.1
 [3.9.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.1...v3.9.0
 [3.8.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.8.0...v3.8.1
