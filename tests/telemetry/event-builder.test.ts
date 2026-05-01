@@ -41,4 +41,19 @@ describe('event-builder tier vocabulary', () => {
     const stage = event.stages.find(s => s.name === 'implementing')!;
     expect(stage.agentTier).toBe('standard');
   });
+
+  it('findingsBySeverity has only critical/high/medium/low (no style bucket)', () => {
+    const rr = makeFixtureRunResult({
+      concerns: [{ source: 'quality_review', severity: 'medium', message: 'x' }],
+    });
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      parentModel: null,
+    });
+    const stage = event.stages.find(s => s.name === 'quality_review')!;
+    expect(Object.keys(stage.findingsBySeverity).sort()).toEqual(['critical', 'high', 'low', 'medium']);
+  });
 });
