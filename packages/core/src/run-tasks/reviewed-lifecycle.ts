@@ -624,6 +624,17 @@ export async function executeReviewedLifecycle(
     family: modelFamily(resolvedModel),
     model: resolvedModel,
   };
+  // Build agent info for a specific reviewer tier. Used so review-stage
+  // entries record the ACTUAL reviewer's model, not the implementer's
+  // — V3 R3 (review.model != implementerModel) requires this to be
+  // the cross-model invariant we claim. Pre-3.10.4 every endReviewStage
+  // call hardcoded implementerAgentInfo, so R3 always fired by
+  // construction regardless of config.
+  const reviewerAgentInfoFor = (tier: AgentType): { tier: AgentType; family: ReturnType<typeof modelFamily>; model: string } => {
+    const provider = providerFor(tier);
+    const model = provider?.config.model ?? config.agents[tier]?.model ?? resolvedModel;
+    return { tier, family: modelFamily(model), model };
+  };
   const runningCostUSD = () => taskCostUSD();
   const policyEscalated: { spec: boolean; quality: boolean; diff: boolean } = { spec: false, quality: false, diff: false };
   const emitFallback = (p: FallbackEventParams) => {
@@ -1258,7 +1269,7 @@ export async function executeReviewedLifecycle(
           : 'skipped',
         round: 1,
       });
-      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
+      endReviewStage(stats, 'diff_review', diffReviewT0_commit, diffReviewC0_commit, reviewerAgentInfoFor((diffCall.usedTier ?? diffReviewerTier) as AgentType), runningCostUSD(), snapshotIdle(stageIdle),
         // Diff review uses 'approve' | 'concerns' | 'reject' | 'transport_failure' (DiffReviewVerdict),
         // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
         'kind' in verdict
@@ -1521,8 +1532,22 @@ export async function executeReviewedLifecycle(
       ? 'skipped' as const
       : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
+    // R3 invariant: review-stage entries must record the actual REVIEWER's
+    // model, not the implementer's. The last-used reviewer tier is the one
+    // that produced the final verdict (after any escalation during rework).
+    // Fall back to the implementer's tier only when no reviewer ever ran
+    // (skipped path), which is fine because the schema R3 then doesn't apply.
+    const lastSpecReviewerEntry = specReviewerHistory[specReviewerHistory.length - 1];
+    const lastQualityReviewerEntry = qualityReviewerHistory[qualityReviewerHistory.length - 1];
+    const specReviewAgent = lastSpecReviewerEntry === undefined || lastSpecReviewerEntry === 'skipped'
+      ? implementerAgentInfo
+      : reviewerAgentInfoFor(lastSpecReviewerEntry);
+    const qualityReviewAgent = lastQualityReviewerEntry === undefined || lastQualityReviewerEntry === 'skipped'
+      ? implementerAgentInfo
+      : reviewerAgentInfoFor(lastQualityReviewerEntry);
+
     if (reviewPolicy !== 'quality_only') {
-    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
+    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, specReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
       specStatus === 'approved' ? 'approved'
         : specStatus === 'changes_required' ? 'changes_required'
         : specStatus === 'skipped' ? 'skipped'
@@ -1533,7 +1558,7 @@ export async function executeReviewedLifecycle(
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
-    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle),
+    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, qualityReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
       qualityResult.status === 'approved' ? 'approved'
         : qualityResult.status === 'changes_required' ? 'changes_required'
         : qualityResult.status === 'annotated' ? 'annotated'
