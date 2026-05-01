@@ -13,7 +13,7 @@ import type {
   VerifyOutcome,
   VerifySkipReason,
 } from '../types.js';
-import { computeCostUSD, computeSavedCostUSD } from '../types.js';
+import { computeCostUSD, computeCostDeltaVsParentUSD } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
 import { createProvider } from '../provider.js';
 import { delegateWithEscalation } from '../delegate-with-escalation.js';
@@ -540,13 +540,13 @@ export async function executeReviewedLifecycle(
             event.cumulativeOutputTokens,
             resolved.provider.config,
           );
-          const savedCostUSD = computeSavedCostUSD(
+          const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
             costUSD,
             event.cumulativeInputTokens,
             event.cumulativeOutputTokens,
             task.parentModel,
           );
-          heartbeat?.updateCost(costUSD, savedCostUSD);
+          heartbeat?.updateCost(costUSD, costDeltaVsParentUSD);
           const nowTurn = Date.now();
           const turnDurMs = nowTurn - prevEventAtMs;
           prevEventAtMs = nowTurn;

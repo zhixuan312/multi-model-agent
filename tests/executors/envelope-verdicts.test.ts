@@ -5,7 +5,7 @@ const baseEnvelope = {
   headline: 'audit: 1/1 tasks complete',
   results: [],
   batchTimings: { wallClockMs: 0, sumOfTaskMs: 0, estimatedParallelSavingsMs: 0 },
-  costSummary: { totalActualCostUSD: 0, totalSavedCostUSD: 0 },
+  costSummary: { totalActualCostUSD: 0, costDeltaVsParentUSD: 0 },
   structuredReport: { kind: 'not_applicable', reason: 'x' },
   error: { kind: 'not_applicable', reason: 'x' },
   proposedInterpretation: { kind: 'not_applicable', reason: 'x' },

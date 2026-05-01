@@ -56,7 +56,7 @@ export interface HeartbeatTickInfo {
     toolCalls: number;
   };
   costUSD: number | null;
-  savedCostUSD: number | null;
+  costDeltaVsParentUSD: number | null;
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number;
   /**
@@ -98,7 +98,7 @@ export interface TransitionFields {
   attemptCap?: number;
   provider?: string;
   costUSD?: number | null;
-  savedCostUSD?: number | null;
+  costDeltaVsParentUSD?: number | null;
 }
 
 export class HeartbeatTimer {
@@ -131,7 +131,7 @@ export class HeartbeatTimer {
 
   // Cost
   private costUSD: number | null = null;
-  private savedCostUSD: number | null = null;
+  private costDeltaVsParentUSD: number | null = null;
 
   // Most recent phase-change, surfaced via getHeartbeatTickInfo so callers can
   // emit task_phase_change events. Cleared after each getHeartbeatTickInfo read.
@@ -182,7 +182,7 @@ export class HeartbeatTimer {
         toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
-      savedCostUSD: this.savedCostUSD,
+      costDeltaVsParentUSD: this.costDeltaVsParentUSD,
       stageIdleMs: this.stageLastEventMs > 0 ? now - this.stageLastEventMs : 0,
       headline: this.composeHeadline(formatElapsed(elapsedMs)),
       snapshot: this.getHeadlineSnapshot(),
@@ -215,7 +215,7 @@ export class HeartbeatTimer {
     this.filesWritten = 0;
     this.toolCalls = 0;
     this.costUSD = null;
-    this.savedCostUSD = null;
+    this.costDeltaVsParentUSD = null;
     this.timer = setInterval(() => this.emit(false), this.intervalMs);
   }
 
@@ -241,8 +241,8 @@ export class HeartbeatTimer {
     if (fields.costUSD !== undefined) {
       this.costUSD = fields.costUSD;
     }
-    if (fields.savedCostUSD !== undefined) {
-      this.savedCostUSD = fields.savedCostUSD;
+    if (fields.costDeltaVsParentUSD !== undefined) {
+      this.costDeltaVsParentUSD = fields.costDeltaVsParentUSD;
     }
 
     // Apply stageCount
@@ -340,10 +340,10 @@ export class HeartbeatTimer {
     this.toolCalls = toolCalls;
   }
 
-  updateCost(costUSD: number | null, savedCostUSD: number | null): void {
+  updateCost(costUSD: number | null, costDeltaVsParentUSD: number | null): void {
     if (!this.started || this.stopped) return;
     this.costUSD = costUSD;
-    this.savedCostUSD = savedCostUSD;
+    this.costDeltaVsParentUSD = costDeltaVsParentUSD;
   }
 
   recordFileRead(): void {
@@ -356,10 +356,10 @@ export class HeartbeatTimer {
     this.toolCalls++;
   }
 
-  applyCost(cost: { costUSD: number; savedCostUSD: number }): void {
+  applyCost(cost: { costUSD: number; costDeltaVsParentUSD: number }): void {
     if (!this.started || this.stopped) return;
     this.costUSD = cost.costUSD;
-    this.savedCostUSD = cost.savedCostUSD;
+    this.costDeltaVsParentUSD = cost.costDeltaVsParentUSD;
   }
 
   markEvent(kind: 'llm' | 'tool' | 'text'): void {
@@ -398,7 +398,7 @@ export class HeartbeatTimer {
         toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
-      savedCostUSD: this.savedCostUSD,
+      costDeltaVsParentUSD: this.costDeltaVsParentUSD,
       final,
       headline: this.composeHeadline(elapsed),
       stageIdleMs: this.stageLastEventMs > 0 ? Date.now() - this.stageLastEventMs : 0,
@@ -430,12 +430,14 @@ export class HeartbeatTimer {
   }
 
   private composeCostClause(): string | null {
-    if (this.parentModel && this.savedCostUSD !== null && this.costUSD !== null) {
+    if (this.parentModel && this.costDeltaVsParentUSD !== null && this.costUSD !== null && this.costDeltaVsParentUSD < 0) {
+      const saved = -this.costDeltaVsParentUSD;
       if (this.costUSD > 0) {
-        const roi = (this.costUSD + this.savedCostUSD) / this.costUSD;
-        return `$${this.savedCostUSD.toFixed(2)} saved (${roi.toFixed(1)}x)`;
+        const parentCost = this.costUSD - this.costDeltaVsParentUSD;
+        const roi = parentCost / this.costUSD;
+        return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)`;
       }
-      return `$${this.savedCostUSD.toFixed(2)} saved`;
+      return `$${saved.toFixed(2)} saved`;
     }
     if (this.costUSD !== null) {
       return `$${this.costUSD.toFixed(2)}`;
@@ -477,11 +479,13 @@ export class HeartbeatTimer {
   }
 
   private composeCostClauseSafe(): string | null {
-    if (this.savedCostUSD === null || !Number.isFinite(this.savedCostUSD) || this.savedCostUSD <= 0) return null;
+    if (this.costDeltaVsParentUSD === null || !Number.isFinite(this.costDeltaVsParentUSD) || this.costDeltaVsParentUSD >= 0) return null;
+    const saved = -this.costDeltaVsParentUSD;
     if (this.costUSD !== null && Number.isFinite(this.costUSD) && this.costUSD > 0) {
-      const roi = (this.costUSD + this.savedCostUSD) / this.costUSD;
-      return `$${this.savedCostUSD.toFixed(2)} saved (${roi.toFixed(1)}x)`;
+      const parentCost = this.costUSD - this.costDeltaVsParentUSD;
+      const roi = parentCost / this.costUSD;
+      return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)`;
     }
-    return `$${this.savedCostUSD.toFixed(2)} saved`;
+    return `$${saved.toFixed(2)} saved`;
   }
 }

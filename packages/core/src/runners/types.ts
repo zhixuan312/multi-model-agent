@@ -25,8 +25,8 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   costUSD: number | null
-  /** Estimated cost savings versus the declared parent model, if known. */
-  savedCostUSD?: number | null
+  /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
+  costDeltaVsParentUSD?: number | null
 }
 
 export interface TerminationReason {
@@ -146,7 +146,7 @@ export type ProgressEvent = {
     toolCalls: number
   }
   costUSD: number | null
-  savedCostUSD: number | null
+  costDeltaVsParentUSD: number | null
   final: boolean
   headline: string
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */

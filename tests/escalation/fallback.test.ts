@@ -24,7 +24,7 @@ function okResult(name: string): RunResult {
     output: `from ${name}`,
     outputIsDiagnostic: false,
     turns: 1,
-    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0.01, savedCostUSD: 0 },
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0.01, costDeltaVsParentUSD: 0 },
     filesRead: [],
     filesWritten: [],
     toolCalls: [],

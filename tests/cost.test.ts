@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeCostUSD, computeSavedCostUSD } from '../packages/core/src/types.js';
+import { computeCostUSD, computeCostDeltaVsParentUSD } from '../packages/core/src/types.js';
 import type { ProviderConfig } from '../packages/core/src/types.js';
 
 describe('computeCostUSD', () => {
@@ -99,32 +99,34 @@ describe('computeCostUSD', () => {
   });
 });
 
-describe('computeSavedCostUSD', () => {
+describe('computeCostDeltaVsParentUSD', () => {
   it('returns null when the parent model is undefined', () => {
-    expect(computeSavedCostUSD(1, 1, 1, undefined)).toBeNull();
+    expect(computeCostDeltaVsParentUSD(1, 1, 1, undefined)).toBeNull();
   });
 
   it('returns null when the actual cost is unavailable', () => {
-    expect(computeSavedCostUSD(null, 1, 1, 'gpt-5-codex')).toBeNull();
+    expect(computeCostDeltaVsParentUSD(null, 1, 1, 'gpt-5-codex')).toBeNull();
   });
 
   it('returns null when the parent profile is unknown', () => {
-    expect(computeSavedCostUSD(1, 1_000, 1_000, 'totally-unknown-model-xyz')).toBeNull();
+    expect(computeCostDeltaVsParentUSD(1, 1_000, 1_000, 'totally-unknown-model-xyz')).toBeNull();
   });
 
-  it('computes savings against a cheaper parent profile', () => {
+  it('returns negative delta when worker is cheaper than parent (savings)', () => {
+    // actualCost = $4, parentCost = ~$17.5 → delta = 4 - 17.5 = -13.5
     const actualCostUSD = 4;
     const inputTokens = 1_000_000;
     const outputTokens = 500_000;
 
-    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'claude-opus-4-6')).toBeCloseTo(13.5, 6);
+    expect(computeCostDeltaVsParentUSD(actualCostUSD, inputTokens, outputTokens, 'claude-opus-4-6')).toBeCloseTo(-13.5, 5);
   });
 
-  it('returns a negative value when the actual cost exceeds the parent profile cost', () => {
+  it('returns positive delta when worker is more expensive than parent', () => {
+    // actualCost = $20, parentCost = ~$2.5 → delta = 20 - 2.5 = 17.5
     const actualCostUSD = 20;
     const inputTokens = 1_000_000;
     const outputTokens = 0;
 
-    expect(computeSavedCostUSD(actualCostUSD, inputTokens, outputTokens, 'gpt-5-codex')).toBeCloseTo(-17.5, 6);
+    expect(computeCostDeltaVsParentUSD(actualCostUSD, inputTokens, outputTokens, 'gpt-5-codex')).toBeCloseTo(17.5, 5);
   });
 });

@@ -18,7 +18,7 @@ export interface SharedResultUsage {
   outputTokens: number;
   totalTokens: number;
   costUSD: number | null;
-  savedCostUSD: number | null;
+  costDeltaVsParentUSD: number | null;
 }
 
 export interface ReviewedRunResultFields {
@@ -35,7 +35,7 @@ function usageShape(u: SharedResultUsage): TokenUsage {
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD: u.costUSD,
-    savedCostUSD: u.savedCostUSD,
+    costDeltaVsParentUSD: u.costDeltaVsParentUSD,
   };
 }
 

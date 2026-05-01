@@ -3,7 +3,7 @@ import { createHash } from 'node:crypto';
 import {
   withTimeout,
   computeCostUSD,
-  computeSavedCostUSD,
+  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
@@ -189,7 +189,7 @@ export async function runClaude(
    */
   function buildCostExceededResult(): RunResult {
     const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-    const savedCostUSD = computeSavedCostUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -198,7 +198,7 @@ export async function runClaude(
         outputTokens,
         totalTokens: inputTokens + outputTokens,
         costUSD: finalCostUSD,
-        savedCostUSD,
+        costDeltaVsParentUSD,
       },
       turns,
       filesRead: tracker.getReads(),
@@ -727,7 +727,7 @@ export async function runClaude(
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-      const savedCostUSD = computeSavedCostUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -736,7 +736,7 @@ export async function runClaude(
           outputTokens,
           totalTokens: inputTokens + outputTokens,
           costUSD: finalCostUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
         },
         turns,
         filesRead: tracker.getReads(),
@@ -784,7 +784,7 @@ export async function runClaude(
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
       const finalCostUSD = effectiveClaudeCost(providerConfig, inputTokens, outputTokens, costUSD);
-      const savedCostUSD = computeSavedCostUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, inputTokens, outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
@@ -797,7 +797,7 @@ export async function runClaude(
           outputTokens,
           totalTokens: inputTokens + outputTokens,
           costUSD: finalCostUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
         },
         turns,
         outputIsDiagnostic: !hasSalvage,
@@ -846,7 +846,7 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUSD,
-    savedCostUSD: computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
   };
 }
 

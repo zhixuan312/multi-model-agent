@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import {
   withTimeout,
   computeCostUSD,
-  computeSavedCostUSD,
+  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
@@ -405,7 +405,7 @@ export async function runOpenAI(
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
-          usage: { ...partial, savedCostUSD: 0 },
+          usage: { ...partial, costDeltaVsParentUSD: 0 },
           turns: turnsAtFailure,
           filesRead: tracker.getReads(),
           directoriesListed: tracker.getDirectoriesListed(),
@@ -698,7 +698,7 @@ export async function runOpenAI(
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
         const partial = partialUsage(currentResult, runner.providerConfig);
-        const savedCostUSD = computeSavedCostUSD(
+        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
           partial.costUSD,
           partial.inputTokens,
           partial.outputTokens,
@@ -714,7 +714,7 @@ export async function runOpenAI(
           status: 'incomplete',
           errorCode: 'degenerate_exhausted',
           error: `agent exhausted time/cost budget after ${turnsAtFailure} turns`,
-          usage: { ...partial, savedCostUSD },
+          usage: { ...partial, costDeltaVsParentUSD },
           turns: turnsAtFailure,
           filesRead,
           directoriesListed: tracker.getDirectoriesListed(),
@@ -740,7 +740,7 @@ export async function runOpenAI(
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
         const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
         const hasSalvage = !scratchpad.isEmpty();
         return {
           output: hasSalvage
@@ -760,7 +760,7 @@ export async function runOpenAI(
             outputTokens: usage.outputTokens,
             totalTokens: usage.totalTokens,
             costUSD,
-            savedCostUSD,
+            costDeltaVsParentUSD,
           },
           turns: usage.requests,
           filesRead,
@@ -788,7 +788,7 @@ export async function runOpenAI(
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
         const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
         const hasSalvage = !scratchpad.isEmpty();
         return {
           output: hasSalvage
@@ -800,7 +800,7 @@ export async function runOpenAI(
             outputTokens: usage.outputTokens,
             totalTokens: usage.totalTokens,
             costUSD,
-            savedCostUSD,
+            costDeltaVsParentUSD,
           },
           turns: usage.requests,
           filesRead,
@@ -823,7 +823,7 @@ export async function runOpenAI(
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const partial = partialUsage(currentResult, runner.providerConfig);
-      const savedCostUSD = computeSavedCostUSD(
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
         partial.costUSD,
         partial.inputTokens,
         partial.outputTokens,
@@ -832,7 +832,7 @@ export async function runOpenAI(
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
-        usage: { ...partial, savedCostUSD },
+        usage: { ...partial, costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -856,7 +856,7 @@ export async function runOpenAI(
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
       const partial = partialUsage(currentResult, runner.providerConfig);
-      const savedCostUSD = computeSavedCostUSD(
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
         partial.costUSD,
         partial.inputTokens,
         partial.outputTokens,
@@ -873,7 +873,7 @@ export async function runOpenAI(
         toolCalls: tracker.getToolCalls(),
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
-        usage: { ...partial, savedCostUSD },
+        usage: { ...partial, costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -895,7 +895,7 @@ function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConf
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
-    savedCostUSD: computeSavedCostUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
   };
 }
 

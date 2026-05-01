@@ -163,7 +163,7 @@ export const TaskCompletedEventSchema = z.object({
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
   totalCostUSD: z.number().min(0).max(800),
-  totalSavedCostUSD: z.number().min(-800).max(800).nullable(),
+  costDeltaVsParentUSD: z.number().min(-800).max(800).nullable(),
 
   // Lifecycle counts
   concernCount: z.number().int().min(0).max(150),
@@ -312,7 +312,7 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   // R13: totalDurationMs in [0, 86_400_000]
   // (enforced by Zod schema bounds)
 
-  // R14: totalCostUSD in [0, 800], totalSavedCostUSD in [-800, 800] or null
+  // R14: totalCostUSD in [0, 800], costDeltaVsParentUSD in [-800, 800] or null
   // (enforced by Zod schema bounds)
 
   // R15: costUSD per stage in [0, 100]

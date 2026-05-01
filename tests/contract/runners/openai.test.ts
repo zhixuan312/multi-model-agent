@@ -82,7 +82,7 @@ describe('contract: runOpenAI RunResult shape', () => {
         outputTokens: 22,
         totalTokens: 33,
         costUSD: 0.000055,
-        savedCostUSD: null,
+        costDeltaVsParentUSD: null,
       },
       turns: 1,
       filesRead: [],

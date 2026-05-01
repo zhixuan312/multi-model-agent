@@ -6,7 +6,7 @@ import { getCodexAuth } from '../auth/codex-oauth.js';
 import {
   withTimeout,
   computeCostUSD,
-  computeSavedCostUSD,
+  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
@@ -312,7 +312,7 @@ export async function runCodex(
    */
   function buildCostExceededResult(): RunResult {
     const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-    const savedCostUSD = computeSavedCostUSD(costUSD ?? 0, inputTokens, outputTokens, parentModel);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD ?? 0, inputTokens, outputTokens, parentModel);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -321,7 +321,7 @@ export async function runCodex(
         outputTokens,
         totalTokens: inputTokens + outputTokens,
         costUSD: costUSD ?? 0,
-        savedCostUSD,
+        costDeltaVsParentUSD,
       },
       turns,
       filesRead: tracker.getReads(),
@@ -869,7 +869,7 @@ export async function runCodex(
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
@@ -878,7 +878,7 @@ export async function runCodex(
           outputTokens,
           totalTokens: inputTokens + outputTokens,
           costUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
         },
         turns,
         filesRead: tracker.getReads(),
@@ -903,7 +903,7 @@ export async function runCodex(
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
       const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel);
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
@@ -919,7 +919,7 @@ export async function runCodex(
           outputTokens,
           totalTokens: inputTokens + outputTokens,
           costUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
         },
         turns,
         outputIsDiagnostic: !hasSalvage,
@@ -957,7 +957,7 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUSD,
-    savedCostUSD: computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
   };
 }
 

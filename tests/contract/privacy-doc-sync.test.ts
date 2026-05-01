@@ -9,7 +9,7 @@ describe('PRIVACY.md ↔ schema sync', () => {
     const expected = [
       'installId', 'schemaVersion', 'mmagentVersion', 'os', 'nodeMajor',
       'route', 'client', 'terminalStatus', 'implementerModel', 'eventId',
-      'totalDurationMs', 'totalCostUSD', 'totalSavedCostUSD',
+      'totalDurationMs', 'totalCostUSD', 'costDeltaVsParentUSD',
       'inputTokens', 'outputTokens', 'cachedTokens', 'reasoningTokens',
       'concernCount', 'escalationCount', 'fallbackCount',
       'stallCount', 'taskMaxIdleMs',

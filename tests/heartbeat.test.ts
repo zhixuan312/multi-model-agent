@@ -33,7 +33,7 @@ describe('HeartbeatTimer', () => {
         expect(first.attemptCap).toBeUndefined();
         expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0 });
         expect(first.costUSD).toBeNull();
-        expect(first.savedCostUSD).toBeNull();
+        expect(first.costDeltaVsParentUSD).toBeNull();
         expect(first.final).toBe(false);
         expect(first.headline).toContain('[1/3] Implementing');
         resolve();
@@ -171,7 +171,7 @@ describe('HeartbeatTimer', () => {
     });
     timer.start(1);
 
-    timer.updateCost(0.05, 0.12);
+    timer.updateCost(0.05, -0.12);
     expect(events).toHaveLength(0);
     timer.stop();
   });
@@ -232,7 +232,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.start(3);
-    timer.updateCost(0.05, 0.12);
+    timer.updateCost(0.05, -0.12);
     timer.updateProgress(4, 2, 12);
 
     timer.stop();
@@ -281,7 +281,7 @@ describe('HeartbeatTimer', () => {
     timer.start(5);
     timer.transition({ stage: 'spec_review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
     timer.updateProgress(2, 1, 7);
-    timer.updateCost(0.03, 0.12);
+    timer.updateCost(0.03, -0.12);
 
     const tick = timer.getHeartbeatTickInfo();
     expect(tick.headline).toContain('[3/5] Spec review');
@@ -317,7 +317,7 @@ describe('HeartbeatTimer', () => {
       intervalMs: 10_000,
     });
     timer.updateProgress(5, 3, 10);
-    timer.updateCost(0.05, 0.10);
+    timer.updateCost(0.05, -0.10);
     timer.start(1);
     timer.stop();
     const final = events.find(e => e.final)!;

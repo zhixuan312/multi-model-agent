@@ -62,7 +62,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `totalDurationMs` | integer (0–86,400,000) | Exact elapsed wall-clock time in milliseconds |
 | `totalCostUSD` | float (0–800) | Token-times-pricing cost estimate in US dollars |
-| `totalSavedCostUSD` | float (−800 to 800) or null | Modeled counterfactual: cost if the task had been done by the parent model instead. Null when no parent pricing profile is available |
+| `costDeltaVsParentUSD` | float (−800 to 800) or null | Actual cost minus estimated parent-model cost. Negative = worker cheaper (savings). Null when parent pricing profile is unavailable |
 
 #### Lifecycle counts (3 fields)
 
@@ -136,7 +136,7 @@ cost = (inputTokens - cachedTokens) × inputRate
 
 Cached input tokens are priced at the profile's cache rate (defaulting to 10% of the input rate per Anthropic's published pricing). Reasoning tokens are a subset of output tokens and are priced at the profile's reasoning rate (defaulting to the output rate — no surcharge).
 
-`totalSavedCostUSD` is a modeled counterfactual: what the same token profile would have cost if run with the orchestrator's parent model instead of the implementer model that was actually used. Like cost, it is an estimate, not a guarantee.
+`costDeltaVsParentUSD` is the actual cost minus the estimated cost using the parent model's pricing profile (negative = savings). Like cost, it is an estimate, not a guarantee.
 
 ### About durations
 

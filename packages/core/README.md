@@ -28,11 +28,11 @@ const results = await runTasks([
 ], config);
 
 for (const r of results) {
-  console.log(r.status, r.usage.costUSD, r.savedCostUSD, r.output);
+  console.log(r.status, r.usage.costUSD, r.usage.costDeltaVsParentUSD, r.output);
 }
 ```
 
-`savedCostUSD` is populated when `defaults.parentModel` is set in the config — it's the difference between the agent's actual cost and what the parent model would have charged for the same input/output token count. Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
+`costDeltaVsParentUSD` is populated when `defaults.parentModel` is set in the config — it's `actualCost − parentCost` (negative = worker cheaper/savings). Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
 
 ## What's inside
 

@@ -91,7 +91,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s, st) => s + ((st.costUSD as number) ?? 0), 0),
-    totalSavedCostUSD: null,
+    costDeltaVsParentUSD: null,
     concernCount: 0,
     escalationCount: 0,
     fallbackCount: 0,
