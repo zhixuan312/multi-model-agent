@@ -48,16 +48,17 @@ mmagent install-skill --target=claude-code  # claude-code | gemini-cli | codex-c
 
 ### 3. Write the config
 
-`~/.multi-model/config.json` — minimal, recommended:
+Paste this into your shell — it creates `~/.multi-model/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
 
-```json
+```bash
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 {
   "agents": {
     "standard": {
-      "type": "openai-compatible",
-      "model": "MiniMax-M2.7",
-      "baseUrl": "https://api.minimax.io/v1",
-      "apiKeyEnv": "MINIMAX_API_KEY"
+      "type": "claude-compatible",
+      "model": "deepseek-v4-pro",
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
     },
     "complex": {
       "type": "codex",
@@ -68,6 +69,7 @@ mmagent install-skill --target=claude-code  # claude-code | gemini-cli | codex-c
     "parentModel": "claude-opus-4-7"
   }
 }
+EOF
 ```
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
@@ -82,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.9.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.1",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -285,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.9.1** — Codex skill installs now use Codex's native `~/.codex/skills/<skillName>/SKILL.md` layout, so all MMA skills load independently in new Codex sessions. The installer also removes the legacy MMA-managed `AGENTS.md` block while preserving user-authored `AGENTS.md` content. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.10.1** — fixes a V3 telemetry collection bug where top-level token totals and `totalCostUSD` always reported 0, and per-stage token/turn/tool/file counts were never populated. Also clamps per-stage `costUSD` ≥ 0. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

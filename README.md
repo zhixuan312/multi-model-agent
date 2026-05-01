@@ -55,16 +55,17 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
 
 ### 3. Write the config
 
-`~/.multi-model/config.json` — minimal, recommended:
+Paste this into your shell — it creates `~/.multi-model/config.json` with the minimum-viable starter config (overwrites any existing file at that path):
 
-```json
+```bash
+mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 {
   "agents": {
     "standard": {
-      "type": "openai-compatible",
-      "model": "MiniMax-M2.7",
-      "baseUrl": "https://api.minimax.io/v1",
-      "apiKeyEnv": "MINIMAX_API_KEY"
+      "type": "claude-compatible",
+      "model": "deepseek-v4-pro",
+      "baseUrl": "https://api.deepseek.com/anthropic",
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
     },
     "complex": {
       "type": "codex",
@@ -75,6 +76,7 @@ Skills are thin adapters that point your AI client at the running daemon. Once i
     "parentModel": "claude-opus-4-7"
   }
 }
+EOF
 ```
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
@@ -89,7 +91,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.9.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.10.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -294,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.9.1** — Codex skill installs now use Codex's native `~/.codex/skills/<skillName>/SKILL.md` layout, so all MMA skills load independently in new Codex sessions. The installer also removes the legacy MMA-managed `AGENTS.md` block while preserving user-authored `AGENTS.md` content. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.10.1** — fixes a V3 telemetry collection bug where top-level token totals (`inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`) and `totalCostUSD` always reported 0, and per-stage token/turn/tool/file counts were never populated. Also clamps per-stage `costUSD` ≥ 0 (previously raced negative under heartbeat cost-delta updates). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

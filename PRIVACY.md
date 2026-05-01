@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 3** · **Last revised:** 2026-04-29 — 0.4.0 (3.10.0)
+**Schema version: 3** · **Last revised:** 2026-05-01 — 0.4.0 (3.10.1)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
