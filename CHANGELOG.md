@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.10.1] - 2026-05-01
+
+### Fixed
+- **top-level token/cost totals (core).** `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`, and `totalCostUSD` on V3 `task.completed` events were always 0. The builder summed across stages, but `extractStageData()` hardcoded every per-stage token field to 0, so the top-level totals collapsed to 0 in the wire payload. Now read directly from `runResult.usage` — the same source `totalSavedCostUSD` already used.
+- **per-stage telemetry metrics (core).** Stage objects in `stages[]` carried 0 for `inputTokens`, `outputTokens`, `cachedTokens`, `reasoningTokens`, `turnCount`, `toolCallCount`, `filesReadCount`, and `filesWrittenCount`. `BaseStageStats` now defines these fields; `endBaseStage` / `endReviewStage` accept a metrics object populated from the implementer's `runResult.usage`/`turns`/`toolCalls`/`filesRead`/`filesWritten` and from the new `SpecReviewMetrics`/`QualityReviewMetrics` returned by `runSpecReview` / `runQualityReview`.
+- **negative per-stage cost (core).** Review-stage `costUSD` was computed via `runningCostUSD()` delta, which races with the heartbeat's running-cost update across runners and could go negative. The fix takes per-stage `costUSD` straight from the runner's `usage.costUSD` and clamps the wire value at ≥0. Falls back to the cost-meter delta when the runner does not report `usage.costUSD` (preserves cost telemetry for runners without per-call pricing).
+- **`BuildContext.route` (core, type-only).** Union now includes `'investigate'`. The wire schema and runtime path already accepted it; the type was incidentally missing the variant. Tightening the type catches future investigate-route callers at compile time.
+- **contract goldens regenerated.** All 33 endpoint goldens updated to reflect the new per-stage metric fields.
+
 ## [3.10.0] - 2026-04-29
 
 ### Added
