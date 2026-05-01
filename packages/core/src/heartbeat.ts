@@ -1,7 +1,7 @@
 import type { ProgressEvent } from './runners/types.js';
 import type { HeadlineSnapshot } from './batch-registry.js';
 
-function formatElapsed(ms: number): string {
+export function formatElapsed(ms: number): string {
   const rounded = Math.round(ms / 1000);
   if (rounded < 60) return `${rounded}s`;
   const minutes = Math.floor(rounded / 60);

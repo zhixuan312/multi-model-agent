@@ -2,12 +2,11 @@ import { describe, it, expect } from 'vitest';
 import {
   BatchRegistry,
   HeartbeatTimer,
-  composeRunningHeadline,
   type HeartbeatTickInfo,
 } from '@zhixuan92/multi-model-agent-core';
 
-describe('heartbeat tick updates runningHeadline', () => {
-  it('recordHeartbeat callback propagates recomposed headline to registry', () => {
+describe('heartbeat tick updates runningHeadlineSnapshot', () => {
+  it('recordHeartbeat callback propagates snapshot to registry', () => {
     const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
     const started = Date.now();
     reg.register({
@@ -21,20 +20,10 @@ describe('heartbeat tick updates runningHeadline', () => {
       running: [{ worker: 'MiniMax-M2.7', turn: 1 }],
     });
 
-    // Simulate the server-side callback: compose from entry + push.
     const recordHeartbeat = (tick: HeartbeatTickInfo) => {
-      const entry = reg.get(tick.batchId);
-      if (!entry) return;
-      const headline = composeRunningHeadline({
-        tasksTotal: entry.tasksTotal ?? 1,
-        tasksStarted: entry.tasksStarted ?? 0,
-        tasksCompleted: entry.tasksCompleted ?? 0,
-        startedAt: entry.startedAt,
-        nowMs: Date.now(),
-        lastHeartbeatAt: entry.lastHeartbeatAt ?? 0,
-        running: entry.running ?? [],
-      });
-      reg.updateRunningHeadline(tick.batchId, headline);
+      if (tick.snapshot) {
+        reg.updateRunningHeadlineSnapshot(tick.batchId, tick.snapshot);
+      }
     };
 
     const progressEvents: unknown[] = [];
@@ -44,11 +33,11 @@ describe('heartbeat tick updates runningHeadline', () => {
     );
     timer.start(1);
     timer.updateProgress(0, 0, 1);
-    timer.transition({ stage: 'implementing', stageIndex: 1 }); // triggers emit
-    timer.stop(); // final emit
+    timer.transition({ stage: 'implementing', stageIndex: 1 });
+    timer.stop();
 
     const updated = reg.get('hb1');
-    expect(updated?.runningHeadline).toMatch(/1\/1 running/);
+    expect(updated?.runningHeadlineSnapshot.prefix).toMatch(/Implementing/);
   });
 
   it('recordHeartbeat no-op when omitted', () => {

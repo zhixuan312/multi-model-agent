@@ -62,7 +62,7 @@ export type {
 export { expandContextBlocks } from './context/expand-context-blocks.js';
 
 // Provider
-export { createProvider } from './provider.js';
+export { createProvider, __setCoreTestProviderOverride } from './provider.js';
 
 // Batch cache
 export { BatchCache } from './batch-cache.js';
@@ -77,7 +77,7 @@ export { runTasks } from './run-tasks/index.js';
 export type { RunTasksOptions } from './run-tasks/index.js';
 
 // Heartbeat
-export { HeartbeatTimer } from './heartbeat.js';
+export { HeartbeatTimer, formatElapsed } from './heartbeat.js';
 export type {
   HeartbeatTimerOptions,
   HeartbeatStage,

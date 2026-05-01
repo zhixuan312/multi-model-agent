@@ -1,41 +1,57 @@
 import { describe, it, expect } from 'vitest';
 import { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
-describe('BatchRegistry runningHeadline', () => {
-  it('new entry has empty runningHeadline', () => {
+describe('BatchRegistry runningHeadlineSnapshot', () => {
+  it('new entry has fallback runningHeadlineSnapshot', () => {
     const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b1', projectCwd: '/tmp', tool: 'delegate',
       state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
       blockIds: [], blocksReleased: false,
     });
-    expect(reg.get('b1')?.runningHeadline).toBe('');
+    const snap = reg.get('b1')?.runningHeadlineSnapshot;
+    expect(snap).toBeDefined();
+    expect(snap!.fallback).toBe('0/1 queued');
   });
 
-  it('updateRunningHeadline sets the field', () => {
+  it('updateRunningHeadlineSnapshot sets the field', () => {
     const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b2', projectCwd: '/tmp', tool: 'delegate',
       state: 'pending', startedAt: 0, stateChangedAt: 0,
       blockIds: [], blocksReleased: false,
     });
-    reg.updateRunningHeadline('b2', '1/1 running, 47s elapsed');
-    expect(reg.get('b2')?.runningHeadline).toBe('1/1 running, 47s elapsed');
+    reg.updateRunningHeadlineSnapshot('b2', {
+      prefix: '[1/1] Implementing (test) — ',
+      statsClause: '',
+      dispatchedAt: Date.now(),
+      fallback: '1/1 queued',
+    });
+    const snap = reg.get('b2')?.runningHeadlineSnapshot;
+    expect(snap?.prefix).toBe('[1/1] Implementing (test) — ');
   });
 
-  it('updateRunningHeadline is no-op on terminal entries', () => {
+  it('updateRunningHeadlineSnapshot is no-op on terminal entries', () => {
     const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b3', projectCwd: '/tmp', tool: 'delegate',
       state: 'complete', startedAt: 0, stateChangedAt: 0,
       blockIds: [], blocksReleased: true,
     });
-    reg.updateRunningHeadline('b3', 'should be ignored');
-    expect(reg.get('b3')?.runningHeadline).toBe('');
+    reg.updateRunningHeadlineSnapshot('b3', {
+      prefix: 'should be ignored',
+      statsClause: '',
+      dispatchedAt: 0,
+      fallback: '',
+    });
+    const snap = reg.get('b3')?.runningHeadlineSnapshot;
+    expect(snap?.prefix).toBe('');
   });
 
-  it('updateRunningHeadline is no-op on unknown batchId', () => {
+  it('updateRunningHeadlineSnapshot is no-op on unknown batchId', () => {
     const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
-    expect(() => reg.updateRunningHeadline('unknown', 'x')).not.toThrow();
+    expect(() => reg.updateRunningHeadlineSnapshot('unknown', {
+      prefix: 'x', statsClause: '', dispatchedAt: 0, fallback: '',
+    })).not.toThrow();
   });
 });
