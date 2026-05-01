@@ -340,15 +340,17 @@ function resolveCostRates(config: ProviderConfig): { input: number; cachedInput:
   return { input, cachedInput, output, reasoning };
 }
 
-export function computeSavedCostUSD(
+export function computeCostDeltaVsParentUSD(
   actualCostUSD: number | null,
   inputTokens: number,
   outputTokens: number,
   parentModel: string | undefined,
-  cachedTokens = 0,
-  reasoningTokens = 0,
+  cachedTokens: number | null = 0,
+  reasoningTokens: number | null = 0,
 ): number | null {
   if (actualCostUSD === null || parentModel === undefined) return null;
+  // §3.6 honest-null: if any required dimension is null, return null
+  if (cachedTokens === null || reasoningTokens === null) return null;
   const profile = findModelProfile(parentModel);
   const input = profile.inputCostPerMTok;
   const output = profile.outputCostPerMTok;
@@ -362,7 +364,7 @@ export function computeSavedCostUSD(
      (outputTokens - reasoningTokens) * output +
      reasoningTokens * reasoning) / 1_000_000;
 
-  return parentCost - actualCostUSD;
+  return actualCostUSD - parentCost;
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController, externalSignal?: AbortSignal): Promise<T> {
