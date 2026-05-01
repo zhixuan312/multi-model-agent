@@ -53,6 +53,8 @@ Submit work product and a checklist to workers for independent verification. Eac
 | `filePaths` | string[] | no | Files to verify against (workers can read them) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. the spec the work was supposed to satisfy) |
 
+> Worker tier for `mma-verify` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+
 ## Full example
 
 ```bash

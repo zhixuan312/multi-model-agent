@@ -51,6 +51,8 @@ Send a document or set of files to workers for structured auditing. Each file is
 
 Either `document` or `filePaths` (or both) must be provided.
 
+> Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+
 ## Full example
 
 ```bash

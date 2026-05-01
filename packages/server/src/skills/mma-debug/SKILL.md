@@ -55,6 +55,8 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 | `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 
+> Worker tier for `mma-debug` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+
 ## Full example
 
 ```bash
