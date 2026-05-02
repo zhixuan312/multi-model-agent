@@ -1519,6 +1519,9 @@ export async function executeReviewedLifecycle(
       }
       if (diffCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'diff', attempt: 0, role: 'diffReviewer', assignedTier: diffReviewerTier, reason: diffCall.unavailableReason! });
+        if (diffCall.unavailableReason === 'reviewer_separation_unsatisfiable') {
+          return __recordOnce(adaptForAllTiersUnavailable({ ...implResult, errorCode: 'reviewer_separation_unsatisfiable', diffReviewStatus: 'error' }, 'spec', 0, resolvedModel, implResult, diffCall.unavailableReason));
+        }
       }
       const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
       const diffEnvelopeStatus: RunResult['diffReviewStatus'] =
@@ -1591,6 +1594,15 @@ export async function executeReviewedLifecycle(
       emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: 0, role: 'specReviewer', assignedTier: initialReviewerTier, reason: initialSpecReview.unavailableReason! });
       fallbackOverrides.push({ role: 'specReviewer', loop: 'spec', attempt: 0, assigned: initialReviewerTier, used: initialSpecReview.usedTier, reason: initialSpecReview.unavailableReason!, triggeringStatus: initialSpecReview.fallbackTriggeringStatus, bothUnavailable: true });
       specReviewerHistory.push('skipped');
+      if (initialSpecReview.unavailableReason === 'reviewer_separation_unsatisfiable') {
+        const unavailableBase = {
+          ...implResult,
+          specReviewStatus: 'error' as const,
+          specReviewReason: 'reviewer separation unsatisfiable',
+          errorCode: 'reviewer_separation_unsatisfiable',
+        };
+        return __recordOnce(adaptForAllTiersUnavailable(unavailableBase, 'spec', 0, resolvedModel, implResult, initialSpecReview.unavailableReason));
+      }
     } else {
       specReviewerHistory.push(initialSpecReview.usedTier as AgentType);
       if (initialSpecReview.fallbackFired) {
@@ -1652,6 +1664,15 @@ export async function executeReviewedLifecycle(
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
         fallbackOverrides.push({ role: 'specReviewer', loop: 'spec', attempt: specAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
         specReviewerHistory.push('skipped');
+        if (reviewCall.unavailableReason === 'reviewer_separation_unsatisfiable') {
+          const unavailableBase = {
+            ...finalImplResult,
+            specReviewStatus: 'error' as const,
+            specReviewReason: 'reviewer separation unsatisfiable',
+            errorCode: 'reviewer_separation_unsatisfiable',
+          };
+          return __recordOnce(adaptForAllTiersUnavailable(unavailableBase, 'spec', specAttemptIndex, resolvedModel, finalImplResult, reviewCall.unavailableReason));
+        }
       } else {
         specReviewerHistory.push(reviewCall.usedTier as AgentType);
         if (reviewCall.fallbackFired) {
@@ -1691,6 +1712,15 @@ export async function executeReviewedLifecycle(
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
         fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: 0, assigned: qualityReviewerTier, used: initialQuality.usedTier, reason: initialQuality.unavailableReason!, triggeringStatus: initialQuality.fallbackTriggeringStatus, bothUnavailable: true });
         qualityReviewerHistory.push('skipped');
+        if (initialQuality.unavailableReason === 'reviewer_separation_unsatisfiable') {
+          const unavailableBase = {
+            ...finalImplResult,
+            qualityReviewStatus: 'error' as const,
+            qualityReviewReason: 'reviewer separation unsatisfiable',
+            errorCode: 'reviewer_separation_unsatisfiable',
+          };
+          return __recordOnce(adaptForAllTiersUnavailable(unavailableBase, 'quality', 0, resolvedModel, finalImplResult, initialQuality.unavailableReason));
+        }
       } else {
         qualityReviewerHistory.push(initialQuality.usedTier as AgentType);
         if (initialQuality.fallbackFired) {
@@ -1790,6 +1820,15 @@ export async function executeReviewedLifecycle(
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
             fallbackOverrides.push({ role: 'qualityReviewer', loop: 'quality', attempt: qualityAttemptIndex, assigned: decision.reviewer, used: reviewCall.usedTier, reason: reviewCall.unavailableReason!, triggeringStatus: reviewCall.fallbackTriggeringStatus, bothUnavailable: true });
             qualityReviewerHistory.push('skipped');
+            if (reviewCall.unavailableReason === 'reviewer_separation_unsatisfiable') {
+              const unavailableBase = {
+                ...finalImplResult,
+                qualityReviewStatus: 'error' as const,
+                qualityReviewReason: 'reviewer separation unsatisfiable',
+                errorCode: 'reviewer_separation_unsatisfiable',
+              };
+              return __recordOnce(adaptForAllTiersUnavailable(unavailableBase, 'quality', qualityAttemptIndex, resolvedModel, finalImplResult, reviewCall.unavailableReason));
+            }
           } else {
             qualityReviewerHistory.push(reviewCall.usedTier as AgentType);
             if (reviewCall.fallbackFired) {

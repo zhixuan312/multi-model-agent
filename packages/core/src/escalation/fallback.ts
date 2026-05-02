@@ -106,7 +106,7 @@ export async function runWithFallback<T>(
   const { assigned, providerFor, unavailableTiers, isTransportFailure, makeSyntheticFailure, call } = input;
   const getStatus = input.getStatus ?? (() => undefined);
   const forbidden = input.forbiddenIdentities ?? [];
-  const forbiddenModels = input.forbiddenModels ?? [];
+  const forbiddenModels = (input.forbiddenModels ?? []).map((model) => canonicalModelName(model));
 
   // ── Helpers for identity separation ──
   // Returns { skip: true } when the tier should be skipped due to separation.

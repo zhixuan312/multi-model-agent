@@ -56,6 +56,27 @@ describe('runWithFallback — forbiddenModels (model-family separation)', () => 
     expect(result.unavailableReason).toBe('reviewer_separation_unsatisfiable');
   });
 
+  it('canonicalizes forbidden model inputs before comparing', async () => {
+    const map: UnavailableMap = new Map();
+    const standard = mockProvider('standard', async () => okResult('standard'),
+      { type: 'codex', model: 'gpt-5.5-preview-20251001' });
+    const complex = mockProvider('complex', async () => okResult('complex'),
+      { type: 'codex', model: 'gpt-5.5' });
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complex),
+      unavailableTiers: map,
+      isTransportFailure,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenModels: ['gpt-5.5-preview-20251001'],
+      call: (p) => p.run('test', {}),
+    });
+
+    expect(result.bothUnavailable).toBe(true);
+    expect(result.unavailableReason).toBe('reviewer_separation_unsatisfiable');
+  });
+
   it('allows fallback when candidate model differs from forbidden models', async () => {
     const map: UnavailableMap = new Map();
     // standard uses gpt-5.5 (forbidden), complex uses claude-haiku-4-5 (different family)

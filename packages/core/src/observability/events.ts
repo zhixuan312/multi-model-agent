@@ -34,7 +34,7 @@ const DiagRoleEnum = z.enum([
   'implementer', 'specReviewer', 'qualityReviewer', 'diffReviewer',
 ]);
 
-const DiagReasonEnum = z.enum(['transport_failure', 'not_configured']);
+const DiagReasonEnum = z.enum(['transport_failure', 'not_configured', 'reviewer_separation_unsatisfiable']);
 
 const ProviderTypeEnum = z.enum(['claude', 'openai-compatible', 'codex']);
 
