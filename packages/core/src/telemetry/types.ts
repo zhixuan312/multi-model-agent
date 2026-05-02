@@ -186,6 +186,14 @@ export const TaskCompletedEventSchema = z.object({
 
   // Stages array
   stages: z.array(StageEntrySchema).min(0).max(8),
+
+  // Validation warnings populated by the recorder before enqueue;
+  // absent for healthy events. Each entry carries the rule name
+  // (e.g. "R1: ...") and the Zod issue path (empty string = cross-field).
+  validation_warnings: z.array(z.object({
+    rule: z.string(),
+    path: z.string(),
+  })).optional(),
 }).strict();
 
 // ── Upload batch ─────────────────────────────────────────────────────────

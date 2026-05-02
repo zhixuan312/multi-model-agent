@@ -34,6 +34,7 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
   briefQualityWarningCount: { kind: 'derived', source: 'min(runResult.briefQualityWarnings.length, 20)' },
   sandboxViolationCount:    { kind: 'derived', source: 'min(runResult.sandboxViolationCount, 100)' },
   stages:                   { kind: 'derived', source: 'buildStages(route, runResult)' },
+  validation_warnings:      { kind: 'derived', source: 'recorder from schema validation (absent when healthy)' },
 };
 
 const COMMON_STAGE_COVERAGE: Record<string, FieldCoverage> = {

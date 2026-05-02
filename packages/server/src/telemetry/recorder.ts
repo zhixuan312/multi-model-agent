@@ -91,15 +91,33 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
         // data is gone forever and the user has no visibility into what was
         // suppressed. 3.10.2's drop-on-fail design hid real telemetry from
         // both operator and dashboard.
+        //
+        // Collect issues from both base-schema parse and cross-field
+        // (ValidatedTaskCompletedEventSchema) parse. Deduplicate by
+        // (message, path) key so the same issue surfacing in both parses
+        // is stored once. Attach as validation_warnings before enqueue
+        // so dashboards can quantify warning rates from stored events
+        // without re-running validation.
+        const warningsMap = new Map<string, { rule: string; path: string }>();
+
         const baseParsed = TaskCompletedEventSchema.safeParse(event);
         if (!baseParsed.success) {
+          for (const i of baseParsed.error.issues) {
+            const key = `${i.message}::${i.path.join('.')}`;
+            warningsMap.set(key, { rule: i.message, path: i.path.join('.') });
+          }
           console.warn('mma-telemetry: schema warning (event still emitted)', {
             eventId: event.eventId,
             issues: baseParsed.error.issues.map((e) => ({ path: e.path.join('.'), message: e.message })),
           });
         }
+
         const refined = ValidatedTaskCompletedEventSchema.safeParse(event);
         if (!refined.success) {
+          for (const i of refined.error.issues) {
+            const key = `${i.message}::${i.path.join('.')}`;
+            warningsMap.set(key, { rule: i.message, path: i.path.join('.') });
+          }
           // Surface the actual offending values alongside the rule name so the
           // operator can tell at a glance whether the cause is config (wrong
           // values) or code (lifecycle bug). Tag the most informative
@@ -124,6 +142,10 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
               path: e.path.join('.'),
             })),
           });
+        }
+
+        if (warningsMap.size > 0) {
+          (event as any).validation_warnings = [...warningsMap.values()];
         }
         enqueue(event as unknown as Record<string, unknown>);
       } catch {
