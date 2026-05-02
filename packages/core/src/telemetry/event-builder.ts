@@ -118,7 +118,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
-    taskMaxIdleMs: runResult.taskMaxIdleMs ?? null,
+    taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     clarificationRequested: runResult.lifecycleClarificationRequested ?? false,
     briefQualityWarningCount: Math.min(runResult.briefQualityWarnings?.length ?? 0, 20),
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
@@ -198,8 +198,8 @@ function extractStageData(
     filesReadCount: clampFilesReadCount((raw as any).filesReadCount ?? 0),
     filesWrittenCount: clampFilesWrittenCount((raw as any).filesWrittenCount ?? 0),
     turnCount: clampTurnCount((raw as any).turnCount ?? 0),
-    maxIdleMs: raw.maxIdleMs ?? null,
-    totalIdleMs: raw.totalIdleMs ?? null,
+    maxIdleMs: raw.maxIdleMs ?? 0,
+    totalIdleMs: raw.totalIdleMs ?? 0,
   };
 }
 

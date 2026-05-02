@@ -94,8 +94,8 @@ const StageEntryBase = z.object({
   filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
-  maxIdleMs: z.number().int().min(0).max(1_200_000).nullable(),
-  totalIdleMs: z.number().int().min(0).max(3_600_000).nullable(),
+  maxIdleMs: z.number().int().min(0).max(1_200_000),
+  totalIdleMs: z.number().int().min(0).max(3_600_000),
 });
 
 export const ReviewStageEntrySchema = StageEntryBase.extend({
@@ -177,7 +177,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Operational signals
   stallCount: z.number().int().min(0).max(20),
-  taskMaxIdleMs: z.number().int().min(0).max(1_200_000).nullable(),
+  taskMaxIdleMs: z.number().int().min(0).max(1_200_000),
   clarificationRequested: z.boolean(),
   briefQualityWarningCount: z.number().int().min(0).max(20),
   sandboxViolationCount: z.number().int().min(0).max(100),

@@ -19,8 +19,8 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
     filesReadCount: 3,
     filesWrittenCount: 1,
     turnCount: 3,
-    maxIdleMs: null,
-    totalIdleMs: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
   };
 
   switch (name) {
@@ -96,7 +96,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     escalationCount: 0,
     fallbackCount: 0,
     stallCount: 0,
-    taskMaxIdleMs: null,
+    taskMaxIdleMs: 0,
     clarificationRequested: false,
     briefQualityWarningCount: 0,
     sandboxViolationCount: 0,

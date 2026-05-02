@@ -31,8 +31,8 @@ function makeValidStage(name: string, overrides: Record<string, unknown> = {}): 
     filesReadCount: 2,
     filesWrittenCount: 1,
     turnCount: 2,
-    maxIdleMs: null,
-    totalIdleMs: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
   };
 
   if (name === 'implementing') return { ...base, ...overrides };
@@ -106,7 +106,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     escalationCount: 0,
     fallbackCount: 0,
     stallCount: 0,
-    taskMaxIdleMs: null,
+    taskMaxIdleMs: 0,
     clarificationRequested: false,
     briefQualityWarningCount: 0,
     sandboxViolationCount: 0,
@@ -635,8 +635,8 @@ describe('StageEntrySchema', () => {
       filesReadCount: 0,
       filesWrittenCount: 0,
       turnCount: 0,
-      maxIdleMs: null,
-      totalIdleMs: null,
+      maxIdleMs: 0,
+      totalIdleMs: 0,
       // missing triggeringConcernCategories
     });
     expect(result.success).toBe(false);
