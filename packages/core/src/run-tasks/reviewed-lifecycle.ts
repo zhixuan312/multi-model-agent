@@ -998,7 +998,7 @@ export async function executeReviewedLifecycle(
       workerStatus: 'failed',
       workerError,
       models: {
-        implementer: resolvedModel,
+        implementer: implModel,
         specReviewer: null,
         qualityReviewer: null,
       },

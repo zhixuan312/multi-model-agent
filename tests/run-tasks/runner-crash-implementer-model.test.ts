@@ -51,9 +51,8 @@ function makeConfig(): MultiModelConfig {
 }
 
 describe('Item 18: runner_crash preserves resolved implementerModel', () => {
-  it('emits implementerModel=resolved config model, not "custom"', async () => {
+  it('emits implementerModel from resolved provider model, not "custom"', async () => {
     const config = makeConfig();
-    const resolvedModel = config.agents.standard.model;
 
     const crashingProvider: Provider = {
       name: 'test-standard',
@@ -83,7 +82,7 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
 
     expect(result.status).toBe('error');
     expect(result.errorCode).toBe('runner_crash');
-    expect(result.models?.implementer).toBe(resolvedModel);
+    expect(result.models?.implementer).toBe('deepseek-v4-pro');
 
     const event = buildTaskCompletedEvent({
       route: 'delegate',
@@ -95,5 +94,57 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
 
     expect(event.implementerModel).toBe('deepseek-v4-pro');
     expect(event.implementerModel).not.toBe('custom');
+  });
+
+  it('uses resolved.provider.config.model when it differs from config.agents[slot].model', async () => {
+    const config = makeConfig();
+    const slotModel = config.agents.standard.model; // 'deepseek-v4-pro'
+
+    const crashingProvider: Provider = {
+      name: 'test-standard',
+      config: {
+        ...config.agents.standard,
+        model: 'gemini-2.5-pro', // differs from the static slot model
+      },
+      run: async () => {
+        throw new Error('simulated runner crash');
+      },
+    };
+
+    const task: TaskSpec = {
+      prompt: 'implement feature X',
+      agentType: 'standard' as const,
+      reviewPolicy: 'off' as const,
+      timeoutMs: 300_000,
+    };
+
+    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+      slot: 'standard',
+      provider: crashingProvider,
+      capabilityOverride: false,
+    };
+
+    const result = await executeReviewedLifecycle(
+      task, resolved, config, 0,
+      undefined, undefined, undefined, undefined, 'delegate',
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.errorCode).toBe('runner_crash');
+    // The implementer model should be the provider's model, not the static slot model
+    expect(result.models?.implementer).toBe('gemini-2.5-pro');
+    expect(result.models?.implementer).not.toBe(slotModel);
+
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: result,
+      client: 'test-client',
+      parentModel: null,
+    });
+
+    expect(event.implementerModel).toBe('gemini-2.5-pro');
+    expect(event.implementerModel).not.toBe('custom');
+    expect(event.implementerModel).not.toBe(slotModel);
   });
 });
