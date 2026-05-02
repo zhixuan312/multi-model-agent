@@ -120,7 +120,10 @@ export class Flusher {
     try {
       // Step 1: read up to 500 records + capture generation snapshot
       let batch: ReadBatchResult = await this.#queue.readBatch(MAX_BATCH);
-      if (batch.records.length === 0) return;
+      if (batch.records.length === 0) {
+        this.clearBackoff();
+        return;
+      }
 
       // Single identity snapshot per flush — threaded into both head-truncation and uploadBatch.
       const identity = getOrCreateIdentity(this.#dir);
