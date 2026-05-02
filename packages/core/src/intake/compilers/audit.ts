@@ -7,6 +7,10 @@ export interface AuditDocumentInput {
   auditType?: string;
 }
 
+const SCOPE_CONTRACT = `
+Audit this document for the requested dimension. To verify specific factual claims, read the exact files referenced by the document. Do NOT enumerate the repository; do NOT glob across all source files. If a claim references a file path or function name, read or grep for that specific name. Stay scoped: the goal is to evaluate the document, not catalog the codebase.
+`.trim();
+
 export function compileAuditDocument(
   input: AuditDocumentInput,
   requestId: string,
@@ -27,6 +31,8 @@ export function compileAuditDocument(
       '  Issue: one-paragraph explanation',
       '  Suggestion: one-line fix recommendation',
       'The reviewer will extract structured findings from your report — do NOT emit JSON.',
+      '',
+      SCOPE_CONTRACT,
     );
 
     return [{
@@ -57,6 +63,8 @@ export function compileAuditDocument(
       '  Issue: one-paragraph explanation',
       '  Suggestion: one-line fix recommendation',
       'The reviewer will extract structured findings from your report — do NOT emit JSON.',
+      '',
+      SCOPE_CONTRACT,
     );
 
     return {

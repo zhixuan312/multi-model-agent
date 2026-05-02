@@ -38,4 +38,13 @@ describe('audit compiler', () => {
     );
     expect(drafts[0].prompt).toContain('MUST re-read all target files');
   });
+
+  it('compiled prompt contains the scope-contract clause verbatim', () => {
+    const drafts = compileAuditDocument(
+      { filePaths: ['/x/spec.md'], auditType: 'correctness' },
+      'req',
+    );
+    expect(drafts[0].prompt).toContain('Do NOT enumerate the repository');
+    expect(drafts[0].prompt).toContain('Stay scoped: the goal is to evaluate the document');
+  });
 });
