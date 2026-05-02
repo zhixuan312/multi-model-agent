@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
+import { ResearchConfigSchema, multiModelConfigSchema } from '../../packages/core/src/config/schema.js';
 
 describe('ResearchConfigSchema', () => {
   it('applies defaults when given empty input', () => {
@@ -63,5 +63,60 @@ describe('ResearchConfigSchema', () => {
   it('caps userSources at 50 entries', () => {
     const big = Array.from({ length: 51 }, (_, i) => `entry ${i}`);
     expect(() => ResearchConfigSchema.parse({ userSources: big })).toThrow();
+  });
+
+  // DNS label edge cases (quality review feedback)
+  it('rejects hostnames with a label starting with hyphen', () => {
+    expect(() => ResearchConfigSchema.parse({ fetchAllowlistExtra: ['foo.-bar.com'] })).toThrow();
+  });
+
+  it('rejects hostnames with a label ending with hyphen', () => {
+    expect(() => ResearchConfigSchema.parse({ fetchAllowlistExtra: ['example.com-'] })).toThrow();
+    expect(() => ResearchConfigSchema.parse({ fetchAllowlistExtra: ['foo-.example.com'] })).toThrow();
+  });
+
+  it('rejects hostnames with label exceeding 63 characters', () => {
+    const longLabel = 'a'.repeat(64);
+    expect(() => ResearchConfigSchema.parse({ fetchAllowlistExtra: [`${longLabel}.com`] })).toThrow();
+  });
+
+  it('deduplicates canonicalized IDNA hosts', () => {
+    const r = ResearchConfigSchema.parse({
+      fetchAllowlistExtra: ['EXAMPLE.com', 'example.com', 'bücher.example.com', 'xn--bcher-kva.example.com'],
+    });
+    expect(r.fetchAllowlistExtra).toEqual(['example.com', 'xn--bcher-kva.example.com']);
+  });
+});
+
+describe('ResearchConfigSchema inside multiModelConfigSchema', () => {
+  const minimalAgents = {
+    standard: { type: 'openai-compatible' as const, model: 'test', baseUrl: 'https://example.com' },
+    complex: { type: 'openai-compatible' as const, model: 'test', baseUrl: 'https://example.com' },
+  };
+
+  it('defaults research when omitted from full config', () => {
+    const c = multiModelConfigSchema.parse({ agents: minimalAgents });
+    expect(c.research.brave.apiKeys).toEqual([]);
+    expect(c.research.brave.timeoutMs).toBe(8000);
+    expect(c.research.fetch.allowPrivateNetwork).toBe(false);
+    expect(c.research.builtinAdapters.arxiv).toBe(true);
+    expect(c.research.userSources).toEqual([]);
+    expect(c.research.fetchAllowlistExtra).toEqual([]);
+  });
+
+  it('accepts partial research override', () => {
+    const c = multiModelConfigSchema.parse({
+      agents: minimalAgents,
+      research: { brave: { apiKeys: ['my-key'] } },
+    });
+    expect(c.research.brave.apiKeys).toEqual(['my-key']);
+    expect(c.research.brave.timeoutMs).toBe(8000); // default still applies
+  });
+
+  it('rejects invalid research sub-field', () => {
+    expect(() => multiModelConfigSchema.parse({
+      agents: minimalAgents,
+      research: { fetch: { maxBodyBytes: 5 * 1024 * 1024 } },
+    })).toThrow();
   });
 });

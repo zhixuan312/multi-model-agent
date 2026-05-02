@@ -182,6 +182,31 @@ export interface MultiModelConfig {
     limits: { maxBodyBytes: number; batchTtlMs: number; idleProjectTimeoutMs: number; clarificationTimeoutMs: number; projectCap: number; maxBatchCacheSize: number; maxContextBlockBytes: number; maxContextBlocksPerProject: number; shutdownDrainMs: number }
     autoUpdateSkills: boolean
   }
+  research: ResearchConfig
+}
+
+export interface ResearchConfig {
+  brave: {
+    apiKeys: string[]
+    timeoutMs: number
+    maxResultsPerQuery: number
+    perCallBackoffMs: number
+  }
+  fetch: {
+    maxRedirects: number
+    connectTimeoutMs: number
+    totalDeadlineMs: number
+    maxBodyBytes: number
+    allowPrivateNetwork: boolean
+  }
+  builtinAdapters: {
+    arxiv: boolean
+    semanticScholar: boolean
+    githubSearch: boolean
+    genericRss: boolean
+  }
+  userSources: string[]
+  fetchAllowlistExtra: string[]
 }
 
 export interface Commit {

@@ -81,45 +81,28 @@ const HostString = z.string().trim().min(1).max(253).transform((raw, ctx) => {
       return z.NEVER;
     }
   }
-  if (!/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(canonical)) {
+  const labels = canonical.split('.');
+  if (labels.length < 2) {
     ctx.addIssue({ code: z.ZodIssueCode.custom,
       message: 'must be a fully-qualified domain name with at least one dot' });
     return z.NEVER;
   }
+  for (const label of labels) {
+    if (label.length === 0 || label.length > 63) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom,
+        message: `DNS label "${label}" must be 1-63 characters` });
+      return z.NEVER;
+    }
+    if (label.startsWith('-') || label.endsWith('-')) {
+      ctx.addIssue({ code: z.ZodIssueCode.custom,
+        message: `DNS label "${label}" must not start or end with a hyphen` });
+      return z.NEVER;
+    }
+  }
   return canonical;
 });
 
-// === Research config defaults & schema ===
-
-const DEFAULT_RESEARCH_BRAVE = {
-  apiKeys: [] as string[],
-  timeoutMs: 8000,
-  maxResultsPerQuery: 10,
-  perCallBackoffMs: 250,
-};
-
-const DEFAULT_RESEARCH_FETCH = {
-  maxRedirects: 3,
-  connectTimeoutMs: 5_000,
-  totalDeadlineMs: 12_000,
-  maxBodyBytes: 1024 * 1024 as number,
-  allowPrivateNetwork: false,
-};
-
-const DEFAULT_RESEARCH_BUILTIN_ADAPTERS = {
-  arxiv: true,
-  semanticScholar: true,
-  githubSearch: true,
-  genericRss: true,
-};
-
-const DEFAULT_RESEARCH = {
-  brave: DEFAULT_RESEARCH_BRAVE,
-  fetch: DEFAULT_RESEARCH_FETCH,
-  builtinAdapters: DEFAULT_RESEARCH_BUILTIN_ADAPTERS,
-  userSources: [] as string[],
-  fetchAllowlistExtra: [] as string[],
-};
+// === Research config schema ===
 
 export const ResearchConfigSchema = z.object({
   brave: z.object({
@@ -130,7 +113,7 @@ export const ResearchConfigSchema = z.object({
     timeoutMs: z.number().int().positive().max(30_000).default(8000),
     maxResultsPerQuery: z.number().int().positive().max(20).default(10),
     perCallBackoffMs: z.number().int().min(0).max(2_000).default(250),
-  }).strict().default(() => DEFAULT_RESEARCH_BRAVE),
+  }).strict().default(() => ({ apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 10, perCallBackoffMs: 250 })),
   fetch: z.object({
     maxRedirects: z.number().int().min(0).max(5).default(3),
     connectTimeoutMs: z.number().int().positive().max(10_000).default(5_000),
@@ -140,19 +123,25 @@ export const ResearchConfigSchema = z.object({
   }).strict().refine(
     v => v.totalDeadlineMs >= v.connectTimeoutMs,
     { message: 'fetch_invalid_deadlines: totalDeadlineMs must be >= connectTimeoutMs' },
-  ).default(() => DEFAULT_RESEARCH_FETCH),
+  ).default(() => ({ maxRedirects: 3, connectTimeoutMs: 5_000, totalDeadlineMs: 12_000, maxBodyBytes: 1024 * 1024, allowPrivateNetwork: false })),
   builtinAdapters: z.object({
     arxiv: z.boolean().default(true),
     semanticScholar: z.boolean().default(true),
     githubSearch: z.boolean().default(true),
     genericRss: z.boolean().default(true),
-  }).strict().default(() => DEFAULT_RESEARCH_BUILTIN_ADAPTERS),
+  }).strict().default(() => ({ arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true })),
   userSources: z.array(TrimmedNonEmpty.max(2000)).max(50).default([]),
   fetchAllowlistExtra: z.array(HostString)
                         .max(64)
                         .transform(arr => Array.from(new Set(arr)))
                         .default([]),
-}).strict().default(() => DEFAULT_RESEARCH);
+}).strict().default(() => ({
+  brave: { apiKeys: [] as string[], timeoutMs: 8000, maxResultsPerQuery: 10, perCallBackoffMs: 250 },
+  fetch: { maxRedirects: 3, connectTimeoutMs: 5_000, totalDeadlineMs: 12_000, maxBodyBytes: 1024 * 1024, allowPrivateNetwork: false },
+  builtinAdapters: { arxiv: true, semanticScholar: true, githubSearch: true, genericRss: true },
+  userSources: [] as string[],
+  fetchAllowlistExtra: [] as string[],
+}));
 
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
 
