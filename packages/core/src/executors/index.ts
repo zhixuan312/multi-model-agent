@@ -7,3 +7,4 @@ export { executeVerify } from './verify.js';
 export { executeDebug } from './debug.js';
 export { executeExecutePlan } from './execute-plan.js';
 export { executeRetry } from './retry.js';
+export { executeExplore } from './explore.js';

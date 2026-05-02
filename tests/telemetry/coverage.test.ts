@@ -34,6 +34,12 @@ const UNCOVERED_ALLOWLIST = new Set<string>([
   'cost_check', // requires cost ceiling trip; covered by cost-ceiling tests.
   'batch_completed', // batch-level executor event, outside single-task canonical runTasks fixture.
   'batch_failed', // batch-level executor event, outside single-task canonical runTasks fixture.
+  'explore_parallel_start', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_parallel_end', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_internal_unavailable', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_external_unavailable', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_synthesize_start', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_synthesize_end', // explore executor batch-level event, outside single-task canonical runTasks fixture.
   'turn_start', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'turn_complete', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'tool_call', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
