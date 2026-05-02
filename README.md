@@ -296,7 +296,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.10.6** — Skill docs corrected to match code. The router skill claimed `mma-execute-plan` accepts `agentType` (it doesn't — schema is strict, rejects with HTTP 400) and that `mma-verify` defaults to standard tier (it defaults to complex). Fixed: only `mma-delegate` accepts `agentType` per task; every other route hardcodes its tier (`/execute-plan` → standard; `/audit` / `/review` / `/debug` / `/verify` / `/investigate` → complex). Also documented the previously-undocumented `inferEffort()` heuristics that auto-route reasoning effort within a tier. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.11.0** — Runtime correctness pass: reviewer cwd plumbing fixed across all runners; reviewer-separation fallback now respects R3 via canonical model identity comparison; per-route prompt scope contracts; `force_salvage` watchdog removed (input-token-volume aborts gone — user-set `maxCostUSD` / `timeoutMs` remain the hard backstop with documented 0.80 cushion); envelope contract honors `proposedInterpretation` when paused; telemetry payload cleanup (`savedCostUSD` → `costDeltaVsParentUSD` rename + sign flip, dead-bucket removal, audit-domain categorizer extension, cached/reasoning token reporting on all runners). Breaking telemetry payload changes — frontend ingest must align. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
