@@ -997,6 +997,11 @@ export async function executeReviewedLifecycle(
       structuredError: { code: 'runner_crash', message: workerError.message },
       workerStatus: 'failed',
       workerError,
+      models: {
+        implementer: resolvedModel,
+        specReviewer: null,
+        qualityReviewer: null,
+      },
     });
   }
 
