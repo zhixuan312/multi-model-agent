@@ -21,6 +21,24 @@ describe('extractURLHosts', () => {
   it('skips malformed URLs silently', () => {
     expect(extractURLHosts(['https://', 'https://no-tld'])).toEqual([]);
   });
+
+  it('skips DNS labels that start or end with hyphen in any position', () => {
+    expect(extractURLHosts([
+      'https://-bad.example.com/x',
+      'https://bad-.example.com/x',
+      'https://example.-bad.com/x',
+      'https://example.bad-.com/x',
+    ])).toEqual([]);
+  });
+
+  it('handles trailing punctuation in source text', () => {
+    const hosts = extractURLHosts([
+      'Visit https://example.com/path, for details',
+      'See https://example.com. for more',
+      'Check https://example.com/page; then continue',
+    ]);
+    expect(hosts).toEqual(['example.com']);
+  });
 });
 
 describe('buildHostAllowlist', () => {
@@ -54,5 +72,37 @@ describe('buildHostAllowlist', () => {
     expect(map.has('example.com')).toBe(true);
     expect(map.has('evil-example.com')).toBe(false);
     expect(map.has('a.example.com')).toBe(false);
+  });
+
+  it('silently skips invalid fetchAllowlistExtra entries', () => {
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: [
+        '127.0.0.1',
+        '[::1]',
+        'localhost',
+        'example.com/path',
+        'https://example.com',
+      ],
+      userSources: [],
+    });
+    expect(map.size).toBe(0);
+  });
+
+  it('IDNA-normalizes Unicode fetchAllowlistExtra entries', () => {
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: ['examplé.com'],
+      userSources: [],
+    });
+    expect(map.get('xn--exampl-gva.com')).toBe('extra');
+    expect(map.size).toBe(1);
+  });
+
+  it('normalizes fetchAllowlistExtra with trailing dot', () => {
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: ['example.com.'],
+      userSources: [],
+    });
+    expect(map.get('example.com')).toBe('extra');
+    expect(map.size).toBe(1);
   });
 });
