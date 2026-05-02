@@ -45,7 +45,7 @@ export async function githubSearch(query: string, opts: GitHubOpts): Promise<Ada
 
   const res = await request(url.toString(), {
     method: 'GET',
-    maxRedirections: 0,
+    
     headers: { accept, 'user-agent': 'mma-explore' },
   });
 

@@ -391,9 +391,10 @@ export async function webFetch(input: WebFetchInput): Promise<WebFetchResult> {
 
       let res;
       try {
+        // undici 8 `request()` does not follow redirects by default; we handle
+        // them manually below to re-validate against the per-task allowlist.
         res = await request(v.url.toString(), {
           method: 'GET',
-          maxRedirections: 0,
           headersTimeout: cfg.connectTimeoutMs,
           ...(dispatcher ? { dispatcher } : {}),
           signal: totalCtrl.signal,

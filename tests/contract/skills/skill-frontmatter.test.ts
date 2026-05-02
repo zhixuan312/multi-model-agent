@@ -45,6 +45,7 @@ const ACTIONABLE_SKILLS = [
   'mma-debug',
   'mma-delegate',
   'mma-execute-plan',
+  'mma-explore',
   'mma-retry',
   'mma-review',
   'mma-verify',

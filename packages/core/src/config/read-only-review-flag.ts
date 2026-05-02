@@ -1,5 +1,6 @@
 const READ_ONLY_ROUTES = [
   'audit_document', 'review_code', 'verify_work', 'investigate_codebase', 'debug_task',
+  'explore',
 ] as const;
 
 type ReadOnlyRoute = (typeof READ_ONLY_ROUTES)[number];

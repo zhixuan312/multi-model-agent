@@ -661,6 +661,66 @@
         ]
       }
     },
+    "/explore": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {}
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "202": {
+            "content": {
+              "application/json": {
+                "schema": {
+                  "properties": {
+                    "batchId": {
+                      "description": "Unique batch identifier for polling via GET /batch/:batchId",
+                      "type": "string"
+                    },
+                    "statusUrl": {
+                      "description": "Full URL to poll for this batch",
+                      "type": "string"
+                    }
+                  },
+                  "required": [
+                    "batchId",
+                    "statusUrl"
+                  ],
+                  "type": "object"
+                }
+              }
+            },
+            "description": "Accepted — batch created"
+          },
+          "400": {
+            "description": "Request validation error"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Explore a topic with parallel internal codebase search and external web research",
+        "tags": [
+          "Tools"
+        ]
+      }
+    },
     "/health": {
       "get": {
         "responses": {

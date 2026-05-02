@@ -244,6 +244,10 @@
       "types": "./dist/executors/investigate.d.ts",
       "import": "./dist/executors/investigate.js"
     },
+    "./executors/explore": {
+      "types": "./dist/executors/explore.d.ts",
+      "import": "./dist/executors/explore.js"
+    },
     "./executors/review": {
       "types": "./dist/executors/review.d.ts",
       "import": "./dist/executors/review.js"
@@ -291,6 +295,10 @@
     "./tool-schemas/investigate": {
       "types": "./dist/tool-schemas/investigate.d.ts",
       "import": "./dist/tool-schemas/investigate.js"
+    },
+    "./tool-schemas/explore": {
+      "types": "./dist/tool-schemas/explore.d.ts",
+      "import": "./dist/tool-schemas/explore.js"
     },
     "./tool-schemas/review": {
       "types": "./dist/tool-schemas/review.d.ts",
@@ -343,5 +351,8 @@
   },
   "overrides": {
     "@anthropic-ai/sdk": "0.81.0"
+  },
+  "devDependencies": {
+    "@types/jsdom": "^28.0.1"
   }
 }

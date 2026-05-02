@@ -12,7 +12,7 @@ export async function arxivSearch(query: string, opts: ArxivOpts = {}): Promise<
   url.searchParams.set('search_query', `all:${query}`);
   url.searchParams.set('max_results', String(max));
 
-  const res = await request(url.toString(), { method: 'GET', maxRedirections: 0 });
+  const res = await request(url.toString(), { method: 'GET' });
   if (res.statusCode >= 300 && res.statusCode < 400) {
     throw new Error('adapter_unexpected_redirect: arxiv');
   }

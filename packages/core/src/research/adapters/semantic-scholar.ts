@@ -40,7 +40,7 @@ export async function semanticScholarSearch(query: string, opts: SSOpts = {}): P
 
   let res;
   try {
-    res = await request(url.toString(), { method: 'GET', maxRedirections: 0 });
+    res = await request(url.toString(), { method: 'GET' });
   } catch (err) {
     throw new Error(`semantic_scholar_request_failed: ${(err as Error).message}`);
   }
