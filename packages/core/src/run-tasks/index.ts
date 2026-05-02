@@ -108,6 +108,7 @@ export async function runTasks(
         toolCalls: [] as string[],
         outputIsDiagnostic: true,
         escalationLog: [] as RunResult['escalationLog'],
+        parsedFindings: null,
         errorCode: 'brief_too_vague',
         briefQualityWarnings: readiness.briefQualityWarnings as BriefQualityWarning[],
         retryable: false,
