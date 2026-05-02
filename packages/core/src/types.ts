@@ -7,6 +7,7 @@ import type {
 } from './runners/types.js';
 import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
 import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
+import type { ResearchToolDefinition } from './research/types.js';
 import { findModelProfile } from './routing/model-profiles.js';
 
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -153,6 +154,14 @@ export interface TaskSpec {
   verifyCommand?: string[]
   autoCommit?: boolean
   planContext?: string
+  /**
+   * Optional task-specific tool injection. When present, runner adapters
+   * merge these tools into the worker's tool surface ON TOP of whatever
+   * `tools: ToolMode` would normally produce. Used by `/explore` for the
+   * external researcher (taskIndex=1) only; all other executors leave this
+   * undefined. Runners MUST treat `undefined` as a no-op.
+   */
+  customToolset?: ResearchToolDefinition[]
 }
 
 export interface CodexProviderConfig { type: 'codex'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
