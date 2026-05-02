@@ -237,6 +237,7 @@ export async function runClaude(
       toolCalls: tracker.getToolCalls(),
       outputIsDiagnostic: true,
       escalationLog: [],
+      parsedFindings: null,
       durationMs: Date.now() - taskStartMs,
     };
   }
@@ -707,6 +708,7 @@ export async function runClaude(
         toolCalls: tracker.getToolCalls(),
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
         ...(contextLimit && { errorCode: 'provider_context_limit' as const }),
@@ -766,6 +768,7 @@ export async function runClaude(
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         durationMs: Date.now() - taskStartMs,
       };
     },
