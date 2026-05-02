@@ -37,6 +37,125 @@ export const MAX_TIME_PRESTOP_RATIO = 0.80;
 
 // === Shared field schemas ===
 
+const TrimmedNonEmpty = z.string().trim().min(1);
+
+// `://` is already covered by the character class (the `:` and `/` matches),
+// kept here only as a defensive belt-and-braces against future class edits
+// that might accidentally drop one of those characters. If you simplify the
+// class, drop the alternation too. Both branches reject the same inputs today.
+const FORBIDDEN_HOST_CHARS = /[\/:@?#]|:\/\//;
+const IPV4_LITERAL = /^(\d{1,3}\.){3}\d{1,3}$/;
+const IPV6_LITERAL = /^\[?[0-9a-fA-F:]+\]?$/;
+
+const HostString = z.string().trim().min(1).max(253).transform((raw, ctx) => {
+  if (FORBIDDEN_HOST_CHARS.test(raw)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom,
+      message: 'must be a bare hostname — no scheme, path, port, credentials, query, or fragment' });
+    return z.NEVER;
+  }
+  if (IPV4_LITERAL.test(raw) || IPV6_LITERAL.test(raw)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom,
+      message: 'IP literals are not allowed in fetchAllowlistExtra (use a DNS hostname)' });
+    return z.NEVER;
+  }
+  const isAscii = /^[\x00-\x7f]+$/.test(raw);
+  let canonical: string;
+  if (isAscii) {
+    try {
+      canonical = new URL(`https://${raw}`).hostname;
+    } catch {
+      ctx.addIssue({ code: z.ZodIssueCode.custom, message: 'invalid hostname' });
+      return z.NEVER;
+    }
+  } else {
+    try {
+      canonical = new URL(`https://${raw}`).hostname;
+    } catch (e) {
+      const msg = (e as Error)?.message ?? '';
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        message: msg.includes('ICU') || /full-icu|small-icu/i.test(msg)
+          ? 'invalid_hostname_idna_unavailable: this Node build was compiled without full ICU; cannot IDNA-normalize non-ASCII hostnames'
+          : 'invalid hostname',
+      });
+      return z.NEVER;
+    }
+  }
+  if (!/^(?!-)[a-z0-9-]+(\.[a-z0-9-]+)+$/.test(canonical)) {
+    ctx.addIssue({ code: z.ZodIssueCode.custom,
+      message: 'must be a fully-qualified domain name with at least one dot' });
+    return z.NEVER;
+  }
+  return canonical;
+});
+
+// === Research config defaults & schema ===
+
+const DEFAULT_RESEARCH_BRAVE = {
+  apiKeys: [] as string[],
+  timeoutMs: 8000,
+  maxResultsPerQuery: 10,
+  perCallBackoffMs: 250,
+};
+
+const DEFAULT_RESEARCH_FETCH = {
+  maxRedirects: 3,
+  connectTimeoutMs: 5_000,
+  totalDeadlineMs: 12_000,
+  maxBodyBytes: 1024 * 1024 as number,
+  allowPrivateNetwork: false,
+};
+
+const DEFAULT_RESEARCH_BUILTIN_ADAPTERS = {
+  arxiv: true,
+  semanticScholar: true,
+  githubSearch: true,
+  genericRss: true,
+};
+
+const DEFAULT_RESEARCH = {
+  brave: DEFAULT_RESEARCH_BRAVE,
+  fetch: DEFAULT_RESEARCH_FETCH,
+  builtinAdapters: DEFAULT_RESEARCH_BUILTIN_ADAPTERS,
+  userSources: [] as string[],
+  fetchAllowlistExtra: [] as string[],
+};
+
+export const ResearchConfigSchema = z.object({
+  brave: z.object({
+    apiKeys: z.array(TrimmedNonEmpty)
+              .max(32)
+              .transform(arr => Array.from(new Set(arr)))
+              .default([]),
+    timeoutMs: z.number().int().positive().max(30_000).default(8000),
+    maxResultsPerQuery: z.number().int().positive().max(20).default(10),
+    perCallBackoffMs: z.number().int().min(0).max(2_000).default(250),
+  }).strict().default(() => DEFAULT_RESEARCH_BRAVE),
+  fetch: z.object({
+    maxRedirects: z.number().int().min(0).max(5).default(3),
+    connectTimeoutMs: z.number().int().positive().max(10_000).default(5_000),
+    totalDeadlineMs: z.number().int().positive().max(30_000).default(12_000),
+    maxBodyBytes: z.number().int().positive().max(4 * 1024 * 1024).default(1024 * 1024),
+    allowPrivateNetwork: z.boolean().default(false),
+  }).strict().refine(
+    v => v.totalDeadlineMs >= v.connectTimeoutMs,
+    { message: 'fetch_invalid_deadlines: totalDeadlineMs must be >= connectTimeoutMs' },
+  ).default(() => DEFAULT_RESEARCH_FETCH),
+  builtinAdapters: z.object({
+    arxiv: z.boolean().default(true),
+    semanticScholar: z.boolean().default(true),
+    githubSearch: z.boolean().default(true),
+    genericRss: z.boolean().default(true),
+  }).strict().default(() => DEFAULT_RESEARCH_BUILTIN_ADAPTERS),
+  userSources: z.array(TrimmedNonEmpty.max(2000)).max(50).default([]),
+  fetchAllowlistExtra: z.array(HostString)
+                        .max(64)
+                        .transform(arr => Array.from(new Set(arr)))
+                        .default([]),
+}).strict().default(() => DEFAULT_RESEARCH);
+
+export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
+
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
 const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
 const openAICompatibleHostedToolsSchema = z.array(z.enum(['web_search']));
@@ -201,6 +320,7 @@ export const multiModelConfigSchema = z.object({
   telemetry: z.object({
     enabled: z.boolean(),
   }).optional(),
+  research: ResearchConfigSchema,
 }).strict();
 
 /** Inferred type for the standalone server configuration block. */
