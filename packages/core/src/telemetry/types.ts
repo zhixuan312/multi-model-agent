@@ -35,6 +35,11 @@ export const ConcernCategory = z.enum([
   'performance',
   'maintainability',
   'doc_gap',
+  'doc_drift',
+  'contract_violation',
+  'coverage_gap',
+  'dead_code',
+  'queue_hygiene',
   'other',
 ]);
 

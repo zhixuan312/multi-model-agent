@@ -1,6 +1,8 @@
 export type ConcernCategory =
   | 'missing_test' | 'scope_creep' | 'incomplete_impl' | 'style_lint'
-  | 'security' | 'performance' | 'maintainability' | 'doc_gap' | 'other';
+  | 'security' | 'performance' | 'maintainability' | 'doc_gap'
+  | 'doc_drift' | 'contract_violation' | 'coverage_gap' | 'dead_code' | 'queue_hygiene'
+  | 'other';
 
 interface RawConcern {
   source:   string; // 'spec_review' | 'quality_review' | 'diff_review' | …
@@ -21,6 +23,11 @@ const PATTERNS: Array<[RegExp, ConcernCategory]> = [
   [/\b(?:style|naming|camelCase|snake_case|formatting|lint(?:er)?)\b/i,           'style_lint'],
   [/\b(?:readme|doc(?:ument(?:ing|ation)?|s)?|comment|jsdoc)\b/i,                 'doc_gap'],
   [/\b(?:extract(?:ing)?|refactor|maintain|coupl(?:ing)?|cohes(?:ion)?)\b/i,       'maintainability'],
+  [/\b(?:stale|out[\s-]*of[\s-]*date|obsolete|no longer accurate)\b/i,              'doc_drift'],
+  [/\b(?:envelope|contract|wire[\s-]*format|public[\s-]*api|gate(?:s|d)?)\b/i,      'contract_violation'],
+  [/\b(?:missing[\s-]*coverage|coverage[\s-]*gap|skipped\b[\s\w-]*\btest|(?:no|without)[\s-]+(?:an?\s+)?(?:active\s+)?replacement)\b/i, 'coverage_gap'],
+  [/\b(?:dead[\s-]*code|unused[\s-]*(?:seam|export|symbol)|stale[\s-]*comment|legacy[\s-]*field)\b/i, 'dead_code'],
+  [/\b(?:queue|tracker|prq|backlog)\b.*\b(?:hygiene|stale|cleanup|historical)\b/i,  'queue_hygiene'],
 ];
 
 export function classifyConcern(c: RawConcern): ConcernCategory {
