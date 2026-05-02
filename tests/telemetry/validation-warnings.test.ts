@@ -58,6 +58,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     reviewPolicy: 'full',
     verifyCommandPresent: false,
     implementerModel: 'gpt-5',
+    implementerTier: 'standard',
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
@@ -81,7 +82,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
       {
         name: 'implementing',
         model: 'gpt-5',
-        agentTier: 'standard',
+        tier: 'standard',
         durationMs: 30000,
         costUSD: 0.03,
         inputTokens: 500,
@@ -98,7 +99,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
       {
         name: 'committing',
         model: 'gpt-5',
-        agentTier: 'standard',
+        tier: 'standard',
         durationMs: 500,
         costUSD: 0.001,
         inputTokens: 100,

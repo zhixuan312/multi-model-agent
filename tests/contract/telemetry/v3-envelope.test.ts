@@ -8,7 +8,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
   const base: Record<string, unknown> = {
     name,
     model,
-    agentTier: 'standard' as const,
+    tier: 'standard' as const,
     durationMs: 5000,
     costUSD: 0.01,
     inputTokens: 100,
@@ -81,6 +81,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     reviewPolicy: route === 'delegate' ? 'full' as const : 'quality_only' as const,
     verifyCommandPresent: route === 'verify',
     implementerModel: 'claude-sonnet',
+    implementerTier: 'standard' as const,
     terminalStatus: 'ok' as const,
     workerStatus: 'done' as const,
     errorCode: null,

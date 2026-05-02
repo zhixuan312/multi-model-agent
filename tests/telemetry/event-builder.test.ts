@@ -8,7 +8,7 @@ function makeFixtureRunResult(overrides: Partial<RunResult>): RunResult {
 }
 
 describe('event-builder tier vocabulary', () => {
-  it('emits agentTier as canonical "complex" (not "reasoning")', () => {
+  it('emits tier as canonical "complex" (not "reasoning")', () => {
     const rr = makeFixtureRunResult({
       stageStats: {
         ...HAPPY.stageStats,
@@ -26,10 +26,10 @@ describe('event-builder tier vocabulary', () => {
       parentModel: null,
     });
     const stage = event.stages.find(s => s.name === 'implementing')!;
-    expect(stage.agentTier).toBe('complex');
+    expect(stage.tier).toBe('complex');
   });
 
-  it('emits agentTier as canonical "standard" unchanged', () => {
+  it('emits tier as canonical "standard" unchanged', () => {
     const rr = makeFixtureRunResult({});
     const event = buildTaskCompletedEvent({
       route: 'delegate',
@@ -39,6 +39,6 @@ describe('event-builder tier vocabulary', () => {
       parentModel: null,
     });
     const stage = event.stages.find(s => s.name === 'implementing')!;
-    expect(stage.agentTier).toBe('standard');
+    expect(stage.tier).toBe('standard');
   });
 });

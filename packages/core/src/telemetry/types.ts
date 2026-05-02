@@ -85,7 +85,7 @@ const StageNameEnum = z.enum([
 const StageEntryBase = z.object({
   name: StageNameEnum,
   model: z.string().regex(STRICT_ID_REGEX),
-  agentTier: z.enum(['standard', 'complex']),
+  tier: z.enum(['standard', 'complex', 'main']),
   durationMs: z.number().int().min(0).max(3_600_000),
   costUSD: z.number().min(0).max(100),
   inputTokens: z.number().int().min(0).max(5_000_000),
@@ -154,6 +154,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
+  implementerTier: z.enum(['standard', 'complex', 'main']),
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),

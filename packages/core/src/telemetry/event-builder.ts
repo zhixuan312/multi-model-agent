@@ -122,6 +122,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
       ?? runResult.models?.implementer
       ?? runResult.stageStats?.implementing?.model
       ?? 'custom',
+    implementerTier: (runResult.stageStats?.implementing?.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
@@ -206,7 +207,7 @@ function extractStageData(
   if (!raw || !raw.entered) return null;
   return {
     model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
-    agentTier: raw.agentTier as 'standard' | 'complex',
+    tier: (raw.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),

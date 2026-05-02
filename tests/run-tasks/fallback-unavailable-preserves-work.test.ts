@@ -177,6 +177,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'custom',
+      implementerTier: 'standard',
       terminalStatus: 'unavailable',
       workerStatus: 'blocked',
       errorCode: null,
@@ -218,6 +219,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'deepseek-v4-pro',
+      implementerTier: 'standard',
       terminalStatus: 'unavailable',
       workerStatus: 'blocked',
       errorCode: null,
@@ -241,7 +243,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
         {
           name: 'implementing',
           model: 'deepseek-v4-pro',
-          agentTier: 'standard',
+          tier: 'standard',
           durationMs: 3_360_000,
           costUSD: 0.87,
           inputTokens: 5000,
@@ -441,7 +443,7 @@ describe('Test 12 Part A — lifecycle regression', () => {
 
     const implStage = event.stages[0]!;
     expect(implStage.name).toBe('implementing');
-    expect(implStage.agentTier).toBe('standard');
+    expect(implStage.tier).toBe('standard');
     expect(implStage.durationMs).toBe(3_360_000);
     expect(implStage.costUSD).toBeCloseTo(0.87, 6);
     expect(implStage.turnCount).toBe(42);
