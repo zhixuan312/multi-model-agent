@@ -5,6 +5,32 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.0] - 2026-05-02
+
+### Added
+- **`/explore` divergent ideation tool** (server + core). New POST `/explore?cwd=<abs>` endpoint that produces 3-5 distinct "threads of thought" from a partial idea, designed to run before `superpowers:brainstorming`. Architecture: three workers under one batch — internal investigator (codebase, readonly), external researcher (web/adapters, no fs), synthesizer (no tools). Internal + external run in parallel; synthesizer composes after. Distinct from `mma-investigate` by output shape: investigate converges to one answer, explore diverges to multiple directions.
+- **Runner-uniform research tool surface** (`packages/core/src/runners/base/research-tools.ts`). Six tools — `web_search` (Brave, optional), `web_fetch` (HTTPS-only with SSRF guard, allowlist, IP pinning), `arxiv`, `semantic_scholar`, `github_search`, `rss` — exposed identically across openai / claude / codex via the new `TaskSpec.customToolset` injection field. Adapters call hardcoded HTTPS endpoints; only `web_fetch` is policed by the per-task host allowlist.
+- **`ResearchConfigSchema`** (`packages/core/src/config/schema.ts`). Top-level `research` block on `multiModelConfigSchema`: `brave.apiKeys` (round-robin with per-call retry budget + deadline), `fetch` (timeouts, body-size cap, redirect cap, optional `allowPrivateNetwork`), `builtinAdapters` (toggles), `userSources` (free-form text strings), `fetchAllowlistExtra` (canonical IDNA-normalized hosts).
+- **SSRF-defense `web_fetch`** (`packages/core/src/research/web-fetch.ts` + `ssrf-guard.ts`). HTTPS-only; rejects IP literals; canonical hostname allowlist (exact match, IDNA-normalized); always-reject set covers loopback / cloud-metadata / link-local / CGNAT (RFC 6598 100.64.0.0/10) / IPv4-mapped IPv6 / 6to4 with embedded-v4 reclassification / multicast; conditional-reject set (RFC 1918 + `fd00::/8`) gated on `allowPrivateNetwork: true` AND provenance `'extra'` (per-task allowlist tracks `Map<host, 'extra' | 'user_source'>` so userSources-derived hosts cannot opt into private-IP fetching).
+- **Brave key rotation with leak-proof errors** (`packages/core/src/research/web-search.ts`). In-process atomic counter (try/finally on the lock chain) round-robins keys across calls; per-call retry budget = `min(N_keys, 4)`; overall deadline + jittered exponential backoff; error messages never include the key value (security test pins this).
+- **Untrusted-content delimiter wrapping** (`packages/core/src/research/untrusted-content.ts`). `<external-content url=… host=… trustLevel="untrusted">…</external-content>` for fetched HTML; `<external-search-results …>` for Brave results. Worker prompts treat anything inside as data, never instructions; injection-attempt detection surfaces as `injectionDetected: true` on the source row.
+- **`mma-explore` SKILL** (`packages/server/src/skills/mma-explore/SKILL.md`). Output-shape disambiguation at the top of "When to Use": one answer → `mma-investigate`; multiple directions → continue. Cross-link added to `mma-investigate/SKILL.md` "Don't use when…" list.
+- **Six observability events** (`packages/core/src/observability/events.ts`): `explore.task.start/end`, `explore.brave.attempt`, `explore.adapter.call`, `explore.source.skipped`, `explore.fetch.blocked` — schemas pinned in `EventSchemas`, contract-tested under `tests/contract/observability/explore-events.test.ts`.
+- **Partial-failure synth handoff.** When one of internal/external workers fails, synthesizer still runs with a fixed stub for the failed side; envelope flags `degradedSources`. When both fail, synthesizer is skipped (`qualityReviewVerdict: 'skipped'`, reason `no_synth_input`). When synthesizer itself fails after both workers succeed, both worker outputs are preserved on the envelope; caller can re-dispatch synthesis only via `mma-retry` on `taskIndex=2`.
+- **Source adapters**: arxiv (Atom feed parser, case-insensitive http→https rewrite), semantic-scholar (JSON), github-search (code + repo), generic-rss (RSS 2.0 / Atom / RSS 1.0/RDF, consumes `WebFetchResult.rawText` to avoid escaped-XML breakage). Generic-rss adapter skips parsing when `textTruncated: true` to avoid silently-incomplete bodies.
+- **Markdown→threads parser** (`packages/core/src/reporting/parse-explore-report.ts`). Per spec §4.2.4: contiguous numbering (renumbers on gaps + flags `malformed_threads`), duplicate-number dedupe, duplicate-axis dedupe, sentinel handling, ≤5 thread cap, `extractionDiagnostics.droppedThreads[]` for missing-required-field drops.
+- **`IncompleteReason: 'threads_dropped'`** distinct from `'malformed_threads'` so downstream consumers can tell "format was broken" from "individual threads were invalid but structure was OK".
+- **`@types/jsdom`** devDep + `@mozilla/readability` + `fast-xml-parser` runtime deps for HTML main-text extraction and feed parsing.
+
+### Changed
+- **`TaskSpec.tools` is unchanged** but a new optional `customToolset?: ResearchToolDefinition[]` field flows through to runner adapters (openai / claude / codex). All three runners merge the array into the worker's tool surface when `tools === 'none'`. All other executors leave the field undefined; runners treat `undefined` as a no-op.
+- **`ReadOnlyReviewFlag` route enum extended** with `'explore'` so `MMAGENT_READ_ONLY_REVIEW=explore` enables quality-only review for the new route.
+- **`undici 8` `request()` no longer accepts `maxRedirections`** — adapters and `web_fetch` removed the parameter (default is no auto-redirect; `web_fetch` follows redirects manually with per-hop allowlist re-validation).
+- **OpenAPI doc + golden + route enum** include `/explore`; total path count is now 15 (8 tool routes + 4 control + 2 introspection + 1 OpenAPI introspection).
+
+### Tests
+- 411 new tests across the explore subsystem: 17 allowlist + 59 ssrf-guard + 31 web-fetch security + 20 web-fetch happy-path + 16 + 4 web-search + 4 untrusted-content + per-adapter (arxiv / semantic-scholar / github-search / rss) + 26 reviewed-execution explore + 21 executor unit + contract tests for skill manifest, observability event schemas, and the routes manifest. Full suite: 2687 passing.
+
 ## [3.11.1] - 2026-05-02
 
 ### Fixed
@@ -1122,7 +1148,9 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.0...HEAD
+[3.12.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.1...v3.12.0
+[3.11.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.0...v3.11.1
 [3.11.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.7...v3.11.0
 [3.10.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.6...v3.10.7
 [3.10.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...v3.10.6
