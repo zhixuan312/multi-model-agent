@@ -648,6 +648,24 @@ export async function executeReviewedLifecycle(
   const fallbackOverrides: FallbackOverride[] = [];
   let latestAttemptedImpl: { tier: AgentType; result: RunResult } | undefined;
   let lastNonRejectedImpl: { tier: AgentType; result: RunResult } | undefined;
+  // Review-stage timing variables hoisted so deferred-finalizer closures
+  // (defined below) can reference them from all early-exit paths.
+  let specReviewT0 = 0;
+  let specReviewC0: number | null = null;
+  let specReviewDurationMs = 0;
+  let qualityReviewT0 = 0;
+  let qualityReviewC0: number | null = null;
+  let qualityReviewDurationMs = 0;
+  // Accumulated metrics from spec/quality review results — threaded to
+  // the deferred finalizers so early-exit paths carry the same token/turn
+  // counts the normal post-loop path always had.
+  let specReviewMetrics: Record<string, unknown> = {};
+  let qualityReviewMetrics: Record<string, unknown> = {};
+  // Hoisted so deferred-finalizer closures (defined below) can reference
+  // these from all early-exit paths. Reassigned after the corresponding
+  // review stage runs.
+  let specStatus: string = 'error';
+  let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
   const reviewRounds = () => ({ spec: specAttemptIndex, quality: qualityAttemptIndex, metadata: metadataRepair, cap: Math.max(maxSpecRows, maxQualityRows) });
   const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
 
@@ -669,6 +687,51 @@ export async function executeReviewedLifecycle(
     const provider = providerFor(tier);
     const model = provider?.config.model ?? config.agents[tier]?.model ?? resolvedModel;
     return { tier, family: modelFamily(model), model };
+  };
+  // Deferred finalizers for spec_review and quality_review. Called from
+  // the normal post-loop path AND from every early-exit path
+  // (round_cap, cost_ceiling, time_ceiling, all_tiers_unavailable).
+  // Idempotent on re-call; no-op when the stage was never started.
+  let specReviewFinalized = false;
+  let qualityReviewFinalized = false;
+
+  const finalizeSpecReviewStage = (): void => {
+    if (specReviewFinalized) return;
+    if (specReviewT0 === 0) return;  // never started
+    specReviewFinalized = true;
+    const lastReviewer = specReviewerHistory[specReviewerHistory.length - 1];
+    const reviewerAgent = (lastReviewer === undefined || lastReviewer === 'skipped')
+      ? implementerAgentInfo
+      : reviewerAgentInfoFor(lastReviewer);
+    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, reviewerAgent,
+      runningCostUSD(), snapshotIdle(stageIdle),
+      specStatus === 'approved' ? 'approved'
+        : specStatus === 'changes_required' ? 'changes_required'
+        : specStatus === 'skipped' ? 'skipped'
+        : specStatus === 'not_applicable' ? 'not_applicable'
+        : 'error',
+      specAttemptIndex,
+      { ...specReviewMetrics, durationMs: specReviewDurationMs });
+  };
+
+  const finalizeQualityReviewStage = (): void => {
+    if (qualityReviewFinalized) return;
+    if (qualityReviewT0 === 0) return;
+    if (reviewPolicy !== 'full' && reviewPolicy !== 'quality_only') return;
+    qualityReviewFinalized = true;
+    const lastReviewer = qualityReviewerHistory[qualityReviewerHistory.length - 1];
+    const reviewerAgent = (lastReviewer === undefined || lastReviewer === 'skipped')
+      ? implementerAgentInfo
+      : reviewerAgentInfoFor(lastReviewer);
+    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, reviewerAgent,
+      runningCostUSD(), snapshotIdle(stageIdle),
+      qualityResult.status === 'approved' ? 'approved'
+        : qualityResult.status === 'changes_required' ? 'changes_required'
+        : qualityResult.status === 'annotated' ? 'annotated'
+        : qualityResult.status === 'skipped' ? 'skipped'
+        : 'error',
+      qualityAttemptIndex,
+      { ...qualityReviewMetrics, durationMs: qualityReviewDurationMs });
   };
   // §3.9: runningCostUSD must be cumulative and monotonic across explicit
   // runner boundaries. Runner progress reports per-runner cumulative token
@@ -776,6 +839,8 @@ export async function executeReviewedLifecycle(
       };
     }
 
+    finalizeSpecReviewStage();
+    finalizeQualityReviewStage();
     const ship = salvageSource ?? lastNonRejectedImpl?.result ?? base;
     return {
       ...ship,
@@ -829,31 +894,35 @@ export async function executeReviewedLifecycle(
     message: string,
     aborting: 'spec' | 'quality',
     wallClockMs?: number,
-  ): RunResult => ({
-    ...base,
-    status: 'incomplete',
-    workerStatus: 'review_loop_aborted',
-    terminationReason: terminationReason === 'round_cap'
-      ? 'round_cap'
-      : {
-          cause: terminationReason === 'cost_ceiling' ? 'cost_exceeded' : 'time_ceiling',
-          turnsUsed: base.turns,
-          hasFileArtifacts: (base.filesWritten ?? []).length > 0,
-          usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
-          workerSelfAssessment: 'review_loop_aborted',
-          wasPromoted: false,
-          ...(wallClockMs !== undefined ? { wallClockMs } : {}),
-        },
-    reviewRounds: reviewRounds(),
-    error: message,
-    specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
-    qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
-    agents: agentEnvelope(
-      specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
-      qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
-    ),
-    stageStats: stats,
-  });
+  ): RunResult => {
+    finalizeSpecReviewStage();
+    finalizeQualityReviewStage();
+    return {
+      ...base,
+      status: 'incomplete',
+      workerStatus: 'review_loop_aborted',
+      terminationReason: terminationReason === 'round_cap'
+        ? 'round_cap'
+        : {
+            cause: terminationReason === 'cost_ceiling' ? 'cost_exceeded' : 'time_ceiling',
+            turnsUsed: base.turns,
+            hasFileArtifacts: (base.filesWritten ?? []).length > 0,
+            usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
+            workerSelfAssessment: 'review_loop_aborted',
+            wasPromoted: false,
+            ...(wallClockMs !== undefined ? { wallClockMs } : {}),
+          },
+      reviewRounds: reviewRounds(),
+      error: message,
+      specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
+      qualityReviewStatus: aborting === 'quality' ? 'changes_required' : (base.qualityReviewStatus ?? 'skipped'),
+      agents: agentEnvelope(
+        specReviewerHistory[specReviewerHistory.length - 1] ?? 'not_applicable',
+        qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
+      ),
+      stageStats: stats,
+    };
+  };
   const defaultVerification: VerifyStageResult = { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   let latestVerification: VerifyStageResult = defaultVerification;
 
@@ -1430,19 +1499,8 @@ export async function executeReviewedLifecycle(
     let finalImplResult = implResult;
     let finalImplReport = effectiveImplReport;
     let specResult: import('../review/spec-reviewer.js').SpecReviewOrSkipped;
-    let specStatus: string;
     let specReport: typeof effectiveImplReport | undefined;
     let specReviewReason: string | undefined;
-    let specReviewT0 = 0;
-    let specReviewC0: number | null = null;
-    // Delta-only timing: accumulate per-call wall durations across the
-    // initial spec_review + every spec_rework round's re-review. This
-    // replaces the `Date.now() - specReviewT0` fallback at endReviewStage,
-    // which over-counts because endReviewStage runs AFTER spec_rework,
-    // quality_review, AND quality_rework all complete. No absolute
-    // timestamps go on the wire — Date.now() is used only as a local
-    // delta source. Privacy.md guarantees ms-deltas only.
-    let specReviewDurationMs = 0;
 
     if (reviewPolicy !== 'quality_only') {
     transitionStage('verifying', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: maxSpecRows }, null);
@@ -1552,18 +1610,6 @@ export async function executeReviewedLifecycle(
       specReviewReason = 'skipped: reviewPolicy is quality_only';
     }
 
-    let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
-    // Hoisted so endReviewStage (called after this block) can read them on the
-    // success path. The endReviewStage call at line 1752 is guarded by
-    // reviewPolicy ∈ {'full', 'quality_only'}; for 'spec_only' / 'diff_only' /
-    // 'off', the quality_review stage stays at emptyStats() default
-    // (entered: false) and is filtered from the wire by event-builder.ts:175.
-    let qualityReviewT0 = 0;
-    let qualityReviewC0: number | null = null;
-    // Same delta-only timing pattern as spec_review — accumulate per-call
-    // wall durations across initial + each rework round's re-review. No
-    // raw timestamps cross the wire.
-    let qualityReviewDurationMs = 0;
     if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
       qualityUnavailable = new Map();
       const qualityReviewerTier = pickReviewer({ loop: 'quality', attemptIndex: 0, baseTier: resolved.slot });
@@ -1737,31 +1783,12 @@ export async function executeReviewedLifecycle(
     // override. endReviewStage uses the override when present and falls
     // back to `Date.now() - t0` otherwise (which over-counts review-block
     // span across rework + later stages).
-    const specMetrics = { ...((specResult as any).metrics ?? {}), durationMs: specReviewDurationMs };
-    const qualityMetrics = { ...((qualityResult as any).metrics ?? {}), durationMs: qualityReviewDurationMs };
+    specReviewMetrics = ((specResult as any).metrics ?? {}) as Record<string, unknown>;
+    qualityReviewMetrics = ((qualityResult as any).metrics ?? {}) as Record<string, unknown>;
 
-    if (reviewPolicy !== 'quality_only') {
-    endReviewStage(stats, 'spec_review', specReviewT0, specReviewC0, specReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
-      specStatus === 'approved' ? 'approved'
-        : specStatus === 'changes_required' ? 'changes_required'
-        : specStatus === 'skipped' ? 'skipped'
-        : specStatus === 'not_applicable' ? 'not_applicable'
-        : 'error',
-      specAttemptIndex,
-      specMetrics);
-    }
+    finalizeSpecReviewStage();
+    finalizeQualityReviewStage();
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
-
-    if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
-    endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, qualityReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
-      qualityResult.status === 'approved' ? 'approved'
-        : qualityResult.status === 'changes_required' ? 'changes_required'
-        : qualityResult.status === 'annotated' ? 'annotated'
-        : qualityResult.status === 'skipped' ? 'skipped'
-        : 'error',
-      qualityAttemptIndex,
-      qualityMetrics);
-    }
     const aggregated = aggregateResult(
       finalReport,
       specReport,
