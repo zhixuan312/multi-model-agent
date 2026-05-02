@@ -41,22 +41,30 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs. runResult.durationMs and per-stage
-  // durations are sampled at different `Date.now()` ticks, so a per-stage measurement can land 1ms
-  // longer than the task-level total. Take the max of (runResult.durationMs, stage-sum) to enforce
-  // R4 by construction; without this guarantee, every event with millisecond-precision drift gets
-  // dropped by the V3 emit-time validator.
+  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs.
+  //
+  // Use runResult.durationMs as the canonical wall-clock total by default.
+  // Salvage-promotion paths in reviewed-lifecycle (adaptForAllTiersUnavailable
+  // at line ~835) can promote a prior runner's full durationMs into a single
+  // stage, overlapping with other stages and causing Σ stage.durationMs to
+  // exceed the task-level wall clock. When that happens, proportionally scale
+  // stage durations down so the sum fits within totalDurationMs rather than
+  // inflating the total to mask the double-counting.
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
-  const totalDurationMs = clampDurationMsTotal(Math.max(runResult.durationMs ?? 0, stageDurationsSum));
+  const rawTotal = runResult.durationMs ?? stageDurationsSum;
+  const totalDurationMs = clampDurationMsTotal(rawTotal);
 
-  // Defensive: clamp any stage duration that exceeds totalDurationMs.
-  // Salvage-promotion paths in reviewed-lifecycle can produce stage durations
-  // that double-count overlapping rework time, inflating a stage beyond the
-  // task-level wall clock. Capping individual stages prevents telemetry from
-  // reporting per-stage durations larger than the task itself.
-  for (const st of stages) {
-    if (st.durationMs > totalDurationMs) {
-      st.durationMs = totalDurationMs;
+  if (stageDurationsSum > totalDurationMs && stages.length > 0) {
+    const scale = totalDurationMs / stageDurationsSum;
+    let allocated = 0;
+    for (let i = 0; i < stages.length; i++) {
+      const scaled = Math.max(0, Math.floor(stages[i].durationMs * scale));
+      stages[i].durationMs = scaled;
+      allocated += scaled;
+    }
+    // Distribute any remainder to the first stage (always implementing)
+    if (allocated < totalDurationMs) {
+      stages[0].durationMs += totalDurationMs - allocated;
     }
   }
 
