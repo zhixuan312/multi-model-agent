@@ -133,34 +133,23 @@ describe('reviewed lifecycle fallback when escalated tier is not configured', ()
       },
     );
 
+    // R3: reviewer can't use standard (same identity as implementer) and complex
+    // is not configured → review skipped. The lifecycle completes ok with
+    // skipped reviews rather than failing the task.
     expect(result.status).toBe('ok');
-    expect(implementationCalls).toBe(3);
-    expect(specReviewCalls).toBe(3);
-    expect(qualityReviewCalls).toBe(1);
+    expect(implementationCalls).toBe(1);
+    expect(specReviewCalls).toBe(0);
+    expect(qualityReviewCalls).toBe(0);
 
-    const fallbackEvent = events.find((event) =>
-      event.event === 'fallback' &&
+    // R3: the spec reviewer's fallback also fails — standard is forbidden
+    // (same identity as implementer) and complex is not configured.
+    // When both tiers are unavailable, a fallback_unavailable event is emitted.
+    const reviewerUnavailable = events.find((event) =>
+      event.event === 'fallback_unavailable' &&
       event.loop === 'spec' &&
-      event.role === 'implementer' &&
-      event.attempt === 2,
+      event.role === 'specReviewer',
     );
-    expect(fallbackEvent).toMatchObject({
-      assignedTier: 'complex',
-      usedTier: 'standard',
-      reason: 'not_configured',
-      violatesSeparation: false,
-    });
-    expect(fallbackEvent?.triggeringStatus).toBeUndefined();
-
-    const escalationUnavailable = events.find((event) =>
-      event.event === 'escalation_unavailable' &&
-      event.loop === 'spec' &&
-      event.role === 'implementer' &&
-      event.attempt === 2,
-    );
-    expect(escalationUnavailable).toMatchObject({
-      wantedTier: 'complex',
-      reason: 'not_configured',
-    });
+    expect(reviewerUnavailable).toBeDefined();
+    expect(reviewerUnavailable?.reason).toBe('not_configured');
   });
 });

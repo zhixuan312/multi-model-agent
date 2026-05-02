@@ -62,7 +62,7 @@ export type {
 export { expandContextBlocks } from './context/expand-context-blocks.js';
 
 // Provider
-export { createProvider, __setCoreTestProviderOverride } from './provider.js';
+export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './provider.js';
 
 // Batch cache
 export { BatchCache } from './batch-cache.js';

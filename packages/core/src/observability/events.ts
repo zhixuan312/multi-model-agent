@@ -103,6 +103,17 @@ export const FallbackEvent = TaskBase.extend({
   reason: DiagReasonEnum,
   triggeringStatus: RunStatusEnum.optional(),
   violatesSeparation: z.boolean(),
+  fallbackSeparationRespected: z.boolean().optional(),
+  assignedIdentity: z.object({
+    providerType: z.string(),
+    normalizedEndpoint: z.string(),
+    modelId: z.string(),
+  }).optional().nullable(),
+  usedIdentity: z.object({
+    providerType: z.string(),
+    normalizedEndpoint: z.string(),
+    modelId: z.string(),
+  }).optional().nullable(),
 }).strict();
 
 export const FallbackUnavailableEvent = TaskBase.extend({

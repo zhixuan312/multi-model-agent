@@ -3,6 +3,7 @@ import type { RunOptions } from './runners/types.js';
 import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
 
 let coreTestProviderOverride: Provider | null = null;
+let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
 
 function assertTestProviderEnabled(): void {
   if (process.env.MMAGENT_TEST_PROVIDER_OVERRIDE !== '1') {
@@ -15,7 +16,13 @@ export function __setCoreTestProviderOverride(provider: Provider | null): void {
   coreTestProviderOverride = provider;
 }
 
+export function __setCoreTestProviderOverrideMap(map: Map<string, Provider> | null): void {
+  assertTestProviderEnabled();
+  coreTestProviderOverrideMap = map;
+}
+
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
+  if (coreTestProviderOverrideMap?.has(slot)) return coreTestProviderOverrideMap.get(slot)!;
   if (coreTestProviderOverride) return coreTestProviderOverride;
   const agentConfig = config.agents[slot];
   if (!agentConfig) {
