@@ -204,6 +204,7 @@ export const UploadBatchSchema = z.object({
   mmagentVersion: VersionString,
   os: Os,
   nodeMajor: z.number().int().min(22).max(99),
+  generation: z.number().int().min(0).optional(),
   events: z.array(TaskCompletedEventSchema).min(1).max(500),
 }).strict();
 
