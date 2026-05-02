@@ -13,14 +13,13 @@ import {
 const Schema = ValidatedTaskCompletedEventSchema;
 
 function makeValidStage(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  // R3: review stages MUST use a different model than the implementer.
-  // implementerModel is 'claude-sonnet', so review/rework/verify/commit stages use 'gpt-5'.
-  const model = (name === 'implementing') ? 'claude-sonnet' : 'gpt-5';
+  // R3: review/rework/verify/commit stages use a different tier than the implementer.
+  const tier = (name === 'implementing') ? 'standard' : 'complex';
 
   const base = {
     name,
-    model,
-    tier: 'standard',
+    model: 'claude-sonnet',
+    tier,
     durationMs: 1000,
     costUSD: 0.01,
     inputTokens: 100,
@@ -177,6 +176,76 @@ describe('V3 telemetry types', () => {
       makeValidEvent({ terminalStatus: 'ok', stages: [] }),
     );
     expect(result.success).toBe(false);
+  });
+
+  // ── R3: review stages must use a different tier than the implementer ──
+  it('R3 — fires when spec_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('spec_review', { tier: 'standard' }),
+        makeValidStage('quality_review', { tier: 'complex' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — fires when quality_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('spec_review', { tier: 'complex' }),
+        makeValidStage('quality_review', { tier: 'standard' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — fires when diff_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('diff_review', { tier: 'standard' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — does NOT fire when models match but tiers differ', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard', model: 'shared-model' }),
+        makeValidStage('spec_review', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('quality_review', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('verifying', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('committing', { tier: 'complex', model: 'shared-model' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    if (!r.success) {
+      expect(r.error.issues.some(i => /^R3:/.test(i.message))).toBe(false);
+    }
+  });
+
+  it('R3 — accepts when all review stages have different tiers', () => {
+    const result = Schema.safeParse(makeValidEvent());
+    expect(result.success).toBe(true);
   });
 
   // ── R4: totalDurationMs >= sum of stage durationMs ──

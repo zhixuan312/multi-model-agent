@@ -50,7 +50,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         durationMs: 10000,
         stageStats: {
           implementing: { stage: 'implementing', entered: true, durationMs: 8000, costUSD: 0.04, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
-          spec_review: { stage: 'spec_review', entered: true, durationMs: 3000, costUSD: 0.001, agentTier: 'standard', modelFamily: 'claude', model: 'claude-haiku', verdict: 'approved', roundsUsed: 1 },
+          spec_review: { stage: 'spec_review', entered: true, durationMs: 3000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-haiku', verdict: 'approved', roundsUsed: 1 },
           spec_rework: { stage: 'spec_rework', entered: true, durationMs: 5000, costUSD: 0.03, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
           committing: { stage: 'committing', entered: true, durationMs: 300, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
         },

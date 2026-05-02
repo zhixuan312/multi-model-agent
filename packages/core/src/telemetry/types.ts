@@ -233,10 +233,14 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     ctx.addIssue({ code: 'custom', message: 'R2.1: empty stages only allowed for brief_too_vague|error' });
   }
 
-  // R3: review stages must use a different model than the implementer
+  // R3: review stages must use a different TIER than the implementer.
+  // Model comparison is intentionally not a gate: user may map all tiers to
+  // the same model string for cost reasons and the pipeline still runs.
   for (const st of event.stages) {
-    if (reviewStages.has(st.name) && st.model === event.implementerModel) {
-      ctx.addIssue({ code: 'custom', message: `R3: ${st.name}.model must differ from implementerModel` });
+    if (st.name === 'spec_review' || st.name === 'quality_review' || st.name === 'diff_review') {
+      if (st.tier === event.implementerTier) {
+        ctx.addIssue({ code: 'custom', message: `R3: ${st.name}.tier must differ from implementerTier` });
+      }
     }
   }
 
