@@ -324,6 +324,15 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
 
   // R15: costUSD per stage in [0, 100]
   // (enforced by Zod schema bounds)
+
+  // R16: rework stages require their parent review stage in the same event
+  const stageNames = new Set((event.stages ?? []).map(s => s.name));
+  if (stageNames.has('spec_rework') && !stageNames.has('spec_review')) {
+    ctx.addIssue({ code: 'custom', message: 'R16: spec_rework requires spec_review in the same event' });
+  }
+  if (stageNames.has('quality_rework') && !stageNames.has('quality_review')) {
+    ctx.addIssue({ code: 'custom', message: 'R16: quality_rework requires quality_review in the same event' });
+  }
 });
 
 // ── Inferred TS types ────────────────────────────────────────────────────

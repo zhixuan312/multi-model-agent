@@ -275,6 +275,7 @@ export interface RunResult {
   verification?: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
+  diffReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   annotatedFindings?: import('./executors/_shared/findings-schema.js').AnnotatedFinding[]
   /** Reviewer findings extracted via typed structured output (OpenAI Agent.outputType).
    *  null on non-review-mode runs and on Claude/Codex runners (which still use the

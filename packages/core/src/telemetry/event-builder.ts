@@ -157,9 +157,12 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
     if (qw) result.push(qw);
   }
 
-  // diff_review — only on full review routes
+  // diff_review — only on full review routes. Diff review is a single-pass
+  // gate (no rework loop), so use one valid round when the stage was entered;
+  // reviewRounds.metadata tracks commit metadata repair attempts, not diff
+  // review rounds.
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const dr = buildReviewStage('diff_review', rr, null, null);
+    const dr = buildReviewStage('diff_review', rr, rr.diffReviewStatus ?? null, 1);
     if (dr) result.push(dr);
   }
 

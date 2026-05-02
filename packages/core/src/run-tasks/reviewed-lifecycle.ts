@@ -1462,6 +1462,13 @@ export async function executeReviewedLifecycle(
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'diff', attempt: 0, role: 'diffReviewer', assignedTier: diffReviewerTier, reason: diffCall.unavailableReason! });
       }
       const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable || isReviewTransportFailure(diffCall.result) ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
+      const diffEnvelopeStatus: RunResult['diffReviewStatus'] =
+        'kind' in verdict
+          ? (verdict.kind === 'approve' ? 'approved'
+            : verdict.kind === 'concerns' ? 'approved'
+            : verdict.kind === 'reject' ? 'changes_required'
+            : 'error')
+          : 'skipped';
       emitTaskEvent('review_decision', {
         stage: 'diff_review',
         verdict: 'kind' in verdict
@@ -1477,7 +1484,7 @@ export async function executeReviewedLifecycle(
         // distinct from spec/quality verdicts. Map to the telemetry verdict enum here.
         'kind' in verdict
           ? (verdict.kind === 'approve' ? 'approved'
-            : verdict.kind === 'concerns' ? 'concerns'
+            : verdict.kind === 'concerns' ? 'approved'
             : verdict.kind === 'reject' ? 'changes_required'
             : 'error')
           : 'skipped',
@@ -1489,6 +1496,7 @@ export async function executeReviewedLifecycle(
         qualityReviewStatus: 'skipped',
         specReviewReason: 'skipped: reviewPolicy is diff_only',
         qualityReviewReason: 'skipped: reviewPolicy is diff_only',
+        diffReviewStatus: diffEnvelopeStatus,
         implementationReport: effectiveImplReport,
         fileArtifactsMissing: implResult.status === 'ok' ? checkOutputTargets(outputTargets) : undefined,
         agents: agentEnvelope('skipped', 'skipped'),

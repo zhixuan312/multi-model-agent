@@ -414,6 +414,63 @@ describe('V3 telemetry types', () => {
     );
     expect(result.success).toBe(false);
   });
+
+  // ── R16: rework stages require their parent review stage in the same event ──
+  it('R16 — rejects spec_rework without spec_review', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('spec_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
+  });
+
+  it('R16 — rejects quality_rework without quality_review', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('quality_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
+  });
+
+  it('R16 — accepts spec_rework when spec_review is present', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('spec_review'),
+          makeValidStage('spec_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('R16 — accepts quality_rework when quality_review is present', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('quality_review'),
+          makeValidStage('quality_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
 });
 
 // ── Batch wrapper ─────────────────────────────────────────────────────────
