@@ -86,6 +86,9 @@ export interface RunWithFallbackResult<T> {
   assignedIdentity?: CanonicalIdentity;
   /** Canonical identity of the actually-used tier's provider. */
   usedIdentity?: CanonicalIdentity;
+
+  /** Higher-work-score of firstResult/altResult on bothUnavailable; null when both have zero work. */
+  salvageResult: T | null;
 }
 
 export async function runWithFallback<T>(
@@ -193,6 +196,7 @@ export async function runWithFallback<T>(
           fallbackSeparationRespected: true,
           assignedIdentity,
           usedIdentity: undefined,
+          salvageResult: null,
         };
       }
       return {
@@ -203,6 +207,7 @@ export async function runWithFallback<T>(
         fallbackReason,
         assignedUnavailableReason,
         unavailableReason: altUnavailableReason,
+        salvageResult: null,
       };
     }
     usedTier = alt;
@@ -231,6 +236,7 @@ export async function runWithFallback<T>(
           fallbackReason: 'not_configured',
           assignedUnavailableReason,
           unavailableReason: 'not_configured',
+          salvageResult: null,
           ...(forbidden.length > 0 ? {
             fallbackSeparationRespected: skippedDueToSeparation || undefined,
             assignedIdentity,
@@ -247,6 +253,7 @@ export async function runWithFallback<T>(
         fallbackReason,
         assignedUnavailableReason,
         unavailableReason: 'not_configured',
+        salvageResult: null,
         ...(forbidden.length > 0 ? {
           fallbackSeparationRespected: skippedDueToSeparation || undefined,
           assignedIdentity,
@@ -269,6 +276,7 @@ export async function runWithFallback<T>(
       fallbackReason,
       assignedUnavailableReason,
       bothUnavailable: false,
+      salvageResult: null,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -297,6 +305,7 @@ export async function runWithFallback<T>(
       bothUnavailable: true,
       unavailableReason: 'transport_failure',
       unavailableTriggeringStatus: calledStatus,
+      salvageResult: null,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -325,6 +334,7 @@ export async function runWithFallback<T>(
       usedTier,
       fallbackFired: false,
       bothUnavailable: false,
+      salvageResult: null,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: sameProviderSep.skip || skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -364,6 +374,7 @@ export async function runWithFallback<T>(
       fallbackTriggeringStatus,
       bothUnavailable: true,
       unavailableReason: altUnavailableReason,
+      salvageResult: null,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: altSeparation || skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -385,6 +396,7 @@ export async function runWithFallback<T>(
       fallbackTriggeringStatus,
       bothUnavailable: true,
       unavailableReason: 'not_configured',
+      salvageResult: null,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -402,6 +414,12 @@ export async function runWithFallback<T>(
   if (isTransportFailure(altResult)) {
     // Both transport-failed mid-call — preserve BOTH triggering statuses.
     markUnavailable(unavailableTiers, altOfUsed, 'transport_failure');
+    const firstWork = scoreWork(result);
+    const altWork = scoreWork(altResult);
+    const maxWork = Math.max(firstWork, altWork);
+    const salvageResult = maxWork > 0
+      ? (firstWork >= altWork ? result : altResult)
+      : null;
     return {
       result: altResult,
       usedTier: altOfUsed,
@@ -411,6 +429,7 @@ export async function runWithFallback<T>(
       bothUnavailable: true,
       unavailableReason: 'transport_failure',
       unavailableTriggeringStatus: altStatus, // alt's failure status (final state)
+      salvageResult,
       ...(forbidden.length > 0 ? {
         fallbackSeparationRespected: skippedDueToSeparation || undefined,
         assignedIdentity,
@@ -427,6 +446,7 @@ export async function runWithFallback<T>(
     fallbackReason,
     fallbackTriggeringStatus,              // assigned's failure status (root cause)
     bothUnavailable: false,
+    salvageResult: null,
     ...(forbidden.length > 0 ? {
       fallbackSeparationRespected: skippedDueToSeparation || undefined,
       assignedIdentity,
@@ -465,4 +485,12 @@ export function isReviewTransportFailure(
   r: { status?: string },
 ): boolean {
   return r.status === 'api_error' || r.status === 'network_error' || r.status === 'timeout';
+}
+
+function scoreWork<T>(r: T | undefined): number {
+  if (!r) return 0;
+  const usage = (r as any).usage ?? {};
+  const turns = (r as any).turns ?? 0;
+  const filesWritten = ((r as any).filesWritten ?? []).length ?? 0;
+  return turns + filesWritten + (usage.inputTokens ?? 0) / 1000;
 }
