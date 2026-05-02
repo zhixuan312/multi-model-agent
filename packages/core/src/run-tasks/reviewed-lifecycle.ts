@@ -35,7 +35,7 @@ import { findModelCapabilities, findModelProfile } from '../routing/model-profil
 import { canonicalIdentity } from '../routing/canonical-model-identity.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
-import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS } from '../config/schema.js';
+import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS, MAX_TIME_PRESTOP_RATIO } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
 import { runQualityReview } from '../review/quality-reviewer.js';
@@ -362,17 +362,40 @@ export async function executeReviewedLifecycle(
     'task_done_summary',
     'fallback', 'fallback_unavailable',
     'escalation', 'escalation_unavailable',
-    'stall_abort', 'cost_check',
+    'stall_abort', 'cost_check', 'time_check',
   ]);
   const shortBatchEarly = verboseBatchIdEarly ? verboseBatchIdEarly.slice(0, 8) : '????????';
   type EventField = string | number | boolean | null | undefined;
   const emitTaskEvent = (event: string, fields: Record<string, EventField>): void => {
     if (bus && verboseBatchIdEarly !== undefined) {
+      const schemaEvent = event === 'heartbeat_timer' ? 'task_started' : event;
       const cleaned: Record<string, EventField> = {};
       for (const [key, value] of Object.entries(fields)) {
         if (value !== undefined) cleaned[key] = value;
       }
-      bus.emit({ event, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
+
+      // Keep verbose-line field names stable while emitting schema-declared
+      // telemetry envelopes in their authoritative persisted shape. EventSchemas
+      // validate the full envelope at EventBus.emit in dev/test, so production
+      // emission paths must construct schema-shaped keys before persistence.
+      if (schemaEvent === 'task_started') {
+        cleaned.route = routeKey || 'delegate';
+        cleaned.cwd = task.cwd ?? process.cwd();
+        for (const key of ['state', 'stage_count', 'tick_ms', 'reason']) delete cleaned[key];
+      }
+      if (event === 'verify_step') {
+        if ('exit_code' in cleaned) { cleaned.exitCode = cleaned.exit_code; delete cleaned.exit_code; }
+        if ('duration_ms' in cleaned) { cleaned.durationMs = cleaned.duration_ms; delete cleaned.duration_ms; }
+        if ('error_message' in cleaned) { cleaned.errorMessage = cleaned.error_message; delete cleaned.error_message; }
+      }
+      if (event === 'task_completed') {
+        if ('stages_json' in cleaned) { cleaned.stages = cleaned.stages_json; delete cleaned.stages_json; }
+        if (!('cachedTokens' in cleaned)) cleaned.cachedTokens = null;
+        if (!('reasoningTokens' in cleaned)) cleaned.reasoningTokens = null;
+        if (!('stages' in cleaned)) cleaned.stages = JSON.stringify(stats);
+      }
+
+      bus.emit({ event: schemaEvent, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
     }
     if (verboseStreamRaw && (verbose || DEFAULT_MODE_EVENTS.has(event))) {
       verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));
@@ -648,7 +671,27 @@ export async function executeReviewedLifecycle(
     const model = provider?.config.model ?? config.agents[tier]?.model ?? resolvedModel;
     return { tier, family: modelFamily(model), model };
   };
-  const runningCostUSD = () => taskCostUSD();
+  // §3.9: runningCostUSD must be monotonic non-decreasing. The heartbeat's
+  // costUSD gets replaced by turn_complete events from every runner that uses
+  // wrappedOnProgress (implementer, spec reviewer, quality reviewer). Since
+  // different runners process different token volumes and compute cost with the
+  // implementer's pricing config, the last-seen value can be lower than
+  // earlier values — making (runningCostUSD - qualityReviewC0) negative.
+  // Guard: track the maximum observed value so the function never decreases.
+  let _lastRunningCostUSD: number | null = null;
+  const runningCostUSD = () => {
+    const current = taskCostUSD();
+    if (current !== null) {
+      if (_lastRunningCostUSD !== null && current < _lastRunningCostUSD) {
+        if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+          throw new Error(`runningCostUSD non-monotonic: prev=${_lastRunningCostUSD} now=${current}`);
+        }
+        return _lastRunningCostUSD;
+      }
+      _lastRunningCostUSD = current;
+    }
+    return current;
+  };
   const policyEscalated: { spec: boolean; quality: boolean; diff: boolean } = { spec: false, quality: false, diff: false };
   const emitFallback = (p: FallbackEventParams) => {
     emitTaskEvent('fallback', p as unknown as Record<string, EventField>);
@@ -718,14 +761,23 @@ export async function executeReviewedLifecycle(
 
   const abortReviewLoop = (
     base: RunResult,
-    terminationReason: 'round_cap' | 'cost_ceiling',
+    terminationReason: 'round_cap' | 'cost_ceiling' | 'time_ceiling',
     message: string,
     aborting: 'spec' | 'quality',
   ): RunResult => ({
     ...base,
     status: 'incomplete',
     workerStatus: 'review_loop_aborted',
-    terminationReason,
+    terminationReason: terminationReason === 'round_cap'
+      ? 'round_cap'
+      : {
+          cause: terminationReason === 'cost_ceiling' ? 'cost_exceeded' : 'time_ceiling',
+          turnsUsed: base.turns,
+          hasFileArtifacts: (base.filesWritten ?? []).length > 0,
+          usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
+          workerSelfAssessment: 'review_loop_aborted',
+          wasPromoted: false,
+        },
     reviewRounds: reviewRounds(),
     error: message,
     specReviewStatus: aborting === 'spec' ? 'changes_required' : (base.specReviewStatus ?? 'approved'),
@@ -777,7 +829,7 @@ export async function executeReviewedLifecycle(
     const cause = typeof result.terminationReason === 'object' ? result.terminationReason.cause : result.terminationReason;
     const capExhausted = result.capExhausted
       ?? (result.status === 'cost_exceeded' || cause === 'cost_exceeded' || cause === 'cost_ceiling' ? 'cost'
-        : result.status === 'timeout' || cause === 'timeout' ? 'wall_clock'
+        : result.status === 'timeout' || cause === 'timeout' || cause === 'time_ceiling' ? 'wall_clock'
           : result.status === 'incomplete' && result.turns > 1 ? 'turn'
             : undefined);
     const lifecycleClarificationRequested = result.lifecycleClarificationRequested
@@ -1368,6 +1420,11 @@ export async function executeReviewedLifecycle(
         emitTaskEvent('cost_check', { stage: 'spec_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
         return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before spec rework', 'spec');
       }
+      const wallClock = Date.now() - taskStartMs;
+      if (wallClock >= MAX_TIME_PRESTOP_RATIO * taskTimeoutMs) {
+        emitTaskEvent('time_check', { stage: 'spec_rework', tripped: true, wallClockMs: wallClock, timeoutMs: taskTimeoutMs });
+        return abortReviewLoop(finalImplResult, 'time_ceiling', `time ceiling reached before spec rework (${wallClock}ms >= 0.8 × ${taskTimeoutMs}ms)`, 'spec');
+      }
       const decision = pickEscalation({ loop: 'spec', attemptIndex: specAttemptIndex, baseTier: resolved.slot });
       if (decision.isEscalated) emitEscalationEvent('spec', specAttemptIndex, decision);
       const specReworkIterStart = Date.now();
@@ -1514,6 +1571,11 @@ export async function executeReviewedLifecycle(
           if (currentCostUSD !== null && maxCostUSD !== undefined && currentCostUSD >= 0.8 * maxCostUSD) {
             emitTaskEvent('cost_check', { stage: 'quality_rework', tripped: true, cost_used_usd: currentCostUSD, cost_cap_usd: maxCostUSD, cost_available: true });
             return abortReviewLoop(finalImplResult, 'cost_ceiling', 'cost ceiling reached before quality rework', 'quality');
+          }
+          const wallClock = Date.now() - taskStartMs;
+          if (wallClock >= MAX_TIME_PRESTOP_RATIO * taskTimeoutMs) {
+            emitTaskEvent('time_check', { stage: 'quality_rework', tripped: true, wallClockMs: wallClock, timeoutMs: taskTimeoutMs });
+            return abortReviewLoop(finalImplResult, 'time_ceiling', `time ceiling reached before quality rework (${wallClock}ms >= 0.8 × ${taskTimeoutMs}ms)`, 'quality');
           }
           const decision = pickEscalation({ loop: 'quality', attemptIndex: qualityAttemptIndex, baseTier: resolved.slot });
           if (decision.isEscalated) emitEscalationEvent('quality', qualityAttemptIndex, decision);
@@ -1741,10 +1803,12 @@ export async function executeReviewedLifecycle(
           toolCalls: r.toolCalls?.length ?? 0,
           inputTokens: r.usage.inputTokens,
           outputTokens: r.usage.outputTokens,
+          cachedTokens: r.usage.cachedTokens ?? null,
+          reasoningTokens: r.usage.reasoningTokens ?? null,
           costUSD: r.usage.costUSD,
           taskMaxIdleMs: r.taskMaxIdleMs ?? null,
           stallTriggered: r.stallTriggered ?? false,
-          stages_json: diagnostics?.logger?.expectedPath() ?? null,
+          stages: JSON.stringify(r.stageStats ?? stats),
         });
       } catch { /* silent — never break the user task */ }
 
