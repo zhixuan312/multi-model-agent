@@ -19,6 +19,7 @@ import * as debug from '@zhixuan92/multi-model-agent-core/tool-schemas/debug';
 import * as executePlan from '@zhixuan92/multi-model-agent-core/tool-schemas/execute-plan';
 import * as retry from '@zhixuan92/multi-model-agent-core/tool-schemas/retry';
 import * as investigate from '@zhixuan92/multi-model-agent-core/tool-schemas/investigate';
+import * as explore from '@zhixuan92/multi-model-agent-core/tool-schemas/explore';
 
 // Extend Zod once with openapi support.
 extendZodWithOpenApi(z);
@@ -79,6 +80,11 @@ const TOOL_ENDPOINTS: Array<{ path: string; summary: string; schema: z.ZodTypeAn
     path: '/investigate',
     summary: 'Investigate the codebase and answer a question with structured citations',
     schema: investigate.inputSchema,
+  },
+  {
+    path: '/explore',
+    summary: 'Explore a topic with parallel internal codebase search and external web research',
+    schema: explore.inputSchema,
   },
 ];
 

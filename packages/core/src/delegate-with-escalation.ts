@@ -146,6 +146,7 @@ export async function delegateWithEscalation(
         parentModel: task.parentModel,
         maxCostUSD: adjustedMaxCostUSD,
         formatConstraints: task.formatConstraints,
+        customToolset: task.customToolset,
         onProgress: safeSink,
         onInitialRequest: (meta) => {
           initialPromptLengthChars = meta.lengthChars;

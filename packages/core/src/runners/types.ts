@@ -7,6 +7,7 @@ import type {
   TaskSpec,
   ToolMode,
 } from '../types.js';
+import type { ResearchToolDefinition } from '../research/types.js';
 
 export type RunStatus =
   | 'ok'
@@ -91,6 +92,11 @@ export interface RunOptions {
   /** Run mode: 'standard' for normal execution, 'review' for typed
    *  structured output review via Agent.outputType. Default 'standard'. */
   runMode?: 'standard' | 'review'
+  /** Optional task-specific tool injection. When present, runners merge
+   *  these tools into the worker's tool surface ON TOP of whatever
+   *  `tools: ToolMode` would normally produce. Runners MUST treat
+   *  undefined as a no-op. */
+  customToolset?: ResearchToolDefinition[]
 }
 
 /** Runtime dependencies for `runTasks`. */

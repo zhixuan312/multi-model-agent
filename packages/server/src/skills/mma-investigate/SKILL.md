@@ -44,6 +44,7 @@ digraph when_to_use {
 - It's about web docs / external APIs → `WebSearch` / `WebFetch`
 - It's about git history → `git log` / `git blame`
 - You need to MODIFY code based on the finding → `mma-delegate` (research + edit)
+- You want to consider multiple distinct directions, not converge on one answer → `mma-explore` (divergent ideation, codebase + web)
 
 ## Endpoint
 

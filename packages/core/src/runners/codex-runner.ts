@@ -354,6 +354,32 @@ export async function runCodex(
     : [];
   const allTools = [...responsesTools, ...hostedTools];
 
+  // --- Custom toolset injection (explore executor, taskIndex=1) ---
+  if (options.customToolset && options.customToolset.length > 0) {
+    for (const ct of options.customToolset) {
+      const jsonSchema = ct.inputSchema instanceof z.ZodType
+        ? z.toJSONSchema(ct.inputSchema)
+        : (ct.inputSchema as Record<string, unknown>);
+      const codexTool: CodexTool = {
+        name: ct.name,
+        description: ct.description,
+        parameters: jsonSchema,
+        execute: async (args: Record<string, unknown>) => {
+          const result = await ct.invoke(args);
+          return typeof result === 'string' ? result : JSON.stringify(result);
+        },
+      };
+      toolsByName.set(ct.name, codexTool);
+      allTools.push({
+        type: 'function' as const,
+        name: ct.name,
+        description: ct.description,
+        parameters: jsonSchema,
+        strict: false,
+      });
+    }
+  }
+
   // --- Prevention layer: system prompt + budget hint ---
   //
   // buildSystemPrompt() is deliberately static and parameter-free. The budget

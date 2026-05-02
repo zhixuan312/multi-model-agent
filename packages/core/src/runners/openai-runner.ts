@@ -4,6 +4,7 @@ import {
   setTracingDisabled,
   OpenAIChatCompletionsModel,
   MaxTurnsExceededError,
+  tool,
 } from '@openai/agents';
 import type { RunItem, AgentInputItem } from '@openai/agents';
 import OpenAI from 'openai';
@@ -91,6 +92,22 @@ setTracingDisabled(true);
 const reviewerOutputType = z.object({
   findings: z.array(reviewerEmittedFindingSchema),
 }).strict();
+
+/**
+ * Normalize a {@link ResearchToolDefinition.inputSchema} to a Zod schema.
+ * Research adapters supply either a Zod schema directly or a JSON-Schema object;
+ * the OpenAI Agents SDK requires Zod schemas for tool parameters, so we convert
+ * JSON-Schema via {@link z.fromJSONSchema} when needed.
+ */
+function normalizeCustomToolSchema(inputSchema: unknown): z.ZodType {
+  if (inputSchema instanceof z.ZodType) return inputSchema;
+  try {
+    const jsonSchema = inputSchema as Record<string, unknown>;
+    return z.fromJSONSchema(jsonSchema);
+  } catch {
+    return z.object({}).passthrough();
+  }
+}
 
 /**
  * Remove `<think>...</think>` reasoning blocks from model output.
@@ -212,6 +229,23 @@ export async function runOpenAI(
     ? (runner.providerConfig.hostedTools ?? []).map(t => ({ type: t } as any))
     : [];
   const tools = [...fileTools, ...hostedTools];
+
+  // --- Custom toolset injection (explore executor, taskIndex=1) ---
+  if (options.customToolset && options.customToolset.length > 0) {
+    for (const ct of options.customToolset) {
+      const params = ct.inputSchema instanceof z.ZodType
+        ? ct.inputSchema
+        : normalizeCustomToolSchema(ct.inputSchema);
+      tools.push(tool({
+        name: ct.name,
+        description: ct.description,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        parameters: params as any,
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        execute: async (args: any) => ct.invoke(args),
+      }));
+    }
+  }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
   const model = new OpenAIChatCompletionsModel(runner.client as any, runner.providerConfig.model);

@@ -1,0 +1,22 @@
+{
+  "total": 100,
+  "offset": 0,
+  "data": [
+    {
+      "paperId": "abc",
+      "title": "Regime Detection in Financial Markets",
+      "abstract": "We present a novel approach to detecting market regimes using hidden Markov models.",
+      "year": 2024,
+      "authors": [{ "name": "Jane Smith" }, { "name": "John Doe" }],
+      "url": "https://www.semanticscholar.org/paper/abc"
+    },
+    {
+      "paperId": "def456",
+      "title": "Multi-Model Agent Architectures",
+      "abstract": "This paper explores architectures for multi-model agent systems.",
+      "year": 2023,
+      "authors": [{ "name": "Alice Johnson" }],
+      "url": "https://www.semanticscholar.org/paper/def456"
+    }
+  ]
+}

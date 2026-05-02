@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<rss version="2.0">
+  <channel>
+    <title>Example Feed</title>
+    <link>https://example.com</link>
+    <description>A sample RSS 2.0 feed for testing</description>
+    <item>
+      <title>First Article</title>
+      <link>https://example.com/articles/1</link>
+      <guid isPermaLink="true">https://example.com/articles/1</guid>
+      <pubDate>Mon, 01 Jan 2024 12:00:00 GMT</pubDate>
+      <description>This is the first article description with some inline HTML tags.</description>
+    </item>
+    <item>
+      <title>Second Article</title>
+      <link>https://example.com/articles/2</link>
+      <guid isPermaLink="true">https://example.com/articles/2</guid>
+      <pubDate>Tue, 02 Jan 2024 15:30:00 GMT</pubDate>
+      <description>Description of the second article.</description>
+    </item>
+    <item>
+      <title>Third Article</title>
+      <link>https://example.com/articles/3</link>
+      <guid isPermaLink="true">https://example.com/articles/3</guid>
+      <pubDate>Wed, 03 Jan 2024 09:00:00 GMT</pubDate>
+      <description>A third and final entry for testing.</description>
+    </item>
+  </channel>
+</rss>

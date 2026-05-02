@@ -849,4 +849,90 @@ describe('runClaude', () => {
       expect(result.usage.cachedTokens).toBeNull();
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // customToolset injection (explore executor, taskIndex=1)
+  // ---------------------------------------------------------------------------
+  describe('runClaude — customToolset', () => {
+    it('registers customToolset tools as an MCP server when set', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      const { z } = await import('zod');
+      const capturedOptions: unknown[] = [];
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+        capturedOptions.push(opts);
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        })();
+      }) as never);
+
+      const customToolset = [{
+        name: 'web_search' as const,
+        description: 'Search the web',
+        inputSchema: z.object({ query: z.string() }),
+        invoke: async (_input: unknown) => 'mock result',
+      }];
+
+      await runClaude('prompt', { customToolset }, providerConfig, defaults);
+
+      const captured = capturedOptions[0] as {
+        options?: { mcpServers?: Record<string, unknown>; allowedTools?: string[] };
+      };
+      expect(captured.options?.mcpServers).toBeDefined();
+      expect(captured.options?.mcpServers?.['custom-tools']).toBeDefined();
+      expect(captured.options?.allowedTools).toContain('mcp__custom-tools__*');
+    });
+
+    it('registers customToolset tools even when toolMode is none', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      const { z } = await import('zod');
+      const capturedOptions: unknown[] = [];
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+        capturedOptions.push(opts);
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        })();
+      }) as never);
+
+      const customToolset = [{
+        name: 'semantic_scholar' as const,
+        description: 'Search Semantic Scholar',
+        inputSchema: z.object({ query: z.string() }),
+        invoke: async (_input: unknown) => 'mock result',
+      }];
+
+      await runClaude('prompt', { tools: 'none', customToolset }, providerConfig, defaults);
+
+      const captured = capturedOptions[0] as {
+        options?: { mcpServers?: Record<string, unknown>; allowedTools?: string[]; tools?: unknown };
+      };
+      expect(captured.options?.mcpServers?.['custom-tools']).toBeDefined();
+      expect(captured.options?.allowedTools).toContain('mcp__custom-tools__*');
+      // code-tools MCP server should NOT be present since toolMode is none
+      expect(captured.options?.mcpServers?.['code-tools']).toBeUndefined();
+    });
+
+    it('treats undefined customToolset as a no-op', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+      const capturedOptions: unknown[] = [];
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: unknown) => {
+        capturedOptions.push(opts);
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        })();
+      }) as never);
+
+      await runClaude('prompt', {}, providerConfig, defaults);
+
+      const captured = capturedOptions[0] as {
+        options?: { mcpServers?: Record<string, unknown>; allowedTools?: string[] };
+      };
+      expect(captured.options?.mcpServers?.['custom-tools']).toBeUndefined();
+    });
+  });
 });

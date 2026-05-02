@@ -132,4 +132,48 @@ describe('parseConfig', () => {
       } as any,
     })).toThrow();
   });
+
+  it('defaults research block when omitted from config', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+    });
+    expect(result.research.brave.apiKeys).toEqual([]);
+    expect(result.research.brave.timeoutMs).toBe(8000);
+    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.brave.perCallBackoffMs).toBe(250);
+    expect(result.research.fetch.maxRedirects).toBe(3);
+    expect(result.research.fetch.connectTimeoutMs).toBe(5000);
+    expect(result.research.fetch.totalDeadlineMs).toBe(12000);
+    expect(result.research.fetch.maxBodyBytes).toBe(1024 * 1024);
+    expect(result.research.fetch.allowPrivateNetwork).toBe(false);
+    expect(result.research.builtinAdapters.arxiv).toBe(true);
+    expect(result.research.builtinAdapters.semanticScholar).toBe(true);
+    expect(result.research.builtinAdapters.githubSearch).toBe(true);
+    expect(result.research.builtinAdapters.genericRss).toBe(true);
+    expect(result.research.userSources).toEqual([]);
+    expect(result.research.fetchAllowlistExtra).toEqual([]);
+  });
+
+  it('accepts partial research config', () => {
+    const result = parseConfig({
+      agents: {
+        standard: minimalAgentConfig,
+        complex: minimalAgentConfig,
+      },
+      research: {
+        brave: { apiKeys: ['k1'], timeoutMs: 5000 },
+        fetch: { allowPrivateNetwork: true },
+      },
+    });
+    expect(result.research.brave.apiKeys).toEqual(['k1']);
+    expect(result.research.brave.timeoutMs).toBe(5000);
+    expect(result.research.fetch.allowPrivateNetwork).toBe(true);
+    // untouched defaults
+    expect(result.research.brave.maxResultsPerQuery).toBe(10);
+    expect(result.research.fetch.maxRedirects).toBe(3);
+    expect(result.research.builtinAdapters.arxiv).toBe(true);
+  });
 });

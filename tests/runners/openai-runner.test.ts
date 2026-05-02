@@ -803,3 +803,74 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     expect(result.usage.reasoningTokens).toBeNull();
   });
 });
+
+// ---------------------------------------------------------------------------
+// customToolset injection (explore executor, taskIndex=1)
+// ---------------------------------------------------------------------------
+
+describe('runOpenAI — customToolset', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRun.mockReset();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('registers customToolset tools in the Agent constructor when set', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({}));
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    const customToolset = [{
+      name: 'web_search' as const,
+      description: 'Search the web',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      invoke: async (_input: unknown) => 'mock result',
+    }];
+
+    await runOpenAI('task', { customToolset }, { client: clientStub, providerConfig, defaults });
+
+    const agentCall = MockAgent.mock.calls[0][0] as { tools: Array<{ name: string; parameters?: unknown }> };
+    const customTool = agentCall.tools.find(t => t.name === 'web_search');
+    expect(customTool).toBeDefined();
+    // JSON-Schema is normalized to a Zod schema that preserves properties, not
+    // discarded in favor of z.object({}).passthrough().
+    expect(customTool!.parameters).toBeDefined();
+  });
+
+  it('customToolset tools coexist with standard ToolMode-derived tools', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({}));
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    const customToolset = [{
+      name: 'arxiv' as const,
+      description: 'Search arXiv',
+      inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+      invoke: async (_input: unknown) => 'mock result',
+    }];
+
+    await runOpenAI('task', { customToolset }, { client: clientStub, providerConfig, defaults });
+
+    const agentCall = MockAgent.mock.calls[0][0] as { tools: Array<{ name: string }> };
+    const toolNames = agentCall.tools.map(t => t.name);
+    // Standard tools still present
+    expect(toolNames).toContain('read_file');
+    expect(toolNames).toContain('write_file');
+    // Custom tool also present
+    expect(toolNames).toContain('arxiv');
+  });
+
+  it('treats undefined customToolset as a no-op', async () => {
+    mockRun.mockResolvedValueOnce(makeMockRunResult({}));
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+
+    await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    const agentCall = MockAgent.mock.calls[0][0] as { tools: Array<{ name: string }> };
+    const toolNames = agentCall.tools.map(t => t.name);
+    // Standard tools present; no custom tools injected
+    expect(toolNames).toContain('read_file');
+    expect(toolNames).not.toContain('arxiv');
+    expect(toolNames).not.toContain('web_search');
+  });
+});

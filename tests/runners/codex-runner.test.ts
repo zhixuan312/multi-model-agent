@@ -853,4 +853,113 @@ describe('runCodex', () => {
       }
     });
   });
+
+  // ---------------------------------------------------------------------------
+  // customToolset injection (explore executor, taskIndex=1)
+  // ---------------------------------------------------------------------------
+  describe('runCodex — customToolset', () => {
+    it('registers customToolset tools in responses.create when set', async () => {
+      const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+      vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+      let capturedParams: any;
+      mockResponsesCreate.mockImplementationOnce((params: any) => {
+        capturedParams = params;
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      });
+
+      const customToolset = [{
+        name: 'arxiv' as const,
+        description: 'Search arXiv',
+        inputSchema: { type: 'object', properties: { query: { type: 'string' } } },
+        invoke: async (_input: unknown) => 'mock result',
+      }];
+
+      const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+      await runCodex(
+        'prompt',
+        { customToolset },
+        { type: 'codex', model: 'gpt-5-codex' },
+        defaults,
+      );
+
+      const functionTools = capturedParams.tools?.filter((t: any) => t.type === 'function') ?? [];
+      const toolNames = functionTools.map((t: any) => t.name);
+      expect(toolNames).toContain('arxiv');
+    });
+
+    it('customToolset tools coexist with standard ToolMode-derived tools', async () => {
+      const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+      vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+      let capturedParams: any;
+      mockResponsesCreate.mockImplementationOnce((params: any) => {
+        capturedParams = params;
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      });
+
+      const customToolset = [{
+        name: 'github_search' as const,
+        description: 'Search GitHub',
+        inputSchema: { type: 'object', properties: { q: { type: 'string' } } },
+        invoke: async (_input: unknown) => 'mock result',
+      }];
+
+      const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+      await runCodex(
+        'prompt',
+        { customToolset },
+        { type: 'codex', model: 'gpt-5-codex' },
+        defaults,
+      );
+
+      const functionTools = capturedParams.tools?.filter((t: any) => t.type === 'function') ?? [];
+      const toolNames = functionTools.map((t: any) => t.name);
+      // Standard tools still present
+      expect(toolNames).toContain('read_file');
+      expect(toolNames).toContain('write_file');
+      // Custom tool also present
+      expect(toolNames).toContain('github_search');
+    });
+
+    it('treats undefined customToolset as a no-op', async () => {
+      const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+      vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+      let capturedParams: any;
+      mockResponsesCreate.mockImplementationOnce((params: any) => {
+        capturedParams = params;
+        return (async function* () {
+          yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
+          yield {
+            type: 'response.completed',
+            response: { status: 'completed', usage: { input_tokens: 1, output_tokens: 1 } },
+          };
+        })();
+      });
+
+      const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+      await runCodex(
+        'prompt',
+        {},
+        { type: 'codex', model: 'gpt-5-codex' },
+        defaults,
+      );
+
+      const functionTools = capturedParams.tools?.filter((t: any) => t.type === 'function') ?? [];
+      const toolNames = functionTools.map((t: any) => t.name);
+      // Standard tools present; no custom tools injected
+      expect(toolNames).toContain('read_file');
+      expect(toolNames).not.toContain('arxiv');
+    });
+  });
 });

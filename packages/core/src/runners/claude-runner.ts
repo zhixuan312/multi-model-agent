@@ -1,4 +1,4 @@
-import { query, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
+import { query, tool, createSdkMcpServer, type Options, type SDKUserMessage } from '@anthropic-ai/claude-agent-sdk';
 import { createHash } from 'node:crypto';
 import {
   withTimeout,
@@ -352,6 +352,35 @@ export async function runClaude(
     ];
   } else {
     queryOptions.tools = [];
+  }
+
+  // --- Custom toolset injection (explore executor, taskIndex=1) ---
+  if (options.customToolset && options.customToolset.length > 0) {
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    const customTools = options.customToolset.map(ct => tool(
+      ct.name,
+      ct.description,
+      ct.inputSchema as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      async (args: any) => {
+        const result = await ct.invoke(args);
+        const text = typeof result === 'string' ? result : JSON.stringify(result);
+        return { content: [{ type: 'text' as const, text }] };
+      },
+    ));
+    const customServer = createSdkMcpServer({
+      name: 'custom-tools',
+      version: '1.0.0',
+      tools: customTools,
+    });
+    if (!queryOptions.mcpServers) queryOptions.mcpServers = {};
+    queryOptions.mcpServers['custom-tools'] = customServer;
+    if (!queryOptions.allowedTools) queryOptions.allowedTools = [];
+    queryOptions.allowedTools.push('mcp__custom-tools__*');
+    // Ensure tools array exists so the SDK knows about non-MCP tools
+    if (!queryOptions.tools || queryOptions.tools.length === 0) {
+      queryOptions.tools = [];
+    }
   }
 
   if (!effort || effort === 'none') {

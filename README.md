@@ -119,6 +119,7 @@ Skills are the surface your AI client sees. Installing them with `mmagent instal
 | `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
 | `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
+| `mma-explore` | Divergent ideation — 3-5 distinct threads from parallel codebase + web research, run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
@@ -275,7 +276,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 15 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server exposing 16 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)

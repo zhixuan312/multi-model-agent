@@ -1,0 +1,27 @@
+{
+  "total_count": 1,
+  "incomplete_results": false,
+  "items": [
+    {
+      "name": "momentum.py",
+      "path": "src/strategies/momentum.py",
+      "sha": "abc123def456",
+      "url": "https://api.github.com/repos/example/algo-trading/contents/src/strategies/momentum.py",
+      "html_url": "https://github.com/example/algo-trading/blob/main/src/strategies/momentum.py",
+      "repository": {
+        "id": 11111,
+        "full_name": "example/algo-trading",
+        "html_url": "https://github.com/example/algo-trading"
+      },
+      "text_matches": [
+        {
+          "object_url": "https://api.github.com/repos/example/algo-trading/contents/src/strategies/momentum.py",
+          "fragment": "def momentum_strategy(prices: list[float], lookback: int = 20) -> Signal:",
+          "matches": [
+            { "text": "momentum_strategy", "indices": [4, 22] }
+          ]
+        }
+      ]
+    }
+  ]
+}

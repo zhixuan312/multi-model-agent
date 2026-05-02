@@ -1,0 +1,114 @@
+{
+  "events": [
+    {
+      "event": "explore_parallel_start",
+      "internalRoute": "explore_internal",
+      "externalRoute": "explore_external"
+    },
+    {
+      "event": "task_started",
+      "route": "explore_internal"
+    },
+    {
+      "event": "worker_start",
+      "model": "mock-model",
+      "providerType": "openai-compatible",
+      "tier": "complex"
+    },
+    {
+      "event": "task_started",
+      "route": "explore_external"
+    },
+    {
+      "event": "worker_start",
+      "model": "mock-model",
+      "providerType": "openai-compatible",
+      "tier": "complex"
+    },
+    {
+      "event": "stage_change",
+      "from": "verifying",
+      "to": "terminal"
+    },
+    {
+      "event": "task_done_summary",
+      "status": "ok",
+      "spec_verdict": "skipped",
+      "quality_verdict": "skipped"
+    },
+    {
+      "event": "heartbeat",
+      "stage": "terminal",
+      "tools": 0,
+      "read": 0,
+      "wrote": 0,
+      "text": 0,
+      "cost": 0.001
+    },
+    {
+      "event": "stage_change",
+      "from": "verifying",
+      "to": "terminal"
+    },
+    {
+      "event": "task_done_summary",
+      "status": "ok",
+      "spec_verdict": "skipped",
+      "quality_verdict": "skipped"
+    },
+    {
+      "event": "heartbeat",
+      "stage": "terminal",
+      "tools": 0,
+      "read": 0,
+      "wrote": 0,
+      "text": 0,
+      "cost": 0.001
+    },
+    {
+      "event": "explore_parallel_end",
+      "internalOk": true,
+      "externalOk": true
+    },
+    {
+      "event": "explore_synthesize_start",
+      "internalAvailable": true,
+      "externalAvailable": true
+    },
+    {
+      "event": "task_started",
+      "route": "explore_synthesize"
+    },
+    {
+      "event": "worker_start",
+      "model": "mock-model",
+      "providerType": "openai-compatible",
+      "tier": "complex"
+    },
+    {
+      "event": "stage_change",
+      "from": "verifying",
+      "to": "terminal"
+    },
+    {
+      "event": "task_done_summary",
+      "status": "ok",
+      "spec_verdict": "skipped",
+      "quality_verdict": "skipped"
+    },
+    {
+      "event": "heartbeat",
+      "stage": "terminal",
+      "tools": 0,
+      "read": 0,
+      "wrote": 0,
+      "text": 0,
+      "cost": 0.001
+    },
+    {
+      "event": "explore_synthesize_end",
+      "threadCount": 3,
+      "recommendedNextStep": true
+    }
+  ]
+}
