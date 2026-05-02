@@ -108,15 +108,16 @@ export async function runQualityReview(
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 
-  const corePrompt = buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
-  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') + corePrompt;
+  const coreParts = buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
+  const fullPrompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
+    `${coreParts.systemPrefix}\n\n${coreParts.userBody}`;
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   let metrics: QualityReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
   let result;
   try {
     result = await delegateWithEscalation(
-      { prompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
+      { prompt: fullPrompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
       { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
@@ -137,7 +138,7 @@ export async function runQualityReview(
     try {
       const retryResult = await delegateWithEscalation(
         {
-          prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          prompt: fullPrompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
           cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000,
         },
         [reviewerProvider],

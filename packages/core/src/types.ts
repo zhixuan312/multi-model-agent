@@ -300,7 +300,18 @@ export interface RunResult {
   qualityReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
 }
 
-export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult> }
+export interface ReviewPromptParts {
+  systemPrefix: string;
+  userBody: string;
+}
+
+export interface CacheHints {
+  cacheableSystemPrompt?: boolean;
+}
+
+export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
+
+export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult>; runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult> }
 
 export interface CostBreakdown {
   inputCost: number;

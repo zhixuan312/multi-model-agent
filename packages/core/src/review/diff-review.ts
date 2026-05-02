@@ -30,9 +30,14 @@ export interface DiffReviewInput {
   abortSignal?: AbortSignal;
 }
 
-const PROMPT_TEMPLATE = (i: DiffReviewInput) => `
-You are reviewing a mechanical refactor in a single pass. No rework loop is available.
+const PROMPT_SYSTEM = `You are reviewing a mechanical refactor in a single pass. No rework loop is available.
 
+Reply with EXACTLY one of:
+- APPROVE
+- CONCERNS: <comma-separated short concern messages>
+- REJECT: <one-line reason>`;
+
+const PROMPT_TEMPLATE = (i: DiffReviewInput) => `
 Working directory: ${i.cwd}
 Verification: ${i.verification.status}
 ${i.verification.steps.map((s) => `- ${s.command} → ${s.status}`).join('\n')}
@@ -41,11 +46,6 @@ Diff${i.diffTruncated ? ' (TRUNCATED at 64 KB — you may not approve cleanly)' 
 \`\`\`diff
 ${i.diff}
 \`\`\`
-
-Reply with EXACTLY one of:
-- APPROVE
-- CONCERNS: <comma-separated short concern messages>
-- REJECT: <one-line reason>
 `;
 
 export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewVerdict> {
@@ -55,7 +55,7 @@ export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewV
   const remaining = input.taskDeadlineMs !== undefined
     ? Math.max(1, input.taskDeadlineMs - Date.now())
     : undefined;
-  const prompt = PROMPT_TEMPLATE(input);
+  const prompt = `${PROMPT_SYSTEM}\n\n${PROMPT_TEMPLATE(input)}`;
   const result = await input.worker.call(prompt, {
     cwd: input.cwd,
     abortSignal: input.abortSignal,

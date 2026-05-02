@@ -17,6 +17,8 @@ import {
   type RunResult,
   type ProviderConfig,
   type ToolMode,
+  type ReviewPromptParts,
+  type ReviewRunOptions,
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
@@ -259,6 +261,9 @@ export async function runOpenAI(
   // first user prompt) and buildReGroundingMessage (injected every
   // RE_GROUNDING_INTERVAL_TURNS turns).
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
+  const instructions = options.instructionsSuffix
+    ? `${systemPrompt}\n\n${options.instructionsSuffix}`
+    : systemPrompt;
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -313,7 +318,7 @@ export async function runOpenAI(
   const agent = new Agent({
     name: 'sub-agent',
     model,
-    instructions: systemPrompt,
+    instructions,
     tools,
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
     ...(runMode === 'review' && { outputType: reviewerOutputType }),
@@ -978,4 +983,21 @@ function partialUsage(
     cachedTokens,
     reasoningTokens,
   };
+}
+
+/**
+ * Review-mode entry: routes `systemPrefix` into Agent.instructions
+ * (cacheable by OpenAI's prefix-caching rules for instructions > 1024 tokens)
+ * and `userBody` as the first user message. The standard prevention-layer
+ * system prompt is prepended to instructions.
+ */
+export async function runOpenAIReview(
+  parts: ReviewPromptParts,
+  options: ReviewRunOptions,
+  runner: OpenAIRunnerOptions,
+): Promise<RunResult> {
+  return runOpenAI(parts.userBody, {
+    ...options,
+    instructionsSuffix: parts.systemPrefix,
+  }, runner);
 }

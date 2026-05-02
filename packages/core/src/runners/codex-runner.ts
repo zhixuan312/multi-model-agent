@@ -10,6 +10,8 @@ import {
   type RunResult,
   type ProviderConfig,
   type ToolMode,
+  type ReviewPromptParts,
+  type ReviewRunOptions,
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { READONLY_TOOL_IDS } from '../tools/definitions.js';
@@ -387,6 +389,9 @@ export async function runCodex(
   // task brief, while the system prompt is threaded through the Responses API
   // `instructions` field.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
+  const instructions = options.instructionsSuffix
+    ? `${systemPrompt}\n\n${options.instructionsSuffix}`
+    : systemPrompt;
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -513,7 +518,7 @@ export async function runCodex(
         // per-run budget hint is already prepended to the first user input.
         const stream = await client.responses.create({
           model: providerConfig.model,
-          instructions: systemPrompt,
+          instructions,
           input,
           stream: true,
           store: false,
@@ -1037,4 +1042,21 @@ function buildCodexIncompleteDiagnostic(opts: {
     '',
     'Recommended action: re-dispatch with a tighter brief, or escalate provider tier.',
   ].join('\n');
+}
+
+/**
+ * Review-mode entry: routes `systemPrefix` into the Responses API
+ * `instructions` field (which the Codex backend can cache when the rubric
+ * is stable across calls) and `userBody` as the first user input message.
+ */
+export async function runCodexReview(
+  parts: ReviewPromptParts,
+  options: ReviewRunOptions,
+  providerConfig: ProviderConfig,
+  defaults: { timeoutMs: number; tools: ToolMode },
+): Promise<RunResult> {
+  return runCodex(parts.userBody, {
+    ...options,
+    instructionsSuffix: parts.systemPrefix,
+  }, providerConfig, defaults);
 }

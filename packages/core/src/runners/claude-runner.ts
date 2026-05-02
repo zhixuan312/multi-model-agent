@@ -7,6 +7,8 @@ import {
   type RunResult,
   type ProviderConfig,
   type ToolMode,
+  type ReviewPromptParts,
+  type ReviewRunOptions,
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { FileTracker } from '../tools/tracker.js';
@@ -252,6 +254,9 @@ export async function runClaude(
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
+  const instructions = options.instructionsSuffix
+    ? `${systemPrompt}\n\n${options.instructionsSuffix}`
+    : systemPrompt;
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -324,7 +329,8 @@ export async function runClaude(
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      append: systemPrompt,
+      append: instructions,
+      ...(options.cacheHints?.cacheableSystemPrompt && { excludeDynamicSections: true }),
     },
     ...(resolvedBaseUrl && resolvedAuthToken && {
       env: {
@@ -920,4 +926,23 @@ function buildClaudeIncompleteDiagnostic(opts: {
     '',
     'Recommended action: re-dispatch with a tighter brief, or check Claude Agent SDK logs.',
   ].join('\n');
+}
+
+/**
+ * Review-mode entry: routes `systemPrefix` into the system prompt append
+ * (with `excludeDynamicSections: true` when `cacheHints.cacheableSystemPrompt`
+ * so the SDK emits ephemeral cache_control on the prefix blocks). `userBody`
+ * becomes the first user message typed as implementer evidence.
+ */
+export async function runClaudeReview(
+  parts: ReviewPromptParts,
+  options: ReviewRunOptions,
+  providerConfig: ProviderConfig,
+  defaults: { timeoutMs: number; tools: ToolMode },
+): Promise<RunResult> {
+  return runClaude(parts.userBody, {
+    ...options,
+    instructionsSuffix: parts.systemPrefix,
+    cacheHints: options.cacheHints,
+  }, providerConfig, defaults);
 }

@@ -93,10 +93,19 @@ export interface RunOptions {
    *  structured output review via Agent.outputType. Default 'standard'. */
   runMode?: 'standard' | 'review'
   /** Optional task-specific tool injection. When present, runners merge
-   *  these tools into the worker's tool surface ON TOP of whatever
+   *  these tools into the worker's tool surface ON TOP OF whatever
    *  `tools: ToolMode` would normally produce. Runners MUST treat
    *  undefined as a no-op. */
   customToolset?: ResearchToolDefinition[]
+  /** Appended to Agent.instructions (or the equivalent system-level prompt
+   *  in each runner) after the standard prevention-layer system prompt.
+   *  Used by the reviewer path so the stable review rubric sits in the
+   *  system layer (cacheable) while the variable evidence stays in the
+   *  user message. */
+  instructionsSuffix?: string
+  /** Hints for prompt-cache behaviour. Runners interpret these as
+   *  provider-specific cache markers (e.g. Claude ephemeral cache_control). */
+  cacheHints?: { cacheableSystemPrompt?: boolean }
 }
 
 /** Runtime dependencies for `runTasks`. */
