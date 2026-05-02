@@ -22,7 +22,6 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
-  buildBudgetPressureNudge,
   buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
@@ -30,9 +29,6 @@ import {
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
-  resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  logWatchdogEvent,
   hasCompletedWork,
   MAX_DEGENERATE_RETRIES,
   STALL_DETECTION_TURNS,
@@ -40,12 +36,10 @@ import {
   hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
-import { classifyError, isRateLimit } from './error-classification.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { classifyError, isRateLimit, isProviderContextLimit } from './error-classification.js';
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
-  buildForceSalvageResult as sharedBuildForceSalvageResult,
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
@@ -392,13 +386,9 @@ export async function runCodex(
 
   // --- Scratchpad: buffers every text emission the codex backend streams
   // through our loop. Every termination path (ok / incomplete / max_turns /
-  // error / timeout / force_salvage) salvages `scratchpad.latest()` when
-  // the final message is empty or degenerate. ---
+  // error / timeout) salvages `scratchpad.latest()` when the final message
+  // is empty or degenerate. ---
   const scratchpad = new TextScratchpad();
-
-  // --- Watchdog: resolve the input-token soft limit once per run ---
-  const profile = findModelProfile(providerConfig.model);
-  const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
@@ -440,7 +430,7 @@ export async function runCodex(
     let lastResponseStatus: string | null = null;
     let lastResponseStatusTurn: number | null = null;
 
-    // --- Supervision / watchdog bookkeeping ---
+    // --- Supervision bookkeeping ---
     // Monitor model: only count degenerate retries when worker has NO tool calls.
     let degenerateRetries = 0;
     let stallTurnCounter = 0;
@@ -453,10 +443,6 @@ export async function runCodex(
     // and break the loop before any retries run. See openai-runner
     // regression #5.
     let lastDegenerateOutput: string | null = null;
-    // High-watermark guard for the watchdog warning nudge — fire at most
-    // once per distinct input-token level. Mirrors openai-runner and
-    // claude-runner.
-    let lastWarnedInputTokens = -1;
 
     try {
       while (true) {
@@ -466,7 +452,7 @@ export async function runCodex(
         turns++;
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
-        // append, watchdog logs, error diagnostics, result.turns).
+        // append, error diagnostics, result.turns).
         emit({ kind: 'turn_start', turn: turns, provider: 'codex', model: providerConfig.model });
 
         // Codex backend requires streaming. The Codex backend's
@@ -552,8 +538,8 @@ export async function runCodex(
         }
 
         // Buffer this turn's text into the scratchpad BEFORE any exit so
-        // every termination path (including supervision exhaustion and
-        // force_salvage) can salvage it. Codex does not emit <think> tags
+        // every termination path (including supervision exhaustion) can
+        // salvage it. Codex does not emit <think> tags
         // by default, so there is no stripping step here.
         if (textThisTurn) {
           scratchpad.append(turns, textThisTurn);
@@ -598,68 +584,6 @@ export async function runCodex(
           }
         }
 
-        // --- Watchdog checks after tokens are updated -------------------
-        const watchdogStatus = checkWatchdogThreshold(usage.inputTokens, softLimit);
-        if (watchdogStatus !== 'ok') {
-          logWatchdogEvent(watchdogStatus, {
-            provider: 'codex',
-            model: providerConfig.model,
-            turn: turns,
-            inputTokens: usage.inputTokens,
-            softLimit,
-            scratchpadChars: scratchpad.toString().length,
-          });
-        }
-        if (watchdogStatus === 'force_salvage') {
-          // `watchdog_force_salvage` is not an injected message — no
-          // re-prompt is sent — but observers still want to see exactly
-          // why the run is being killed. Emit with contentLengthChars: 0
-          // to reflect the "nothing was injected, we just terminated"
-          // semantics (mirrors openai-runner and claude-runner).
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_force_salvage',
-            turn: turns,
-            contentLengthChars: 0,
-          });
-          const salvaged = buildCodexForceSalvageResult({
-            tracker,
-            scratchpad,
-            providerConfig,
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            cachedTokens: usage.cachedTokens,
-            reasoningTokens: usage.reasoningTokens,
-            turns,
-            softLimit,
-            durationMs: Date.now() - taskStartMs,
-            parentModel,
-          });
-          emit({ kind: 'done', status: salvaged.status });
-          return salvaged;
-        }
-        // Warning-band nudge: fire at most once per distinct input-token
-        // high-watermark. Pushed as a user message so the next turn of
-        // the codex loop addresses the budget-pressure prompt. We use
-        // the shared prevention helper (NOT an inline string) so every
-        // runner emits byte-identical wording.
-        if (watchdogStatus === 'warning' && usage.inputTokens > lastWarnedInputTokens) {
-          lastWarnedInputTokens = usage.inputTokens;
-          const warning = buildBudgetPressureNudge({ inputTokens: usage.inputTokens, softLimit });
-          input.push({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            role: 'user',
-            content: warning,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any);
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_warning',
-            turn: turns,
-            contentLengthChars: warning.length,
-          });
-        }
-
         // --- Periodic re-grounding inside the loop ---------------------
         if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
           if (!canAffordNextTurn()) {
@@ -687,9 +611,8 @@ export async function runCodex(
         }
 
         // --- turn_complete: one event per while-iteration. Fires after the
-        // watchdog + re-grounding checks have run (so cumulative token
-        // counts and any injection events are already on the wire) and
-        // BEFORE the supervision branching / tool-execution loop. Every
+        // re-grounding checks have run (so cumulative token counts and any
+        // injection events are already on the wire) and BEFORE the supervision branching / tool-execution loop. Every
         // continue/return in the branches below happens AFTER this event,
         // so the sequence "turn_start ... text_emission ... turn_complete"
         // is guaranteed per iteration.
@@ -877,6 +800,7 @@ export async function runCodex(
       // and `classifyError` only decides which RunStatus bucket the
       // failure lands in.
       const { status } = classifyError(err);
+      const errorCode = isProviderContextLimit(err) ? 'provider_context_limit' : undefined;
 
       // Salvage: if the scratchpad has buffered text from earlier turns,
       // return it as the output. Pre-Task-5 behavior returned only the
@@ -906,6 +830,7 @@ export async function runCodex(
         escalationLog: [],
         error: detailed,
         durationMs: Date.now() - taskStartMs,
+        ...(errorCode !== undefined && { errorCode }),
         ...(isRateLimit(err) && {
           structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:codex' },
         }),
@@ -954,10 +879,10 @@ export async function runCodex(
 // --- Helpers: canonical return-shape builders -------------------------------
 //
 // Mirror claude-runner's buildClaudeOkResult / buildClaudeIncompleteResult /
-// buildClaudeForceSalvageResult / buildClaudeMaxTurnsResult so every exit
-// from the supervision state machine is a one-line call. Each helper folds
-// the shared filesRead/filesWritten/toolCalls/usage preamble so the call
-// sites in `run()` stay short and symmetric across runners.
+// buildClaudeMaxTurnsResult so every exit from the supervision state machine
+// is a one-line call. Each helper folds the shared
+// filesRead/filesWritten/toolCalls/usage preamble so the call sites in
+// `run()` stay short and symmetric across runners.
 
 interface CodexResultCommonArgs {
   tracker: FileTracker;
@@ -1012,20 +937,6 @@ function buildCodexIncompleteResult(
     durationMs: args.durationMs,
     reason: args.reason,
     stampExhausted: true,
-  });
-}
-
-function buildCodexForceSalvageResult(
-  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
-): RunResult {
-  return sharedBuildForceSalvageResult({
-    providerLabel: 'codex',
-    usage: codexUsage(args),
-    turns: args.turns,
-    tracker: args.tracker,
-    scratchpad: args.scratchpad,
-    softLimit: args.softLimit,
-    durationMs: args.durationMs,
   });
 }
 

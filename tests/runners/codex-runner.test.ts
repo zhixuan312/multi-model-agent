@@ -509,18 +509,20 @@ describe('runCodex', () => {
     expect(result.errorCode).toBe('degenerate_exhausted');
   });
 
-  // ─── 13. Task 5: watchdog force_salvage at 95% ─────────────────────────────
-  it('returns incomplete with scratchpad salvage when watchdog fires force_salvage', async () => {
+  // ─── 13. Task B6: codex-runner does NOT abort or inject when tokens exceed softLimit ──
+  it('codex-runner does not abort or inject when input tokens exceed softLimit', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
-    // Soft limit 100, turn emits 96 input tokens -> ratio 0.96 >= 0.95 -> force_salvage.
+    // 200k input tokens — well past any reasonable softLimit. The runner
+    // has no watchdog, so it should complete normally without aborting or
+    // injecting watchdog messages.
     mockResponsesCreate.mockImplementationOnce(() => {
       return (async function* () {
-        yield { type: 'response.output_text.delta', delta: 'partial progress notes' };
+        yield { type: 'response.output_text.delta', delta: VALID_FINAL_OUTPUT };
         yield {
           type: 'response.completed',
-          response: { status: 'completed', usage: { input_tokens: 96, output_tokens: 1 } },
+          response: { status: 'completed', usage: { input_tokens: 200_000, output_tokens: 100 } },
         };
       })();
     });
@@ -528,16 +530,48 @@ describe('runCodex', () => {
     const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
     const result = await runCodex(
       'prompt',
-      {},
+      { maxCostUSD: undefined, timeoutMs: undefined },
       { type: 'codex', model: 'gpt-5-codex', inputTokenSoftLimit: 100 },
       defaults,
     );
 
-    expect(result.status).toBe('incomplete');
-    expect(result.output).toBe('partial progress notes');
+    // No watchdog — the run completes normally.
+    expect(result.status).toBe('ok');
+    // Termination is NOT force_salvage or budget_exceeded.
+    expect(result.errorCode).toBeUndefined();
+
+    // Verify no watchdog-specific injections are in the message history.
+    // Match the EXACT watchdog text, NOT generic words like 'budget' which
+    // legitimately appear in cost-budget telemetry and prompt scope contracts.
+    const messages = mockResponsesCreate.mock.calls
+      .flatMap((call: unknown[]) => {
+        const params = call[0] as { input?: Array<{ content?: string }> };
+        return params?.input ?? [];
+      });
+    const allContent = messages.map(m => m.content ?? '').join(' ');
+    expect(allContent).not.toContain('watchdog_force_salvage');
+    expect(allContent).not.toContain('cumulative input token usage has crossed');
   });
 
-  // ─── 14. Task 5: error path salvages scratchpad ─────────────────────────────
+  // ─── 14. Task B6: provider context-limit error classification ───────────────
+  it('classifies provider context-window error as provider_context_limit', async () => {
+    const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
+    vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
+
+    mockResponsesCreate.mockRejectedValueOnce(new Error('context_length_exceeded'));
+
+    const { runCodex } = await import('../../packages/core/src/runners/codex-runner.js');
+    const result = await runCodex(
+      'prompt',
+      {},
+      { type: 'codex', model: 'gpt-5-codex' },
+      defaults,
+    );
+
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  // ─── 15. Task 5: error path salvages scratchpad ─────────────────────────────
   it('salvages scratchpad on error after buffering earlier text', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
@@ -584,7 +618,7 @@ describe('runCodex', () => {
     expect(result.directoriesListed).toEqual([process.cwd()]);
   });
 
-  // ─── 15. Task 5: abort-path error message is not misleading ────────────────
+  // ─── 16. Task 5: abort-path error message is not misleading ────────────────
   // Regression test for the 2026-04-10 Fate dispatch: the error formatter
   // appended "last response status: completed" from a previous successful
   // turn, making the abort look like it originated from a completed response.
@@ -640,7 +674,7 @@ describe('runCodex', () => {
     }
   });
 
-  // ─── 16. Task 5: first-turn empty output still gets retries (sentinel fix) ──
+  // ─── 17. Task 5: first-turn empty output still gets retries (sentinel fix) ──
   it('first-turn empty output is retried, not short-circuited by same-output early-out', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
@@ -778,7 +812,7 @@ describe('runCodex', () => {
 
       // Ordering: turn_start fires first (after turns++ at top of while
       // iteration), then text_emission (after scratchpad append), then
-      // turn_complete (after watchdog + reground checks), then done last.
+      // turn_complete (after reground checks), then done last.
       const kinds = events.map((e) => e.kind);
       expect(kinds[0]).toBe('turn_start');
       expect(kinds).toContain('text_emission');

@@ -397,33 +397,28 @@ describe('runClaude', () => {
   });
 
   // -------------------------------------------------------------------------
-  // 13. watchdog force_salvage — an over-budget first result triggers
-  //     abortController.abort() and the runner returns incomplete with
-  //     the scratchpad's latest text.
+  // 13. watchdog removal — high input tokens no longer force_salvage
   // -------------------------------------------------------------------------
-  it('triggers force_salvage path when input tokens cross the 95% watchdog threshold on a result message', async () => {
+  it('no longer force_salvages when input tokens are high — continues to completion', async () => {
     const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
-    // Soft limit override so 95% is easy to hit: 1000 -> force_salvage at 950.
+    // inputTokenSoftLimit is no longer consulted for force_salvage; the
+    // runner continues to completion even with high cumulative input tokens.
     const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
 
     (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
       (async function* () {
-        yield assistantMsg('salvageable scratchpad text');
-        // Result pushes cumulative input tokens to 960 (96% of softLimit).
-        // Runner must force_salvage on the post-result watchdog check.
-        yield resultMsg({ result: 'Let me check', inputTokens: 960 });
-        // Any messages beyond the force_salvage must not influence the
-        // returned result — but the runner has already broken out by then.
-        yield assistantMsg('should not be captured');
-        yield resultMsg({ result: VALID_FINAL_OUTPUT });
+        yield assistantMsg('partial findings before completion');
+        // High cumulative input tokens (well past the old 95% threshold)
+        yield resultMsg({ result: VALID_FINAL_OUTPUT, inputTokens: 960 });
       })(),
     );
 
     const result = await runClaude('task', {}, pc, defaults);
 
-    expect(result.status).toBe('incomplete');
-    expect(result.output).toBe('salvageable scratchpad text');
+    // Runner completes normally — the force_salvage path was removed.
+    expect(result.status).toBe('ok');
+    expect(result.output).toBe(VALID_FINAL_OUTPUT);
   });
 
   // -------------------------------------------------------------------------
@@ -488,8 +483,8 @@ describe('runClaude', () => {
         })(),
       );
 
-      const events: ProgressEvent[] = [];
-      const onProgress = (e: ProgressEvent) => { events.push(e); };
+      const events: InternalRunnerEvent[] = [];
+      const onProgress = (e: InternalRunnerEvent) => { events.push(e); };
 
       const result = await runClaude(
         'prompt',
@@ -632,6 +627,120 @@ describe('runClaude', () => {
 
       const captured = capturedOptions[0] as { options?: { env?: unknown } };
       expect(captured.options?.env).toBeUndefined();
+    });
+  });
+
+  // ---------------------------------------------------------------------------
+  // Task B7: force_salvage + warning-nudge removal + provider_context_limit
+  // ---------------------------------------------------------------------------
+  describe('watchdog removal (§3.7)', () => {
+    it('does not abort or force_salvage when input tokens are high', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      let capturedQueue: AsyncIterable<unknown> | null = null;
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce(((opts: {
+        prompt: AsyncIterable<unknown>;
+      }) => {
+        capturedQueue = opts.prompt;
+        return (async function* () {
+          yield assistantMsg(VALID_FINAL_OUTPUT);
+          // High input token count that would have triggered force_salvage
+          // under the old watchdog (200k tokens with default 100k soft limit
+          // would be at 200% — well past the 95% threshold).
+          yield resultMsg({ result: VALID_FINAL_OUTPUT, inputTokens: 200_000, outputTokens: 100 });
+        })();
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      // Should complete normally — no force_salvage abort.
+      expect(result.status).toBe('ok');
+      expect(result.output).toBe(VALID_FINAL_OUTPUT);
+
+      // Verify no watchdog-specific messages were injected into the queue.
+      expect(capturedQueue).not.toBeNull();
+      const iterator = (capturedQueue as AsyncIterable<unknown>)[Symbol.asyncIterator]();
+      const messages: string[] = [];
+      for (let next = await iterator.next(); !next.done; next = await iterator.next()) {
+        const msg = next.value as { message?: { content?: string } };
+        if (msg.message?.content) messages.push(msg.message.content);
+      }
+      expect(messages.find((m) => m.includes('watchdog_force_salvage'))).toBeUndefined();
+      expect(messages.find((m) => m.includes('cumulative input token usage has crossed'))).toBeUndefined();
+    });
+
+    it('classifies provider context-window error as provider_context_limit', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce((() => {
+        throw new Error('context window exceeded: prompt is too long');
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      // status='api_error' (underlying classification: provider raised an error);
+      // errorCode='provider_context_limit' is the specific signal callers key off.
+      expect(result.status).toBe('api_error');
+      expect(result.errorCode).toBe('provider_context_limit');
+    });
+
+    it('classifies prompt-is-too-long signature as provider_context_limit', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce((() => {
+        throw new Error('prompt is too long for this model');
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('error');
+      expect(result.errorCode).toBe('provider_context_limit');
+    });
+
+    it('classifies 400 max_tokens error as provider_context_limit', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce((() => {
+        throw new Error('400 max_tokens exceeded');
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('error');
+      expect(result.errorCode).toBe('provider_context_limit');
+    });
+
+    it('classifies structured error with status=400 and max_tokens in message', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce((() => {
+        const err = new Error('max_tokens limit reached');
+        const structured = Object.assign(err, { status: 400 });
+        throw structured;
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      // classifyError returns status='api_error' for HTTP errors (numeric
+      // .status), and the runner's isContextLimit check independently sets
+      // errorCode='provider_context_limit'. Both classifications coexist
+      // so the orchestrator can route on either field.
+      expect(result.status).toBe('api_error');
+      expect(result.errorCode).toBe('provider_context_limit');
+    });
+
+    it('classifies a plain string throw as provider_context_limit', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      (query as ReturnType<typeof vi.fn>).mockImplementationOnce((() => {
+        throw 'context window exceeded: prompt is too long';
+      }) as never);
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      expect(result.status).toBe('error');
+      expect(result.errorCode).toBe('provider_context_limit');
     });
   });
 

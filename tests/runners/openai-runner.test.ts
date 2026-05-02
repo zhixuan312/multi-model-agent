@@ -254,6 +254,7 @@ describe('runOpenAI — prevention scaffolding integration', () => {
         makeMockRunResult({
           finalOutput: 'Let me check',
           inputTokens: 200_000,
+          history: [{ role: 'user', content: 'original high-token request' }],
           newItems: [
             {
               type: 'message_output_item',
@@ -277,11 +278,18 @@ describe('runOpenAI — prevention scaffolding integration', () => {
       defaults,
     });
 
-    expect(result.status).not.toBe('error');
+    expect(result.status).toBe('ok');
+    expect(result.errorCode).toBeUndefined();
     expect(result.terminationReason?.cause).not.toBe('force_salvage');
     expect(result.terminationReason?.cause).not.toBe('budget_exceeded');
     expect(events.find(e => e.injectionType === 'watchdog_force_salvage')).toBeUndefined();
     expect(events.find(e => e.injectionType === 'watchdog_warning')).toBeUndefined();
+
+    const dispatchedMessages = mockRun.mock.calls
+      .map(([, input]) => input)
+      .flatMap((input) => Array.isArray(input) ? input : [{ role: 'user', content: String(input) }]);
+    expect(dispatchedMessages.find((m) => String((m as { content?: unknown }).content ?? '').includes('watchdog_force_salvage'))).toBeUndefined();
+    expect(dispatchedMessages.find((m) => String((m as { content?: unknown }).content ?? '').includes('watchdog_warning'))).toBeUndefined();
   });
 
   it('openai-runner classifies provider context-window error as provider_context_limit', async () => {
@@ -301,6 +309,54 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies context_length_exceeded from code field when message is generic', async () => {
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({ finalOutput: 'Let me check' }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Bad request'), { code: 'context_length_exceeded', status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
+    expect(result.error).toBe('Bad request');
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies realistic OpenAI maximum context length message as provider_context_limit', async () => {
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check' }))
+      .mockRejectedValueOnce(
+        Object.assign(
+          new Error("This model's maximum context length is 128000 tokens. Please reduce the length of the messages."),
+          { status: 400 },
+        ),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies spaced OpenAI context length exceeded message as provider_context_limit', async () => {
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('context length exceeded'), { status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
     expect(result.errorCode).toBe('provider_context_limit');
   });
 

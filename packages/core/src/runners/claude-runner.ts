@@ -19,7 +19,6 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
-  buildBudgetPressureNudge,
   buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
@@ -27,22 +26,14 @@ import {
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
-  resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  logWatchdogEvent,
   hasCompletedWork,
   MAX_DEGENERATE_RETRIES,
-  STALL_DETECTION_TURNS,
-  detectToolCallLoop,
-  hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
-import { classifyError, isRateLimit } from './error-classification.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { classifyError, isProviderContextLimit, isRateLimit } from './error-classification.js';
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
-  buildForceSalvageResult as sharedBuildForceSalvageResult,
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
@@ -119,6 +110,41 @@ function userMessage(text: string): SDKUserMessage {
     message: { role: 'user', content: text },
     parent_tool_use_id: null,
   };
+}
+
+/**
+ * Detect whether a thrown error signals a provider-side context-window
+ * limit (prompt too long, context window exceeded). Used by the catch
+ * block to stamp `errorCode: 'provider_context_limit'`.
+ */
+function isContextLimit(err: unknown): boolean {
+  // Collect all string-typed error surfaces from the thrown value —
+  // err.message, structured SDK error envelopes, and the stringified
+  // fallback of the whole value — so a plain string throw or a wrapped
+  // provider error is still classified as provider_context_limit.
+  const candidates: string[] = [];
+  if (err instanceof Error) candidates.push(err.message);
+  if (typeof err === 'string') candidates.push(err);
+  candidates.push(String(err ?? ''));
+
+  // Some SDKs wrap errors in { error: { message } } or { cause: { message } }
+  const e = (err ?? {}) as Record<string, unknown>;
+  if (e.error && typeof (e.error as Record<string, unknown>)?.message === 'string') {
+    candidates.push((e.error as Record<string, string>).message);
+  }
+  if (e.cause && typeof (e.cause as Record<string, unknown>)?.message === 'string') {
+    candidates.push((e.cause as Record<string, string>).message);
+  }
+
+  const status = typeof e.status === 'number' ? e.status : undefined;
+  const text = candidates.join(' ');
+
+  return (
+    /context\s*window\s*exceeded/i.test(text) ||
+    /prompt is too long/i.test(text) ||
+    /400.*max_tokens/i.test(text) ||
+    (status === 400 && /max_tokens/i.test(text))
+  );
 }
 
 export async function runClaude(
@@ -331,13 +357,9 @@ export async function runClaude(
 
   // --- Scratchpad: buffers every assistant text block we see streaming
   // through the iterator. On any termination path (ok/incomplete/max_turns/
-  // error/timeout/force_salvage) we salvage `scratchpad.latest()` when the
+  // error/timeout) we salvage `scratchpad.latest()` when the
   // final `result.result` is empty or degenerate. ---
   const scratchpad = new TextScratchpad();
-
-  // --- Watchdog: resolve the input-token soft limit once per run ---
-  const profile = findModelProfile(providerConfig.model);
-  const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
@@ -349,30 +371,24 @@ export async function runClaude(
     // --- Supervision / watchdog bookkeeping ---
     // Monitor model: only count degenerate retries when worker has NO tool calls.
     let degenerateRetries = 0;
-    let stallTurnCounter = 0;
-    let lastFilesRead = tracker.getReads().length;
-    let lastFilesWritten = tracker.getWrites().length;
     // Initialised to `null` (NOT ''): on the first turn there is no
     // previous degenerate output to compare against, so the same-output
     // early-out must be skipped. See openai-runner regression #5.
     let lastDegenerateOutput: string | null = null;
-    // High-watermark guard for the watchdog warning nudge — fire at most
-    // once per distinct input-token level. Mirrors openai-runner.
-    let lastWarnedInputTokens = -1;
 
     // --- Completed-result sentinel. Every exit from the supervision
     // state machine inside the `for await` iterator sets this to a fully-
     // built RunResult and then `break`s. After the loop, the one explicit
     // return on the happy path is `completedResult`. This gives every
-    // exit (ok / incomplete / force_salvage / max_turns) a single
+    // exit (ok / incomplete / max_turns) a single
     // explicit owner, mirroring openai-runner's `while (true) + return`
     // shape but compatible with the for-await iterator contract. ---
     let completedResult: RunResult | null = null;
 
     // --- Streaming input queue. See PushableUserMessageQueue docstring:
     // using an async iterable as the `prompt` enables mid-run user-message
-    // injection (supervision re-prompts, re-grounding, budget-pressure
-    // nudges) without restarting the CLI subprocess. ---
+    // injection (supervision re-prompts and re-grounding) without
+    // restarting the CLI subprocess. ---
     const messageQueue = new PushableUserMessageQueue();
     messageQueue.push(userMessage(promptWithBudgetHint));
 
@@ -427,70 +443,6 @@ export async function runClaude(
             }
           }
 
-          // --- Watchdog check (assistant-message cadence). We check
-          // `usage.inputTokens` as accumulated from prior `result` messages.
-          // On the very first assistant message inputTokens is 0 and no
-          // threshold can fire; that's correct. This is also the ONLY
-          // site that handles `warning` — it logs AND pushes the nudge
-          // as one action. The post-result site only handles
-          // force_salvage. ---
-          const watchdogStatus = checkWatchdogThreshold(usage.inputTokens, softLimit);
-          if (watchdogStatus !== 'ok') {
-            logWatchdogEvent(watchdogStatus, {
-              provider: providerConfig.type,
-              model: providerConfig.model,
-              turn: turns,
-              inputTokens: usage.inputTokens,
-              softLimit,
-              scratchpadChars: scratchpad.toString().length,
-            });
-          }
-          if (watchdogStatus === 'force_salvage') {
-            // `watchdog_force_salvage` is not an injected message — no
-            // re-prompt is sent — but observers still want to see why the
-            // run is being killed. We emit the event with
-            // `contentLengthChars: 0` to reflect the "nothing was injected,
-            // we just terminated" semantics (mirrors openai-runner).
-            emit({
-              kind: 'injection',
-              injectionType: 'watchdog_force_salvage',
-              turn: turns,
-              contentLengthChars: 0,
-            });
-            completedResult = buildClaudeForceSalvageResult({
-              tracker,
-              scratchpad,
-              providerConfig,
-              sdkCostUSD: costUSD,
-              usage,
-              turns,
-              softLimit,
-              durationMs: Date.now() - taskStartMs,
-              parentModel,
-            });
-            messageQueue.close();
-            abortController.abort();
-            break;
-          }
-          // Fire the warning nudge at most once per distinct input-token
-          // high-watermark. We push a user message into the queue so the
-          // next turn of the conversation will address the budget-pressure
-          // prompt. If the nudge response is itself a valid final answer,
-          // the supervision loop on the NEXT `result` message will return
-          // `ok`. High-watermark guard prevents re-nudging if inputTokens
-          // stays the same across two assistant messages.
-          if (watchdogStatus === 'warning' && usage.inputTokens > lastWarnedInputTokens) {
-            lastWarnedInputTokens = usage.inputTokens;
-            const warning = buildBudgetPressureNudge({ inputTokens: usage.inputTokens, softLimit });
-            emit({
-              kind: 'injection',
-              injectionType: 'watchdog_warning',
-              turn: turns,
-              contentLengthChars: warning.length,
-            });
-            messageQueue.push(userMessage(warning));
-          }
-
           // --- Periodic re-grounding (best-effort in streaming-input
           // mode): inject a reminder every RE_GROUNDING_INTERVAL_TURNS
           // turns via the same queue. The iterator keeps reading until
@@ -531,8 +483,7 @@ export async function runClaude(
           // streaming-input mode push a new user message into the queue
           // and the SDK emits a fresh `result` message per top-level user
           // turn — we want the cumulative usage across every result we
-          // see, not just the last one. Accumulation keeps the watchdog
-          // soft-limit check honest across retries and produces correct
+          // see, not just the last one. Accumulation produces correct
           // totals on any termination path.
           let turnInputTokens = 0;
           let turnOutputTokens = 0;
@@ -590,45 +541,6 @@ export async function runClaude(
           if (turnCost !== null) {
             lastTurnCostUSD = turnCost;
             costMeter.add(turnCost);
-          }
-
-          // --- Watchdog check on the result message as well: input tokens
-          // have just jumped and we may now be in force_salvage territory.
-          // The post-result site ONLY handles force_salvage. `warning` is
-          // intentionally ignored here — the assistant-message-cadence site
-          // above is the single place that logs warnings AND pushes the
-          // nudge into the queue. Logging `warning` here without pushing a
-          // nudge would be misleading (suggests action that didn't happen).
-          const postResultWatchdog = checkWatchdogThreshold(usage.inputTokens, softLimit);
-          if (postResultWatchdog === 'force_salvage') {
-            logWatchdogEvent(postResultWatchdog, {
-              provider: providerConfig.type,
-              model: providerConfig.model,
-              turn: turns,
-              inputTokens: usage.inputTokens,
-              softLimit,
-              scratchpadChars: scratchpad.toString().length,
-            });
-            emit({
-              kind: 'injection',
-              injectionType: 'watchdog_force_salvage',
-              turn: turns,
-              contentLengthChars: 0,
-            });
-            completedResult = buildClaudeForceSalvageResult({
-              tracker,
-              scratchpad,
-              providerConfig,
-              sdkCostUSD: costUSD,
-              usage,
-              turns,
-              softLimit,
-              durationMs: Date.now() - taskStartMs,
-              parentModel,
-            });
-            messageQueue.close();
-            abortController.abort();
-            break;
           }
 
           // --- Max-turns: don't supervise a max-turns termination,
@@ -741,6 +653,7 @@ export async function runClaude(
       // distinguish abort / network / HTTP-error / generic failure modes.
       const { status, reason } = classifyError(err);
       const msg = err instanceof Error ? err.message : String(err);
+      const contextLimit = isContextLimit(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
@@ -766,6 +679,7 @@ export async function runClaude(
         escalationLog: [],
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
+        ...(contextLimit && { errorCode: 'provider_context_limit' as const }),
         ...(isRateLimit(err) && {
           structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:claude' },
         }),
@@ -832,8 +746,8 @@ export async function runClaude(
 
 // --- Helpers: canonical return-shape builders -------------------------------
 //
-// Mirror openai-runner's buildOkResult / buildSupervisionExhaustedResult /
-// buildForceSalvageResult so each exit from the supervision state machine is
+// Mirror openai-runner's buildOkResult / buildIncompleteResult /
+// buildMaxTurnsExitResult so each exit from the supervision state machine is
 // a one-line call. Every helper folds the shared
 // filesRead/filesWritten/toolCalls/effectiveCost preamble so the call sites
 // in run() stay short and symmetric across runners.
@@ -898,20 +812,6 @@ function buildClaudeIncompleteResult(
     buildDiagnostic: buildClaudeIncompleteDiagnostic,
     durationMs: args.durationMs,
     reason: args.reason,
-  });
-}
-
-function buildClaudeForceSalvageResult(
-  args: ClaudeResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
-): RunResult {
-  return sharedBuildForceSalvageResult({
-    providerLabel: 'claude',
-    usage: claudeUsage(args),
-    turns: args.turns,
-    tracker: args.tracker,
-    scratchpad: args.scratchpad,
-    softLimit: args.softLimit,
-    durationMs: args.durationMs,
   });
 }
 
