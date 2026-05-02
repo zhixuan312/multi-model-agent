@@ -90,7 +90,11 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
       .slice(0, 3) as Array<'web_search' | 'web_fetch'>,
     reviewPolicy,
     verifyCommandPresent,
-    implementerModel: implResult?.canonical ?? 'custom',
+    implementerModel:
+      implResult?.canonical
+      ?? runResult.models?.implementer
+      ?? runResult.stageStats?.implementing?.model
+      ?? 'custom',
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
@@ -171,7 +175,7 @@ function extractStageData(
 ) {
   if (!raw || !raw.entered) return null;
   return {
-    model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
+    model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
     agentTier: raw.agentTier as 'standard' | 'complex',
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
