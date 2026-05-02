@@ -1,4 +1,4 @@
-## [unreleased] - 2026-05-02
+## [3.11.1] - 2026-05-02
 
 ### Fixed
 - **Self-heal stuck telemetry queues with rotated installIds.** The flusher now drops contiguous head-prefix records whose `installId` does not match the current local identity, in addition to the existing legacy-schema drop. The single per-flush identity snapshot is threaded into upload as a parameter; mismatched records are dropped locally without a network round-trip. After `mma telemetry reset-id`, any queued events from the previous identity are dropped on next flush. (Bug 1)
