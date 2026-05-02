@@ -1,7 +1,6 @@
 import type { Provider, AgentType, RunResult } from '../types.js';
 import type { RunStatus } from '../runners/types.js';
 import { canonicalIdentity, identityEquals, type CanonicalIdentity } from '../routing/canonical-model-identity.js';
-import { canonicalModelName } from '../routing/canonical-model.js';
 
 export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'api_error',
@@ -51,13 +50,12 @@ export interface RunWithFallbackInput<T> {
    *  failures (providerFor throws/returns undefined) follow the existing unavailable path. */
   forbiddenIdentities?: CanonicalIdentity[];
 
-  /** Canonical model-family prefixes (e.g. `gpt-5.5`, `deepseek-v4-pro`) to
-   *  exclude from candidate selection. When a candidate provider's model
-   *  resolves to a prefix in this set, the candidate is skipped with
+  /** Tier(s) to exclude from candidate selection. When a candidate's tier
+   *  matches an entry in this set, the candidate is skipped with
    *  `unavailableReason: 'reviewer_separation_unsatisfiable'`. This check
-   *  runs after `forbiddenIdentities` and operates at the model-family
-   *  level (not full identity). */
-  forbiddenModels?: string[];
+   *  runs after `forbiddenIdentities` and gates separation by tier rather
+   *  than by model family — same-model/different-tier is allowed. */
+  forbiddenTiers?: AgentType[];
 }
 
 export interface RunWithFallbackResult<T> {
@@ -106,7 +104,7 @@ export async function runWithFallback<T>(
   const { assigned, providerFor, unavailableTiers, isTransportFailure, makeSyntheticFailure, call } = input;
   const getStatus = input.getStatus ?? (() => undefined);
   const forbidden = input.forbiddenIdentities ?? [];
-  const forbiddenModels = (input.forbiddenModels ?? []).map((model) => canonicalModelName(model));
+  const forbiddenTiers = input.forbiddenTiers ?? [];
 
   // ── Helpers for identity separation ──
   // Returns { skip: true } when the tier should be skipped due to separation.
@@ -137,21 +135,12 @@ export async function runWithFallback<T>(
     try { return canonicalIdentity(p.config); } catch { return null; }
   };
 
-  // ── Model-family-level separation check (forbiddenModels) ──
-  // Returns { skip: true } when the tier's canonical model prefix matches a
-  // forbiddenModels entry. Fail-closed: unresolvable model → skip.
-  const checkModelSeparation = (tier: AgentType): { skip: boolean } => {
-    if (forbiddenModels.length === 0) return { skip: false };
-    let p: Provider | undefined;
-    try { p = providerFor(tier); } catch { return { skip: false }; }
-    if (!p) return { skip: false };
-    try {
-      const modelName = canonicalModelName(p.config.model);
-      if (forbiddenModels.includes(modelName)) return { skip: true };
-      return { skip: false };
-    } catch {
-      return { skip: true };
-    }
+  // ── Tier-level separation check (forbiddenTiers) ──
+  // Returns { skip: true } when the tier itself is forbidden.
+  const checkTierSeparation = (tier: AgentType): { skip: boolean } => {
+    if (forbiddenTiers.length === 0) return { skip: false };
+    if (forbiddenTiers.includes(tier)) return { skip: true };
+    return { skip: false };
   };
 
   // ── Resolve assigned identity (before any availability checks) ──
@@ -163,7 +152,7 @@ export async function runWithFallback<T>(
   let fallbackReason: FallbackReason | undefined;
   let assignedUnavailableReason: FallbackReason | undefined;
   let skippedDueToSeparation = false;
-  let skippedDueToModelSeparation = false;
+  let skippedDueToTierSeparation = false;
   let usedIdentity: CanonicalIdentity | undefined = assignedIdentity;
 
   if (unavailableTiers.has(assigned)) {
@@ -185,9 +174,9 @@ export async function runWithFallback<T>(
         usedIdentity = sep.identity;
       }
       if (!sep.skip && fallbackReason === undefined) {
-        const modelSep = checkModelSeparation(assigned);
-        if (modelSep.skip) {
-          skippedDueToModelSeparation = true;
+        const tierSep = checkTierSeparation(assigned);
+        if (tierSep.skip) {
+          skippedDueToTierSeparation = true;
           fallbackReason = 'reviewer_separation_unsatisfiable';
         }
       }
@@ -215,9 +204,9 @@ export async function runWithFallback<T>(
           usedIdentity = altSep.identity;
         }
         if (!altSep.skip && altUnavailableReason === undefined) {
-          const altModelSep = checkModelSeparation(alt);
-          if (altModelSep.skip) {
-            skippedDueToModelSeparation = true;
+          const altTierSep = checkTierSeparation(alt);
+          if (altTierSep.skip) {
+            skippedDueToTierSeparation = true;
             altUnavailableReason = 'reviewer_separation_unsatisfiable';
           }
         }
@@ -227,9 +216,9 @@ export async function runWithFallback<T>(
       // Both unavailable up-front. If separation was the blocking reason for
       // either tier, surface it as the unavailableReason so callers like
       // adaptForAllTiersUnavailable can map to the correct errorCode.
-      // forbiddenModels specifically means reviewer_separation_unsatisfiable
+      // forbiddenTiers specifically means reviewer_separation_unsatisfiable
       // regardless of why the alt is unavailable (e.g. not_configured).
-      if (skippedDueToSeparation || skippedDueToModelSeparation) {
+      if (skippedDueToSeparation || skippedDueToTierSeparation) {
         return {
           result: makeSyntheticFailure(assigned),
           usedTier: 'none',
@@ -237,7 +226,7 @@ export async function runWithFallback<T>(
           bothUnavailable: true,
           fallbackReason,
           assignedUnavailableReason,
-          unavailableReason: skippedDueToModelSeparation ? 'reviewer_separation_unsatisfiable' : altUnavailableReason,
+          unavailableReason: skippedDueToTierSeparation ? 'reviewer_separation_unsatisfiable' : altUnavailableReason,
           fallbackSeparationRespected: skippedDueToSeparation || undefined,
           assignedIdentity,
           usedIdentity: undefined,
@@ -408,9 +397,9 @@ export async function runWithFallback<T>(
         usedIdentity = altSep.identity;
       }
       if (!altSep.skip && altUnavailableReason === undefined) {
-        const altModelSep = checkModelSeparation(altOfUsed);
-        if (altModelSep.skip) {
-          skippedDueToModelSeparation = true;
+        const altTierSep = checkTierSeparation(altOfUsed);
+        if (altTierSep.skip) {
+          skippedDueToTierSeparation = true;
           altUnavailableReason = 'reviewer_separation_unsatisfiable';
         }
       }
