@@ -112,6 +112,7 @@ export async function executeExecutePlan(
     contextBlockIds: input.contextBlockIds,
     parentModel,
     autoCommit: true,
+    verifyCommand: input.verifyCommand,
   };
   const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
