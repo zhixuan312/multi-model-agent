@@ -3,7 +3,7 @@ import type { IncomingMessage } from 'node:http';
 const CLIENT_ALLOWLIST = new Set(['claude-code', 'cursor', 'codex-cli', 'gemini-cli']);
 const SKILL_ALLOWLIST = new Set([
   'mma-delegate', 'mma-audit', 'mma-review', 'mma-verify', 'mma-debug',
-  'mma-execute-plan', 'mma-retry', 'mma-investigate',
+  'mma-execute-plan', 'mma-retry', 'mma-investigate', 'mma-explore',
   'mma-context-blocks', 'mma-clarifications',
 ]);
 
