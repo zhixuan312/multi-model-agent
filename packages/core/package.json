@@ -335,6 +335,7 @@
     "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@mozilla/readability": "^0.6.0",
     "@openai/agents": "^0.8.0",
+    "fast-xml-parser": "^5.7.2",
     "jsdom": "^29.1.1",
     "openai": "^6.0.0",
     "undici": "^8.2.0",
