@@ -1554,9 +1554,10 @@ export async function executeReviewedLifecycle(
 
     let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
     // Hoisted so endReviewStage (called after this block) can read them on the
-    // success path. When the quality review is skipped (`reviewPolicy !== 'full'`),
-    // the values stay at 0/null and the corresponding stage entry remains in its
-    // `entered: false` default — endReviewStage is never called.
+    // success path. The endReviewStage call at line 1752 is guarded by
+    // reviewPolicy ∈ {'full', 'quality_only'}; for 'spec_only' / 'diff_only' /
+    // 'off', the quality_review stage stays at emptyStats() default
+    // (entered: false) and is filtered from the wire by event-builder.ts:175.
     let qualityReviewT0 = 0;
     let qualityReviewC0: number | null = null;
     // Same delta-only timing pattern as spec_review — accumulate per-call
@@ -1751,6 +1752,7 @@ export async function executeReviewedLifecycle(
     }
     const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
 
+    if (reviewPolicy === 'full' || reviewPolicy === 'quality_only') {
     endReviewStage(stats, 'quality_review', qualityReviewT0, qualityReviewC0, qualityReviewAgent, runningCostUSD(), snapshotIdle(stageIdle),
       qualityResult.status === 'approved' ? 'approved'
         : qualityResult.status === 'changes_required' ? 'changes_required'
@@ -1759,6 +1761,7 @@ export async function executeReviewedLifecycle(
         : 'error',
       qualityAttemptIndex,
       qualityMetrics);
+    }
     const aggregated = aggregateResult(
       finalReport,
       specReport,
