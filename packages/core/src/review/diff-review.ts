@@ -3,7 +3,7 @@ import type { SkippedReviewResult } from './skipped-result.js';
 
 export type DiffReviewConcern = {
   source: 'diff_review';
-  severity: 'low' | 'medium' | 'high';
+  severity: 'critical' | 'high' | 'medium' | 'low';
   message: string;
 };
 
