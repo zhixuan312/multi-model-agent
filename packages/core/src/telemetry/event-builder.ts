@@ -49,6 +49,17 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
   const totalDurationMs = clampDurationMsTotal(Math.max(runResult.durationMs ?? 0, stageDurationsSum));
 
+  // Defensive: clamp any stage duration that exceeds totalDurationMs.
+  // Salvage-promotion paths in reviewed-lifecycle can produce stage durations
+  // that double-count overlapping rework time, inflating a stage beyond the
+  // task-level wall clock. Capping individual stages prevents telemetry from
+  // reporting per-stage durations larger than the task itself.
+  for (const st of stages) {
+    if (st.durationMs > totalDurationMs) {
+      st.durationMs = totalDurationMs;
+    }
+  }
+
   // Top-level totals are summed across all stages (impl + reviewers + reworks +
   // verify + commit) so the dashboard's `total_cost_cents` reflects the true
   // task cost. runResult.usage only carries the LAST implementer attempt and
