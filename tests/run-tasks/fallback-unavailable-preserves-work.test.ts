@@ -2,32 +2,52 @@ import { describe, it, expect, vi } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
 import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
-import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
+import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult, StageStatsMap } from '../../packages/core/src/types.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
-// Escalation provider always transport-fails with zero work.
-// The primary (assigned) provider injected via resolved.provider will carry
-// the 56-min salvage state so scoreWork picks it as salvageResult.
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
-  createProvider: (_slot: string) => ({
-    name: 'escalation-mock',
-    config: { type: 'openai-compatible' as const, model: 'gpt-5.2', baseUrl: 'https://ex.invalid/v1' },
-    run: async () => ({
-      output: '',
-      status: 'timeout' as const,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
-      turns: 0,
-      filesRead: [],
-      filesWritten: [],
-      toolCalls: [],
-      outputIsDiagnostic: true,
-      escalationLog: [],
-    }),
-  }),
-}));
+// ── Stage-stats fixture helpers ──────────────────────────────────────────
+
+function notEnteredStage<T extends Record<string, unknown>>(stage: string, extras?: T) {
+  return {
+    stage,
+    entered: false,
+    durationMs: null,
+    costUSD: null,
+    agentTier: null,
+    modelFamily: null,
+    model: null,
+    maxIdleMs: null,
+    totalIdleMs: null,
+    activityEvents: null,
+    inputTokens: null,
+    outputTokens: null,
+    cachedTokens: null,
+    reasoningTokens: null,
+    turnCount: null,
+    toolCallCount: null,
+    filesReadCount: null,
+    filesWrittenCount: null,
+    ...extras,
+  };
+}
+
+function emptyStageStats() {
+  return {
+    implementing: notEnteredStage('implementing'),
+    spec_review: notEnteredStage('spec_review', { verdict: null, roundsUsed: null }),
+    spec_rework: notEnteredStage('spec_rework'),
+    quality_review: notEnteredStage('quality_review', { verdict: null, roundsUsed: null }),
+    quality_rework: notEnteredStage('quality_rework'),
+    diff_review: notEnteredStage('diff_review', { verdict: null, roundsUsed: null }),
+    verifying: notEnteredStage('verifying', { outcome: null, skipReason: null }),
+    committing: notEnteredStage('committing'),
+  } as unknown as StageStatsMap;
+}
+
+// ── Config factory ───────────────────────────────────────────────────────
 
 function makeConfig(): MultiModelConfig {
   return {
@@ -95,6 +115,7 @@ describe('Test 12 Part B — event-builder unit with salvage RunResult', () => {
       workerStatus: 'blocked',
       terminationReason: 'all_tiers_unavailable',
       stageStats: {
+        ...emptyStageStats(),
         implementing: {
           stage: 'implementing',
           entered: true,
@@ -115,13 +136,6 @@ describe('Test 12 Part B — event-builder unit with salvage RunResult', () => {
           filesReadCount: 2,
           filesWrittenCount: 2,
         },
-        spec_review: { stage: 'spec_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-        spec_rework: { stage: 'spec_rework' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
-        quality_review: { stage: 'quality_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-        quality_rework: { stage: 'quality_rework' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
-        diff_review: { stage: 'diff_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-        verifying: { stage: 'verifying' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, outcome: null, skipReason: null },
-        committing: { stage: 'committing' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
       },
       models: { implementer: 'deepseek-v4-pro', specReviewer: null, qualityReviewer: null },
       agents: {
@@ -274,52 +288,48 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
 // implementerModel lookup: models.implementer > stage model > 'custom'
 
 describe('Test 14 — implementerModel lookup precedence', () => {
-  const baseRunResult: RunResult = {
-    output: 'test',
-    status: 'ok',
-    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [],
-    durationMs: 1000,
-    workerStatus: 'done',
-    terminationReason: { cause: 'finished' as const, turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done' as const, wasPromoted: false },
-    stageStats: {
-      implementing: {
-        stage: 'implementing' as const,
-        entered: true,
-        durationMs: 1000,
-        costUSD: 0.01,
-        agentTier: 'standard',
-        modelFamily: null,
-        model: null,
-        maxIdleMs: null,
-        totalIdleMs: null,
-        activityEvents: null,
-        inputTokens: 100,
-        outputTokens: 50,
-        cachedTokens: null,
-        reasoningTokens: null,
-        turnCount: 1,
-        toolCallCount: 1,
-        filesReadCount: 0,
-        filesWrittenCount: 0,
+  function makeBaseRunResult(): RunResult {
+    return {
+      output: 'test',
+      status: 'ok',
+      usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
+      turns: 1,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: false,
+      escalationLog: [],
+      durationMs: 1000,
+      workerStatus: 'done',
+      terminationReason: { cause: 'finished' as const, turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done' as const, wasPromoted: false },
+      stageStats: {
+        ...emptyStageStats(),
+        implementing: {
+          stage: 'implementing',
+          entered: true,
+          durationMs: 1000,
+          costUSD: 0.01,
+          agentTier: 'standard',
+          modelFamily: null,
+          model: null,
+          maxIdleMs: null,
+          totalIdleMs: null,
+          activityEvents: null,
+          inputTokens: 100,
+          outputTokens: 50,
+          cachedTokens: null,
+          reasoningTokens: null,
+          turnCount: 1,
+          toolCallCount: 1,
+          filesReadCount: 0,
+          filesWrittenCount: 0,
+        },
       },
-      spec_review: { stage: 'spec_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-      spec_rework: { stage: 'spec_rework' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
-      quality_review: { stage: 'quality_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-      quality_rework: { stage: 'quality_rework' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
-      diff_review: { stage: 'diff_review' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, verdict: null, roundsUsed: null },
-      verifying: { stage: 'verifying' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null, outcome: null, skipReason: null },
-      committing: { stage: 'committing' as const, entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: null, totalIdleMs: null, activityEvents: null, inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null },
-    },
-    models: { implementer: 'gpt-5', specReviewer: null, qualityReviewer: null },
-    agents: { implementer: 'standard', specReviewer: 'not_applicable', qualityReviewer: 'not_applicable' },
-    concerns: [],
-  };
+      models: { implementer: 'gpt-5', specReviewer: null, qualityReviewer: null },
+      agents: { implementer: 'standard', specReviewer: 'not_applicable', qualityReviewer: 'not_applicable' },
+      concerns: [],
+    };
+  }
 
   const buildCtx = {
     route: 'delegate' as const,
@@ -329,14 +339,14 @@ describe('Test 14 — implementerModel lookup precedence', () => {
   };
 
   it('case 1: models.implementer set → that name wins', () => {
-    const rr = structuredClone(baseRunResult);
+    const rr = structuredClone(makeBaseRunResult());
     rr.models = { implementer: 'claude-sonnet', specReviewer: null, qualityReviewer: null };
     const event = buildTaskCompletedEvent({ ...buildCtx, runResult: rr });
     expect(event.implementerModel).toBe('claude-sonnet');
   });
 
   it('case 2: only stage model set → that name wins', () => {
-    const rr = structuredClone(baseRunResult);
+    const rr = structuredClone(makeBaseRunResult());
     delete (rr as any).models;
     rr.stageStats!.implementing.model = 'gemini-2.5-pro';
     const event = buildTaskCompletedEvent({ ...buildCtx, runResult: rr });
@@ -344,7 +354,7 @@ describe('Test 14 — implementerModel lookup precedence', () => {
   });
 
   it('case 3: nothing set → custom literal', () => {
-    const rr = structuredClone(baseRunResult);
+    const rr = structuredClone(makeBaseRunResult());
     delete (rr as any).models;
     rr.stageStats!.implementing.model = null;
     const event = buildTaskCompletedEvent({ ...buildCtx, runResult: rr });
@@ -357,12 +367,38 @@ describe('Test 14 — implementerModel lookup precedence', () => {
 // transport-fail so bothUnavailable fires. The higher-work tier's result
 // (standard, 56-min equivalent state) becomes salvageResult and its data
 // threads into the emitted task_completed event.
+//
+// The module mock of @zhixuan92/multi-model-agent-core/provider is the
+// *complex-tier* (escalation) provider. The primary (standard) provider is
+// passed directly via resolved.provider so scoreWork picks it as the
+// salvageResult. Both tiers produce transport failures, triggering
+// all_tiers_unavailable.
 
 describe('Test 12 Part A — lifecycle regression', () => {
   it('preserves implementer work via salvage when both tiers unavailable', async () => {
     const config = makeConfig();
 
-    // Primary provider (standard) — fails with timeout but carries 56-min of work.
+    // Escalation (complex-tier) mock: always transport-fails with zero work.
+    // This is the fallback path that the lifecycle calls via createProvider.
+    vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+      createProvider: (_slot: string) => ({
+        name: 'escalation-mock',
+        config: { type: 'openai-compatible' as const, model: 'gpt-5.2', baseUrl: 'https://ex.invalid/v1' },
+        run: async () => ({
+          output: '',
+          status: 'timeout' as const,
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+        }),
+      }),
+    }));
+
+    // Primary (standard) provider — fails with timeout but carries 56-min of work.
     // scoreWork = turns(42) + filesWritten(2) + inputTokens/1000(47) = 91
     const primaryProvider: Provider = {
       name: 'test-standard',
@@ -413,17 +449,23 @@ describe('Test 12 Part A — lifecycle regression', () => {
     // Salvage: stageStats.implementing should be entered with real work.
     expect(result.stageStats).toBeDefined();
     expect(result.stageStats!.implementing.entered).toBe(true);
-    // Metrics from salvage source (standard provider)
+
+    // All metrics from salvage source (standard provider) must thread through.
+    // Note: adaptForAllTiersUnavailable sets durationMs/costUSD on the stage from
+    // existing?.durationMs (which is null for a fresh stage), but turnCount,
+    // inputTokens, outputTokens, and filesWrittenCount come directly from
+    // salvageSource fields. The overall result.durationMs is preserved however.
+    expect(result.durationMs).toBe(3_360_000);
     expect(result.stageStats!.implementing.turnCount).toBe(42);
     expect(result.stageStats!.implementing.filesWrittenCount).toBe(2);
     expect(result.stageStats!.implementing.inputTokens).toBe(47000);
     expect(result.stageStats!.implementing.outputTokens).toBe(12000);
 
-    // models should thread through
+    // Verify salvage model identity threads through.
     expect(result.models).toBeDefined();
-    expect(result.models!.implementer).toBeTruthy();
+    expect(result.models!.implementer).toBe('deepseek-v4-pro');
 
-    // Build the event to verify end-to-end
+    // Build the event to verify end-to-end telemetry preservation.
     const event = buildTaskCompletedEvent({
       route: 'delegate',
       taskSpec: { filePaths: ['src/feature.ts'] },
@@ -433,15 +475,20 @@ describe('Test 12 Part A — lifecycle regression', () => {
     });
 
     expect(event.terminalStatus).toBe('unavailable');
-    expect(event.implementerModel).toBeTruthy();
-    expect(event.implementerModel).not.toBe('custom');
-    expect(event.stages.length).toBeGreaterThanOrEqual(1);
-    expect(event.totalDurationMs).toBeGreaterThan(0);
+    expect(event.implementerModel).toBe('deepseek-v4-pro');
+    expect(event.totalDurationMs).toBeGreaterThan(3_000_000);
+    expect(event.stages).toHaveLength(1);
 
-    // The implementing stage carries the salvage data
-    const implStage = event.stages.find(s => s.name === 'implementing');
-    expect(implStage).toBeDefined();
-    expect(implStage!.turnCount).toBe(42);
-    expect(implStage!.filesWrittenCount).toBe(2);
+    // The implementing stage carries the full salvage data except for
+    // durationMs and costUSD which adaptForAllTiersUnavailable sets from
+    // existing stage data (null for a fresh stage → clamped to 0).
+    // runResult.durationMs drives event.totalDurationMs instead.
+    const implStage = event.stages[0]!;
+    expect(implStage.name).toBe('implementing');
+    expect(implStage.agentTier).toBe('standard');
+    expect(implStage.turnCount).toBe(42);
+    expect(implStage.filesWrittenCount).toBe(2);
+    expect(implStage.inputTokens).toBe(47000);
+    expect(implStage.outputTokens).toBe(12000);
   });
 });
