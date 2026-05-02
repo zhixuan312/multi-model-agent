@@ -319,7 +319,7 @@ export async function runOpenAI(
     const ceilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
     if (ceilingMs !== null) {
       const err = new Error('time_ceiling');
-      (err as Record<string, unknown>).__timeCeiling = ceilingMs;
+      (err as unknown as Record<string, unknown>).__timeCeiling = ceilingMs;
       throw err;
     }
     const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;

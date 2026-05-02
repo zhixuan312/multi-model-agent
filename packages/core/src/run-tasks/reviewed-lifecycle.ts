@@ -572,7 +572,7 @@ export async function executeReviewedLifecycle(
             event.cumulativeOutputTokens,
             providerConfig,
           );
-          _currentRunnerCostUSD = costUSD;
+          _currentRunnerCostUSD = costUSD ?? 0;
           const cumulativeCostUSD = (_completedRunnerCostUSD ?? 0) + _currentRunnerCostUSD;
           heartbeat?.updateCost(cumulativeCostUSD, null);
           const nowTurn = Date.now();

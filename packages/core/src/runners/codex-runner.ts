@@ -533,11 +533,20 @@ export async function runCodex(
             sawCompleted = true;
             const r = event.response as Response | undefined;
             if (r?.usage) {
+              // Codex SDK ResponseUsage type doesn't declare cached_input_tokens /
+              // reasoning_tokens, but the wire payload carries them when the model
+              // emits them. Cast to a wider shape to read; null when absent.
+              const wideUsage = r.usage as unknown as {
+                input_tokens?: number;
+                output_tokens?: number;
+                cached_input_tokens?: number;
+                reasoning_tokens?: number;
+              };
               const turnUsage: CanonicalUsage = {
-                inputTokens: r.usage.input_tokens ?? 0,
-                outputTokens: r.usage.output_tokens ?? 0,
-                cachedTokens: r.usage.cached_input_tokens ?? null,
-                reasoningTokens: r.usage.reasoning_tokens ?? null,
+                inputTokens: wideUsage.input_tokens ?? 0,
+                outputTokens: wideUsage.output_tokens ?? 0,
+                cachedTokens: wideUsage.cached_input_tokens ?? null,
+                reasoningTokens: wideUsage.reasoning_tokens ?? null,
               };
               usage = mergeUsage(usage, turnUsage);
             }

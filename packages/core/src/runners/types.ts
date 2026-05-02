@@ -120,8 +120,6 @@ export type InternalRunnerEvent =
         | 'supervise_thinking'
         | 'supervise_fragment'
         | 'supervise_insufficient_coverage'
-        | 'watchdog_warning'
-        | 'watchdog_force_salvage'
       turn: number
       contentLengthChars: number
     }
