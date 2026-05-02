@@ -55,6 +55,7 @@ export const ErrorCode = z.enum([
   'network_error',
   'rate_limit_exceeded',
   'incomplete_no_summary',
+  'reviewer_separation_unsatisfiable',
   'other',
 ]);
 
