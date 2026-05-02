@@ -290,9 +290,12 @@ export class Flusher {
   }
 
   #scheduleBackoff(ms: number): void {
+    if (this.#backoffTimer) {
+      clearTimeout(this.#backoffTimer);
+      this.#backoffTimer = null;
+    }
     this.#backoffTimer = setTimeout(() => {
       this.#backoffTimer = null;
-      this.#backoffMs = 0;
       this.flush().catch(() => {});
     }, ms);
     if (this.#backoffTimer.unref) this.#backoffTimer.unref();
