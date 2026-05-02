@@ -13,6 +13,7 @@
   "POST /debug",
   "POST /delegate",
   "POST /execute-plan",
+  "POST /explore",
   "POST /investigate",
   "POST /retry",
   "POST /review",
