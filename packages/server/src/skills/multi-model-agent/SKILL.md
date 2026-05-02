@@ -23,12 +23,14 @@ digraph picker {
     "Verify a checklist?" [shape=diamond];
     "Debug a failure?" [shape=diamond];
     "Codebase question?" [shape=diamond];
+    "Convergent or divergent?" [shape=diamond];
     "mma-execute-plan" [shape=box];
     "mma-audit" [shape=box];
     "mma-review" [shape=box];
     "mma-verify" [shape=box];
     "mma-debug" [shape=box];
     "mma-investigate" [shape=box];
+    "mma-explore" [shape=box];
     "mma-delegate" [shape=box];
 
     "Plan/spec file on disk?" -> "mma-execute-plan" [label="yes"];
@@ -41,8 +43,10 @@ digraph picker {
     "Verify a checklist?" -> "Debug a failure?" [label="no"];
     "Debug a failure?" -> "mma-debug" [label="yes"];
     "Debug a failure?" -> "Codebase question?" [label="no"];
-    "Codebase question?" -> "mma-investigate" [label="yes"];
+    "Codebase question?" -> "Convergent or divergent?" [label="yes"];
     "Codebase question?" -> "mma-delegate" [label="no — ad-hoc"];
+    "Convergent or divergent?" -> "mma-investigate" [label="convergent (one answer)"];
+    "Convergent or divergent?" -> "mma-explore" [label="divergent (3-5 directions)"];
 }
 ```
 
@@ -124,8 +128,7 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 ```bash
 PORT=7337
 if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
-  mmagent serve >/dev/null 2>&1 &
-  disown
+  mmagent serve >/dev/null 2>&1 & disown
   for _ in 1 2 3 4 5 6 7 8 9 10; do
     sleep 0.5
     curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1 && break
@@ -133,10 +136,7 @@ if ! curl -sf "http://127.0.0.1:$PORT/health" >/dev/null 2>&1; then
 fi
 ```
 
-Idempotent: already-running daemon → curl succeeds → no-op.
-
-❌ `mmagent serve` (no `&`) — blocks forever, never reaches the next step.
-✅ `mmagent serve >/dev/null 2>&1 & disown` — backgrounded, releases the shell.
+Idempotent: already-running daemon → curl succeeds → no-op. Background `mmagent serve` (with `& disown`) — never run it foreground (it would block the rest of the script).
 
 ## Auth token
 
@@ -164,6 +164,7 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 | `mma-debug` | `complex` |
 | `mma-verify` | `complex` |
 | `mma-investigate` | `complex` |
+| `mma-explore` | `complex` (all three workers — internal, external, synthesizer) |
 
 If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
