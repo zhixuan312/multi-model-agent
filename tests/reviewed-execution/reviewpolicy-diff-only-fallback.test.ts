@@ -152,6 +152,9 @@ describe('Item 3: diff_review reject sets terminationReason.cause = error', () =
     expect(result.terminationReason).toBeDefined();
     if (result.terminationReason && typeof result.terminationReason === 'object') {
       expect(result.terminationReason.cause).toBe('error');
+      expect(result.terminationReason.turnsUsed).toBe(1);
+      expect(result.terminationReason.hasFileArtifacts).toBe(true);
+      expect(result.terminationReason.usedShell).toBe(false);
     }
   });
 });

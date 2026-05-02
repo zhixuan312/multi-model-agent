@@ -1054,6 +1054,18 @@ export async function executeReviewedLifecycle(
     }, verification);
   }
 
+  function diffReviewErrorTerminationReason(base: RunResult) {
+    return {
+      cause: 'error' as const,
+      turnsUsed: base.turns,
+      hasFileArtifacts: (base.filesWritten ?? []).length > 0,
+      usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
+      workerSelfAssessment: 'failed' as const,
+      wasPromoted: false,
+      ...(base.terminationReason && typeof base.terminationReason === 'object' && base.terminationReason.wallClockMs !== undefined ? { wallClockMs: base.terminationReason.wallClockMs } : {}),
+    };
+  }
+
   function resolveDiffOnlyTerminal(base: RunResult, verdict: DiffReviewOrSkipped, verification: VerifyStageResult, diffTruncated: boolean): RunResult {
     const concerns = [...(base.concerns ?? [])];
     if ('status' in verdict && verdict.status === 'skipped') {
@@ -1076,15 +1088,7 @@ export async function executeReviewedLifecycle(
           code: 'diff_review_rejected',
           message: verdict.message || 'diff review rejected implementation',
         },
-        terminationReason: {
-          cause: 'error',
-          turnsUsed: base.terminationReason && typeof base.terminationReason === 'object' ? (base.terminationReason.turnsUsed ?? 0) : 0,
-          hasFileArtifacts: false,
-          usedShell: false,
-          workerSelfAssessment: 'failed',
-          wasPromoted: false,
-          ...(base.terminationReason && typeof base.terminationReason === 'object' && base.terminationReason.wallClockMs !== undefined ? { wallClockMs: base.terminationReason.wallClockMs } : {}),
-        },
+        terminationReason: diffReviewErrorTerminationReason(base),
         concerns,
         commits,
         commitError,
@@ -1102,15 +1106,7 @@ export async function executeReviewedLifecycle(
           code: verdict.status,
           message: verdict.reason ?? `diff review transport failure: ${verdict.status}`,
         },
-        terminationReason: {
-          cause: 'error',
-          turnsUsed: base.terminationReason && typeof base.terminationReason === 'object' ? (base.terminationReason.turnsUsed ?? 0) : 0,
-          hasFileArtifacts: false,
-          usedShell: false,
-          workerSelfAssessment: 'failed',
-          wasPromoted: false,
-          ...(base.terminationReason && typeof base.terminationReason === 'object' && base.terminationReason.wallClockMs !== undefined ? { wallClockMs: base.terminationReason.wallClockMs } : {}),
-        },
+        terminationReason: diffReviewErrorTerminationReason(base),
         concerns: [...concerns, ...verdict.concerns],
         commits,
         commitError,
