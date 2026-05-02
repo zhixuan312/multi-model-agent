@@ -8,10 +8,46 @@ export interface BraveSearchResponse {
   attempts: Array<{ keyIndex: number; status: number | 'error' }>;
 }
 
+function validateBraveResults(body: unknown): BraveSearchResult[] {
+  if (body == null || typeof body !== 'object') return [];
+  const b = body as Record<string, unknown>;
+  const web = b.web;
+  if (web == null || typeof web !== 'object') return [];
+  const results = (web as Record<string, unknown>).results;
+  if (!Array.isArray(results)) return [];
+  return results.map((r: unknown, i: number) => {
+    if (r == null || typeof r !== 'object') {
+      return { title: `[invalid entry ${i}]`, url: '', snippet: '' };
+    }
+    const item = r as Record<string, unknown>;
+    return {
+      title: typeof item.title === 'string' ? item.title : `[missing title ${i}]`,
+      url: typeof item.url === 'string' ? item.url : '',
+      snippet: typeof item.snippet === 'string' ? item.snippet : '',
+    };
+  });
+}
+
 export class BraveClient {
   private nextKeyIndex = 0;
+  // Promise-chain critical-section lock: each caller waits for its
+  // predecessor, then atomically reads+advances nextKeyIndex.
+  // try/finally is load-bearing — without it an exception in the
+  // critical section would stall the chain permanently, hanging every
+  // subsequent search() call.
   private lockChain: Promise<void> = Promise.resolve();
-  constructor(private readonly cfg: ResearchConfig['brave']) {}
+
+  // Injectable for deterministic testing (backoff/jitter).
+  private readonly _sleep: (ms: number) => Promise<void>;
+  private readonly _random: () => number;
+
+  constructor(
+    private readonly cfg: ResearchConfig['brave'],
+    opts?: { sleep?: (ms: number) => Promise<void>; random?: () => number },
+  ) {
+    this._sleep = opts?.sleep ?? ((ms) => new Promise((r) => setTimeout(r, ms)));
+    this._random = opts?.random ?? (() => Math.random());
+  }
 
   private async takeNextKeyIndex(): Promise<number> {
     let release!: () => void;
@@ -51,9 +87,19 @@ export class BraveClient {
       }
       const idx = await this.takeNextKeyIndex();
       lastIndex = idx;
+
+      // Re-check deadline after lock acquisition — takeNextKeyIndex() may
+      // have waited behind a slow predecessor.
+      if (Date.now() > deadline) {
+        throw new Error('brave_deadline_exceeded');
+      }
+
       const key = this.cfg.apiKeys[idx]!;
       const ctrl = new AbortController();
-      const remaining = Math.max(50, deadline - Date.now());
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) {
+        throw new Error('brave_deadline_exceeded');
+      }
       const timer = setTimeout(() => ctrl.abort(), remaining);
       let res: Awaited<ReturnType<typeof request>> | undefined;
       try {
@@ -66,9 +112,9 @@ export class BraveClient {
           signal: ctrl.signal,
         });
         if (res.statusCode === 200) {
-          const body = await res.body.json() as { web?: { results?: BraveSearchResult[] } };
+          const body = await res.body.json() as unknown;
           return {
-            results: (body.web?.results ?? []).map(r => ({ title: r.title, url: r.url, snippet: r.snippet })),
+            results: validateBraveResults(body),
             keyIndex: idx,
             attempts: [...attempts, { keyIndex: idx, status: 200 }],
           };
@@ -82,9 +128,15 @@ export class BraveClient {
           try { await res.body.dump?.(); } catch { /* nothing */ }
         }
       }
-      const base = this.cfg.perCallBackoffMs * (2 ** attempt);
-      const jitter = base * (0.75 + Math.random() * 0.5);
-      await new Promise(r => setTimeout(r, jitter));
+
+      // No sleep after the final attempt.
+      if (attempt < maxAttempts - 1) {
+        const base = this.cfg.perCallBackoffMs * (2 ** attempt);
+        const jitter = base * (0.75 + this._random() * 0.5);
+        // Cap to remaining deadline so backoff alone never exceeds timeoutMs.
+        const capped = Math.min(jitter, Math.max(0, deadline - Date.now()));
+        await this._sleep(capped);
+      }
     }
     const summary = attempts.map(a => a.status).join(',');
     throw new Error(`brave_keys_exhausted: attempts=[${summary}] lastKeyIndex=${lastIndex}`);
