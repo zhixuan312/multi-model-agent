@@ -148,7 +148,7 @@ export class Flusher {
         this.#dropped += unflushableHead;
         batch = await this.#queue.readBatch(MAX_BATCH);
         if (batch.records.length === 0) {
-          this.clearBackoff();   // see Edit C
+          this.clearBackoff();
           return;
         }
       }
@@ -290,7 +290,6 @@ export class Flusher {
   }
 
   #scheduleBackoff(ms: number): void {
-    this.clearBackoff();
     this.#backoffTimer = setTimeout(() => {
       this.#backoffTimer = null;
       this.#backoffMs = 0;
