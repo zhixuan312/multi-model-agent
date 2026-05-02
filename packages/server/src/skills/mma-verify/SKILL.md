@@ -107,6 +107,8 @@ Every finding has the same shape:
    color, or `(low confidence)` annotation). User decides what to do.
 5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
 
+@include _shared/budget-defaults.md
+
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-verify`:

@@ -79,6 +79,8 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
+@include _shared/budget-defaults.md
+
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:
