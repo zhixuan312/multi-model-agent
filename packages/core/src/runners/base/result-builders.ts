@@ -64,6 +64,7 @@ export function buildOkResult(args: {
     escalationLog: [],
     verification: DEFAULT_VERIFICATION,
     durationMs,
+    parsedFindings: null,
   };
 }
 
@@ -109,6 +110,7 @@ export function buildIncompleteResult(args: {
     verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
+    parsedFindings: null,
   };
 }
 
@@ -138,6 +140,7 @@ export function buildForceSalvageResult(args: {
     escalationLog: [],
     verification: DEFAULT_VERIFICATION,
     durationMs,
+    parsedFindings: null,
   };
 }
 
@@ -171,6 +174,7 @@ export function buildMaxTurnsExitResult(args: {
     verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
     durationMs,
+    parsedFindings: null,
   };
 }
 
@@ -202,5 +206,6 @@ export function buildTimeCeilingResult(args: {
     terminationReason: { cause: 'time_ceiling', turnsUsed: turns, hasFileArtifacts: tracker.getWrites().length > 0, usedShell: tracker.getToolCalls().some(c => c.startsWith('shell')), workerSelfAssessment: null, wasPromoted: false, wallClockMs },
     capExhausted: 'wall_clock',
     durationMs,
+    parsedFindings: null,
   };
 }

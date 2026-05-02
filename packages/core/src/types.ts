@@ -246,7 +246,7 @@ export interface RunResult {
    *  null on non-review-mode runs and on Claude/Codex runners (which still use the
    *  JSON-block extraction path). When non-null, downstream consumers MUST prefer it
    *  over parseReviewerFindings(...). See Edit G2/G3. */
-  parsedFindings: import('./executors/_shared/findings-schema.js').AnnotatedFinding[] | null
+  parsedFindings?: import('./executors/_shared/findings-schema.js').AnnotatedFinding[] | null
   structuredReport?: import('./reporting/structured-report.js').ParsedStructuredReport
   agents?: {
     implementer: 'standard' | 'complex' | 'not_run'

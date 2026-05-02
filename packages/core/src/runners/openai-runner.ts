@@ -8,6 +8,7 @@ import {
 import type { RunItem, AgentInputItem } from '@openai/agents';
 import OpenAI from 'openai';
 import { createHash } from 'node:crypto';
+import { z } from 'zod';
 import {
   withTimeout,
   computeCostUSD,
@@ -18,6 +19,11 @@ import {
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
+import {
+  reviewerEmittedFindingSchema,
+  evidenceIsGrounded,
+} from '../executors/_shared/findings-schema.js';
+import type { AnnotatedFinding } from '../executors/_shared/findings-schema.js';
 
 /**
  * Structural view of `RunResult` from @openai/agents. We intentionally do
@@ -75,6 +81,16 @@ import { type CanonicalUsage } from './base/usage-accumulator.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
+
+/**
+ * OpenAI Structured Outputs requires an object root (not a bare array). The
+ * `findings` field carries the array of reviewer-emitted findings. After the
+ * run, each finding is annotated with `evidenceGrounded` to produce the
+ * final `AnnotatedFinding[]` stored in `RunResult.parsedFindings`.
+ */
+const reviewerOutputType = z.object({
+  findings: z.array(reviewerEmittedFindingSchema),
+}).strict();
 
 /**
  * Remove `<think>...</think>` reasoning blocks from model output.
@@ -140,6 +156,7 @@ export async function runOpenAI(
   const toolMode = options.tools ?? runner.defaults.tools;
   const cwd = options.cwd ?? process.cwd();
   const effort = options.effort ?? runner.providerConfig.effort;
+  const runMode = options.runMode ?? 'standard';
 
   const sandboxPolicy = options.sandboxPolicy ?? runner.providerConfig.sandboxPolicy ?? 'cwd-only';
   const abortController = new AbortController();
@@ -265,6 +282,7 @@ export async function runOpenAI(
     instructions: systemPrompt,
     tools,
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
+    ...(runMode === 'review' && { outputType: reviewerOutputType }),
   });
 
   // --- Scratchpad: buffers assistant text across every agentRun() call so
@@ -405,6 +423,7 @@ export async function runOpenAI(
           outputIsDiagnostic: true,
           escalationLog: [],
           durationMs: Date.now() - taskStartMs,
+          parsedFindings: null,
         };
       }
 
@@ -448,6 +467,28 @@ export async function runOpenAI(
 
         if (validation.valid) {
           const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel);
+
+          if (runMode === 'review') {
+            const parsed = reviewerOutputType.safeParse(currentResult.finalOutput);
+            if (parsed.success) {
+              ok.parsedFindings = parsed.data.findings.map(f => ({
+                ...f,
+                evidenceGrounded: evidenceIsGrounded(f.evidence, stripped),
+              }));
+            } else {
+              emit({ kind: 'done', status: 'error' });
+              return {
+                ...ok,
+                output: `Reviewer structured output validation failed: ${parsed.error.message}`,
+                status: 'error',
+                error: `reviewer outputType validation failed: ${parsed.error.message}`,
+                parsedFindings: null,
+              };
+            }
+          } else {
+            ok.parsedFindings = null;
+          }
+
           emit({ kind: 'done', status: ok.status });
           return ok;
         }
@@ -640,6 +681,7 @@ export async function runOpenAI(
           outputIsDiagnostic: !hasSalvage,
           escalationLog: [],
           durationMs: Date.now() - taskStartMs,
+          parsedFindings: null,
         };
       }
 
@@ -694,6 +736,7 @@ export async function runOpenAI(
         ...(isProviderContextLimit(err) && {
           errorCode: 'provider_context_limit',
         }),
+        parsedFindings: null,
       };
     }
   };
@@ -727,6 +770,7 @@ export async function runOpenAI(
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
         durationMs: Date.now() - taskStartMs,
+        parsedFindings: null,
       };
     },
     abortController,
