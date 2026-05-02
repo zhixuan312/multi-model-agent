@@ -144,7 +144,10 @@ export function endReviewStage(
     stage: name,
     entered: true,
     durationMs: metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0,
-    costUSD: metrics?.costUSD !== undefined ? metrics.costUSD
+    // Item 7: != null (covers both undefined AND null) — null means
+    // "pricing unavailable, fall through to runningCostUSD computation"
+    // rather than masking unknown as the literal 0.
+    costUSD: metrics?.costUSD != null ? metrics.costUSD
       : finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
