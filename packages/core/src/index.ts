@@ -145,6 +145,14 @@ export type {
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
+// Test seams (gated: NODE_ENV=test AND MMAGENT_TEST_SEAMS=1)
+export {
+  __forceClarification,
+  __forceClarificationGlobal,
+  __clearForcedClarification,
+  __consumeForcedClarification,
+} from './intake/force-clarification.js';
+
 // Batch registry
 export * from './batch-registry.js';
 

@@ -1,7 +1,11 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import { boot } from './fixtures/harness.js';
 import { mockProvider } from './fixtures/mock-providers.js';
 import { normalize, type JsonValue } from './serializer/index.js';
+import {
+  __forceClarificationGlobal,
+  __clearForcedClarification,
+} from '../../packages/core/src/intake/force-clarification.js';
 
 async function authedFetch(url: string, token: string, init?: RequestInit): Promise<Response> {
   return await fetch(url, {
@@ -116,6 +120,50 @@ describe('contract: polling lifecycle', () => {
         expect(normalized).toEqual(expected);
       }
     } finally {
+      await h.close();
+    }
+  }, 30_000);
+
+  it('clarification wins precedence over subordinate failure-stage outputs', async () => {
+    // Force a clarification and assert that the envelope presents the
+    // clarification gate (proposedInterpretation as string), not an error.
+    // All subordinate fields (results, batchTimings, costSummary,
+    // structuredReport, error) must be not_applicable — clarification
+    // takes precedence over any downstream stage output.
+    const originalNodeEnv = process.env.NODE_ENV;
+    const originalSeams = process.env.MMAGENT_TEST_SEAMS;
+    process.env.NODE_ENV = 'test';
+    process.env.MMAGENT_TEST_SEAMS = '1';
+    __forceClarificationGlobal('precedence test — which scope?');
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const dispatch = await authedFetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, h.token, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tasks: [{ prompt: 'refactor the module' }] }),
+      });
+      expect(dispatch.status).toBe(202);
+      const { batchId } = (await dispatch.json()) as { batchId: string };
+
+      const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
+      const body = terminal as Record<string, unknown>;
+
+      // Clarification gate: proposedInterpretation must be a non-empty string
+      expect(typeof body.proposedInterpretation).toBe('string');
+      expect((body.proposedInterpretation as string).length).toBeGreaterThan(0);
+
+      // Precedence: error and all subordinate fields are not_applicable
+      const notApp = (v: unknown) =>
+        typeof v === 'object' && v !== null && (v as Record<string, unknown>).kind === 'not_applicable';
+      expect(notApp(body.error)).toBe(true);
+      expect(notApp(body.results)).toBe(true);
+      expect(notApp(body.batchTimings)).toBe(true);
+      expect(notApp(body.costSummary)).toBe(true);
+      expect(notApp(body.structuredReport)).toBe(true);
+    } finally {
+      __clearForcedClarification();
+      process.env.NODE_ENV = originalNodeEnv;
+      process.env.MMAGENT_TEST_SEAMS = originalSeams;
       await h.close();
     }
   }, 30_000);

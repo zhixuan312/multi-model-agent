@@ -86,7 +86,7 @@ export async function executeDelegate(
     input.tasks as DelegateTaskInput[],
     requestId,
   );
-  const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
+  const intakeResult = runIntakePipeline(drafts, config, contextBlockStore, ctx.batchId);
 
   if (ctx.batchId === undefined) {
     throw new Error('executeDelegate requires ctx.batchId');

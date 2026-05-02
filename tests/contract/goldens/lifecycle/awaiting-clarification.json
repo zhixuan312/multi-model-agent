@@ -1,45 +1,24 @@
 {
-  "headline": "delegate: awaiting clarification",
+  "headline": "awaiting clarification: Interpreting your request as the answer to: I'm not confident about this interpretation — prompt is too vague to form one concrete instruction. Is my proposed draft correct?",
   "results": {
     "kind": "not_applicable",
-    "reason": "awaiting clarification"
+    "reason": "batch awaiting clarification"
   },
   "batchTimings": {
     "kind": "not_applicable",
-    "reason": "awaiting clarification"
+    "reason": "batch awaiting clarification"
   },
   "costSummary": {
     "kind": "not_applicable",
-    "reason": "awaiting clarification"
+    "reason": "batch awaiting clarification"
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "awaiting clarification"
+    "reason": "batch awaiting clarification"
   },
   "error": {
     "kind": "not_applicable",
-    "reason": "awaiting clarification"
+    "reason": "batch awaiting clarification"
   },
-  "proposedInterpretation": "Interpreting your request as the answer to: I'm not confident about this interpretation — prompt is too vague to form one concrete instruction. Is my proposed draft correct?",
-  "batchId": "<DETERMINISTIC>",
-  "tasks": [],
-  "wallClockMs": "<DETERMINISTIC>",
-  "clarificationId": "<DETERMINISTIC>",
-  "clarifications": [
-    {
-      "draftId": "<DETERMINISTIC>",
-      "taskIndex": 0,
-      "proposedDraft": {
-        "prompt": "Can you help\n\nStay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.",
-        "done": "Provide a clear, complete response addressing the request."
-      },
-      "assumptions": [
-        "inferred done condition for analysis-only task"
-      ],
-      "questions": [
-        "I'm not confident about this interpretation — prompt is too vague to form one concrete instruction. Is my proposed draft correct?"
-      ],
-      "reason": "prompt is too vague to form one concrete instruction"
-    }
-  ]
+  "proposedInterpretation": "Interpreting your request as the answer to: I'm not confident about this interpretation — prompt is too vague to form one concrete instruction. Is my proposed draft correct?"
 }
