@@ -106,7 +106,7 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 
 Stage-type-specific extras:
 
-- **Review stages** (`spec_review`, `quality_review`, `diff_review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array), `findingsBySeverity` (`{ high, medium, low, style }` object).
+- **Review stages** (`spec_review`, `quality_review`, `diff_review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier).
 - **Rework stages** (`spec_rework`, `quality_rework`): `triggeringConcernCategories` (string array).
 - **Verifying stage**: `outcome` (enum), `skipReason` (string or null).
 - **Committing stage**: `filesCommittedCount` (integer), `branchCreated` (boolean).
