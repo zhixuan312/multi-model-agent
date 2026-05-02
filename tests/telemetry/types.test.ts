@@ -44,7 +44,7 @@ function makeValidStage(name: string, overrides: Record<string, unknown> = {}): 
         verdict: 'approved',
         roundsUsed: 1,
         concernCategories: [],
-        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0, style: 0 },
+        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       },
       ...overrides,
     };
@@ -101,7 +101,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s: number, st: Record<string, unknown>) => s + ((st.costUSD as number) ?? 0), 0),
-    totalSavedCostUSD: null,
+    costDeltaVsParentUSD: null,
     concernCount: 0,
     escalationCount: 0,
     fallbackCount: 0,
@@ -543,7 +543,7 @@ describe('StageEntrySchema', () => {
   it('accepts review stage with findingsBySeverity', () => {
     const result = StageEntrySchema.safeParse(
       makeValidStage('quality_review', {
-        findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3, style: 1 },
+        findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3 },
       }),
     );
     expect(result.success).toBe(true);
@@ -589,6 +589,80 @@ describe('StageEntrySchema', () => {
     const result = StageEntrySchema.safeParse(
       makeValidStage('committing', { filesCommittedCount: 5, branchCreated: true }),
     );
+    expect(result.success).toBe(true);
+  });
+});
+
+// ── Nullable cachedTokens / reasoningTokens (§3.6) ───────────────────────
+
+describe('nullable cachedTokens and reasoningTokens', () => {
+  it('StageEntrySchema accepts null cachedTokens and reasoningTokens', () => {
+    const stage = makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null });
+    const result = StageEntrySchema.safeParse(stage);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cachedTokens).toBeNull();
+      expect(result.data.reasoningTokens).toBeNull();
+    }
+  });
+
+  it('TaskCompletedEventSchema accepts null cachedTokens and reasoningTokens', () => {
+    const event = makeValidEvent({
+      cachedTokens: null,
+      reasoningTokens: null,
+      stages: [
+        makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('spec_review', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('quality_review', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('verifying', { cachedTokens: null, reasoningTokens: null }),
+        makeValidStage('committing', { cachedTokens: null, reasoningTokens: null }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+    if (result.success) {
+      expect(result.data.cachedTokens).toBeNull();
+      expect(result.data.reasoningTokens).toBeNull();
+    }
+  });
+
+  it('R5 validation uses ?? 0 for null tokens (honest-null treats missing as zero for aggregate checks)', () => {
+    // null cached/reasoning at both top-level and stage level passes R5
+    const event = makeValidEvent({
+      cachedTokens: null,
+      reasoningTokens: null,
+      inputTokens: 200,
+      outputTokens: 100,
+      stages: [
+        makeValidStage('implementing', {
+          inputTokens: 200,
+          outputTokens: 100,
+          cachedTokens: null,
+          reasoningTokens: null,
+        }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+  });
+
+  it('R5b and R6 skip validation when tokens are null', () => {
+    // reasoningTokens=null with outputTokens=1 should not trigger R5b
+    const event = makeValidEvent({
+      inputTokens: 200,
+      outputTokens: 1,
+      cachedTokens: null,
+      reasoningTokens: null,
+      stages: [
+        makeValidStage('implementing', {
+          inputTokens: 200,
+          outputTokens: 1,
+          cachedTokens: null,
+          reasoningTokens: null,
+        }),
+      ],
+    });
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
     expect(result.success).toBe(true);
   });
 });

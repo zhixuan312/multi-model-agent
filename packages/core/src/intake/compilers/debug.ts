@@ -8,6 +8,10 @@ export interface DebugTaskInput {
   filePaths?: string[];
 }
 
+const SCOPE_CONTRACT = `
+Reproduce the reported failure first. Read code along the failure path. Do NOT speculatively read unrelated subsystems.
+`.trim();
+
 export function compileDebugTask(
   input: DebugTaskInput,
   requestId: string,
@@ -24,6 +28,8 @@ export function compileDebugTask(
   if (input.filePaths?.length) {
     promptParts.push(`\nFiles involved: ${input.filePaths.join(', ')}`);
   }
+
+  promptParts.push(`\n${SCOPE_CONTRACT}`);
 
   return [{
     draftId: createDraftId(requestId, 0, 'root'),

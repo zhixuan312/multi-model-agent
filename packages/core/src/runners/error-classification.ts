@@ -26,6 +26,55 @@ import type { RunStatus } from './types.js';
  */
 
 /**
+ * Detect whether an error represents a provider-side context-limit
+ * violation. Pattern-matches known provider error signatures for
+ * context-window exceeded conditions.
+ *
+ * Used by every runner to set errorCode='provider_context_limit' so the
+ * escalation orchestrator and downstream observers can distinguish
+ * context-limit failures from other API errors without string-matching
+ * the error field.
+ */
+export function isProviderContextLimit(err: unknown): boolean {
+  const e = (err ?? {}) as {
+    message?: unknown;
+    code?: unknown;
+    error?: unknown;
+    bodyText?: unknown;
+    status?: unknown;
+  };
+  const message = typeof e.message === 'string' ? e.message : '';
+  const code = typeof e.code === 'string' ? e.code : '';
+  const error = typeof e.error === 'string' ? e.error : '';
+  const bodyText = typeof e.bodyText === 'string' ? e.bodyText : '';
+
+  // Also inspect nested error shapes (some SDKs wrap in error.code / error.message).
+  const nestedError = (typeof e.error === 'object' && e.error !== null) ? e.error as Record<string, unknown> : null;
+  const nestedCode = typeof nestedError?.code === 'string' ? nestedError.code : '';
+  const nestedMessage = typeof nestedError?.message === 'string' ? nestedError.message : '';
+
+  const combined = `${message} ${code} ${error} ${bodyText} ${nestedCode} ${nestedMessage}`;
+
+  // Check structured code fields first — these are the most specific
+  // provider signals (OpenAI-compatible APIs commonly use this code).
+  if (code === 'context_length_exceeded' || nestedCode === 'context_length_exceeded') return true;
+
+  // OpenAI-compatible signatures seen in APIError messages:
+  //   - "context_length_exceeded"
+  //   - "context length exceeded"
+  //   - "This model's maximum context length is ..."
+  //   - "Please reduce the length of the messages"
+  if (/context[_ -]length[_ -]exceeded/i.test(combined)) return true;
+  if (/maximum context length/i.test(combined)) return true;
+  if (/reduce the length of the messages?/i.test(combined)) return true;
+
+  // Anthropic / generic context-window signatures.
+  if (/context window(?: is| size| exceeded| limit| too)/i.test(combined)) return true;
+
+  return false;
+}
+
+/**
  * Detect whether an error represents a provider-side rate limit (HTTP 429
  * or equivalent). Used by every runner to surface a structured
  * `rate_limit_exceeded` code so the escalation orchestrator and downstream
@@ -41,6 +90,17 @@ export function isRateLimit(err: unknown): boolean {
 }
 
 export function classifyError(err: unknown): { status: RunStatus; reason: string } {
+  // Provider context-window failures are API-side rejections even when the
+  // thrown shape lacks a numeric HTTP status. Check this before generic HTTP
+  // handling so classifyError() participates in provider_context_limit
+  // classification instead of leaving these as plain api_error/error.
+  if (isProviderContextLimit(err)) {
+    return {
+      status: 'api_error',
+      reason: 'provider_context_limit',
+    };
+  }
+
   // Unwrap the common fields we read below. `err` may be anything, so guard
   // every access.
   const e = (err ?? {}) as {

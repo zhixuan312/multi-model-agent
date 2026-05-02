@@ -123,7 +123,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     const [result] = await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000001', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000001', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     expect(result.status).toBe('ok');
@@ -143,8 +143,6 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
       verdict: 'annotated',
       iterationIndex: 1,
       findingsReviewed: 2,
-      findingsFlagged: 0,
-      severityCorrections: 0,
       // meanConfidence: (80 + 40) / 2 = 60
       meanConfidence: 60,
     });
@@ -158,7 +156,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000002', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000002', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const reworkEvents = capturedEvents.filter((e) => e.event === 'read_only_review.rework');
@@ -173,7 +171,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000003', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000003', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const terminalEvents = capturedEvents.filter((e) => e.event === 'read_only_review.terminal');
@@ -194,7 +192,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000004', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000004', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const rorEventNames = capturedEvents
@@ -212,7 +210,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     const [result] = await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     expect(result.status).toBe('ok');
@@ -231,6 +229,25 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
   });
 });
 
+describe('read_only_review.quality event has no findingsFlagged or severityCorrections', () => {
+  it('does not emit findingsFlagged or severityCorrections (dead fields removed per §3.10)', async () => {
+    reviewerOutputState.output = REVIEWER_OUTPUT;
+    resetCaptured();
+
+    const { bus } = makeBus();
+    await runTasks(
+      [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
+      config,
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000006', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+    );
+
+    const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
+    expect(qualityEvents).toHaveLength(1);
+    expect(qualityEvents[0]).not.toHaveProperty('findingsFlagged');
+    expect(qualityEvents[0]).not.toHaveProperty('severityCorrections');
+  });
+});
+
 describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
   it('accepts meanConfidence=null (all-fallback path)', () => {
     const sample = {
@@ -244,8 +261,6 @@ describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
       verdict: 'annotated' as const,
       iterationIndex: 1,
       findingsReviewed: 2,
-      findingsFlagged: 0,
-      severityCorrections: 0,
       meanConfidence: null,
       durationMs: 1234,
       costUSD: 0.05,
@@ -253,5 +268,37 @@ describe('ReadOnlyReviewQualityEvent — null meanConfidence', () => {
     const result = ReadOnlyReviewQualityEvent.safeParse(sample);
     expect(result.success).toBe(true);
     if (!result.success) throw new Error(`schema rejected null meanConfidence: ${result.error.message}`);
+  });
+});
+
+describe('ReadOnlyReviewQualityEvent — rejects dead fields (§3.10)', () => {
+  const validSample = {
+    ts: '2026-05-01T12:00:00.000+00:00',
+    batchId: '550e8400-e29b-41d4-a716-446655440001',
+    taskIndex: 0,
+    event: 'read_only_review.quality' as const,
+    route: 'audit',
+    verdict: 'annotated' as const,
+    iterationIndex: 1,
+    findingsReviewed: 2,
+    meanConfidence: 80,
+    durationMs: 1234,
+    costUSD: 0.05,
+  };
+
+  it('rejects payload with findingsFlagged (dead field)', () => {
+    const result = ReadOnlyReviewQualityEvent.safeParse({
+      ...validSample,
+      findingsFlagged: 0,
+    });
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects payload with severityCorrections (dead field)', () => {
+    const result = ReadOnlyReviewQualityEvent.safeParse({
+      ...validSample,
+      severityCorrections: 0,
+    });
+    expect(result.success).toBe(false);
   });
 });

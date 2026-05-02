@@ -42,7 +42,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
         verdict: 'approved' as const,
         roundsUsed: 1,
         concernCategories: [] as string[],
-        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0, style: 0 },
+        findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
         ...overrides,
         name,
       } as const;
@@ -91,7 +91,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s, st) => s + ((st.costUSD as number) ?? 0), 0),
-    totalSavedCostUSD: null,
+    costDeltaVsParentUSD: null,
     concernCount: 0,
     escalationCount: 0,
     fallbackCount: 0,

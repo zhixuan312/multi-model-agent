@@ -25,4 +25,10 @@ describe('verify compiler', () => {
     const drafts = compileVerifyWork({ checklist: ['check 1'] }, 'req');
     expect(drafts[0].prompt).toContain('pass/fail');
   });
+
+  it('compiled verify prompt contains scope-contract clause verbatim', () => {
+    const drafts = compileVerifyWork({ checklist: ['check 1'] }, 'req');
+    expect(drafts[0].prompt).toContain('Run the supplied verification command');
+    expect(drafts[0].prompt).toContain('Do NOT explore or refactor');
+  });
 });

@@ -1,6 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RunResult, RawStageStats } from '../types.js';
-import { computeSavedCostUSD } from '../types.js';
+import { computeCostDeltaVsParentUSD } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import type { TaskCompletedEventType, StageEntryType, ConcernCategoryType } from './types.js';
@@ -60,11 +60,13 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   const totalCachedTokens = clampCachedTokens(stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0));
   const totalReasoningTokens = clampReasoningTokens(stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0));
 
-  const savedCostUSD = computeSavedCostUSD(
+  const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
     totalCostUSD,
     totalInputTokens,
     totalOutputTokens,
     parentModel ?? undefined,
+    totalCachedTokens,
+    totalReasoningTokens,
   );
 
   const reviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
@@ -99,7 +101,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     reasoningTokens: totalReasoningTokens,
     totalDurationMs,
     totalCostUSD,
-    totalSavedCostUSD: savedCostUSD,
+    costDeltaVsParentUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
@@ -170,7 +172,7 @@ function extractStageData(
   if (!raw || !raw.entered) return null;
   return {
     model: raw.model ? normalizeModel(raw.model).canonical : 'custom',
-    agentTier: (raw.agentTier === 'complex' ? 'reasoning' : 'standard') as 'standard' | 'reasoning',
+    agentTier: raw.agentTier as 'standard' | 'complex',
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
@@ -206,7 +208,7 @@ function buildReviewStage(
   const concernSource = name;
   const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
-  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0, style: 0 };
+  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
   for (const c of stageConcerns) {
     const sev = (c as any).severity ?? 'medium';
     if (sev in findingsBySeverity) {

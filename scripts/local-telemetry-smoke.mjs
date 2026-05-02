@@ -108,7 +108,7 @@ console.log({
   cachedTokens: event.cachedTokens,
   reasoningTokens: event.reasoningTokens,
   totalCostUSD: event.totalCostUSD,
-  totalSavedCostUSD: event.totalSavedCostUSD,
+  costDeltaVsParentUSD: event.costDeltaVsParentUSD,
 });
 console.log('\nPer-stage implementing tokens (these were 0 in 3.10.0):');
 const impl = event.stages.find(s => s.name === 'implementing');

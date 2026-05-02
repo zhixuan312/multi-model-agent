@@ -1,15 +1,9 @@
-import { vi, beforeEach, afterEach } from 'vitest';
 import {
   validateCompletion,
   validateCoverage,
   buildRePrompt,
   sameDegenerateOutput,
   resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  WATCHDOG_WARNING_RATIO,
-  WATCHDOG_FORCE_SALVAGE_RATIO,
-  logWatchdogEvent,
-  type WatchdogEventDetails,
   validateSubAgentOutput,
   THINKING_DIAGNOSTIC_MARKER,
 } from '../../packages/core/src/runners/supervision.js';
@@ -295,102 +289,20 @@ describe('resolveInputTokenSoftLimit — precedence', () => {
   });
 });
 
-describe('checkWatchdogThreshold', () => {
-  it('exposes the documented 80% / 95% ratios as exports', () => {
-    expect(WATCHDOG_WARNING_RATIO).toBe(0.80);
-    expect(WATCHDOG_FORCE_SALVAGE_RATIO).toBe(0.95);
-  });
-
-  it('returns "ok" below 80% of the limit', () => {
-    expect(checkWatchdogThreshold(700_000, 1_000_000)).toBe('ok');
-  });
-
-  it('returns "warning" at exactly 80% of the limit', () => {
-    expect(checkWatchdogThreshold(800_000, 1_000_000)).toBe('warning');
-  });
-
-  it('returns "warning" between 80% and 95%', () => {
-    expect(checkWatchdogThreshold(900_000, 1_000_000)).toBe('warning');
-  });
-
-  it('returns "force_salvage" at exactly 95% of the limit', () => {
-    expect(checkWatchdogThreshold(950_000, 1_000_000)).toBe('force_salvage');
-  });
-
-  it('returns "force_salvage" above 95%', () => {
-    expect(checkWatchdogThreshold(1_100_000, 1_000_000)).toBe('force_salvage');
-  });
-
-  // Regression for Task 2 review fix #1: a silent 'ok' on an invalid
-  // softLimit would mask upstream bugs in runners that call this directly.
-  it('throws on softLimit === 0', () => {
-    expect(() => checkWatchdogThreshold(100, 0)).toThrow(/positive finite number/);
-  });
-
-  it('throws on negative softLimit', () => {
-    expect(() => checkWatchdogThreshold(100, -1)).toThrow(/positive finite number/);
-  });
-
-  it('throws on NaN softLimit', () => {
-    expect(() => checkWatchdogThreshold(100, Number.NaN)).toThrow(/positive finite number/);
-  });
-
-  it('throws on Infinity softLimit', () => {
-    expect(() => checkWatchdogThreshold(100, Number.POSITIVE_INFINITY)).toThrow(
-      /positive finite number/,
-    );
-  });
+it('supervision.ts no longer exports WatchdogStatus, checkWatchdogThreshold, or buildBudgetPressureNudge', async () => {
+  const sup = await import('../../packages/core/src/runners/supervision.js');
+  expect((sup as any).checkWatchdogThreshold).toBeUndefined();
+  expect((sup as any).buildBudgetPressureNudge).toBeUndefined();
+  expect((sup as any).WATCHDOG_FORCE_SALVAGE_RATIO).toBeUndefined();
+  expect((sup as any).WATCHDOG_WARNING_RATIO).toBeUndefined();
 });
 
-describe('logWatchdogEvent — MULTI_MODEL_DEBUG output', () => {
-  let stderrSpy: ReturnType<typeof vi.spyOn>;
-
-  const baseDetails: WatchdogEventDetails = {
-    provider: 'codex',
-    model: 'gpt-5-codex',
-    turn: 5,
-    inputTokens: 800_000,
-    softLimit: 1_000_000,
-    scratchpadChars: 0,
-  };
-
-  beforeEach(() => {
-    stderrSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
-  });
-
-  afterEach(() => {
-    stderrSpy.mockRestore();
-    vi.unstubAllEnvs();
-  });
-
-  it('emits nothing when MULTI_MODEL_DEBUG is unset', () => {
-    logWatchdogEvent('warning', { ...baseDetails });
-    expect(stderrSpy).not.toHaveBeenCalled();
-  });
-
-  it('emits a warning line when MULTI_MODEL_DEBUG=1 and status is warning', () => {
-    vi.stubEnv('MULTI_MODEL_DEBUG', '1');
-    logWatchdogEvent('warning', { ...baseDetails });
-    expect(stderrSpy).toHaveBeenCalledTimes(1);
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('WATCHDOG warning'));
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('provider=codex'));
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('inputTokens=800000'));
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('percentOfLimit=80'));
-  });
-
-  it('emits a force_salvage line when status is force_salvage', () => {
-    vi.stubEnv('MULTI_MODEL_DEBUG', '1');
-    logWatchdogEvent('force_salvage', {
-      ...baseDetails,
-      turn: 18,
-      inputTokens: 950_000,
-      scratchpadChars: 30000,
-    });
-    expect(stderrSpy).toHaveBeenCalledTimes(1);
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('WATCHDOG force_salvage'));
-    expect(stderrSpy).toHaveBeenCalledWith(expect.stringContaining('scratchpadChars=30000'));
-  });
+it('supervision.ts still exports resolveInputTokenSoftLimit (config helper, not watchdog)', async () => {
+  const sup = await import('../../packages/core/src/runners/supervision.js');
+  expect(typeof (sup as any).resolveInputTokenSoftLimit).toBe('function');
 });
+
+
 
 describe('validateSubAgentOutput (coordinator)', () => {
   it('empty output always fails even when expectedCoverage is declared', () => {

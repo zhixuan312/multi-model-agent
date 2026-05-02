@@ -176,7 +176,7 @@ export async function executeReview(
         const msg = e instanceof Error ? e.message : String(e);
         return {
           output: '', status: 'error' as const,
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
           turns: 0, filesRead: [], filesWritten: [], toolCalls: [],
           outputIsDiagnostic: false, escalationLog: [],
           error: msg, errorCode: 'executor_error', retryable: false,

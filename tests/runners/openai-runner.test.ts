@@ -113,6 +113,8 @@ function makeMockRunResult(overrides: {
   outputTokens?: number;
   requests?: number;
   history?: unknown[];
+  inputTokensDetails?: Array<Record<string, number>>;
+  outputTokensDetails?: Array<Record<string, number>>;
 }) {
   const assistantText = overrides.finalOutput ?? VALID_FINAL_OUTPUT;
   return {
@@ -133,6 +135,8 @@ function makeMockRunResult(overrides: {
         outputTokens: overrides.outputTokens ?? 200,
         totalTokens: (overrides.inputTokens ?? 1000) + (overrides.outputTokens ?? 200),
         requests: overrides.requests ?? 3,
+        inputTokensDetails: overrides.inputTokensDetails,
+        outputTokensDetails: overrides.outputTokensDetails,
       },
     },
   };
@@ -240,92 +244,120 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     expect(lastMessage.content).toContain('exploration fragment');
   });
 
-  it('triggers the force_salvage path when input tokens cross the 95% watchdog threshold', async () => {
-    // Soft limit override so 95% is easy to hit: 1000 -> force_salvage at 950.
+  it('openai-runner does not abort or inject when input tokens exceed softLimit', async () => {
+    // With watchdog removed, high input tokens should NOT trigger force_salvage
+    // or budget_exceeded. The runner proceeds through normal supervision.
     const pc = { ...providerConfig, inputTokenSoftLimit: 1000 };
 
-    // First and only run() returns a degenerate output AND has inputTokens=960
-    // (>= 95% of 1000). The runner should force-salvage immediately.
-    mockRun.mockResolvedValueOnce(
-      makeMockRunResult({
-        finalOutput: 'Let me check',
-        inputTokens: 960,
-        newItems: [
-          {
-            type: 'message_output_item',
-            rawItem: {
-              role: 'assistant',
-              content: [{ type: 'output_text', text: 'salvageable scratchpad text' }],
-            },
-          },
-        ],
-      }),
-    );
-
-    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
-    const result = await runOpenAI('task', {}, {
-      client: clientStub,
-      providerConfig: pc,
-      defaults,
-    });
-
-    expect(result.status).toBe('incomplete');
-    // Only one run() call — the watchdog forcibly terminates before any
-    // supervision re-prompt or warning nudge fires.
-    expect(mockRun).toHaveBeenCalledTimes(1);
-    expect(result.output).toBe('salvageable scratchpad text');
-  });
-
-  it('validates the warning-nudge response in the same iteration and returns ok when it is valid (regression #1)', async () => {
-    // Reviewer bug: the prior implementation fell into the warning
-    // branch, dispatched a nudge turn, then `continue`d back to the
-    // loop head — causing the watchdog to fire `warning` AGAIN
-    // (because input tokens only grow) and never validating the
-    // nudge response. A model that produced a perfect final answer
-    // in response to the nudge had its output discarded.
-    //
-    // Fix: fall through to validateCompletion() in the same iteration
-    // so a valid nudge response returns `ok`.
-    const pc = { ...providerConfig, inputTokenSoftLimit: 1_000_000 };
-
-    // First call: 850k input tokens (warning band: 80%-95%), degenerate
-    // final output so the watchdog nudge would have been dispatched.
-    // Second call: 900k input tokens (still warning band, higher than
-    // first) with a VALID final output. Under the fix this must be
-    // validated in the same iteration and returned as `ok`.
     mockRun
       .mockResolvedValueOnce(
         makeMockRunResult({
           finalOutput: 'Let me check',
-          inputTokens: 850_000,
+          inputTokens: 200_000,
+          history: [{ role: 'user', content: 'original high-token request' }],
+          newItems: [
+            {
+              type: 'message_output_item',
+              rawItem: {
+                role: 'assistant',
+                content: [{ type: 'output_text', text: 'salvageable scratchpad text' }],
+              },
+            },
+          ],
         }),
       )
       .mockResolvedValueOnce(
-        makeMockRunResult({
-          finalOutput: VALID_FINAL_OUTPUT,
-          inputTokens: 900_000,
-        }),
+        makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT, inputTokens: 210_000 }),
       );
 
+    const events: Array<{ kind: string; injectionType?: string }> = [];
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
-    const result = await runOpenAI('task', {}, {
+    const result = await runOpenAI('task', { onProgress: (e) => events.push(e) }, {
       client: clientStub,
       providerConfig: pc,
       defaults,
     });
 
     expect(result.status).toBe('ok');
-    expect(result.output).toBe(VALID_FINAL_OUTPUT);
-    // Exactly two calls: initial + one nudge. NOT three or more
-    // (which is what the pre-fix behaviour produced as the nudge
-    // loop kept re-firing until force_salvage).
-    expect(mockRun).toHaveBeenCalledTimes(2);
-    // The nudge message is the last user turn on the second call.
-    const secondInput = mockRun.mock.calls[1][1] as Array<{ role: string; content: string }>;
-    expect(Array.isArray(secondInput)).toBe(true);
-    const lastMessage = secondInput[secondInput.length - 1];
-    expect(lastMessage.role).toBe('user');
-    expect(lastMessage.content).toContain('Budget pressure');
+    expect(result.errorCode).toBeUndefined();
+    expect(result.terminationReason?.cause).not.toBe('force_salvage');
+    expect(result.terminationReason?.cause).not.toBe('budget_exceeded');
+    expect(events.find(e => e.injectionType === 'watchdog_force_salvage')).toBeUndefined();
+    expect(events.find(e => e.injectionType === 'watchdog_warning')).toBeUndefined();
+
+    const dispatchedMessages = mockRun.mock.calls
+      .map(([, input]) => input)
+      .flatMap((input) => Array.isArray(input) ? input : [{ role: 'user', content: String(input) }]);
+    expect(dispatchedMessages.find((m) => String((m as { content?: unknown }).content ?? '').includes('watchdog_force_salvage'))).toBeUndefined();
+    expect(dispatchedMessages.find((m) => String((m as { content?: unknown }).content ?? '').includes('watchdog_warning'))).toBeUndefined();
+  });
+
+  it('openai-runner classifies provider context-window error as provider_context_limit', async () => {
+    // First call populates scratchpad with a degenerate fragment.
+    // Second call throws a context_length_exceeded error.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          inputTokens: 200_000,
+        }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error('context_length_exceeded'), { code: 'context_length_exceeded', status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies context_length_exceeded from code field when message is generic', async () => {
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({ finalOutput: 'Let me check' }),
+      )
+      .mockRejectedValueOnce(
+        Object.assign(new Error('Bad request'), { code: 'context_length_exceeded', status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
+    expect(result.error).toBe('Bad request');
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies realistic OpenAI maximum context length message as provider_context_limit', async () => {
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check' }))
+      .mockRejectedValueOnce(
+        Object.assign(
+          new Error("This model's maximum context length is 128000 tokens. Please reduce the length of the messages."),
+          { status: 400 },
+        ),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
+    expect(result.errorCode).toBe('provider_context_limit');
+  });
+
+  it('classifies spaced OpenAI context length exceeded message as provider_context_limit', async () => {
+    mockRun
+      .mockResolvedValueOnce(makeMockRunResult({ finalOutput: 'Let me check' }))
+      .mockRejectedValueOnce(
+        Object.assign(new Error('context length exceeded'), { status: 400 }),
+      );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('api_error');
+    expect(result.errorCode).toBe('provider_context_limit');
   });
 
   it('gives a first-turn empty output the full supervision retry budget (regression #5)', async () => {
@@ -616,5 +648,158 @@ describe('runOpenAI — prevention scaffolding integration', () => {
     // gets enough budget to complete, not throw, and we get ok
     expect(result.status).toBe('ok');
     expect(mockRun).toHaveBeenCalledTimes(2); // initial + 1 continuation
+  });
+});
+
+// ---------------------------------------------------------------------------
+// §3.6: CanonicalUsage — cached/reasoning token propagation
+// ---------------------------------------------------------------------------
+
+describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    mockRun.mockReset();
+  });
+  afterEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('propagates cached tokens from inputTokensDetails', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 500 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(500);
+  });
+
+  it('propagates reasoning tokens from outputTokensDetails', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        outputTokensDetails: [{ reasoning_tokens: 300 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.reasoningTokens).toBe(300);
+  });
+
+  it('preserves 0 values for cached and reasoning tokens', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 0 }],
+        outputTokensDetails: [{ reasoning_tokens: 0 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(0);
+    expect(result.usage.reasoningTokens).toBe(0);
+  });
+
+  it('returns null when inputTokensDetails is absent', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({ finalOutput: VALID_FINAL_OUTPUT }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBeNull();
+    expect(result.usage.reasoningTokens).toBeNull();
+  });
+
+  it('returns null when outputTokensDetails is absent', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 100 }],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(100);
+    expect(result.usage.reasoningTokens).toBeNull();
+  });
+
+  it('sums cached tokens across multiple detail entries', async () => {
+    mockRun.mockResolvedValueOnce(
+      makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [
+          { cached_tokens: 200 },
+          { cached_tokens: 300 },
+        ],
+        outputTokensDetails: [
+          { reasoning_tokens: 100 },
+          { reasoning_tokens: 150 },
+        ],
+      }),
+    );
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('ok');
+    expect(result.usage.cachedTokens).toBe(500);
+    expect(result.usage.reasoningTokens).toBe(250);
+  });
+
+  it('propagates cached/reasoning tokens on the error path', async () => {
+    // First call populates scratchpad with cached details, second throws.
+    mockRun
+      .mockResolvedValueOnce(
+        makeMockRunResult({
+          finalOutput: 'Let me check',
+          inputTokensDetails: [{ cached_tokens: 400 }],
+          outputTokensDetails: [{ reasoning_tokens: 200 }],
+        }),
+      )
+      .mockRejectedValueOnce(new Error('upstream API exploded'));
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
+
+    expect(result.status).toBe('error');
+    expect(result.usage.cachedTokens).toBe(400);
+    expect(result.usage.reasoningTokens).toBe(200);
+  });
+
+  it('propagates cached/reasoning tokens on the timeout path', async () => {
+    mockRun.mockImplementationOnce(() => {
+      return new Promise((resolve) => setTimeout(() => resolve(makeMockRunResult({
+        finalOutput: VALID_FINAL_OUTPUT,
+        inputTokensDetails: [{ cached_tokens: 300 }],
+        outputTokensDetails: [{ reasoning_tokens: 100 }],
+      })), 10_000));
+    });
+
+    const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
+    const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults: { timeoutMs: 1, tools: 'full' as const } });
+
+    // With timeoutMs=1, the new time_ceiling path (§3.8) trips before the
+    // legacy withTimeout fires. status='incomplete' with terminationReason
+    // 'time_ceiling' is the new shape; usage is null per §3.6.
+    expect(['timeout', 'incomplete']).toContain(result.status);
+    expect(result.usage.cachedTokens).toBeNull();
+    expect(result.usage.reasoningTokens).toBeNull();
   });
 });

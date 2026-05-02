@@ -10,8 +10,43 @@ import type { DelegateTaskInput } from '../intake/compilers/delegate.js';
 import { runIntakePipeline } from '../intake/pipeline.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import type { ClarificationEntry } from '../intake/types.js';
-import { notApplicable } from '../reporting/not-applicable.js';
+import { notApplicable, isNotApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+
+/**
+ * Synthesize a human-readable proposedInterpretation from clarification entries.
+ * Extracted so edge cases can be tested independently.
+ */
+export function synthesizeProposedInterpretation(
+  clarifications: ClarificationEntry[],
+): string {
+  const firstQuestion = clarifications[0]?.questions?.[0];
+  if (firstQuestion && firstQuestion.trim().length > 0) {
+    return `Interpreting your request as the answer to: ${firstQuestion}`;
+  }
+  // Fallback: use the first clarification's reason, or a generic phrase
+  const fallbackReason = clarifications[0]?.reason?.trim();
+  if (fallbackReason) {
+    return `Interpreting your request based on: ${fallbackReason}`;
+  }
+  return 'Interpreting your request based on the proposed draft';
+}
+
+/**
+ * Invariant: when clarifications are pending, proposedInterpretation must be
+ * a real string — never notApplicable. Extracted so the invariant itself can
+ * be tested directly (forcing the bug path).
+ */
+export function assertInterpretationAvailable(
+  awaitingClarification: boolean,
+  proposedInterpretation: string | NotApplicable,
+): void {
+  if (awaitingClarification && isNotApplicable(proposedInterpretation)) {
+    throw new Error(
+      'proposedInterpretation invariant violation: clarifications present but interpretation is not_applicable',
+    );
+  }
+}
 
 export interface DelegateOptions {
   /**
@@ -51,21 +86,25 @@ export async function executeDelegate(
     input.tasks as DelegateTaskInput[],
     requestId,
   );
-  const intakeResult = runIntakePipeline(drafts, config, contextBlockStore);
+  const intakeResult = runIntakePipeline(drafts, config, contextBlockStore, ctx.batchId);
 
   if (ctx.batchId === undefined) {
     throw new Error('executeDelegate requires ctx.batchId');
   }
   let results: RunResult[] = [];
   const readySpecs = intakeResult.ready.map(r => r.task);
-  const batchId = batchCache.remember(ctx.batchId, readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
+  // Inject harness-level defaults (cwd, timeoutMs, maxCostUSD, etc.) so the
+  // response envelope's `tasks` field reflects what was actually executed —
+  // not the pre-inject intake output. Otherwise goldens that pin cwd/timeout
+  // mismatch the response.
+  const resolvedReadySpecs = readySpecs.length > 0 ? injectDefaults(readySpecs) : readySpecs;
+  const batchId = batchCache.remember(ctx.batchId, resolvedReadySpecs.length > 0 ? resolvedReadySpecs : (input.tasks as TaskSpec[]));
 
   const batchStartMs = Date.now();
   let batchAborted = false;
   try {
-    if (readySpecs.length > 0) {
-      const resolvedTasks = injectDefaults(readySpecs);
-      results = await runTasksImpl(resolvedTasks, config, {
+    if (resolvedReadySpecs.length > 0) {
+      results = await runTasksImpl(resolvedReadySpecs, config, {
         onProgress,
         runtime: { contextBlockStore },
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
@@ -84,7 +123,7 @@ export async function executeDelegate(
     const fallback: RunResult = {
       output: '',
       status: 'error' as RunResult['status'],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
       turns: 0,
       filesRead: [],
       filesWritten: [],
@@ -126,6 +165,15 @@ export async function executeDelegate(
   const awaitingClarification = intakeResult.clarifications.length > 0;
   const tasksTotal = readySpecs.length;
   const tasksCompleted = results.length;
+
+  const proposedInterpretation: string | NotApplicable = awaitingClarification
+    ? synthesizeProposedInterpretation(intakeResult.clarifications)
+    : notApplicable('batch not awaiting clarification');
+
+  if (process.env.NODE_ENV === 'test' || process.env.NODE_ENV === 'development') {
+    assertInterpretationAvailable(awaitingClarification, proposedInterpretation);
+  }
+
   return {
     headline: composeTerminalHeadline({ tool: 'delegate', awaitingClarification, tasksTotal, tasksCompleted }),
     results: awaitingClarification ? notApplicable('awaiting clarification') : results,
@@ -135,11 +183,9 @@ export async function executeDelegate(
       ? notApplicable('awaiting clarification')
       : notApplicable('no structured report emitted by this executor'),
     error: notApplicable(awaitingClarification ? 'awaiting clarification' : 'batch succeeded'),
-    proposedInterpretation: awaitingClarification
-      ? notApplicable('clarification proposed but interpretation unavailable')
-      : notApplicable('batch not awaiting clarification'),
+    proposedInterpretation,
     batchId,
-    tasks: readySpecs,
+    tasks: resolvedReadySpecs,
     wallClockMs,
     parentModel,
     ...(clarificationId !== undefined && { clarificationId }),

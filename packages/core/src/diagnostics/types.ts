@@ -55,6 +55,9 @@ export interface FallbackEventParams {
   reason: DiagReason;
   triggeringStatus?: RunStatus;
   violatesSeparation: boolean;
+  fallbackSeparationRespected?: boolean;
+  assignedIdentity?: { providerType: string; normalizedEndpoint: string; modelId: string } | null;
+  usedIdentity?: { providerType: string; normalizedEndpoint: string; modelId: string } | null;
 }
 
 export interface FallbackUnavailableEventParams {

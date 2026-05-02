@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import { assertCrossTierConfigured } from '../../packages/server/src/http/cross-tier-guard.js';
 import { startServer } from '../../packages/server/src/http/server.js';
-import { __setTestProviderOverride } from '../../packages/server/src/http/test-provider-override.js';
+import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 
 // ── Lightweight mock ServerResponse for unit tests ───────────────────────
@@ -124,7 +124,7 @@ async function bootWithAgents(agents: { standard?: unknown; complex?: unknown })
   writeFileSync(tokenPath, `${token}\n`, 'utf8');
 
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
-  __setTestProviderOverride(mockProvider({ stage: 'ok' }));
+  __setCoreTestProviderOverride(mockProvider({ stage: 'ok' }));
 
   const config = {
     agents,
@@ -161,7 +161,7 @@ async function bootWithAgents(agents: { standard?: unknown; complex?: unknown })
     token,
     async close() {
       await server.stop();
-      __setTestProviderOverride(null);
+      __setCoreTestProviderOverride(null);
       await unlink(tokenPath).catch(() => undefined);
     },
   };

@@ -28,11 +28,11 @@ const results = await runTasks([
 ], config);
 
 for (const r of results) {
-  console.log(r.status, r.usage.costUSD, r.savedCostUSD, r.output);
+  console.log(r.status, r.usage.costUSD, r.usage.costDeltaVsParentUSD, r.output);
 }
 ```
 
-`savedCostUSD` is populated when `defaults.parentModel` is set in the config — it's the difference between the agent's actual cost and what the parent model would have charged for the same input/output token count. Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
+`costDeltaVsParentUSD` is populated when `defaults.parentModel` is set in the config — it's `actualCost − parentCost` (negative = worker cheaper/savings). Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
 
 ## What's inside
 
@@ -104,7 +104,7 @@ As of 3.4.0 every task-execution event the worker emits to the verbose stderr st
 
 ## What's new
 
-Latest: **3.10.6** — Skill content packaged in `@zhixuan92/multi-model-agent-core/skills` was corrected: the router skill (`multi-model-agent/SKILL.md`) and `mma-execute-plan/SKILL.md` had drifted from the executor code. Only `delegate.ts` schema accepts `agentType`; every other tool-schema is `.strict()` and rejects it with HTTP 400. Per-route hardcoded tiers (`executors/*.ts:agentType`) are now accurately documented. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.11.0** — Core runtime correctness pass: reviewer cwd plumbed through all runners; new `forbiddenIdentities` parameter on `runWithFallback` for R3-respecting reviewer separation via canonical model identity tuples; `force_salvage` watchdog and 80% warning-nudge removed across all runners (input-token-volume aborts gone); new `time_ceiling` abort path mirrors `cost_ceiling` (both at 0.80 × budget); `executeDelegate` synthesizes `proposedInterpretation` when intake produces clarifications; per-route prompt scope contracts in compilers; canonical `CanonicalUsage` shape for cached / reasoning tokens; new `canonical-model-identity` module with URL normalization and credential-stripping. Breaking telemetry: `savedCostUSD` → `costDeltaVsParentUSD` (formula flipped), dead `style` / `findingsFlagged` / `severityCorrections` fields removed, watchdog event types removed. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

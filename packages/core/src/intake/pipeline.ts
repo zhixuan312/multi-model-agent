@@ -11,6 +11,7 @@ import type {
 import { inferMissingFields } from './infer.js';
 import { classifyDraft } from './classify.js';
 import { resolveDraft } from './resolve.js';
+import { __consumeForcedClarification } from './force-clarification.js';
 
 function expandDraftContextBlocks(
   draft: DraftTask,
@@ -66,7 +67,39 @@ export function runIntakePipeline(
   drafts: DraftTask[],
   config: MultiModelConfig,
   contextBlockStore?: ContextBlockStore,
+  batchId?: string,
 ): IntakeResult {
+  // Test seam: forced clarification overrides normal classification
+  if (batchId) {
+    const forcedReason = __consumeForcedClarification(batchId);
+    if (forcedReason !== null) {
+      const clarifications: ClarificationEntry[] = drafts.map((draft, i) => ({
+        draftId: draft.draftId,
+        taskIndex: i,
+        proposedDraft: {
+          prompt: draft.prompt,
+          filePaths: draft.filePaths,
+          done: draft.done,
+        },
+        assumptions: draft.assumptions ?? [],
+        questions: [forcedReason],
+        reason: forcedReason,
+      }));
+      return {
+        ready: [],
+        clarifications,
+        hardErrors: [],
+        intakeProgress: {
+          totalDrafts: drafts.length,
+          readyDrafts: 0,
+          clarificationDrafts: clarifications.length,
+          hardErrorDrafts: 0,
+          executedDrafts: 0,
+        },
+      };
+    }
+  }
+
   const ready: ReadyDraft[] = [];
   const clarifications: ClarificationEntry[] = [];
   const hardErrors: HardError[] = [];

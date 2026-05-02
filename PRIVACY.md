@@ -62,7 +62,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `totalDurationMs` | integer (0–86,400,000) | Exact elapsed wall-clock time in milliseconds |
 | `totalCostUSD` | float (0–800) | Token-times-pricing cost estimate in US dollars |
-| `totalSavedCostUSD` | float (−800 to 800) or null | Modeled counterfactual: cost if the task had been done by the parent model instead. Null when no parent pricing profile is available |
+| `costDeltaVsParentUSD` | float (−800 to 800) or null | Actual cost minus estimated parent-model cost. Negative = worker cheaper (savings). Null when parent pricing profile is unavailable |
 
 #### Lifecycle counts (3 fields)
 
@@ -90,7 +90,7 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 |-------|------|
 | `name` | enum: `implementing`, `spec_review`, `spec_rework`, `quality_review`, `quality_rework`, `diff_review`, `verifying`, `committing` |
 | `model` | string — the model used for this stage |
-| `agentTier` | enum: `standard`, `reasoning` |
+| `agentTier` | enum: `standard`, `complex` |
 | `durationMs` | integer — exact elapsed time for this stage |
 | `costUSD` | float — cost estimate for this stage |
 | `inputTokens` | integer |
@@ -106,7 +106,7 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 
 Stage-type-specific extras:
 
-- **Review stages** (`spec_review`, `quality_review`, `diff_review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array), `findingsBySeverity` (`{ high, medium, low, style }` object).
+- **Review stages** (`spec_review`, `quality_review`, `diff_review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier).
 - **Rework stages** (`spec_rework`, `quality_rework`): `triggeringConcernCategories` (string array).
 - **Verifying stage**: `outcome` (enum), `skipReason` (string or null).
 - **Committing stage**: `filesCommittedCount` (integer), `branchCreated` (boolean).
@@ -136,7 +136,7 @@ cost = (inputTokens - cachedTokens) × inputRate
 
 Cached input tokens are priced at the profile's cache rate (defaulting to 10% of the input rate per Anthropic's published pricing). Reasoning tokens are a subset of output tokens and are priced at the profile's reasoning rate (defaulting to the output rate — no surcharge).
 
-`totalSavedCostUSD` is a modeled counterfactual: what the same token profile would have cost if run with the orchestrator's parent model instead of the implementer model that was actually used. Like cost, it is an estimate, not a guarantee.
+`costDeltaVsParentUSD` is the actual cost minus the estimated cost using the parent model's pricing profile (negative = savings). Like cost, it is an estimate, not a guarantee.
 
 ### About durations
 

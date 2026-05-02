@@ -287,7 +287,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.10.6** — Skill docs now match executor code. Only `mma-delegate` accepts `agentType` per task — every other route hardcodes its tier and rejects `agentType` with HTTP 400 (`/execute-plan` → standard; `/audit` / `/review` / `/debug` / `/verify` / `/investigate` → complex). The router skill previously claimed `mma-execute-plan` accepts `agentType` (false) and that `mma-verify` defaults to standard (also false; defaults to complex). Also added a new "Reasoning effort: auto-inferred" section documenting the `inferEffort()` heuristics. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.11.0** — Runtime correctness pass: reviewer cwd plumbed through all runners; reviewer fallback respects R3 via canonical model identity; per-route prompt scope contracts; `force_salvage` token-volume watchdog removed (only user-set `maxCostUSD` / `timeoutMs` abort, with documented 0.80 cushion); envelope contract honors `proposedInterpretation` when paused; telemetry payload cleanup (`savedCostUSD` → `costDeltaVsParentUSD` rename + flip, dead-bucket removal, audit-domain categorizer, cached/reasoning tokens on all runners). Breaking telemetry payload changes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

@@ -258,7 +258,7 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0.001,
-    "totalSavedCostUSD": 0
+    "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
@@ -275,7 +275,8 @@
   "batchId": "<DETERMINISTIC>",
   "tasks": [
     {
-      "prompt": "golden delegate test prompt — please just echo ok",
+      "prompt": "golden delegate test prompt — please just echo ok\n\nStay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.",
+      "done": "Provide a clear, complete response addressing the request.",
       "agentType": "standard",
       "reviewPolicy": "full",
       "tools": "full",

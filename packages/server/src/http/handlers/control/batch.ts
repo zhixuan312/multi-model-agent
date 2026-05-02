@@ -39,19 +39,9 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
       return;
     }
 
-    // Pending → 202 text/plain progress line
-    if (entry.state === 'pending') {
-      const snap = entry.runningHeadlineSnapshot;
-      const elapsedMs = Date.now() - snap.dispatchedAt;
-      const headline = snap.prefix
-        ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
-        : snap.fallback;
-      res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
-      res.end(headline);
-      return;
-    }
-
-    // Parse optional taskIndex (only honored on complete state with array results)
+    // Parse optional taskIndex BEFORE checking batch state — syntactic
+    // validation is independent of state, and clients shouldn't get a 202
+    // when the request URL itself is malformed.
     const rawTaskIndex = ctx.url.searchParams.get('taskIndex');
     let taskIndex: number | null = null;
     if (rawTaskIndex !== null) {
@@ -65,6 +55,18 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         return;
       }
       taskIndex = parseInt(rawTaskIndex, 10);
+    }
+
+    // Pending → 202 text/plain progress line
+    if (entry.state === 'pending') {
+      const snap = entry.runningHeadlineSnapshot;
+      const elapsedMs = Date.now() - snap.dispatchedAt;
+      const headline = snap.prefix
+        ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+        : snap.fallback;
+      res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
+      res.end(headline);
+      return;
     }
 
     if (entry.state === 'awaiting_clarification') {

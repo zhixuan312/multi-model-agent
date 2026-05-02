@@ -24,7 +24,7 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
   reasoningTokens:          { kind: 'derived', source: 'sum(stages[].reasoningTokens)' },
   totalDurationMs:          { kind: 'derived', source: 'runResult.durationMs ?? sum(stages[].durationMs)' },
   totalCostUSD:             { kind: 'derived', source: 'sum(stages[].costUSD)' },
-  totalSavedCostUSD:        { kind: 'derived', source: 'computeSavedCostUSD(totals, parentModel)' },
+  costDeltaVsParentUSD:        { kind: 'derived', source: 'computeCostDeltaVsParentUSD(totals, parentModel)' },
   concernCount:             { kind: 'derived', source: 'min(runResult.concerns.length, 150)' },
   escalationCount:          { kind: 'derived', source: 'distinctProviders(escalationLog) - 1, capped at 20' },
   fallbackCount:            { kind: 'derived', source: 'min(runResult.agents.fallbackOverrides.length, 20)' },
@@ -38,7 +38,7 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
 
 const COMMON_STAGE_COVERAGE: Record<string, FieldCoverage> = {
   model:               { kind: 'derived', source: 'stageStats[name].model' },
-  agentTier:           { kind: 'derived', source: 'stageStats[name].agentTier' },
+  agentTier:           { kind: 'derived', source: 'stageStats[name].agentTier' },  // values: 'standard' | 'complex'
   durationMs:          { kind: 'derived', source: 'stageStats[name].durationMs' },
   costUSD:             { kind: 'derived', source: 'stageStats[name].costUSD' },
   inputTokens:         { kind: 'derived', source: 'stageStats[name].inputTokens' },

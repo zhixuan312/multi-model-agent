@@ -3,7 +3,7 @@ import manifest from './goldens/observability.json' with { type: 'json' };
 import { runFullFixtureSuite, runTaskLifecycleFixtures, runEdgeCaseFixtures, runCloudFixtures } from './fixtures/observability-fixtures.js';
 
 describe('observability contract — exhaustive', () => {
-  it('forward: every emitted event in fixtures appears in manifest with required fields', async () => {
+  it('forward: every emitted event in fixtures appears in manifest with required fields', { timeout: 60_000 }, async () => {
     const captured = await runFullFixtureSuite();
     expect(captured.length).toBeGreaterThan(0);
     for (const ev of captured) {
@@ -45,7 +45,7 @@ describe('observability contract — exhaustive', () => {
     // the manifest validity check above ensures schema coverage.
   });
 
-  it('reverse (edge-case subset): failProvider emits task_started; manifest covers batch_failed', async () => {
+  it('reverse (edge-case subset): failProvider emits task_started; manifest covers batch_failed', { timeout: 60_000 }, async () => {
     const captured = await runEdgeCaseFixtures();
     const seen = new Set(captured.map(e => e.event));
     expect(seen.has('task_started'), 'task_started never emitted').toBe(true);

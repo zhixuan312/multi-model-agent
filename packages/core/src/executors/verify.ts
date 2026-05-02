@@ -147,7 +147,7 @@ export async function executeVerify(
       ));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
+      results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
     }
     const wallClockMs = Date.now() - startMs;
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
@@ -200,7 +200,7 @@ export async function executeVerify(
     results = [result];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
-    results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
+    results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], error: msg, errorCode: 'executor_error', retryable: false, durationMs: 0, structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:verify' }, workerStatus: 'failed' as const }];
   }
   const wallClockMs = Date.now() - startMs;
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);

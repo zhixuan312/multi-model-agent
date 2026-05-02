@@ -101,7 +101,7 @@ export async function runTasks(
       return {
         output: `Brief too vague: missing ${readiness.missingPillars.join(', ')}`,
         status: 'brief_too_vague' as const,
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
         turns: 0,
         filesRead: [] as string[],
         filesWritten: [] as string[],

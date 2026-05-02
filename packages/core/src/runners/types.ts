@@ -25,20 +25,27 @@ export interface TokenUsage {
   outputTokens: number
   totalTokens: number
   costUSD: number | null
-  /** Estimated cost savings versus the declared parent model, if known. */
-  savedCostUSD?: number | null
+  /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
+  costDeltaVsParentUSD: number | null
+  /** Input tokens served from cache rather than computed. null = provider does not expose this dimension. */
+  cachedTokens: number | null
+  /** Output tokens attributed to reasoning/thinking. null = provider does not expose this dimension. */
+  reasoningTokens: number | null
 }
 
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'degenerate_exhausted'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'time_ceiling' | 'degenerate_exhausted'
        | 'api_error' | 'network_error' | 'api_aborted' | 'brief_too_vague' | 'error'
   turnsUsed: number
   hasFileArtifacts: boolean
   usedShell: boolean
   workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_aborted' | null
   wasPromoted: boolean
+  /** Wall-clock ms elapsed when the termination condition tripped.
+   *  Populated for time_ceiling aborts; omitted for other causes. */
+  wallClockMs?: number
 }
 
 /**
@@ -113,8 +120,6 @@ export type InternalRunnerEvent =
         | 'supervise_thinking'
         | 'supervise_fragment'
         | 'supervise_insufficient_coverage'
-        | 'watchdog_warning'
-        | 'watchdog_force_salvage'
       turn: number
       contentLengthChars: number
     }
@@ -146,7 +151,7 @@ export type ProgressEvent = {
     toolCalls: number
   }
   costUSD: number | null
-  savedCostUSD: number | null
+  costDeltaVsParentUSD: number | null
   final: boolean
   headline: string
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */

@@ -11,7 +11,7 @@ import { createHash } from 'node:crypto';
 import {
   withTimeout,
   computeCostUSD,
-  computeSavedCostUSD,
+  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
@@ -34,7 +34,7 @@ import { injectionTypeFor } from './injection-type.js';
  * the call sites rather than here — which is exactly what we want.
  */
 interface AgentRunOutput {
-  state: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number } };
+  state: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number; inputTokensDetails?: Array<Record<string, number>>; outputTokensDetails?: Array<Record<string, number>> } };
   history: AgentInputItem[];
   finalOutput?: string;
   newItems: RunItem[];
@@ -49,7 +49,6 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
-  buildBudgetPressureNudge,
   buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
@@ -57,9 +56,6 @@ import {
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
-  resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  logWatchdogEvent,
   THINKING_DIAGNOSTIC_MARKER,
   hasCompletedWork,
   MAX_DEGENERATE_RETRIES,
@@ -67,14 +63,15 @@ import {
   detectToolCallLoop,
   hasNewFileActivity,
 } from './supervision.js';
-import { classifyError, isRateLimit } from './error-classification.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { classifyError, isRateLimit, isProviderContextLimit } from './error-classification.js';
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
-  buildForceSalvageResult as sharedBuildForceSalvageResult,
+  buildTimeCeilingResult as sharedBuildTimeCeilingResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { checkTimeCeiling } from './base/time-check.js';
+import { type CanonicalUsage } from './base/usage-accumulator.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
 setTracingDisabled(true);
@@ -270,14 +267,9 @@ export async function runOpenAI(
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
   });
 
-  // --- Watchdog: resolve the input-token soft limit once per run ---
-  const profile = findModelProfile(runner.providerConfig.model);
-  const softLimit = resolveInputTokenSoftLimit(runner.providerConfig, profile);
-
   // --- Scratchpad: buffers assistant text across every agentRun() call so
-  // that every termination path (ok/incomplete/max_turns/error/timeout/
-  // force_salvage) can return the best text we heard, even if the final
-  // message is junk. ---
+  // that every termination path (ok/incomplete/max_turns/error/timeout)
+  // can return the best text we heard, even if the final message is junk. ---
   const scratchpad = new TextScratchpad();
 
   /**
@@ -324,6 +316,12 @@ export async function runOpenAI(
   const runTurnAndBuffer = async (
     input: string | AgentInputItem[],
   ): Promise<AgentRunOutput> => {
+    const ceilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
+    if (ceilingMs !== null) {
+      const err = new Error('time_ceiling');
+      (err as unknown as Record<string, unknown>).__timeCeiling = ceilingMs;
+      throw err;
+    }
     const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;
     emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible', model: runner.providerConfig.model });
     const result = (await agentRun(agent, input, {
@@ -378,13 +376,6 @@ export async function runOpenAI(
       // would cause `sameDegenerateOutput('', '')` to fire on a first-
       // turn empty output and break the loop before retries run.
       let lastDegenerateOutput: string | null = null;
-      // Track the input-token count at which we last fired a warning
-      // nudge. This prevents nudging twice in a row for the same
-      // `currentResult` when validation still fails after a nudge
-      // response: the next loop iteration will see
-      // `currentInputTokens <= lastWarnedInputTokens` and fall through
-      // to validation / re-prompt instead of re-issuing the nudge.
-      let lastWarnedInputTokens = -1;
       let lastValidationKind: string | undefined = undefined;
 
       /**
@@ -405,7 +396,7 @@ export async function runOpenAI(
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
-          usage: { ...partial, savedCostUSD: 0 },
+          usage: { ...partial, costDeltaVsParentUSD: 0 },
           turns: turnsAtFailure,
           filesRead: tracker.getReads(),
           directoriesListed: tracker.getDirectoriesListed(),
@@ -441,86 +432,12 @@ export async function runOpenAI(
       }
 
       // Supervision loop. On each iteration we:
-      //   1. Check the watchdog (may force-terminate or nudge)
-      //   2. Validate the final message (may re-prompt)
-      //   3. Inject re-grounding every RE_GROUNDING_INTERVAL_TURNS turns
+      //   1. Validate the final message (may re-prompt)
+      //   2. Inject re-grounding every RE_GROUNDING_INTERVAL_TURNS turns
       // A single pass where validateCompletion returns `valid` is the clean
       // exit. Otherwise we either re-prompt (and loop) or salvage.
       // eslint-disable-next-line no-constant-condition
       while (true) {
-        // --- Watchdog check ---
-        const currentInputTokens = currentResult.state.usage.inputTokens;
-        const watchdogStatus = checkWatchdogThreshold(currentInputTokens, softLimit);
-
-        if (watchdogStatus !== 'ok') {
-          logWatchdogEvent(watchdogStatus, {
-            provider: 'openai-compatible',
-            model: runner.providerConfig.model,
-            turn: currentResult.state.usage.requests,
-            inputTokens: currentInputTokens,
-            softLimit,
-            scratchpadChars: scratchpad.toString().length,
-          });
-        }
-
-        if (watchdogStatus === 'force_salvage') {
-          // `watchdog_force_salvage` is not an injected message — no
-          // re-prompt is sent — but observers still want to see exactly
-          // why the run is being killed. We emit the event with a
-          // `contentLengthChars` of 0 to reflect the "nothing was
-          // injected, we just terminated" semantics.
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_force_salvage',
-            turn: currentResult.state.usage.requests,
-            contentLengthChars: 0,
-          });
-          const salvaged = buildForceSalvageResult(
-            currentResult,
-            scratchpad,
-            tracker,
-            runner.providerConfig,
-            softLimit,
-            Date.now() - taskStartMs,
-            parentModel,
-          );
-          emit({ kind: 'done', status: salvaged.status });
-          return salvaged;
-        }
-
-        // Warning-band nudge: fire at most once per distinct input-token
-        // level. We dispatch the nudge turn, append to the scratchpad,
-        // record the new high-watermark, and then FALL THROUGH to the
-        // validation block below — the nudge response might itself be a
-        // perfectly valid final answer, so we must validate it in the
-        // SAME iteration. Without the fall-through, a valid nudge
-        // response would be thrown away and the loop would grind until
-        // force_salvage (pre-fix bug #1).
-        if (watchdogStatus === 'warning' && currentInputTokens > lastWarnedInputTokens) {
-          const warning = buildBudgetPressureNudge({
-            inputTokens: currentInputTokens,
-            softLimit,
-          });
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_warning',
-            turn: currentResult.state.usage.requests,
-            contentLengthChars: warning.length,
-          });
-          lastWarnedInputTokens = currentInputTokens;
-          if (!canAffordNextTurn()) {
-            const costExceeded = buildCostExceededResult(currentResult.state.usage.requests);
-            emit({ kind: 'done', status: costExceeded.status });
-            return costExceeded;
-          }
-          const warningCont = await runContinuationTurn(currentResult, warning);
-          if (!warningCont.ok) {
-            supervisionExhausted = true;
-            break;
-          }
-          currentResult = warningCont.result;
-        }
-
         // --- Validation check ---
         const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
         const validation = validateSubAgentOutput(stripped, {
@@ -698,7 +615,7 @@ export async function runOpenAI(
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
         const partial = partialUsage(currentResult, runner.providerConfig);
-        const savedCostUSD = computeSavedCostUSD(
+        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
           partial.costUSD,
           partial.inputTokens,
           partial.outputTokens,
@@ -714,7 +631,7 @@ export async function runOpenAI(
           status: 'incomplete',
           errorCode: 'degenerate_exhausted',
           error: `agent exhausted time/cost budget after ${turnsAtFailure} turns`,
-          usage: { ...partial, savedCostUSD },
+          usage: { ...partial, costDeltaVsParentUSD },
           turns: turnsAtFailure,
           filesRead,
           directoriesListed: tracker.getDirectoriesListed(),
@@ -726,92 +643,21 @@ export async function runOpenAI(
         };
       }
 
-      function buildSupervisionExhaustedResult(
-        currentResult: AgentRunOutput,
-        scratchpad: TextScratchpad,
-        tracker: FileTracker,
-        providerConfig: ProviderConfig,
-        durationMs: number,
-        parentModel?: string,
-        opts?: { reason?: string },
-      ): RunResult {
-        const usage = currentResult.state.usage;
-        const filesRead = tracker.getReads();
-        const filesWritten = tracker.getWrites();
-        const toolCalls = tracker.getToolCalls();
-        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-        const hasSalvage = !scratchpad.isEmpty();
-        return {
-          output: hasSalvage
-            ? scratchpad.latest()
-            : buildIncompleteDiagnostic({
-                providerLabel: 'openai-compatible',
-                turns: usage.requests,
-                inputTokens: usage.inputTokens,
-                outputTokens: usage.outputTokens,
-                filesRead,
-                filesWritten,
-              }),
-          status: 'incomplete',
-          errorCode: 'degenerate_exhausted',
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            totalTokens: usage.totalTokens,
-            costUSD,
-            savedCostUSD,
-          },
-          turns: usage.requests,
-          filesRead,
-          directoriesListed: tracker.getDirectoriesListed(),
-          filesWritten,
-          toolCalls,
-          outputIsDiagnostic: !hasSalvage,
-          escalationLog: [],
-          ...(opts?.reason && { error: opts.reason }),
-          durationMs,
-        };
+      if (err instanceof Error && '__timeCeiling' in err) {
+        const ceilingMs = (err as Record<string, unknown>).__timeCeiling as number;
+        emit({ kind: 'done', status: 'incomplete' });
+        const partial = partialUsage(currentResult, runner.providerConfig);
+        return sharedBuildTimeCeilingResult({
+          usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, totalTokens: partial.totalTokens, costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD ?? null, cachedTokens: partial.cachedTokens ?? null, reasoningTokens: partial.reasoningTokens ?? null },
+          turns: currentResult?.state.usage.requests ?? 0,
+          tracker,
+          scratchpad,
+          wallClockMs: ceilingMs,
+          timeoutMs,
+          durationMs: Date.now() - taskStartMs,
+        });
       }
 
-      function buildForceSalvageResult(
-        currentResult: AgentRunOutput,
-        scratchpad: TextScratchpad,
-        tracker: FileTracker,
-        providerConfig: ProviderConfig,
-        softLimit: number,
-        durationMs: number,
-        parentModel?: string,
-      ): RunResult {
-        const usage = currentResult.state.usage;
-        const filesRead = tracker.getReads();
-        const filesWritten = tracker.getWrites();
-        const toolCalls = tracker.getToolCalls();
-        const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-        const savedCostUSD = computeSavedCostUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
-        const hasSalvage = !scratchpad.isEmpty();
-        return {
-          output: hasSalvage
-            ? scratchpad.latest()
-            : `[openai-compatible sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-          status: 'incomplete',
-          usage: {
-            inputTokens: usage.inputTokens,
-            outputTokens: usage.outputTokens,
-            totalTokens: usage.totalTokens,
-            costUSD,
-            savedCostUSD,
-          },
-          turns: usage.requests,
-          filesRead,
-          directoriesListed: tracker.getDirectoriesListed(),
-          filesWritten,
-          toolCalls,
-          outputIsDiagnostic: !hasSalvage,
-          escalationLog: [],
-          durationMs,
-        };
-      }
       // Classify the thrown error into a finer-grained RunStatus so the
       // escalation orchestrator (and downstream observers) can distinguish
       // abort / network / HTTP-error / generic failure modes. We still
@@ -823,7 +669,7 @@ export async function runOpenAI(
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const partial = partialUsage(currentResult, runner.providerConfig);
-      const savedCostUSD = computeSavedCostUSD(
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
         partial.costUSD,
         partial.inputTokens,
         partial.outputTokens,
@@ -832,7 +678,7 @@ export async function runOpenAI(
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
-        usage: { ...partial, savedCostUSD },
+        usage: { ...partial, costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -845,6 +691,9 @@ export async function runOpenAI(
         ...(isRateLimit(err) && {
           structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:openai-compatible' },
         }),
+        ...(isProviderContextLimit(err) && {
+          errorCode: 'provider_context_limit',
+        }),
       };
     }
   };
@@ -856,7 +705,7 @@ export async function runOpenAI(
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
       const partial = partialUsage(currentResult, runner.providerConfig);
-      const savedCostUSD = computeSavedCostUSD(
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
         partial.costUSD,
         partial.inputTokens,
         partial.outputTokens,
@@ -873,7 +722,7 @@ export async function runOpenAI(
         toolCalls: tracker.getToolCalls(),
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
-        usage: { ...partial, savedCostUSD },
+        usage: { ...partial, costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -887,15 +736,54 @@ export async function runOpenAI(
 
 // --- Helpers: canonical return-shape builders -------------------------------
 
+/**
+ * Extract cached/reasoning tokens into {@link CanonicalUsage} shape (§3.6).
+ *
+ * The @openai/agents SDK stores per-request detail records in
+ * `inputTokensDetails: Array<Record<string, number>>` and
+ * `outputTokensDetails: Array<Record<string, number>>`. The OpenAI API
+ * returns `cached_tokens` and `reasoning_tokens` as snake_case keys
+ * inside those detail objects. We sum across all requests; if the provider
+ * never exposed the detail field the result is null.
+ */
+function extractCanonicalTokens(usage: {
+  inputTokensDetails?: Array<Record<string, number>>;
+  outputTokensDetails?: Array<Record<string, number>>;
+}): Pick<CanonicalUsage, 'cachedTokens' | 'reasoningTokens'> {
+  let cachedTokens = 0;
+  let hasCached = false;
+  for (const d of usage.inputTokensDetails ?? []) {
+    if (typeof d.cached_tokens === 'number') {
+      cachedTokens += d.cached_tokens;
+      hasCached = true;
+    }
+  }
+  let reasoningTokens = 0;
+  let hasReasoning = false;
+  for (const d of usage.outputTokensDetails ?? []) {
+    if (typeof d.reasoning_tokens === 'number') {
+      reasoningTokens += d.reasoning_tokens;
+      hasReasoning = true;
+    }
+  }
+  return {
+    cachedTokens: hasCached ? cachedTokens : null,
+    reasoningTokens: hasReasoning ? reasoningTokens : null,
+  };
+}
+
 function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
   const u = currentResult.state.usage;
   const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig);
+  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(u);
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
-    savedCostUSD: computeSavedCostUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    cachedTokens,
+    reasoningTokens,
   };
 }
 
@@ -934,26 +822,6 @@ function buildSupervisionExhaustedResult(
     durationMs,
     reason: opts?.reason,
     stampExhausted: true,
-  });
-}
-
-function buildForceSalvageResult(
-  currentResult: AgentRunOutput,
-  scratchpad: TextScratchpad,
-  tracker: FileTracker,
-  providerConfig: ProviderConfig,
-  softLimit: number,
-  durationMs: number,
-  parentModel?: string,
-): RunResult {
-  return sharedBuildForceSalvageResult({
-    providerLabel: 'openai-compatible',
-    usage: openAIUsage(currentResult, providerConfig, parentModel),
-    turns: currentResult.state.usage.requests,
-    tracker,
-    scratchpad,
-    softLimit,
-    durationMs,
   });
 }
 
@@ -1008,13 +876,17 @@ function partialUsage(
   providerConfig: ProviderConfig,
 ): RunResult['usage'] {
   if (!result) {
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null };
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null };
   }
   const usage = result.state.usage;
+  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(usage);
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
     costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+    costDeltaVsParentUSD: null,
+    cachedTokens,
+    reasoningTokens,
   };
 }

@@ -1,4 +1,4 @@
-import { classifyError } from '../../packages/core/src/runners/error-classification.js';
+import { classifyError, isProviderContextLimit } from '../../packages/core/src/runners/error-classification.js';
 
 describe('classifyError', () => {
   // ─── api_aborted branch ────────────────────────────────────────────────
@@ -56,6 +56,29 @@ describe('classifyError', () => {
       const err = Object.assign(new Error(''), { code: 'ECONNREFUSED' });
       const { reason } = classifyError(err);
       expect(reason).toBe('network error');
+    });
+  });
+
+  // ─── provider_context_limit branch ─────────────────────────────────────
+  describe('provider_context_limit', () => {
+    it('classifies context-window errors as api_error with provider_context_limit reason', () => {
+      const err = Object.assign(new Error('context_length_exceeded'), { status: 400 });
+      const { status, reason } = classifyError(err);
+      expect(status).toBe('api_error');
+      expect(reason).toBe('provider_context_limit');
+    });
+
+    it('detects OpenAI maximum context length and plural messages signature', () => {
+      const err = Object.assign(
+        new Error("This model's maximum context length is 128000 tokens. Please reduce the length of the messages."),
+        { status: 400 },
+      );
+      expect(isProviderContextLimit(err)).toBe(true);
+      expect(classifyError(err).reason).toBe('provider_context_limit');
+    });
+
+    it('detects spaced context length exceeded signatures', () => {
+      expect(isProviderContextLimit(new Error('context length exceeded'))).toBe(true);
     });
   });
 

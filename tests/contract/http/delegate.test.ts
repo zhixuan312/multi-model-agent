@@ -3,11 +3,6 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider, type Stage } from '../fixtures/mock-providers.js';
 import { normalize, type JsonValue } from '../serializer/index.js';
 
-// NOTE: per post-refactor-queue (Phase 6 ExecutionContext trap) the
-// mockProvider override is not yet wired through run-tasks, so all stages
-// currently produce identical envelopes (connection-error path). These
-// goldens pin the *envelope shape* for the HTTP surface and will ratify
-// divergence when Chapter 4 wires the runner adapter layer.
 
 const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'clarification', 'review-rework'];
 

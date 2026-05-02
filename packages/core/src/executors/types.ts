@@ -26,7 +26,7 @@ export interface BatchProgress {
 /** Aggregate cost metrics for a `delegate_tasks` batch. */
 export interface BatchAggregateCost {
   totalActualCostUSD: number
-  totalSavedCostUSD: number
+  totalCostDeltaVsParentUSD: number
 }
 
 export interface ExecutionContext {

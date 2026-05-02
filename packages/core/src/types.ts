@@ -199,7 +199,7 @@ export interface RunResult {
   errorCode?: string
   retryable?: boolean
   briefQualityWarnings?: BriefQualityWarning[]
-  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'all_tiers_unavailable'
+  terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
   structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
@@ -340,15 +340,17 @@ function resolveCostRates(config: ProviderConfig): { input: number; cachedInput:
   return { input, cachedInput, output, reasoning };
 }
 
-export function computeSavedCostUSD(
+export function computeCostDeltaVsParentUSD(
   actualCostUSD: number | null,
   inputTokens: number,
   outputTokens: number,
   parentModel: string | undefined,
-  cachedTokens = 0,
-  reasoningTokens = 0,
+  cachedTokens: number | null = 0,
+  reasoningTokens: number | null = 0,
 ): number | null {
   if (actualCostUSD === null || parentModel === undefined) return null;
+  // §3.6 honest-null: if any required dimension is null, return null
+  if (cachedTokens === null || reasoningTokens === null) return null;
   const profile = findModelProfile(parentModel);
   const input = profile.inputCostPerMTok;
   const output = profile.outputCostPerMTok;
@@ -362,7 +364,7 @@ export function computeSavedCostUSD(
      (outputTokens - reasoningTokens) * output +
      reasoningTokens * reasoning) / 1_000_000;
 
-  return parentCost - actualCostUSD;
+  return actualCostUSD - parentCost;
 }
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController, externalSignal?: AbortSignal): Promise<T> {

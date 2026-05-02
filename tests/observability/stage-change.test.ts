@@ -93,7 +93,7 @@ describe('stage_change emissions (P5)', () => {
     await runTasks(
       [{ prompt: 'do the task at src/a.ts. Done when tsc passes.', agentType: 'standard' as const }],
       config,
-      { batchId: '00000000-0000-0000-0000-000000000001', bus },
+      { batchId: '12345678-1234-4234-8234-000000000001', bus },
     );
 
     const stageChanges = captured.filter((e) => e.event === 'stage_change') as Array<EventType & { from: string; to: string }>;

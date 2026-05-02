@@ -29,9 +29,9 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { writeFileSync } from 'node:fs';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';
+import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '@zhixuan92/multi-model-agent/server';
-import { __setTestProviderOverride } from '../../../packages/server/src/http/test-provider-override.js';
+
 import { freezeClock } from './deterministic-clock.js';
 
 export interface HarnessHandle {
@@ -67,7 +67,15 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   process.env.MMAGENT_TEST_INTROSPECTION = '1';
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
   __setCoreTestProviderOverride(opts.provider);
-  __setTestProviderOverride(opts.provider);
+  // Give standard and complex different canonical identities so R3 separation
+  // (forbiddenIdentities) doesn't block fallback in single-provider test mode.
+  // Each tier gets a config-wrapped copy differing only in baseUrl path suffix
+  // so canonicalIdentity resolves to distinct normalizedEndpoints while model
+  // names and all run behavior stay identical.
+  const origBaseUrl = (opts.provider.config as Record<string, unknown>).baseUrl ?? 'http://mock.local';
+  const standardProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/standard` } };
+  const complexProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/complex` } };
+  __setCoreTestProviderOverrideMap(new Map([['standard', standardProvider], ['complex', complexProvider]]));
 
   const token = randomUUID();
   const tokenPath = join(tmpdir(), `mmagent-test-token-${randomUUID()}`);
@@ -122,7 +130,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     async close(): Promise<void> {
       await server.stop();
       __setCoreTestProviderOverride(null);
-      __setTestProviderOverride(null);
+      __setCoreTestProviderOverrideMap(null);
       await unlink(tokenPath).catch(() => undefined);
     },
   };

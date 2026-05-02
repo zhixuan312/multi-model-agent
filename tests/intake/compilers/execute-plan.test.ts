@@ -91,4 +91,13 @@ Create REST endpoints for CRUD operations on users.
     expect(drafts[0].prompt).toContain('Do not redesign');
     expect(drafts[0].prompt).toContain('use them verbatim');
   });
+
+  it('compiled execute-plan prompt contains scope-contract clause verbatim', () => {
+    const drafts = compileExecutePlan(
+      { tasks: ['1. do X\n2. do Y'], fileContents: '# Plan\n1. do X\n2. do Y' },
+      'req',
+    );
+    expect(drafts[0].prompt).toContain('Execute exactly the steps in the plan');
+    expect(drafts[0].prompt).toContain('Do NOT add steps not in the plan');
+  });
 });

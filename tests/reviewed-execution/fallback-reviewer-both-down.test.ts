@@ -105,7 +105,6 @@ describe('reviewed lifecycle fallback when both spec reviewer tiers are down', (
     expect(providerCalls).toEqual([
       { slot: 'standard', kind: 'implementer' },
       { slot: 'complex', kind: 'specReviewer' },
-      { slot: 'standard', kind: 'specReviewer' },
     ]);
 
     expect(result.status).toBe('ok');

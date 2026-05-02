@@ -17,6 +17,24 @@ export const DEFAULT_TASK_TIMEOUT_MS = 3_600_000;
  * legitimately slow reviewers (deepseek-v4-pro, large diffs). */
 export const DEFAULT_STALL_TIMEOUT_MS = 1_200_000;
 
+/** Per-task cost cap in USD. Negative is rejected; zero allows free-agent
+ * runs (both input/output price rates set to 0). */
+export const DEFAULT_MAX_COST_USD = 10;
+
+/** Pre-stop threshold ratio for cost — the runtime warns and may refuse
+ * new turns when cost reaches DEFAULT_MAX_COST_USD × this ratio ($8).
+ * A turn already in flight is allowed to complete, so the worst-case
+ * total is DEFAULT_MAX_COST_USD / MAX_COST_PRESTOP_RATIO ($12.50).
+ * This is NOT an 80%-overshoot allowance; it is an 80%-of-cap pre-stop.
+ * See §3.8 for the rationale. */
+export const MAX_COST_PRESTOP_RATIO = 0.80;
+
+/** Clock counterpart of MAX_COST_PRESTOP_RATIO — same pre-stop semantics
+ * applied to wall-clock time: the runtime warns at
+ * DEFAULT_TASK_TIMEOUT_MS × this ratio (48 min), with a worst-case
+ * total of DEFAULT_TASK_TIMEOUT_MS / MAX_TIME_PRESTOP_RATIO (1.25 h). */
+export const MAX_TIME_PRESTOP_RATIO = 0.80;
+
 // === Shared field schemas ===
 
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
@@ -87,7 +105,7 @@ const agentConfigSchema = z.discriminatedUnion('type', [
 const defaultsSchema = z.object({
   timeoutMs: z.number().int().positive().default(DEFAULT_TASK_TIMEOUT_MS),
   stallTimeoutMs: z.number().int().positive().default(DEFAULT_STALL_TIMEOUT_MS),
-  maxCostUSD: z.number().nonnegative().default(10),
+  maxCostUSD: z.number().nonnegative().default(DEFAULT_MAX_COST_USD),
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
@@ -95,7 +113,7 @@ const defaultsSchema = z.object({
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
-  maxCostUSD: 10,
+  maxCostUSD: DEFAULT_MAX_COST_USD,
   tools: 'full' as const,
   sandboxPolicy: 'cwd-only' as const,
 }));

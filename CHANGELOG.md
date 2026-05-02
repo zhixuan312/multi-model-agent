@@ -5,6 +5,33 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.11.0] - 2026-05-02
+
+### Fixed
+- **Reviewer cwd plumbing** (runtime, R3 quality killer). Quality / spec / diff reviewers fell back to `process.cwd()` of `mmagent serve` instead of `task.cwd` when they landed on a different runner from the implementer. Every reviewer fallback call now plumbs `task.cwd` into `provider.run` options across all three runners (codex, claude, openai). New `tests/contract/reviewer-cwd.test.ts` pins the contract.
+- **Reviewer-separation fallback violated R3** (escalation). When the assigned reviewer tier transport-failed, the fallback could land on the implementer's own model (same identity → review self-confirms). New `forbiddenIdentities` parameter on `runWithFallback` compares the candidate's resolved canonical identity tuple `(providerType, normalizedEndpoint, modelId)` against the implementer's identity; fails closed if identity unresolvable on a constructed provider. New `'reviewer_unavailable_separation'` error code when no candidate respects separation.
+- **`force_salvage` watchdog removed** (runtime, §3.7). The 95% `softLimit` `force_salvage` path force-terminated genuinely thorough work based on input-token volume — an arbitrary internal cap that contradicted the user's "thoroughness pays" stance. Removed across all three runners. The 80% warning-nudge injection also removed (redundant given user-set `maxCostUSD` / `timeoutMs` hard backstops). Provider context-window failures now classify as `provider_context_limit` (distinct from `incomplete` / `budget_exceeded`).
+- **Negative `read_only_review.quality.cost_usd`** (telemetry, §3.9). The review-cost emission path mixed up actual-cost with delta-vs-parent, producing negative numbers in real-world telemetry. Diagnosed and fixed; runtime monotonic-cost invariant assertion in dev/test catches future regressions.
+- **`wallClockMs: 0` hardcoded on single-task paths** (telemetry, §3.1). audit / debug / execute-plan single-task return paths emitted `wallClockMs: 0` instead of `Date.now() - startMs`. Real wall-clock now reported.
+- **Tier vocabulary drift between column and payload** (telemetry, §3.2). `agentTier` was emitted as `complex` in the top-level column but translated to `reasoning` in the stage payload. Removed translation; canonical `'standard' | 'complex'` everywhere.
+- **Negative `costDeltaVsParentUSD` from formula+rename mismatch** (telemetry, §3.3). `computeSavedCostUSD` renamed to `computeCostDeltaVsParentUSD` AND formula flipped to `actualCostUSD - parentCost`. Positive = worker more expensive than parent; negative = worker cheaper. Honest-`null` when any required token dimension is unavailable.
+- **Concern classifier collapsed audit findings to `"other"`** (telemetry, §3.4). Source-code-review patterns missed audit-domain vocabulary. Added `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene` categories.
+- **Dead `style` severity bucket + dead `findingsFlagged` / `severityCorrections` fields** (telemetry, §3.5 + §3.10). `findingsBySeverity` is now the documented 4 tiers (critical / high / medium / low); legacy zero-stub fields removed entirely per `rules/development-mode.md`.
+- **`proposedInterpretation` was `not_applicable` while clarifications pending** (envelope contract, §5.1). Per the public 7-field envelope contract, a string `proposedInterpretation` IS the awaiting-clarification gate. `executeDelegate` now synthesizes a non-empty interpretation from the first clarification when one is pending; runtime invariant assertion in dev/test prevents the regression.
+
+### Added
+- **Per-route prompt scope contracts** (intake, §6.1). Each route's compiler now appends a scope-contract clause to the worker's prompt: audit ("Do NOT enumerate the repository"), review ("Do NOT review code outside the requested scope"), verify ("Do NOT explore or refactor"), debug ("Reproduce the failure first"), delegate ("Stay scoped to the explicit task description"), execute-plan ("Execute exactly the steps in the plan"). New `tests/behavioral/audit-prompt-scope.test.ts` uses a deterministic mock runner to assert the audit prompt blocks repo-wide globs.
+- **Approximate-budget semantics for `maxCostUSD` / `timeoutMs`** (config, §3.8). Both are documented as approximate budgets, not strict caps — the runtime aborts at 0.80 × the cap (named via `MAX_COST_HEADROOM_RATIO` / `MAX_TIME_HEADROOM_RATIO` constants) to leave headroom for one in-flight turn. Worst-case overshoot calculation documented in API docs and every route's SKILL.md. Defaults exported as named constants: `DEFAULT_TASK_TIMEOUT_MS = 1h`, `DEFAULT_STALL_TIMEOUT_MS = 20min`, `DEFAULT_MAX_COST_USD = $10`. New `time_ceiling` abort path mirrors the cost-ceiling path at both lifecycle and runner levels.
+- **Cached and reasoning tokens on every runner** (telemetry, §3.6). New `runners/base/usage-accumulator.ts` defines `CanonicalUsage` with `cachedTokens` and `reasoningTokens` as `number | null` (null = provider doesn't expose; number = real value, including 0). codex / openai map `cached_input_tokens` and `reasoning_tokens` directly; claude sums `cache_read_input_tokens + cache_creation_input_tokens` into `cachedTokens` (reasoning stays null per claude API gap).
+- **Telemetry coverage invariant** (testing, §3.11). `tests/telemetry/coverage.test.ts` asserts every event in `observability/events.ts` has a runtime fixture (or is in `UNCOVERED_ALLOWLIST` with reason). Emit-time schema validation in dev/test (throws on violation) replaces silent acceptance.
+- **`__forceClarification` test seam** (intake, §5.2). Gated by `NODE_ENV === 'test' AND MMAGENT_TEST_SEAMS === '1'` (double-gating prevents accidental fires). Pairs with `__clearForcedClarification()`. Request-scoped via `Map<batchId, reason>` plus a global one-shot via `__forceClarificationGlobal`. Cross-process via `MMAGENT_FORCED_CLARIFICATION` env var. New `tests/contract/http/confirm-clarifications.test.ts` re-authors the full HTTP round-trip; `tests/contract/lifecycle.test.ts` re-authors clarification-precedence.
+- **Cross-runner consistency contract test** (testing, §11). `tests/contract/cross-runner-consistency.test.ts` asserts an invariant subset (event-type set, `terminationReason` enum, `RunnerOptions.cwd` honoring, per-stage telemetry shape, no-watchdog regression, `provider_context_limit` classification) — uniformly across codex / claude / openai. Any future runner-layer fix that fails to update all three runners fails this contract.
+
+### Changed
+- **Breaking telemetry payload changes.** Field renames (`savedCostUSD` → `costDeltaVsParentUSD`; `agentTier` translation removed), removed fields (`style` severity, `findingsFlagged`, `severityCorrections`), nullable shape changes (`cachedTokens`, `reasoningTokens` are `number | null`), removed event types (`watchdog_force_salvage`, `watchdog_warning`). Frontend ingest must align with the new shapes.
+
+See `docs/superpowers/specs/2026-05-01-mma-runtime-and-telemetry-fixes-design.md` for the complete design.
+
 ## [3.10.7] - 2026-05-01
 
 ### Fixed
@@ -1081,7 +1108,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.7...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.0...HEAD
+[3.11.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.7...v3.11.0
 [3.10.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.6...v3.10.7
 [3.10.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.5...v3.10.6
 [3.10.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.4...v3.10.5

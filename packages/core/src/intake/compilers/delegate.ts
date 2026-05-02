@@ -15,6 +15,12 @@ export interface DelegateTaskInput {
   reviewPolicy?: ReviewPolicy;
 }
 
+const SCOPE_CONTRACT = `Stay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.`;
+
+export function compileDelegatePrompt(input: { prompt: string }): string {
+  return `${input.prompt}\n\n${SCOPE_CONTRACT}`;
+}
+
 export function compileDelegateTasks(
   tasks: DelegateTaskInput[] | null | undefined,
   requestId: string,
@@ -35,7 +41,7 @@ export function compileDelegateTasks(
         route: 'delegate_tasks',
         originalInput,
       } as DelegateSource,
-      prompt: task.prompt,
+      prompt: compileDelegatePrompt(task),
       done: task.done,
       filePaths: task.filePaths,
       agentType: task.agentType,

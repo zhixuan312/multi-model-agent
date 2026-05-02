@@ -23,7 +23,7 @@ export interface DiffReviewInput {
   worker: {
     call: (
       prompt: string,
-      opts?: { abortSignal?: AbortSignal; timeoutMs?: number },
+      opts?: { cwd?: string; abortSignal?: AbortSignal; timeoutMs?: number },
     ) => Promise<{ output: string; status?: string }>;
   };
   taskDeadlineMs?: number;
@@ -57,6 +57,7 @@ export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewV
     : undefined;
   const prompt = PROMPT_TEMPLATE(input);
   const result = await input.worker.call(prompt, {
+    cwd: input.cwd,
     abortSignal: input.abortSignal,
     timeoutMs: remaining,
   });

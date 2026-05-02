@@ -40,4 +40,12 @@ describe('review compiler', () => {
     const drafts = compileReviewCode({ filePaths: ['src/foo.ts'] }, 'req');
     expect(drafts[0].prompt).toContain('Provide a structured review');
   });
+
+  it('compiled review prompt contains scope-contract clause verbatim', () => {
+    const drafts = compileReviewCode({ filePaths: ['/x/foo.ts'], reviewType: 'security' }, 'req');
+    expect(drafts).toHaveLength(1);
+    const prompt = drafts[0].prompt;
+    expect(prompt).toContain('Review the specified files in scope');
+    expect(prompt).toContain('Do NOT review code outside the requested scope');
+  });
 });

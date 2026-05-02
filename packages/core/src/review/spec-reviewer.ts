@@ -56,6 +56,7 @@ export async function runSpecReview(
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
   onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
+  cwd: string = process.cwd(),
 ): Promise<SpecReviewResult> {
   const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
     buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
@@ -69,6 +70,7 @@ export async function runSpecReview(
     result = await delegateWithEscalation(
       {
         prompt,
+        cwd,
         agentType: reviewerSlot,
         briefQualityPolicy: 'off',
         timeoutMs: 120_000,
@@ -99,6 +101,7 @@ export async function runSpecReview(
       const retryResult = await delegateWithEscalation(
         {
           prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          cwd,
           agentType: reviewerSlot,
           briefQualityPolicy: 'off',
           timeoutMs: 120_000,

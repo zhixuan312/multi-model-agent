@@ -2,6 +2,10 @@ import type { DraftTask, ExecutePlanSource } from '../types.js';
 import { createDraftId } from '../draft-id.js';
 import type { ReviewPolicy } from './delegate.js';
 
+const SCOPE_CONTRACT = `
+Execute exactly the steps in the plan. Do NOT add steps not in the plan.
+`.trim();
+
 export interface ExecutePlanTaskInput {
   task: string;
   reviewPolicy?: ReviewPolicy;
@@ -43,6 +47,8 @@ export function compileExecutePlan(
       'The plan was written by a higher-capability model — your job is to execute it faithfully.',
       'Follow any acceptance criteria, file paths, and constraints specified in the plan.',
       'If you cannot find a unique matching task, report that no match was found and do not implement anything.',
+      '',
+      SCOPE_CONTRACT,
     ].join('\n');
 
     return {

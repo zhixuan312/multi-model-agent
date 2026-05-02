@@ -13,14 +13,14 @@ export function computeTimings(wallClockMs: number, results: RunResult[]): Batch
 
 export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
   let totalActualCostUSD = 0;
-  let totalSavedCostUSD = 0;
+  let totalCostDeltaVsParentUSD = 0;
   for (const r of results) {
     if (r.usage.costUSD !== null && r.usage.costUSD !== undefined) {
       totalActualCostUSD += r.usage.costUSD;
     }
-    if (r.usage.savedCostUSD !== null && r.usage.savedCostUSD !== undefined) {
-      totalSavedCostUSD += r.usage.savedCostUSD;
+    if (r.usage.costDeltaVsParentUSD !== null && r.usage.costDeltaVsParentUSD !== undefined) {
+      totalCostDeltaVsParentUSD += r.usage.costDeltaVsParentUSD;
     }
   }
-  return { totalActualCostUSD, totalSavedCostUSD };
+  return { totalActualCostUSD, totalCostDeltaVsParentUSD };
 }

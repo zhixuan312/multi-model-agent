@@ -62,7 +62,7 @@ export type {
 export { expandContextBlocks } from './context/expand-context-blocks.js';
 
 // Provider
-export { createProvider, __setCoreTestProviderOverride } from './provider.js';
+export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './provider.js';
 
 // Batch cache
 export { BatchCache } from './batch-cache.js';
@@ -106,7 +106,7 @@ export type { ResolvedAgent } from './routing/resolve-agent.js';
 export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
 
 // Intake pipeline
-export { compileDelegateTasks } from './intake/compilers/delegate.js';
+export { compileDelegateTasks, compileDelegatePrompt } from './intake/compilers/delegate.js';
 export { compileReviewCode } from './intake/compilers/review.js';
 export { compileDebugTask } from './intake/compilers/debug.js';
 export { compileVerifyWork } from './intake/compilers/verify.js';
@@ -145,6 +145,14 @@ export type {
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
+// Test seams (gated: NODE_ENV=test AND MMAGENT_TEST_SEAMS=1)
+export {
+  __forceClarification,
+  __forceClarificationGlobal,
+  __clearForcedClarification,
+  __consumeForcedClarification,
+} from './intake/force-clarification.js';
+
 // Batch registry
 export * from './batch-registry.js';
 
@@ -162,7 +170,7 @@ export type { EventSink } from './observability/bus.js';
 export { LocalLogSink } from './observability/local-log-sink.js';
 export { TelemetrySink } from './observability/telemetry-sink.js';
 export type { Recorder } from './observability/telemetry-sink.js';
-export { Event, CLOUD_EVENT_NAMES } from './observability/events.js';
+export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './observability/events.js';
 export type { EventType } from './observability/events.js';
 export { JsonlWriter } from './diagnostics/jsonl-writer.js';
 export type { JsonlWriterOptions } from './diagnostics/jsonl-writer.js';

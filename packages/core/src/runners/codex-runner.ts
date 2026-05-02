@@ -6,7 +6,7 @@ import { getCodexAuth } from '../auth/codex-oauth.js';
 import {
   withTimeout,
   computeCostUSD,
-  computeSavedCostUSD,
+  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
@@ -22,7 +22,6 @@ import {
   buildSystemPrompt,
   buildBudgetHint,
   buildReGroundingMessage,
-  buildBudgetPressureNudge,
   buildFormatConstraintSuffix,
   RE_GROUNDING_INTERVAL_TURNS,
 } from './prevention.js';
@@ -30,9 +29,6 @@ import {
   validateSubAgentOutput,
   buildRePrompt,
   sameDegenerateOutput,
-  resolveInputTokenSoftLimit,
-  checkWatchdogThreshold,
-  logWatchdogEvent,
   hasCompletedWork,
   MAX_DEGENERATE_RETRIES,
   STALL_DETECTION_TURNS,
@@ -40,16 +36,17 @@ import {
   hasNewFileActivity,
 } from './supervision.js';
 import { injectionTypeFor } from './injection-type.js';
-import { classifyError, isRateLimit } from './error-classification.js';
-import { findModelProfile } from '../routing/model-profiles.js';
+import { classifyError, isRateLimit, isProviderContextLimit } from './error-classification.js';
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
-  buildForceSalvageResult as sharedBuildForceSalvageResult,
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
+  buildTimeCeilingResult as sharedBuildTimeCeilingResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { checkTimeCeiling } from './base/time-check.js';
 import type { SandboxPolicy } from '../types.js';
+import { mergeUsage, makeEmptyUsage, type CanonicalUsage } from './base/usage-accumulator.js';
 
 // CODEX_DEBUG=1 causes the runner to log raw HTTP request/response bodies to
 // stderr. Those bodies routinely include the user's prompt, file contents,
@@ -278,8 +275,7 @@ export async function runCodex(
   // variable already reflects the current turn at that point (it was
   // incremented at the top of the iteration), so the callback can read it
   // directly — no +1 offset.
-  let inputTokens = 0;
-  let outputTokens = 0;
+  let usage = makeEmptyUsage();
   let turns = 0;
 
   const tracker = new FileTracker((summary) => {
@@ -311,17 +307,19 @@ export async function runCodex(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-    const savedCostUSD = computeSavedCostUSD(costUSD ?? 0, inputTokens, outputTokens, parentModel);
+    const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD ?? 0, usage.inputTokens, usage.outputTokens, parentModel);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
       usage: {
-        inputTokens,
-        outputTokens,
-        totalTokens: inputTokens + outputTokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        totalTokens: usage.inputTokens + usage.outputTokens,
         costUSD: costUSD ?? 0,
-        savedCostUSD,
+        costDeltaVsParentUSD,
+        cachedTokens: usage.cachedTokens,
+        reasoningTokens: usage.reasoningTokens,
       },
       turns,
       filesRead: tracker.getReads(),
@@ -390,13 +388,9 @@ export async function runCodex(
 
   // --- Scratchpad: buffers every text emission the codex backend streams
   // through our loop. Every termination path (ok / incomplete / max_turns /
-  // error / timeout / force_salvage) salvages `scratchpad.latest()` when
-  // the final message is empty or degenerate. ---
+  // error / timeout) salvages `scratchpad.latest()` when the final message
+  // is empty or degenerate. ---
   const scratchpad = new TextScratchpad();
-
-  // --- Watchdog: resolve the input-token soft limit once per run ---
-  const profile = findModelProfile(providerConfig.model);
-  const softLimit = resolveInputTokenSoftLimit(providerConfig, profile);
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
@@ -438,7 +432,7 @@ export async function runCodex(
     let lastResponseStatus: string | null = null;
     let lastResponseStatusTurn: number | null = null;
 
-    // --- Supervision / watchdog bookkeeping ---
+    // --- Supervision bookkeeping ---
     // Monitor model: only count degenerate retries when worker has NO tool calls.
     let degenerateRetries = 0;
     let stallTurnCounter = 0;
@@ -451,21 +445,39 @@ export async function runCodex(
     // and break the loop before any retries run. See openai-runner
     // regression #5.
     let lastDegenerateOutput: string | null = null;
-    // High-watermark guard for the watchdog warning nudge — fire at most
-    // once per distinct input-token level. Mirrors openai-runner and
-    // claude-runner.
-    let lastWarnedInputTokens = -1;
 
     try {
       while (true) {
         // Track tokens at start of turn for cost accounting
-        const tokensAtTurnStart = inputTokens;
-        const outputTokensAtTurnStart = outputTokens;
+        const tokensAtTurnStart = usage.inputTokens;
+        const outputTokensAtTurnStart = usage.outputTokens;
         turns++;
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
-        // append, watchdog logs, error diagnostics, result.turns).
+        // append, error diagnostics, result.turns).
         emit({ kind: 'turn_start', turn: turns, provider: 'codex', model: providerConfig.model });
+
+        // Time ceiling check before dispatching a provider call.
+        const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
+        if (timeCeilingMs !== null) {
+          return sharedBuildTimeCeilingResult({
+            usage: {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.inputTokens + usage.outputTokens,
+              costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+              costDeltaVsParentUSD: computeCostDeltaVsParentUSD(computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig) ?? 0, usage.inputTokens, usage.outputTokens, parentModel),
+              cachedTokens: usage.cachedTokens,
+              reasoningTokens: usage.reasoningTokens,
+            },
+            turns,
+            tracker,
+            scratchpad,
+            wallClockMs: timeCeilingMs,
+            timeoutMs,
+            durationMs: Date.now() - taskStartMs,
+          });
+        }
 
         // Codex backend requires streaming. The Codex backend's
         // `response.completed` event does NOT populate `response.output` —
@@ -521,8 +533,22 @@ export async function runCodex(
             sawCompleted = true;
             const r = event.response as Response | undefined;
             if (r?.usage) {
-              inputTokens += r.usage.input_tokens ?? 0;
-              outputTokens += r.usage.output_tokens ?? 0;
+              // Codex SDK ResponseUsage type doesn't declare cached_input_tokens /
+              // reasoning_tokens, but the wire payload carries them when the model
+              // emits them. Cast to a wider shape to read; null when absent.
+              const wideUsage = r.usage as unknown as {
+                input_tokens?: number;
+                output_tokens?: number;
+                cached_input_tokens?: number;
+                reasoning_tokens?: number;
+              };
+              const turnUsage: CanonicalUsage = {
+                inputTokens: wideUsage.input_tokens ?? 0,
+                outputTokens: wideUsage.output_tokens ?? 0,
+                cachedTokens: wideUsage.cached_input_tokens ?? null,
+                reasoningTokens: wideUsage.reasoning_tokens ?? null,
+              };
+              usage = mergeUsage(usage, turnUsage);
             }
             if (r?.status) {
               lastResponseStatus = r.status;
@@ -545,8 +571,8 @@ export async function runCodex(
         }
 
         // Buffer this turn's text into the scratchpad BEFORE any exit so
-        // every termination path (including supervision exhaustion and
-        // force_salvage) can salvage it. Codex does not emit <think> tags
+        // every termination path (including supervision exhaustion) can
+        // salvage it. Codex does not emit <think> tags
         // by default, so there is no stripping step here.
         if (textThisTurn) {
           scratchpad.append(turns, textThisTurn);
@@ -591,66 +617,6 @@ export async function runCodex(
           }
         }
 
-        // --- Watchdog checks after tokens are updated -------------------
-        const watchdogStatus = checkWatchdogThreshold(inputTokens, softLimit);
-        if (watchdogStatus !== 'ok') {
-          logWatchdogEvent(watchdogStatus, {
-            provider: 'codex',
-            model: providerConfig.model,
-            turn: turns,
-            inputTokens,
-            softLimit,
-            scratchpadChars: scratchpad.toString().length,
-          });
-        }
-        if (watchdogStatus === 'force_salvage') {
-          // `watchdog_force_salvage` is not an injected message — no
-          // re-prompt is sent — but observers still want to see exactly
-          // why the run is being killed. Emit with contentLengthChars: 0
-          // to reflect the "nothing was injected, we just terminated"
-          // semantics (mirrors openai-runner and claude-runner).
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_force_salvage',
-            turn: turns,
-            contentLengthChars: 0,
-          });
-          const salvaged = buildCodexForceSalvageResult({
-            tracker,
-            scratchpad,
-            providerConfig,
-            inputTokens,
-            outputTokens,
-            turns,
-            softLimit,
-            durationMs: Date.now() - taskStartMs,
-            parentModel,
-          });
-          emit({ kind: 'done', status: salvaged.status });
-          return salvaged;
-        }
-        // Warning-band nudge: fire at most once per distinct input-token
-        // high-watermark. Pushed as a user message so the next turn of
-        // the codex loop addresses the budget-pressure prompt. We use
-        // the shared prevention helper (NOT an inline string) so every
-        // runner emits byte-identical wording.
-        if (watchdogStatus === 'warning' && inputTokens > lastWarnedInputTokens) {
-          lastWarnedInputTokens = inputTokens;
-          const warning = buildBudgetPressureNudge({ inputTokens, softLimit });
-          input.push({
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-            role: 'user',
-            content: warning,
-            // eslint-disable-next-line @typescript-eslint/no-explicit-any
-          } as any);
-          emit({
-            kind: 'injection',
-            injectionType: 'watchdog_warning',
-            turn: turns,
-            contentLengthChars: warning.length,
-          });
-        }
-
         // --- Periodic re-grounding inside the loop ---------------------
         if (turns > 0 && turns % RE_GROUNDING_INTERVAL_TURNS === 0) {
           if (!canAffordNextTurn()) {
@@ -678,22 +644,21 @@ export async function runCodex(
         }
 
         // --- turn_complete: one event per while-iteration. Fires after the
-        // watchdog + re-grounding checks have run (so cumulative token
-        // counts and any injection events are already on the wire) and
-        // BEFORE the supervision branching / tool-execution loop. Every
+        // re-grounding checks have run (so cumulative token counts and any
+        // injection events are already on the wire) and BEFORE the supervision branching / tool-execution loop. Every
         // continue/return in the branches below happens AFTER this event,
         // so the sequence "turn_start ... text_emission ... turn_complete"
         // is guaranteed per iteration.
         emit({
           kind: 'turn_complete',
           turn: turns,
-          cumulativeInputTokens: inputTokens,
-          cumulativeOutputTokens: outputTokens,
+          cumulativeInputTokens: usage.inputTokens,
+          cumulativeOutputTokens: usage.outputTokens,
         });
 
         // Track cost for this turn (Task 25)
-        const turnInputTokens = inputTokens - tokensAtTurnStart;
-        const turnOutputTokens = outputTokens - outputTokensAtTurnStart;
+        const turnInputTokens = usage.inputTokens - tokensAtTurnStart;
+        const turnOutputTokens = usage.outputTokens - outputTokensAtTurnStart;
         const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
         if (turnCost !== null) {
           lastTurnCostUSD = turnCost;
@@ -719,8 +684,10 @@ export async function runCodex(
               tracker,
               scratchpad,
               providerConfig,
-              inputTokens,
-              outputTokens,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cachedTokens: usage.cachedTokens,
+              reasoningTokens: usage.reasoningTokens,
               turns,
               output: stripped,
               durationMs: Date.now() - taskStartMs,
@@ -742,8 +709,10 @@ export async function runCodex(
               tracker,
               scratchpad,
               providerConfig,
-              inputTokens,
-              outputTokens,
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cachedTokens: usage.cachedTokens,
+              reasoningTokens: usage.reasoningTokens,
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
@@ -809,8 +778,10 @@ export async function runCodex(
         tracker,
         scratchpad,
         providerConfig,
-        inputTokens,
-        outputTokens,
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedTokens: usage.cachedTokens,
+        reasoningTokens: usage.reasoningTokens,
         turns,
         lastOutput: output,
         reason: `loop exited after ${turns} turns without producing a clean final answer`,
@@ -862,23 +833,26 @@ export async function runCodex(
       // and `classifyError` only decides which RunStatus bucket the
       // failure lands in.
       const { status } = classifyError(err);
+      const errorCode = isProviderContextLimit(err) ? 'provider_context_limit' : undefined;
 
       // Salvage: if the scratchpad has buffered text from earlier turns,
       // return it as the output. Pre-Task-5 behavior returned only the
       // error string, losing 30k+ tokens of work on abort.
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
+      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
         usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
+          cachedTokens: usage.cachedTokens,
+          reasoningTokens: usage.reasoningTokens,
         },
         turns,
         filesRead: tracker.getReads(),
@@ -889,6 +863,7 @@ export async function runCodex(
         escalationLog: [],
         error: detailed,
         durationMs: Date.now() - taskStartMs,
+        ...(errorCode !== undefined && { errorCode }),
         ...(isRateLimit(err) && {
           structuredError: { code: 'rate_limit_exceeded', message: 'rate limited by provider', where: 'runner:codex' },
         }),
@@ -902,8 +877,8 @@ export async function runCodex(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
-      const savedCostUSD = computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel);
+      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
@@ -915,11 +890,13 @@ export async function runCodex(
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         usage: {
-          inputTokens,
-          outputTokens,
-          totalTokens: inputTokens + outputTokens,
+          inputTokens: usage.inputTokens,
+          outputTokens: usage.outputTokens,
+          totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD,
-          savedCostUSD,
+          costDeltaVsParentUSD,
+          cachedTokens: usage.cachedTokens,
+          reasoningTokens: usage.reasoningTokens,
         },
         turns,
         outputIsDiagnostic: !hasSalvage,
@@ -935,10 +912,10 @@ export async function runCodex(
 // --- Helpers: canonical return-shape builders -------------------------------
 //
 // Mirror claude-runner's buildClaudeOkResult / buildClaudeIncompleteResult /
-// buildClaudeForceSalvageResult / buildClaudeMaxTurnsResult so every exit
-// from the supervision state machine is a one-line call. Each helper folds
-// the shared filesRead/filesWritten/toolCalls/usage preamble so the call
-// sites in `run()` stay short and symmetric across runners.
+// buildClaudeMaxTurnsResult so every exit from the supervision state machine
+// is a one-line call. Each helper folds the shared
+// filesRead/filesWritten/toolCalls/usage preamble so the call sites in
+// `run()` stay short and symmetric across runners.
 
 interface CodexResultCommonArgs {
   tracker: FileTracker;
@@ -946,18 +923,22 @@ interface CodexResultCommonArgs {
   providerConfig: ProviderConfig;
   inputTokens: number;
   outputTokens: number;
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
   turns: number;
 }
 
 function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, inputTokens, outputTokens, parentModel } = args;
+  const { providerConfig, inputTokens, outputTokens, cachedTokens, reasoningTokens, parentModel } = args;
   const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUSD,
-    savedCostUSD: computeSavedCostUSD(costUSD, inputTokens, outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
+    cachedTokens,
+    reasoningTokens,
   };
 }
 
@@ -989,20 +970,6 @@ function buildCodexIncompleteResult(
     durationMs: args.durationMs,
     reason: args.reason,
     stampExhausted: true,
-  });
-}
-
-function buildCodexForceSalvageResult(
-  args: CodexResultCommonArgs & { softLimit: number; durationMs: number; parentModel?: string },
-): RunResult {
-  return sharedBuildForceSalvageResult({
-    providerLabel: 'codex',
-    usage: codexUsage(args),
-    turns: args.turns,
-    tracker: args.tracker,
-    scratchpad: args.scratchpad,
-    softLimit: args.softLimit,
-    durationMs: args.durationMs,
   });
 }
 

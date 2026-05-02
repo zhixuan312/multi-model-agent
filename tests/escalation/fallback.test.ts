@@ -6,6 +6,7 @@ import {
   type UnavailableMap,
 } from '../../packages/core/src/escalation/fallback.js';
 import type { Provider, RunResult, AgentType } from '../../packages/core/src/types.js';
+import { canonicalIdentity, identityEquals } from '../../packages/core/src/routing/canonical-model-identity.js';
 
 function mockProvider(name: string, run: () => Promise<RunResult>, config?: unknown): Provider {
   // Default config varies by name so existing tests get DISTINCT effective providers
@@ -24,7 +25,7 @@ function okResult(name: string): RunResult {
     output: `from ${name}`,
     outputIsDiagnostic: false,
     turns: 1,
-    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0.01, savedCostUSD: 0 },
+    usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15, costUSD: 0.01, costDeltaVsParentUSD: 0 },
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
@@ -281,5 +282,153 @@ describe('runWithFallback — generic with custom T', () => {
     expect(result.usedTier).toBe('complex');
     expect(result.result.finding).toBe('looks good');
     expect(map.get('standard')).toBe('transport_failure');
+  });
+});
+
+// ── forbiddenIdentities (R3 separation) ──────────────────────────────────────
+
+describe('runWithFallback — forbiddenIdentities separation', () => {
+  it('skips candidates whose canonical identity matches forbiddenIdentities', async () => {
+    const map: UnavailableMap = new Map();
+    const implConfig = { type: 'codex' as const, model: 'gpt-5.5' };
+    const implIdentity = canonicalIdentity(implConfig);
+    // Both standard and complex resolve to the same model as implementer
+    const standard = mockProvider('standard', async () => okResult('standard'), implConfig);
+    const complex = mockProvider('complex', async () => okResult('complex'), implConfig);
+    const complexCall = vi.fn(async () => okResult('complex'));
+    const complexSpy = mockProvider('complex', complexCall, implConfig);
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complexSpy),
+      unavailableTiers: map,
+      isTransportFailure,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenIdentities: [implIdentity],
+      call: (p) => p.run('test', {}),
+    });
+    // Both tiers resolve to the same canonical identity → both forbidden
+    expect(result.bothUnavailable).toBe(true);
+    expect(result.fallbackSeparationRespected).toBe(true);
+  });
+
+  it('selects a different-identity tier if available', async () => {
+    const map: UnavailableMap = new Map();
+    const implConfig = { type: 'codex' as const, model: 'gpt-5.5' };
+    const implIdentity = canonicalIdentity(implConfig);
+    // standard matches implementer (forbidden), complex is different model
+    const standard = mockProvider('standard', async () => okResult('standard'), implConfig);
+    const complexConfig = { type: 'claude' as const, model: 'haiku-4-5' };
+    const complex = mockProvider('complex', async () => okResult('complex'), complexConfig);
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complex),
+      unavailableTiers: map,
+      isTransportFailure,
+      getStatus: (r) => r.status,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenIdentities: [implIdentity],
+      call: (p) => p.run('test', {}),
+    });
+    // standard was skipped (forbidden identity) → fell back to complex
+    expect(result.fallbackFired).toBe(true);
+    expect(result.usedTier).toBe('complex');
+    expect(result.bothUnavailable).toBe(false);
+    expect(result.fallbackSeparationRespected).toBe(true);
+  });
+
+  it('skips candidate when canonicalIdentity throws on a constructed provider (fail-closed)', async () => {
+    // A valid Provider with a null config will cause canonicalIdentity to throw
+    // (accessing config.type on null). This simulates identity-resolution failure
+    // on a successfully-constructed provider — fail-closed territory.
+    const map: UnavailableMap = new Map();
+    const standard = { name: 'standard', config: null as any, run: async () => okResult('standard') } as Provider;
+    const complexCfg = { type: 'claude' as const, model: 'haiku-4-5' };
+    const complex = mockProvider('complex', async () => okResult('complex'), complexCfg);
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : complex),
+      unavailableTiers: map,
+      isTransportFailure,
+      getStatus: (r) => r.status,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenIdentities: [canonicalIdentity({ type: 'codex', model: 'some-model' })],
+      call: (p) => p.run('test', {}),
+    });
+    // canonicalIdentity(null) throws → fail-closed → skip standard
+    // complex has a different model → fallback succeeds
+    expect(result.fallbackFired).toBe(true);
+    expect(result.usedTier).toBe('complex');
+    expect(result.bothUnavailable).toBe(false);
+    expect(result.fallbackSeparationRespected).toBe(true);
+  });
+
+  it('treats providerFor throwing as construction failure, NOT separation', async () => {
+    const map: UnavailableMap = new Map();
+    const implIdentity = canonicalIdentity({ type: 'codex', model: 'gpt-5.5' });
+    const complexCfg = { type: 'claude' as const, model: 'haiku-4-5' };
+    const complex = mockProvider('complex', async () => okResult('complex'), complexCfg);
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => {
+        if (t === 'standard') throw new Error('missing API key');
+        return complex;
+      },
+      unavailableTiers: map,
+      isTransportFailure,
+      getStatus: (r) => r.status,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenIdentities: [implIdentity],
+      call: (p) => p.run('test', {}),
+    });
+    // providerFor threw for standard → construction failure, handled as unavailable
+    // complex is available and not forbidden → fallback succeeds
+    expect(result.fallbackFired).toBe(true);
+    expect(result.usedTier).toBe('complex');
+    expect(result.bothUnavailable).toBe(false);
+    // Separation was NOT the reason for skipping standard — construction failure was
+    expect(result.fallbackSeparationRespected).toBeUndefined();
+  });
+
+  it('returns assignedIdentity and usedIdentity when forbiddenIdentities provided', async () => {
+    const map: UnavailableMap = new Map();
+    const standardConfig = { type: 'claude' as const, model: 'sonnet-4-6' };
+    const standard = mockProvider('standard', async () => okResult('standard'), standardConfig);
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : undefined),
+      unavailableTiers: map,
+      isTransportFailure,
+      makeSyntheticFailure: makeSynthetic,
+      forbiddenIdentities: [canonicalIdentity({ type: 'codex', model: 'gpt-5.5' })],
+      call: (p) => p.run('test', {}),
+    });
+    expect(result.bothUnavailable).toBe(false);
+    expect(result.assignedIdentity).toBeDefined();
+    expect(result.assignedIdentity!.modelId).toBe('sonnet-4-6');
+    expect(result.usedIdentity).toBeDefined();
+    expect(result.usedIdentity!.modelId).toBe('sonnet-4-6');
+  });
+
+  it('does not populate identity fields when forbiddenIdentities is not provided', async () => {
+    const map: UnavailableMap = new Map();
+    const standard = mockProvider('standard', async () => okResult('standard'));
+
+    const result = await runWithFallback<RunResult>({
+      assigned: 'standard',
+      providerFor: (t) => (t === 'standard' ? standard : undefined),
+      unavailableTiers: map,
+      isTransportFailure,
+      makeSyntheticFailure: makeSynthetic,
+      call: (p) => p.run('test', {}),
+    });
+    expect(result.bothUnavailable).toBe(false);
+    expect(result.fallbackSeparationRespected).toBeUndefined();
+    expect(result.assignedIdentity).toBeUndefined();
+    expect(result.usedIdentity).toBeUndefined();
   });
 });

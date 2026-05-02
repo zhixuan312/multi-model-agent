@@ -18,12 +18,14 @@ export interface SharedResultUsage {
   outputTokens: number;
   totalTokens: number;
   costUSD: number | null;
-  savedCostUSD: number | null;
+  costDeltaVsParentUSD: number | null;
+  cachedTokens: number | null;
+  reasoningTokens: number | null;
 }
 
 export interface ReviewedRunResultFields {
   workerStatus: 'done' | 'done_with_concerns' | 'review_loop_aborted' | 'failed';
-  terminationReason?: 'round_cap' | 'cost_ceiling' | 'all_tiers_unavailable';
+  terminationReason?: 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable';
   reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>;
   error?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
@@ -35,7 +37,9 @@ function usageShape(u: SharedResultUsage): TokenUsage {
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD: u.costUSD,
-    savedCostUSD: u.savedCostUSD,
+    costDeltaVsParentUSD: u.costDeltaVsParentUSD,
+    cachedTokens: u.cachedTokens,
+    reasoningTokens: u.reasoningTokens,
   };
 }
 
@@ -166,6 +170,37 @@ export function buildMaxTurnsExitResult(args: {
     escalationLog: [],
     verification: DEFAULT_VERIFICATION,
     ...(reason !== undefined && { error: reason }),
+    durationMs,
+  };
+}
+
+export function buildTimeCeilingResult(args: {
+  usage: SharedResultUsage;
+  turns: number;
+  tracker: FileTracker;
+  scratchpad: TextScratchpad;
+  wallClockMs: number;
+  timeoutMs: number | undefined;
+  durationMs: number;
+}): RunResult {
+  const { usage, turns, tracker, scratchpad, wallClockMs, timeoutMs, durationMs } = args;
+  const hasSalvage = !scratchpad.isEmpty();
+  const diagnostic = `Time ceiling reached (${wallClockMs}ms >= 0.8 × ${timeoutMs ?? '?'}ms).`;
+  return {
+    output: hasSalvage ? scratchpad.latest() : diagnostic,
+    status: 'incomplete',
+    usage: usageShape(usage),
+    turns,
+    filesRead: tracker.getReads(),
+    directoriesListed: tracker.getDirectoriesListed(),
+    filesWritten: tracker.getWrites(),
+    toolCalls: tracker.getToolCalls(),
+    outputIsDiagnostic: !hasSalvage,
+    escalationLog: [],
+    verification: DEFAULT_VERIFICATION,
+    errorCode: 'time_ceiling',
+    terminationReason: { cause: 'time_ceiling', turnsUsed: turns, hasFileArtifacts: tracker.getWrites().length > 0, usedShell: tracker.getToolCalls().some(c => c.startsWith('shell')), workerSelfAssessment: null, wasPromoted: false, wallClockMs },
+    capExhausted: 'wall_clock',
     durationMs,
   };
 }
