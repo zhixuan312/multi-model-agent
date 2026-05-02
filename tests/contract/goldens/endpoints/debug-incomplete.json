@@ -38,7 +38,7 @@
         "workerSelfAssessment": null,
         "wasPromoted": false
       },
-      "errorCode": "incomplete",
+      "errorCode": "incomplete_no_summary",
       "retryable": false,
       "workerStatus": "done",
       "concerns": [],

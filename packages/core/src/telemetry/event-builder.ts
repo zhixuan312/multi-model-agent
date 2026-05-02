@@ -3,7 +3,7 @@ import type { RunResult, RawStageStats } from '../types.js';
 import { computeCostDeltaVsParentUSD } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import type { TaskCompletedEventType, StageEntryType, ConcernCategoryType } from './types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType } from './types.js';
 import { deriveTerminalStatus } from '../run-tasks/derive-terminal-status.js';
 import {
   clampStageCost,
@@ -304,8 +304,26 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
 
+const VALID_ERROR_CODES: ReadonlySet<string> = new Set(ErrorCode.options);
+
 function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
-  if (rr.structuredError?.code) return rr.structuredError.code as any;
+  // structuredError.code is the most authoritative signal — the lifecycle
+  // sets it for specific failure modes. Map values not in the telemetry
+  // ErrorCode enum: api_aborted → api_error, timeout → dropped (no enum
+  // member; timeout is surfaced via terminalStatus).
+  if (rr.structuredError?.code) {
+    const code = rr.structuredError.code;
+    if (code === 'api_aborted') return 'api_error';
+    if (VALID_ERROR_CODES.has(code)) return code as TaskCompletedEventType['errorCode'];
+    return null;
+  }
+  // rr.errorCode carries intentional error codes set by the lifecycle
+  // (e.g., 'incomplete_no_summary'). Status-level fallbacks from the
+  // delegation layer (e.g., 'incomplete', 'error', 'timeout') are NOT
+  // valid telemetry error codes and are dropped here.
+  if (rr.errorCode && VALID_ERROR_CODES.has(rr.errorCode)) {
+    return rr.errorCode as TaskCompletedEventType['errorCode'];
+  }
   const tr = rr.terminationReason;
   if (tr && typeof tr === 'object') {
     switch (tr.cause) {

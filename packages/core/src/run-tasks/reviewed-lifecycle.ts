@@ -1301,7 +1301,7 @@ export async function executeReviewedLifecycle(
       return __recordOnce(adaptForAllTiersUnavailable(initialImpl.result, 'spec', 0, resolvedModel, initialImpl.salvageResult));
     }
 
-    const implResult = initialImpl.result;
+    let implResult = initialImpl.result;
     latestAttemptedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     lastNonRejectedImpl = { tier: initialImpl.usedTier as AgentType, result: implResult };
     implementerHistory.push(initialImpl.usedTier as AgentType);
@@ -1319,8 +1319,29 @@ export async function executeReviewedLifecycle(
     });
     specAttemptIndex = 1;
 
-    const implReport = implResult.status === 'ok' ? parseStructuredReport(implResult.output) : undefined;
+    const implReport = parseStructuredReport(implResult.output);
     const workerStatus = extractWorkerStatus(implReport);
+    // Item 9: surface silent-incomplete via errorCode — the delegation layer
+    // cascades result.status as a fallback errorCode (e.g., 'incomplete'),
+    // which is not an informative error code. Replace it when the runner
+    // produced no parseable summary — the operator can now filter on
+    // 'incomplete_no_summary' instead of guessing.
+    //
+    // parseStructuredReport always returns a report object and has a
+    // last-resort fallback that treats the first paragraph as an implicit
+    // summary, so implReport.summary alone is not a reliable signal. Treat
+    // the run as having a structured summary only when a real ## Summary
+    // section exists and parses to non-placeholder content.
+    const hasSummaryHeader = /\n##\s+summary\s*\n/i.test(implResult.output) || /^##\s+summary\s*\n/im.test(implResult.output);
+    const summaryText = (hasSummaryHeader ? implReport.summary : null)?.trim().toLowerCase() ?? '';
+    const hasStructuredSummary = hasSummaryHeader && summaryText !== ''
+      && !['none', '(none)', 'n/a', 'na', 'todo', 'tbd'].includes(summaryText);
+    if (implResult.status === 'incomplete' && !hasStructuredSummary) {
+      const cascadedFallback = implResult.errorCode === implResult.status;
+      if (!implResult.errorCode || cascadedFallback) {
+        implResult = { ...implResult, errorCode: 'incomplete_no_summary' };
+      }
+    }
 
     if (implResult.status === 'ok' && isArtifactProducing) {
       await captureCommitsAfterImplementation(implResult, implReport, baselineHead);

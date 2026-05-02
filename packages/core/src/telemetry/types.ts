@@ -54,6 +54,7 @@ export const ErrorCode = z.enum([
   'api_error',
   'network_error',
   'rate_limit_exceeded',
+  'incomplete_no_summary',
   'other',
 ]);
 
