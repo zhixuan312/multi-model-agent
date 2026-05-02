@@ -54,6 +54,7 @@ digraph picker {
 | `mma-verify` | Verify work against a checklist (one item per worker, parallel) |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
+| `mma-explore` | Divergent ideation from codebase + web research — use before `superpowers:brainstorming` |
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous batch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
