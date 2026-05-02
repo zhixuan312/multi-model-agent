@@ -122,23 +122,32 @@ export class Flusher {
       let batch: ReadBatchResult = await this.#queue.readBatch(MAX_BATCH);
       if (batch.records.length === 0) return;
 
-      // Step 1a: drop any legacy-schema prefix at the head. Records with
-      // schemaVersion < SCHEMA_VERSION used a different wrapper shape that
-      // the current backend rejects with 401 — non-droppable in our 204/400/413
-      // ack contract, so they would permanently block the queue head.
-      let legacyHead = 0;
+      // Single identity snapshot per flush — threaded into both head-truncation and uploadBatch.
+      const identity = getOrCreateIdentity(this.#dir);
+
+      // A record at the head cannot be sent if EITHER its schemaVersion is below
+      // SCHEMA_VERSION OR its installId does not match the current identity. In both
+      // cases the record is permanently un-authenticatable; retrying the same signed
+      // payload always fails. Drop the contiguous head-prefix locally, then re-read
+      // so subsequent meta byteOffsets reflect the post-truncate file layout.
+      let unflushableHead = 0;
       while (
-        legacyHead < batch.records.length &&
-        batch.records[legacyHead].schemaVersion < SCHEMA_VERSION
+        unflushableHead < batch.records.length &&
+        (
+          batch.records[unflushableHead].schemaVersion < SCHEMA_VERSION ||
+          batch.records[unflushableHead].installId !== identity.installId
+        )
       ) {
-        legacyHead++;
+        unflushableHead++;
       }
-      if (legacyHead > 0) {
-        await this.#queue.truncate(batch.meta.slice(0, legacyHead));
-        this.#dropped += legacyHead;
-        // Re-read so subsequent meta byteOffsets reflect the post-truncate file layout.
+      if (unflushableHead > 0) {
+        await this.#queue.truncate(batch.meta.slice(0, unflushableHead));
+        this.#dropped += unflushableHead;
         batch = await this.#queue.readBatch(MAX_BATCH);
-        if (batch.records.length === 0) return;
+        if (batch.records.length === 0) {
+          this.clearBackoff();   // see Edit C
+          return;
+        }
       }
 
       const genSnapshot = readGeneration(this.#dir);
@@ -178,7 +187,7 @@ export class Flusher {
 
         if (signal.aborted) break;
 
-        const result = await this.#uploadBatch(group, signal);
+        const result = await this.#uploadBatch(group, signal, identity);
 
         if (result.status === '204' || result.status === '400' || result.status === '413') {
           acknowledgedCount += group.records.length;
@@ -218,6 +227,7 @@ export class Flusher {
   async #uploadBatch(
     group: { records: ReadBatchResult['records']; meta: ReadBatchResult['meta'] },
     signal: AbortSignal,
+    identity: ReturnType<typeof getOrCreateIdentity>,
   ): Promise<UploadResult> {
     const first = group.records[0];
     const events = group.records.flatMap(r => r.events);
@@ -229,7 +239,6 @@ export class Flusher {
       nodeMajor: first.nodeMajor,
       events,
     });
-    const identity = getOrCreateIdentity(this.#dir);
     const signature = sign(identity.privateKeyPkcs8, jsonBody);
     const body = gzipSync(Buffer.from(jsonBody, 'utf8'));
 
