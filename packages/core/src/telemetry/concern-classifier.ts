@@ -6,7 +6,7 @@ export type ConcernCategory =
 
 interface RawConcern {
   source:   string; // 'spec_review' | 'quality_review' | 'diff_review' | …
-  severity: string; // 'critical' | 'major' | 'minor' | …
+  severity: string; // 'critical' | 'high' | 'medium' | 'low' (4-tier SeverityBin)
   message:  string;
 }
 
