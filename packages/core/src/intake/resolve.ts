@@ -51,7 +51,6 @@ export function resolveDraft(
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     briefQualityPolicy: 'off',
-    cwd: process.cwd(),
     skipCompletionHeuristic: draft.skipCompletionHeuristic,
   };
 }

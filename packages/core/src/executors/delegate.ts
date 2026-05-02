@@ -58,14 +58,18 @@ export async function executeDelegate(
   }
   let results: RunResult[] = [];
   const readySpecs = intakeResult.ready.map(r => r.task);
-  const batchId = batchCache.remember(ctx.batchId, readySpecs.length > 0 ? readySpecs : (input.tasks as TaskSpec[]));
+  // Inject harness-level defaults (cwd, timeoutMs, maxCostUSD, etc.) so the
+  // response envelope's `tasks` field reflects what was actually executed —
+  // not the pre-inject intake output. Otherwise goldens that pin cwd/timeout
+  // mismatch the response.
+  const resolvedReadySpecs = readySpecs.length > 0 ? injectDefaults(readySpecs) : readySpecs;
+  const batchId = batchCache.remember(ctx.batchId, resolvedReadySpecs.length > 0 ? resolvedReadySpecs : (input.tasks as TaskSpec[]));
 
   const batchStartMs = Date.now();
   let batchAborted = false;
   try {
-    if (readySpecs.length > 0) {
-      const resolvedTasks = injectDefaults(readySpecs);
-      results = await runTasksImpl(resolvedTasks, config, {
+    if (resolvedReadySpecs.length > 0) {
+      results = await runTasksImpl(resolvedReadySpecs, config, {
         onProgress,
         runtime: { contextBlockStore },
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
@@ -139,7 +143,7 @@ export async function executeDelegate(
       ? notApplicable('clarification proposed but interpretation unavailable')
       : notApplicable('batch not awaiting clarification'),
     batchId,
-    tasks: readySpecs,
+    tasks: resolvedReadySpecs,
     wallClockMs,
     parentModel,
     ...(clarificationId !== undefined && { clarificationId }),

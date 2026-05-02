@@ -1254,7 +1254,7 @@ export async function executeReviewedLifecycle(
         isTransportFailure: (r) => isReviewTransportFailure(r),
         getStatus: (r) => (r as { status?: RunStatus }).status,
         makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-        call: (provider) => runDiffReview({ cwd, diff: evidence.fullDiff, diffTruncated: evidence.diffTruncated, verification, worker: { call: (prompt: string, opts?: { abortSignal?: AbortSignal; timeoutMs?: number }) => provider.run(prompt, { abortSignal: opts?.abortSignal, timeoutMs: opts?.timeoutMs }) }, taskDeadlineMs, abortSignal: stallController.signal }),
+        call: (provider) => runDiffReview({ cwd, diff: evidence.fullDiff, diffTruncated: evidence.diffTruncated, verification, worker: { call: (prompt: string, opts?: { cwd?: string; abortSignal?: AbortSignal; timeoutMs?: number }) => provider.run(prompt, { cwd: opts?.cwd ?? cwd, abortSignal: opts?.abortSignal, timeoutMs: opts?.timeoutMs }) }, taskDeadlineMs, abortSignal: stallController.signal }),
       });
       if (diffCall.fallbackFired) {
         emitFallback({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'diff', attempt: 0, role: 'diffReviewer', assignedTier: diffReviewerTier, usedTier: diffCall.usedTier as AgentType, reason: diffCall.fallbackReason!, triggeringStatus: diffCall.fallbackTriggeringStatus, violatesSeparation: diffCall.usedTier === implementerHistory[implementerHistory.length - 1] });
@@ -1328,7 +1328,7 @@ export async function executeReviewedLifecycle(
       isTransportFailure: (r) => isReviewTransportFailure(r),
       getStatus: (r) => (r as { status?: RunStatus }).status,
       makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-      call: (provider) => runSpecReview(provider, packet, effectiveImplReport, fileContents, implResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress),
+      call: (provider) => runSpecReview(provider, packet, effectiveImplReport, fileContents, implResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd),
     });
     specReviewDurationMs += Date.now() - initialSpecReviewIterStart;
     if (initialSpecReview.bothUnavailable) {
@@ -1385,7 +1385,7 @@ export async function executeReviewedLifecycle(
       commitReworkStage(stats, 'spec_rework', specReworkAcc, implementerAgentInfo);
       transitionStage('spec_rework', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows }, null);
       const reReviewIterStart = Date.now();
-      const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+      const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd) });
       specReviewDurationMs += Date.now() - reReviewIterStart;
       if (reviewCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -1435,7 +1435,7 @@ export async function executeReviewedLifecycle(
       qualityReviewT0 = Date.now();
       qualityReviewC0 = runningCostUSD();
       const initialQualityIterStart = Date.now();
-      const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+      const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd) });
       qualityReviewDurationMs += Date.now() - initialQualityIterStart;
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
@@ -1529,7 +1529,7 @@ export async function executeReviewedLifecycle(
           commitReworkStage(stats, 'quality_rework', qualityReworkAcc, implementerAgentInfo);
           transitionStage('quality_rework', 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows }, null);
           const qReReviewIterStart = Date.now();
-          const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress) });
+          const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), call: (provider) => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd) });
           qualityReviewDurationMs += Date.now() - qReReviewIterStart;
           if (reviewCall.bothUnavailable) {
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });

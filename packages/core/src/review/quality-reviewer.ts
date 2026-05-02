@@ -85,11 +85,12 @@ export async function runQualityReview(
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
   onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
+  cwd: string = process.cwd(),
 ): Promise<QualityReviewResult> {
   // Read-only annotation path: triggered when caller passed a prompt builder
   // (these are the per-route quality_only prompts in quality-only-prompts.ts).
   if (qualityReviewPromptBuilder && workerOutput !== undefined) {
-    return runAnnotationReview(reviewerProvider, packet, workerOutput, qualityReviewPromptBuilder, taskDeadlineMs, abortSignal, onProgress);
+    return runAnnotationReview(reviewerProvider, packet, workerOutput, qualityReviewPromptBuilder, cwd, taskDeadlineMs, abortSignal, onProgress);
   }
 
   // Artifact-route gating path: unchanged from prior behavior.
@@ -105,7 +106,7 @@ export async function runQualityReview(
   let result;
   try {
     result = await delegateWithEscalation(
-      { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
+      { prompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
       { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
@@ -127,7 +128,7 @@ export async function runQualityReview(
       const retryResult = await delegateWithEscalation(
         {
           prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
-          agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000,
+          cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000,
         },
         [reviewerProvider],
         { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
@@ -158,6 +159,7 @@ async function runAnnotationReview(
   packet: { prompt: string; scope: string[]; doneCondition: string },
   workerOutput: string,
   qualityReviewPromptBuilder: (ctx: { workerOutput: string; brief: string }) => string,
+  cwd: string,
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
   onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
@@ -218,7 +220,7 @@ async function runAnnotationReview(
     let result;
     try {
       result = await delegateWithEscalation(
-        { prompt, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
+        { prompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
         [reviewerProvider],
         { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
       );
