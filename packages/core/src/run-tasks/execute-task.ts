@@ -18,6 +18,7 @@ export function errorResult(error: string): RunResult {
     toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [],
+    parsedFindings: null,
     error,
   };
 }

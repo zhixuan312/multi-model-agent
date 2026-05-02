@@ -556,7 +556,7 @@ describe('runClaude', () => {
       await runClaude('prompt', {}, cfg, defaults);
 
       const captured = capturedOptions[0] as { options?: { env?: Record<string, string> } };
-      expect(captured.options?.env).toEqual({
+      expect(captured.options?.env).toMatchObject({
         ANTHROPIC_BASE_URL: 'https://api.deepseek.com/anthropic',
         ANTHROPIC_AUTH_TOKEN: 'sk-test-inline',
       });

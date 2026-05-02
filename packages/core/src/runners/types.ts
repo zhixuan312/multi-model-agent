@@ -88,6 +88,9 @@ export interface RunOptions {
    *  returns a `timeout` result via the same path as the per-call timeout.
    *  Used by the orchestrator's stall watchdog. */
   abortSignal?: AbortSignal
+  /** Run mode: 'standard' for normal execution, 'review' for typed
+   *  structured output review via Agent.outputType. Default 'standard'. */
+  runMode?: 'standard' | 'review'
 }
 
 /** Runtime dependencies for `runTasks`. */

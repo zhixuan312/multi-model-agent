@@ -237,6 +237,7 @@ export async function runClaude(
       toolCalls: tracker.getToolCalls(),
       outputIsDiagnostic: true,
       escalationLog: [],
+      parsedFindings: null,
       durationMs: Date.now() - taskStartMs,
     };
   }
@@ -283,11 +284,14 @@ export async function runClaude(
     }
   }
 
-  // `claude-compatible` agents target an Anthropic-format endpoint hosted by
-  // a third party (e.g. DeepSeek's https://api.deepseek.com/anthropic). The
-  // agent SDK's `Options.env` merges on top of `process.env` per-invocation,
-  // so a claude-compatible agent pointed at DeepSeek does not leak into a
-  // sibling `claude` agent that uses the real Anthropic backend.
+  // `claude-compatible` agents target an Anthropic-format endpoint hosted by a
+  // third party (e.g. DeepSeek). claude-agent-sdk 0.2.113+ REPLACES process.env
+  // in the spawned subprocess with whatever is passed to Options.env (this is a
+  // breaking change from the pre-0.2.113 merge semantics). The `...process.env`
+  // spread below explicitly restores pre-0.2.113 inheritance for PATH, HOME,
+  // proxy vars, locale vars, etc., while the targeted overrides ensure a
+  // claude-compatible agent's endpoint and auth do not leak into a sibling
+  // `claude` agent on the same node.
   let resolvedAuthToken: string | undefined;
   let resolvedBaseUrl: string | undefined;
   if (providerConfig.type === 'claude-compatible') {
@@ -324,6 +328,7 @@ export async function runClaude(
     },
     ...(resolvedBaseUrl && resolvedAuthToken && {
       env: {
+        ...process.env,                            // critical: 0.2.113+ replaces process.env, so spread it explicitly
         ANTHROPIC_BASE_URL: resolvedBaseUrl,
         ANTHROPIC_AUTH_TOKEN: resolvedAuthToken,
       },
@@ -703,6 +708,7 @@ export async function runClaude(
         toolCalls: tracker.getToolCalls(),
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         error: msg || reason,
         durationMs: Date.now() - taskStartMs,
         ...(contextLimit && { errorCode: 'provider_context_limit' as const }),
@@ -762,6 +768,7 @@ export async function runClaude(
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         durationMs: Date.now() - taskStartMs,
       };
     },

@@ -20,7 +20,7 @@ import * as path from 'node:path';
 import * as fs from 'node:fs';
 import * as os from 'node:os';
 import { fileURLToPath } from 'node:url';
-import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, ShutdownCause } from '@zhixuan92/multi-model-agent-core';
 import { collectInlineApiKeyOffenders, loadAuthToken } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '../http/server.js';
 import { createRecorder } from '../telemetry/recorder.js';
@@ -141,6 +141,10 @@ let stopInFlight = false;
 // Stored so they can be removed when stop() is called programmatically
 let onSigterm: (() => void) | undefined;
 let onSigint: (() => void) | undefined;
+let onStdoutErrorRef: ((err: NodeJS.ErrnoException) => void) | undefined;
+let onStderrErrorRef: ((err: NodeJS.ErrnoException) => void) | undefined;
+let onUncaughtRef: ((err: unknown) => void) | undefined;
+let onUnhandledRejectionRef: ((reason: unknown) => void) | undefined;
 
 /**
  * Start the HTTP server with the given config.
@@ -169,6 +173,52 @@ export async function startServe(
   // Stripping to { server } here caused a 3.1.0 regression where tool
   // endpoints returned 503 'no_agent_config' even when agents were set.
   const running = await startServer(config as Parameters<typeof startServer>[0]);
+
+  // ── stdout/stderr error + uncaught/unhandled rejection guards ────────
+  const logShutdown = (_cause: ShutdownCause): void => {
+    // Option A: no diagnostics surface today. Cause name routed via stderr only.
+    // Option B (follow-up): wire running.diagnostics?.shutdown(_cause) here.
+  };
+
+  const onStdoutError = (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
+    logShutdown('stdout_other_error');
+    try { process.stderr.write(`[mmagent] stdout error: ${err.message}\n`); } catch { /* stderr may also be dead */ }
+    exit(1);
+  };
+  const onStderrError = (err: NodeJS.ErrnoException) => {
+    if (err.code === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
+    logShutdown('stdout_other_error');
+    exit(1);
+  };
+  const onUncaught = (err: unknown) => {
+    const errno = (err as NodeJS.ErrnoException | undefined)?.code;
+    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
+    logShutdown('uncaughtException');
+    try {
+      const msg = err instanceof Error ? (err.stack ?? err.message) : String(err);
+      process.stderr.write(`[mmagent] uncaught exception: ${msg}\n`);
+    } catch { /* best-effort */ }
+    exit(1);
+  };
+  const onUnhandledRejection = (reason: unknown) => {
+    const errno = (reason as NodeJS.ErrnoException | undefined)?.code;
+    if (errno === 'EPIPE') { logShutdown('stdout_epipe'); exit(0); }
+    logShutdown('unhandledRejection');
+    try {
+      const msg = reason instanceof Error ? (reason.stack ?? reason.message) : String(reason);
+      process.stderr.write(`[mmagent] unhandled rejection: ${msg}\n`);
+    } catch { /* best-effort */ }
+    exit(1);
+  };
+  process.stdout.on('error', onStdoutError);
+  process.stderr.on('error', onStderrError);
+  process.on('uncaughtException', onUncaught);
+  process.on('unhandledRejection', onUnhandledRejection);
+  onStdoutErrorRef = onStdoutError;
+  onStderrErrorRef = onStderrError;
+  onUncaughtRef = onUncaught;
+  onUnhandledRejectionRef = onUnhandledRejection;
 
   // ── Telemetry: consent re-confirmation + recorder ─────────────────────
   const homeDir = path.join(os.homedir(), '.multi-model');
@@ -314,6 +364,11 @@ export async function startServe(
       // programmatically (i.e. not via a signal).
       if (onSigterm) process.off('SIGTERM', onSigterm);
       if (onSigint) process.off('SIGINT', onSigint);
+      if (onStdoutErrorRef) process.stdout.off('error', onStdoutErrorRef);
+      if (onStderrErrorRef) process.stderr.off('error', onStderrErrorRef);
+      if (onUncaughtRef) process.off('uncaughtException', onUncaughtRef);
+      if (onUnhandledRejectionRef) process.off('unhandledRejection', onUnhandledRejectionRef);
+      onStdoutErrorRef = onStderrErrorRef = onUncaughtRef = onUnhandledRejectionRef = undefined;
       if (flusher) {
         await flusher.drain().catch(() => { /* best-effort */ });
       }

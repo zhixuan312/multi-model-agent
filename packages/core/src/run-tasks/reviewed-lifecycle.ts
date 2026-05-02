@@ -735,8 +735,46 @@ export async function executeReviewedLifecycle(
   // on the base result (set by callers via abortReviewLoop({ ...res, specReviewStatus, ... })).
   // Defaults to 'changes_required' for whichever loop tripped — that's the only state the
   // loop ever fires from, by construction.
-  function adaptForAllTiersUnavailable(base: RunResult, loop: 'spec' | 'quality', attempt: number): RunResult {
-    const ship = lastNonRejectedImpl?.result ?? base;
+  function adaptForAllTiersUnavailable(base: RunResult, loop: 'spec' | 'quality', attempt: number, resolvedModel: string, salvageSource: RunResult | null): RunResult {
+    const stageName = loop === 'spec' && attempt === 0 ? 'implementing'
+      : loop === 'spec' ? 'spec_rework'
+      : 'quality_rework';
+
+    // Promote salvage stage stats + metrics into the global stats map so R2.1
+    // (non-empty stages for 'incomplete') passes even when bothUnavailable
+    // short-circuits before endBaseStage runs at the call site.
+    if (salvageSource?.stageStats) {
+      for (const key of Object.keys(salvageSource.stageStats) as (keyof StageStatsMap)[]) {
+        const val = salvageSource.stageStats[key];
+        if (val) (stats as Record<string, unknown>)[key] = val;
+      }
+    }
+
+    const existing = (stats as Record<string, unknown>)[stageName] as { entered?: boolean; durationMs?: unknown; costUSD?: unknown } | undefined;
+    if (!existing?.entered) {
+      (stats as Record<string, unknown>)[stageName] = {
+        stage: stageName,
+        entered: true,
+        durationMs: existing?.durationMs ?? salvageSource?.durationMs ?? null,
+        costUSD: existing?.costUSD ?? salvageSource?.usage?.costUSD ?? null,
+        agentTier: implementerAgentInfo.tier,
+        modelFamily: modelFamily(implementerAgentInfo.model),
+        model: implementerAgentInfo.model,
+        maxIdleMs: null,
+        totalIdleMs: null,
+        activityEvents: null,
+        inputTokens: salvageSource?.usage?.inputTokens ?? null,
+        outputTokens: salvageSource?.usage?.outputTokens ?? null,
+        cachedTokens: salvageSource?.usage?.cachedTokens ?? null,
+        reasoningTokens: salvageSource?.usage?.reasoningTokens ?? null,
+        turnCount: salvageSource?.turns ?? null,
+        toolCallCount: (salvageSource?.toolCalls?.length) || null,
+        filesReadCount: (salvageSource?.filesRead?.length) || null,
+        filesWrittenCount: (salvageSource?.filesWritten?.length) || null,
+      };
+    }
+
+    const ship = salvageSource ?? lastNonRejectedImpl?.result ?? base;
     return {
       ...ship,
       status: 'incomplete',
@@ -749,6 +787,13 @@ export async function executeReviewedLifecycle(
         qualityReviewerHistory[qualityReviewerHistory.length - 1] ?? ((reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'not_applicable' : 'skipped'),
       ),
       stageStats: stats,
+      models: {
+        implementer: salvageSource?.models?.implementer
+          ?? (salvageSource?.stageStats?.[stageName] as { model?: string | null } | undefined)?.model
+          ?? resolvedModel,
+        specReviewer: ship.models?.specReviewer ?? null,
+        qualityReviewer: ship.models?.qualityReviewer ?? null,
+      },
     } as RunResult;
   }
 
@@ -872,6 +917,7 @@ export async function executeReviewedLifecycle(
       toolCalls: [],
       outputIsDiagnostic: true,
       escalationLog: [],
+      parsedFindings: null,
       error: workerError.message,
       errorCode: 'runner_crash',
       structuredError: { code: 'runner_crash', message: workerError.message },
@@ -1100,6 +1146,7 @@ export async function executeReviewedLifecycle(
           toolCalls: [],
           outputIsDiagnostic: true,
           escalationLog: [],
+          parsedFindings: null,
           error: `task.cwd ${cwd} had pre-existing modifications`,
           errorCode: 'dirty_worktree',
           commits,
@@ -1158,7 +1205,7 @@ export async function executeReviewedLifecycle(
         assignedTier: initialDecision.impl,
         reason: initialImpl.unavailableReason!,
       });
-      return __recordOnce(adaptForAllTiersUnavailable(initialImpl.result, 'spec', 0));
+      return __recordOnce(adaptForAllTiersUnavailable(initialImpl.result, 'spec', 0, resolvedModel, initialImpl.salvageResult));
     }
 
     const implResult = initialImpl.result;
@@ -1459,7 +1506,7 @@ export async function executeReviewedLifecycle(
       if (reworkCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
         if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
-        return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'spec', specAttemptIndex));
+        return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'spec', specAttemptIndex, resolvedModel, reworkCall.salvageResult));
       }
       finalImplResult = reworkCall.result;
       latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };
@@ -1608,7 +1655,7 @@ export async function executeReviewedLifecycle(
           if (reworkCall.bothUnavailable) {
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', assignedTier: decision.impl, reason: reworkCall.unavailableReason! });
             if (decision.isEscalated) emitEscalationUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'implementer', wantedTier: decision.impl, reason: reworkCall.unavailableReason! });
-            return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex));
+            return __recordOnce(adaptForAllTiersUnavailable(reworkCall.result, 'quality', qualityAttemptIndex, resolvedModel, reworkCall.salvageResult));
           }
           finalImplResult = reworkCall.result;
           latestAttemptedImpl = { tier: reworkCall.usedTier as AgentType, result: finalImplResult };

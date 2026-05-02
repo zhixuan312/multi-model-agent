@@ -179,6 +179,7 @@ export async function executeReview(
           usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
           turns: 0, filesRead: [], filesWritten: [], toolCalls: [],
           outputIsDiagnostic: false, escalationLog: [],
+          parsedFindings: null,
           error: msg, errorCode: 'executor_error', retryable: false,
           durationMs: 0,
           structuredError: { code: 'executor_error' as const, message: msg, where: 'executor:review' },

@@ -74,6 +74,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         toolCalls: [],
         outputIsDiagnostic: true,
         escalationLog: [],
+        parsedFindings: null,
         error: err instanceof Error ? err.message : String(err),
       };
     }

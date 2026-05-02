@@ -328,6 +328,7 @@ export async function runCodex(
       toolCalls: tracker.getToolCalls(),
       outputIsDiagnostic: true,
       escalationLog: [],
+      parsedFindings: null,
       durationMs: Date.now() - taskStartMs,
     };
   }
@@ -861,6 +862,7 @@ export async function runCodex(
         toolCalls: tracker.getToolCalls(),
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         error: detailed,
         durationMs: Date.now() - taskStartMs,
         ...(errorCode !== undefined && { errorCode }),
@@ -901,6 +903,7 @@ export async function runCodex(
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
+        parsedFindings: null,
         durationMs: Date.now() - taskStartMs,
       };
     },

@@ -87,6 +87,7 @@ export async function executeRetry(
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
+      parsedFindings: null,
       error: message,
       errorCode: 'executor_error',
       retryable: false,

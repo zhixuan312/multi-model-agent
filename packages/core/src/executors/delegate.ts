@@ -130,6 +130,7 @@ export async function executeDelegate(
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
+      parsedFindings: null,
       error: message,
       errorCode: 'executor_error',
       retryable: false,
