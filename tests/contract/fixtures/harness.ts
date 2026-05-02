@@ -31,7 +31,7 @@ import { writeFileSync } from 'node:fs';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from '@zhixuan92/multi-model-agent-core';
 import { startServer } from '@zhixuan92/multi-model-agent/server';
-import { __setTestProviderOverride } from '../../../packages/server/src/http/test-provider-override.js';
+
 import { freezeClock } from './deterministic-clock.js';
 
 export interface HarnessHandle {
@@ -76,7 +76,6 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   const standardProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/standard` } };
   const complexProvider = { ...opts.provider, config: { ...opts.provider.config, baseUrl: `${origBaseUrl}/complex` } };
   __setCoreTestProviderOverrideMap(new Map([['standard', standardProvider], ['complex', complexProvider]]));
-  __setTestProviderOverride(opts.provider);
 
   const token = randomUUID();
   const tokenPath = join(tmpdir(), `mmagent-test-token-${randomUUID()}`);
@@ -132,7 +131,6 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
       await server.stop();
       __setCoreTestProviderOverride(null);
       __setCoreTestProviderOverrideMap(null);
-      __setTestProviderOverride(null);
       await unlink(tokenPath).catch(() => undefined);
     },
   };
