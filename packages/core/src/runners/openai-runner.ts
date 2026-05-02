@@ -700,6 +700,8 @@ export async function runOpenAI(
           partial.inputTokens,
           partial.outputTokens,
           parentModel,
+          partial.cachedTokens,
+          partial.reasoningTokens,
         );
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
@@ -755,6 +757,8 @@ export async function runOpenAI(
         partial.inputTokens,
         partial.outputTokens,
         parentModel,
+        partial.cachedTokens,
+        partial.reasoningTokens,
       );
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
@@ -792,6 +796,8 @@ export async function runOpenAI(
         partial.inputTokens,
         partial.outputTokens,
         parentModel,
+        partial.cachedTokens,
+        partial.reasoningTokens,
       );
       return {
         output: hasSalvage
@@ -855,16 +861,16 @@ function extractCanonicalTokens(usage: {
   };
 }
 
-function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
+export function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
   const u = currentResult.state.usage;
-  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig);
   const { cachedTokens, reasoningTokens } = extractCanonicalTokens(u);
+  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0);
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel, cachedTokens, reasoningTokens),
     cachedTokens,
     reasoningTokens,
   };
@@ -967,7 +973,7 @@ function partialUsage(
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
-    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0),
     costDeltaVsParentUSD: null,
     cachedTokens,
     reasoningTokens,

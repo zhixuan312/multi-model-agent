@@ -216,8 +216,8 @@ export async function runClaude(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -436,14 +436,14 @@ export async function runClaude(
 
           const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
           if (timeCeilingMs !== null) {
-            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
             completedResult = sharedBuildTimeCeilingResult({
               usage: {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 totalTokens: usage.inputTokens + usage.outputTokens,
                 costUSD: finalCostUSD,
-                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel),
+                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
                 cachedTokens: usage.cachedTokens,
                 reasoningTokens: null,
               },
@@ -716,8 +716,8 @@ export async function runClaude(
       const contextLimit = isContextLimit(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -776,8 +776,8 @@ export async function runClaude(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
@@ -828,20 +828,22 @@ function effectiveClaudeCost(
   inputTokens: number,
   outputTokens: number,
   sdkCost: number | null,
+  cachedTokens = 0,
+  reasoningTokens = 0,
 ): number | null {
-  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig, cachedTokens, reasoningTokens);
   return computed ?? sdkCost;
 }
 
 function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
   const { providerConfig, sdkCostUSD, usage, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD);
+  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.inputTokens + usage.outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
     cachedTokens: usage.cachedTokens,
     reasoningTokens: usage.reasoningTokens,
   };

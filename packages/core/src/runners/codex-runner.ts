@@ -307,8 +307,8 @@ export async function runCodex(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD ?? 0, usage.inputTokens, usage.outputTokens, parentModel);
+    const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD ?? 0, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -492,8 +492,8 @@ export async function runCodex(
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               totalTokens: usage.inputTokens + usage.outputTokens,
-              costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
-              costDeltaVsParentUSD: computeCostDeltaVsParentUSD(computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig) ?? 0, usage.inputTokens, usage.outputTokens, parentModel),
+              costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0),
+              costDeltaVsParentUSD: computeCostDeltaVsParentUSD(computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0) ?? 0, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
               cachedTokens: usage.cachedTokens,
               reasoningTokens: usage.reasoningTokens,
             },
@@ -867,8 +867,8 @@ export async function runCodex(
       // error string, losing 30k+ tokens of work on abort.
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
@@ -905,8 +905,8 @@ export async function runCodex(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
@@ -959,13 +959,13 @@ interface CodexResultCommonArgs {
 
 function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
   const { providerConfig, inputTokens, outputTokens, cachedTokens, reasoningTokens, parentModel } = args;
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0);
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel, cachedTokens, reasoningTokens),
     cachedTokens,
     reasoningTokens,
   };
