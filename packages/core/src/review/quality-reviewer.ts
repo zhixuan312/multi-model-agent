@@ -4,10 +4,10 @@ import { buildQualityReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import type { AnnotatedFinding } from '../executors/_shared/findings-schema.js';
-import { parseReviewerFindings } from './parse-reviewer-findings.js';
+import { parseReviewerFindings, type ParseReviewerFindingsResult } from './parse-reviewer-findings.js';
 import { fallbackExtractFindings } from './fallback-extraction.js';
 
-export { parseReviewerFindings } from './parse-reviewer-findings.js';
+export { parseReviewerFindings, type ParseReviewerFindingsResult } from './parse-reviewer-findings.js';
 export { fallbackExtractFindings } from './fallback-extraction.js';
 
 /**
@@ -176,7 +176,13 @@ async function runAnnotationReview(
     return { status: attempt1.status, findings: [], errorReason: attempt1.errorReason, metrics: attempt1.metrics };
   }
   metrics = addMetrics(metrics, attempt1.metrics);
-  const parsed1 = parseReviewerFindings(attempt1.output, workerOutput);
+
+  let parsed1: ParseReviewerFindingsResult;
+  if (attempt1.parsedFindings !== null) {
+    parsed1 = { ok: true, findings: attempt1.parsedFindings, ungroundedCount: attempt1.parsedFindings.filter(f => !f.evidenceGrounded).length };
+  } else {
+    parsed1 = parseReviewerFindings(attempt1.output, workerOutput);
+  }
   if (parsed1.ok) {
     return successResult(parsed1.findings, metrics);
   }
@@ -192,7 +198,13 @@ async function runAnnotationReview(
     return { status: attempt2.status, findings: [], errorReason: attempt2.errorReason, metrics };
   }
   metrics = addMetrics(metrics, attempt2.metrics);
-  const parsed2 = parseReviewerFindings(attempt2.output, workerOutput);
+
+  let parsed2: ParseReviewerFindingsResult;
+  if (attempt2.parsedFindings !== null) {
+    parsed2 = { ok: true, findings: attempt2.parsedFindings, ungroundedCount: attempt2.parsedFindings.filter(f => !f.evidenceGrounded).length };
+  } else {
+    parsed2 = parseReviewerFindings(attempt2.output, workerOutput);
+  }
   if (parsed2.ok) {
     return successResult(parsed2.findings, metrics);
   }
@@ -213,7 +225,15 @@ async function runAnnotationReview(
     };
   }
 
-  type CallOk = { kind: 'ok'; output: string; metrics: QualityReviewMetrics };
+  type CallOk = {
+    kind: 'ok';
+    output: string;
+    metrics: QualityReviewMetrics;
+    /** Threaded through from RunResult.parsedFindings. Non-null only on OpenAI
+     *  review-mode runs (Edit G2). Null on Claude/Codex (which still use
+     *  parseReviewerFindings). */
+    parsedFindings: AnnotatedFinding[] | null;
+  };
   type CallTransport = { kind: 'transport'; status: 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted'; errorReason: string; metrics: QualityReviewMetrics };
 
   async function callReviewer(prompt: string): Promise<CallOk | CallTransport> {
@@ -234,6 +254,6 @@ async function runAnnotationReview(
       }
       return { kind: 'transport', status: 'error', errorReason: `review agent returned status: ${result.status}`, metrics: m };
     }
-    return { kind: 'ok', output: result.output, metrics: m };
+    return { kind: 'ok', output: result.output, metrics: m, parsedFindings: result.parsedFindings };
   }
 }
