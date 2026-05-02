@@ -1198,17 +1198,25 @@ export async function executeReviewedLifecycle(
     const headMoved = headNow !== baselineHead;
     const treeDirty = porcelain.length > 0;
     if (!headMoved && !treeDirty) return;
+
+    // Emit committing stage for both worker-committed (headMoved) and
+    // pending-commit (treeDirty) paths. Workers that auto-commit during
+    // turns leave a clean tree but moved HEAD — they must still produce
+    // a committing stage so telemetry includes filesCommittedCount.
+    transitionStage('verifying', 'committing', { stage: 'committing', stageIndex: 7 }, null);
+    const commitT0 = Date.now();
+    const commitC0 = runningCostUSD();
+
     if (headMoved) await recordWorkerCommits(baselineHead, 'HEAD');
     if (treeDirty) {
       const validCommit = implReport?.commit ?? await repairCommitMetadata(implReport?.commitDiagnostic ?? 'no commit block emitted');
-      if (!validCommit) return;
-      transitionStage('verifying', 'committing', { stage: 'committing', stageIndex: 7 }, null);
-      const commitT0 = Date.now();
-      const commitC0 = runningCostUSD();
-      const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
-      commits.push(c);
-      endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle));
+      if (validCommit) {
+        const c = await runCommitStage({ cwd, filesWritten: implResult.filesWritten, commit: validCommit });
+        commits.push(c);
+      }
     }
+
+    endBaseStage(stats, 'committing', commitT0, commitC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle));
   }
 
   // Tracks the final RunResult across every exit path so the `finally` block
