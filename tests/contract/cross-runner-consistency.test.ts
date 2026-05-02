@@ -8,6 +8,34 @@
  * Each helper function (`runFixture*`) mocks the relevant SDK and invokes
  * the production runner function so the test runs against the real runner
  * implementation — not a reduced mock Provider.
+ *
+ * ## Plan-adaptation notes (§11 pseudocode → real types)
+ *
+ * The §11 plan sketch was written before the full runner event surface was
+ * finalized. Three adaptations were required to match real types:
+ *
+ * 1. `e.event` → `e.kind`: InternalRunnerEvent uses `kind` as its
+ *    discriminator, not `event`. The plan's `e.event` naming matches the
+ *    diagnostics/telemetry event layer, which is not available at the
+ *    individual-runner level.
+ *
+ * 2. `c.path?.startsWith('/')` → `c.startsWith('/')`: RunResult.toolCalls is
+ *    `string[]`, so each element is a plain string, not an object with a
+ *    `.path` property.
+ *
+ * 3. `e.event?.startsWith('watchdog')` → `e.kind === 'injection' && ...`:
+ *    Watchdog-related events in the runner stream are `injection`-kind events
+ *    with `injectionType` of `watchdog_warning` or `watchdog_force_salvage`.
+ *    There is no top-level `watchdog_*` event kind.
+ *
+ * 4. Test 4 (`task_completed` with `stages`): InternalRunnerEvent does not
+ *    include a `task_completed` kind or a `stages` array. Those live in the
+ *    diagnostics/telemetry layer (`TaskCompletedLocalEvent`), emitted by the
+ *    orchestrator (`executeReviewedLifecycle`), not by individual runner
+ *    functions. The test uses `turn_complete` — the runner-level completion
+ *    event — as the closest analogue, and checks its field-shape across
+ *    runners to assert the same structural-consistency invariant at the
+ *    runner event layer.
  */
 
 import { describe, expect, it } from 'vitest';
@@ -352,13 +380,24 @@ describe('cross-runner consistency', () => {
 
   // -----------------------------------------------------------------------
   // 4. Per-stage telemetry field shape
+  //
+  // Note: the §11 plan pseudocode references `task_completed` with a
+  // `stages` array containing an `implementing` stage. InternalRunnerEvent
+  // does NOT include those — `task_completed` with `stages` lives in the
+  // diagnostics layer (TaskCompletedLocalEvent) emitted by the orchestrator
+  // (`executeReviewedLifecycle`), not by individual runner functions.
+  //
+  // This test uses `turn_complete` — the runner-level completion event that
+  // IS part of InternalRunnerEvent — as the structural-consistency anchor.
+  // Comparing its field-shape across runners asserts the same invariant
+  // (uniform event structure) at the runner-event layer. Per-stage telemetry
+  // shape is validated at the orchestrator level by the V3 envelope contract
+  // tests (tests/contract/telemetry/v3-envelope.test.ts).
   // -----------------------------------------------------------------------
 
   it('per-stage telemetry has the same field shape across runners', async () => {
     const shapes = await Promise.all(RUNNERS.map(async r => {
       const events = await runFixtureWithCapture(r);
-      // Pick the canonical turn_complete event (always emitted; carries
-      // cumulative usage). Every runner emits this for every turn.
       const turnComplete = events.find(e => e.kind === 'turn_complete');
       expect(turnComplete, `runner ${r} did not emit turn_complete`).toBeDefined();
       return Object.keys(turnComplete!).sort();
