@@ -254,6 +254,6 @@ async function runAnnotationReview(
       }
       return { kind: 'transport', status: 'error', errorReason: `review agent returned status: ${result.status}`, metrics: m };
     }
-    return { kind: 'ok', output: result.output, metrics: m, parsedFindings: result.parsedFindings };
+    return { kind: 'ok', output: result.output, metrics: m, parsedFindings: result.parsedFindings ?? null };
   }
 }

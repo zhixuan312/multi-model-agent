@@ -750,7 +750,7 @@ export async function executeReviewedLifecycle(
       }
     }
 
-    const existing = (stats as Record<string, unknown>)[stageName] as { entered?: boolean } | undefined;
+    const existing = (stats as Record<string, unknown>)[stageName] as { entered?: boolean; durationMs?: unknown; costUSD?: unknown } | undefined;
     if (!existing?.entered) {
       (stats as Record<string, unknown>)[stageName] = {
         stage: stageName,
