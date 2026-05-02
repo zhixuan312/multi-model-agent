@@ -5,10 +5,14 @@ import { vi, beforeEach, afterEach } from 'vitest';
 //
 // When runMode='review', the runner sets Agent.outputType = reviewerOutputType
 // (a Zod schema). The @openai/agents SDK then returns the parsed structured
-// output as finalOutput. This test verifies that:
-//   1. All four severity levels round-trip correctly into parsedFindings.
-//   2. evidenceGrounded is annotated on each finding.
-//   3. The legacy parseReviewerFindings (JSON-block path) is never invoked.
+// output as finalOutput — a PLAIN object { findings: [...] }, not a string.
+// This test verifies:
+//   1. The runner safely handles non-string finalOutput in review mode by
+//      extracting validation text from newItems instead of calling string
+//      methods on the structured object.
+//   2. All four severity levels round-trip correctly into parsedFindings.
+//   3. evidenceGrounded is annotated on each finding.
+//   4. The legacy parseReviewerFindings (JSON-block path) is never invoked.
 // ---------------------------------------------------------------------------
 
 // Spy on parseReviewerFindings BEFORE the runner module is loaded, so we can
@@ -93,6 +97,8 @@ const findingsPayload = {
  * Simulated worker output text. This is the implementer's narrative that the
  * reviewer findings reference via the `evidence` field. It must be >= 200
  * chars so validateCompletion passes the minimum-length heuristic.
+ *
+ * Every evidence string from the payload above appears verbatim in this text.
  */
 const WORKER_OUTPUT = `
 Security audit of the authentication module revealed several issues.
@@ -118,42 +124,21 @@ before the next release. The SQL injection finding is critical and should be fix
 immediately as it is remotely exploitable without authentication.
 `.trim();
 
-// The combined payload object — what the SDK would return from processFinalOutput.
-//
-// With outputType set, the @openai/agents SDK returns the parsed structured
-// object as finalOutput. The runner's supervision loop calls
-// stripThinkingTags(finalOutput) which calls .replace() / .trimStart() on
-// it — those need to return the raw worker output text so
-// validateSubAgentOutput passes the completion heuristic.
-//
-// We attach replace/trimStart as non-enumerable so Zod's .strict() check
-// (which uses Object.keys) doesn't reject them as extra keys.
-const finalOutputValue: { findings: typeof findingsPayload.findings } = {
-  findings: findingsPayload.findings,
-} as unknown as { findings: typeof findingsPayload.findings };
-
-Object.defineProperty(finalOutputValue, 'replace', {
-  value: (pattern: string | RegExp, replacement: string) =>
-    WORKER_OUTPUT.replace(pattern, replacement),
-  enumerable: false,
-  writable: true,
-  configurable: true,
-});
-Object.defineProperty(finalOutputValue, 'trimStart', {
-  value: () => WORKER_OUTPUT.trimStart(),
-  enumerable: false,
-  writable: true,
-  configurable: true,
-});
-
 /**
- * Build a mock @openai/agents RunResult whose finalOutput is the structured
- * findings payload AND whose newItems contain the worker output text so the
- * scratchpad / supervision loop gets a valid text emission.
+ * Build a mock @openai/agents RunResult for review mode.
+ *
+ * finalOutput is a PLAIN structured object { findings: [...] } — exactly what
+ * the SDK returns when Agent.outputType is set. It has NO string methods
+ * (.replace, .trimStart, etc). The runner MUST extract validation text from
+ * newItems instead of calling string methods on finalOutput.
+ *
+ * newItems contains the worker's narrative output (the implementer's text
+ * that findings reference via evidence). validateSubAgentOutput and
+ * evidenceIsGrounded both consume this text.
  */
 function makeMockReviewResult() {
   return {
-    finalOutput: finalOutputValue,
+    finalOutput: { findings: findingsPayload.findings },
     newItems: [
       {
         type: 'message_output_item' as const,
@@ -169,6 +154,37 @@ function makeMockReviewResult() {
         inputTokens: 3000,
         outputTokens: 800,
         totalTokens: 3800,
+        requests: 1,
+        inputTokensDetails: [],
+        outputTokensDetails: [],
+      },
+    },
+  };
+}
+
+/**
+ * Build a mock result for non-review (standard) mode. In this mode the SDK
+ * returns a string finalOutput, not a structured object.
+ */
+function makeMockStandardResult() {
+  const text = 'This is a complete sub-agent answer that is long enough to pass the validateCompletion minimum-length heuristic without any additional structural hints because it carries more than 200 characters of plain text content.';
+  return {
+    finalOutput: text,
+    newItems: [
+      {
+        type: 'message_output_item' as const,
+        rawItem: {
+          role: 'assistant' as const,
+          content: [{ type: 'output_text' as const, text }],
+        },
+      },
+    ],
+    history: [],
+    state: {
+      usage: {
+        inputTokens: 500,
+        outputTokens: 100,
+        totalTokens: 600,
         requests: 1,
         inputTokensDetails: [],
         outputTokensDetails: [],
@@ -204,7 +220,7 @@ describe('runOpenAI — typed reviewer findings round-trip (runMode: review)', (
     vi.clearAllMocks();
   });
 
-  it('parses four-severity findings via Agent.outputType and never calls parseReviewerFindings', async () => {
+  it('parses four-severity findings via Agent.outputType when finalOutput is a plain object', async () => {
     mockRun.mockResolvedValueOnce(makeMockReviewResult());
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
@@ -251,6 +267,10 @@ describe('runOpenAI — typed reviewer findings round-trip (runMode: review)', (
     expect(findings[0].reviewerConfidence).toBe(95);
     expect(findings[3].reviewerConfidence).toBe(80);
 
+    // The output field should be the worker's narrative text (extracted from
+    // newItems), not the structured object stringified
+    expect(result.output).toBe(WORKER_OUTPUT);
+
     // The legacy JSON-block path was NEVER called
     expect(parseReviewerFindingsSpy).not.toHaveBeenCalled();
 
@@ -266,9 +286,7 @@ describe('runOpenAI — typed reviewer findings round-trip (runMode: review)', (
   });
 
   it('sets parsedFindings to null when runMode is NOT review', async () => {
-    // Same mock result but runMode is 'standard' — the outputType branch is
-    // skipped and parsedFindings stays null.
-    mockRun.mockResolvedValueOnce(makeMockReviewResult());
+    mockRun.mockResolvedValueOnce(makeMockStandardResult());
 
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
 

@@ -42,7 +42,7 @@ import type { AnnotatedFinding } from '../executors/_shared/findings-schema.js';
 interface AgentRunOutput {
   state: { usage: { inputTokens: number; outputTokens: number; totalTokens: number; requests: number; inputTokensDetails?: Array<Record<string, number>>; outputTokensDetails?: Array<Record<string, number>> } };
   history: AgentInputItem[];
-  finalOutput?: string;
+  finalOutput?: unknown;
   newItems: RunItem[];
 }
 import { FileTracker } from '../tools/tracker.js';
@@ -458,7 +458,12 @@ export async function runOpenAI(
       // eslint-disable-next-line no-constant-condition
       while (true) {
         // --- Validation check ---
-        const stripped = stripThinkingTags(currentResult.finalOutput ?? '');
+        // In review mode the SDK returns a structured object in finalOutput
+        // (from Agent.outputType). Validation text comes from newItems.
+        const rawOutput = runMode === 'review'
+          ? extractAssistantText(currentResult.newItems)
+          : String(currentResult.finalOutput ?? '');
+        const stripped = stripThinkingTags(rawOutput);
         const validation = validateSubAgentOutput(stripped, {
           expectedCoverage: options.expectedCoverage,
           skipCompletionHeuristic: options.skipCompletionHeuristic,
