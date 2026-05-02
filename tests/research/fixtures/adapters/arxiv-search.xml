@@ -1,0 +1,63 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <link href="http://arxiv.org/api/query?search_query=all:regime+detection&amp;id_list=&amp;start=0&amp;max_results=10" rel="self" type="application/atom+xml"/>
+  <title type="html">ArXiv Query: search_query=all:regime+detection&amp;id_list=&amp;start=0&amp;max_results=10</title>
+  <id>http://arxiv.org/api/1kLbAKkUQyGi0E+pE7jRP6iQPPs</id>
+  <updated>2024-03-15T00:00:00-04:00</updated>
+  <opensearch:totalResults xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">28</opensearch:totalResults>
+  <opensearch:startIndex xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">0</opensearch:startIndex>
+  <opensearch:itemsPerPage xmlns:opensearch="http://a9.com/-/spec/opensearch/1.1/">10</opensearch:itemsPerPage>
+  <entry>
+    <id>http://arxiv.org/abs/2401.12345v1</id>
+    <updated>2024-01-15T18:30:00Z</updated>
+    <published>2024-01-15T18:30:00Z</published>
+    <title>Regime-Aware Factor Timing with Macroeconomic Attention</title>
+    <summary>We propose a regime-aware factor timing framework that uses macroeconomic attention mechanisms to identify market regimes and allocate across equity factors. Our approach combines hidden Markov regime-switching models with transformer-based attention over a curated set of macroeconomic time series. In backtests spanning 1990–2023, the strategy achieves Sharpe ratios 40% higher than equal-weighted factor portfolios, with drawdowns concentrated in identifiable crisis regimes rather than factor-specific drawdowns.</summary>
+    <author>
+      <name>Jane Q. Analyst</name>
+    </author>
+    <author>
+      <name>Michael K. Chen</name>
+    </author>
+    <link href="http://arxiv.org/abs/2401.12345v1" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2401.12345v1" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" scheme="http://arxiv.org/schemas/atom" term="q-fin.PM"/>
+    <category scheme="http://arxiv.org/schemas/atom" term="q-fin.PM"/>
+    <category scheme="http://arxiv.org/schemas/atom" term="stat.ML"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2311.56789v2</id>
+    <updated>2023-12-01T14:22:00Z</updated>
+    <published>2023-11-10T14:22:00Z</published>
+    <title>Detecting Structural Breaks in Financial Time Series via Contrastive Learning</title>
+    <summary>We introduce a self-supervised contrastive learning method for detecting structural breaks and regime changes in multivariate financial time series. Unlike traditional CUSUM or Bai-Perron approaches, our method learns representations that maximize divergence between distinct regimes and compactness within regimes. Empirical evaluations on synthetic and real market data show F1 scores exceeding 0.89 for regime boundary detection, outperforming classical econometric methods by 15–25%.</summary>
+    <author>
+      <name>Ana Rodriguez-Perez</name>
+    </author>
+    <author>
+      <name>David L. Thompson</name>
+    </author>
+    <author>
+      <name>Sarah E. Gupta</name>
+    </author>
+    <link href="http://arxiv.org/abs/2311.56789v2" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2311.56789v2" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" scheme="http://arxiv.org/schemas/atom" term="cs.LG"/>
+    <category scheme="http://arxiv.org/schemas/atom" term="cs.LG"/>
+    <category scheme="http://arxiv.org/schemas/atom" term="q-fin.ST"/>
+  </entry>
+  <entry>
+    <id>http://arxiv.org/abs/2402.00123v1</id>
+    <updated>2024-02-05T09:15:00Z</updated>
+    <published>2024-02-05T09:15:00Z</published>
+    <title>Dynamic Asset Allocation Under Regime-Switching Volatility: A Deep Reinforcement Learning Approach</title>
+    <summary>We develop a deep reinforcement learning framework for dynamic asset allocation that explicitly models regime-switching volatility dynamics. The agent learns to adjust portfolio weights in response to detected volatility regimes, using a custom reward function that penalizes drawdowns during high-volatility regimes. In out-of-sample tests with S&amp;P 500 sector ETFs, the approach delivers annualized returns of 14.2% versus 10.1% for a 60/40 benchmark, with comparable volatility.</summary>
+    <author>
+      <name>Robert Park</name>
+    </author>
+    <link href="http://arxiv.org/abs/2402.00123v1" rel="alternate" type="text/html"/>
+    <link title="pdf" href="http://arxiv.org/pdf/2402.00123v1" rel="related" type="application/pdf"/>
+    <arxiv:primary_category xmlns:arxiv="http://arxiv.org/schemas/atom" scheme="http://arxiv.org/schemas/atom" term="q-fin.PM"/>
+    <category scheme="http://arxiv.org/schemas/atom" term="q-fin.PM"/>
+  </entry>
+</feed>

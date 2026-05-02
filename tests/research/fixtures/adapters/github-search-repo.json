@@ -1,0 +1,28 @@
+{
+  "total_count": 2,
+  "incomplete_results": false,
+  "items": [
+    {
+      "id": 12345,
+      "node_id": "MDEwOlJlcG9zaXRvcnkxMjM0NQ==",
+      "name": "momentum-trading",
+      "full_name": "example/momentum-trading",
+      "html_url": "https://github.com/example/momentum-trading",
+      "description": "A momentum trading strategy implemented in Python with backtesting support",
+      "url": "https://api.github.com/repos/example/momentum-trading",
+      "stargazers_count": 142,
+      "language": "Python"
+    },
+    {
+      "id": 67890,
+      "node_id": "MDEwOlJlcG9zaXRvcnk2Nzg5MA==",
+      "name": "momentum-strategy-rs",
+      "full_name": "rusty/momentum-strategy-rs",
+      "html_url": "https://github.com/rusty/momentum-strategy-rs",
+      "description": "High-frequency momentum strategy engine in Rust",
+      "url": "https://api.github.com/repos/rusty/momentum-strategy-rs",
+      "stargazers_count": 89,
+      "language": "Rust"
+    }
+  ]
+}
