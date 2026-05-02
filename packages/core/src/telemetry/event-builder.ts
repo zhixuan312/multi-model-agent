@@ -28,7 +28,7 @@ export interface BuildContext {
   runResult: RunResult;
   client: string;
   parentModel: string | null;
-  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off' | 'none';
   verifyCommandPresent?: boolean;
 }
 
@@ -69,7 +69,15 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     totalReasoningTokens,
   );
 
-  const reviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
+  const rawReviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
+  // Normalize TaskSpec-level values to wire enum:
+  //   'off'       → 'none' (wire form for no-review)
+  //   'spec_only' → 'full' (wire collapses spec_only to full; downstream consumers
+  //                  read per-stage entries to see that quality_review didn't run)
+  const reviewPolicy =
+    rawReviewPolicy === 'off' ? 'none' :
+    rawReviewPolicy === 'spec_only' ? 'full' :
+    rawReviewPolicy;
   const verifyCommandPresent = ctx.verifyCommandPresent ?? false;
 
   const implModelRaw = runResult.models?.implementer ?? null;

@@ -304,6 +304,8 @@ export async function executeReviewedLifecycle(
       client: string;
       triggeringSkill: string;
       parentModel: string | null;
+      reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off';
+      verifyCommandPresent?: boolean;
     }) => void;
   },
   _route?: string,
@@ -1852,6 +1854,8 @@ export async function executeReviewedLifecycle(
           client: _client ?? 'claude-code',
           triggeringSkill: _triggeringSkill ?? 'direct',
           parentModel: task.parentModel ?? null,
+          reviewPolicy,
+          verifyCommandPresent: !!(task.verifyCommand && task.verifyCommand.length > 0),
         });
       } catch { /* silent */ }
 
