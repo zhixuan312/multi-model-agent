@@ -23,4 +23,11 @@ describe('debug compiler', () => {
     const drafts = compileDebugTask({ problem: 'bug', filePaths: ['src/a.ts'] }, 'req');
     expect(drafts[0].filePaths).toEqual(['src/a.ts']);
   });
+
+  it('compiled debug prompt contains scope-contract clause verbatim', () => {
+    const drafts = compileDebugTask({ problem: 'foo throws TypeError' }, 'req');
+    const prompt = drafts[0].prompt;
+    expect(prompt).toContain('Reproduce the reported failure first');
+    expect(prompt).toContain('Do NOT speculatively read unrelated subsystems');
+  });
 });

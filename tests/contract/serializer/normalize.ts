@@ -26,6 +26,8 @@ const VOLATILE_KEYS = new Set([
   'pid',
   'version',
   'id',
+  'draftId',
+  'clarificationId',
   'retryBatchId',
   'contextBlockId',
   // v3.9.0 — per-stage idle telemetry varies with wall-clock timing

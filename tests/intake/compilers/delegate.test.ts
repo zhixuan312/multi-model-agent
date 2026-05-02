@@ -1,7 +1,13 @@
 import { describe, it, expect } from 'vitest';
-import { compileDelegateTasks } from '../../../packages/core/src/intake/compilers/delegate.js';
+import { compileDelegateTasks, compileDelegatePrompt } from '../../../packages/core/src/intake/compilers/delegate.js';
 
 describe('delegate compiler', () => {
+  it('compiled delegate prompt contains scope-contract clause verbatim', () => {
+    const prompt = compileDelegatePrompt({ prompt: 'do X' });
+    expect(prompt).toContain('Stay scoped to the explicit task description');
+    expect(prompt).toContain('do not enumerate adjacent ones');
+  });
+
   it('creates one draft per task with sequential indices', () => {
     const drafts = compileDelegateTasks([
       { prompt: 'task 1', done: 'done 1' },
@@ -9,7 +15,8 @@ describe('delegate compiler', () => {
     ], 'req-abc');
     expect(drafts).toHaveLength(2);
     expect(drafts[0].draftId).toBe('req-abc:0:root');
-    expect(drafts[0].prompt).toBe('task 1');
+    expect(drafts[0].prompt).toContain('task 1');
+    expect(drafts[0].prompt).toContain('Stay scoped to the explicit task description');
     expect(drafts[0].done).toBe('done 1');
     expect(drafts[1].draftId).toBe('req-abc:1:root');
   });

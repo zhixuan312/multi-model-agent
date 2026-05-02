@@ -275,7 +275,8 @@
   "batchId": "<DETERMINISTIC>",
   "tasks": [
     {
-      "prompt": "task one",
+      "prompt": "task one\n\nStay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.",
+      "done": "Provide a clear, complete response addressing the request.",
       "agentType": "standard",
       "reviewPolicy": "full",
       "tools": "full",
@@ -286,7 +287,8 @@
       "cwd": "<REPO>"
     },
     {
-      "prompt": "task two",
+      "prompt": "task two\n\nStay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.",
+      "done": "Provide a clear, complete response addressing the request.",
       "agentType": "standard",
       "reviewPolicy": "full",
       "tools": "full",

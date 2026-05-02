@@ -250,12 +250,7 @@
           "filesReadCount": null,
           "filesWrittenCount": null
         }
-      },
-      "briefQualityWarnings": [
-        "bare_topic_noun",
-        "no_done_condition",
-        "tiny_brief"
-      ]
+      }
     }
   ],
   "batchTimings": {
