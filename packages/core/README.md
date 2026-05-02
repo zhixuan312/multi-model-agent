@@ -40,7 +40,7 @@ for (const r of results) {
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
-- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate (used by the HTTP server package)
+- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate, explore (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
@@ -64,7 +64,7 @@ for (const r of results) {
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
-| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate` |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate`, `explore` |
 | `./reporting/parse-investigation-report` | `parseInvestigationReport`, `parseCitations`, `parseConfidence` (3.4.0) |
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
