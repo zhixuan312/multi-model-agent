@@ -1,51 +1,30 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
-import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
-import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult, StageStatsMap } from '../../packages/core/src/types.js';
+import { emptyStats, executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
-// ── Stage-stats fixture helpers ──────────────────────────────────────────
-
-function notEnteredStage<T extends Record<string, unknown>>(stage: string, extras?: T) {
-  return {
-    stage,
-    entered: false,
-    durationMs: null,
-    costUSD: null,
-    agentTier: null,
-    modelFamily: null,
-    model: null,
-    maxIdleMs: null,
-    totalIdleMs: null,
-    activityEvents: null,
-    inputTokens: null,
-    outputTokens: null,
-    cachedTokens: null,
-    reasoningTokens: null,
-    turnCount: null,
-    toolCallCount: null,
-    filesReadCount: null,
-    filesWrittenCount: null,
-    ...extras,
-  };
-}
-
-function emptyStageStats() {
-  return {
-    implementing: notEnteredStage('implementing'),
-    spec_review: notEnteredStage('spec_review', { verdict: null, roundsUsed: null }),
-    spec_rework: notEnteredStage('spec_rework'),
-    quality_review: notEnteredStage('quality_review', { verdict: null, roundsUsed: null }),
-    quality_rework: notEnteredStage('quality_rework'),
-    diff_review: notEnteredStage('diff_review', { verdict: null, roundsUsed: null }),
-    verifying: notEnteredStage('verifying', { outcome: null, skipReason: null }),
-    committing: notEnteredStage('committing'),
-  } as unknown as StageStatsMap;
-}
+vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+  createProvider: (_slot: string) => ({
+    name: 'escalation-mock',
+    config: { type: 'openai-compatible' as const, model: 'gpt-5.2', baseUrl: 'https://ex.invalid/v1' },
+    run: async () => ({
+      output: '',
+      status: 'timeout' as const,
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+    }),
+  }),
+}));
 
 // ── Config factory ───────────────────────────────────────────────────────
 
@@ -115,7 +94,7 @@ describe('Test 12 Part B — event-builder unit with salvage RunResult', () => {
       workerStatus: 'blocked',
       terminationReason: 'all_tiers_unavailable',
       stageStats: {
-        ...emptyStageStats(),
+        ...emptyStats(),
         implementing: {
           stage: 'implementing',
           entered: true,
@@ -303,7 +282,7 @@ describe('Test 14 — implementerModel lookup precedence', () => {
       workerStatus: 'done',
       terminationReason: { cause: 'finished' as const, turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done' as const, wasPromoted: false },
       stageStats: {
-        ...emptyStageStats(),
+        ...emptyStats(),
         implementing: {
           stage: 'implementing',
           entered: true,
@@ -380,23 +359,6 @@ describe('Test 12 Part A — lifecycle regression', () => {
 
     // Escalation (complex-tier) mock: always transport-fails with zero work.
     // This is the fallback path that the lifecycle calls via createProvider.
-    vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
-      createProvider: (_slot: string) => ({
-        name: 'escalation-mock',
-        config: { type: 'openai-compatible' as const, model: 'gpt-5.2', baseUrl: 'https://ex.invalid/v1' },
-        run: async () => ({
-          output: '',
-          status: 'timeout' as const,
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [],
-        }),
-      }),
-    }));
 
     // Primary (standard) provider — fails with timeout but carries 56-min of work.
     // scoreWork = turns(42) + filesWritten(2) + inputTokens/1000(47) = 91
@@ -451,11 +413,9 @@ describe('Test 12 Part A — lifecycle regression', () => {
     expect(result.stageStats!.implementing.entered).toBe(true);
 
     // All metrics from salvage source (standard provider) must thread through.
-    // Note: adaptForAllTiersUnavailable sets durationMs/costUSD on the stage from
-    // existing?.durationMs (which is null for a fresh stage), but turnCount,
-    // inputTokens, outputTokens, and filesWrittenCount come directly from
-    // salvageSource fields. The overall result.durationMs is preserved however.
     expect(result.durationMs).toBe(3_360_000);
+    expect(result.stageStats!.implementing.durationMs).toBe(3_360_000);
+    expect(result.stageStats!.implementing.costUSD).toBeCloseTo(0.87, 6);
     expect(result.stageStats!.implementing.turnCount).toBe(42);
     expect(result.stageStats!.implementing.filesWrittenCount).toBe(2);
     expect(result.stageStats!.implementing.inputTokens).toBe(47000);
@@ -479,13 +439,11 @@ describe('Test 12 Part A — lifecycle regression', () => {
     expect(event.totalDurationMs).toBeGreaterThan(3_000_000);
     expect(event.stages).toHaveLength(1);
 
-    // The implementing stage carries the full salvage data except for
-    // durationMs and costUSD which adaptForAllTiersUnavailable sets from
-    // existing stage data (null for a fresh stage → clamped to 0).
-    // runResult.durationMs drives event.totalDurationMs instead.
     const implStage = event.stages[0]!;
     expect(implStage.name).toBe('implementing');
     expect(implStage.agentTier).toBe('standard');
+    expect(implStage.durationMs).toBe(3_360_000);
+    expect(implStage.costUSD).toBeCloseTo(0.87, 6);
     expect(implStage.turnCount).toBe(42);
     expect(implStage.filesWrittenCount).toBe(2);
     expect(implStage.inputTokens).toBe(47000);

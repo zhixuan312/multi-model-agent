@@ -755,8 +755,8 @@ export async function executeReviewedLifecycle(
       (stats as Record<string, unknown>)[stageName] = {
         stage: stageName,
         entered: true,
-        durationMs: existing?.durationMs ?? null,
-        costUSD: existing?.costUSD ?? null,
+        durationMs: existing?.durationMs ?? salvageSource?.durationMs ?? null,
+        costUSD: existing?.costUSD ?? salvageSource?.usage?.costUSD ?? null,
         agentTier: implementerAgentInfo.tier,
         modelFamily: modelFamily(implementerAgentInfo.model),
         model: implementerAgentInfo.model,
