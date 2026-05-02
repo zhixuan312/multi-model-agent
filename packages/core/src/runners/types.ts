@@ -36,13 +36,16 @@ export interface TokenUsage {
 export interface TerminationReason {
   /** Why the task stopped. 'finished' means the worker returned normally — check
    *  workerSelfAssessment for the worker's own view of completion. */
-  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'degenerate_exhausted'
+  cause: 'finished' | 'incomplete' | 'timeout' | 'cost_exceeded' | 'time_ceiling' | 'degenerate_exhausted'
        | 'api_error' | 'network_error' | 'api_aborted' | 'brief_too_vague' | 'error'
   turnsUsed: number
   hasFileArtifacts: boolean
   usedShell: boolean
   workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_aborted' | null
   wasPromoted: boolean
+  /** Wall-clock ms elapsed when the termination condition tripped.
+   *  Populated for time_ceiling aborts; omitted for other causes. */
+  wallClockMs?: number
 }
 
 /**

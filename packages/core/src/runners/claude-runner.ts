@@ -35,8 +35,10 @@ import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
+  buildTimeCeilingResult as sharedBuildTimeCeilingResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { checkTimeCeiling } from './base/time-check.js';
 import { type CanonicalUsage, makeEmptyUsage, mergeUsage } from './base/usage-accumulator.js';
 
 
@@ -397,6 +399,30 @@ export async function runClaude(
         if (msg.type === 'assistant') {
           turns++;
           emit({ kind: 'turn_start', turn: turns, provider: providerConfig.type, model: providerConfig.model });
+
+          const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
+          if (timeCeilingMs !== null) {
+            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+            completedResult = sharedBuildTimeCeilingResult({
+              usage: {
+                inputTokens: usage.inputTokens,
+                outputTokens: usage.outputTokens,
+                totalTokens: usage.inputTokens + usage.outputTokens,
+                costUSD: finalCostUSD,
+                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel),
+                cachedTokens: usage.cachedTokens,
+                reasoningTokens: null,
+              },
+              turns,
+              tracker,
+              scratchpad,
+              wallClockMs: timeCeilingMs,
+              timeoutMs,
+              durationMs: Date.now() - taskStartMs,
+            });
+            messageQueue.close();
+            break;
+          }
 
           // Capture every assistant text block as scratchpad fodder. The
           // claude-agent-sdk's BetaMessage.content is an array of blocks:

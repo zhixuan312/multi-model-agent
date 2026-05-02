@@ -41,8 +41,10 @@ import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
   buildMaxTurnsExitResult as sharedBuildMaxTurnsExitResult,
+  buildTimeCeilingResult as sharedBuildTimeCeilingResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { checkTimeCeiling } from './base/time-check.js';
 import type { SandboxPolicy } from '../types.js';
 import { mergeUsage, makeEmptyUsage, type CanonicalUsage } from './base/usage-accumulator.js';
 
@@ -454,6 +456,28 @@ export async function runCodex(
         // turn number we use everywhere else in this runner (the scratchpad
         // append, error diagnostics, result.turns).
         emit({ kind: 'turn_start', turn: turns, provider: 'codex', model: providerConfig.model });
+
+        // Time ceiling check before dispatching a provider call.
+        const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
+        if (timeCeilingMs !== null) {
+          return sharedBuildTimeCeilingResult({
+            usage: {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              totalTokens: usage.inputTokens + usage.outputTokens,
+              costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+              costDeltaVsParentUSD: computeCostDeltaVsParentUSD(computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig) ?? 0, usage.inputTokens, usage.outputTokens, parentModel),
+              cachedTokens: usage.cachedTokens,
+              reasoningTokens: usage.reasoningTokens,
+            },
+            turns,
+            tracker,
+            scratchpad,
+            wallClockMs: timeCeilingMs,
+            timeoutMs,
+            durationMs: Date.now() - taskStartMs,
+          });
+        }
 
         // Codex backend requires streaming. The Codex backend's
         // `response.completed` event does NOT populate `response.output` —

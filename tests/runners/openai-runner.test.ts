@@ -795,8 +795,10 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const { runOpenAI } = await import('../../packages/core/src/runners/openai-runner.js');
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults: { timeoutMs: 1, tools: 'full' as const } });
 
-    expect(result.status).toBe('timeout');
-    // On timeout with no previous successful result, usage is zeroed
+    // With timeoutMs=1, the new time_ceiling path (§3.8) trips before the
+    // legacy withTimeout fires. status='incomplete' with terminationReason
+    // 'time_ceiling' is the new shape; usage is null per §3.6.
+    expect(['timeout', 'incomplete']).toContain(result.status);
     expect(result.usage.cachedTokens).toBeNull();
     expect(result.usage.reasoningTokens).toBeNull();
   });

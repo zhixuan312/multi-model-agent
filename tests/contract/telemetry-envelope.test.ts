@@ -45,7 +45,7 @@ describe('telemetry envelope (v2)', () => {
     const ev = {
       event: 'heartbeat',
       ts: new Date().toISOString(),
-      batchId: '00000000-0000-0000-0000-000000000001',
+      batchId: '12345678-1234-4234-8234-000000000001',
       taskIndex: 0,
       elapsed: '10s',
       stage: 'implementing',

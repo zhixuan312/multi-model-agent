@@ -17,7 +17,7 @@ describe('envelope verdict fields', () => {
   it('accepts envelope with all three verdict fields populated', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
       specReviewVerdict: 'not_applicable',
@@ -30,7 +30,7 @@ describe('envelope verdict fields', () => {
   it('accepts envelope omitting the new verdict fields (optional)', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
     });
@@ -45,7 +45,7 @@ describe('envelope verdict fields', () => {
   it('accepts roundsUsed: 0 for kill-switched topology', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
       specReviewVerdict: 'not_applicable',
@@ -58,7 +58,7 @@ describe('envelope verdict fields', () => {
   it('rejects invalid verdict values', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
       specReviewVerdict: 'not_a_valid_verdict',
@@ -71,7 +71,7 @@ describe('envelope verdict fields', () => {
   it('rejects negative roundsUsed', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
       specReviewVerdict: 'not_applicable',
@@ -84,7 +84,7 @@ describe('envelope verdict fields', () => {
   it('rejects non-integer roundsUsed', () => {
     const result = schema.safeParse({
       ...baseEnvelope,
-      batchId: '00000000-0000-0000-0000-000000000000',
+      batchId: '12345678-1234-4234-8234-000000000000',
       wallClockMs: 0,
       parentModel: 'm',
       specReviewVerdict: 'not_applicable',

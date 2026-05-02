@@ -28,18 +28,12 @@ const REVIEWER_OUTPUT = [
 ].join('\n');
 
 /**
- * Provider factory with monotonic costs.
- *
- * The reviewer (slot === 'complex') reports higher cumulative token counts so
- * computeCostUSD(reviewerTokens, config) >= computeCostUSD(implTokens, config).
- * With the 3.0/15.0 per-MTok pricing on the resolved provider config:
- *   impl:   (10000/1e6)*3.0 + (5000/1e6)*15.0  = 0.105
- *   reviewer: (40000/1e6)*3.0 + (10000/1e6)*15.0 = 0.27
- * heartbeat cost is naturally monotonic (0.105 → 0.27).
- *
- * The runtime assertion in runningCostUSD() (throw in test/dev) still guards
- * against regressions that would make the raw cost drop.
+ * Mutable mode flag so individual tests can opt into the regression scenario
+ * (implementer cost higher than reviewer cost) even though vi.mock is hoisted
+ * and the factory is created once.
  */
+let _mockMode: 'monotonic' | 'regression' = 'monotonic';
+
 function makeMockCreateProvider() {
   return (slot: string) => ({
     name: slot,
@@ -53,11 +47,16 @@ function makeMockCreateProvider() {
     run: async (_prompt: string, options?: { onProgress?: (e: InternalRunnerEvent) => void }) => {
       const onProgress = options?.onProgress;
       const isReviewer = slot === 'complex';
-      // Reviewer reports higher cumulative token counts so the heartbeat cost
-      // is monotone non-decreasing (§3.9 invariant).
-      const tokens = isReviewer
-        ? { inputTokens: 40000, outputTokens: 10000, costUSD: 0.27 }
-        : { inputTokens: 10000, outputTokens: 5000, costUSD: 0.105 };
+      // regression mode: implementer cost HIGHER than reviewer — the pre-fix
+      // failure mode where heartbeat cost drops and quality review delta
+      // becomes negative (see §3.9).
+      const tokens = _mockMode === 'regression'
+        ? isReviewer
+          ? { inputTokens: 1000, outputTokens: 500, costUSD: 0.0105 }
+          : { inputTokens: 40000, outputTokens: 10000, costUSD: 0.27 }
+        : isReviewer
+          ? { inputTokens: 40000, outputTokens: 10000, costUSD: 0.27 }
+          : { inputTokens: 10000, outputTokens: 5000, costUSD: 0.105 };
       if (onProgress) {
         onProgress({
           kind: 'turn_complete' as const,
@@ -81,8 +80,6 @@ function makeMockCreateProvider() {
   });
 }
 
-// Top-level mock — executes BEFORE executeReviewedLifecycle is imported,
-// so the module's createProvider import sees this mock.
 vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: makeMockCreateProvider(),
 }));
@@ -135,140 +132,104 @@ function makeConfig(): MultiModelConfig {
 }
 
 /**
- * Extract cost from a heartbeat event envelope. Returns the numeric cost or null
- * if the event isn't a heartbeat or cost is null.
+ * Run the reviewed lifecycle and capture all bus events. Returns the result
+ * and the captured events for assertion.
  */
-function extractRunningCost(e: unknown): number | null {
+async function runReviewedLifecycleAndCaptureEvents(opts?: {
+  recordHeartbeat?: boolean;
+}) {
+  const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
+  const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
+
+  const config = makeConfig();
+  const task: TaskSpec = {
+    prompt: 'audit this code',
+    agentType: 'complex' as const,
+    reviewPolicy: 'quality_only' as const,
+  };
+
+  const implProvider = (createProvider as any)('standard') as Provider;
+  const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    slot: 'standard',
+    provider: implProvider,
+    capabilityOverride: false,
+  };
+
+  const events: unknown[] = [];
+  const sink: EventSink = { name: 'capture', emit: event => { events.push(event); } };
+  const bus = new EventBus([sink]);
+
+  const builder = (ctx: { workerOutput: string; brief: string }) =>
+    `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+
+  const heartbeatCfg = {
+    batchId: '00000000-0000-4000-8000-000000000000',
+    ...(opts?.recordHeartbeat ? { recordHeartbeat: () => {} } : {}),
+  };
+
+  const result = await executeReviewedLifecycle(
+    task, resolved, config, 0,
+    undefined,
+    heartbeatCfg,
+    undefined, undefined, 'audit',
+    undefined, undefined,
+    bus,
+    builder,
+  );
+
+  return { result, events };
+}
+
+/**
+ * Extract cost from a heartbeat event envelope. Returns the numeric cost or null.
+ */
+function extractHeartbeatCost(e: unknown): number | null {
   const ev = e as { event?: string; cost?: number | null };
   if (ev.event !== 'heartbeat') return null;
   return ev.cost ?? null;
 }
 
 describe('review-cost-monotonic (§3.9)', () => {
-  it('runningCostUSD is monotone non-decreasing across stage transitions (heartbeat events)', async () => {
-    const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
-    const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
+  beforeEach(() => {
+    _mockMode = 'monotonic';
+  });
 
-    const config = makeConfig();
-    const task: TaskSpec = {
-      prompt: 'audit this code',
-      agentType: 'complex' as const,
-      reviewPolicy: 'quality_only' as const,
-    };
+  it('runningCostUSD is monotone non-decreasing across stage transitions (heartbeat events carry cumulative cost)', async () => {
+    const { events } = await runReviewedLifecycleAndCaptureEvents({ recordHeartbeat: true });
 
-    const implProvider = (createProvider as any)('standard') as Provider;
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
-      slot: 'standard',
-      provider: implProvider,
-      capabilityOverride: false,
-    };
-
-    const events: unknown[] = [];
-    const sink: EventSink = { name: 'capture', emit: event => { events.push(event); } };
-    const bus = new EventBus([sink]);
-
-    const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
-
-    await executeReviewedLifecycle(
-      task, resolved, config, 0,
-      undefined,
-      { batchId: '00000000-0000-4000-8000-000000000000', recordHeartbeat: () => {} },
-      undefined, undefined, 'audit',
-      undefined, undefined,
-      bus,
-      builder,
-    );
-
-    // §3.9 invariant: every heartbeat event's cost is monotone non-decreasing.
+    // §3.9 invariant: heartbeat event cost must be monotone non-decreasing.
+    // With the cumulative-cost fix, the heartbeat timer's costUSD reflects
+    // completed-runners-total + current-runner-partial, so it cannot drop.
     let lastCost = 0;
+    let samples = 0;
     for (const e of events) {
-      const cost = extractRunningCost(e);
+      const cost = extractHeartbeatCost(e);
       if (cost !== null) {
+        samples++;
         expect(cost).toBeGreaterThanOrEqual(lastCost);
         lastCost = cost;
       }
     }
+    // Verify we observed at least one heartbeat emission with a cost value.
+    expect(samples).toBeGreaterThanOrEqual(1);
   });
 
-  it('read_only_review.quality.costUSD >= 0', async () => {
-    const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
-    const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
-
-    const config = makeConfig();
-    const task: TaskSpec = {
-      prompt: 'audit this code',
-      agentType: 'complex' as const,
-      reviewPolicy: 'quality_only' as const,
-    };
-
-    const implProvider = (createProvider as any)('standard') as Provider;
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
-      slot: 'standard',
-      provider: implProvider,
-      capabilityOverride: false,
-    };
-
-    const events: unknown[] = [];
-    const sink: EventSink = { name: 'capture', emit: event => { events.push(event); } };
-    const bus = new EventBus([sink]);
-
-    const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
-
-    await executeReviewedLifecycle(
-      task, resolved, config, 0,
-      undefined,
-      { batchId: '00000000-0000-4000-8000-000000000000' },
-      undefined, undefined, 'audit',
-      undefined, undefined,
-      bus,
-      builder,
-    );
+  it('read_only_review.quality.costUSD equals reviewer actual usage when reviewer cost exceeds implementer', async () => {
+    const { events, result } = await runReviewedLifecycleAndCaptureEvents();
 
     const reviewEvent = events.find(e => (e as { event?: string }).event === 'read_only_review.quality');
     expect(reviewEvent).toBeDefined();
     const cost = (reviewEvent as { costUSD?: number | null }).costUSD;
-    if (cost !== null) {
-      expect(cost).toBeGreaterThanOrEqual(0);
-    }
+    expect(cost).not.toBeNull();
+    expect(cost).toBeGreaterThanOrEqual(0);
+    expect(cost!).toBeCloseTo(0.27, 10);
+    expect(result.stageStats!.quality_review.costUSD!).toBeCloseTo(0.27, 10);
+    expect(result.stageStats!.implementing.costUSD!).toBeCloseTo(0.105, 10);
   });
 
   it('read_only_review.quality event passes Zod schema validation (costUSD >= 0 enforced by .min(0))', async () => {
-    const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
-    const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
+    const { events } = await runReviewedLifecycleAndCaptureEvents();
     const { ReadOnlyReviewQualityEvent } = await import('../../packages/core/src/observability/events.js');
-
-    const config = makeConfig();
-    const task: TaskSpec = {
-      prompt: 'audit this code',
-      agentType: 'complex' as const,
-      reviewPolicy: 'quality_only' as const,
-    };
-
-    const implProvider = (createProvider as any)('standard') as Provider;
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
-      slot: 'standard',
-      provider: implProvider,
-      capabilityOverride: false,
-    };
-
-    const events: unknown[] = [];
-    const sink: EventSink = { name: 'capture', emit: event => { events.push(event); } };
-    const bus = new EventBus([sink]);
-
-    const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
-
-    await executeReviewedLifecycle(
-      task, resolved, config, 0,
-      undefined,
-      { batchId: '00000000-0000-4000-8000-000000000000' },
-      undefined, undefined, 'audit',
-      undefined, undefined,
-      bus,
-      builder,
-    );
 
     const reviewEvent = events.find(e => (e as { event?: string }).event === 'read_only_review.quality');
     expect(reviewEvent).toBeDefined();
@@ -279,38 +240,9 @@ describe('review-cost-monotonic (§3.9)', () => {
     expect(parseResult.success).toBe(true);
   });
 
-  it('read_only_review.quality.costUSD >= 0 in stageStats', async () => {
-    const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
-    const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
+  it('stageStats costUSD >= 0 for every entered stage', async () => {
+    const { result } = await runReviewedLifecycleAndCaptureEvents({ recordHeartbeat: true });
 
-    const config = makeConfig();
-    const task: TaskSpec = {
-      prompt: 'audit this code',
-      agentType: 'complex' as const,
-      reviewPolicy: 'quality_only' as const,
-    };
-
-    const implProvider = (createProvider as any)('standard') as Provider;
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
-      slot: 'standard',
-      provider: implProvider,
-      capabilityOverride: false,
-    };
-
-    const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
-
-    const result = await executeReviewedLifecycle(
-      task, resolved, config, 0,
-      undefined,
-      { batchId: '00000000-0000-4000-8000-000000000000', recordHeartbeat: () => {} },
-      undefined, undefined, 'audit',
-      undefined, undefined,
-      undefined,
-      builder,
-    );
-
-    // Every entered stage's costUSD must be >= 0 (H3 invariant from §3.9).
     expect(result.stageStats).toBeDefined();
     const stats = result.stageStats!;
     const stageNames = ['implementing', 'spec_review', 'spec_rework', 'quality_review', 'quality_rework', 'verifying', 'diff_review', 'committing'] as const;
@@ -320,5 +252,76 @@ describe('review-cost-monotonic (§3.9)', () => {
         expect(s.costUSD).toBeGreaterThanOrEqual(0);
       }
     }
+  });
+
+  describe('regression: implementer cost higher than reviewer cost', () => {
+    beforeEach(() => {
+      _mockMode = 'regression';
+    });
+
+    it('read_only_review.quality.costUSD equals reviewer actual usage when implementer cost exceeds reviewer', async () => {
+      // This is the known failure mode from §3.9: the implementer processes
+      // far more tokens than the reviewer. The review event must report the
+      // reviewer stage cost itself, not reviewerCost - implementerCost.
+      const { events, result } = await runReviewedLifecycleAndCaptureEvents();
+
+      const reviewEvent = events.find(e => (e as { event?: string }).event === 'read_only_review.quality');
+      expect(reviewEvent).toBeDefined();
+      const cost = (reviewEvent as { costUSD?: number | null }).costUSD;
+      expect(cost).not.toBeNull();
+      expect(cost).toBeGreaterThanOrEqual(0);
+      expect(cost!).toBeCloseTo(0.0105, 10);
+      expect(result.stageStats!.quality_review.costUSD!).toBeCloseTo(0.0105, 10);
+      expect(result.stageStats!.implementing.costUSD!).toBeCloseTo(0.27, 10);
+    });
+
+    it('heartbeat cost is monotonic when implementer cost exceeds reviewer cost', async () => {
+      const { events } = await runReviewedLifecycleAndCaptureEvents({ recordHeartbeat: true });
+
+      let lastCost = 0;
+      let samples = 0;
+      for (const e of events) {
+        const cost = extractHeartbeatCost(e);
+        if (cost !== null) {
+          samples++;
+          expect(cost).toBeGreaterThanOrEqual(lastCost);
+          lastCost = cost;
+        }
+      }
+      expect(samples).toBeGreaterThanOrEqual(1);
+    });
+
+    it('stageStats costUSD >= 0 for every entered stage in regression mode', async () => {
+      const { result } = await runReviewedLifecycleAndCaptureEvents({ recordHeartbeat: true });
+
+      expect(result.stageStats).toBeDefined();
+      const stats = result.stageStats!;
+      const stageNames = ['implementing', 'spec_review', 'spec_rework', 'quality_review', 'quality_rework', 'verifying', 'diff_review', 'committing'] as const;
+      for (const name of stageNames) {
+        const s = stats[name];
+        if (s.entered && s.costUSD !== null) {
+          expect(s.costUSD).toBeGreaterThanOrEqual(0);
+        }
+      }
+    });
+
+    it('cumulative heartbeat task cost equals sum of actual stage usage costs', async () => {
+      const { events, result } = await runReviewedLifecycleAndCaptureEvents({ recordHeartbeat: true });
+
+      expect(result.stageStats).toBeDefined();
+      const stats = result.stageStats!;
+
+      let stageSum = 0;
+      const stageNames = ['implementing', 'spec_review', 'spec_rework', 'quality_review', 'quality_rework', 'verifying', 'diff_review', 'committing'] as const;
+      for (const name of stageNames) {
+        const s = stats[name];
+        if (s.entered && s.costUSD !== null) stageSum += s.costUSD;
+      }
+
+      const terminal = events.find(e => (e as { event?: string }).event === 'read_only_review.terminal') as { costUSD?: number | null } | undefined;
+      expect(terminal?.costUSD).not.toBeNull();
+      expect(terminal!.costUSD!).toBeCloseTo(stageSum, 10);
+      expect(stageSum).toBeCloseTo(0.2805, 10);
+    });
   });
 });

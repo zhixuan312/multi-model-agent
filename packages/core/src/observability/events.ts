@@ -192,6 +192,23 @@ export const StallAbortEvent = TaskBase.extend({
   threshold_ms: z.number().int().min(0),
 }).strict();
 
+export const TimeCheckEvent = TaskBase.extend({
+  event: z.literal('time_check'),
+  stage: z.string(),
+  tripped: z.boolean(),
+  wallClockMs: z.number().int().min(0),
+  timeoutMs: z.number().int().min(0),
+}).strict();
+
+export const CostCheckEvent = TaskBase.extend({
+  event: z.literal('cost_check'),
+  stage: z.string(),
+  tripped: z.boolean(),
+  cost_used_usd: z.number().min(0),
+  cost_cap_usd: z.number().min(0),
+  cost_available: z.boolean(),
+}).strict();
+
 export const BatchCompletedEvent = BatchBase.extend({
   event: z.literal('batch_completed'),
   tool: z.string(),
@@ -389,6 +406,8 @@ export const Event = z.discriminatedUnion('event', [
   ReadOnlyReviewQualityEvent,
   ReadOnlyReviewTerminalEvent,
   StallAbortEvent,
+  TimeCheckEvent,
+  CostCheckEvent,
   BatchCompletedEvent,
   BatchFailedEvent,
   TaskCompletedLocalEvent,
@@ -414,3 +433,50 @@ export const CLOUD_EVENT_NAMES = new Set([
   'install.changed',
   'skill.installed',
 ] as const);
+
+// ---------------------------------------------------------------------------
+// Schema index for coverage invariants and emit-time validation
+// ---------------------------------------------------------------------------
+
+/**
+ * Map from event discriminator to its full-envelope Zod schema.
+ *
+ * Each schema validates the **complete persisted envelope** (including the
+ * `event: <name>` discriminator field), not just the caller-supplied payload.
+ * This makes one schema authoritative for both emit and ingest.
+ *
+ * Used by the telemetry coverage invariant test and by the emit-time
+ * validator (NODE_ENV=test|development).
+ */
+export const EventSchemas: Record<string, z.ZodType> = {
+  // Lifecycle
+  task_started:               TaskStartedEvent,
+  stage_change:               StageChangeEvent,
+  heartbeat:                  HeartbeatEvent,
+  fallback:                   FallbackEvent,
+  fallback_unavailable:       FallbackUnavailableEvent,
+  escalation:                 EscalationEvent,
+  escalation_unavailable:     EscalationUnavailableEvent,
+  review_decision:            ReviewDecisionEvent,
+  verify_step:                VerifyStepEvent,
+  verify_skipped:             VerifySkippedEvent,
+  'read_only_review.quality':  ReadOnlyReviewQualityEvent,
+  'read_only_review.terminal': ReadOnlyReviewTerminalEvent,
+  stall_abort:                StallAbortEvent,
+  time_check:                 TimeCheckEvent,
+  cost_check:                 CostCheckEvent,
+  task_completed:             TaskCompletedLocalEvent,
+  batch_completed:            BatchCompletedEvent,
+  batch_failed:               BatchFailedEvent,
+  // Runner internals
+  worker_start:    WorkerStartEvent,
+  turn_start:      TurnStartEvent,
+  turn_complete:   TurnCompleteEvent,
+  tool_call:       ToolCallEvent,
+  text_emission:   TextEmissionEvent,
+  // Cloud-bound
+  'task.completed':   TaskCompletedCloudEvent,
+  'session.started':  SessionStartedCloudEvent,
+  'install.changed':  InstallChangedCloudEvent,
+  'skill.installed':  SkillInstalledCloudEvent,
+};

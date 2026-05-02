@@ -67,8 +67,10 @@ import { classifyError, isRateLimit, isProviderContextLimit } from './error-clas
 import {
   buildOkResult as sharedBuildOkResult,
   buildIncompleteResult as sharedBuildIncompleteResult,
+  buildTimeCeilingResult as sharedBuildTimeCeilingResult,
   type SharedResultUsage,
 } from './base/result-builders.js';
+import { checkTimeCeiling } from './base/time-check.js';
 import { type CanonicalUsage } from './base/usage-accumulator.js';
 
 // Disable tracing — not all OpenAI-compatible providers support it
@@ -314,6 +316,12 @@ export async function runOpenAI(
   const runTurnAndBuffer = async (
     input: string | AgentInputItem[],
   ): Promise<AgentRunOutput> => {
+    const ceilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
+    if (ceilingMs !== null) {
+      const err = new Error('time_ceiling');
+      (err as Record<string, unknown>).__timeCeiling = ceilingMs;
+      throw err;
+    }
     const nextTurn = (currentResult?.state.usage.requests ?? 0) + 1;
     emit({ kind: 'turn_start', turn: nextTurn, provider: 'openai-compatible', model: runner.providerConfig.model });
     const result = (await agentRun(agent, input, {
@@ -633,6 +641,21 @@ export async function runOpenAI(
           escalationLog: [],
           durationMs: Date.now() - taskStartMs,
         };
+      }
+
+      if (err instanceof Error && '__timeCeiling' in err) {
+        const ceilingMs = (err as Record<string, unknown>).__timeCeiling as number;
+        emit({ kind: 'done', status: 'incomplete' });
+        const partial = partialUsage(currentResult, runner.providerConfig);
+        return sharedBuildTimeCeilingResult({
+          usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, totalTokens: partial.totalTokens, costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD ?? null, cachedTokens: partial.cachedTokens ?? null, reasoningTokens: partial.reasoningTokens ?? null },
+          turns: currentResult?.state.usage.requests ?? 0,
+          tracker,
+          scratchpad,
+          wallClockMs: ceilingMs,
+          timeoutMs,
+          durationMs: Date.now() - taskStartMs,
+        });
       }
 
       // Classify the thrown error into a finer-grained RunStatus so the

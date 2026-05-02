@@ -123,7 +123,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     const [result] = await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000001', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000001', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     expect(result.status).toBe('ok');
@@ -156,7 +156,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000002', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000002', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const reworkEvents = capturedEvents.filter((e) => e.event === 'read_only_review.rework');
@@ -171,7 +171,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000003', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000003', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const terminalEvents = capturedEvents.filter((e) => e.event === 'read_only_review.terminal');
@@ -192,7 +192,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000004', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000004', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const rorEventNames = capturedEvents
@@ -210,7 +210,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     const [result] = await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000005', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     expect(result.status).toBe('ok');
@@ -238,7 +238,7 @@ describe('read_only_review.quality event has no findingsFlagged or severityCorre
     await runTasks(
       [{ prompt: 'audit src/', agentType: 'standard', reviewPolicy: 'quality_only', cwd: '/tmp/test' }],
       config,
-      { route: 'audit', batchId: '00000000-0000-0000-0000-000000000006', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
+      { route: 'audit', batchId: '12345678-1234-4234-8234-000000000006', bus, qualityReviewPromptBuilder: buildAuditQualityPrompt },
     );
 
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');

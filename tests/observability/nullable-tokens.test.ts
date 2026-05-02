@@ -4,7 +4,7 @@ import { TaskCompletedLocalEvent, TurnCompleteEvent } from '../../packages/core/
 describe('observability event schemas — nullable cachedTokens/reasoningTokens', () => {
   const baseTaskFields = {
     ts: '2026-05-01T00:00:00.000Z',
-    batchId: '00000000-0000-0000-0000-000000000000',
+    batchId: '12345678-1234-4234-8234-000000000000',
     taskIndex: 0,
   };
 
