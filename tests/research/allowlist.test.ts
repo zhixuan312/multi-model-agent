@@ -36,8 +36,16 @@ describe('extractURLHosts', () => {
       'Visit https://example.com/path, for details',
       'See https://example.com. for more',
       'Check https://example.com/page; then continue',
+      'Bare URL https://example.com, then comma',
+      'Paren-adjacent (https://example.com) is still extracted',
     ]);
     expect(hosts).toEqual(['example.com']);
+  });
+
+  it('skips overlong hostnames and labels', () => {
+    const overlongHost = `${'a'.repeat(250)}.com`;
+    const overlongLabel = `${'a'.repeat(64)}.com`;
+    expect(extractURLHosts([`https://${overlongHost}/x`, `https://${overlongLabel}/x`])).toEqual([]);
   });
 });
 
@@ -97,12 +105,40 @@ describe('buildHostAllowlist', () => {
     expect(map.size).toBe(1);
   });
 
-  it('normalizes fetchAllowlistExtra with trailing dot', () => {
+  it('normalizes fetchAllowlistExtra with whitespace, uppercase, and trailing dot', () => {
     const map = buildHostAllowlist({
-      fetchAllowlistExtra: ['example.com.'],
+      fetchAllowlistExtra: [' EXAMPLE.com. '],
       userSources: [],
     });
     expect(map.get('example.com')).toBe('extra');
     expect(map.size).toBe(1);
+  });
+
+  it('deduplicates normalized fetchAllowlistExtra entries', () => {
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: ['EXAMPLE.com', 'example.com.'],
+      userSources: [],
+    });
+    expect(map.get('example.com')).toBe('extra');
+    expect(map.size).toBe(1);
+  });
+
+  it('fetchAllowlistExtra wins after normalization on user-source collision', () => {
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: [' EXAMPLE.com. '],
+      userSources: ['https://example.com/page'],
+    });
+    expect(map.get('example.com')).toBe('extra');
+    expect(map.size).toBe(1);
+  });
+
+  it('skips overlong fetchAllowlistExtra hostnames and labels', () => {
+    const overlongHost = `${'a'.repeat(250)}.com`;
+    const overlongLabel = `${'a'.repeat(64)}.com`;
+    const map = buildHostAllowlist({
+      fetchAllowlistExtra: [overlongHost, overlongLabel],
+      userSources: [],
+    });
+    expect(map.size).toBe(0);
   });
 });

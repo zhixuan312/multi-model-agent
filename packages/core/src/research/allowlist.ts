@@ -1,8 +1,10 @@
+import { isIP } from 'node:net';
+
 const URL_REGEX = /\bhttps?:\/\/[^\s'"<>()]+/gi;
 
-const FORBIDDEN_HOST_CHARS = /[\/:@?#]/;
-const IPV4_LITERAL = /^(\d{1,3}\.){3}\d{1,3}$/;
-const IPV6_LITERAL = /^\[?[0-9a-fA-F:]+\]?$/;
+const FORBIDDEN_HOST_CHARS = /[\/:@?#]|:\/\//;
+const MAX_HOSTNAME_LENGTH = 253;
+const TRAILING_URL_PUNCTUATION = /[.,;:!?]+$/;
 
 /**
  * Validate and canonicalize a hostname string. Returns the canonical
@@ -14,17 +16,20 @@ const IPV6_LITERAL = /^\[?[0-9a-fA-F:]+\]?$/;
  * schema parsing — cannot inject non-FQDN entries with "extra" provenance.
  */
 function canonicalizeHostname(raw: string): string | null {
-  if (FORBIDDEN_HOST_CHARS.test(raw)) return null;
-  if (IPV4_LITERAL.test(raw) || IPV6_LITERAL.test(raw)) return null;
+  const trimmed = raw.trim();
+  if (trimmed.length === 0 || trimmed.length > MAX_HOSTNAME_LENGTH) return null;
+  if (FORBIDDEN_HOST_CHARS.test(trimmed)) return null;
   // Strip trailing dot (DNS root label) — example.com. ≡ example.com
-  const stripped = raw.endsWith('.') ? raw.slice(0, -1) : raw;
-  if (stripped.length === 0) return null;
+  const stripped = trimmed.endsWith('.') ? trimmed.slice(0, -1) : trimmed;
+  if (stripped.length === 0 || stripped.length > MAX_HOSTNAME_LENGTH) return null;
   let canonical: string;
   try {
     canonical = new URL(`https://${stripped}`).hostname;
   } catch {
     return null;
   }
+  if (canonical.length === 0 || canonical.length > MAX_HOSTNAME_LENGTH) return null;
+  if (isIP(canonical) !== 0) return null;
   const labels = canonical.split('.');
   if (labels.length < 2) return null;
   for (const label of labels) {
@@ -41,7 +46,8 @@ export function extractURLHosts(strings: readonly string[]): string[] {
     const matches = s.match(URL_REGEX) ?? [];
     for (const m of matches) {
       try {
-        const u = new URL(m);
+        const candidate = m.replace(TRAILING_URL_PUNCTUATION, '');
+        const u = new URL(candidate);
         if (!u.hostname) continue;
         const canonical = canonicalizeHostname(u.hostname);
         if (canonical === null) continue;
@@ -75,10 +81,11 @@ export type HostAllowlist = ReadonlyMap<string, AllowlistProvenance>;
  * deliberate intent.
  *
  * Both sources are validated through canonicalizeHostname; invalid entries
- * (IP literals, single-label names, malformed hostnames) are silently
- * skipped. This is defense-in-depth: even though ResearchConfigSchema
- * validates fetchAllowlistExtra via HostString, this function does not
- * trust callers to have done so.
+ * (IP literals, single-label names, malformed hostnames, overlong hosts)
+ * are silently skipped. This mirrors ResearchConfigSchema's HostString
+ * canonicalization as defense-in-depth for callers that have not parsed
+ * configuration first; silent skipping preserves URL-extraction behavior
+ * for untrusted userSources while keeping this builder non-throwing.
  */
 export function buildHostAllowlist(input: AllowlistInput): HostAllowlist {
   const map = new Map<string, AllowlistProvenance>();

@@ -9,13 +9,22 @@ describe('classifyIP', () => {
     ['127.0.0.1',           'loopback'],
     ['::1',                 'loopback'],
     ['10.0.0.1',            'private'],
+    ['172.15.255.255',      'public'],
+    ['172.16.0.0',          'private'],
     ['172.16.5.5',          'private'],
+    ['172.31.255.255',      'private'],
+    ['172.32.0.0',          'public'],
     ['192.168.1.1',         'private'],
     ['fc00::1',             'private'],   // locally-assigned ULA half — always-reject in spec, classified 'private' here
     ['fd12:3456:789a::1',   'private'],   // randomly-assigned ULA half — opt-in-skippable
-    ['100.64.0.1',          'private'],   // RFC 6598 CGNAT — never publicly routable
-    ['100.127.255.254',     'private'],   // CGNAT range upper boundary
+    ['100.63.255.255',      'public'],
+    ['100.64.0.0',          'private'],   // RFC 6598 CGNAT — opt-in allowable with private hosts
+    ['100.64.0.1',          'private'],
+    ['100.127.255.255',     'private'],   // CGNAT range upper boundary
+    ['100.128.0.0',         'public'],
+    ['169.254.0.0',         'link-local-or-metadata'],
     ['169.254.169.254',     'link-local-or-metadata'],
+    ['169.254.255.255',     'link-local-or-metadata'],
     ['fe80::1',             'link-local-or-metadata'],
     ['fec1::1',             'public'],    // fec0::/10 was deprecated; "fec" prefix outside that block is unicast — classify by routable status
     ['fd00:ec2::254',       'link-local-or-metadata'],  // AWS metadata ULA carve-out
@@ -31,10 +40,20 @@ describe('classifyIP', () => {
     ['2002:7f00:0001::',    'loopback'],  // embeds 127.0.0.1
     ['0.0.0.0',             'unspecified'],
     ['::',                  'unspecified'],
+    ['192.0.0.1',           'broadcast-or-reserved'],
+    ['192.0.2.1',           'broadcast-or-reserved'], // TEST-NET-1
+    ['198.18.0.1',          'broadcast-or-reserved'], // benchmarking
+    ['198.51.100.1',        'broadcast-or-reserved'], // TEST-NET-2
+    ['203.0.113.1',         'broadcast-or-reserved'], // TEST-NET-3
+    ['224.0.0.0',           'multicast'],
     ['224.0.0.1',           'multicast'],
+    ['239.255.255.255',     'multicast'],
     ['ff00::1',             'multicast'],
     ['255.255.255.255',     'broadcast-or-reserved'],
+    ['240.0.0.0',           'broadcast-or-reserved'],
     ['240.0.0.1',           'broadcast-or-reserved'],
+    ['2001:db8::1',         'broadcast-or-reserved'], // documentation
+    ['2001::1',             'broadcast-or-reserved'], // special-purpose assignments
     ['8.8.8.8',             'public'],
     ['2606:4700:4700::1111', 'public'],
   ];
@@ -52,6 +71,9 @@ describe('resolveAndPin', () => {
 
   it('throws SsrfBlocked when any resolved IP is private (without opt-in)', async () => {
     const fakeResolve = vi.fn().mockResolvedValue(['10.0.0.1']);
+    await expect(
+      resolveAndPin('intranet', { resolve: fakeResolve, allowPrivateForHost: false }),
+    ).rejects.toThrow(SsrfBlocked);
     await expect(
       resolveAndPin('intranet', { resolve: fakeResolve, allowPrivateForHost: false }),
     ).rejects.toThrow(/web_fetch_private_ip_blocked/);
@@ -86,5 +108,47 @@ describe('resolveAndPin', () => {
     try { await resolveAndPin('intranet', { resolve: fakeResolve, allowPrivateForHost: false }); }
     catch (e) { caught = e; }
     expect(String(caught)).not.toContain('10.0.0.1');
+  });
+
+  it('throws when resolver returns empty array', async () => {
+    const fakeResolve = vi.fn().mockResolvedValue([]);
+    await expect(
+      resolveAndPin('no-records', { resolve: fakeResolve, allowPrivateForHost: false }),
+    ).rejects.toThrow(/web_fetch_no_addresses/);
+  });
+
+  it('preserves resolver failures separately from no-address results', async () => {
+    const fakeResolve = vi.fn().mockRejectedValue(new Error('SERVFAIL 10.0.0.1'));
+    let caught: unknown;
+    try { await resolveAndPin('broken.example', { resolve: fakeResolve, allowPrivateForHost: false }); }
+    catch (e) { caught = e; }
+    expect(caught).toBeInstanceOf(SsrfBlocked);
+    expect((caught as SsrfBlocked).code).toBe('web_fetch_dns_resolution_failed');
+    expect(String(caught)).not.toContain('10.0.0.1');
+  });
+
+  it('with allowPrivateForHost=true allows fd00::/8 ULA (non-cloud-metadata)', async () => {
+    const fakeResolve = vi.fn().mockResolvedValue(['fd12:3456:789a::1']);
+    const pinned = await resolveAndPin('ula-host', { resolve: fakeResolve, allowPrivateForHost: true });
+    expect(pinned).toBe('fd12:3456:789a::1');
+  });
+
+  it('with allowPrivateForHost=true rejects fc00::/8 (locally-assigned ULA always blocked)', async () => {
+    const fakeResolve = vi.fn().mockResolvedValue(['fc00::1']);
+    await expect(
+      resolveAndPin('local-ula', { resolve: fakeResolve, allowPrivateForHost: true }),
+    ).rejects.toThrow(/web_fetch_private_ip_blocked/);
+  });
+
+  it('with allowPrivateForHost=true allows CGNAT 100.64.0.0/10', async () => {
+    const fakeResolve = vi.fn().mockResolvedValue(['100.64.0.1']);
+    const pinned = await resolveAndPin('cgnat-host', { resolve: fakeResolve, allowPrivateForHost: true });
+    expect(pinned).toBe('100.64.0.1');
+  });
+
+  it('with allowPrivateForHost=true allows RFC1918 192.168.x.x', async () => {
+    const fakeResolve = vi.fn().mockResolvedValue(['192.168.1.100']);
+    const pinned = await resolveAndPin('rfc1918-host', { resolve: fakeResolve, allowPrivateForHost: true });
+    expect(pinned).toBe('192.168.1.100');
   });
 });
