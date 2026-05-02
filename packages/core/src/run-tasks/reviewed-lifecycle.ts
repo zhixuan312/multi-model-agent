@@ -1076,6 +1076,15 @@ export async function executeReviewedLifecycle(
           code: 'diff_review_rejected',
           message: verdict.message || 'diff review rejected implementation',
         },
+        terminationReason: {
+          cause: 'error',
+          turnsUsed: base.terminationReason && typeof base.terminationReason === 'object' ? (base.terminationReason.turnsUsed ?? 0) : 0,
+          hasFileArtifacts: false,
+          usedShell: false,
+          workerSelfAssessment: 'failed',
+          wasPromoted: false,
+          ...(base.terminationReason && typeof base.terminationReason === 'object' && base.terminationReason.wallClockMs !== undefined ? { wallClockMs: base.terminationReason.wallClockMs } : {}),
+        },
         concerns,
         commits,
         commitError,
@@ -1088,6 +1097,20 @@ export async function executeReviewedLifecycle(
         status: verdict.status,
         workerStatus: 'failed',
         error: verdict.reason ?? `diff review transport failure: ${verdict.status}`,
+        errorCode: verdict.status,
+        structuredError: {
+          code: verdict.status,
+          message: verdict.reason ?? `diff review transport failure: ${verdict.status}`,
+        },
+        terminationReason: {
+          cause: 'error',
+          turnsUsed: base.terminationReason && typeof base.terminationReason === 'object' ? (base.terminationReason.turnsUsed ?? 0) : 0,
+          hasFileArtifacts: false,
+          usedShell: false,
+          workerSelfAssessment: 'failed',
+          wasPromoted: false,
+          ...(base.terminationReason && typeof base.terminationReason === 'object' && base.terminationReason.wallClockMs !== undefined ? { wallClockMs: base.terminationReason.wallClockMs } : {}),
+        },
         concerns: [...concerns, ...verdict.concerns],
         commits,
         commitError,
@@ -1461,7 +1484,7 @@ export async function executeReviewedLifecycle(
       if (diffCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'diff', attempt: 0, role: 'diffReviewer', assignedTier: diffReviewerTier, reason: diffCall.unavailableReason! });
       }
-      const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable || isReviewTransportFailure(diffCall.result) ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
+      const verdict: DiffReviewOrSkipped = diffCall.bothUnavailable ? makeSkippedReviewResult('all_tiers_unavailable') : diffCall.result;
       const diffEnvelopeStatus: RunResult['diffReviewStatus'] =
         'kind' in verdict
           ? (verdict.kind === 'approve' ? 'approved'

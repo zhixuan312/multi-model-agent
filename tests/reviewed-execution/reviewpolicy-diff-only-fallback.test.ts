@@ -119,6 +119,43 @@ function makeCwd(): string {
   return cwd;
 }
 
+describe('Item 3: diff_review reject sets terminationReason.cause = error', () => {
+  it('reject branch produces status=error and overwrites terminationReason', async () => {
+    const standardRun = vi.fn(async (_prompt: string) => {
+      return okResult(STRUCTURED_IMPL_OUTPUT);
+    });
+    const complexRun = vi.fn(async (prompt: string) => {
+      if (prompt.includes('You are reviewing a mechanical refactor')) {
+        return { output: 'REJECT: implementation introduces bugs' };
+      }
+      return okResult(STRUCTURED_IMPL_OUTPUT);
+    });
+
+    providers.standard = makeProvider('standard', standardRun);
+    providers.complex = makeProvider('complex', complexRun);
+
+    const [result] = await runTasks(
+      [{
+        prompt: 'modify src/a.ts',
+        agentType: 'standard',
+        cwd: makeCwd(),
+        filePaths: ['src/a.ts'],
+        reviewPolicy: 'diff_only',
+      }],
+      makeConfig(),
+      { batchId: 'batch-diff-only-reject' },
+    );
+
+    expect(result.status).toBe('error');
+    expect(result.workerStatus).toBe('failed');
+    expect(result.errorCode).toBe('diff_review_rejected');
+    expect(result.terminationReason).toBeDefined();
+    if (result.terminationReason && typeof result.terminationReason === 'object') {
+      expect(result.terminationReason.cause).toBe('error');
+    }
+  });
+});
+
 describe('reviewPolicy=diff_only fallback', () => {
   it('records diff-review fallback with loop=diff and role=diffReviewer', async () => {
     const fallbackEvents: Array<Record<string, unknown>> = [];
