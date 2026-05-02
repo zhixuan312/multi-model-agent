@@ -802,7 +802,7 @@ describe('runClaude', () => {
       const result = await runClaude('prompt', {}, providerConfig, defaults);
 
       expect(result.status).toBe('ok');
-      expect(result.usage.inputTokens).toBe(1000);
+      expect(result.usage.inputTokens).toBe(1100); // 1000 turn + 80 cache_read + 20 cache_create
       expect(result.usage.outputTokens).toBe(500);
       expect(result.usage.cachedTokens).toBe(100); // 80 + 20
     });

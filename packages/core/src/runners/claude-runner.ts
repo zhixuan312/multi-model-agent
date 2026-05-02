@@ -574,7 +574,7 @@ export async function runClaude(
             : (cacheRead ?? 0) + (cacheCreate ?? 0);
 
           const turnUsage: CanonicalUsage = {
-            inputTokens: turnInputTokens,
+            inputTokens: turnInputTokens + (cacheRead ?? 0) + (cacheCreate ?? 0),
             outputTokens: turnOutputTokens,
             cachedTokens: turnCachedTokens,
             reasoningTokens: null, // claude API does not document reasoning tokens (§10)
