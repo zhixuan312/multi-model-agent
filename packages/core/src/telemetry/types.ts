@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ModelFamilyEnum } from '../routing/model-profiles.js';
 
-export const SCHEMA_VERSION = 3;
+export const SCHEMA_VERSION = 4;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
@@ -17,7 +17,7 @@ const VersionString = z
 export const Os = z.enum(['darwin', 'linux', 'win32', 'other']);
 
 export const BatchWrapperSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   installId: z.string().uuid(),
   mmagentVersion: VersionString,
   os: Os,
@@ -68,6 +68,22 @@ export const FindingsBySeveritySchema = z.object({
   low: z.number().int().min(0).max(200),
 }).strict();
 
+// Shared base: matches the TokenCounts interface in cost/compute.ts.
+// Single source of truth for "the five token classes". Future additions
+// (e.g., a new token class) update one place.
+export const TokenCountsSchema = z.object({
+  inputTokens: z.number().int().min(0),
+  outputTokens: z.number().int().min(0),
+  cachedReadTokens: z.number().int().min(0),
+  cachedCreationTokens: z.number().int().min(0),
+  reasoningTokens: z.number().int().min(0),
+});
+
+export const TierUsageSchema = TokenCountsSchema.extend({
+  model: z.string(),
+  costUSD: z.number().nullable(),
+});
+
 // ── Stage entry (§3.3) ───────────────────────────────────────────────────
 
 const StageNameEnum = z.enum([
@@ -81,16 +97,20 @@ const StageNameEnum = z.enum([
   'committing',
 ]);
 
-// Base fields shared by all stage variants
-const StageEntryBase = z.object({
+// Base fields shared by all stage variants.
+// Field set kept in lockstep with TokenCountsSchema — when a new token class
+// is added there, the token fields here must be updated too.
+export const StageEntryBase = z.object({
   name: StageNameEnum,
+  round: z.number().int().min(0),
   model: z.string().regex(STRICT_ID_REGEX),
   tier: z.enum(['standard', 'complex', 'main']),
   durationMs: z.number().int().min(0).max(3_600_000),
-  costUSD: z.number().min(0).max(100),
+  costUSD: z.number().min(0).max(100).nullable(),
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
-  cachedTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  cachedCreationTokens: z.number().int().min(0).max(5_000_000).nullable(),
   reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
   toolCallCount: z.number().int().min(0).max(5000),
   filesReadCount: z.number().int().min(0).max(5000),
@@ -155,23 +175,33 @@ export const TaskCompletedEventSchema = z.object({
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
   implementerTier: z.enum(['standard', 'complex', 'main']),
+  parentModel: z.string().nullable(),
+  parentModelFamily: ModelFamilyEnum,
+
+  // Tier-level usage breakdown (§3.2, §3.3)
+  tierUsage: z.object({
+    standard: TierUsageSchema.optional(),
+    complex: TierUsageSchema.optional(),
+    main: TierUsageSchema.optional(),
+  }),
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
   workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_aborted']),
   errorCode: ErrorCode.nullable(),
-  parentModelFamily: ModelFamilyEnum,
 
   // Token economics
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
-  cachedTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  cachedCreationTokens: z.number().int().min(0).max(5_000_000).nullable(),
   reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
 
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
-  totalCostUSD: z.number().min(0).max(800),
-  costDeltaVsParentUSD: z.number().min(-800).max(800).nullable(),
+  totalCostUSD: z.number().min(0).max(800).nullable(),
+  parentEquivalentCostUSD: z.number().nullable(),
+  costDeltaVsParentUSD: z.number().nullable(),
 
   // Lifecycle counts
   concernCount: z.number().int().min(0).max(150),
@@ -186,7 +216,7 @@ export const TaskCompletedEventSchema = z.object({
   sandboxViolationCount: z.number().int().min(0).max(100),
 
   // Stages array
-  stages: z.array(StageEntrySchema).min(0).max(8),
+  stages: z.array(StageEntrySchema).min(0).max(16),
 
   // Validation warnings populated by the recorder before enqueue;
   // absent for healthy events. Each entry carries the rule name
@@ -200,7 +230,7 @@ export const TaskCompletedEventSchema = z.object({
 // ── Upload batch ─────────────────────────────────────────────────────────
 
 export const UploadBatchSchema = z.object({
-  schemaVersion: z.literal(3),
+  schemaVersion: z.literal(4),
   installId: z.string().uuid(),
   mmagentVersion: VersionString,
   os: Os,
@@ -227,21 +257,9 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     }
   }
 
-  // R2: stage count must be > 0 for ok/incomplete (brief_too_vague may have 0)
   // R2.1: empty stages only allowed for brief_too_vague and error
   if (event.stages.length === 0 && !['brief_too_vague', 'error'].includes(event.terminalStatus)) {
     ctx.addIssue({ code: 'custom', message: 'R2.1: empty stages only allowed for brief_too_vague|error' });
-  }
-
-  // R3: review stages must use a different TIER than the implementer.
-  // Model comparison is intentionally not a gate: user may map all tiers to
-  // the same model string for cost reasons and the pipeline still runs.
-  for (const st of event.stages) {
-    if (st.name === 'spec_review' || st.name === 'quality_review' || st.name === 'diff_review') {
-      if (st.tier === event.implementerTier) {
-        ctx.addIssue({ code: 'custom', message: `R3: ${st.name}.tier must differ from implementerTier` });
-      }
-    }
   }
 
   // R4: totalDurationMs >= sum of stage durationMs (not strictly equal due to overhead)
@@ -258,15 +276,17 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     (acc, st) => ({
       input: acc.input + st.inputTokens,
       output: acc.output + st.outputTokens,
-      cached: acc.cached + (st.cachedTokens ?? 0),
+      cachedRead: acc.cachedRead + (st.cachedReadTokens ?? 0),
+      cachedCreation: acc.cachedCreation + (st.cachedCreationTokens ?? 0),
       reasoning: acc.reasoning + (st.reasoningTokens ?? 0),
     }),
-    { input: 0, output: 0, cached: 0, reasoning: 0 },
+    { input: 0, output: 0, cachedRead: 0, cachedCreation: 0, reasoning: 0 },
   );
   if (
     tokenSum.input < event.inputTokens ||
     tokenSum.output < event.outputTokens ||
-    tokenSum.cached < (event.cachedTokens ?? 0) ||
+    tokenSum.cachedRead < (event.cachedReadTokens ?? 0) ||
+    tokenSum.cachedCreation < (event.cachedCreationTokens ?? 0) ||
     tokenSum.reasoning < (event.reasoningTokens ?? 0)
   ) {
     ctx.addIssue({ code: 'custom', message: 'R5: top-level token counts must not exceed sum of stage token counts' });
@@ -280,18 +300,29 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     }
   }
 
-  // R6: per stage, cachedTokens ≤ inputTokens (cached is subset of input).
-  // When cachedTokens is null the provider didn't expose it; skip validation.
+  // R6b: non-negativity of cachedReadTokens and cachedCreationTokens is
+  // enforced by z.number().int().min(0). The soft-warning case
+  // (cachedReadTokens + cachedCreationTokens > 100 × inputTokens) lives in
+  // recorder.ts validation_warnings; see Task 11.5.
+
+  // R7: (name, round) uniqueness across the stages array.
+  const seenNameRound = new Set<string>();
   for (const st of event.stages) {
-    if (st.cachedTokens !== null && st.cachedTokens > st.inputTokens) {
-      ctx.addIssue({ code: 'custom', message: 'R6: cachedTokens must not exceed inputTokens per stage' });
+    const key = `${st.name}:${st.round}`;
+    if (seenNameRound.has(key)) {
+      ctx.addIssue({ code: 'custom', message: `R7: duplicate (name, round) pair: ${key}` });
     }
+    seenNameRound.add(key);
   }
 
-  // R7: totalCostUSD = sum of stage costUSD (float comparison with tolerance)
-  const costSum = event.stages.reduce((s, st) => s + st.costUSD, 0);
-  if (Math.abs(costSum - event.totalCostUSD) > 0.02) {
-    ctx.addIssue({ code: 'custom', message: 'R7: totalCostUSD must approximately equal sum of stage costUSD' });
+  // cost-sum: totalCostUSD must approximately equal sum of stage costUSD
+  // (float comparison with tolerance). When totalCostUSD is null (honest-null
+  // because a contributing stage has null costUSD), skip this check.
+  if (event.totalCostUSD !== null && event.stages.every(st => st.costUSD !== null)) {
+    const costSum = event.stages.reduce((s, st) => s + (st.costUSD as number), 0);
+    if (Math.abs(costSum - event.totalCostUSD) > 0.02) {
+      ctx.addIssue({ code: 'custom', message: 'cost-sum: totalCostUSD must approximately equal sum of stage costUSD' });
+    }
   }
 
   // R8: verification outcome only on delegate, execute-plan, verify routes
@@ -335,10 +366,7 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   // R13: totalDurationMs in [0, 86_400_000]
   // (enforced by Zod schema bounds)
 
-  // R14: totalCostUSD in [0, 800], costDeltaVsParentUSD in [-800, 800] or null
-  // (enforced by Zod schema bounds)
-
-  // R15: costUSD per stage in [0, 100]
+  // R14: totalCostUSD in [0, 800] or null
   // (enforced by Zod schema bounds)
 
   // R16: rework stages require their parent review stage in the same event

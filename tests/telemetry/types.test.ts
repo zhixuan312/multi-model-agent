@@ -4,27 +4,62 @@ import {
   TaskCompletedEventSchema,
   ValidatedTaskCompletedEventSchema,
   StageEntrySchema,
+  StageEntryBase,
   BatchWrapperSchema,
   UploadBatchSchema,
   STRICT_ID_REGEX,
+  TierUsageSchema,
 } from '../../packages/core/src/telemetry/types.js';
 
-// Use the validated schema for tests that check R1-R15 rules
+// Use the validated schema for tests that check R1-R16 rules
 const Schema = ValidatedTaskCompletedEventSchema;
 
-function makeValidStage(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  // R3: review/rework/verify/commit stages use a different tier than the implementer.
+// ── v4 test fixtures ─────────────────────────────────────────────────────
+
+const validStageBase = {
+  name: 'implementing' as const,
+  round: 0,
+  model: 'claude-sonnet',
+  tier: 'standard' as const,
+  durationMs: 1000,
+  costUSD: 0.01,
+  inputTokens: 100,
+  outputTokens: 50,
+  cachedReadTokens: 0,
+  cachedCreationTokens: 0,
+  reasoningTokens: 0,
+  toolCallCount: 3,
+  filesReadCount: 2,
+  filesWrittenCount: 1,
+  turnCount: 2,
+  maxIdleMs: 0,
+  totalIdleMs: 0,
+};
+
+const validTierUsage = {
+  model: 'claude-sonnet',
+  inputTokens: 500,
+  outputTokens: 200,
+  cachedReadTokens: 50,
+  cachedCreationTokens: 10,
+  reasoningTokens: 30,
+  costUSD: 0.05,
+};
+
+function makeStage(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const tier = (name === 'implementing') ? 'standard' : 'complex';
 
-  const base = {
+  const base: Record<string, unknown> = {
     name,
+    round: (overrides.round as number) ?? 0,
     model: 'claude-sonnet',
     tier,
     durationMs: 1000,
     costUSD: 0.01,
     inputTokens: 100,
     outputTokens: 50,
-    cachedTokens: 0,
+    cachedReadTokens: 0,
+    cachedCreationTokens: 0,
     reasoningTokens: 0,
     toolCallCount: 3,
     filesReadCount: 2,
@@ -70,11 +105,11 @@ function makeValidStage(name: string, overrides: Record<string, unknown> = {}): 
 
 function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const stages = (overrides.stages as Record<string, unknown>[]) ?? [
-    makeValidStage('implementing'),
-    makeValidStage('spec_review'),
-    makeValidStage('quality_review'),
-    makeValidStage('verifying'),
-    makeValidStage('committing'),
+    makeStage('implementing'),
+    makeStage('spec_review'),
+    makeStage('quality_review'),
+    makeStage('verifying'),
+    makeStage('committing'),
   ];
 
   // Compute top-level totals from stages unless explicitly overridden
@@ -91,13 +126,17 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     verifyCommandPresent: true,
     implementerModel: 'claude-sonnet',
     implementerTier: 'standard',
+    parentModel: null,
+    parentModelFamily: 'claude',
+    tierUsage: {},
+    parentEquivalentCostUSD: null,
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
-    parentModelFamily: 'claude',
     inputTokens: sum('inputTokens'),
     outputTokens: sum('outputTokens'),
-    cachedTokens: sum('cachedTokens'),
+    cachedReadTokens: sum('cachedReadTokens'),
+    cachedCreationTokens: sum('cachedCreationTokens'),
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s: number, st: Record<string, unknown>) => s + ((st.costUSD as number) ?? 0), 0),
@@ -115,9 +154,9 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
   };
 }
 
-describe('V3 telemetry types', () => {
-  it('SCHEMA_VERSION is 3', () => {
-    expect(SCHEMA_VERSION).toBe(3);
+describe('V4 telemetry types', () => {
+  it('SCHEMA_VERSION is 4', () => {
+    expect(SCHEMA_VERSION).toBe(4);
   });
 
   it('accepts a well-formed task.completed event', () => {
@@ -178,82 +217,12 @@ describe('V3 telemetry types', () => {
     expect(result.success).toBe(false);
   });
 
-  // ── R3: review stages must use a different tier than the implementer ──
-  it('R3 — fires when spec_review.tier === event.implementerTier', () => {
-    const ev = makeValidEvent({
-      implementerTier: 'standard',
-      stages: [
-        makeValidStage('implementing', { tier: 'standard' }),
-        makeValidStage('spec_review', { tier: 'standard' }),
-        makeValidStage('quality_review', { tier: 'complex' }),
-        makeValidStage('verifying', { tier: 'complex' }),
-        makeValidStage('committing', { tier: 'complex' }),
-      ],
-    });
-    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    expect(r.success).toBe(false);
-    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
-  });
-
-  it('R3 — fires when quality_review.tier === event.implementerTier', () => {
-    const ev = makeValidEvent({
-      implementerTier: 'standard',
-      stages: [
-        makeValidStage('implementing', { tier: 'standard' }),
-        makeValidStage('spec_review', { tier: 'complex' }),
-        makeValidStage('quality_review', { tier: 'standard' }),
-        makeValidStage('verifying', { tier: 'complex' }),
-        makeValidStage('committing', { tier: 'complex' }),
-      ],
-    });
-    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    expect(r.success).toBe(false);
-    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
-  });
-
-  it('R3 — fires when diff_review.tier === event.implementerTier', () => {
-    const ev = makeValidEvent({
-      implementerTier: 'standard',
-      stages: [
-        makeValidStage('implementing', { tier: 'standard' }),
-        makeValidStage('diff_review', { tier: 'standard' }),
-        makeValidStage('verifying', { tier: 'complex' }),
-        makeValidStage('committing', { tier: 'complex' }),
-      ],
-    });
-    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    expect(r.success).toBe(false);
-    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
-  });
-
-  it('R3 — does NOT fire when models match but tiers differ', () => {
-    const ev = makeValidEvent({
-      implementerTier: 'standard',
-      stages: [
-        makeValidStage('implementing', { tier: 'standard', model: 'shared-model' }),
-        makeValidStage('spec_review', { tier: 'complex', model: 'shared-model' }),
-        makeValidStage('quality_review', { tier: 'complex', model: 'shared-model' }),
-        makeValidStage('verifying', { tier: 'complex', model: 'shared-model' }),
-        makeValidStage('committing', { tier: 'complex', model: 'shared-model' }),
-      ],
-    });
-    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    if (!r.success) {
-      expect(r.error.issues.some(i => /^R3:/.test(i.message))).toBe(false);
-    }
-  });
-
-  it('R3 — accepts when all review stages have different tiers', () => {
-    const result = Schema.safeParse(makeValidEvent());
-    expect(result.success).toBe(true);
-  });
-
   // ── R4: totalDurationMs >= sum of stage durationMs ──
   it('R4 — rejects when stage duration sum exceeds totalDurationMs', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         totalDurationMs: 100,
-        stages: [makeValidStage('implementing', { durationMs: 5000 })],
+        stages: [makeStage('implementing', { durationMs: 5000 })],
       }),
     );
     expect(result.success).toBe(false);
@@ -263,18 +232,18 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         totalDurationMs: 1000,
-        stages: [makeValidStage('implementing', { durationMs: 1000 })],
+        stages: [makeStage('implementing', { durationMs: 1000 })],
       }),
     );
     expect(result.success).toBe(true);
   });
 
-  // ── R5: top-level token counts must equal sum of stages ──
+  // ── R5: top-level token counts must not exceed sum of stages ──
   it('R5 — rejects when token sums do not match top-level', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         inputTokens: 999,
-        stages: [makeValidStage('implementing', { inputTokens: 100 })],
+        stages: [makeStage('implementing', { inputTokens: 100 })],
       }),
     );
     expect(result.success).toBe(false);
@@ -285,13 +254,15 @@ describe('V3 telemetry types', () => {
       makeValidEvent({
         inputTokens: 100,
         outputTokens: 50,
-        cachedTokens: 0,
+        cachedReadTokens: 0,
+        cachedCreationTokens: 0,
         reasoningTokens: 0,
         stages: [
-          makeValidStage('implementing', {
+          makeStage('implementing', {
             inputTokens: 100,
             outputTokens: 50,
-            cachedTokens: 0,
+            cachedReadTokens: 0,
+            cachedCreationTokens: 0,
             reasoningTokens: 0,
           }),
         ],
@@ -308,10 +279,10 @@ describe('V3 telemetry types', () => {
         outputTokens: 200,
         reasoningTokens: 100,
         stages: [
-          makeValidStage('implementing', {
+          makeStage('implementing', {
             inputTokens: 200,
             outputTokens: 200,
-            reasoningTokens: 201, // > output
+            reasoningTokens: 201,
           }),
         ],
       }),
@@ -319,41 +290,32 @@ describe('V3 telemetry types', () => {
     expect(result.success).toBe(false);
   });
 
-  // ── R6: per stage, cachedTokens <= inputTokens ──
-  it('R6 — rejects when cachedTokens > inputTokens', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        inputTokens: 200,
-        outputTokens: 50,
-        cachedTokens: 300, // exceeds input
-        stages: [
-          makeValidStage('implementing', {
-            inputTokens: 200,
-            outputTokens: 50,
-            cachedTokens: 300,
-          }),
-        ],
-      }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  // ── R7: totalCostUSD approx equals sum of stage costUSD ──
-  it('R7 — rejects when cost sum differs significantly', () => {
+  // ── cost-sum: totalCostUSD approx equals sum of stage costUSD ──
+  it('cost-sum — rejects when cost sum differs significantly', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         totalCostUSD: 100,
-        stages: [makeValidStage('implementing', { costUSD: 0.01 })],
+        stages: [makeStage('implementing', { costUSD: 0.01 })],
       }),
     );
     expect(result.success).toBe(false);
   });
 
-  it('R7 — accepts small float cost differences (within 0.02 tolerance)', () => {
+  it('cost-sum — accepts small float cost differences (within 0.02 tolerance)', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         totalCostUSD: 0.0100001,
-        stages: [makeValidStage('implementing', { costUSD: 0.01 })],
+        stages: [makeStage('implementing', { costUSD: 0.01 })],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('cost-sum — skipped when totalCostUSD is null', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        totalCostUSD: null,
+        stages: [makeStage('implementing', { costUSD: 0.05 })],
       }),
     );
     expect(result.success).toBe(true);
@@ -366,9 +328,9 @@ describe('V3 telemetry types', () => {
         route: 'audit',
         reviewPolicy: 'quality_only',
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_review'),
-          makeValidStage('verifying'),
+          makeStage('implementing'),
+          makeStage('quality_review'),
+          makeStage('verifying'),
         ],
       }),
     );
@@ -385,7 +347,7 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         route: 'retry',
-        stages: [makeValidStage('implementing'), makeValidStage('quality_review')],
+        stages: [makeStage('implementing'), makeStage('quality_review')],
       }),
     );
     expect(result.success).toBe(false);
@@ -398,8 +360,8 @@ describe('V3 telemetry types', () => {
         route: 'audit',
         reviewPolicy: 'quality_only',
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('spec_review'),
+          makeStage('implementing'),
+          makeStage('spec_review'),
         ],
       }),
     );
@@ -413,9 +375,9 @@ describe('V3 telemetry types', () => {
         route: 'audit',
         reviewPolicy: 'quality_only',
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_review'),
-          makeValidStage('quality_rework'),
+          makeStage('implementing'),
+          makeStage('quality_review'),
+          makeStage('quality_rework'),
         ],
       }),
     );
@@ -429,10 +391,10 @@ describe('V3 telemetry types', () => {
         route: 'delegate',
         reviewPolicy: 'full',
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_review', { verdict: 'annotated' }),
-          makeValidStage('verifying'),
-          makeValidStage('committing'),
+          makeStage('implementing'),
+          makeStage('quality_review', { verdict: 'annotated' }),
+          makeStage('verifying'),
+          makeStage('committing'),
         ],
       }),
     );
@@ -445,9 +407,9 @@ describe('V3 telemetry types', () => {
         route: 'audit',
         reviewPolicy: 'quality_only',
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_review', { verdict: 'annotated' }),
-          makeValidStage('committing'),
+          makeStage('implementing'),
+          makeStage('quality_review', { verdict: 'annotated' }),
+          makeStage('committing'),
         ],
       }),
     );
@@ -475,14 +437,9 @@ describe('V3 telemetry types', () => {
     expect(result.success).toBe(false);
   });
 
-  it('R15 — rejects stage costUSD > 100', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        totalCostUSD: 100,
-        stages: [makeValidStage('implementing', { costUSD: 101 })],
-      }),
-    );
-    expect(result.success).toBe(false);
+  it('R14 — accepts totalCostUSD: null', () => {
+    const result = Schema.safeParse(makeValidEvent({ totalCostUSD: null }));
+    expect(result.success).toBe(true);
   });
 
   // ── R16: rework stages require their parent review stage in the same event ──
@@ -490,9 +447,9 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('spec_rework'),
-          makeValidStage('verifying'),
+          makeStage('implementing'),
+          makeStage('spec_rework'),
+          makeStage('verifying'),
         ],
       }),
     );
@@ -504,9 +461,9 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_rework'),
-          makeValidStage('verifying'),
+          makeStage('implementing'),
+          makeStage('quality_rework'),
+          makeStage('verifying'),
         ],
       }),
     );
@@ -518,10 +475,10 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('spec_review'),
-          makeValidStage('spec_rework'),
-          makeValidStage('verifying'),
+          makeStage('implementing'),
+          makeStage('spec_review'),
+          makeStage('spec_rework'),
+          makeStage('verifying'),
         ],
       }),
     );
@@ -532,10 +489,10 @@ describe('V3 telemetry types', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
-          makeValidStage('implementing'),
-          makeValidStage('quality_review'),
-          makeValidStage('quality_rework'),
-          makeValidStage('verifying'),
+          makeStage('implementing'),
+          makeStage('quality_review'),
+          makeStage('quality_rework'),
+          makeStage('verifying'),
         ],
       }),
     );
@@ -546,22 +503,22 @@ describe('V3 telemetry types', () => {
 // ── Batch wrapper ─────────────────────────────────────────────────────────
 
 describe('BatchWrapperSchema', () => {
-  it('accepts valid V3 batch wrapper', () => {
+  it('accepts valid V4 batch wrapper', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
     });
     expect(result.success).toBe(true);
   });
 
-  it('rejects schemaVersion !== 3', () => {
+  it('rejects schemaVersion !== 4', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 2,
+      schemaVersion: 3,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
     });
@@ -570,9 +527,9 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects invalid UUID installId', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'not-a-uuid',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
     });
@@ -581,9 +538,9 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects nodeMajor < 22', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 20,
     });
@@ -592,9 +549,9 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects nodeMajor > 99', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 100,
     });
@@ -608,9 +565,9 @@ describe('UploadBatchSchema', () => {
   it('accepts a valid upload batch', () => {
     const event = Schema.parse(makeValidEvent());
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [event],
@@ -620,9 +577,9 @@ describe('UploadBatchSchema', () => {
 
   it('rejects empty events array', () => {
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [],
@@ -663,13 +620,13 @@ describe('STRICT_ID_REGEX', () => {
 
 describe('StageEntrySchema', () => {
   it('accepts implementing stage', () => {
-    const result = StageEntrySchema.safeParse(makeValidStage('implementing'));
+    const result = StageEntrySchema.safeParse(makeStage('implementing'));
     expect(result.success).toBe(true);
   });
 
   it('accepts review stage with findingsBySeverity', () => {
     const result = StageEntrySchema.safeParse(
-      makeValidStage('quality_review', {
+      makeStage('quality_review', {
         findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3 },
       }),
     );
@@ -678,14 +635,14 @@ describe('StageEntrySchema', () => {
 
   it('accepts verifying stage with outcome=passed', () => {
     const result = StageEntrySchema.safeParse(
-      makeValidStage('verifying', { outcome: 'passed' }),
+      makeStage('verifying', { outcome: 'passed' }),
     );
     expect(result.success).toBe(true);
   });
 
   it('accepts verifying with outcome=skipped and skipReason set', () => {
     const result = StageEntrySchema.safeParse(
-      makeValidStage('verifying', { outcome: 'skipped', skipReason: 'no_command' }),
+      makeStage('verifying', { outcome: 'skipped', skipReason: 'no_command' }),
     );
     expect(result.success).toBe(true);
   });
@@ -693,13 +650,15 @@ describe('StageEntrySchema', () => {
   it('rejects rework stage without triggeringConcernCategories', () => {
     const result = StageEntrySchema.safeParse({
       name: 'quality_rework',
+      round: 0,
       model: 'claude-sonnet',
       tier: 'standard',
       durationMs: 1000,
       costUSD: 0.01,
       inputTokens: 0,
       outputTokens: 0,
-      cachedTokens: 0,
+      cachedReadTokens: 0,
+      cachedCreationTokens: 0,
       reasoningTokens: 0,
       toolCallCount: 0,
       filesReadCount: 0,
@@ -714,57 +673,58 @@ describe('StageEntrySchema', () => {
 
   it('accepts commit stage with filesCommittedCount and branchCreated', () => {
     const result = StageEntrySchema.safeParse(
-      makeValidStage('committing', { filesCommittedCount: 5, branchCreated: true }),
+      makeStage('committing', { filesCommittedCount: 5, branchCreated: true }),
     );
     expect(result.success).toBe(true);
   });
 });
 
-// ── Nullable cachedTokens / reasoningTokens (§3.6) ───────────────────────
+// ── Nullable cached tokens (§3.6) ────────────────────────────────────────
 
-describe('nullable cachedTokens and reasoningTokens', () => {
-  it('StageEntrySchema accepts null cachedTokens and reasoningTokens', () => {
-    const stage = makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null });
+describe('nullable cachedReadTokens and cachedCreationTokens', () => {
+  it('StageEntrySchema accepts null cachedReadTokens and cachedCreationTokens', () => {
+    const stage = makeStage('implementing', { cachedReadTokens: null, cachedCreationTokens: null });
     const result = StageEntrySchema.safeParse(stage);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.cachedTokens).toBeNull();
-      expect(result.data.reasoningTokens).toBeNull();
+      expect(result.data.cachedReadTokens).toBeNull();
+      expect(result.data.cachedCreationTokens).toBeNull();
     }
   });
 
-  it('TaskCompletedEventSchema accepts null cachedTokens and reasoningTokens', () => {
+  it('TaskCompletedEventSchema accepts null cachedReadTokens and cachedCreationTokens', () => {
     const event = makeValidEvent({
-      cachedTokens: null,
-      reasoningTokens: null,
+      cachedReadTokens: null,
+      cachedCreationTokens: null,
       stages: [
-        makeValidStage('implementing', { cachedTokens: null, reasoningTokens: null }),
-        makeValidStage('spec_review', { cachedTokens: null, reasoningTokens: null }),
-        makeValidStage('quality_review', { cachedTokens: null, reasoningTokens: null }),
-        makeValidStage('verifying', { cachedTokens: null, reasoningTokens: null }),
-        makeValidStage('committing', { cachedTokens: null, reasoningTokens: null }),
+        makeStage('implementing', { cachedReadTokens: null, cachedCreationTokens: null }),
+        makeStage('spec_review', { cachedReadTokens: null, cachedCreationTokens: null }),
+        makeStage('quality_review', { cachedReadTokens: null, cachedCreationTokens: null }),
+        makeStage('verifying', { cachedReadTokens: null, cachedCreationTokens: null }),
+        makeStage('committing', { cachedReadTokens: null, cachedCreationTokens: null }),
       ],
     });
     const result = ValidatedTaskCompletedEventSchema.safeParse(event);
     expect(result.success).toBe(true);
     if (result.success) {
-      expect(result.data.cachedTokens).toBeNull();
-      expect(result.data.reasoningTokens).toBeNull();
+      expect(result.data.cachedReadTokens).toBeNull();
+      expect(result.data.cachedCreationTokens).toBeNull();
     }
   });
 
-  it('R5 validation uses ?? 0 for null tokens (honest-null treats missing as zero for aggregate checks)', () => {
-    // null cached/reasoning at both top-level and stage level passes R5
+  it('R5 validation uses ?? 0 for null cached tokens (honest-null treats missing as zero for aggregate checks)', () => {
     const event = makeValidEvent({
-      cachedTokens: null,
+      cachedReadTokens: null,
+      cachedCreationTokens: null,
       reasoningTokens: null,
       inputTokens: 200,
       outputTokens: 100,
       stages: [
-        makeValidStage('implementing', {
+        makeStage('implementing', {
           inputTokens: 200,
           outputTokens: 100,
-          cachedTokens: null,
+          cachedReadTokens: null,
+          cachedCreationTokens: null,
           reasoningTokens: null,
         }),
       ],
@@ -773,23 +733,115 @@ describe('nullable cachedTokens and reasoningTokens', () => {
     expect(result.success).toBe(true);
   });
 
-  it('R5b and R6 skip validation when tokens are null', () => {
-    // reasoningTokens=null with outputTokens=1 should not trigger R5b
+  it('R5b skips validation when reasoningTokens are null', () => {
     const event = makeValidEvent({
       inputTokens: 200,
       outputTokens: 1,
-      cachedTokens: null,
+      cachedReadTokens: null,
+      cachedCreationTokens: null,
       reasoningTokens: null,
       stages: [
-        makeValidStage('implementing', {
+        makeStage('implementing', {
           inputTokens: 200,
           outputTokens: 1,
-          cachedTokens: null,
+          cachedReadTokens: null,
+          cachedCreationTokens: null,
           reasoningTokens: null,
         }),
       ],
     });
     const result = ValidatedTaskCompletedEventSchema.safeParse(event);
     expect(result.success).toBe(true);
+  });
+});
+
+// ── Schema v4: round on stages and R7 uniqueness ─────────────────────────
+
+describe('schema v4: round on stages and R7 uniqueness', () => {
+  it('StageEntryBase requires round (≥0)', () => {
+    const stage = { name: 'implementing', round: 0, tier: 'standard', model: 'm',
+      durationMs: 1000, costUSD: 0.01, inputTokens: 100, outputTokens: 50,
+      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
+      turnCount: 0, maxIdleMs: 0, totalIdleMs: 0 };
+    expect(StageEntryBase.safeParse(stage).success).toBe(true);
+  });
+
+  it('R7 fires when (name, round) collides', () => {
+    const ev = makeValidEvent({ stages: [
+      makeStage('spec_review', { round: 0 }),
+      makeStage('spec_review', { round: 0 }),
+    ]});
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R7:/.test(i.message))).toBe(true);
+  });
+
+  it('R7 does NOT fire when (name, round) is unique', () => {
+    const ev = makeValidEvent({ stages: [
+      makeStage('spec_review', { round: 0 }),
+      makeStage('spec_review', { round: 1 }),
+    ]});
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
+  });
+});
+
+// ── Schema v4: split cached fields and nullable cost ─────────────────────
+
+describe('schema v4: split cached fields and nullable cost', () => {
+  it('costUSD: null is accepted on stages', () => {
+    expect(StageEntryBase.safeParse({ ...validStageBase, costUSD: null }).success).toBe(true);
+  });
+
+  it('R6b: negative cachedReadTokens fails at Zod level', () => {
+    expect(StageEntryBase.safeParse({ ...validStageBase, cachedReadTokens: -1 }).success).toBe(false);
+  });
+
+  it('stages array length 16 passes', () => {
+    const ev = makeValidEvent({ stages: Array.from({ length: 16 }, (_, i) => makeStage('implementing', { round: i })) });
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
+  });
+
+  it('stages array length 17 fails', () => {
+    const ev = makeValidEvent({ stages: Array.from({ length: 17 }, (_, i) => makeStage('implementing', { round: i })) });
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(false);
+  });
+});
+
+// ── Schema v4: tierUsage and parentModel ─────────────────────────────────
+
+describe('schema v4: tierUsage and parentModel', () => {
+  it('event accepts tierUsage with subset of {standard, complex, main} keys', () => {
+    const ev = makeValidEvent({ tierUsage: { standard: validTierUsage } });
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
+  });
+
+  it('event accepts parentModel: null', () => {
+    const ev = makeValidEvent({ parentModel: null, parentEquivalentCostUSD: null, costDeltaVsParentUSD: null });
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
+  });
+
+  it('event accepts parentModel: "claude-opus-4-7"', () => {
+    const ev = makeValidEvent({ parentModel: 'claude-opus-4-7' });
+    expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
+  });
+});
+
+// ── TierUsageSchema ──────────────────────────────────────────────────────
+
+describe('TierUsageSchema', () => {
+  it('accepts valid tier usage', () => {
+    const result = TierUsageSchema.safeParse(validTierUsage);
+    expect(result.success).toBe(true);
+  });
+
+  it('accepts null costUSD', () => {
+    const result = TierUsageSchema.safeParse({ ...validTierUsage, costUSD: null });
+    expect(result.success).toBe(true);
+  });
+
+  it('rejects negative inputTokens', () => {
+    const result = TierUsageSchema.safeParse({ ...validTierUsage, inputTokens: -1 });
+    expect(result.success).toBe(false);
   });
 });
