@@ -3,7 +3,7 @@ import { normalizeUsageToSubset } from '../../packages/core/src/runners/base/usa
 
 describe('Item 10: usage normalizer enforces subset semantics', () => {
   it('lifts inputTokens when cachedTokens > inputTokens (sibling input)', () => {
-    const u = { inputTokens: 100, outputTokens: 50, cachedTokens: 800, reasoningTokens: 0 };
+    const u = { inputTokens: 100, outputTokens: 50, cachedTokens: 800, cachedReadTokens: 800, cachedCreationTokens: 0, reasoningTokens: 0 };
     const n = normalizeUsageToSubset(u);
     expect(n.inputTokens).toBe(900);
     expect(n.cachedTokens).toBe(800);
@@ -11,13 +11,13 @@ describe('Item 10: usage normalizer enforces subset semantics', () => {
   });
 
   it('passes through unchanged when cached <= input', () => {
-    const u = { inputTokens: 1000, outputTokens: 100, cachedTokens: 200, reasoningTokens: 0 };
+    const u = { inputTokens: 1000, outputTokens: 100, cachedTokens: 200, cachedReadTokens: 200, cachedCreationTokens: 0, reasoningTokens: 0 };
     const n = normalizeUsageToSubset(u);
     expect(n.inputTokens).toBe(1000);
   });
 
   it('handles cachedTokens null gracefully', () => {
-    const u = { inputTokens: 500, outputTokens: 100, cachedTokens: null, reasoningTokens: 0 };
+    const u = { inputTokens: 500, outputTokens: 100, cachedTokens: null, cachedReadTokens: null, cachedCreationTokens: null, reasoningTokens: 0 };
     const n = normalizeUsageToSubset(u);
     expect(n.inputTokens).toBe(500);
     expect(n.cachedTokens).toBeNull();

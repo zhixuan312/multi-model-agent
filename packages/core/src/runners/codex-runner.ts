@@ -578,6 +578,8 @@ export async function runCodex(
                 inputTokens: wideUsage.input_tokens ?? 0,
                 outputTokens: wideUsage.output_tokens ?? 0,
                 cachedTokens: wideUsage.cached_input_tokens ?? null,
+                cachedReadTokens: wideUsage.cached_input_tokens ?? null,
+                cachedCreationTokens: null,
                 reasoningTokens: wideUsage.reasoning_tokens ?? null,
               };
               usage = mergeUsage(usage, turnUsage);

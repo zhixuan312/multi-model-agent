@@ -583,6 +583,8 @@ export async function runClaude(
             inputTokens: turnInputTokens + (cacheRead ?? 0) + (cacheCreate ?? 0),
             outputTokens: turnOutputTokens,
             cachedTokens: turnCachedTokens,
+            cachedReadTokens: cacheRead !== undefined ? cacheRead : null,
+            cachedCreationTokens: cacheCreate !== undefined ? cacheCreate : null,
             reasoningTokens: null, // claude API does not document reasoning tokens (§10)
           };
           usage = mergeUsage(usage, turnUsage);
