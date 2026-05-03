@@ -6,14 +6,14 @@
     "rateLookupDate": "2026-04-17",
     "defaults": { "family": "claude", "supportsEffort": true, "inputTokenSoftLimit": 150000, "capabilities": ["web_search", "web_fetch"] },
     "profiles": [
-      { "prefix": "claude",          "tier": "standard",  "cost": "medium", "input": 3,     "output": 15,   "bestFor": "general Claude tasks (catch-all, Sonnet rates)" },
-      { "prefix": "claude-opus",     "tier": "reasoning", "cost": "high",   "input": 5,     "output": 25,   "bestFor": "high-ambiguity tasks where error cost is high" },
+      { "prefix": "claude",          "tier": "standard",  "cost": "medium", "input": 3,     "output": 15,   "cachedCreation": 3.75, "bestFor": "general Claude tasks (catch-all, Sonnet rates)" },
+      { "prefix": "claude-opus",     "tier": "reasoning", "cost": "high",   "input": 5,     "output": 25,   "cachedCreation": 6.25, "bestFor": "high-ambiguity tasks where error cost is high" },
       { "prefix": "claude-sonnet",                                                                            "bestFor": "professional coding and tool use" },
-      { "prefix": "claude-haiku",                          "cost": "low",   "input": 1,     "output": 5,    "bestFor": "fast low-cost coding and batch work" },
-      { "prefix": "claude-opus-4-1",                                         "input": 15,    "output": 75,   "bestFor": "deprecated, retiring 2026-06-15" },
+      { "prefix": "claude-haiku",                          "cost": "low",   "input": 1,     "output": 5,    "cachedCreation": 1.25, "bestFor": "fast low-cost coding and batch work" },
+      { "prefix": "claude-opus-4-1",                                         "input": 15,    "output": 75,   "cachedCreation": 18.75, "bestFor": "deprecated, retiring 2026-06-15" },
       { "prefix": "claude-3",        "supportsEffort": false, "capabilities": [],                             "bestFor": "legacy 3.x (deprecated)" },
-      { "prefix": "claude-3-opus",   "tier": "reasoning", "cost": "high",   "input": 15,    "output": 75,   "bestFor": "legacy Claude 3 Opus (deprecated)" },
-      { "prefix": "claude-3-haiku",                        "cost": "low",   "input": 0.25,  "output": 1.25, "bestFor": "legacy Claude 3 Haiku (deprecated, retiring 2026-04-19)" }
+      { "prefix": "claude-3-opus",   "tier": "reasoning", "cost": "high",   "input": 15,    "output": 75,   "cachedCreation": 18.75, "bestFor": "legacy Claude 3 Opus (deprecated)" },
+      { "prefix": "claude-3-haiku",                        "cost": "low",   "input": 0.25,  "output": 1.25, "cachedCreation": 0.3125, "bestFor": "legacy Claude 3 Haiku (deprecated, retiring 2026-04-19)" }
     ]
   },
   {

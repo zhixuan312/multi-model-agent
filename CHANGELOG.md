@@ -5,6 +5,31 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.2] - 2026-05-03
+
+### Added
+- **Cost-attribution revamp — pure `priceTokens` function.** New `TokenCounts`, `RateCard`, and `priceTokens` types and function in `packages/core/src/cost/compute.ts` replace scattered, inconsistent pricing logic. Each runner now emits sibling-semantic `CanonicalUsage` where `inputTokens` excludes cached tokens. A single pure `priceTokens(tokenCounts, rateCard)` is the only pricing path.
+- **Per-round token snapshots and per-turn delta cost meter.** Lifecycle takes per-round token snapshots so multi-round review/rework stages emit one `StageEntry` per round with accurate per-turn cost deltas instead of stale cumulative totals.
+- **Telemetry schema v4 — round, split cached fields, tierUsage.** `StageEntry` gains an optional `round` counter. Cache tokens are split into `cachedReadTokens` and `cachedCreationTokens` across all runner usage shapes. `Event` gains `tierUsage` (per-tier token rollup) and `parentModel` / `parentEquivalentCostUSD`.
+- **R6b soft warning when cached >> input.** The event-builder now emits a soft telemetry warning when cached tokens vastly exceed input tokens, flagging potential cache-truncation anomalies.
+- **`rollupByTier` and `sumTokens` pure helpers.** New pure aggregation helpers in `packages/core/src/cost/rollup.ts` roll up stage entries by tier and sum token counts.
+- **`resolveRateCard` with profile lookup.** Rate-card resolution with per-model-profile pricing and sensible defaults, replacing hard-coded provider price tables.
+- **Calibrated Anthropic pricing.** Anthropic profiles updated with `cachedCreation` pricing (USD 1.25/M for Opus 4, USD 0.375/M for Sonnet 4 CACHE_WRITE multiplier).
+
+### Changed
+- **Runner usage semantics.** Runners (Claude, OpenAI, Codex) now emit canonical `inputTokens` (excludes cache reads/writes) and separate `cachedReadTokens` / `cachedCreationTokens` fields. Cache read/write costs are additive on top of base input price.
+- **Reviewer-implementer separation gated by tier, not model name.** Separation is controlled by `standard` / `complex` / `main` tier membership rather than canonical model-name matching, preserving user sovereignty over model choice.
+- **Profile model renamed.** `cachedInput` renamed to `cachedRead` in model profiles; `cachedCreation` added for Anthropic providers that charge for cache writes.
+- **Architecture docs.** Added three-axis layered architecture map (horizontal stages, vertical tool stack, substrate) to `docs/ARCHITECTURE.md`.
+
+### Removed
+- **Legacy cost helpers.** Deleted `computeCostBreakdown`, `computeCostDeltaVsParentUSD`, `normalizeUsageToSubset`, and the `cachedTokens` field — superseded by the pure `priceTokens` path and split cache fields.
+
+### Fixed
+- **Stage telemetry completeness.** Deferred-finalizer pattern ensures `spec_review` and `quality_review` stage entries persist even when rework paths abort early. Diff-review verdict reflects actual lifecycle decisions instead of hard-coded `not_applicable`. Contradictory `terminalStatus` / `errorCode` triples resolved.
+- **Schema normalization.** `maxIdleMs` / `totalIdleMs` normalized to integer `0` everywhere. Silent-incomplete runs surfaced via `incomplete_no_summary` error code.
+- **`runner_crash` model identity.** Resolved `implementerModel` preserved on `runner_crash` paths instead of emitting `"custom"`.
+
 ## [3.12.1] - 2026-05-03
 
 ### Fixed
@@ -1174,7 +1199,9 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.2...HEAD
+[3.12.2]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.1...v3.12.2
+[3.12.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.0...v3.12.1
 [3.12.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.1...v3.12.0
 [3.11.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.0...v3.11.1
 [3.11.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.10.7...v3.11.0

@@ -84,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.2",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -289,7 +289,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.12.1** — Telemetry & state-machine correctness pass diagnosed against 3.11.1 production data. Reviewer-implementer separation gate now uses tier (`standard` / `complex` / `main`), not model name — user is sovereign over model choice. R6 (cached ⊆ input subset semantics) holds across all runners; cost calc consumes `cachedTokens` so per-stage cost reflects the cache discount. Reviewer prompts split into `{systemPrefix, userBody}` for cross-runner caching (Claude SDK ephemeral cache_control; OpenAI/Codex auto-cache via instructions prefix). Stage telemetry preserved on every early-exit path via deferred-finalizer. `diff_review.verdict` plumbed end-to-end (no longer hard-coded `not_applicable`); `terminationReason.cause = 'error'` on diff-review reject so R1 stops firing. `validation_warnings` attached to events. `verifyCommand` flows through intake. Adds `tier`/`implementerTier` to wire schema and R16 (rework requires preceding review). 99 new tests (2786 total). Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.12.2** — Cost-attribution revamp (telemetry schema **v3 → v4**, breaking). Single `priceTokens(tokens, rateCard)` function is the only cost path everywhere — runners, per-turn meter, per-stage rollup, parent-equivalent. Sibling-semantic `inputTokens` (excludes cache); the structural bug class that inflated savings on cache-heavy runs is now impossible. `cachedTokens` split into `cachedReadTokens` + `cachedCreationTokens` so Anthropic cache writes (1.25× input) bill correctly. New event-root `tierUsage` rollup answers "what did the complex tier cost vs standard" without iterating `stages[]`. `parentModel` recorded alongside `parentModelFamily` for forensic identity. Multi-round review/rework loops now emit one stage entry per round (`(name, round)` is the new uniqueness key). Per-turn cost meter uses `subtractTokens` delta tracking — no more false `cost_exceeded` on cache-heavy or tool-loop turns. Backend dual-accepts schema v3 + v4. 50 new tests (2836 total). Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

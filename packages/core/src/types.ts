@@ -8,8 +8,6 @@ import type {
 import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
 import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
 import type { ResearchToolDefinition } from './research/types.js';
-import { findModelProfile } from './routing/model-profiles.js';
-
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 export type AgentType = 'standard' | 'complex';
@@ -312,111 +310,6 @@ export interface CacheHints {
 export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
 
 export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult>; runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult> }
-
-export interface CostBreakdown {
-  inputCost: number;
-  cachedInputCost: number;
-  outputCost: number;
-  reasoningCost: number;
-  total: number;
-}
-
-/**
- * Compute cost using the V3 4-term formula with subset semantics:
- *   cost = (input - cached) × inputRate
- *        + cached × cachedRate
- *        + (output - reasoning) × outputRate
- *        + reasoning × reasoningRate
- *
- * Cached rate fallback: profile.cachedInputCostPerMTok ?? inputRate × 0.1
- * Reasoning rate fallback: profile.reasoningCostPerMTok ?? outputRate
- *
- * Returns float USD with no rounding — the single rounding boundary is at
- * backend ingest (micro-USD conversion).
- */
-export function computeCostUSD(
-  inputTokens: number,
-  outputTokens: number,
-  config: ProviderConfig,
-  cachedTokens = 0,
-  reasoningTokens = 0,
-): number | null {
-  const breakdown = computeCostBreakdown(inputTokens, outputTokens, config, cachedTokens, reasoningTokens);
-  return breakdown?.total ?? null;
-}
-
-/** Per-bucket cost breakdown for use by event-builder per-stage emit. */
-export function computeCostBreakdown(
-  inputTokens: number,
-  outputTokens: number,
-  config: ProviderConfig,
-  cachedTokens = 0,
-  reasoningTokens = 0,
-): CostBreakdown | null {
-  const rates = resolveCostRates(config);
-  if (!rates) return null;
-
-  const inputPart = (inputTokens - cachedTokens) * rates.input;
-  const cachedPart = cachedTokens * rates.cachedInput;
-  const outputPart = (outputTokens - reasoningTokens) * rates.output;
-  const reasoningPart = reasoningTokens * rates.reasoning;
-
-  const total = (inputPart + cachedPart + outputPart + reasoningPart) / 1_000_000;
-
-  return {
-    inputCost: Math.max(0, inputPart / 1_000_000),
-    cachedInputCost: Math.max(0, cachedPart / 1_000_000),
-    outputCost: Math.max(0, outputPart / 1_000_000),
-    reasoningCost: Math.max(0, reasoningPart / 1_000_000),
-    total: Math.max(0, total),
-  };
-}
-
-function resolveCostRates(config: ProviderConfig): { input: number; cachedInput: number; output: number; reasoning: number } | null {
-  const explicitInput = config.inputCostPerMTok;
-  const explicitOutput = config.outputCostPerMTok;
-  if (explicitInput !== undefined && explicitOutput !== undefined && Number.isFinite(explicitInput) && Number.isFinite(explicitOutput) && explicitInput >= 0 && explicitOutput >= 0) {
-    const profile = findModelProfile(config.model);
-    const cachedInput = profile.cachedInputCostPerMTok ?? explicitInput * 0.1;
-    const reasoning = profile.reasoningCostPerMTok ?? explicitOutput;
-    return { input: explicitInput, cachedInput, output: explicitOutput, reasoning };
-  }
-
-  const profile = findModelProfile(config.model);
-  const input = profile.inputCostPerMTok;
-  const output = profile.outputCostPerMTok;
-  if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
-  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
-  const reasoning = profile.reasoningCostPerMTok ?? output;
-  return { input, cachedInput, output, reasoning };
-}
-
-export function computeCostDeltaVsParentUSD(
-  actualCostUSD: number | null,
-  inputTokens: number,
-  outputTokens: number,
-  parentModel: string | undefined,
-  cachedTokens: number | null = 0,
-  reasoningTokens: number | null = 0,
-): number | null {
-  if (actualCostUSD === null || parentModel === undefined) return null;
-  // §3.6 honest-null: if any required dimension is null, return null
-  if (cachedTokens === null || reasoningTokens === null) return null;
-  const profile = findModelProfile(parentModel);
-  const input = profile.inputCostPerMTok;
-  const output = profile.outputCostPerMTok;
-  if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
-  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
-  const reasoning = profile.reasoningCostPerMTok ?? output;
-
-  const parentCost =
-    ((inputTokens - cachedTokens) * input +
-     cachedTokens * cachedInput +
-     (outputTokens - reasoningTokens) * output +
-     reasoningTokens * reasoning) / 1_000_000;
-
-  return actualCostUSD - parentCost;
-}
 
 export function withTimeout<T>(promise: Promise<T>, timeoutMs: number, onTimeout: () => T, abort?: AbortController, externalSignal?: AbortSignal): Promise<T> {
   let timeoutId: ReturnType<typeof setTimeout> | undefined;

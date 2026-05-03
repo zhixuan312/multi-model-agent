@@ -9,11 +9,13 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
     name,
     model: 'claude-sonnet',
     tier,
+    round: 0,
     durationMs: 5000,
     costUSD: 0.01,
     inputTokens: 100,
     outputTokens: 80,
-    cachedTokens: 0,
+    cachedReadTokens: 0,
+    cachedCreationTokens: 0,
     reasoningTokens: 0,
     toolCallCount: 5,
     filesReadCount: 3,
@@ -85,13 +87,17 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     terminalStatus: 'ok' as const,
     workerStatus: 'done' as const,
     errorCode: null,
+    parentModel: null,
     parentModelFamily: 'claude' as const,
+    tierUsage: {},
     inputTokens: sum('inputTokens'),
     outputTokens: sum('outputTokens'),
-    cachedTokens: sum('cachedTokens'),
+    cachedReadTokens: sum('cachedReadTokens'),
+    cachedCreationTokens: sum('cachedCreationTokens'),
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s, st) => s + ((st.costUSD as number) ?? 0), 0),
+    parentEquivalentCostUSD: null,
     costDeltaVsParentUSD: null,
     concernCount: 0,
     escalationCount: 0,
@@ -269,22 +275,22 @@ describe('V3 envelope contract', () => {
   it('batch wrapper round-trip', () => {
     const event = ValidatedTaskCompletedEventSchema.parse(makeEvent('delegate'));
     const batch = UploadBatchSchema.parse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '3.12.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [event],
     });
     expect(batch.events).toHaveLength(1);
-    expect(batch.schemaVersion).toBe(3);
+    expect(batch.schemaVersion).toBe(4);
   });
 
-  it('rejects V2 schema version in batch', () => {
+  it('rejects V3 schema version in batch', () => {
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 2,
+      schemaVersion: 3,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
-      mmagentVersion: '2.0.0',
+      mmagentVersion: '3.10.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [ValidatedTaskCompletedEventSchema.parse(makeEvent('delegate'))],

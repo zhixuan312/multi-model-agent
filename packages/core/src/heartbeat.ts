@@ -138,6 +138,10 @@ export class HeartbeatTimer {
   private phaseChangeFrom: HeartbeatStage | null = null;
   private phaseChangeTo: HeartbeatStage | null = null;
 
+  // Rate-card-unresolved flag: true when at least one turn could not be priced
+  // because the model's rate card is unknown (unprofiled model).
+  private _rateCardUnresolved = false;
+
   constructor(
     onProgress: (event: ProgressEvent) => void,
     options: HeartbeatTimerOptions,
@@ -362,6 +366,16 @@ export class HeartbeatTimer {
     this.costDeltaVsParentUSD = cost.costDeltaVsParentUSD;
   }
 
+  /**
+   * Signal that the running cost is incomplete because the rate card for
+   * the active model is unresolved. When set, heartbeat display shows
+   * "$X.YY+" instead of "$X.YY" to indicate unprofiled pricing.
+   */
+  markRateCardUnresolved(): void {
+    if (!this.started || this.stopped) return;
+    this._rateCardUnresolved = true;
+  }
+
   markEvent(kind: 'llm' | 'tool' | 'text'): void {
     if (!this.started || this.stopped) return;
     const now = Date.now();
@@ -435,12 +449,12 @@ export class HeartbeatTimer {
       if (this.costUSD > 0) {
         const parentCost = this.costUSD - this.costDeltaVsParentUSD;
         const roi = parentCost / this.costUSD;
-        return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)`;
+        return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)${this._rateCardUnresolved ? '+' : ''}`;
       }
-      return `$${saved.toFixed(2)} saved`;
+      return `$${saved.toFixed(2)} saved${this._rateCardUnresolved ? '+' : ''}`;
     }
     if (this.costUSD !== null) {
-      return `$${this.costUSD.toFixed(2)}`;
+      return `$${this.costUSD.toFixed(2)}${this._rateCardUnresolved ? '+' : ''}`;
     }
     return null;
   }
@@ -484,8 +498,8 @@ export class HeartbeatTimer {
     if (this.costUSD !== null && Number.isFinite(this.costUSD) && this.costUSD > 0) {
       const parentCost = this.costUSD - this.costDeltaVsParentUSD;
       const roi = parentCost / this.costUSD;
-      return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)`;
+      return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)${this._rateCardUnresolved ? '+' : ''}`;
     }
-    return `$${saved.toFixed(2)} saved`;
+    return `$${saved.toFixed(2)} saved${this._rateCardUnresolved ? '+' : ''}`;
   }
 }

@@ -53,7 +53,30 @@ export function collectValidationWarnings(
     }
   }
 
+  // R6b: soft warning when cached tokens grossly exceed input tokens per stage.
+  // Non-nullability is enforced by the schema; treat null as 0 for this check.
+  for (const r6b of checkR6b(event)) {
+    const key = `${r6b.rule}::${r6b.path}`;
+    if (!warningsMap.has(key)) {
+      warningsMap.set(key, r6b);
+    }
+  }
+
   return { warnings: [...warningsMap.values()], baseIssues, refinedIssues };
+}
+
+function checkR6b(event: TaskCompletedEventType): Array<{ rule: string; path: string }> {
+  const warnings: Array<{ rule: string; path: string }> = [];
+  for (let i = 0; i < event.stages.length; i++) {
+    const s = event.stages[i];
+    if (s.inputTokens > 0) {
+      const cachedSum = (s.cachedReadTokens ?? 0) + (s.cachedCreationTokens ?? 0);
+      if (cachedSum > 100 * s.inputTokens) {
+        warnings.push({ rule: 'R6b', path: `stages[${i}]` });
+      }
+    }
+  }
+  return warnings;
 }
 
 export interface Recorder {

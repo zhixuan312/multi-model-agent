@@ -17,7 +17,7 @@ describe('flusher signing', () => {
     const identity = getOrCreateIdentity(dir);
     const queue = new Queue(dir);
     await queue.append({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: identity.installId,
       mmagentVersion: '0.2.0',
       os: 'linux',
@@ -50,7 +50,7 @@ describe('flusher signing', () => {
     await (queue.append as any)({ schemaVersion: 2, install: { installId: identity.installId, mmagentVersion: '1.0.0', os: 'linux', nodeMajor: '22' }, generation: 0, events: [{ eventId: 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb' }] });
     // One current-schema record behind them.
     await queue.append({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: identity.installId,
       mmagentVersion: '3.10.0',
       os: 'linux',
@@ -71,7 +71,7 @@ describe('flusher signing', () => {
     // Only the V3 record should reach the wire.
     expect(calls).toHaveLength(1);
     const sentJson = JSON.parse(gunzipSync(calls[0].body).toString('utf8'));
-    expect(sentJson.schemaVersion).toBe(3);
+    expect(sentJson.schemaVersion).toBe(4);
     expect(sentJson.events).toHaveLength(1);
     expect(sentJson.events[0].eventId).toBe('cccccccc-cccc-4ccc-8ccc-cccccccccccc');
 

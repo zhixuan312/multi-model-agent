@@ -1,10 +1,11 @@
 import { randomUUID } from 'node:crypto';
 import type { RunResult, RawStageStats } from '../types.js';
-import { computeCostDeltaVsParentUSD } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType } from './types.js';
 import { deriveTerminalStatus } from '../run-tasks/derive-terminal-status.js';
+import { rollupByTier, sumTokens } from '../cost/rollup.js';
+import { priceTokens, resolveRateCard } from '../cost/compute.js';
 import {
   clampStageCost,
   clampTaskCost,
@@ -68,25 +69,49 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     }
   }
 
-  // Top-level totals are summed across all stages (impl + reviewers + reworks +
-  // verify + commit) so the dashboard's `total_cost_cents` reflects the true
-  // task cost. runResult.usage only carries the LAST implementer attempt and
-  // ignores reviewer + earlier-impl rounds — using it would systematically
-  // under-report cost (~24× in real-world rework cases).
-  const totalCostUSD = clampTaskCost(stages.reduce((s, st) => s + (st.costUSD ?? 0), 0));
-  const totalInputTokens = clampInputTokens(stages.reduce((s, st) => s + ((st as { inputTokens?: number }).inputTokens ?? 0), 0));
-  const totalOutputTokens = clampOutputTokens(stages.reduce((s, st) => s + ((st as { outputTokens?: number }).outputTokens ?? 0), 0));
-  const totalCachedTokens = clampCachedTokens(stages.reduce((s, st) => s + ((st as { cachedTokens?: number }).cachedTokens ?? 0), 0));
-  const totalReasoningTokens = clampReasoningTokens(stages.reduce((s, st) => s + ((st as { reasoningTokens?: number }).reasoningTokens ?? 0), 0));
+  // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
+  const tierUsage = rollupByTier(stages.map(s => ({
+    tier: s.tier as 'standard' | 'complex' | 'main',
+    model: s.model,
+    costUSD: s.costUSD,
+    inputTokens: s.inputTokens,
+    outputTokens: s.outputTokens,
+    cachedReadTokens: s.cachedReadTokens ?? 0,
+    cachedCreationTokens: s.cachedCreationTokens ?? 0,
+    reasoningTokens: s.reasoningTokens ?? 0,
+  })));
 
-  const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
-    totalCostUSD,
-    totalInputTokens,
-    totalOutputTokens,
-    parentModel ?? undefined,
-    totalCachedTokens,
-    totalReasoningTokens,
-  );
+  const allTokens = sumTokens(stages.map(s => ({
+    inputTokens: s.inputTokens,
+    outputTokens: s.outputTokens,
+    cachedReadTokens: s.cachedReadTokens ?? 0,
+    cachedCreationTokens: s.cachedCreationTokens ?? 0,
+    reasoningTokens: s.reasoningTokens ?? 0,
+  })));
+
+  // Honest-null: ANY contributing stage with costUSD: null poisons the total.
+  // Matches rollupByTier semantics — invariant: Σ tierUsage[T].costUSD === totalCostUSD
+  // (both null OR both equal).
+  const anyNullCost = stages.some(s => s.costUSD === null);
+  const totalCostUSD = stages.length === 0
+    ? 0
+    : (anyNullCost ? null : clampTaskCost(stages.reduce((sum, s) => sum + (s.costUSD as number), 0)));
+
+  const totalInputTokens = clampInputTokens(allTokens.inputTokens);
+  const totalOutputTokens = clampOutputTokens(allTokens.outputTokens);
+  const totalCachedReadTokens = clampCachedTokens(allTokens.cachedReadTokens);
+  const totalCachedCreationTokens = clampCachedTokens(allTokens.cachedCreationTokens);
+  const totalReasoningTokens = clampReasoningTokens(allTokens.reasoningTokens);
+
+  const parentCard = resolveRateCard(parentModel);
+  const parentEquivalentCostUSD = parentCard ? priceTokens(allTokens, parentCard) : null;
+
+  const costDeltaVsParentUSD = (totalCostUSD === null || parentEquivalentCostUSD === null)
+    ? null
+    : totalCostUSD - parentEquivalentCostUSD;
+
+  // Canonicalize parentModel for emission (matches implementerModel emission path).
+  const parentNormalized = parentModel ? normalizeModel(parentModel) : null;
 
   const rawReviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
   // Normalize TaskSpec-level values to wire enum:
@@ -126,13 +151,17 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
-    parentModelFamily: parentModel ? normalizeModel(parentModel).family : 'other',
+    parentModel: parentNormalized?.canonical ?? null,
+    parentModelFamily: parentNormalized?.family ?? 'other',
+    tierUsage,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
-    cachedTokens: totalCachedTokens,
+    cachedReadTokens: totalCachedReadTokens,
+    cachedCreationTokens: totalCachedCreationTokens,
     reasoningTokens: totalReasoningTokens,
     totalDurationMs,
     totalCostUSD,
+    parentEquivalentCostUSD,
     costDeltaVsParentUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
@@ -208,11 +237,13 @@ function extractStageData(
   return {
     model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
     tier: (raw.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
+    round: (raw as any).round ?? 0,
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
     outputTokens: clampOutputTokens((raw as any).outputTokens ?? 0),
-    cachedTokens: clampCachedTokens((raw as any).cachedTokens ?? 0),
+    cachedReadTokens: clampCachedTokens((raw as any).cachedReadTokens ?? 0),
+    cachedCreationTokens: clampCachedTokens((raw as any).cachedCreationTokens ?? 0),
     reasoningTokens: clampReasoningTokens((raw as any).reasoningTokens ?? 0),
     toolCallCount: clampToolCallCount((raw as any).toolCallCount ?? 0),
     filesReadCount: clampFilesReadCount((raw as any).filesReadCount ?? 0),

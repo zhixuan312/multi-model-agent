@@ -105,10 +105,10 @@ describe('model profile registry', () => {
   });
 
   it('validates cached and reasoning pricing as non-negative numbers', () => {
-    expect(modelProfileSchema.safeParse(baseProfile({ cachedInputCostPerMTok: 0 })).success).toBe(true);
+    expect(modelProfileSchema.safeParse(baseProfile({ cachedReadCostPerMTok: 0 })).success).toBe(true);
     expect(modelProfileSchema.safeParse(baseProfile({ reasoningCostPerMTok: 0 })).success).toBe(true);
 
-    expect(modelProfileSchema.safeParse(baseProfile({ cachedInputCostPerMTok: -0.01 })).success).toBe(false);
+    expect(modelProfileSchema.safeParse(baseProfile({ cachedReadCostPerMTok: -0.01 })).success).toBe(false);
     expect(modelProfileSchema.safeParse(baseProfile({ reasoningCostPerMTok: -0.01 })).success).toBe(false);
   });
 });
