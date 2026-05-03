@@ -92,7 +92,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.3",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -298,7 +298,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.12.2** — Cost-attribution revamp (telemetry schema **v3 → v4**, breaking). Single `priceTokens(tokens, rateCard)` function is the only cost path everywhere — runners, per-turn meter, per-stage rollup, parent-equivalent. Sibling-semantic `inputTokens` (excludes cache); the structural bug class that inflated savings on cache-heavy runs is now impossible. `cachedTokens` split into `cachedReadTokens` + `cachedCreationTokens` so Anthropic cache writes (1.25× input) bill correctly. New event-root `tierUsage` rollup answers "what did the complex tier cost vs standard" without iterating `stages[]`. `parentModel` recorded alongside `parentModelFamily` for forensic identity. Multi-round review/rework loops now emit one stage entry per round (`(name, round)` is the new uniqueness key). Per-turn cost meter uses `subtractTokens` delta tracking — no more false `cost_exceeded` on cache-heavy or tool-loop turns. Backend dual-accepts schema v3 + v4. 50 new tests (2836 total). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.12.3** — Bug-fix patch closing the four real-world regressions surfaced by 3.12.2 telemetry. Reviewer cost + findings recovered for DeepSeek (and any openai-compatible non-OpenAI provider): runner stops forcing `Agent.outputType` on DeepSeek and treats structured-output parse failures as non-fatal everywhere, so `runAnnotationReview`'s text-parser fallback recovers findings from prose instead of dropping the whole call. `agents.implementer` now agrees with stage stats — both report `resolved.slot`; per-call fallback drift remains visible in `implementerHistory` + `fallbackOverrides`. Reviewer separation is **slot-based only**: `forbiddenIdentities` removed from spec/quality/diff reviewer fallback calls, so when the user puts the same model on different tiers the review still runs. `endReviewStage` clamps `totalIdleMs` to `durationMs` to prevent impossible idle ratios from the two-attempt review loop. All 2836 tests pass. Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 

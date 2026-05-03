@@ -145,7 +145,10 @@ describe('reviewed lifecycle fallback on complex task transport failure', () => 
 
     expect(result.status).toBe('ok');
     expect(result.specReviewStatus).toBe('approved');
-    expect(result.agents?.implementer).toBe('standard');
+    // 3.12.3: agents.implementer = resolved.slot ('complex' here, baseTier of the task).
+    // Downward fallback to standard is recorded in implementerHistory + fallbackOverrides.
+    expect(result.agents?.implementer).toBe('complex');
+    expect(result.agents?.implementerHistory).toContain('standard');
     expect(result.agents?.fallbackOverrides).toEqual([
       expect.objectContaining({
         role: 'implementer',

@@ -133,23 +133,23 @@ describe('reviewed lifecycle fallback when escalated tier is not configured', ()
       },
     );
 
-    // R3: reviewer can't use standard (same identity as implementer) and complex
-    // is not configured → review skipped. The lifecycle completes ok with
-    // skipped reviews rather than failing the task.
-    expect(result.status).toBe('ok');
+    // 3.12.3: reviewer assigned to complex (not_configured) → falls back to
+    // standard → standard is in forbiddenTiers (same slot as implementer) →
+    // bothUnavailable with reason='reviewer_separation_unsatisfiable'.
+    // Lifecycle terminates with status='incomplete' via adaptForAllTiersUnavailable.
+    expect(result.status).toBe('incomplete');
     expect(implementationCalls).toBe(1);
     expect(specReviewCalls).toBe(0);
     expect(qualityReviewCalls).toBe(0);
 
-    // R3: the spec reviewer's fallback also fails — standard is forbidden
-    // (same identity as implementer) and complex is not configured.
-    // When both tiers are unavailable, a fallback_unavailable event is emitted.
     const reviewerUnavailable = events.find((event) =>
       event.event === 'fallback_unavailable' &&
       event.loop === 'spec' &&
       event.role === 'specReviewer',
     );
     expect(reviewerUnavailable).toBeDefined();
-    expect(reviewerUnavailable?.reason).toBe('not_configured');
+    // Reason is now reviewer_separation_unsatisfiable (slot-based) rather than
+    // not_configured (per-tier reason from the assigned-tier failure).
+    expect(reviewerUnavailable?.reason).toBe('reviewer_separation_unsatisfiable');
   });
 });

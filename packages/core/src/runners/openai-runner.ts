@@ -320,13 +320,26 @@ export async function runOpenAI(
   if (effort && effort !== 'none') modelSettings.reasoning = { effort };
   if (Object.keys(providerData).length > 0) modelSettings.providerData = providerData;
 
+  // outputType is disabled for DeepSeek in review mode. DeepSeek's V4 hybrid
+  // models either fail schema-conformance enforcement OR the @openai/agents
+  // SDK's schema-enforcement code path skips usage aggregation on this
+  // backend specifically, leaving every review call with
+  // `state.usage = {inputTokens: 0, outputTokens: 0}` despite real tokens
+  // being burned (3.12.2 telemetry showed every audit's quality_review with
+  // 30+ turns and 0 cost). The downstream text-parser fallback in
+  // runAnnotationReview (parseReviewerFindings → fallbackExtractFindings)
+  // recovers findings from prose, so dropping the schema costs us nothing
+  // for DeepSeek. Other openai-compatible backends (OpenAI proper,
+  // structured-output-capable proxies like vLLM) keep outputType.
+  const useOutputType = runMode === 'review' && !isDeepSeek;
+
   const agent = new Agent({
     name: 'sub-agent',
     model,
     instructions,
     tools,
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
-    ...(runMode === 'review' && { outputType: reviewerOutputType }),
+    ...(useOutputType && { outputType: reviewerOutputType }),
   });
 
   // --- Scratchpad: buffers assistant text across every agentRun() call so
@@ -531,7 +544,7 @@ export async function runOpenAI(
         if (validation.valid) {
           const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel);
 
-          if (runMode === 'review') {
+          if (runMode === 'review' && useOutputType) {
             const parsed = reviewerOutputType.safeParse(currentResult.finalOutput);
             if (parsed.success) {
               ok.parsedFindings = parsed.data.findings.map(f => ({
@@ -539,16 +552,14 @@ export async function runOpenAI(
                 evidenceGrounded: evidenceIsGrounded(f.evidence, stripped),
               }));
             } else {
-              emit({ kind: 'done', status: 'error' });
-              return {
-                ...ok,
-                output: `Reviewer structured output validation failed: ${parsed.error.message}`,
-                status: 'error',
-                error: `reviewer outputType validation failed: ${parsed.error.message}`,
-                parsedFindings: null,
-              };
+              // OpenAI-proper structured-output failure: should be rare since
+              // OpenAI honors the schema, but if it happens we still don't
+              // want to discard the call — fall through to the text parser.
+              ok.parsedFindings = null;
             }
           } else {
+            // Review mode on non-OpenAI provider, OR delegate mode: text-parser
+            // fallback in runAnnotationReview handles findings extraction.
             ok.parsedFindings = null;
           }
 

@@ -180,7 +180,11 @@ describe('reviewed lifecycle fallback on transport failure', () => {
 
     expect(result.status).toBe('ok');
     expect(result.specReviewStatus).toBe('approved');
-    expect(result.agents?.implementer).toBe('complex');
+    // 3.12.3: agents.implementer reflects the originally-resolved slot.
+    // Per-call escalation drift is recorded in implementerHistory + fallbackOverrides
+    // (verified separately below) — see CHANGELOG 3.12.3 for the contract change.
+    expect(result.agents?.implementer).toBe('standard');
+    expect(result.agents?.implementerHistory).toContain('complex');
     expect(implOverrides).toHaveLength(2);
     expect(overrides).toHaveLength(2);
     expect(implOverrides).toEqual([
