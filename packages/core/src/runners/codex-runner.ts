@@ -5,14 +5,13 @@ import type { Response, ResponseInputItem } from 'openai/resources/responses/res
 import { getCodexAuth } from '../auth/codex-oauth.js';
 import {
   withTimeout,
-  computeCostUSD,
-  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
+import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { READONLY_TOOL_IDS } from '../tools/definitions.js';
 import { FileTracker } from '../tools/tracker.js';
@@ -295,6 +294,12 @@ export async function runCodex(
   // Track last turn cost for estimating next turn cost
   let lastTurnCostUSD = 0;
 
+  // Per-turn cumulative → delta tracking state (§4.2)
+  let lastCumulative: TokenCounts = {
+    inputTokens: 0, outputTokens: 0,
+    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+  };
+
   /**
    * Check if we can afford the next turn based on previous turn cost estimate.
    */
@@ -309,8 +314,16 @@ export async function runCodex(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD ?? 0, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+    const tc = usageTokenCounts(usage);
+    const workerCard = resolveProviderRateCard(providerConfig);
+    const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
+    let costDeltaVsParentUSD: number | null = null;
+    if (costUSD !== null && parentModel) {
+      const parentCard = resolveRateCard(parentModel);
+      if (parentCard) {
+        costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
+      }
+    }
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -321,6 +334,8 @@ export async function runCodex(
         costUSD: costUSD ?? 0,
         costDeltaVsParentUSD,
         cachedTokens: usage.cachedTokens,
+        cachedReadTokens: usage.cachedReadTokens,
+        cachedCreationTokens: usage.cachedCreationTokens,
         reasoningTokens: usage.reasoningTokens,
       },
       turns,
@@ -480,9 +495,6 @@ export async function runCodex(
 
     try {
       while (true) {
-        // Track tokens at start of turn for cost accounting
-        const tokensAtTurnStart = usage.inputTokens;
-        const outputTokensAtTurnStart = usage.outputTokens;
         turns++;
         // Emit turn_start AFTER incrementing so `turn` matches the 1-indexed
         // turn number we use everywhere else in this runner (the scratchpad
@@ -492,14 +504,26 @@ export async function runCodex(
         // Time ceiling check before dispatching a provider call.
         const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
         if (timeCeilingMs !== null) {
+          const tc = usageTokenCounts(usage);
+          const workerCard = resolveProviderRateCard(providerConfig);
+          const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
+          let costDeltaVsParentUSD: number | null = null;
+          if (costUSD !== null && parentModel) {
+            const parentCard = resolveRateCard(parentModel);
+            if (parentCard) {
+              costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
+            }
+          }
           return sharedBuildTimeCeilingResult({
             usage: {
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               totalTokens: usage.inputTokens + usage.outputTokens,
-              costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0),
-              costDeltaVsParentUSD: computeCostDeltaVsParentUSD(computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0) ?? 0, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
+              costUSD,
+              costDeltaVsParentUSD,
               cachedTokens: usage.cachedTokens,
+              cachedReadTokens: usage.cachedReadTokens,
+              cachedCreationTokens: usage.cachedCreationTokens,
               reasoningTokens: usage.reasoningTokens,
             },
             turns,
@@ -690,10 +714,12 @@ export async function runCodex(
           cumulativeOutputTokens: usage.outputTokens,
         });
 
-        // Track cost for this turn (Task 25)
-        const turnInputTokens = usage.inputTokens - tokensAtTurnStart;
-        const turnOutputTokens = usage.outputTokens - outputTokensAtTurnStart;
-        const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+        // Track cost for this turn using per-turn delta from cumulative
+        const cur = usageTokenCounts(usage);
+        const turnTokens = subtractTokens(cur, lastCumulative);
+        lastCumulative = cur;
+        const rateCard = resolveProviderRateCard(providerConfig);
+        const turnCost = rateCard ? priceTokens(turnTokens, rateCard) : null;
         if (turnCost !== null) {
           lastTurnCostUSD = turnCost;
           costMeter.add(turnCost);
@@ -874,8 +900,16 @@ export async function runCodex(
       // error string, losing 30k+ tokens of work on abort.
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+      const tc = usageTokenCounts(usage);
+      const workerCard = resolveProviderRateCard(providerConfig);
+      const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
+      let costDeltaVsParentUSD: number | null = null;
+      if (costUSD !== null && parentModel) {
+        const parentCard = resolveRateCard(parentModel);
+        if (parentCard) {
+          costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
+        }
+      }
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
@@ -886,6 +920,8 @@ export async function runCodex(
           costUSD,
           costDeltaVsParentUSD,
           cachedTokens: usage.cachedTokens,
+          cachedReadTokens: usage.cachedReadTokens,
+          cachedCreationTokens: usage.cachedCreationTokens,
           reasoningTokens: usage.reasoningTokens,
         },
         turns,
@@ -912,8 +948,16 @@ export async function runCodex(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const costUSD = computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+      const tc = usageTokenCounts(usage);
+      const workerCard = resolveProviderRateCard(providerConfig);
+      const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
+      let costDeltaVsParentUSD: number | null = null;
+      if (costUSD !== null && parentModel) {
+        const parentCard = resolveRateCard(parentModel);
+        if (parentCard) {
+          costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
+        }
+      }
       return {
         // Preserve any text the scratchpad buffered before the timeout fired.
         // Partial usage is read from the running accumulators hoisted above —
@@ -931,6 +975,8 @@ export async function runCodex(
           costUSD,
           costDeltaVsParentUSD,
           cachedTokens: usage.cachedTokens,
+          cachedReadTokens: usage.cachedReadTokens,
+          cachedCreationTokens: usage.cachedCreationTokens,
           reasoningTokens: usage.reasoningTokens,
         },
         turns,
@@ -964,16 +1010,53 @@ interface CodexResultCommonArgs {
   turns: number;
 }
 
+function resolveProviderRateCard(config: ProviderConfig): RateCard | null {
+  return resolveRateCard(config.model, {
+    inputCostPerMTok: config.inputCostPerMTok,
+    outputCostPerMTok: config.outputCostPerMTok,
+  });
+}
+
+function usageTokenCounts(u: CanonicalUsage): TokenCounts {
+  const cachedRead = u.cachedReadTokens ?? 0;
+  return {
+    inputTokens: Math.max(0, u.inputTokens - cachedRead),
+    outputTokens: u.outputTokens,
+    cachedReadTokens: cachedRead,
+    cachedCreationTokens: 0,
+    reasoningTokens: u.reasoningTokens ?? 0,
+  };
+}
+
 function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
   const { providerConfig, inputTokens, outputTokens, cachedTokens, reasoningTokens, parentModel } = args;
-  const costUSD = computeCostUSD(inputTokens, outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0);
+  const cachedRead = cachedTokens ?? 0;
+  const nonCachedInput = Math.max(0, inputTokens - cachedRead);
+  const workerCard = resolveProviderRateCard(providerConfig);
+  const tokenCounts: TokenCounts = {
+    inputTokens: nonCachedInput,
+    outputTokens,
+    cachedReadTokens: cachedRead,
+    cachedCreationTokens: 0,
+    reasoningTokens: reasoningTokens ?? 0,
+  };
+  const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
+  let costDeltaVsParentUSD: number | null = null;
+  if (costUSD !== null && parentModel) {
+    const parentCard = resolveRateCard(parentModel);
+    if (parentCard) {
+      costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
+    }
+  }
   return {
     inputTokens,
     outputTokens,
     totalTokens: inputTokens + outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, inputTokens, outputTokens, parentModel, cachedTokens, reasoningTokens),
+    costDeltaVsParentUSD,
     cachedTokens,
+    cachedReadTokens: cachedTokens,
+    cachedCreationTokens: null,
     reasoningTokens,
   };
 }
