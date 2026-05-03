@@ -13,7 +13,6 @@ import type {
   VerifyOutcome,
   VerifySkipReason,
 } from '../types.js';
-import { computeCostUSD, computeCostDeltaVsParentUSD } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
 import { createProvider } from '../provider.js';
 import { delegateWithEscalation } from '../delegate-with-escalation.js';
@@ -36,6 +35,7 @@ import { findModelCapabilities, findModelProfile } from '../routing/model-profil
 import { canonicalIdentity } from '../routing/canonical-model-identity.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
+import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts } from '../cost/compute.js';
 import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS, MAX_TIME_PRESTOP_RATIO } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -573,14 +573,31 @@ export async function executeReviewedLifecycle(
         if (event.kind === 'turn_complete') {
           heartbeat?.markEvent('llm');
           const providerConfig = _activeRunnerProviderConfig ?? resolved.provider.config;
-          const costUSD = computeCostUSD(
-            event.cumulativeInputTokens,
-            event.cumulativeOutputTokens,
-            providerConfig,
-          );
-          _currentRunnerCostUSD = costUSD ?? 0;
+          // §3.5 point 2: per-turn delta tracking from cumulative usage
+          const cur: TokenCounts = {
+            inputTokens: event.cumulativeInputTokens,
+            outputTokens: event.cumulativeOutputTokens,
+            cachedReadTokens: event.cumulativeCachedReadTokens ?? 0,
+            cachedCreationTokens: event.cumulativeCachedCreationTokens ?? 0,
+            reasoningTokens: event.cumulativeReasoningTokens ?? 0,
+          };
+          const turnTokens = subtractTokens(cur, _lastCumulative);
+          _lastCumulative = cur;
+          const card = resolveRateCard(providerConfig.model, {
+            ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
+            ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
+          });
+          const turnCost = card ? priceTokens(turnTokens, card) : null;
+          if (turnCost !== null) {
+            _currentRunnerCostUSD = (_currentRunnerCostUSD ?? 0) + turnCost;
+          } else {
+            _rateCardUnresolved = true;
+          }
           const cumulativeCostUSD = (_completedRunnerCostUSD ?? 0) + _currentRunnerCostUSD;
           heartbeat?.updateCost(cumulativeCostUSD, null);
+          if (_rateCardUnresolved) {
+            heartbeat?.markRateCardUnresolved();
+          }
           const nowTurn = Date.now();
           const turnDurMs = nowTurn - prevEventAtMs;
           prevEventAtMs = nowTurn;
@@ -588,7 +605,7 @@ export async function executeReviewedLifecycle(
             emitTaskEvent('turn_complete', {
               input_tokens: event.cumulativeInputTokens,
               output_tokens: event.cumulativeOutputTokens,
-              cost: costUSD,
+              cost: turnCost,
               duration_ms: turnDurMs,
               provider: providerConfig.model,
             });
@@ -748,6 +765,13 @@ export async function executeReviewedLifecycle(
   let _currentRunnerCostUSD = 0;
   let _activeRunnerProviderConfig: Provider['config'] | null = null;
   let _prevRunningCost: number | null = null;
+  // Per-turn delta tracking state (§3.5 point 2). Reset at each
+  // provider.run() boundary via `runAccounted`.
+  let _lastCumulative: TokenCounts = {
+    inputTokens: 0, outputTokens: 0,
+    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+  };
+  let _rateCardUnresolved = false;
   const runningCostUSD = () => {
     const current = _completedRunnerCostUSD !== null || _currentRunnerCostUSD !== 0
       ? (_completedRunnerCostUSD ?? 0) + _currentRunnerCostUSD
@@ -766,6 +790,11 @@ export async function executeReviewedLifecycle(
     }
     _activeRunnerProviderConfig = provider.config;
     _currentRunnerCostUSD = 0;
+    _lastCumulative = {
+      inputTokens: 0, outputTokens: 0,
+      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+    };
+    _rateCardUnresolved = false;
     try {
       const result = await call();
       const actualCost = (result as { usage?: { costUSD?: number | null } | null; metrics?: { costUSD?: number | null } } | null)?.usage?.costUSD

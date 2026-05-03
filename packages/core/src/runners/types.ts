@@ -133,6 +133,9 @@ export type InternalRunnerEvent =
       turn: number
       cumulativeInputTokens: number
       cumulativeOutputTokens: number
+      cumulativeCachedReadTokens?: number
+      cumulativeCachedCreationTokens?: number
+      cumulativeReasoningTokens?: number
     }
   | {
       kind: 'injection'

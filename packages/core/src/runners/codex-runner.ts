@@ -712,6 +712,9 @@ export async function runCodex(
           turn: turns,
           cumulativeInputTokens: usage.inputTokens,
           cumulativeOutputTokens: usage.outputTokens,
+          ...(usage.cachedReadTokens != null && { cumulativeCachedReadTokens: usage.cachedReadTokens }),
+          ...(usage.cachedCreationTokens != null && { cumulativeCachedCreationTokens: usage.cachedCreationTokens }),
+          ...(usage.reasoningTokens != null && { cumulativeReasoningTokens: usage.reasoningTokens }),
         });
 
         // Track cost for this turn using per-turn delta from cumulative

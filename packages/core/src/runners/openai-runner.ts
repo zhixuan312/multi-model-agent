@@ -400,20 +400,23 @@ export async function runOpenAI(
         preview: text.slice(0, 200),
       });
     }
+    const cachedRead = sumCachedReadTokens(result.state.usage.inputTokensDetails) ?? 0;
+    const reasoning = sumReasoningTokens(result.state.usage.outputTokensDetails) ?? 0;
     emit({
       kind: 'turn_complete',
       turn: result.state.usage.requests,
       cumulativeInputTokens: result.state.usage.inputTokens,
       cumulativeOutputTokens: result.state.usage.outputTokens,
+      cumulativeCachedReadTokens: cachedRead > 0 ? cachedRead : undefined,
+      cumulativeReasoningTokens: reasoning > 0 ? reasoning : undefined,
     });
     // Track cost for this turn using per-turn delta from cumulative
-    const cachedRead = sumCachedReadTokens(result.state.usage.inputTokensDetails) ?? 0;
     const cur: TokenCounts = {
       inputTokens: Math.max(0, result.state.usage.inputTokens - cachedRead),
       outputTokens: result.state.usage.outputTokens,
       cachedReadTokens: cachedRead,
       cachedCreationTokens: 0,
-      reasoningTokens: sumReasoningTokens(result.state.usage.outputTokensDetails) ?? 0,
+      reasoningTokens: reasoning,
     };
     const turnTokens = subtractTokens(cur, lastCumulative);
     lastCumulative = cur;

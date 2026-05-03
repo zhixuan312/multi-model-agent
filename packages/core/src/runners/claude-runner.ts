@@ -637,6 +637,9 @@ export async function runClaude(
             turn: turns,
             cumulativeInputTokens: usage.inputTokens,
             cumulativeOutputTokens: usage.outputTokens,
+            ...(usage.cachedReadTokens != null && { cumulativeCachedReadTokens: usage.cachedReadTokens }),
+            ...(usage.cachedCreationTokens != null && { cumulativeCachedCreationTokens: usage.cachedCreationTokens }),
+            ...(usage.reasoningTokens != null && { cumulativeReasoningTokens: usage.reasoningTokens }),
           });
 
           // Track cost for this turn (Task 25)
