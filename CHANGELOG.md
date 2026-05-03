@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.3] - 2026-05-04
+
+### Fixed
+- **Reviewer never skipped on shared-model + slot-different configs.** `runWithFallback` no longer receives `forbiddenIdentities: [implementerIdentity]` for spec/quality/diff reviewer calls. Slot separation is enforced solely by `forbiddenTiers: [resolved.slot]`. Rationale: if the user has intentionally configured both `standard` and `complex` slots with the same model (or backend), the slot assignment IS the separation contract — refusing to review on identity grounds was unwarranted paternalism. This also unblocks the 3.12.2 case where `canonicalIdentity` could throw on a successfully-constructed provider, fail-closing into `bothUnavailable=true` and silently skipping every spec_review for the affected route.
+- **Reviewer 0-cost / findings lost on DeepSeek (and other openai-compatible non-OpenAI providers).** `openai-runner` review-mode no longer returns `status='error'` when `reviewerOutputType.safeParse` fails. Instead it returns `status='ok'` with `parsedFindings: null`, allowing `runAnnotationReview`'s text-parser fallback (`parseReviewerFindings` → `fallbackExtractFindings`) to recover findings from the assistant text. Fixes the 3.12.2 regression where DeepSeek-v4-pro reviewers logged 30 turns + 21 tool calls but recorded `costUSD=0`, `inputTokens=0`, `verdict='error'`, and `findingsBySeverity={...0}` — every audit's quality_review was lost. Resolves the cascading `fallbackCount=1` on 100% of 3.12.2 tasks.
+- **`agents.implementer` no longer drifts from stage `agentTier` after fallback.** `agentEnvelope` (`reviewed-lifecycle.ts`) now reports `resolved.slot` as the implementer identity, matching what `stats.implementing.agentTier` records. Per-call slot drift remains visible via `fallbackOverrides` and `implementerHistory`. Pre-3.12.3 used `latestAttemptedImpl.tier`, which silently disagreed with stage stats whenever `runWithFallback` flipped tiers — producing audit telemetry rows where top-level `agentType: standard` contradicted `implementerTier: complex` and the model that actually executed.
+- **Review-stage `totalIdleMs` clamped to `durationMs`.** `endReviewStage` now clamps the snapshotted idle accumulator to the stage's wall-clock duration. Pre-3.12.3 saw 110-145% idle ratios on every failed reviewer because `runAnnotationReview` makes 2 sequential `delegateWithEscalation` calls and tail events from cross-runner async cleanup landed after the stage's transition boundary, producing impossible values that broke downstream "% time idle" dashboards.
+
 ## [3.12.2] - 2026-05-03
 
 ### Added

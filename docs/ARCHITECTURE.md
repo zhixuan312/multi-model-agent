@@ -82,22 +82,22 @@ Stages 3+4+5 are gated by each task's `reviewPolicy` (`full | spec_only | qualit
 Every tool is a stack of files at fixed layers. Adding a tool adds one row at each layer; the layer itself never changes shape.
 
 ```
-Layer V.1  Schema           core/src/tool-schemas/<tool>.ts            (Zod input/output)
-Layer V.2  HTTP handler     server/src/http/handlers/tools/<tool>.ts   (or .../control/)
-Layer V.3  Compiler         core/src/intake/compilers/<tool>.ts        (raw → DraftTask[])
-Layer V.4  Executor         core/src/executors/<tool>.ts               (review policy + lifecycle)
-Layer V.5  Bespoke output   core/src/reporting/parse-<tool>-report.ts +
+Layer L.1  Schema           core/src/tool-schemas/<tool>.ts            (Zod input/output)
+Layer L.2  HTTP handler     server/src/http/handlers/tools/<tool>.ts   (or .../control/)
+Layer L.3  Compiler         core/src/intake/compilers/<tool>.ts        (raw → DraftTask[])
+Layer L.4  Executor         core/src/executors/<tool>.ts               (review policy + lifecycle)
+Layer L.5  Bespoke output   core/src/reporting/parse-<tool>-report.ts +
                             compose-<tool>-headline.ts                  (tools w/ custom output)
-Layer V.6  Skill markdown   server/src/skills/mma-<tool>/SKILL.md       (caller-facing prompt)
-Layer V.7  Installer hook   server/src/install/{claude-code,cursor,codex-cli,
+Layer L.6  Skill markdown   server/src/skills/mma-<tool>/SKILL.md       (caller-facing prompt)
+Layer L.7  Installer hook   server/src/install/{claude-code,cursor,codex-cli,
                             gemini-cli}.ts via manifest.ts               (per-client writer)
-Layer V.8  Contract goldens tests/contract/goldens/endpoints/<tool>-<stage>.json +
+Layer L.8  Contract goldens tests/contract/goldens/endpoints/<tool>-<stage>.json +
                             routes.json + observability.json
 ```
 
 Per-tool fill of the stack:
 
-| Tool | V.4 executor | V.5 bespoke output | V.6 skill |
+| Tool | L.4 executor | L.5 bespoke output | L.6 skill |
 |---|---|---|---|
 | `delegate_tasks` | full review | — | mma-delegate |
 | `audit_document` | quality_only | — | mma-audit |
@@ -114,7 +114,7 @@ Per-tool fill of the stack:
 
 Two invariants the layered stack enforces:
 
-- **Vertical layers don't reach across.** A schema (V.1) never imports an executor (V.4); a skill markdown (V.6) is plain prose with no code dependency. New tools fill the stack top-to-bottom — they don't sneak in mid-stack.
+- **Vertical layers don't reach across.** A schema (L.1) never imports an executor (L.4); a skill markdown (L.6) is plain prose with no code dependency. New tools fill the stack top-to-bottom — they don't sneak in mid-stack.
 - **Horizontal stages don't reach backwards.** Reporting (5) reads from Review (4) outputs; Review never reads from Reporting. The pipeline is one-way except for the rework sub-loop inside Stage 4.
 
 ## Substrate — orthogonal capabilities
@@ -200,7 +200,7 @@ Old path → new path map (for readers coming from pre-3.2.0):
 Where to add:
 
 - **A new provider:** `core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `core/src/provider.ts` factory.
-- **A new specialized preset:** fill the V.1–V.7 stack — `tool-schemas/<name>.ts`, `intake/compilers/<name>.ts`, `executors/<name>.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
+- **A new specialized preset:** fill the L.1–L.7 stack — `tool-schemas/<name>.ts`, `intake/compilers/<name>.ts`, `executors/<name>.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
 - **A new observability event:** emit structured log line from `diagnostics/` or a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
 - **A new tool/route:** register in `server/src/http/server.ts`; add handler under `http/handlers/tools/`; add route to `tests/contract/goldens/routes.json`; add tool schema in `core/src/tool-schemas/`; pin per-stage goldens under `tests/contract/goldens/endpoints/`.
