@@ -333,7 +333,7 @@ export async function runCodex(
         totalTokens: usage.inputTokens + usage.outputTokens,
         costUSD: costUSD ?? 0,
         costDeltaVsParentUSD,
-        cachedTokens: usage.cachedTokens,
+        cachedTokens: usage.cachedReadTokens,
         cachedReadTokens: usage.cachedReadTokens,
         cachedCreationTokens: usage.cachedCreationTokens,
         reasoningTokens: usage.reasoningTokens,
@@ -521,7 +521,7 @@ export async function runCodex(
               totalTokens: usage.inputTokens + usage.outputTokens,
               costUSD,
               costDeltaVsParentUSD,
-              cachedTokens: usage.cachedTokens,
+              cachedTokens: usage.cachedReadTokens,
               cachedReadTokens: usage.cachedReadTokens,
               cachedCreationTokens: usage.cachedCreationTokens,
               reasoningTokens: usage.reasoningTokens,
@@ -601,7 +601,6 @@ export async function runCodex(
               const turnUsage: CanonicalUsage = {
                 inputTokens: wideUsage.input_tokens ?? 0,
                 outputTokens: wideUsage.output_tokens ?? 0,
-                cachedTokens: wideUsage.cached_input_tokens ?? null,
                 cachedReadTokens: wideUsage.cached_input_tokens ?? null,
                 cachedCreationTokens: null,
                 reasoningTokens: wideUsage.reasoning_tokens ?? null,
@@ -749,7 +748,7 @@ export async function runCodex(
               providerConfig,
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
-              cachedTokens: usage.cachedTokens,
+              cachedReadTokens: usage.cachedReadTokens,
               reasoningTokens: usage.reasoningTokens,
               turns,
               output: stripped,
@@ -774,7 +773,7 @@ export async function runCodex(
               providerConfig,
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
-              cachedTokens: usage.cachedTokens,
+              cachedReadTokens: usage.cachedReadTokens,
               reasoningTokens: usage.reasoningTokens,
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
@@ -843,7 +842,7 @@ export async function runCodex(
         providerConfig,
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        cachedTokens: usage.cachedTokens,
+        cachedReadTokens: usage.cachedReadTokens,
         reasoningTokens: usage.reasoningTokens,
         turns,
         lastOutput: output,
@@ -922,7 +921,7 @@ export async function runCodex(
           totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD,
           costDeltaVsParentUSD,
-          cachedTokens: usage.cachedTokens,
+          cachedTokens: usage.cachedReadTokens,
           cachedReadTokens: usage.cachedReadTokens,
           cachedCreationTokens: usage.cachedCreationTokens,
           reasoningTokens: usage.reasoningTokens,
@@ -977,7 +976,7 @@ export async function runCodex(
           totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD,
           costDeltaVsParentUSD,
-          cachedTokens: usage.cachedTokens,
+          cachedTokens: usage.cachedReadTokens,
           cachedReadTokens: usage.cachedReadTokens,
           cachedCreationTokens: usage.cachedCreationTokens,
           reasoningTokens: usage.reasoningTokens,
@@ -1008,7 +1007,7 @@ interface CodexResultCommonArgs {
   providerConfig: ProviderConfig;
   inputTokens: number;
   outputTokens: number;
-  cachedTokens: number | null;
+  cachedReadTokens: number | null;
   reasoningTokens: number | null;
   turns: number;
 }
@@ -1032,8 +1031,8 @@ function usageTokenCounts(u: CanonicalUsage): TokenCounts {
 }
 
 function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, inputTokens, outputTokens, cachedTokens, reasoningTokens, parentModel } = args;
-  const cachedRead = cachedTokens ?? 0;
+  const { providerConfig, inputTokens, outputTokens, cachedReadTokens, reasoningTokens, parentModel } = args;
+  const cachedRead = cachedReadTokens ?? 0;
   const nonCachedInput = Math.max(0, inputTokens - cachedRead);
   const workerCard = resolveProviderRateCard(providerConfig);
   const tokenCounts: TokenCounts = {
@@ -1057,8 +1056,8 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
     totalTokens: inputTokens + outputTokens,
     costUSD,
     costDeltaVsParentUSD,
-    cachedTokens,
-    cachedReadTokens: cachedTokens,
+    cachedTokens: cachedReadTokens,
+    cachedReadTokens,
     cachedCreationTokens: null,
     reasoningTokens,
   };

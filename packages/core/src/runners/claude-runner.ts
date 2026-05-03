@@ -251,7 +251,7 @@ export async function runClaude(
         totalTokens: usage.inputTokens + usage.outputTokens,
         costUSD: finalCostUSD,
         costDeltaVsParentUSD,
-        cachedTokens: usage.cachedTokens,
+        cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
         reasoningTokens: null,
       },
       turns,
@@ -485,7 +485,7 @@ export async function runClaude(
                 totalTokens: usage.inputTokens + usage.outputTokens,
                 costUSD: finalCostUSD,
                 costDeltaVsParentUSD,
-                cachedTokens: usage.cachedTokens,
+                cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
                 reasoningTokens: null,
               },
               turns,
@@ -610,14 +610,10 @@ export async function runClaude(
             cacheRead = u['cache_read_input_tokens'] ?? undefined;
             cacheCreate = u['cache_creation_input_tokens'] ?? undefined;
           }
-          const turnCachedTokens = (cacheRead === undefined && cacheCreate === undefined)
-            ? null
-            : (cacheRead ?? 0) + (cacheCreate ?? 0);
 
           const turnUsage: CanonicalUsage = {
             inputTokens: turnInputTokens,                              // sibling: NO cache fields added
             outputTokens: turnOutputTokens,
-            cachedTokens: turnCachedTokens,
             cachedReadTokens: cacheRead ?? null,
             cachedCreationTokens: cacheCreate ?? null,
             reasoningTokens: null,
@@ -793,7 +789,7 @@ export async function runClaude(
           totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD: finalCostUSD,
           costDeltaVsParentUSD,
-          cachedTokens: usage.cachedTokens,
+          cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
           reasoningTokens: null,
         },
         turns,
@@ -869,7 +865,7 @@ export async function runClaude(
           totalTokens: usage.inputTokens + usage.outputTokens,
           costUSD: finalCostUSD,
           costDeltaVsParentUSD,
-          cachedTokens: usage.cachedTokens,
+          cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
           reasoningTokens: null,
         },
         turns,
@@ -949,7 +945,7 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     totalTokens: usage.inputTokens + usage.outputTokens,
     costUSD,
     costDeltaVsParentUSD,
-    cachedTokens: usage.cachedTokens,
+    cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
     cachedReadTokens: usage.cachedReadTokens,
     cachedCreationTokens: usage.cachedCreationTokens,
     reasoningTokens: usage.reasoningTokens,
