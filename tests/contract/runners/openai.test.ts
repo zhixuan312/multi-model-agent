@@ -84,6 +84,8 @@ describe('contract: runOpenAI RunResult shape', () => {
         costUSD: 0.000055,
         costDeltaVsParentUSD: null,
         cachedTokens: null,
+        cachedReadTokens: null,
+        cachedCreationTokens: null,
         reasoningTokens: null,
       },
       turns: 1,

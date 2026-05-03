@@ -12,14 +12,13 @@ import { createHash } from 'node:crypto';
 import { z } from 'zod';
 import {
   withTimeout,
-  computeCostUSD,
-  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
+import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
 import {
@@ -212,6 +211,12 @@ export async function runOpenAI(
   // Track last turn cost for estimating next turn cost (used by runTurnAndBuffer)
   let lastTurnCostUSD = 0;
 
+  // Per-turn cumulative → delta tracking state (§3.5 point 2)
+  let lastCumulative: TokenCounts = {
+    inputTokens: 0, outputTokens: 0,
+    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+  };
+
   // The tracker fires `onToolCall` synchronously inside every
   // `trackToolCall(...)` — which itself is called from inside a tool
   // implementation during an `agentRun` turn. That means `currentResult`
@@ -401,8 +406,19 @@ export async function runOpenAI(
       cumulativeInputTokens: result.state.usage.inputTokens,
       cumulativeOutputTokens: result.state.usage.outputTokens,
     });
-    // Track cost for this turn
-    const turnCost = computeCostUSD(result.state.usage.inputTokens, result.state.usage.outputTokens, runner.providerConfig);
+    // Track cost for this turn using per-turn delta from cumulative
+    const cachedRead = sumCachedReadTokens(result.state.usage.inputTokensDetails) ?? 0;
+    const cur: TokenCounts = {
+      inputTokens: Math.max(0, result.state.usage.inputTokens - cachedRead),
+      outputTokens: result.state.usage.outputTokens,
+      cachedReadTokens: cachedRead,
+      cachedCreationTokens: 0,
+      reasoningTokens: sumReasoningTokens(result.state.usage.outputTokensDetails) ?? 0,
+    };
+    const turnTokens = subtractTokens(cur, lastCumulative);
+    lastCumulative = cur;
+    const rateCard = resolveProviderRateCard(runner.providerConfig);
+    const turnCost = rateCard ? priceTokens(turnTokens, rateCard) : null;
     if (turnCost !== null) {
       lastTurnCostUSD = turnCost;
       costMeter.add(turnCost);
@@ -449,11 +465,11 @@ export async function runOpenAI(
        * Build a cost_exceeded result.
        */
       function buildCostExceededResult(turnsAtFailure: number): RunResult {
-        const partial = partialUsage(currentResult, runner.providerConfig);
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
-          usage: { ...partial, costDeltaVsParentUSD: 0 },
+          usage: partial,
           turns: turnsAtFailure,
           filesRead: tracker.getReads(),
           directoriesListed: tracker.getDirectoriesListed(),
@@ -699,15 +715,7 @@ export async function runOpenAI(
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
-        const partial = partialUsage(currentResult, runner.providerConfig);
-        const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
-          partial.costUSD,
-          partial.inputTokens,
-          partial.outputTokens,
-          parentModel,
-          partial.cachedTokens,
-          partial.reasoningTokens,
-        );
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
         const turnsAtFailure = currentResult?.state.usage.requests ?? 0;
@@ -718,7 +726,7 @@ export async function runOpenAI(
           status: 'incomplete',
           errorCode: 'degenerate_exhausted',
           error: `agent exhausted time/cost budget after ${turnsAtFailure} turns`,
-          usage: { ...partial, costDeltaVsParentUSD },
+          usage: partial,
           turns: turnsAtFailure,
           filesRead,
           directoriesListed: tracker.getDirectoriesListed(),
@@ -734,7 +742,7 @@ export async function runOpenAI(
       if (err instanceof Error && '__timeCeiling' in err) {
         const ceilingMs = (err as Record<string, unknown>).__timeCeiling as number;
         emit({ kind: 'done', status: 'incomplete' });
-        const partial = partialUsage(currentResult, runner.providerConfig);
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
         return sharedBuildTimeCeilingResult({
           usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, totalTokens: partial.totalTokens, costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD ?? null, cachedTokens: partial.cachedTokens ?? null, reasoningTokens: partial.reasoningTokens ?? null },
           turns: currentResult?.state.usage.requests ?? 0,
@@ -756,19 +764,11 @@ export async function runOpenAI(
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
-        partial.costUSD,
-        partial.inputTokens,
-        partial.outputTokens,
-        parentModel,
-        partial.cachedTokens,
-        partial.reasoningTokens,
-      );
+      const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
-        usage: { ...partial, costDeltaVsParentUSD },
+        usage: partial,
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -795,15 +795,7 @@ export async function runOpenAI(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(
-        partial.costUSD,
-        partial.inputTokens,
-        partial.outputTokens,
-        parentModel,
-        partial.cachedTokens,
-        partial.reasoningTokens,
-      );
+      const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
       return {
         output: hasSalvage
           ? scratchpad.latest()
@@ -815,7 +807,7 @@ export async function runOpenAI(
         toolCalls: tracker.getToolCalls(),
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
-        usage: { ...partial, costDeltaVsParentUSD },
+        usage: partial,
         turns: currentResult?.state.usage.requests ?? 0,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -830,53 +822,98 @@ export async function runOpenAI(
 
 // --- Helpers: canonical return-shape builders -------------------------------
 
+function resolveProviderRateCard(config: ProviderConfig): RateCard | null {
+  return resolveRateCard(config.model, {
+    inputCostPerMTok: config.inputCostPerMTok,
+    outputCostPerMTok: config.outputCostPerMTok,
+  });
+}
+
 /**
- * Extract cached/reasoning tokens into {@link CanonicalUsage} shape (§3.6).
+ * Sum cached_tokens across inputTokensDetails records.
+ * OpenAI exposes cache reads only via `cached_tokens` in inputTokensDetails;
+ * there is no cache creation exposure.
+ */
+function sumCachedReadTokens(details?: Array<Record<string, number>>): number | null {
+  if (!details || details.length === 0) return null;
+  let sum = 0;
+  let hasAny = false;
+  for (const d of details) {
+    if (typeof d.cached_tokens === 'number') {
+      sum += d.cached_tokens;
+      hasAny = true;
+    }
+  }
+  return hasAny ? sum : null;
+}
+
+/**
+ * Sum reasoning_tokens across outputTokensDetails records.
+ */
+function sumReasoningTokens(details?: Array<Record<string, number>>): number | null {
+  if (!details || details.length === 0) return null;
+  let sum = 0;
+  let hasAny = false;
+  for (const d of details) {
+    if (typeof d.reasoning_tokens === 'number') {
+      sum += d.reasoning_tokens;
+      hasAny = true;
+    }
+  }
+  return hasAny ? sum : null;
+}
+
+/**
+ * Extract split cache/reasoning tokens into {@link CanonicalUsage} shape (§3.6).
  *
- * The @openai/agents SDK stores per-request detail records in
- * `inputTokensDetails: Array<Record<string, number>>` and
- * `outputTokensDetails: Array<Record<string, number>>`. The OpenAI API
- * returns `cached_tokens` and `reasoning_tokens` as snake_case keys
- * inside those detail objects. We sum across all requests; if the provider
- * never exposed the detail field the result is null.
+ * OpenAI exposes cache reads via `cached_tokens` in `inputTokensDetails` and
+ * reasoning tokens via `reasoning_tokens` in `outputTokensDetails`. There is
+ * no cache creation dimension in OpenAI's API, so `cachedCreationTokens` is
+ * always null.
  */
 function extractCanonicalTokens(usage: {
   inputTokensDetails?: Array<Record<string, number>>;
   outputTokensDetails?: Array<Record<string, number>>;
-}): Pick<CanonicalUsage, 'cachedTokens' | 'reasoningTokens'> {
-  let cachedTokens = 0;
-  let hasCached = false;
-  for (const d of usage.inputTokensDetails ?? []) {
-    if (typeof d.cached_tokens === 'number') {
-      cachedTokens += d.cached_tokens;
-      hasCached = true;
-    }
-  }
-  let reasoningTokens = 0;
-  let hasReasoning = false;
-  for (const d of usage.outputTokensDetails ?? []) {
-    if (typeof d.reasoning_tokens === 'number') {
-      reasoningTokens += d.reasoning_tokens;
-      hasReasoning = true;
-    }
-  }
+}): Pick<CanonicalUsage, 'cachedReadTokens' | 'cachedCreationTokens' | 'reasoningTokens'> {
   return {
-    cachedTokens: hasCached ? cachedTokens : null,
-    reasoningTokens: hasReasoning ? reasoningTokens : null,
+    cachedReadTokens: sumCachedReadTokens(usage.inputTokensDetails),
+    cachedCreationTokens: null,
+    reasoningTokens: sumReasoningTokens(usage.outputTokensDetails),
   };
 }
 
 export function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
   const u = currentResult.state.usage;
-  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(u);
-  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0);
+  const { cachedReadTokens, reasoningTokens } = extractCanonicalTokens(u);
+  const cachedRead = cachedReadTokens ?? 0;
+  const reasoning = reasoningTokens ?? 0;
+  const nonCachedInput = Math.max(0, u.inputTokens - cachedRead);
+  const workerCard = resolveProviderRateCard(providerConfig);
+  const tokenCounts: TokenCounts = {
+    inputTokens: nonCachedInput,
+    outputTokens: u.outputTokens,
+    cachedReadTokens: cachedRead,
+    cachedCreationTokens: 0,
+    reasoningTokens: reasoning,
+  };
+  const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
+  let costDeltaVsParentUSD: number | null = null;
+  if (costUSD !== null && parentModel) {
+    const parentCard = resolveRateCard(parentModel);
+    if (parentCard) {
+      costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
+    }
+  }
+  const legacyCached = cachedReadTokens !== null ? cachedRead : null;
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel, cachedTokens, reasoningTokens),
-    cachedTokens,
+    costDeltaVsParentUSD,
+    cachedTokens: legacyCached,
+    cachedReadTokens,
+    cachedCreationTokens: null,
     reasoningTokens,
   };
 }
@@ -968,19 +1005,42 @@ function formatFileList(files: string[]): string {
 function partialUsage(
   result: AgentRunOutput | undefined,
   providerConfig: ProviderConfig,
+  parentModel?: string,
 ): RunResult['usage'] {
   if (!result) {
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null };
+    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, cachedReadTokens: null, cachedCreationTokens: null, reasoningTokens: null };
   }
   const usage = result.state.usage;
-  const { cachedTokens, reasoningTokens } = extractCanonicalTokens(usage);
+  const { cachedReadTokens, reasoningTokens } = extractCanonicalTokens(usage);
+  const cachedRead = cachedReadTokens ?? 0;
+  const reasoning = reasoningTokens ?? 0;
+  const nonCachedInput = Math.max(0, usage.inputTokens - cachedRead);
+  const workerCard = resolveProviderRateCard(providerConfig);
+  const tokenCounts: TokenCounts = {
+    inputTokens: nonCachedInput,
+    outputTokens: usage.outputTokens,
+    cachedReadTokens: cachedRead,
+    cachedCreationTokens: 0,
+    reasoningTokens: reasoning,
+  };
+  const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
+  let costDeltaVsParentUSD: number | null = null;
+  if (costUSD !== null && parentModel) {
+    const parentCard = resolveRateCard(parentModel);
+    if (parentCard) {
+      costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
+    }
+  }
+  const legacyCached = cachedReadTokens !== null ? cachedRead : null;
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
-    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0),
-    costDeltaVsParentUSD: null,
-    cachedTokens,
+    costUSD,
+    costDeltaVsParentUSD,
+    cachedTokens: legacyCached,
+    cachedReadTokens,
+    cachedCreationTokens: null,
     reasoningTokens,
   };
 }
