@@ -10,16 +10,16 @@ describe('V3 cross-field validation (warn-only since 3.10.3)', () => {
   // CAN detect the violations — what the recorder does with that signal
   // (drop vs warn vs emit) is a separate policy. See recorder.ts comments.
 
-  it('R3 detection: review.tier === implementerTier produces a schema warning', () => {
+  // R3 was intentionally removed in v4 — review tier equality with
+  // implementer tier is no longer a schema violation. Cross-tier
+  // differentiation is now reflected in tierUsage rollup, not enforced
+  // at the stage level. See §3.4 for current rule set.
+  it('R3 removal: review.tier === implementerTier no longer fails validation (v4)', () => {
     const rr = richRunResult();
     rr.stageStats!.spec_review.agentTier = 'standard';
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    expect(parsed.success).toBe(false);
-    if (!parsed.success) {
-      const r3 = parsed.error.issues.find((e) => e.message.toLowerCase().includes('r3'));
-      expect(r3).toBeDefined();
-    }
+    expect(parsed.success).toBe(true);
   });
 
   it('R10b detection: rework stage on quality_only route produces a schema warning', () => {
