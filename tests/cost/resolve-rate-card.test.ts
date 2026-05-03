@@ -11,13 +11,13 @@ describe('resolveRateCard', () => {
     expect(resolveRateCard(undefined)).toBeNull();
   });
 
-  it.skip('known anthropic model → card with explicit cachedCreationCostPerMTok = input × 1.25', () => {
+  it('known anthropic model → card with explicit cachedCreationCostPerMTok = input × 1.25', () => {
     const card = resolveRateCard('claude-opus-4-7');
     expect(card).not.toBeNull();
     expect(card!.cachedCreationCostPerMTok).toBeCloseTo(card!.inputCostPerMTok * 1.25, 10);
   });
 
-  it.skip('known non-anthropic model → cachedCreationCostPerMTok defaults to inputCostPerMTok (no premium)', () => {
+  it('known non-anthropic model → cachedCreationCostPerMTok defaults to inputCostPerMTok (no premium)', () => {
     const card = resolveRateCard('gpt-5.5');
     expect(card).not.toBeNull();
     expect(card!.cachedCreationCostPerMTok).toBeCloseTo(card!.inputCostPerMTok, 10);

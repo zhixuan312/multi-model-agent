@@ -328,7 +328,7 @@ export interface CostBreakdown {
  *        + (output - reasoning) × outputRate
  *        + reasoning × reasoningRate
  *
- * Cached rate fallback: profile.cachedInputCostPerMTok ?? inputRate × 0.1
+ * Cached rate fallback: profile.cachedReadCostPerMTok ?? inputRate × 0.1
  * Reasoning rate fallback: profile.reasoningCostPerMTok ?? outputRate
  *
  * Returns float USD with no rounding — the single rounding boundary is at
@@ -377,7 +377,7 @@ function resolveCostRates(config: ProviderConfig): { input: number; cachedInput:
   const explicitOutput = config.outputCostPerMTok;
   if (explicitInput !== undefined && explicitOutput !== undefined && Number.isFinite(explicitInput) && Number.isFinite(explicitOutput) && explicitInput >= 0 && explicitOutput >= 0) {
     const profile = findModelProfile(config.model);
-    const cachedInput = profile.cachedInputCostPerMTok ?? explicitInput * 0.1;
+    const cachedInput = profile.cachedReadCostPerMTok ?? explicitInput * 0.1;
     const reasoning = profile.reasoningCostPerMTok ?? explicitOutput;
     return { input: explicitInput, cachedInput, output: explicitOutput, reasoning };
   }
@@ -386,7 +386,7 @@ function resolveCostRates(config: ProviderConfig): { input: number; cachedInput:
   const input = profile.inputCostPerMTok;
   const output = profile.outputCostPerMTok;
   if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
-  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
+  const cachedInput = profile.cachedReadCostPerMTok ?? input * 0.1;
   const reasoning = profile.reasoningCostPerMTok ?? output;
   return { input, cachedInput, output, reasoning };
 }
@@ -406,7 +406,7 @@ export function computeCostDeltaVsParentUSD(
   const input = profile.inputCostPerMTok;
   const output = profile.outputCostPerMTok;
   if (input === undefined || output === undefined || !Number.isFinite(input) || !Number.isFinite(output) || input < 0 || output < 0) return null;
-  const cachedInput = profile.cachedInputCostPerMTok ?? input * 0.1;
+  const cachedInput = profile.cachedReadCostPerMTok ?? input * 0.1;
   const reasoning = profile.reasoningCostPerMTok ?? output;
 
   const parentCost =
