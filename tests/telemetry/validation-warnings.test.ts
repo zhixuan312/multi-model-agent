@@ -62,13 +62,17 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
+    parentModel: null,
     parentModelFamily: 'openai',
+    tierUsage: {},
     inputTokens: 600,
     outputTokens: 150,
-    cachedTokens: 60,
+    cachedReadTokens: 60,
+    cachedCreationTokens: 0,
     reasoningTokens: 30,
     totalDurationMs: 50000,
     totalCostUSD: 0.031,
+    parentEquivalentCostUSD: null,
     costDeltaVsParentUSD: null,
     concernCount: 0,
     escalationCount: 0,
@@ -81,13 +85,15 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     stages: [
       {
         name: 'implementing',
+        round: 0,
         model: 'gpt-5',
         tier: 'standard',
         durationMs: 30000,
         costUSD: 0.03,
         inputTokens: 500,
         outputTokens: 100,
-        cachedTokens: 50,
+        cachedReadTokens: 50,
+        cachedCreationTokens: 0,
         reasoningTokens: 25,
         toolCallCount: 4,
         filesReadCount: 2,
@@ -98,13 +104,15 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
       },
       {
         name: 'committing',
+        round: 0,
         model: 'gpt-5',
         tier: 'standard',
         durationMs: 500,
         costUSD: 0.001,
         inputTokens: 100,
         outputTokens: 50,
-        cachedTokens: 10,
+        cachedReadTokens: 10,
+        cachedCreationTokens: 0,
         reasoningTokens: 5,
         toolCallCount: 1,
         filesReadCount: 1,
@@ -285,6 +293,83 @@ describe('collectValidationWarnings', () => {
     // Dedup: each issue appears once
     const r1Warnings = result.warnings.filter(w => w.rule.startsWith('R1:'));
     expect(r1Warnings.length).toBe(1);
+  });
+});
+
+// ── R6b: soft warning for cached grossly exceeding input ─────────────────
+
+describe('R6b soft warning: cached >> input', () => {
+  it('emits validation_warning when cachedReadTokens + cachedCreationTokens > 100 × inputTokens', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 100;
+    event.stages[0].cachedReadTokens = 11_000;
+    event.stages[0].cachedCreationTokens = 0;
+    event.stages[0].outputTokens = 50;
+
+    const result = collectValidationWarnings(event);
+
+    expect(result.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ rule: 'R6b', path: 'stages[0]' }),
+      ]),
+    );
+  });
+
+  it('triggers when cachedCreationTokens alone exceed threshold', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 100;
+    event.stages[0].cachedReadTokens = 0;
+    event.stages[0].cachedCreationTokens = 15_000;
+    event.stages[0].outputTokens = 50;
+
+    const result = collectValidationWarnings(event);
+    expect(result.warnings.some(w => w.rule === 'R6b' && w.path === 'stages[0]')).toBe(true);
+  });
+
+  it('triggers when sum of both cached fields exceeds threshold', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 100;
+    event.stages[0].cachedReadTokens = 6_000;
+    event.stages[0].cachedCreationTokens = 5_000;
+    event.stages[0].outputTokens = 50;
+
+    const result = collectValidationWarnings(event);
+    expect(result.warnings.some(w => w.rule === 'R6b' && w.path === 'stages[0]')).toBe(true);
+  });
+
+  it('no warning when cached ratio is normal', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 500;
+    event.stages[0].cachedReadTokens = 5_000;
+    event.stages[0].cachedCreationTokens = 0;
+
+    const result = collectValidationWarnings(event);
+    expect(result.warnings.filter(w => w.rule === 'R6b')).toEqual([]);
+  });
+
+  it('no warning when inputTokens is 0 (division guard)', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 0;
+    event.stages[0].cachedReadTokens = 50_000;
+    event.stages[0].cachedCreationTokens = 50_000;
+
+    const result = collectValidationWarnings(event);
+    expect(result.warnings.filter(w => w.rule === 'R6b')).toEqual([]);
+  });
+
+  it('detects R6b across multiple stages', () => {
+    const event = makeMinimalValidEvent();
+    event.stages[0].inputTokens = 100;
+    event.stages[0].cachedReadTokens = 11_000;
+    event.stages[0].cachedCreationTokens = 0;
+    event.stages[1].inputTokens = 10;
+    event.stages[1].cachedReadTokens = 0;
+    event.stages[1].cachedCreationTokens = 2_000;
+
+    const result = collectValidationWarnings(event);
+    const r6bWarnings = result.warnings.filter(w => w.rule === 'R6b');
+    expect(r6bWarnings).toHaveLength(2);
+    expect(r6bWarnings.map(w => w.path).sort()).toEqual(['stages[0]', 'stages[1]']);
   });
 });
 
