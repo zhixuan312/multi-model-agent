@@ -2,58 +2,170 @@
 
 One-page orientation for maintainers. Deeper content lives alongside code.
 
-## Layers
+## The three axes
+
+multi-model-agent is organized around three axes. A request is a *path* through them, not a region.
+
+- **Horizontal** — request flow: a request descends through five stages from the HTTP boundary to the terminal envelope.
+- **Vertical** — tool surface: each tool exists as a stack of files at fixed layers (schema → handler → compiler → executor → ...). Adding a tool means filling the stack top-to-bottom; the layers themselves never change shape.
+- **Substrate** — orthogonal capabilities (auth, cost, telemetry, runners, research) every stage and every tool borrows from.
+
+**Package rule of thumb:** `packages/core` has no knowledge of HTTP. `packages/server` has no LLM-calling logic — it hands off to core via `executors/*.ts`.
+
+## Horizontal axis — the five stages
+
+Each stage decomposes into sub-layers that always run in this order. The pipeline is one-way except for the rework sub-loop inside Stage 4.
 
 ```
-┌──────────────────────────────────────────────────────────────────────┐
-│ packages/server — runtime surface (HTTP service + install CLI)       │
-│   cli/            CLI entry (serve, print-token, install-skill)      │
-│   http/           Router, middleware, tool + control handlers        │
-│     handlers/tools/     delegate, audit, review, verify, debug,      │
-│                         execute-plan, retry                          │
-│     handlers/control/   batch polling, context-blocks, clarifications│
-│   install/        Per-client writers (codex-cli, gemini-cli, cursor) │
-│   skills/         Packaged mma-* skills (Markdown SKILL.md files)    │
-│   openapi.ts      Schema generator for public contract               │
-├──────────────────────────────────────────────────────────────────────┤
-│ packages/core — library                                              │
-│   config/         Config schema + loader (Zod)                       │
-│   intake/         Brief compile, classify, clarify; compilers per    │
-│                    route under compilers/                            │
-│   readiness/      Brief-quality evaluation                           │
-│   executors/      One file per tool (delegate/audit/review/verify/   │
-│                    debug/execute-plan/retry); ExecutionContext       │
-│                    factory                                           │
-│   run-tasks/      Orchestrator — intake → dispatch → review → report │
-│                    (index, execute-task, reviewed-lifecycle,         │
-│                    worker-status, fallback-report, plan-extraction)  │
-│   runners/        Per-provider runners (openai, claude, codex);      │
-│                    shared interface + result-builders under base/    │
-│   review/         Spec + quality reviewer prompts, aggregation       │
-│   reporting/      Structured report parser, headline composers       │
-│   routing/        Agent resolver + model profiles                    │
-│   tools/          Tool definitions + provider adapters + tracker     │
-│   cost/           Cost metering                                      │
-│   context/        Context block store + expansion                    │
-│   diagnostics/    JSONL event logger                                 │
-│   types.ts        Cross-cutting types only (TaskSpec, Provider,      │
-│                    RunResult, ProviderConfig, MultiModelConfig)      │
-└──────────────────────────────────────────────────────────────────────┘
+Stage 1 — INGRESS  (HTTP boundary)
+  1.1  Transport          server/src/http/{server,router,loopback}.ts
+  1.2  Authentication     server/src/http/auth.ts
+  1.3  Validation         server/src/http/{cwd-validator,cross-tier-guard,
+                          canonicalize-file-paths}.ts
+  1.4  Context binding    server/src/http/{project-registry,handler-deps,
+                          request-pipeline,request-observability}.ts +
+                          core/src/executors/execution-context.ts
+
+Stage 2 — INTAKE  (interpret request → executable plan)
+  2.1  Pipeline entry     core/src/intake/pipeline.ts
+  2.2  Per-route compile  core/src/intake/compilers/<tool>.ts        ← vertical slice point
+  2.3  Quality assessment core/src/readiness/readiness.ts, intake/classify.ts
+  2.4  Inference          core/src/intake/{infer,resolve}.ts, effort-inference.ts
+  2.5  Clarification gate core/src/intake/{clarification-store,force-clarification,
+                          confirm}.ts
+
+Stage 3 — DISPATCH  (pick agent, run implementer, supervise)
+  3.1  Agent resolution   core/src/routing/{resolve-agent,model-profiles,
+                          canonical-model-identity}.ts
+  3.2  Lifecycle drive    core/src/run-tasks/{index,execute-task,
+                          reviewed-lifecycle}.ts
+  3.3  Escalation         core/src/delegate-with-escalation.ts +
+                          core/src/escalation/{policy,fallback}.ts
+  3.4  Provider invoke    core/src/runners/{claude,codex,openai}-runner.ts
+                          via runners/base/*
+  3.5  In-call control    core/src/runners/supervision.ts, tools/scratchpad.ts,
+                          heartbeat.ts, cost/cost-meter.ts, file-artifact-check.ts,
+                          run-tasks/stage-idle-tracker.ts
+  3.6  Tools surface      core/src/tools/{definitions,claude-adapter,
+                          openai-adapter,tracker,call-cache}.ts +
+                          research substrate (see C.4)
+
+Stage 4 — REVIEW  (cross-agent verdict + rework)
+  4.1  Prompt build       core/src/review/{reviewer-prompt,quality-only-prompts}.ts
+  4.2  Reviewer execution core/src/review/{spec-reviewer,quality-reviewer,
+                          diff-review}.ts
+  4.3  Finding parsing    core/src/review/{parse-reviewer-findings,evidence}.ts
+  4.4  Aggregation+rework core/src/review/{aggregate-result,skipped-result,
+                          fallback-extraction}.ts
+
+Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
+  5.1  Output parsing     core/src/reporting/{structured-report,
+                          parse-investigation-report,parse-explore-report}.ts
+  5.2  Status derivation  core/src/run-tasks/{derive-terminal-status,
+                          worker-status}.ts +
+                          reporting/derive-{explore,investigate}-status.ts
+  5.3  Headline           core/src/reporting/compose-{terminal,running,explore,
+                          investigate}-headline.ts, not-applicable.ts
+  5.4  Telemetry emit     core/src/telemetry/{event-builder,normalize,clamp,
+                          bucketing,field-coverage,concern-classifier,
+                          consent-rules}.ts +
+                          observability/{bus,events,*-sink}.ts
+  5.5  Persistence        core/src/{batch-registry,batch-cache,async-dispatch}.ts,
+                          context/context-block-store.ts,
+                          run-tasks/commit-stage.ts, auto-commit.ts
 ```
 
-**Rule of thumb:** `packages/core` has no knowledge of HTTP. `packages/server` has no LLM-calling logic — it hands off to core via `executors/*.ts`.
+Stages 3+4+5 are gated by each task's `reviewPolicy` (`full | spec_only | quality_only | diff_only | off`). Read-only presets set `quality_only` or `off`; artifact-producing presets keep `full`. The lifecycle inspects the policy and skips stages accordingly — there is no parallel "lite" lifecycle.
+
+## Vertical axis — the tool stack
+
+Every tool is a stack of files at fixed layers. Adding a tool adds one row at each layer; the layer itself never changes shape.
+
+```
+Layer V.1  Schema           core/src/tool-schemas/<tool>.ts            (Zod input/output)
+Layer V.2  HTTP handler     server/src/http/handlers/tools/<tool>.ts   (or .../control/)
+Layer V.3  Compiler         core/src/intake/compilers/<tool>.ts        (raw → DraftTask[])
+Layer V.4  Executor         core/src/executors/<tool>.ts               (review policy + lifecycle)
+Layer V.5  Bespoke output   core/src/reporting/parse-<tool>-report.ts +
+                            compose-<tool>-headline.ts                  (tools w/ custom output)
+Layer V.6  Skill markdown   server/src/skills/mma-<tool>/SKILL.md       (caller-facing prompt)
+Layer V.7  Installer hook   server/src/install/{claude-code,cursor,codex-cli,
+                            gemini-cli}.ts via manifest.ts               (per-client writer)
+Layer V.8  Contract goldens tests/contract/goldens/endpoints/<tool>-<stage>.json +
+                            routes.json + observability.json
+```
+
+Per-tool fill of the stack:
+
+| Tool | V.4 executor | V.5 bespoke output | V.6 skill |
+|---|---|---|---|
+| `delegate_tasks` | full review | — | mma-delegate |
+| `audit_document` | quality_only | — | mma-audit |
+| `review_code` | quality_only | — | mma-review |
+| `verify_work` | quality_only | — | mma-verify |
+| `debug_task` | quality_only | — | mma-debug |
+| `execute_plan` | full review + plan-extraction | — | mma-execute-plan |
+| `investigate` | review off | parse-investigation-report + compose-investigate-headline | mma-investigate |
+| `explore` | review off + research adapters | parse-explore-report + compose-explore-headline + derive-explore-status | mma-explore |
+| `retry_tasks` | replay prior batch | — | mma-retry |
+| `register_context_block` | state-only (no executor) | — | mma-context-blocks |
+| `get_batch_slice` | state-only | — | (used internally by mma-* skills) |
+| `confirm_clarifications` | state-only | — | mma-clarifications |
+
+Two invariants the layered stack enforces:
+
+- **Vertical layers don't reach across.** A schema (V.1) never imports an executor (V.4); a skill markdown (V.6) is plain prose with no code dependency. New tools fill the stack top-to-bottom — they don't sneak in mid-stack.
+- **Horizontal stages don't reach backwards.** Reporting (5) reads from Review (4) outputs; Review never reads from Reporting. The pipeline is one-way except for the rework sub-loop inside Stage 4.
+
+## Substrate — orthogonal capabilities
+
+These layers underlie every stage and every tool. They aren't on either axis; they're the floor both axes stand on.
+
+```
+C.1  Identity & sandboxing      core/src/auth/{claude,codex}-oauth.ts,
+                                server/src/http/auth.ts, cross-tier-guard.ts,
+                                cwd-validator.ts, loopback.ts
+C.2  Bounded execution           core/src/cost/cost-meter.ts, heartbeat.ts,
+                                effort-inference.ts, escalation/{policy,fallback}.ts,
+                                file-artifact-check.ts, error-codes.ts
+C.3  Provider abstraction        core/src/provider.ts,
+                                runners/base/{types,result-builders,research-tools,
+                                time-check,usage-accumulator}.ts,
+                                runners/{supervision,error-classification,
+                                injection-type,prevention}.ts, model-profiles.json
+C.4  Research substrate          core/src/research/{allowlist,ssrf-guard,web-fetch,
+                                web-search,untrusted-content}.ts +
+                                research/adapters/{arxiv,github-search,
+                                semantic-scholar,generic-rss}.ts
+C.5  Telemetry & observability   core/src/telemetry/{event-builder,normalize,clamp,
+                                bucketing,field-coverage,concern-classifier,
+                                consent-rules}.ts,
+                                observability/{bus,events,buckets,*-sink}.ts,
+                                diagnostics/{jsonl-writer,http-server-log,
+                                request-spill,verbose-line}.ts
+C.6  State stores (in-process)   core/src/{project-context,batch-registry,
+                                batch-cache}.ts, context/context-block-store.ts,
+                                intake/clarification-store.ts
+C.7  Distribution                server/src/install/{claude-code,cursor,codex-cli,
+                                gemini-cli,discover,manifest,manifest-resolve,
+                                missing-skills,orchestrate,headers,notify,
+                                include-utils}.ts +
+                                server/src/skills/mma-*/SKILL.md
+```
+
+A single request reads as a path: the horizontal axis tells you *which stage*, the vertical axis tells you *which file does that stage's work for this tool*, and the substrate tells you *which capability the stage borrows from*.
 
 ## Runner adapter taxonomy
 
-Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` implementation (see `packages/core/src/runners/base/types.ts`). The adapter normalizes turn observations (text, usage, tool calls, finish reason) so the shared runner shell can own supervision, scratchpad salvage, watchdog policy, cost ceilings, and result building via `runners/base/result-builders.ts`. Provider-specific I/O (OpenAI Agents SDK, Anthropic Claude SDK, OpenAI Responses for Codex) stays inside each adapter.
+Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` implementation (see `core/src/runners/base/types.ts`). The adapter normalizes turn observations (text, usage, tool calls, finish reason) so the shared runner shell can own supervision, scratchpad salvage, watchdog policy, cost ceilings, and result building via `runners/base/result-builders.ts`. Provider-specific I/O (OpenAI Agents SDK, Anthropic Claude SDK, OpenAI Responses for Codex) stays inside each adapter.
 
-## Request lifecycle
+## Request lifecycle (concrete trace)
 
-1. **Ingress** — `packages/server/src/http/server.ts` routes `POST /<tool>?cwd=<abs>` to a handler. Handlers reserve a `ProjectContext` per cwd and build an `ExecutionContext` via `core/src/executors/execution-context.ts`.
-2. **Intake** — `core/src/intake/*.ts` compiles raw input into `DraftTask[]`, classifies brief quality, and decides whether to emit a clarification proposal. Route compilers live under `intake/compilers/`.
-3. **Dispatch** — `core/src/run-tasks/index.ts::runTasks` drives each task through `reviewed-lifecycle.ts`, which orchestrates implementer → spec review → quality review → (optional) rework.
-4. **Execution** — `reviewed-lifecycle` calls `execute-task.ts` which delegates to `delegate-with-escalation.ts`. The escalation orchestrator picks a provider via `routing/resolve-agent.ts`, calls the provider's `Provider.run(prompt, options)`, and collects `AttemptRecord`s.
-5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), stored in `BatchRegistry`, and returned via `GET /batch/:id`.
+1. **Ingress** — `server/src/http/server.ts` routes `POST /<tool>?cwd=<abs>` to a handler. Handlers reserve a `ProjectContext` per cwd and build an `ExecutionContext` via `core/src/executors/execution-context.ts`.
+2. **Intake** — `core/src/intake/pipeline.ts` compiles raw input into `DraftTask[]`, classifies brief quality, and decides whether to emit a clarification proposal. Route compilers live under `intake/compilers/`.
+3. **Dispatch** — `core/src/run-tasks/index.ts::runTasks` drives each task through `reviewed-lifecycle.ts`, which calls `execute-task.ts` → `delegate-with-escalation.ts`. The escalation orchestrator picks a provider via `routing/resolve-agent.ts` and invokes `Provider.run(prompt, options)`, collecting `AttemptRecord`s.
+4. **Review** — `reviewed-lifecycle.ts` runs spec review, quality review, and (when applicable) diff review per the task's `reviewPolicy`, looping rework until approved, plateaued, or capped.
+5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), telemetry events emitted via the observability bus, and the result stored in `BatchRegistry` for retrieval via `GET /batch/:id`.
 
 ## Testing layers
 
@@ -87,11 +199,11 @@ Old path → new path map (for readers coming from pre-3.2.0):
 
 Where to add:
 
-- **A new provider:** `packages/core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `packages/core/src/provider.ts` factory.
-- **A new specialized preset (audit variant, custom review):** `packages/core/src/executors/<name>.ts` + `packages/core/src/intake/compilers/<name>.ts` + `packages/server/src/http/handlers/tools/<name>.ts` + (optionally) a `packages/server/src/skills/mma-<name>/SKILL.md`.
+- **A new provider:** `core/src/runners/<name>-runner.ts` with a `RunnerAdapter` implementation and a `runX(prompt, options, runnerOpts)` entry point. Update `core/src/provider.ts` factory.
+- **A new specialized preset:** fill the V.1–V.7 stack — `tool-schemas/<name>.ts`, `intake/compilers/<name>.ts`, `executors/<name>.ts`, `server/http/handlers/tools/<name>.ts`, optional `reporting/parse-<name>-report.ts` + `compose-<name>-headline.ts` if the output shape is bespoke, and `server/skills/mma-<name>/SKILL.md`.
 - **A new contract test:** `tests/contract/<area>/<topic>.test.ts`; goldens under `tests/contract/goldens/<area>/<topic>.json`. Capture via the `it.todo` → external capture script → flip pattern (never fail-first-then-copy).
 - **A new observability event:** emit structured log line from `diagnostics/` or a handler; add required fields to `tests/contract/goldens/observability.json`; the replay test picks it up automatically.
-- **A new tool/route:** register in `packages/server/src/http/server.ts`; add handler under `http/handlers/tools/`; add route to `tests/contract/goldens/routes.json`; add tool schema in `core/src/tool-schemas/`; pin per-stage goldens under `tests/contract/goldens/endpoints/`.
+- **A new tool/route:** register in `server/src/http/server.ts`; add handler under `http/handlers/tools/`; add route to `tests/contract/goldens/routes.json`; add tool schema in `core/src/tool-schemas/`; pin per-stage goldens under `tests/contract/goldens/endpoints/`.
 
 ## Further reading
 
