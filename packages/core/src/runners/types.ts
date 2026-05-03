@@ -30,6 +30,10 @@ export interface TokenUsage {
   costDeltaVsParentUSD: number | null
   /** Input tokens served from cache rather than computed. null = provider does not expose this dimension. */
   cachedTokens: number | null
+  /** Cache read tokens — input tokens retrieved from prompt cache. null = provider does not expose this dimension. */
+  cachedReadTokens?: number | null
+  /** Cache creation tokens — input tokens written to prompt cache. null = provider does not expose this dimension. */
+  cachedCreationTokens?: number | null
   /** Output tokens attributed to reasoning/thinking. null = provider does not expose this dimension. */
   reasoningTokens: number | null
 }

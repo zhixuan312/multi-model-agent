@@ -20,6 +20,8 @@ export interface SharedResultUsage {
   costUSD: number | null;
   costDeltaVsParentUSD: number | null;
   cachedTokens: number | null;
+  cachedReadTokens?: number | null;
+  cachedCreationTokens?: number | null;
   reasoningTokens: number | null;
 }
 
@@ -39,6 +41,8 @@ function usageShape(u: SharedResultUsage): TokenUsage {
     costUSD: u.costUSD,
     costDeltaVsParentUSD: u.costDeltaVsParentUSD,
     cachedTokens: u.cachedTokens,
+    cachedReadTokens: u.cachedReadTokens,
+    cachedCreationTokens: u.cachedCreationTokens,
     reasoningTokens: u.reasoningTokens,
   };
 }

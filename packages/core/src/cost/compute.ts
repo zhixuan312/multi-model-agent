@@ -22,8 +22,8 @@ export function resolveRateCard(
 ): RateCard | null {
   if (!model) return null;
   const profile = findModelProfile(model);
-  const input = profile.inputCostPerMTok;
-  const output = profile.outputCostPerMTok;
+  const input = override?.inputCostPerMTok ?? profile.inputCostPerMTok;
+  const output = override?.outputCostPerMTok ?? profile.outputCostPerMTok;
   if (
     input === undefined || output === undefined ||
     !Number.isFinite(input) || !Number.isFinite(output) ||
@@ -32,9 +32,9 @@ export function resolveRateCard(
     return null;
   }
 
-  const cachedRead = profile.cachedReadCostPerMTok ?? input * 0.10;
-  const cachedCreation = profile.cachedCreationCostPerMTok ?? input;
-  const reasoning = profile.reasoningCostPerMTok ?? output;
+  const cachedRead = override?.cachedReadCostPerMTok ?? profile.cachedReadCostPerMTok ?? input * 0.10;
+  const cachedCreation = override?.cachedCreationCostPerMTok ?? profile.cachedCreationCostPerMTok ?? input;
+  const reasoning = override?.reasoningCostPerMTok ?? profile.reasoningCostPerMTok ?? output;
 
   return {
     inputCostPerMTok: input,
@@ -42,7 +42,6 @@ export function resolveRateCard(
     cachedReadCostPerMTok: cachedRead,
     cachedCreationCostPerMTok: cachedCreation,
     reasoningCostPerMTok: reasoning,
-    ...override,
   };
 }
 

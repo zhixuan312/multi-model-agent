@@ -2,14 +2,13 @@ import { query, tool, createSdkMcpServer, type Options, type SDKUserMessage } fr
 import { createHash } from 'node:crypto';
 import {
   withTimeout,
-  computeCostUSD,
-  computeCostDeltaVsParentUSD,
   type RunResult,
   type ProviderConfig,
   type ToolMode,
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
+import { priceTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
@@ -215,11 +214,34 @@ export async function runClaude(
   }
 
   /**
+   * Resolve a RateCard from the runner's providerConfig, falling back to
+   * explicit config costs when the model profile is absent.
+   */
+  function resolveConfigRateCard(): RateCard | null {
+    return resolveRateCard(providerConfig.model, {
+      ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
+      ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
+    });
+  }
+
+  /**
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+    const finalRateCard = resolveConfigRateCard();
+    const finalTokens: TokenCounts = {
+      inputTokens: usage.inputTokens,
+      outputTokens: usage.outputTokens,
+      cachedReadTokens: usage.cachedReadTokens ?? 0,
+      cachedCreationTokens: usage.cachedCreationTokens ?? 0,
+      reasoningTokens: usage.reasoningTokens ?? 0,
+    };
+    const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
+    const parentCard = resolveRateCard(parentModel);
+    const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
+    const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
+      ? null
+      : finalCostUSD - parentEquivCostUSD;
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -442,14 +464,27 @@ export async function runClaude(
 
           const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
           if (timeCeilingMs !== null) {
-            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+            const finalRateCard = resolveConfigRateCard();
+            const finalTokens: TokenCounts = {
+              inputTokens: usage.inputTokens,
+              outputTokens: usage.outputTokens,
+              cachedReadTokens: usage.cachedReadTokens ?? 0,
+              cachedCreationTokens: usage.cachedCreationTokens ?? 0,
+              reasoningTokens: usage.reasoningTokens ?? 0,
+            };
+            const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
+            const parentCard = resolveRateCard(parentModel);
+            const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
+            const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
+              ? null
+              : finalCostUSD - parentEquivCostUSD;
             completedResult = sharedBuildTimeCeilingResult({
               usage: {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 totalTokens: usage.inputTokens + usage.outputTokens,
                 costUSD: finalCostUSD,
-                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
+                costDeltaVsParentUSD,
                 cachedTokens: usage.cachedTokens,
                 reasoningTokens: null,
               },
@@ -580,12 +615,12 @@ export async function runClaude(
             : (cacheRead ?? 0) + (cacheCreate ?? 0);
 
           const turnUsage: CanonicalUsage = {
-            inputTokens: turnInputTokens + (cacheRead ?? 0) + (cacheCreate ?? 0),
+            inputTokens: turnInputTokens,                              // sibling: NO cache fields added
             outputTokens: turnOutputTokens,
             cachedTokens: turnCachedTokens,
-            cachedReadTokens: cacheRead !== undefined ? cacheRead : null,
-            cachedCreationTokens: cacheCreate !== undefined ? cacheCreate : null,
-            reasoningTokens: null, // claude API does not document reasoning tokens (§10)
+            cachedReadTokens: cacheRead ?? null,
+            cachedCreationTokens: cacheCreate ?? null,
+            reasoningTokens: null,
           };
           usage = mergeUsage(usage, turnUsage);
 
@@ -605,7 +640,15 @@ export async function runClaude(
           });
 
           // Track cost for this turn (Task 25)
-          const turnCost = computeCostUSD(turnInputTokens, turnOutputTokens, providerConfig);
+          const rateCard = resolveConfigRateCard();
+          const turnTokens: TokenCounts = {
+            inputTokens: turnInputTokens,
+            outputTokens: turnOutputTokens,
+            cachedReadTokens: cacheRead ?? 0,
+            cachedCreationTokens: cacheCreate ?? 0,
+            reasoningTokens: 0,
+          };
+          const turnCost = rateCard ? priceTokens(turnTokens, rateCard) : null;
           if (turnCost !== null) {
             lastTurnCostUSD = turnCost;
             costMeter.add(turnCost);
@@ -724,8 +767,20 @@ export async function runClaude(
       const contextLimit = isContextLimit(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+      const finalRateCard = resolveConfigRateCard();
+      const finalTokens: TokenCounts = {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedReadTokens: usage.cachedReadTokens ?? 0,
+        cachedCreationTokens: usage.cachedCreationTokens ?? 0,
+        reasoningTokens: usage.reasoningTokens ?? 0,
+      };
+      const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
+      const parentCard = resolveRateCard(parentModel);
+      const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
+      const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
+        ? null
+        : finalCostUSD - parentEquivCostUSD;
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -784,8 +839,20 @@ export async function runClaude(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
+      const finalRateCard = resolveConfigRateCard();
+      const finalTokens: TokenCounts = {
+        inputTokens: usage.inputTokens,
+        outputTokens: usage.outputTokens,
+        cachedReadTokens: usage.cachedReadTokens ?? 0,
+        cachedCreationTokens: usage.cachedCreationTokens ?? 0,
+        reasoningTokens: usage.reasoningTokens ?? 0,
+      };
+      const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
+      const parentCard = resolveRateCard(parentModel);
+      const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
+      const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
+        ? null
+        : finalCostUSD - parentEquivCostUSD;
       return {
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
@@ -836,23 +903,52 @@ function effectiveClaudeCost(
   inputTokens: number,
   outputTokens: number,
   sdkCost: number | null,
-  cachedTokens = 0,
+  cachedReadTokens = 0,
+  cachedCreationTokens = 0,
   reasoningTokens = 0,
 ): number | null {
-  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig, cachedTokens, reasoningTokens);
+  const rateCard = resolveRateCard(providerConfig.model, {
+    ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
+    ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
+  });
+  const computed = rateCard ? priceTokens({
+    inputTokens,
+    outputTokens,
+    cachedReadTokens,
+    cachedCreationTokens,
+    reasoningTokens,
+  }, rateCard) : null;
   return computed ?? sdkCost;
 }
 
 function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, sdkCostUSD, usage, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+  const { providerConfig, usage, parentModel } = args;
+  const rateCard = resolveRateCard(providerConfig.model, {
+    ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
+    ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
+  });
+  const tokens: TokenCounts = {
+    inputTokens: usage.inputTokens,
+    outputTokens: usage.outputTokens,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedCreationTokens: usage.cachedCreationTokens ?? 0,
+    reasoningTokens: usage.reasoningTokens ?? 0,
+  };
+  const costUSD = rateCard ? priceTokens(tokens, rateCard) : null;
+  const parentCard = resolveRateCard(parentModel);
+  const parentEquivCostUSD = parentCard ? priceTokens(tokens, parentCard) : null;
+  const costDeltaVsParentUSD = (costUSD === null || parentEquivCostUSD === null)
+    ? null
+    : costUSD - parentEquivCostUSD;
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.inputTokens + usage.outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
+    costDeltaVsParentUSD,
     cachedTokens: usage.cachedTokens,
+    cachedReadTokens: usage.cachedReadTokens,
+    cachedCreationTokens: usage.cachedCreationTokens,
     reasoningTokens: usage.reasoningTokens,
   };
 }
