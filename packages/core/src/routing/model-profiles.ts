@@ -132,7 +132,9 @@ export const modelProfileSchema = z.object({
   supportsEffort: z.boolean(),
   inputCostPerMTok: z.number().finite().nonnegative().optional(),
   outputCostPerMTok: z.number().finite().nonnegative().optional(),
-  cachedInputCostPerMTok: z.number().finite().nonnegative().optional(),
+  cachedInputCostPerMTok: z.number().finite().nonnegative().optional(),  // legacy — kept for transition
+  cachedReadCostPerMTok:     z.number().finite().nonnegative().optional(),
+  cachedCreationCostPerMTok: z.number().finite().nonnegative().optional(),
   reasoningCostPerMTok: z.number().finite().nonnegative().optional(),
   rateSource: z.string().min(1).optional(),
   rateLookupDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
@@ -168,7 +170,9 @@ const profileEntrySchema = z.object({
   supportsEffort: z.boolean().optional(),
   input: z.number().finite().nonnegative().optional(),   // short for inputCostPerMTok
   output: z.number().finite().nonnegative().optional(),  // short for outputCostPerMTok
-  cachedInput: z.number().finite().nonnegative().optional(),
+  cachedInput: z.number().finite().nonnegative().optional(),   // legacy
+  cachedRead:     z.number().finite().nonnegative().optional(),
+  cachedCreation: z.number().finite().nonnegative().optional(),
   reasoning: z.number().finite().nonnegative().optional(),
   inputTokenSoftLimit: z.number().int().positive().optional(),
   capabilities: z.array(z.enum(['web_search', 'web_fetch'])).optional(),
@@ -242,7 +246,9 @@ function resolveEntry(
     result.supportsEffort = parent.supportsEffort;
     if (parent.inputCostPerMTok !== undefined) result.inputCostPerMTok = parent.inputCostPerMTok;
     if (parent.outputCostPerMTok !== undefined) result.outputCostPerMTok = parent.outputCostPerMTok;
-    if (parent.cachedInputCostPerMTok !== undefined) result.cachedInputCostPerMTok = parent.cachedInputCostPerMTok;
+    if (parent.cachedInputCostPerMTok    !== undefined) result.cachedInputCostPerMTok    = parent.cachedInputCostPerMTok;
+    if (parent.cachedReadCostPerMTok     !== undefined) result.cachedReadCostPerMTok     = parent.cachedReadCostPerMTok;
+    if (parent.cachedCreationCostPerMTok !== undefined) result.cachedCreationCostPerMTok = parent.cachedCreationCostPerMTok;
     if (parent.reasoningCostPerMTok !== undefined) result.reasoningCostPerMTok = parent.reasoningCostPerMTok;
     result.inputTokenSoftLimit = parent.inputTokenSoftLimit;
     result.capabilities = [...parent.capabilities];
@@ -258,10 +264,19 @@ function resolveEntry(
   if (entry.supportsEffort !== undefined) result.supportsEffort = entry.supportsEffort;
   if (entry.input !== undefined) result.inputCostPerMTok = entry.input;
   if (entry.output !== undefined) result.outputCostPerMTok = entry.output;
-  if (entry.cachedInput !== undefined) result.cachedInputCostPerMTok = entry.cachedInput;
+  if (entry.cachedInput    !== undefined) result.cachedInputCostPerMTok    = entry.cachedInput;
+  if (entry.cachedRead     !== undefined) result.cachedReadCostPerMTok     = entry.cachedRead;
+  if (entry.cachedCreation !== undefined) result.cachedCreationCostPerMTok = entry.cachedCreation;
   if (entry.reasoning !== undefined) result.reasoningCostPerMTok = entry.reasoning;
   if (entry.inputTokenSoftLimit !== undefined) result.inputTokenSoftLimit = entry.inputTokenSoftLimit;
   if (entry.capabilities !== undefined) result.capabilities = [...entry.capabilities];
+
+  // transition fallback: if explicit cachedRead is missing but legacy cachedInput is present,
+  // populate cachedReadCostPerMTok from cachedInputCostPerMTok so resolveRateCard works.
+  // This line is removed in Task 5 once the JSON migration is complete.
+  if (result.cachedReadCostPerMTok === undefined && result.cachedInputCostPerMTok !== undefined) {
+    result.cachedReadCostPerMTok = result.cachedInputCostPerMTok;
+  }
 
   return result;
 }
