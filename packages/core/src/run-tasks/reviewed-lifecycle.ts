@@ -141,10 +141,22 @@ export function endReviewStage(
   // span the entire review block including subsequent stages.
   metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
 ): void {
+  const durationMs = metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0;
+  // Idle-tracker leak guard: stageIdle is reset at every transitionStage(),
+  // but runAnnotationReview makes 2 sequential delegateWithEscalation calls
+  // (attempt1 + attempt2), and tail events from cross-runner async cleanup
+  // can land after the stage's wall-clock end, producing totalIdleMs values
+  // that exceed durationMs (3.12.2 saw 110-145% idle ratios). Clamping here
+  // prevents impossible values from reaching the dashboard while preserving
+  // the legitimate per-stage signal in the common case.
+  const rawTotalIdle = idle?.totalIdleMs ?? 0;
+  const rawMaxIdle = idle?.maxIdleMs ?? 0;
+  const clampedTotalIdle = Math.min(rawTotalIdle, Math.max(0, durationMs));
+  const clampedMaxIdle = Math.min(rawMaxIdle, Math.max(0, durationMs));
   (stats as Record<string, unknown>)[name] = {
     stage: name,
     entered: true,
-    durationMs: metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0,
+    durationMs,
     // Item 7: != null (covers both undefined AND null) — null means
     // "pricing unavailable, fall through to runningCostUSD computation"
     // rather than masking unknown as the literal 0.
@@ -153,8 +165,8 @@ export function endReviewStage(
     agentTier: agent.tier,
     modelFamily: modelFamily(agent.model),
     model: agent.model,
-    maxIdleMs: idle?.maxIdleMs ?? 0,
-    totalIdleMs: idle?.totalIdleMs ?? 0,
+    maxIdleMs: clampedMaxIdle,
+    totalIdleMs: clampedTotalIdle,
     activityEvents: idle?.activityEvents ?? 0,
     inputTokens: metrics?.inputTokens ?? null,
     outputTokens: metrics?.outputTokens ?? null,
@@ -344,9 +356,13 @@ export async function executeReviewedLifecycle(
     return providers[tier];
   }
 
-  // Compute the implementer's canonical identity for reviewer separation (R3).
-  // Used as forbiddenIdentities on reviewer fallback calls so the reviewer
-  // never lands on the same effective backend as the implementer.
+  // Compute the implementer's canonical identity. Retained for diagnostics
+  // and emitFallback events; NOT used to gate reviewer separation. Separation
+  // is enforced by `forbiddenTiers: [resolved.slot]` instead — what matters is
+  // that the reviewer runs in a different agent_type slot, not that it uses
+  // a different model. If the user configures both slots with the same model
+  // (or even the same backend), the review still proceeds because the slot
+  // assignment is intentional.
   const implementerIdentity = (() => {
     try { return canonicalIdentity(resolved.provider.config); } catch { return undefined; }
   })();
@@ -908,8 +924,14 @@ export async function executeReviewedLifecycle(
   const implementerCapabilities = (agentConfig.capabilities ?? findModelCapabilities(agentConfig.model) ?? []) as ('web_search' | 'web_fetch')[];
 
   const agentEnvelope = (specReviewer: AgentType | 'skipped' | 'not_applicable', qualityReviewer: AgentType | 'skipped' | 'not_applicable') => {
-    const selectedImpl = latestAttemptedImpl ?? lastNonRejectedImpl;
-    const implementer = selectedImpl?.tier ?? resolved.slot;
+    // Identity = the slot the executor *resolved to* before any per-call
+    // fallback flips. This must match `stats.implementing.agentTier`
+    // (which uses `resolved.slot` directly at line ~697). Per-call slot
+    // drift is recorded in `fallbackOverrides` and `implementerHistory`,
+    // not by mutating implementer identity. Pre-3.12.3 used
+    // latestAttemptedImpl.tier here, which silently disagreed with
+    // stage stats whenever runWithFallback flipped tiers.
+    const implementer = resolved.slot;
     return {
       implementer,
       ...(implementerHistory.length > 1 || implementerHistory.some(t => t !== implementer) ? { implementerHistory } : {}),
@@ -1539,7 +1561,6 @@ export async function executeReviewedLifecycle(
         isTransportFailure: (r) => isReviewTransportFailure(r),
         getStatus: (r) => (r as { status?: RunStatus }).status,
         makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-        forbiddenIdentities: implementerIdentity ? [implementerIdentity] : undefined,
         forbiddenTiers: [resolved.slot],
         call: (provider) => runAccounted(provider, () => runDiffReview({ cwd, diff: evidence.fullDiff, diffTruncated: evidence.diffTruncated, verification, worker: { call: (prompt: string, opts?: { cwd?: string; abortSignal?: AbortSignal; timeoutMs?: number }) => provider.run(prompt, { cwd: opts?.cwd ?? cwd, abortSignal: opts?.abortSignal, timeoutMs: opts?.timeoutMs }) }, taskDeadlineMs, abortSignal: stallController.signal })),
       });
@@ -1615,7 +1636,6 @@ export async function executeReviewedLifecycle(
       isTransportFailure: (r) => isReviewTransportFailure(r),
       getStatus: (r) => (r as { status?: RunStatus }).status,
       makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-      forbiddenIdentities: implementerIdentity ? [implementerIdentity] : undefined,
       forbiddenTiers: [resolved.slot],
       call: (provider) => runAccounted(provider, () => runSpecReview(provider, packet, effectiveImplReport, fileContents, implResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)),
     });
@@ -1688,7 +1708,7 @@ export async function executeReviewedLifecycle(
       commitReworkStage(stats, 'spec_rework', specReworkAcc, implementerAgentInfo);
       transitionStage('spec_rework', 'spec_review', { stage: 'spec_review', stageIndex: 2, reviewRound: specAttemptIndex + 1, attemptCap: maxSpecRows }, null);
       const reReviewIterStart = Date.now();
-      const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenIdentities: implementerIdentity ? [implementerIdentity] : undefined, forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
+      const reviewCall = await runWithFallback<import('../review/spec-reviewer.js').SpecReviewOrSkipped>({ assigned: decision.reviewer, providerFor, unavailableTiers: specUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runSpecReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, task.planContext, evidence.block, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
       specReviewDurationMs += Date.now() - reReviewIterStart;
       if (reviewCall.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'spec', attempt: specAttemptIndex, role: 'specReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
@@ -1736,7 +1756,7 @@ export async function executeReviewedLifecycle(
       qualityReviewT0 = Date.now();
       qualityReviewC0 = runningCostUSD();
       const initialQualityIterStart = Date.now();
-      const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenIdentities: implementerIdentity ? [implementerIdentity] : undefined, forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
+      const initialQuality = await runWithFallback<LegacyQualityReviewResult>({ assigned: qualityReviewerTier, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runQualityReview(provider, packet, specReport ?? finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
       qualityReviewDurationMs += Date.now() - initialQualityIterStart;
       if (initialQuality.bothUnavailable) {
         emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: 0, role: 'qualityReviewer', assignedTier: qualityReviewerTier, reason: initialQuality.unavailableReason! });
@@ -1844,7 +1864,7 @@ export async function executeReviewedLifecycle(
           commitReworkStage(stats, 'quality_rework', qualityReworkAcc, implementerAgentInfo);
           transitionStage('quality_rework', 'quality_review', { stage: 'quality_review', stageIndex: 4, reviewRound: qualityAttemptIndex + 1, attemptCap: maxQualityRows }, null);
           const qReReviewIterStart = Date.now();
-          const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenIdentities: implementerIdentity ? [implementerIdentity] : undefined, forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
+          const reviewCall = await runWithFallback<LegacyQualityReviewResult>({ assigned: decision.reviewer, providerFor, unavailableTiers: qualityUnavailable, isTransportFailure: (r) => isReviewTransportFailure(r), getStatus: (r) => (r as { status?: RunStatus }).status, makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'), forbiddenTiers: [resolved.slot], call: (provider) => runAccounted(provider, () => runQualityReview(provider, packet, finalImplReport, fileContents, finalImplResult.toolCalls, finalImplResult.filesWritten, evidence.block, qualityReviewPromptBuilder, finalImplResult.output, taskDeadlineMs, stallController.signal, wrappedOnProgress, cwd)) });
           qualityReviewDurationMs += Date.now() - qReReviewIterStart;
           if (reviewCall.bothUnavailable) {
             emitFallbackUnavailable({ batchId: heartbeatWiring?.batchId ?? '', taskIndex, loop: 'quality', attempt: qualityAttemptIndex, role: 'qualityReviewer', assignedTier: decision.reviewer, reason: reviewCall.unavailableReason! });
