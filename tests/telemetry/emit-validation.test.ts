@@ -10,9 +10,9 @@ describe('V3 cross-field validation (warn-only since 3.10.3)', () => {
   // CAN detect the violations — what the recorder does with that signal
   // (drop vs warn vs emit) is a separate policy. See recorder.ts comments.
 
-  it('R3 detection: review.model === implementerModel produces a schema warning', () => {
+  it('R3 detection: review.tier === implementerTier produces a schema warning', () => {
     const rr = richRunResult();
-    rr.stageStats!.spec_review.model = rr.models!.implementer;
+    rr.stageStats!.spec_review.agentTier = 'standard';
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(false);

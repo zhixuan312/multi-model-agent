@@ -121,7 +121,7 @@ export interface FallbackOverride {
   attempt: number;
   assigned: AgentType;
   used: AgentType | 'none';
-  reason: 'transport_failure' | 'not_configured';
+  reason: 'transport_failure' | 'not_configured' | 'reviewer_separation_unsatisfiable';
   triggeringStatus?: RunStatus;
   bothUnavailable: boolean;
 }
@@ -236,7 +236,7 @@ export interface RunResult {
   terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
-  structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
+  structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted' | 'incomplete_no_summary' | 'reviewer_separation_unsatisfiable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_aborted' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   specReviewReason?: string
@@ -275,6 +275,7 @@ export interface RunResult {
   verification?: VerifyStageResult
   qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
+  diffReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   annotatedFindings?: import('./executors/_shared/findings-schema.js').AnnotatedFinding[]
   /** Reviewer findings extracted via typed structured output (OpenAI Agent.outputType).
    *  null on non-review-mode runs and on Claude/Codex runners (which still use the
@@ -299,7 +300,18 @@ export interface RunResult {
   qualityReviewReport?: import('./reporting/structured-report.js').ParsedStructuredReport
 }
 
-export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult> }
+export interface ReviewPromptParts {
+  systemPrefix: string;
+  userBody: string;
+}
+
+export interface CacheHints {
+  cacheableSystemPrompt?: boolean;
+}
+
+export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
+
+export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult>; runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult> }
 
 export interface CostBreakdown {
   inputCost: number;

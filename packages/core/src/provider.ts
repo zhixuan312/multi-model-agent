@@ -1,4 +1,4 @@
-import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig } from './types.js';
+import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig, ReviewPromptParts, ReviewRunOptions } from './types.js';
 import type { RunOptions } from './runners/types.js';
 import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
 
@@ -80,5 +80,53 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
     }
   };
 
-  return { name: slot, config: providerConfig, run };
+  const runReview = async (parts: ReviewPromptParts, options: ReviewRunOptions = {}): Promise<RunResult> => {
+    try {
+      switch (agentConfig.type) {
+        case 'codex': {
+          const { runCodexReview } = await import('./runners/codex-runner.js');
+          return await runCodexReview(parts, options, providerConfig, defaults);
+        }
+
+        case 'claude':
+        case 'claude-compatible': {
+          const { runClaudeReview } = await import('./runners/claude-runner.js');
+          return await runClaudeReview(parts, options, providerConfig, defaults);
+        }
+
+        case 'openai-compatible': {
+          const { runOpenAIReview } = await import('./runners/openai-runner.js');
+          const { default: OpenAI } = await import('openai');
+          const apiKey = agentConfig.apiKey
+            ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
+          const client = new OpenAI({
+            apiKey: apiKey || 'not-needed',
+            baseURL: agentConfig.baseUrl,
+          });
+          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults };
+          return await runOpenAIReview(parts, options, runnerOpts);
+        }
+
+        default: {
+          throw new Error(`Unreachable: unknown provider type`);
+        }
+      }
+    } catch (err) {
+      return {
+        output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
+        status: 'error',
+        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+        turns: 0,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: [],
+        outputIsDiagnostic: true,
+        escalationLog: [],
+        parsedFindings: null,
+        error: err instanceof Error ? err.message : String(err),
+      };
+    }
+  };
+
+  return { name: slot, config: providerConfig, run, runReview };
 }

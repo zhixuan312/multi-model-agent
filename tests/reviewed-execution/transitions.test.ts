@@ -74,11 +74,11 @@ describe('stage transitions via transitionStage helper', () => {
     expect(s.spec_review.maxIdleMs).not.toBeNull();
     expect(s.quality_review.entered).toBe(true);
     expect(s.quality_review.maxIdleMs).not.toBeNull();
-    // Non-entered stages keep null idle fields.
+    // Non-entered stages keep 0 idle fields.
     expect(s.spec_rework.entered).toBe(false);
-    expect(s.spec_rework.maxIdleMs).toBeNull();
+    expect(s.spec_rework.maxIdleMs).toBe(0);
     expect(s.quality_rework.entered).toBe(false);
-    expect(s.quality_rework.maxIdleMs).toBeNull();
+    expect(s.quality_rework.maxIdleMs).toBe(0);
   });
 
   it('reviewPolicy=off fires terminal transition early from verifying', async () => {
@@ -97,7 +97,7 @@ describe('stage transitions via transitionStage helper', () => {
     expect(results[0].stageStats?.implementing.entered).toBe(true);
     expect(results[0].stageStats?.implementing.maxIdleMs).not.toBeNull();
     expect(results[0].stageStats?.spec_review.entered).toBe(false);
-    expect(results[0].stageStats?.spec_review.maxIdleMs).toBeNull();
+    expect(results[0].stageStats?.spec_review.maxIdleMs).toBe(0);
   });
 
   it('stage idle tracker resets on each transition — independent snapshots per stage', async () => {

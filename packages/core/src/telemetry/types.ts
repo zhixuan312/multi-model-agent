@@ -54,6 +54,8 @@ export const ErrorCode = z.enum([
   'api_error',
   'network_error',
   'rate_limit_exceeded',
+  'incomplete_no_summary',
+  'reviewer_separation_unsatisfiable',
   'other',
 ]);
 
@@ -83,7 +85,7 @@ const StageNameEnum = z.enum([
 const StageEntryBase = z.object({
   name: StageNameEnum,
   model: z.string().regex(STRICT_ID_REGEX),
-  agentTier: z.enum(['standard', 'complex']),
+  tier: z.enum(['standard', 'complex', 'main']),
   durationMs: z.number().int().min(0).max(3_600_000),
   costUSD: z.number().min(0).max(100),
   inputTokens: z.number().int().min(0).max(5_000_000),
@@ -94,8 +96,8 @@ const StageEntryBase = z.object({
   filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
   turnCount: z.number().int().min(0).max(250),
-  maxIdleMs: z.number().int().min(0).max(1_200_000).nullable(),
-  totalIdleMs: z.number().int().min(0).max(3_600_000).nullable(),
+  maxIdleMs: z.number().int().min(0).max(1_200_000),
+  totalIdleMs: z.number().int().min(0).max(3_600_000),
 });
 
 export const ReviewStageEntrySchema = StageEntryBase.extend({
@@ -152,6 +154,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
+  implementerTier: z.enum(['standard', 'complex', 'main']),
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
@@ -177,13 +180,21 @@ export const TaskCompletedEventSchema = z.object({
 
   // Operational signals
   stallCount: z.number().int().min(0).max(20),
-  taskMaxIdleMs: z.number().int().min(0).max(1_200_000).nullable(),
+  taskMaxIdleMs: z.number().int().min(0).max(1_200_000),
   clarificationRequested: z.boolean(),
   briefQualityWarningCount: z.number().int().min(0).max(20),
   sandboxViolationCount: z.number().int().min(0).max(100),
 
   // Stages array
   stages: z.array(StageEntrySchema).min(0).max(8),
+
+  // Validation warnings populated by the recorder before enqueue;
+  // absent for healthy events. Each entry carries the rule name
+  // (e.g. "R1: ...") and the Zod issue path (empty string = cross-field).
+  validation_warnings: z.array(z.object({
+    rule: z.string(),
+    path: z.string(),
+  })).optional(),
 }).strict();
 
 // ── Upload batch ─────────────────────────────────────────────────────────
@@ -194,6 +205,7 @@ export const UploadBatchSchema = z.object({
   mmagentVersion: VersionString,
   os: Os,
   nodeMajor: z.number().int().min(22).max(99),
+  generation: z.number().int().min(0).optional(),
   events: z.array(TaskCompletedEventSchema).min(1).max(500),
 }).strict();
 
@@ -221,10 +233,14 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     ctx.addIssue({ code: 'custom', message: 'R2.1: empty stages only allowed for brief_too_vague|error' });
   }
 
-  // R3: review stages must use a different model than the implementer
+  // R3: review stages must use a different TIER than the implementer.
+  // Model comparison is intentionally not a gate: user may map all tiers to
+  // the same model string for cost reasons and the pipeline still runs.
   for (const st of event.stages) {
-    if (reviewStages.has(st.name) && st.model === event.implementerModel) {
-      ctx.addIssue({ code: 'custom', message: `R3: ${st.name}.model must differ from implementerModel` });
+    if (st.name === 'spec_review' || st.name === 'quality_review' || st.name === 'diff_review') {
+      if (st.tier === event.implementerTier) {
+        ctx.addIssue({ code: 'custom', message: `R3: ${st.name}.tier must differ from implementerTier` });
+      }
     }
   }
 
@@ -324,6 +340,15 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
 
   // R15: costUSD per stage in [0, 100]
   // (enforced by Zod schema bounds)
+
+  // R16: rework stages require their parent review stage in the same event
+  const stageNames = new Set((event.stages ?? []).map(s => s.name));
+  if (stageNames.has('spec_rework') && !stageNames.has('spec_review')) {
+    ctx.addIssue({ code: 'custom', message: 'R16: spec_rework requires spec_review in the same event' });
+  }
+  if (stageNames.has('quality_rework') && !stageNames.has('quality_review')) {
+    ctx.addIssue({ code: 'custom', message: 'R16: quality_rework requires quality_review in the same event' });
+  }
 });
 
 // ── Inferred TS types ────────────────────────────────────────────────────

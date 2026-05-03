@@ -15,6 +15,7 @@ export interface ExecutePlanInput {
   tasks: Array<string | ExecutePlanTaskInput>;
   fileContents: string;
   filePaths?: string[];
+  verifyCommand?: string[];
 }
 
 function normalizeTask(input: string | ExecutePlanTaskInput): ExecutePlanTaskInput {
@@ -62,6 +63,7 @@ export function compileExecutePlan(
       prompt,
       reviewPolicy,
       agentType: 'standard',
+      verifyCommand: input.verifyCommand,
     };
   });
 }

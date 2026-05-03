@@ -58,8 +58,9 @@ export async function runSpecReview(
   onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
   cwd: string = process.cwd(),
 ): Promise<SpecReviewResult> {
-  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
-    buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+  const promptParts = buildSpecReviewPrompt(packet, implReport, fileContents, toolCallLog, planContext);
+  const fullPrompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
+    `${promptParts.systemPrefix}\n\n${promptParts.userBody}`;
 
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
@@ -69,7 +70,7 @@ export async function runSpecReview(
   try {
     result = await delegateWithEscalation(
       {
-        prompt,
+        prompt: fullPrompt,
         cwd,
         agentType: reviewerSlot,
         briefQualityPolicy: 'off',
@@ -100,7 +101,7 @@ export async function runSpecReview(
     try {
       const retryResult = await delegateWithEscalation(
         {
-          prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          prompt: fullPrompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
           cwd,
           agentType: reviewerSlot,
           briefQualityPolicy: 'off',

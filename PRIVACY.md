@@ -32,11 +32,12 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `reviewPolicy` | enum: `full`, `quality_only`, `diff_only`, `none` | Review topology distribution |
 | `verifyCommandPresent` | boolean | Verify-command adoption rate |
 
-#### Model (1 field)
+#### Model (2 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `implementerModel` | string (1–120 chars) | Model usage distribution across the fleet |
+| `implementerTier` | enum: `standard`, `complex`, `main` | Tier classification used as the reviewer-separation gate (the user's model choice is sovereign; tier is the mechanism). Cost accounting still keys off `implementerModel`. |
 
 #### Outcome (4 fields)
 
@@ -44,7 +45,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `terminalStatus` | enum: `ok`, `incomplete`, `timeout`, `error`, `cost_exceeded`, `brief_too_vague`, `unavailable` | Success/failure rate per route |
 | `workerStatus` | enum: `done`, `done_with_concerns`, `needs_context`, `blocked`, `failed`, `review_loop_aborted` | Worker outcome quality |
-| `errorCode` | enum or null | Failure attribution (no raw error messages) |
+| `errorCode` | enum or null — values include `verify_command_error`, `commit_metadata_invalid`, `commit_metadata_repair_modified_files`, `dirty_worktree`, `diff_review_rejected`, `runner_crash`, `executor_error`, `api_error`, `network_error`, `rate_limit_exceeded`, `incomplete_no_summary`, `reviewer_separation_unsatisfiable`, `other` | Failure attribution (no raw error messages). `incomplete_no_summary` and `reviewer_separation_unsatisfiable` were added in 3.12.1 to surface previously-silent failure modes. |
 | `parentModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
 
 #### Token economics (4 fields)
@@ -72,15 +73,16 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `escalationCount` | integer (0–20) | Escalation frequency |
 | `fallbackCount` | integer (0–20) | Provider-fallback frequency |
 
-#### Operational signals (5 fields)
+#### Operational signals (6 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `stallCount` | integer (0–20) | Stall-watchdog fire frequency → timeout tuning |
-| `taskMaxIdleMs` | integer (0–1,200,000) or null | Longest silent gap in the task lifecycle → stall-threshold calibration |
+| `taskMaxIdleMs` | integer (0–1,200,000) | Longest silent gap in the task lifecycle → stall-threshold calibration. As of 3.12.1, never null on the wire (was `number \| null` previously); `0` means no measurable idle gap. |
 | `clarificationRequested` | boolean | Clarification frequency |
 | `briefQualityWarningCount` | integer (0–20) | Brief-quality warning rate |
 | `sandboxViolationCount` | integer (0–100) | Sandbox-policy violation rate |
+| `validation_warnings` | optional array of `{ rule: string, path: string }` | Cross-field schema-validation warnings (R1–R16) attached when the event triggers a refinement issue. **Meta about validation only — does NOT contain user data.** Each entry carries the rule name (e.g. `"R1: ..."`) and the Zod issue path (empty string for cross-field rules). Absent on healthy events. Backend uses this to quantify warning rates without re-running validation. |
 
 #### Stages array (0–8 entries)
 
@@ -89,10 +91,10 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 | Field | Type |
 |-------|------|
 | `name` | enum: `implementing`, `spec_review`, `spec_rework`, `quality_review`, `quality_rework`, `diff_review`, `verifying`, `committing` |
-| `model` | string — the model used for this stage |
-| `agentTier` | enum: `standard`, `complex` |
+| `model` | string — the model used for this stage (cost-accounting label) |
+| `tier` | enum: `standard`, `complex`, `main` — agent tier slot. Replaces the prior `agentTier` field as of 3.12.1; reviewer-separation now gates on tier, not model. |
 | `durationMs` | integer — exact elapsed time for this stage |
-| `costUSD` | float — cost estimate for this stage |
+| `costUSD` | float or null — cost estimate for this stage; `null` when pricing is unavailable for the stage's model (was previously masked as `0`) |
 | `inputTokens` | integer |
 | `outputTokens` | integer |
 | `cachedTokens` | integer |
@@ -101,8 +103,8 @@ Each stage is a discriminated-union entry on `name`. The base fields common to a
 | `filesReadCount` | integer |
 | `filesWrittenCount` | integer |
 | `turnCount` | integer |
-| `maxIdleMs` | integer or null — longest silent gap in this stage |
-| `totalIdleMs` | integer or null — total idle time in this stage |
+| `maxIdleMs` | integer (0–1,200,000) — longest silent gap in this stage. As of 3.12.1, never null on the wire (`0` means no measurable gap). |
+| `totalIdleMs` | integer (0–3,600,000) — total idle time in this stage. As of 3.12.1, never null on the wire. |
 
 Stage-type-specific extras:
 

@@ -59,6 +59,8 @@ export interface ExecutionContext {
       client: string;
       triggeringSkill: string;
       parentModel: string | null;
+      reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off';
+      verifyCommandPresent?: boolean;
     }) => void;
   };
   /** Route name for telemetry (e.g. 'delegate', 'audit'). */
@@ -87,6 +89,8 @@ export interface ExecutionContextInput {
       client: string;
       triggeringSkill: string;
       parentModel: string | null;
+      reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off';
+      verifyCommandPresent?: boolean;
     }) => void;
   };
   route?: string;

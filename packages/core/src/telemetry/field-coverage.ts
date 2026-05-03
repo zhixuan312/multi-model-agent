@@ -14,6 +14,7 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
   reviewPolicy:             { kind: 'derived', source: 'BuildContext.reviewPolicy or route default' },
   verifyCommandPresent:     { kind: 'derived', source: 'BuildContext.verifyCommandPresent' },
   implementerModel:         { kind: 'derived', source: 'runResult.models.implementer (normalized)' },
+  implementerTier:          { kind: 'derived', source: 'runResult.stageStats.implementing.agentTier' },
   terminalStatus:           { kind: 'derived', source: 'runResult.terminationReason' },
   workerStatus:             { kind: 'derived', source: 'runResult.workerStatus' },
   errorCode:                { kind: 'derived', source: 'runResult.error / status' },
@@ -34,11 +35,12 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
   briefQualityWarningCount: { kind: 'derived', source: 'min(runResult.briefQualityWarnings.length, 20)' },
   sandboxViolationCount:    { kind: 'derived', source: 'min(runResult.sandboxViolationCount, 100)' },
   stages:                   { kind: 'derived', source: 'buildStages(route, runResult)' },
+  validation_warnings:      { kind: 'derived', source: 'recorder from schema validation (absent when healthy)' },
 };
 
 const COMMON_STAGE_COVERAGE: Record<string, FieldCoverage> = {
   model:               { kind: 'derived', source: 'stageStats[name].model' },
-  agentTier:           { kind: 'derived', source: 'stageStats[name].agentTier' },  // values: 'standard' | 'complex'
+  tier:                { kind: 'derived', source: 'stageStats[name].agentTier' },  // values: 'standard' | 'complex' | 'main'
   durationMs:          { kind: 'derived', source: 'stageStats[name].durationMs' },
   costUSD:             { kind: 'derived', source: 'stageStats[name].costUSD' },
   inputTokens:         { kind: 'derived', source: 'stageStats[name].inputTokens' },

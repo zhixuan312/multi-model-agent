@@ -27,11 +27,11 @@ const BASE_RUN_RESULT: RunResult = {
   stageStats: {
     implementing:   { stage: 'implementing', entered: true, durationMs: 20_000, costUSD: 0.004, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
     verifying:      { stage: 'verifying', entered: true, durationMs: 2_000, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', outcome: 'passed', skipReason: null },
-    spec_review:    { stage: 'spec_review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    spec_review:    { stage: 'spec_review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
     spec_rework:    { stage: 'spec_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    quality_review: { stage: 'quality_review', entered: true, durationMs: 1_000, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    quality_review: { stage: 'quality_review', entered: true, durationMs: 1_000, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
     quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    diff_review:    { stage: 'diff_review', entered: true, durationMs: 500, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    diff_review:    { stage: 'diff_review', entered: true, durationMs: 500, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
     committing:     { stage: 'committing', entered: true, durationMs: 500, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
   },
 };

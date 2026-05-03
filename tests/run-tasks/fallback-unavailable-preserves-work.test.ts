@@ -177,6 +177,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'custom',
+      implementerTier: 'standard',
       terminalStatus: 'unavailable',
       workerStatus: 'blocked',
       errorCode: null,
@@ -192,7 +193,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       escalationCount: 0,
       fallbackCount: 0,
       stallCount: 0,
-      taskMaxIdleMs: null,
+      taskMaxIdleMs: 0,
       clarificationRequested: false,
       briefQualityWarningCount: 0,
       sandboxViolationCount: 0,
@@ -218,6 +219,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'deepseek-v4-pro',
+      implementerTier: 'standard',
       terminalStatus: 'unavailable',
       workerStatus: 'blocked',
       errorCode: null,
@@ -233,7 +235,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       escalationCount: 0,
       fallbackCount: 1,
       stallCount: 0,
-      taskMaxIdleMs: null,
+      taskMaxIdleMs: 0,
       clarificationRequested: false,
       briefQualityWarningCount: 0,
       sandboxViolationCount: 0,
@@ -241,7 +243,7 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
         {
           name: 'implementing',
           model: 'deepseek-v4-pro',
-          agentTier: 'standard',
+          tier: 'standard',
           durationMs: 3_360_000,
           costUSD: 0.87,
           inputTokens: 5000,
@@ -252,8 +254,8 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
           filesReadCount: 2,
           filesWrittenCount: 2,
           turnCount: 42,
-          maxIdleMs: null,
-          totalIdleMs: null,
+          maxIdleMs: 0,
+          totalIdleMs: 0,
         },
       ],
     };
@@ -291,9 +293,9 @@ describe('Test 14 — implementerModel lookup precedence', () => {
           agentTier: 'standard',
           modelFamily: null,
           model: null,
-          maxIdleMs: null,
-          totalIdleMs: null,
-          activityEvents: null,
+          maxIdleMs: 0,
+          totalIdleMs: 0,
+          activityEvents: 0,
           inputTokens: 100,
           outputTokens: 50,
           cachedTokens: null,
@@ -441,12 +443,142 @@ describe('Test 12 Part A — lifecycle regression', () => {
 
     const implStage = event.stages[0]!;
     expect(implStage.name).toBe('implementing');
-    expect(implStage.agentTier).toBe('standard');
+    expect(implStage.tier).toBe('standard');
     expect(implStage.durationMs).toBe(3_360_000);
     expect(implStage.costUSD).toBeCloseTo(0.87, 6);
     expect(implStage.turnCount).toBe(42);
     expect(implStage.filesWrittenCount).toBe(2);
     expect(implStage.inputTokens).toBe(47000);
     expect(implStage.outputTokens).toBe(12000);
+  });
+});
+
+// ── Test 15 — Item 5 regression ─────────────────────────────────────────
+// Salvage stages from adaptForAllTiersUnavailable must emit 0 not null for
+// idle fields. Null was a SQL aggregation hazard on the wire; entered=false
+// already signals 'stage didn't run'.
+
+describe('Test 15 — Item 5: idle fields are 0 not null', () => {
+  it('emptyStats() returns 0 for maxIdleMs/totalIdleMs/activityEvents on every stage', () => {
+    const stats = emptyStats();
+    const stages = Object.values(stats);
+    for (const s of stages) {
+      expect(s.maxIdleMs).toBe(0);
+      expect(s.totalIdleMs).toBe(0);
+      expect(s.activityEvents).toBe(0);
+    }
+  });
+
+  it('salvage-style RunResult with idle=0 passes Zod validation', () => {
+    const stats = emptyStats();
+    const runResult: RunResult = {
+      output: 'unavailable — both tiers transport-failed',
+      status: 'incomplete',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: 1000,
+      workerStatus: 'blocked',
+      terminationReason: 'all_tiers_unavailable',
+      stageStats: {
+        ...stats,
+        implementing: {
+          ...stats.implementing,
+          entered: true,
+          durationMs: 3_360_000,
+          costUSD: 0.87,
+          agentTier: 'standard',
+          modelFamily: 'deepseek',
+          model: 'deepseek-v4-pro',
+          inputTokens: 47000,
+          outputTokens: 12000,
+          cachedTokens: 0,
+          turnCount: 42,
+          toolCallCount: 4,
+          filesReadCount: 2,
+          filesWrittenCount: 2,
+        },
+      },
+      models: { implementer: 'deepseek-v4-pro', specReviewer: null, qualityReviewer: null },
+      agents: {
+        implementer: 'standard',
+        implementerToolMode: 'full',
+        specReviewer: 'not_applicable',
+        qualityReviewer: 'not_applicable',
+        fallbackOverrides: [],
+      },
+      concerns: [],
+    };
+
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult,
+      client: 'test-client',
+      parentModel: null,
+    });
+
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(true);
+
+    // Verify the implementing stage from salvage has 0 not null for idle fields.
+    const implStage = event.stages.find(s => s.name === 'implementing')!;
+    expect(implStage.maxIdleMs).toBe(0);
+    expect(implStage.totalIdleMs).toBe(0);
+  });
+
+  it('maxIdleMs: null fails Zod validation (nullable dropped)', () => {
+    const runResult: RunResult = {
+      output: 'test',
+      status: 'incomplete',
+      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0 },
+      turns: 0,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [],
+      durationMs: 1000,
+      workerStatus: 'blocked',
+      terminationReason: 'all_tiers_unavailable',
+      stageStats: emptyStats(),
+      models: { implementer: null, specReviewer: null, qualityReviewer: null },
+      agents: {
+        implementer: 'not_applicable',
+        implementerToolMode: 'none',
+        specReviewer: 'not_applicable',
+        qualityReviewer: 'not_applicable',
+        fallbackOverrides: [],
+      },
+      concerns: [],
+    };
+
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult,
+      client: 'test-client',
+      parentModel: null,
+    });
+
+    // Force a null into a stage field that the schema now rejects.
+    (event as Record<string, unknown>).stages = [{
+      name: 'implementing',
+      entered: false,
+      durationMs: null,
+      costUSD: null,
+      agentTier: null,
+      modelFamily: null,
+      model: null,
+      maxIdleMs: null,
+      totalIdleMs: null,
+    }];
+
+    const result = ValidatedTaskCompletedEventSchema.safeParse(event);
+    expect(result.success).toBe(false);
   });
 });

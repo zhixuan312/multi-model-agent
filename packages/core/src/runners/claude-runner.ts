@@ -7,6 +7,8 @@ import {
   type RunResult,
   type ProviderConfig,
   type ToolMode,
+  type ReviewPromptParts,
+  type ReviewRunOptions,
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { FileTracker } from '../tools/tracker.js';
@@ -216,8 +218,8 @@ export async function runClaude(
    * Build a cost_exceeded result.
    */
   function buildCostExceededResult(): RunResult {
-    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+    const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+    const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
     return {
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
@@ -252,6 +254,9 @@ export async function runClaude(
   // systemPrompt union type — `{ type: 'preset', preset: 'claude_code',
   // append: string }` is the intended "add to defaults" shape.
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
+  const instructions = options.instructionsSuffix
+    ? `${systemPrompt}\n\n${options.instructionsSuffix}`
+    : systemPrompt;
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -324,7 +329,8 @@ export async function runClaude(
     systemPrompt: {
       type: 'preset',
       preset: 'claude_code',
-      append: systemPrompt,
+      append: instructions,
+      ...(options.cacheHints?.cacheableSystemPrompt && { excludeDynamicSections: true }),
     },
     ...(resolvedBaseUrl && resolvedAuthToken && {
       env: {
@@ -436,14 +442,14 @@ export async function runClaude(
 
           const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
           if (timeCeilingMs !== null) {
-            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
+            const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
             completedResult = sharedBuildTimeCeilingResult({
               usage: {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
                 totalTokens: usage.inputTokens + usage.outputTokens,
                 costUSD: finalCostUSD,
-                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel),
+                costDeltaVsParentUSD: computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
                 cachedTokens: usage.cachedTokens,
                 reasoningTokens: null,
               },
@@ -574,7 +580,7 @@ export async function runClaude(
             : (cacheRead ?? 0) + (cacheCreate ?? 0);
 
           const turnUsage: CanonicalUsage = {
-            inputTokens: turnInputTokens,
+            inputTokens: turnInputTokens + (cacheRead ?? 0) + (cacheCreate ?? 0),
             outputTokens: turnOutputTokens,
             cachedTokens: turnCachedTokens,
             reasoningTokens: null, // claude API does not document reasoning tokens (§10)
@@ -716,8 +722,8 @@ export async function runClaude(
       const contextLimit = isContextLimit(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -776,8 +782,8 @@ export async function runClaude(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD);
-      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel);
+      const finalCostUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, costUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
+      const costDeltaVsParentUSD = computeCostDeltaVsParentUSD(finalCostUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens);
       return {
         output: hasSalvage ? scratchpad.latest() : `Agent timed out after ${timeoutMs}ms.`,
         status: 'timeout',
@@ -828,20 +834,22 @@ function effectiveClaudeCost(
   inputTokens: number,
   outputTokens: number,
   sdkCost: number | null,
+  cachedTokens = 0,
+  reasoningTokens = 0,
 ): number | null {
-  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig);
+  const computed = computeCostUSD(inputTokens, outputTokens, providerConfig, cachedTokens, reasoningTokens);
   return computed ?? sdkCost;
 }
 
 function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
   const { providerConfig, sdkCostUSD, usage, parentModel } = args;
-  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD);
+  const costUSD = effectiveClaudeCost(providerConfig, usage.inputTokens, usage.outputTokens, sdkCostUSD, usage.cachedTokens ?? 0, usage.reasoningTokens ?? 0);
   return {
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.inputTokens + usage.outputTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, usage.inputTokens, usage.outputTokens, parentModel, usage.cachedTokens, usage.reasoningTokens),
     cachedTokens: usage.cachedTokens,
     reasoningTokens: usage.reasoningTokens,
   };
@@ -918,4 +926,23 @@ function buildClaudeIncompleteDiagnostic(opts: {
     '',
     'Recommended action: re-dispatch with a tighter brief, or check Claude Agent SDK logs.',
   ].join('\n');
+}
+
+/**
+ * Review-mode entry: routes `systemPrefix` into the system prompt append
+ * (with `excludeDynamicSections: true` when `cacheHints.cacheableSystemPrompt`
+ * so the SDK emits ephemeral cache_control on the prefix blocks). `userBody`
+ * becomes the first user message typed as implementer evidence.
+ */
+export async function runClaudeReview(
+  parts: ReviewPromptParts,
+  options: ReviewRunOptions,
+  providerConfig: ProviderConfig,
+  defaults: { timeoutMs: number; tools: ToolMode },
+): Promise<RunResult> {
+  return runClaude(parts.userBody, {
+    ...options,
+    instructionsSuffix: parts.systemPrefix,
+    cacheHints: options.cacheHints,
+  }, providerConfig, defaults);
 }

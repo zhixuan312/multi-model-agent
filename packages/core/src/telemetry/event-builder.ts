@@ -3,7 +3,7 @@ import type { RunResult, RawStageStats } from '../types.js';
 import { computeCostDeltaVsParentUSD } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import type { TaskCompletedEventType, StageEntryType, ConcernCategoryType } from './types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType } from './types.js';
 import { deriveTerminalStatus } from '../run-tasks/derive-terminal-status.js';
 import {
   clampStageCost,
@@ -28,7 +28,7 @@ export interface BuildContext {
   runResult: RunResult;
   client: string;
   parentModel: string | null;
-  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
+  reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off' | 'none';
   verifyCommandPresent?: boolean;
 }
 
@@ -41,13 +41,32 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   const stages = buildStages(route, runResult);
 
-  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs. runResult.durationMs and per-stage
-  // durations are sampled at different `Date.now()` ticks, so a per-stage measurement can land 1ms
-  // longer than the task-level total. Take the max of (runResult.durationMs, stage-sum) to enforce
-  // R4 by construction; without this guarantee, every event with millisecond-precision drift gets
-  // dropped by the V3 emit-time validator.
+  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs.
+  //
+  // Use runResult.durationMs as the canonical wall-clock total by default.
+  // Salvage-promotion paths in reviewed-lifecycle (adaptForAllTiersUnavailable
+  // at line ~835) can promote a prior runner's full durationMs into a single
+  // stage, overlapping with other stages and causing Σ stage.durationMs to
+  // exceed the task-level wall clock. When that happens, proportionally scale
+  // stage durations down so the sum fits within totalDurationMs rather than
+  // inflating the total to mask the double-counting.
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
-  const totalDurationMs = clampDurationMsTotal(Math.max(runResult.durationMs ?? 0, stageDurationsSum));
+  const rawTotal = runResult.durationMs ?? stageDurationsSum;
+  const totalDurationMs = clampDurationMsTotal(rawTotal);
+
+  if (stageDurationsSum > totalDurationMs && stages.length > 0) {
+    const scale = totalDurationMs / stageDurationsSum;
+    let allocated = 0;
+    for (let i = 0; i < stages.length; i++) {
+      const scaled = Math.max(0, Math.floor(stages[i].durationMs * scale));
+      stages[i].durationMs = scaled;
+      allocated += scaled;
+    }
+    // Distribute any remainder to the first stage (always implementing)
+    if (allocated < totalDurationMs) {
+      stages[0].durationMs += totalDurationMs - allocated;
+    }
+  }
 
   // Top-level totals are summed across all stages (impl + reviewers + reworks +
   // verify + commit) so the dashboard's `total_cost_cents` reflects the true
@@ -69,7 +88,15 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     totalReasoningTokens,
   );
 
-  const reviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
+  const rawReviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
+  // Normalize TaskSpec-level values to wire enum:
+  //   'off'       → 'none' (wire form for no-review)
+  //   'spec_only' → 'full' (wire collapses spec_only to full; downstream consumers
+  //                  read per-stage entries to see that quality_review didn't run)
+  const reviewPolicy =
+    rawReviewPolicy === 'off' ? 'none' :
+    rawReviewPolicy === 'spec_only' ? 'full' :
+    rawReviewPolicy;
   const verifyCommandPresent = ctx.verifyCommandPresent ?? false;
 
   const implModelRaw = runResult.models?.implementer ?? null;
@@ -95,6 +122,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
       ?? runResult.models?.implementer
       ?? runResult.stageStats?.implementing?.model
       ?? 'custom',
+    implementerTier: (runResult.stageStats?.implementing?.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
@@ -110,7 +138,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
-    taskMaxIdleMs: runResult.taskMaxIdleMs ?? null,
+    taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     clarificationRequested: runResult.lifecycleClarificationRequested ?? false,
     briefQualityWarningCount: Math.min(runResult.briefQualityWarnings?.length ?? 0, 20),
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
@@ -149,9 +177,12 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
     if (qw) result.push(qw);
   }
 
-  // diff_review — only on full review routes
+  // diff_review — only on full review routes. Diff review is a single-pass
+  // gate (no rework loop), so use one valid round when the stage was entered;
+  // reviewRounds.metadata tracks commit metadata repair attempts, not diff
+  // review rounds.
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const dr = buildReviewStage('diff_review', rr, null, null);
+    const dr = buildReviewStage('diff_review', rr, rr.diffReviewStatus ?? null, 1);
     if (dr) result.push(dr);
   }
 
@@ -176,7 +207,7 @@ function extractStageData(
   if (!raw || !raw.entered) return null;
   return {
     model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
-    agentTier: raw.agentTier as 'standard' | 'complex',
+    tier: (raw.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
@@ -187,8 +218,8 @@ function extractStageData(
     filesReadCount: clampFilesReadCount((raw as any).filesReadCount ?? 0),
     filesWrittenCount: clampFilesWrittenCount((raw as any).filesWrittenCount ?? 0),
     turnCount: clampTurnCount((raw as any).turnCount ?? 0),
-    maxIdleMs: raw.maxIdleMs ?? null,
-    totalIdleMs: raw.totalIdleMs ?? null,
+    maxIdleMs: raw.maxIdleMs ?? 0,
+    totalIdleMs: raw.totalIdleMs ?? 0,
   };
 }
 
@@ -293,8 +324,26 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
 
+const VALID_ERROR_CODES: ReadonlySet<string> = new Set(ErrorCode.options);
+
 function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
-  if (rr.structuredError?.code) return rr.structuredError.code as any;
+  // structuredError.code is the most authoritative signal — the lifecycle
+  // sets it for specific failure modes. Map values not in the telemetry
+  // ErrorCode enum: api_aborted → api_error, timeout → dropped (no enum
+  // member; timeout is surfaced via terminalStatus).
+  if (rr.structuredError?.code) {
+    const code = rr.structuredError.code;
+    if (code === 'api_aborted') return 'api_error';
+    if (VALID_ERROR_CODES.has(code)) return code as TaskCompletedEventType['errorCode'];
+    return null;
+  }
+  // rr.errorCode carries intentional error codes set by the lifecycle
+  // (e.g., 'incomplete_no_summary'). Status-level fallbacks from the
+  // delegation layer (e.g., 'incomplete', 'error', 'timeout') are NOT
+  // valid telemetry error codes and are dropped here.
+  if (rr.errorCode && VALID_ERROR_CODES.has(rr.errorCode)) {
+    return rr.errorCode as TaskCompletedEventType['errorCode'];
+  }
   const tr = rr.terminationReason;
   if (tr && typeof tr === 'object') {
     switch (tr.cause) {

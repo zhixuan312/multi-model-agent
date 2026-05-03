@@ -10,6 +10,8 @@ let specReviewCalls = 0;
 let qualityReviewCalls = 0;
 let diffReviewCalls = 0;
 let implementCalls = 0;
+let diffReviewOutput: string = 'APPROVE';
+let diffReviewStatus: string | undefined;
 
 vi.mock('@zhixuan92/multi-model-agent-core/run-tasks/verify-stage', () => ({
   runVerifyStage: vi.fn(async () => ({
@@ -31,7 +33,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
     run: async (prompt: string) => {
       if (typeof prompt === 'string' && prompt.includes('You are reviewing a mechanical refactor')) {
         diffReviewCalls++;
-        return { output: 'APPROVE' };
+        return { output: diffReviewOutput, status: diffReviewStatus };
       }
       if (typeof prompt === 'string' && prompt.startsWith('You are a spec compliance reviewer')) {
         specReviewCalls++;
@@ -42,7 +44,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
         return reviewResult;
       }
       implementCalls++;
-      return implResult;
+      return { ...implResult, filesWritten: [...implResult.filesWritten], filesRead: [...implResult.filesRead], toolCalls: [...implResult.toolCalls], escalationLog: [...implResult.escalationLog] };
     },
   }),
 }));
@@ -98,6 +100,8 @@ function reset(status: typeof verifyStatus = 'passed') {
   qualityReviewCalls = 0;
   diffReviewCalls = 0;
   implementCalls = 0;
+  diffReviewOutput = 'APPROVE';
+  diffReviewStatus = undefined;
 }
 
 function makeRepo(): string {
@@ -136,6 +140,29 @@ describe('reviewPolicy branching', () => {
     expect(diffReviewCalls).toBe(1);
     expect(specReviewCalls).toBe(0);
     expect(qualityReviewCalls).toBe(0);
+    expect(result.diffReviewStatus).toBe('approved');
+  });
+
+  it('reviewPolicy=diff_only sets diffReviewStatus=approved on concerns verdict', async () => {
+    reset('passed');
+    diffReviewOutput = 'CONCERNS: unused import, missing semicolon';
+    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'diff_only', verifyCommand: ['npm test'] }], config);
+
+    expect(diffReviewCalls).toBe(1);
+    expect(result.diffReviewStatus).toBe('approved');
+    expect(result.workerStatus).toBe('done_with_concerns');
+    expect(result.concerns).toContainEqual(expect.objectContaining({ source: 'diff_review' }));
+  });
+
+  it('reviewPolicy=diff_only sets diffReviewStatus=changes_required on reject verdict', async () => {
+    reset('passed');
+    diffReviewOutput = 'REJECT: unsafe deletion in core logic';
+    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'diff_only', verifyCommand: ['npm test'] }], config);
+
+    expect(diffReviewCalls).toBe(1);
+    expect(result.diffReviewStatus).toBe('changes_required');
+    expect(result.status).toBe('error');
+    expect(result.structuredError?.code).toBe('diff_review_rejected');
   });
 
   it('reviewPolicy=spec_only skips quality_review', async () => {

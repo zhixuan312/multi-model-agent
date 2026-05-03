@@ -13,6 +13,7 @@ export interface DelegateTaskInput {
   agentType?: string;
   contextBlockIds?: string[];
   reviewPolicy?: ReviewPolicy;
+  verifyCommand?: string[];
 }
 
 const SCOPE_CONTRACT = `Stay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.`;
@@ -47,6 +48,7 @@ export function compileDelegateTasks(
       agentType: task.agentType,
       contextBlockIds: task.contextBlockIds,
       reviewPolicy: task.reviewPolicy ?? 'full',
+      verifyCommand: task.verifyCommand,
     };
   });
 }

@@ -46,26 +46,36 @@ export interface QualityReviewMetrics {
   outputTokens: number;
   turnCount: number;
   toolCallCount: number;
-  costUSD: number;
+  /**
+   * Item 7: null means "pricing unavailable / unknown" (provider returned null
+   * costUSD, e.g., model has no pricing in profile). 0 means "free or zero-cost".
+   * endReviewStage falls back to runningCostUSD-c0 when this is null.
+   */
+  costUSD: number | null;
 }
 
-function extractMetrics(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): QualityReviewMetrics {
+export function extractMetrics(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): QualityReviewMetrics {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
     toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.usage?.costUSD ?? 0,
+    costUSD: r.usage?.costUSD ?? null,
   };
 }
 
 function addMetrics(a: QualityReviewMetrics, b: QualityReviewMetrics): QualityReviewMetrics {
+  // Item 7: null means unknown. Sum is null only if BOTH are null;
+  // (null + known) = known (preserve the partial signal). This keeps
+  // running cost tracking working when one iteration has unknown cost.
+  const addNullable = (x: number | null, y: number | null): number | null =>
+    x === null && y === null ? null : (x ?? 0) + (y ?? 0);
   return {
     inputTokens: a.inputTokens + b.inputTokens,
     outputTokens: a.outputTokens + b.outputTokens,
     turnCount: a.turnCount + b.turnCount,
     toolCallCount: a.toolCallCount + b.toolCallCount,
-    costUSD: a.costUSD + b.costUSD,
+    costUSD: addNullable(a.costUSD, b.costUSD),
   };
 }
 
@@ -98,15 +108,16 @@ export async function runQualityReview(
     return { status: 'skipped', findings: [], errorReason: 'no files written by implementer' };
   }
 
-  const corePrompt = buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
-  const prompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') + corePrompt;
+  const coreParts = buildQualityReviewPrompt(packet, implReport, fileContents, toolCallLog);
+  const fullPrompt = (evidenceBlock ? `${evidenceBlock}\n\n` : '') +
+    `${coreParts.systemPrefix}\n\n${coreParts.userBody}`;
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';
   let metrics: QualityReviewMetrics = { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0 };
   let result;
   try {
     result = await delegateWithEscalation(
-      { prompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
+      { prompt: fullPrompt, cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000 },
       [reviewerProvider],
       { explicitlyPinned: true, taskDeadlineMs, abortSignal, onProgress },
     );
@@ -127,7 +138,7 @@ export async function runQualityReview(
     try {
       const retryResult = await delegateWithEscalation(
         {
-          prompt: prompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
+          prompt: fullPrompt + '\n\nIMPORTANT: Your response MUST begin with a "## Summary" section containing either "approved" or "changes_required". Follow this exact format.',
           cwd, agentType: reviewerSlot, briefQualityPolicy: 'off', timeoutMs: 120_000,
         },
         [reviewerProvider],

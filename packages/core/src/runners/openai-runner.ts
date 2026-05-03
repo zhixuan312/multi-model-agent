@@ -17,6 +17,8 @@ import {
   type RunResult,
   type ProviderConfig,
   type ToolMode,
+  type ReviewPromptParts,
+  type ReviewRunOptions,
 } from '../types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
@@ -259,6 +261,9 @@ export async function runOpenAI(
   // first user prompt) and buildReGroundingMessage (injected every
   // RE_GROUNDING_INTERVAL_TURNS turns).
   const systemPrompt = buildSystemPrompt() + buildFormatConstraintSuffix(options.formatConstraints ?? {});
+  const instructions = options.instructionsSuffix
+    ? `${systemPrompt}\n\n${options.instructionsSuffix}`
+    : systemPrompt;
   const budgetHint = buildBudgetHint({ timeoutMs, maxCostUSD: options.maxCostUSD });
   const promptWithBudgetHint = `${budgetHint}\n\n${prompt}`;
 
@@ -313,7 +318,7 @@ export async function runOpenAI(
   const agent = new Agent({
     name: 'sub-agent',
     model,
-    instructions: systemPrompt,
+    instructions,
     tools,
     ...(Object.keys(modelSettings).length > 0 && { modelSettings }),
     ...(runMode === 'review' && { outputType: reviewerOutputType }),
@@ -700,6 +705,8 @@ export async function runOpenAI(
           partial.inputTokens,
           partial.outputTokens,
           parentModel,
+          partial.cachedTokens,
+          partial.reasoningTokens,
         );
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
@@ -755,6 +762,8 @@ export async function runOpenAI(
         partial.inputTokens,
         partial.outputTokens,
         parentModel,
+        partial.cachedTokens,
+        partial.reasoningTokens,
       );
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
@@ -792,6 +801,8 @@ export async function runOpenAI(
         partial.inputTokens,
         partial.outputTokens,
         parentModel,
+        partial.cachedTokens,
+        partial.reasoningTokens,
       );
       return {
         output: hasSalvage
@@ -855,16 +866,16 @@ function extractCanonicalTokens(usage: {
   };
 }
 
-function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
+export function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
   const u = currentResult.state.usage;
-  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig);
   const { cachedTokens, reasoningTokens } = extractCanonicalTokens(u);
+  const costUSD = computeCostUSD(u.inputTokens, u.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0);
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
     totalTokens: u.totalTokens,
     costUSD,
-    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel),
+    costDeltaVsParentUSD: computeCostDeltaVsParentUSD(costUSD, u.inputTokens, u.outputTokens, parentModel, cachedTokens, reasoningTokens),
     cachedTokens,
     reasoningTokens,
   };
@@ -967,9 +978,26 @@ function partialUsage(
     inputTokens: usage.inputTokens,
     outputTokens: usage.outputTokens,
     totalTokens: usage.totalTokens,
-    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig),
+    costUSD: computeCostUSD(usage.inputTokens, usage.outputTokens, providerConfig, cachedTokens ?? 0, reasoningTokens ?? 0),
     costDeltaVsParentUSD: null,
     cachedTokens,
     reasoningTokens,
   };
+}
+
+/**
+ * Review-mode entry: routes `systemPrefix` into Agent.instructions
+ * (cacheable by OpenAI's prefix-caching rules for instructions > 1024 tokens)
+ * and `userBody` as the first user message. The standard prevention-layer
+ * system prompt is prepended to instructions.
+ */
+export async function runOpenAIReview(
+  parts: ReviewPromptParts,
+  options: ReviewRunOptions,
+  runner: OpenAIRunnerOptions,
+): Promise<RunResult> {
+  return runOpenAI(parts.userBody, {
+    ...options,
+    instructionsSuffix: parts.systemPrefix,
+  }, runner);
 }

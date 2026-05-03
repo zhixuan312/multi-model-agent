@@ -2,13 +2,13 @@ import { describe, it, expect } from 'vitest';
 import { ValidatedTaskCompletedEventSchema, UploadBatchSchema } from '../../../packages/core/src/telemetry/types.js';
 
 function makeStage(name: string, overrides: Record<string, unknown> = {}) {
-  // R3: review stages must use a different model than implementerModel.
-  const model = name === 'implementing' ? 'claude-sonnet' : 'gpt-5';
+  // R3: review stages must use a different tier than implementerTier.
+  const tier = name === 'implementing' ? 'standard' : 'complex';
 
   const base: Record<string, unknown> = {
     name,
-    model,
-    agentTier: 'standard' as const,
+    model: 'claude-sonnet',
+    tier,
     durationMs: 5000,
     costUSD: 0.01,
     inputTokens: 100,
@@ -19,8 +19,8 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
     filesReadCount: 3,
     filesWrittenCount: 1,
     turnCount: 3,
-    maxIdleMs: null,
-    totalIdleMs: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
   };
 
   switch (name) {
@@ -81,6 +81,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     reviewPolicy: route === 'delegate' ? 'full' as const : 'quality_only' as const,
     verifyCommandPresent: route === 'verify',
     implementerModel: 'claude-sonnet',
+    implementerTier: 'standard' as const,
     terminalStatus: 'ok' as const,
     workerStatus: 'done' as const,
     errorCode: null,
@@ -96,7 +97,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     escalationCount: 0,
     fallbackCount: 0,
     stallCount: 0,
-    taskMaxIdleMs: null,
+    taskMaxIdleMs: 0,
     clarificationRequested: false,
     briefQualityWarningCount: 0,
     sandboxViolationCount: 0,

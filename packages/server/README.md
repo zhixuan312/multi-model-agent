@@ -84,7 +84,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.11.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.1",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -289,7 +289,7 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 
 ## What's new
 
-Latest: **3.11.0** — Runtime correctness pass: reviewer cwd plumbed through all runners; reviewer fallback respects R3 via canonical model identity; per-route prompt scope contracts; `force_salvage` token-volume watchdog removed (only user-set `maxCostUSD` / `timeoutMs` abort, with documented 0.80 cushion); envelope contract honors `proposedInterpretation` when paused; telemetry payload cleanup (`savedCostUSD` → `costDeltaVsParentUSD` rename + flip, dead-bucket removal, audit-domain categorizer, cached/reasoning tokens on all runners). Breaking telemetry payload changes. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+Latest: **3.12.1** — Telemetry & state-machine correctness pass diagnosed against 3.11.1 production data. Reviewer-implementer separation gate now uses tier (`standard` / `complex` / `main`), not model name — user is sovereign over model choice. R6 (cached ⊆ input subset semantics) holds across all runners; cost calc consumes `cachedTokens` so per-stage cost reflects the cache discount. Reviewer prompts split into `{systemPrefix, userBody}` for cross-runner caching (Claude SDK ephemeral cache_control; OpenAI/Codex auto-cache via instructions prefix). Stage telemetry preserved on every early-exit path via deferred-finalizer. `diff_review.verdict` plumbed end-to-end (no longer hard-coded `not_applicable`); `terminationReason.cause = 'error'` on diff-review reject so R1 stops firing. `validation_warnings` attached to events. `verifyCommand` flows through intake. Adds `tier`/`implementerTier` to wire schema and R16 (rework requires preceding review). 99 new tests (2786 total). Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

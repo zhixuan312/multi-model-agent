@@ -13,14 +13,13 @@ import {
 const Schema = ValidatedTaskCompletedEventSchema;
 
 function makeValidStage(name: string, overrides: Record<string, unknown> = {}): Record<string, unknown> {
-  // R3: review stages MUST use a different model than the implementer.
-  // implementerModel is 'claude-sonnet', so review/rework/verify/commit stages use 'gpt-5'.
-  const model = (name === 'implementing') ? 'claude-sonnet' : 'gpt-5';
+  // R3: review/rework/verify/commit stages use a different tier than the implementer.
+  const tier = (name === 'implementing') ? 'standard' : 'complex';
 
   const base = {
     name,
-    model,
-    agentTier: 'standard',
+    model: 'claude-sonnet',
+    tier,
     durationMs: 1000,
     costUSD: 0.01,
     inputTokens: 100,
@@ -31,8 +30,8 @@ function makeValidStage(name: string, overrides: Record<string, unknown> = {}): 
     filesReadCount: 2,
     filesWrittenCount: 1,
     turnCount: 2,
-    maxIdleMs: null,
-    totalIdleMs: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
   };
 
   if (name === 'implementing') return { ...base, ...overrides };
@@ -91,6 +90,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     reviewPolicy: 'full',
     verifyCommandPresent: true,
     implementerModel: 'claude-sonnet',
+    implementerTier: 'standard',
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
@@ -106,7 +106,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     escalationCount: 0,
     fallbackCount: 0,
     stallCount: 0,
-    taskMaxIdleMs: null,
+    taskMaxIdleMs: 0,
     clarificationRequested: false,
     briefQualityWarningCount: 0,
     sandboxViolationCount: 0,
@@ -176,6 +176,76 @@ describe('V3 telemetry types', () => {
       makeValidEvent({ terminalStatus: 'ok', stages: [] }),
     );
     expect(result.success).toBe(false);
+  });
+
+  // ── R3: review stages must use a different tier than the implementer ──
+  it('R3 — fires when spec_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('spec_review', { tier: 'standard' }),
+        makeValidStage('quality_review', { tier: 'complex' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — fires when quality_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('spec_review', { tier: 'complex' }),
+        makeValidStage('quality_review', { tier: 'standard' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — fires when diff_review.tier === event.implementerTier', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard' }),
+        makeValidStage('diff_review', { tier: 'standard' }),
+        makeValidStage('verifying', { tier: 'complex' }),
+        makeValidStage('committing', { tier: 'complex' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    expect(r.success).toBe(false);
+    expect(r.error?.issues.some(i => /^R3:/.test(i.message))).toBe(true);
+  });
+
+  it('R3 — does NOT fire when models match but tiers differ', () => {
+    const ev = makeValidEvent({
+      implementerTier: 'standard',
+      stages: [
+        makeValidStage('implementing', { tier: 'standard', model: 'shared-model' }),
+        makeValidStage('spec_review', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('quality_review', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('verifying', { tier: 'complex', model: 'shared-model' }),
+        makeValidStage('committing', { tier: 'complex', model: 'shared-model' }),
+      ],
+    });
+    const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
+    if (!r.success) {
+      expect(r.error.issues.some(i => /^R3:/.test(i.message))).toBe(false);
+    }
+  });
+
+  it('R3 — accepts when all review stages have different tiers', () => {
+    const result = Schema.safeParse(makeValidEvent());
+    expect(result.success).toBe(true);
   });
 
   // ── R4: totalDurationMs >= sum of stage durationMs ──
@@ -414,6 +484,63 @@ describe('V3 telemetry types', () => {
     );
     expect(result.success).toBe(false);
   });
+
+  // ── R16: rework stages require their parent review stage in the same event ──
+  it('R16 — rejects spec_rework without spec_review', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('spec_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
+  });
+
+  it('R16 — rejects quality_rework without quality_review', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('quality_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(false);
+    expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
+  });
+
+  it('R16 — accepts spec_rework when spec_review is present', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('spec_review'),
+          makeValidStage('spec_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
+
+  it('R16 — accepts quality_rework when quality_review is present', () => {
+    const result = Schema.safeParse(
+      makeValidEvent({
+        stages: [
+          makeValidStage('implementing'),
+          makeValidStage('quality_review'),
+          makeValidStage('quality_rework'),
+          makeValidStage('verifying'),
+        ],
+      }),
+    );
+    expect(result.success).toBe(true);
+  });
 });
 
 // ── Batch wrapper ─────────────────────────────────────────────────────────
@@ -567,7 +694,7 @@ describe('StageEntrySchema', () => {
     const result = StageEntrySchema.safeParse({
       name: 'quality_rework',
       model: 'claude-sonnet',
-      agentTier: 'standard',
+      tier: 'standard',
       durationMs: 1000,
       costUSD: 0.01,
       inputTokens: 0,
@@ -578,8 +705,8 @@ describe('StageEntrySchema', () => {
       filesReadCount: 0,
       filesWrittenCount: 0,
       turnCount: 0,
-      maxIdleMs: null,
-      totalIdleMs: null,
+      maxIdleMs: 0,
+      totalIdleMs: 0,
       // missing triggeringConcernCategories
     });
     expect(result.success).toBe(false);
