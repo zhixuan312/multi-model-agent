@@ -3,14 +3,16 @@ import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 describe('PRIVACY.md ↔ schema sync', () => {
-  it('lists every V3 UploadBatch + event field', () => {
+  it('lists every V4 UploadBatch + event field', () => {
     const repoRoot = join(__dirname, '..', '..');
     const md = readFileSync(join(repoRoot, 'PRIVACY.md'), 'utf8');
     const expected = [
       'installId', 'schemaVersion', 'mmagentVersion', 'os', 'nodeMajor',
       'route', 'client', 'terminalStatus', 'implementerModel', 'eventId',
-      'totalDurationMs', 'totalCostUSD', 'costDeltaVsParentUSD',
-      'inputTokens', 'outputTokens', 'cachedTokens', 'reasoningTokens',
+      'totalDurationMs', 'totalCostUSD', 'costDeltaVsParentUSD', 'parentEquivalentCostUSD',
+      'inputTokens', 'outputTokens',
+      'cachedReadTokens', 'cachedCreationTokens', 'reasoningTokens',
+      'tierUsage', 'parentModel', 'round',
       'concernCount', 'escalationCount', 'fallbackCount',
       'stallCount', 'taskMaxIdleMs',
       'reviewPolicy', 'verifyCommandPresent',

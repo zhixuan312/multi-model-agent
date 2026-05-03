@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 3** · **Last revised:** 2026-05-01 — 0.4.0 (3.10.5)
+**Schema version: 4** · **Last revised:** 2026-05-03 — 3.12.2 (cost-attribution revamp)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -32,12 +32,13 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `reviewPolicy` | enum: `full`, `quality_only`, `diff_only`, `none` | Review topology distribution |
 | `verifyCommandPresent` | boolean | Verify-command adoption rate |
 
-#### Model (2 fields)
+#### Model (3 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `implementerModel` | string (1–120 chars) | Model usage distribution across the fleet |
 | `implementerTier` | enum: `standard`, `complex`, `main` | Tier classification used as the reviewer-separation gate (the user's model choice is sovereign; tier is the mechanism). Cost accounting still keys off `implementerModel`. |
+| `parentModel` | string (1–120 chars) or null | The flagship model the task was delegated FROM (e.g. `claude-opus-4-7`). Added in 3.12.2 alongside `parentModelFamily` so retrospective cost analysis doesn't have to assume the parent identity. Null for clients without a parent context (codex-cli, cursor). |
 
 #### Outcome (4 fields)
 
@@ -48,22 +49,34 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `errorCode` | enum or null — values include `verify_command_error`, `commit_metadata_invalid`, `commit_metadata_repair_modified_files`, `dirty_worktree`, `diff_review_rejected`, `runner_crash`, `executor_error`, `api_error`, `network_error`, `rate_limit_exceeded`, `incomplete_no_summary`, `reviewer_separation_unsatisfiable`, `other` | Failure attribution (no raw error messages). `incomplete_no_summary` and `reviewer_separation_unsatisfiable` were added in 3.12.1 to surface previously-silent failure modes. |
 | `parentModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
 
-#### Token economics (4 fields)
+#### Token economics (5 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
-| `inputTokens` | integer (0–5,000,000) | Total input token volume |
+| `inputTokens` | integer (0–5,000,000) | New (non-cached) input tokens. As of 3.12.2 schema v4: sibling semantics — `inputTokens` does NOT include cache reads or cache writes. |
 | `outputTokens` | integer (0–500,000) | Total output token volume |
-| `cachedTokens` | integer (0–5,000,000) | Cache utilization rate |
-| `reasoningTokens` | integer (0–500,000) | Reasoning token volume (subset of output) |
+| `cachedReadTokens` | integer (0–5,000,000) | Cache-read token volume — billed at the cache-read rate (~10% of input). Replaces the prior `cachedTokens` field as of 3.12.2. |
+| `cachedCreationTokens` | integer (0–5,000,000) | Cache-write/creation token volume — billed at the cache-creation rate (Anthropic: 1.25× input; other providers: no premium). Added in 3.12.2 to bill cache writes correctly. |
+| `reasoningTokens` | integer (0–500,000) | Reasoning token volume (separate from output) |
 
-#### Run totals (3 fields)
+#### Run totals (4 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `totalDurationMs` | integer (0–86,400,000) | Exact elapsed wall-clock time in milliseconds |
-| `totalCostUSD` | float (0–800) | Token-times-pricing cost estimate in US dollars |
-| `costDeltaVsParentUSD` | float (−800 to 800) or null | Actual cost minus estimated parent-model cost. Negative = worker cheaper (savings). Null when parent pricing profile is unavailable |
+| `totalCostUSD` | float (0–800) or null | Token-times-pricing cost estimate in US dollars. Null when any contributing stage has unresolvable model pricing (honest-null discipline). |
+| `parentEquivalentCostUSD` | float (0–800) or null | What the SAME tokens would have cost on the parent model. Null when `parentModel` is null or its pricing profile is unavailable. Added in 3.12.2. |
+| `costDeltaVsParentUSD` | float (−800 to 800) or null | `totalCostUSD − parentEquivalentCostUSD`. Positive = worker cost more than parent. Negative = saved. Null when either contributing field is null. |
+
+#### Per-tier rollup (`tierUsage`)
+
+A keyed record `{ standard?, complex?, main? }` where each present tier carries the per-tier sum of all stage-level token counts and `costUSD`. Each tier's `costUSD` is the sum of stage costs at each stage's own model rate (so it's accurate even when fallback swapped models within a tier). Added in 3.12.2 to expose per-tier cost without iterating `stages[]`.
+
+| Sub-field (per tier) | Type |
+|---|---|
+| `model` | string — the last model that ran on this tier within the task (forensic label; for accurate reverse-pricing iterate `stages[]`) |
+| `inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedCreationTokens`, `reasoningTokens` | integer — same semantics as the top-level token fields, restricted to stages on this tier |
+| `costUSD` | float or null — sum of `stage.costUSD` for stages on this tier (null per honest-null if any contributing stage was null) |
 
 #### Lifecycle counts (3 fields)
 
@@ -84,20 +97,22 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `sandboxViolationCount` | integer (0–100) | Sandbox-policy violation rate |
 | `validation_warnings` | optional array of `{ rule: string, path: string }` | Cross-field schema-validation warnings (R1–R16) attached when the event triggers a refinement issue. **Meta about validation only — does NOT contain user data.** Each entry carries the rule name (e.g. `"R1: ..."`) and the Zod issue path (empty string for cross-field rules). Absent on healthy events. Backend uses this to quantify warning rates without re-running validation. |
 
-#### Stages array (0–8 entries)
+#### Stages array (0–16 entries)
 
-Each stage is a discriminated-union entry on `name`. The base fields common to all stage types:
+Each stage is a discriminated-union entry on `(name, round)`. As of 3.12.2 (schema v4), multi-round review/rework loops emit one entry per round (so `spec_review × 3` produces three entries with `round: 0, 1, 2`). The array max raised from 8 to 16 to accommodate worst-case multi-round runs. Base fields common to all stage types:
 
 | Field | Type |
 |-------|------|
 | `name` | enum: `implementing`, `spec_review`, `spec_rework`, `quality_review`, `quality_rework`, `diff_review`, `verifying`, `committing` |
+| `round` | integer (≥0) — 0-indexed round counter; 0 for single-invocation stages. Added in 3.12.2 schema v4. |
 | `model` | string — the model used for this stage (cost-accounting label) |
 | `tier` | enum: `standard`, `complex`, `main` — agent tier slot. Replaces the prior `agentTier` field as of 3.12.1; reviewer-separation now gates on tier, not model. |
 | `durationMs` | integer — exact elapsed time for this stage |
-| `costUSD` | float or null — cost estimate for this stage; `null` when pricing is unavailable for the stage's model (was previously masked as `0`) |
-| `inputTokens` | integer |
+| `costUSD` | float or null — cost estimate for this stage at this stage's own model rate; `null` when pricing is unavailable. |
+| `inputTokens` | integer — sibling semantics (excludes cache) as of 3.12.2 schema v4. |
 | `outputTokens` | integer |
-| `cachedTokens` | integer |
+| `cachedReadTokens` | integer or null — cache-read tokens. Replaces `cachedTokens` as of 3.12.2 schema v4. |
+| `cachedCreationTokens` | integer or null — cache-write tokens. Added in 3.12.2 schema v4. |
 | `reasoningTokens` | integer |
 | `toolCallCount` | integer |
 | `filesReadCount` | integer |
@@ -117,7 +132,7 @@ Stage-type-specific extras:
 
 | Field | Type |
 |-------|------|
-| `schemaVersion` | integer literal `3` |
+| `schemaVersion` | integer literal `4` (was `3` pre-3.12.2). Backend dual-accepts `3` and `4` during the migration window. |
 | `installId` | UUIDv4 — pseudonymous, generated locally, rotates every 365 days |
 | `mmagentVersion` | SemVer string |
 | `os` | enum: `darwin`, `linux`, `win32`, `other` |
@@ -127,18 +142,21 @@ No `language`, `tzOffsetBucket`, or `tzOffsetBucket` fields — these are no lon
 
 ### How cost is computed
 
-Cost is a token-times-pricing estimate from the daemon's pricing tables (`model-profiles.json`). It is NOT an invoice — actual charges may differ from the estimate. The formula is:
+Cost is a token-times-pricing estimate from the daemon's pricing tables (`model-profiles.json`). It is NOT an invoice — actual charges may differ from the estimate.
+
+As of 3.12.2 (schema v4), cost is computed via a single pure function `priceTokens(tokens, rateCard)` at every site (per-stage, per-turn meter, per-tier rollup, parent-equivalent). Each token class is multiplied by its own rate independently — there is no `(input − cached)` subtraction anywhere, so the prior subset-vs-sibling-semantics bug class is structurally impossible. The formula is:
 
 ```
-cost = (inputTokens - cachedTokens) × inputRate
-     + cachedTokens × cachedInputRate
-     + (outputTokens - reasoningTokens) × outputRate
-     + reasoningTokens × reasoningRate
+cost =   inputTokens          × inputRate          (non-cached new input only)
+       + outputTokens         × outputRate
+       + cachedReadTokens     × cachedReadRate     (default: input × 0.10)
+       + cachedCreationTokens × cachedCreationRate (Anthropic: input × 1.25; others: input)
+       + reasoningTokens      × reasoningRate      (default: output)
 ```
 
-Cached input tokens are priced at the profile's cache rate (defaulting to 10% of the input rate per Anthropic's published pricing). Reasoning tokens are a subset of output tokens and are priced at the profile's reasoning rate (defaulting to the output rate — no surcharge).
+Per-stage cost is computed at that stage's own model rate. The top-level `totalCostUSD` is the sum of per-stage costs (equivalently: the sum of `tierUsage[T].costUSD` across tiers).
 
-`costDeltaVsParentUSD` is the actual cost minus the estimated cost using the parent model's pricing profile (negative = savings). Like cost, it is an estimate, not a guarantee.
+`parentEquivalentCostUSD = priceTokens(allTokens, parentRateCard)` — the same totals priced at the parent model's rate. `costDeltaVsParentUSD = totalCostUSD − parentEquivalentCostUSD`. Positive = paid more than parent would have. Negative = saved. Both are null when `parentModel` is null or its pricing profile is unavailable. Like cost, all of these are estimates, not guarantees.
 
 ### About durations
 
@@ -175,7 +193,7 @@ If you discover us collecting something not listed in "What we collect," that is
 Telemetry is **disabled by default**. If you previously opted in to V2 telemetry:
 
 - On upgrade to 3.10.0+, your V2 opt-in is cleared. You must explicitly opt in to V3 telemetry.
-- Run `mmagent telemetry enable` to opt in. This writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 3` atomically.
+- Run `mmagent telemetry enable` to opt in. This writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 4` atomically.
 - If you opted in to V3 and want to opt out:
 
 ```bash
@@ -208,5 +226,6 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedCreationTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `parentModel` (specific identity alongside `parentModelFamily`), and `parentEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
 | 2026-04-29 | 3 | V3 schema: single `task.completed` event type; exact integer/numeric fields replace bucketed approximations; stages array replaces fixed-key stage map; `session.started`, `install.changed`, `skill.installed` event types removed; `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted` removed; `language`, `tzOffsetBucket` removed from batch wrapper; cost formula uses 4-term cached/reasoning rates; consent re-confirmation required on V2→V3 upgrade. |
 | 2026-04-26 | 1 | Initial privacy policy. Document all `task.completed`, `session.started`, `install.changed`, and `skill.installed` fields. Enum-only, bucketed values only, no free-form text, no content capture. Telemetry off by default. |

@@ -92,7 +92,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.2",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -298,7 +298,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.12.1** — Telemetry & state-machine correctness pass diagnosed against 3.11.1 production data. Reviewer-implementer separation gate now uses tier (`standard` / `complex` / `main`), not model name — user is sovereign over model choice. R6 (cached ⊆ input subset semantics) holds across all runners; cost calc consumes `cachedTokens` so per-stage cost reflects the cache discount. `diff_review.verdict` is plumbed end-to-end (no longer hard-coded `not_applicable`); `terminationReason.cause = 'error'` on diff-review reject so R1 stops firing. Reviewer prompts split into `{systemPrefix, userBody}` for cross-runner caching. Stage telemetry preserved on every early-exit path via deferred-finalizer (Bug 1). `validation_warnings` attached to events for backend storage. `verifyCommand` actually flows through intake. Adds `tier`/`implementerTier` to wire schema; R16 invariant (rework requires preceding review). 99 new tests (2786 total). Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.12.2** — Cost-attribution revamp (telemetry schema **v3 → v4**, breaking). Single `priceTokens(tokens, rateCard)` function is the only cost path everywhere — runners, per-turn meter, per-stage rollup, parent-equivalent. Sibling-semantic `inputTokens` (excludes cache); the structural bug class that inflated savings on cache-heavy runs is now impossible. `cachedTokens` split into `cachedReadTokens` + `cachedCreationTokens` so Anthropic cache writes (1.25× input) bill correctly. New event-root `tierUsage` rollup answers "what did the complex tier cost vs standard" without iterating `stages[]`. `parentModel` recorded alongside `parentModelFamily` for forensic identity. Multi-round review/rework loops now emit one stage entry per round (`(name, round)` is the new uniqueness key). Per-turn cost meter uses `subtractTokens` delta tracking — no more false `cost_exceeded` on cache-heavy or tool-loop turns. Backend dual-accepts schema v3 + v4. 50 new tests (2836 total). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
