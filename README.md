@@ -92,7 +92,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.11.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"3.12.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -298,7 +298,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## What's new
 
-Latest: **3.11.0** — Runtime correctness pass: reviewer cwd plumbing fixed across all runners; reviewer-separation fallback now respects R3 via canonical model identity comparison; per-route prompt scope contracts; `force_salvage` watchdog removed (input-token-volume aborts gone — user-set `maxCostUSD` / `timeoutMs` remain the hard backstop with documented 0.80 cushion); envelope contract honors `proposedInterpretation` when paused; telemetry payload cleanup (`savedCostUSD` → `costDeltaVsParentUSD` rename + sign flip, dead-bucket removal, audit-domain categorizer extension, cached/reasoning token reporting on all runners). Breaking telemetry payload changes — frontend ingest must align. Full history in [CHANGELOG](./CHANGELOG.md).
+Latest: **3.12.1** — Telemetry & state-machine correctness pass diagnosed against 3.11.1 production data. Reviewer-implementer separation gate now uses tier (`standard` / `complex` / `main`), not model name — user is sovereign over model choice. R6 (cached ⊆ input subset semantics) holds across all runners; cost calc consumes `cachedTokens` so per-stage cost reflects the cache discount. `diff_review.verdict` is plumbed end-to-end (no longer hard-coded `not_applicable`); `terminationReason.cause = 'error'` on diff-review reject so R1 stops firing. Reviewer prompts split into `{systemPrefix, userBody}` for cross-runner caching. Stage telemetry preserved on every early-exit path via deferred-finalizer (Bug 1). `validation_warnings` attached to events for backend storage. `verifyCommand` actually flows through intake. Adds `tier`/`implementerTier` to wire schema; R16 invariant (rework requires preceding review). 99 new tests (2786 total). Full history in [CHANGELOG](./CHANGELOG.md).
 
 ## License
 
