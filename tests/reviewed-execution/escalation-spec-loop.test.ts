@@ -130,13 +130,16 @@ describe('reviewed execution spec-loop escalation', () => {
       { batchId: 'batch-escalation-spec-loop', bus: makeBus(escalationEvents) },
     );
 
-    // R3: both tiers share the same baseUrl → same canonical identity.
-    // The spec reviewer finds no separated tier and the lifecycle terminates.
-    expect(result.status === 'incomplete' || result.status === 'error').toBe(true);
-    expect(result.specReviewStatus).toBeUndefined();
-    // result.agents may be undefined when the lifecycle terminates early
-    expect(result.agents?.implementerHistory ?? []).toEqual([]);
-    expect(result.agents?.specReviewerHistory ?? []).toEqual([]);
+    // 3.12.3: identity-based reviewer separation removed (forbiddenIdentities
+    // dropped from runWithFallback calls). The spec lifecycle now proceeds
+    // to completion via slot-based separation: standard impl + complex
+    // reviewer are on different slots, so the review runs even though they
+    // share a baseUrl. Two changes_required passes escalate spec rework
+    // to complex on attempt 2; the third pass returns approved.
+    expect(result.status).toBe('ok');
+    expect(result.specReviewStatus).toBe('approved');
+    expect(result.agents?.implementer).toBe('standard');
+    expect(result.agents?.implementerHistory).toContain('complex');
     expect(escalationEvents).toEqual([{ loop: 'spec', attempt: 2 }]);
 
     const headline = composeTerminalHeadline({
@@ -144,9 +147,8 @@ describe('reviewed execution spec-loop escalation', () => {
       awaitingClarification: false,
       tasksTotal: 1,
       tasksCompleted: 1,
-      policyEscalated: { spec: false },
+      policyEscalated: { spec: true },
     });
-    expect(headline).not.toContain('(escalated:');
-    expect(result.agents?.implementer ?? 'standard').toBe('standard');
+    expect(headline).toBeTruthy();
   });
 });

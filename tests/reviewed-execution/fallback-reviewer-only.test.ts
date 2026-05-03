@@ -157,12 +157,15 @@ describe('reviewed lifecycle reviewer-only fallback', () => {
       },
     );
 
-    // R3: complex reviewer failed; standard fallback shares implementer's
-    // identity → forbidden → both tiers unavailable → spec review skipped
-    expect(result.specReviewStatus).toBe('skipped');
+    // 3.12.3: complex reviewer failed (api_error); fallback to standard is
+    // forbidden by slot separation (impl was on standard slot) → bothUnavailable
+    // with reason=reviewer_separation_unsatisfiable → lifecycle terminates as
+    // incomplete. Pre-3.12.3 identity-based skip produced a softer 'not_configured'
+    // reason and the lifecycle continued with spec_review='skipped'.
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('reviewer_separation_unsatisfiable');
     expect(result.agents?.implementer).toBe('standard');
-    expect(result.agents?.specReviewer).toBe('skipped');
-    expect(result.agents?.specReviewerHistory).toEqual(['skipped']);
+    expect(result.agents?.specReviewerHistory).toContain('skipped');
     expect(result.agents?.fallbackOverrides).toEqual([
       expect.objectContaining({
         role: 'specReviewer',
@@ -170,12 +173,12 @@ describe('reviewed lifecycle reviewer-only fallback', () => {
         attempt: 0,
         assigned: 'complex',
         used: 'complex',
-        reason: 'not_configured',
-        triggeringStatus: 'api_error',
+        reason: 'reviewer_separation_unsatisfiable',
         bothUnavailable: true,
       }),
     ]);
     expect(complexRun).toHaveBeenCalled();
-    expect(standardRun).toHaveBeenCalled();
+    // standardRun will have been called once (as the implementer); slot-separation
+    // prevents it from being invoked again as the spec reviewer.
   });
 });

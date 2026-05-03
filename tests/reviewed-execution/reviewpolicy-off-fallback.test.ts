@@ -138,7 +138,9 @@ describe('reviewPolicy=off initial implementation fallback', () => {
     expect(result.workerStatus).toBe('done');
     expect(result.specReviewStatus).toBe('skipped');
     expect(result.qualityReviewStatus).toBe('skipped');
-    expect(result.agents?.implementer).toBe('complex');
+    // 3.12.3: agents.implementer = resolved.slot. Escalation visible in fallbackOverrides below.
+    expect(result.agents?.implementer).toBe('standard');
+    expect(result.agents?.implementerHistory).toContain('complex');
     expect(result.agents?.specReviewer).toBe('skipped');
     expect(result.agents?.qualityReviewer).toBe('skipped');
     expect(result.agents?.fallbackOverrides).toEqual([

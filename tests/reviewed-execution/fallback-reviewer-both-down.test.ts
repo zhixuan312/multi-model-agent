@@ -107,11 +107,14 @@ describe('reviewed lifecycle fallback when both spec reviewer tiers are down', (
       { slot: 'complex', kind: 'specReviewer' },
     ]);
 
-    expect(result.status).toBe('ok');
-    expect(result.terminationReason).toMatchObject({ cause: 'finished' });
-    expect(result.workerStatus).toBe('done');
-    expect(result.specReviewStatus).toBe('skipped');
-    expect(result.qualityReviewStatus).toBe('skipped');
+    // 3.12.3: when both reviewer tiers are down (complex transport-failed,
+    // standard forbidden by slot separation), the lifecycle terminates as
+    // incomplete with errorCode=reviewer_separation_unsatisfiable. Pre-3.12.3
+    // identity-based skip produced a softer 'not_configured' reason that
+    // caused the lifecycle to soft-skip and continue — that path is gone now
+    // that reviewer separation is purely slot-based.
+    expect(result.status).toBe('incomplete');
+    expect(result.errorCode).toBe('reviewer_separation_unsatisfiable');
     expect(result.agents?.specReviewerHistory).toContain('skipped');
   });
 });
