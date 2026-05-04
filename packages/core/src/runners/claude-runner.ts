@@ -505,6 +505,34 @@ export async function runClaude(
           // { type: 'thinking', ... } | ...`. We only want plain text;
           // tool_use blocks have no salvage value (they're side-effects)
           // and thinking blocks are stripped before the caller sees them.
+          if ('message' in msg && msg.message) {
+            // --- Per-turn usage capture (3.12.4) ---
+            // Anthropic API attaches a `usage` field to every assistant
+            // message. The claude-agent-sdk surfaces it on `msg.message.usage`.
+            // Pre-3.12.4 we only read usage from the terminal `result` message
+            // (line ~596 below), which meant any timeout / mid-stream error
+            // left the running `usage` accumulator at zero — even after 21+
+            // turns of real billable work. Capturing per-turn here means the
+            // timeout / error paths return real partial-usage instead of
+            // zeros. The `result`-message branch later REPLACES the
+            // accumulator with its cumulative number when present (it's the
+            // authoritative end-of-conversation total) — so successful runs
+            // are unaffected and we don't double-count.
+            // eslint-disable-next-line @typescript-eslint/no-explicit-any
+            const m = msg.message as any;
+            if (m.usage && typeof m.usage === 'object') {
+              const u = m.usage as Record<string, number | undefined>;
+              const perTurn: CanonicalUsage = {
+                inputTokens: u.input_tokens ?? 0,
+                outputTokens: u.output_tokens ?? 0,
+                cachedReadTokens: u.cache_read_input_tokens ?? null,
+                cachedCreationTokens: u.cache_creation_input_tokens ?? null,
+                reasoningTokens: null,
+              };
+              usage = mergeUsage(usage, perTurn);
+            }
+          }
+
           if ('message' in msg && msg.message && 'content' in msg.message) {
             // The claude-agent-sdk's BetaMessage.content is typed as an
             // array of content blocks — but historically the API sometimes
@@ -611,14 +639,34 @@ export async function runClaude(
             cacheCreate = u['cache_creation_input_tokens'] ?? undefined;
           }
 
-          const turnUsage: CanonicalUsage = {
-            inputTokens: turnInputTokens,                              // sibling: NO cache fields added
-            outputTokens: turnOutputTokens,
-            cachedReadTokens: cacheRead ?? null,
-            cachedCreationTokens: cacheCreate ?? null,
-            reasoningTokens: null,
-          };
-          usage = mergeUsage(usage, turnUsage);
+          // 3.12.4: result-message usage is the authoritative
+          // end-of-conversation cumulative. Per-turn capture above already
+          // filled `usage` from each assistant message, so REPLACE here
+          // (not merge) when result reports non-zero — this preserves the
+          // pre-3.12.4 contract that a successful run's final usage matches
+          // exactly what the SDK reported in its result envelope, and
+          // prevents double-counting (assistant per-turn + result cumulative).
+          // If the result message reports zero (some providers omit
+          // modelUsage on certain error subtypes), keep what we already
+          // have from the per-turn merges instead of clobbering.
+          if (turnInputTokens > 0 || turnOutputTokens > 0) {
+            usage = {
+              inputTokens: turnInputTokens,
+              outputTokens: turnOutputTokens,
+              cachedReadTokens: cacheRead ?? usage.cachedReadTokens,
+              cachedCreationTokens: cacheCreate ?? usage.cachedCreationTokens,
+              reasoningTokens: usage.reasoningTokens,
+            };
+          } else if (cacheRead !== undefined || cacheCreate !== undefined) {
+            // Result reported cache fields but no input/output — preserve
+            // accumulator's tokens, fold in cache numbers.
+            usage = {
+              ...usage,
+              cachedReadTokens: cacheRead ?? usage.cachedReadTokens,
+              cachedCreationTokens: cacheCreate ?? usage.cachedCreationTokens,
+            };
+          }
+          // else: result reported nothing useful — leave per-turn accumulator alone.
 
           if ('total_cost_usd' in msg && typeof msg.total_cost_usd === 'number') {
             costUSD = msg.total_cost_usd;
