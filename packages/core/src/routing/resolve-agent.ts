@@ -35,6 +35,8 @@ export function resolveAgent(
   if (!agents) {
     throw new Error('capability_missing: config must have agents defined');
   }
+  // v4.0 invariant: each tier slot holds exactly one model id. `declared.model` is a `string`,
+  // never `string[]`. ConfigResolver enforces this at boot via Zod refinement (Phase 2.1).
   const declared = agents[agentType];
   if (!declared) {
     throw new Error(`capability_missing: agent "${agentType}" not found in config`);

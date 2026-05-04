@@ -157,7 +157,7 @@ const tokenCostSchema = z.number().nonnegative().finite().optional();
 const capabilitiesSchema = z.array(z.enum(['web_search', 'web_fetch'])).optional();
 
 const baseAgentFields = {
-  model: z.string().min(1),
+  model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
   capabilities: capabilitiesSchema,
   effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
