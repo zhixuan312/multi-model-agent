@@ -144,7 +144,7 @@ export interface TaskSpec {
   maxCostUSD?: number
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
   briefQualityPolicy?: BriefQualityPolicy
-  parentModel?: string
+  mainModel?: string
   formatConstraints?: FormatConstraints
   skipCompletionHeuristic?: boolean
   expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
@@ -171,7 +171,7 @@ export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | Claude
 
 export interface MultiModelConfig {
   agents: { standard: AgentConfig; complex: AgentConfig }
-  defaults: { timeoutMs: number; stallTimeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; parentModel?: string }
+  defaults: { timeoutMs: number; stallTimeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; mainModel?: string }
   diagnostics?: { log: boolean; logDir?: string; verbose?: boolean }
   clarifications?: { maxRoundsPerDraft?: number }
   server: {

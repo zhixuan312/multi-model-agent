@@ -188,7 +188,7 @@ export async function runOpenAI(
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
-  const parentModel = options.parentModel;
+  const mainModel = options.mainModel;
 
   // --- Progress event emission (Task 9) -----------------------------------
   //
@@ -487,7 +487,7 @@ export async function runOpenAI(
        * Build a cost_exceeded result.
        */
       function buildCostExceededResult(turnsAtFailure: number): RunResult {
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
+        const partial = partialUsage(currentResult, runner.providerConfig, mainModel, runner.usageAccumulator);
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
@@ -549,7 +549,7 @@ export async function runOpenAI(
         });
 
         if (validation.valid) {
-          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel, runner.usageAccumulator);
+          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, mainModel, runner.usageAccumulator);
 
           if (runMode === 'review' && useOutputType) {
             const parsed = reviewerOutputType.safeParse(currentResult.finalOutput);
@@ -722,7 +722,7 @@ export async function runOpenAI(
         tracker,
         runner.providerConfig,
         Date.now() - taskStartMs,
-        parentModel,
+        mainModel,
         { reason: exhaustedReason },
       );
       emit({ kind: 'done', status: exhausted.status });
@@ -736,7 +736,7 @@ export async function runOpenAI(
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
+        const partial = partialUsage(currentResult, runner.providerConfig, mainModel, runner.usageAccumulator);
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
         const turnsAtFailure = currentResult?.state.usage.requests ?? 0;
@@ -764,7 +764,7 @@ export async function runOpenAI(
       if (err instanceof Error && '__timeCeiling' in err) {
         const ceilingMs = (err as Record<string, unknown>).__timeCeiling as number;
         emit({ kind: 'done', status: 'incomplete' });
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
+        const partial = partialUsage(currentResult, runner.providerConfig, mainModel, runner.usageAccumulator);
         return sharedBuildTimeCeilingResult({
           usage: partial,
           turns: currentResult?.state.usage.requests ?? 0,
@@ -786,7 +786,7 @@ export async function runOpenAI(
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
+      const partial = partialUsage(currentResult, runner.providerConfig, mainModel, runner.usageAccumulator);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -818,7 +818,7 @@ export async function runOpenAI(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
+      const partial = partialUsage(currentResult, runner.providerConfig, mainModel, runner.usageAccumulator);
       return {
         output: hasSalvage
           ? scratchpad.latest()
@@ -908,7 +908,7 @@ function extractCanonicalTokens(usage: {
 export function openAIUsage(
   currentResult: AgentRunOutput,
   providerConfig: ProviderConfig,
-  parentModel?: string,
+  mainModel?: string,
   usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): SharedResultUsage {
   const sdk = currentResult.state.usage;
@@ -946,8 +946,8 @@ export function openAIUsage(
   };
   const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
   let costDeltaVsParentUSD: number | null = null;
-  if (costUSD !== null && parentModel) {
-    const parentCard = resolveRateCard(parentModel);
+  if (costUSD !== null && mainModel) {
+    const parentCard = resolveRateCard(mainModel);
     if (parentCard) {
       costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
     }
@@ -968,12 +968,12 @@ function buildOkResult(
   tracker: FileTracker,
   providerConfig: ProviderConfig,
   durationMs: number,
-  parentModel?: string,
+  mainModel?: string,
   usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): RunResult {
   return sharedBuildOkResult({
     output,
-    usage: openAIUsage(currentResult, providerConfig, parentModel, usageAccumulator),
+    usage: openAIUsage(currentResult, providerConfig, mainModel, usageAccumulator),
     turns: currentResult.state.usage.requests,
     tracker,
     durationMs,
@@ -986,12 +986,12 @@ function buildSupervisionExhaustedResult(
   tracker: FileTracker,
   providerConfig: ProviderConfig,
   durationMs: number,
-  parentModel?: string,
+  mainModel?: string,
   opts?: { reason?: string },
   usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): RunResult {
   return sharedBuildIncompleteResult({
-    usage: openAIUsage(currentResult, providerConfig, parentModel, usageAccumulator),
+    usage: openAIUsage(currentResult, providerConfig, mainModel, usageAccumulator),
     turns: currentResult.state.usage.requests,
     tracker,
     scratchpad,
@@ -1051,7 +1051,7 @@ function formatFileList(files: string[]): string {
 function partialUsage(
   result: AgentRunOutput | undefined,
   providerConfig: ProviderConfig,
-  parentModel?: string,
+  mainModel?: string,
   usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): SharedResultUsage {
   if (!result) {
@@ -1067,7 +1067,7 @@ function partialUsage(
       };
       const card = resolveProviderRateCard(providerConfig);
       const costUSD = card ? priceTokens(tc, card) : null;
-      const parentCard = parentModel ? resolveRateCard(parentModel) : null;
+      const parentCard = mainModel ? resolveRateCard(mainModel) : null;
       const costDeltaVsParentUSD = (costUSD !== null && parentCard)
         ? costUSD - priceTokens(tc, parentCard)
         : null;
@@ -1084,7 +1084,7 @@ function partialUsage(
   }
   // Reuse openAIUsage's SDK-vs-accumulator selection logic so the timeout
   // / cost-exceeded paths get the same fallback semantics as the ok path.
-  return openAIUsage(result, providerConfig, parentModel, usageAccumulator);
+  return openAIUsage(result, providerConfig, mainModel, usageAccumulator);
 }
 
 /**

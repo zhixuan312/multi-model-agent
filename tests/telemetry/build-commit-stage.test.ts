@@ -15,7 +15,7 @@ describe('buildCommitStage filesCommittedCount', () => {
       { sha: 'a', subject: '', body: '', filesChanged: ['src/a.ts', 'src/b.ts'], authoredAt: '' },
       { sha: 'b', subject: '', body: '', filesChanged: ['src/a.ts', 'src/c.ts'], authoredAt: '' },
     ]);
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const commit = ev.stages.find(s => s.name === 'committing')!;
     expect((commit as any).filesCommittedCount).toBe(3);
     expect((commit as any).branchCreated).toBe(false);
@@ -24,7 +24,7 @@ describe('buildCommitStage filesCommittedCount', () => {
   it('clamps at 1000', () => {
     const files = Array.from({ length: 1500 }, (_, i) => `src/file${i}.ts`);
     const rr = withCommits([{ sha: 'a', subject: '', body: '', filesChanged: files, authoredAt: '' }]);
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const commit = ev.stages.find(s => s.name === 'committing')!;
     expect((commit as any).filesCommittedCount).toBe(1000);
   });
@@ -32,7 +32,7 @@ describe('buildCommitStage filesCommittedCount', () => {
   it('returns 0 when commits is null/undefined/empty', () => {
     for (const c of [null, undefined, []]) {
       const rr = withCommits(c);
-      const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+      const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
       const commit = ev.stages.find(s => s.name === 'committing')!;
       expect((commit as any).filesCommittedCount).toBe(0);
     }
@@ -47,7 +47,7 @@ describe('buildCommitStage filesCommittedCount', () => {
       { sha: 'c', filesChanged: [null, 42, 'src/valid.ts'] },
     ];
     const rr = withCommits(malformed);
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const commit = ev.stages.find(s => s.name === 'committing')!;
     expect((commit as any).filesCommittedCount).toBe(1);
   });

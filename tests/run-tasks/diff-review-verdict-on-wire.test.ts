@@ -30,7 +30,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -45,7 +45,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -62,7 +62,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -82,7 +82,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -104,7 +104,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -121,7 +121,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeUndefined();

@@ -98,7 +98,7 @@ export async function executeExecutePlan(
     };
   }
 
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'standard',
@@ -110,7 +110,7 @@ export async function executeExecutePlan(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
-    parentModel,
+    mainModel,
     autoCommit: true,
     verifyCommand: input.verifyCommand,
   };
@@ -169,7 +169,7 @@ export async function executeExecutePlan(
       proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
-      parentModel,
+      mainModel,
       ...(ctxId !== undefined && { contextBlockId: ctxId }),
     };
   }
@@ -198,7 +198,7 @@ export async function executeExecutePlan(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
-    parentModel,
+    mainModel,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),
   };
 }

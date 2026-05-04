@@ -97,7 +97,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.terminalStatus).toBe('incomplete');
@@ -147,7 +147,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
     expect(event.errorCode).toBe('incomplete_no_summary');
   });
@@ -285,7 +285,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.terminalStatus).toBe('incomplete');
@@ -342,7 +342,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       taskSpec: { filePaths: [] },
       runResult,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.errorCode).toBe('incomplete_no_summary');
@@ -403,7 +403,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.errorCode).toBeNull();
@@ -456,7 +456,7 @@ describe('deriveErrorCode allowlist', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
   }
 

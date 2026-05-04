@@ -422,7 +422,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
       reviewPolicy: 'quality_only',
     });
 

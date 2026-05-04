@@ -7,7 +7,7 @@ import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
 import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/telemetry/types';
-import type { TaskCompletedEventType } from '@zhixuan92/multi-model-agent-core/telemetry/types';
+import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/telemetry/types';
 import {
   buildTaskCompletedEvent,
   type BuildContext,
@@ -152,19 +152,20 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
       try {
         const d = decide(homeDir);
         if (!d.enabled) return;
-        const event = buildTaskCompletedEvent(ctx);
+        const event: WireTelemetryRecord = buildTaskCompletedEvent(ctx);
+        const ev = event as unknown as TaskCompletedEventType;
 
-        const { warnings, baseIssues, refinedIssues } = collectValidationWarnings(event);
+        const { warnings, baseIssues, refinedIssues } = collectValidationWarnings(ev);
 
         if (baseIssues.length > 0) {
           console.warn('mma-telemetry: schema warning (event still emitted)', {
-            eventId: event.eventId,
+            eventId: ev.eventId,
             issues: baseIssues,
           });
         }
 
         if (refinedIssues.length > 0) {
-          const stageModelsByName = (event.stages ?? []).reduce(
+          const stageModelsByName = (ev.stages ?? []).reduce(
             (acc: Record<string, string>, s: { name: string; model?: string }) => {
               if (s.name && s.model) acc[s.name] = s.model;
               return acc;
@@ -172,12 +173,12 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
             {},
           );
           console.warn('mma-telemetry: cross-field warning (event still emitted)', {
-            eventId: event.eventId,
-            implementerModel: event.implementerModel,
+            eventId: ev.eventId,
+            implementerModel: ev.implementerModel,
             stageModels: stageModelsByName,
-            totalDurationMs: event.totalDurationMs,
-            inputTokens: event.inputTokens,
-            outputTokens: event.outputTokens,
+            totalDurationMs: ev.totalDurationMs,
+            inputTokens: ev.inputTokens,
+            outputTokens: ev.outputTokens,
             issues: refinedIssues.map((e) => ({
               rule: e.message,
               path: e.path,

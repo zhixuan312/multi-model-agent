@@ -237,7 +237,7 @@ export async function runClaude(
       cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
     };
     const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
-    const parentCard = resolveRateCard(parentModel);
+    const parentCard = resolveRateCard(mainModel);
     const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
     const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
       ? null
@@ -425,7 +425,7 @@ export async function runClaude(
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
-  const parentModel = options.parentModel;
+  const mainModel = options.mainModel;
 
   const run = async (): Promise<RunResult> => {
     let output = '';
@@ -470,7 +470,7 @@ export async function runClaude(
               cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
             };
             const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
-            const parentCard = resolveRateCard(parentModel);
+            const parentCard = resolveRateCard(mainModel);
             const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
             const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
               ? null
@@ -706,7 +706,7 @@ export async function runClaude(
               lastOutput: output,
               reason: `claude-agent-sdk signaled error_max_turns after ${turns} turns`,
               durationMs: Date.now() - taskStartMs,
-              parentModel,
+              mainModel,
             });
             messageQueue.close();
             break;
@@ -732,7 +732,7 @@ export async function runClaude(
               turns,
               output,
               durationMs: Date.now() - taskStartMs,
-              parentModel,
+              mainModel,
             });
             messageQueue.close();
             break;
@@ -753,7 +753,7 @@ export async function runClaude(
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
-              parentModel,
+              mainModel,
             });
             messageQueue.close();
             break;
@@ -773,7 +773,7 @@ export async function runClaude(
                 turns,
                 reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
                 durationMs: Date.now() - taskStartMs,
-                parentModel,
+                mainModel,
               });
               messageQueue.close();
               break;
@@ -814,7 +814,7 @@ export async function runClaude(
         cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
       };
       const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
-      const parentCard = resolveRateCard(parentModel);
+      const parentCard = resolveRateCard(mainModel);
       const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
       const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
         ? null
@@ -863,7 +863,7 @@ export async function runClaude(
       usage,
       turns,
       durationMs: Date.now() - taskStartMs,
-      parentModel,
+      mainModel,
     });
     emit({ kind: 'done', status: drained.status });
     return drained;
@@ -883,7 +883,7 @@ export async function runClaude(
         cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
       };
       const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
-      const parentCard = resolveRateCard(parentModel);
+      const parentCard = resolveRateCard(mainModel);
       const parentEquivCostUSD = parentCard ? priceTokens(finalTokens, parentCard) : null;
       const costDeltaVsParentUSD = (finalCostUSD === null || parentEquivCostUSD === null)
         ? null
@@ -952,8 +952,8 @@ function effectiveClaudeCost(
   return computed ?? sdkCost;
 }
 
-function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, usage, parentModel } = args;
+function claudeUsage(args: ClaudeResultCommonArgs & { mainModel?: string }): SharedResultUsage {
+  const { providerConfig, usage, mainModel } = args;
   const rateCard = resolveRateCard(providerConfig.model, {
     ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
     ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
@@ -965,7 +965,7 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
   };
   const costUSD = rateCard ? priceTokens(tokens, rateCard) : null;
-  const parentCard = resolveRateCard(parentModel);
+  const parentCard = resolveRateCard(mainModel);
   const parentEquivCostUSD = parentCard ? priceTokens(tokens, parentCard) : null;
   const costDeltaVsParentUSD = (costUSD === null || parentEquivCostUSD === null)
     ? null
@@ -981,7 +981,7 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
 }
 
 function buildClaudeOkResult(
-  args: ClaudeResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
+  args: ClaudeResultCommonArgs & { output: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildOkResult({
     output: args.output,
@@ -997,7 +997,7 @@ function buildClaudeOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildClaudeIncompleteResult(
-  args: ClaudeResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
+  args: ClaudeResultCommonArgs & { reason?: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildIncompleteResult({
     usage: claudeUsage(args),
@@ -1011,7 +1011,7 @@ function buildClaudeIncompleteResult(
 }
 
 function buildClaudeMaxTurnsExitResult(
-  args: ClaudeResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
+  args: ClaudeResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildMaxTurnsExitResult({
     usage: claudeUsage(args),

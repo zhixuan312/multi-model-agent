@@ -87,7 +87,7 @@ export interface RunOptions {
   /** Called exactly once per attempt when the runner has assembled the
    *  canonical orchestrator-side initial brief. */
   onInitialRequest?: (meta: { lengthChars: number; sha256: string }) => void
-  parentModel?: string
+  mainModel?: string
   maxCostUSD?: number
   formatConstraints?: FormatConstraints
   /** External abort signal — when fired, the runner force-salvages and

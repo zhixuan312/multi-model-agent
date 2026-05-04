@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { RunResult, RawStageStats } from '../types.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType } from './types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './types.js';
 import { deriveTerminalStatus } from '../run-tasks/derive-terminal-status.js';
 import { rollupByTier, sumTokens } from '../cost/rollup.js';
 import { priceTokens, resolveRateCard } from '../cost/compute.js';
@@ -27,7 +27,7 @@ export interface BuildContext {
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
   client: string;
-  parentModel: string | null;
+  mainModel: string | null;
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommandPresent?: boolean;
 }
@@ -36,13 +36,8 @@ const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'verify', 'debug
 const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
 const VERIFY_ROUTES = new Set(['delegate', 'execute-plan', 'verify']);
 
-export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventType {
-  // TODO(v4-phase-2 task 2.8): translate internal `mainModel*` field names to wire `parentModel*`.
-  // See docs/superpowers/plans/0.4.0/backend-ingestion-recipe.md for the exact field mapping
-  // (mainModel/Family/Tier/AgentModel -> parentModel/Family/Tier/AgentModel).
-  // SCHEMA_VERSION 4 wire compat: also emit deprecated-fields constants here
-  // (capabilities=[], clarificationRequested=false, briefQualityWarningCount=0, triggeringSkill=null).
-  const { route, runResult, client, parentModel } = ctx;
+export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
+  const { route, runResult, client, mainModel } = ctx;
 
   const stages = buildStages(route, runResult);
 
@@ -104,15 +99,15 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   const totalCachedReadTokens = clampCachedTokens(allTokens.cachedReadTokens);
   const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
-  const parentCard = resolveRateCard(parentModel);
-  const parentEquivalentCostUSD = parentCard ? priceTokens(allTokens, parentCard) : null;
+  const mainCard = resolveRateCard(mainModel);
+  const parentEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
 
   const costDeltaVsParentUSD = (totalCostUSD === null || parentEquivalentCostUSD === null)
     ? null
     : totalCostUSD - parentEquivalentCostUSD;
 
-  // Canonicalize parentModel for emission (matches implementerModel emission path).
-  const parentNormalized = parentModel ? normalizeModel(parentModel) : null;
+  // Canonicalize mainModel for emission (matches implementerModel emission path).
+  const mainNormalized = mainModel ? normalizeModel(mainModel) : null;
 
   const reviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
   const verifyCommandPresent = ctx.verifyCommandPresent ?? false;
@@ -124,7 +119,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   const distinctProviders = new Set(escalationLog.map(a => a.provider)).size;
   const escalationCount = Math.max(0, distinctProviders - 1);
 
-  return {
+  const internalRecord = {
     eventId: randomUUID(),
     route,
     client,
@@ -144,8 +139,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
-    parentModel: parentNormalized?.canonical ?? null,
-    parentModelFamily: parentNormalized?.family ?? 'other',
+    mainModel: mainNormalized?.canonical ?? null,
+    mainModelFamily: mainNormalized?.family ?? 'other',
     tierUsage,
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
@@ -165,6 +160,29 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
     stages,
   };
+
+  return buildWirePayload(internalRecord);
+}
+
+/**
+ * Translates an internal telemetry record (mainModel*) into the v4 wire shape
+ * (parentModel* + deprecated-fields constants). Single point of wire translation.
+ */
+export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
+  const wire: Record<string, unknown> = {
+    ...internalRecord,
+    // Wire-rename: internal mainModel* -> wire parentModel*
+    parentModel: internalRecord.mainModel,
+    parentModelFamily: internalRecord.mainModelFamily,
+    // SCHEMA_VERSION 4 deprecated-fields constants (back-compat for backend ingestion)
+    capabilities: [],
+    clarificationRequested: false,
+    briefQualityWarningCount: 0,
+  };
+  // Strip internal-only fields the wire should not carry
+  delete wire.mainModel;
+  delete wire.mainModelFamily;
+  return wire as unknown as WireTelemetryRecord;
 }
 
 function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {

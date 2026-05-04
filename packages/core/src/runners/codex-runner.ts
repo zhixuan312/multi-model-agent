@@ -318,8 +318,8 @@ export async function runCodex(
     const workerCard = resolveProviderRateCard(providerConfig);
     const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
     let costDeltaVsParentUSD: number | null = null;
-    if (costUSD !== null && parentModel) {
-      const parentCard = resolveRateCard(parentModel);
+    if (costUSD !== null && mainModel) {
+      const parentCard = resolveRateCard(mainModel);
       if (parentCard) {
         costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
       }
@@ -437,7 +437,7 @@ export async function runCodex(
 
   // --- Task timing + parent model (Task 9) --------------------------------
   const taskStartMs = Date.now();
-  const parentModel = options.parentModel;
+  const mainModel = options.mainModel;
 
   const run = async (): Promise<RunResult> => {
     const capture: { last?: RawErrorCapture } = {};
@@ -504,8 +504,8 @@ export async function runCodex(
           const workerCard = resolveProviderRateCard(providerConfig);
           const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
           let costDeltaVsParentUSD: number | null = null;
-          if (costUSD !== null && parentModel) {
-            const parentCard = resolveRateCard(parentModel);
+          if (costUSD !== null && mainModel) {
+            const parentCard = resolveRateCard(mainModel);
             if (parentCard) {
               costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
             }
@@ -743,7 +743,7 @@ export async function runCodex(
               turns,
               output: stripped,
               durationMs: Date.now() - taskStartMs,
-              parentModel,
+              mainModel,
             });
             emit({ kind: 'done', status: ok.status });
             return ok;
@@ -767,7 +767,7 @@ export async function runCodex(
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
-              parentModel,
+              mainModel,
             });
             emit({ kind: 'done', status: exhausted.status });
             return exhausted;
@@ -836,7 +836,7 @@ export async function runCodex(
         lastOutput: output,
         reason: `loop exited after ${turns} turns without producing a clean final answer`,
         durationMs: Date.now() - taskStartMs,
-        parentModel,
+        mainModel,
       });
       emit({ kind: 'done', status: incompleteResult.status });
       return incompleteResult;
@@ -894,8 +894,8 @@ export async function runCodex(
       const workerCard = resolveProviderRateCard(providerConfig);
       const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
       let costDeltaVsParentUSD: number | null = null;
-      if (costUSD !== null && parentModel) {
-        const parentCard = resolveRateCard(parentModel);
+      if (costUSD !== null && mainModel) {
+        const parentCard = resolveRateCard(mainModel);
         if (parentCard) {
           costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
         }
@@ -938,8 +938,8 @@ export async function runCodex(
       const workerCard = resolveProviderRateCard(providerConfig);
       const costUSD = workerCard ? priceTokens(tc, workerCard) : null;
       let costDeltaVsParentUSD: number | null = null;
-      if (costUSD !== null && parentModel) {
-        const parentCard = resolveRateCard(parentModel);
+      if (costUSD !== null && mainModel) {
+        const parentCard = resolveRateCard(mainModel);
         if (parentCard) {
           costDeltaVsParentUSD = costUSD - priceTokens(tc, parentCard);
         }
@@ -1008,8 +1008,8 @@ function usageTokenCounts(u: CanonicalUsage): TokenUsage {
   };
 }
 
-function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, inputTokens, outputTokens, cachedReadTokens, parentModel } = args;
+function codexUsage(args: CodexResultCommonArgs & { mainModel?: string }): SharedResultUsage {
+  const { providerConfig, inputTokens, outputTokens, cachedReadTokens, mainModel } = args;
   const cachedRead = cachedReadTokens ?? 0;
   const nonCachedInput = Math.max(0, inputTokens - cachedRead);
   const workerCard = resolveProviderRateCard(providerConfig);
@@ -1021,8 +1021,8 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
   };
   const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
   let costDeltaVsParentUSD: number | null = null;
-  if (costUSD !== null && parentModel) {
-    const parentCard = resolveRateCard(parentModel);
+  if (costUSD !== null && mainModel) {
+    const parentCard = resolveRateCard(mainModel);
     if (parentCard) {
       costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
     }
@@ -1038,7 +1038,7 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
 }
 
 function buildCodexOkResult(
-  args: CodexResultCommonArgs & { output: string; durationMs: number; parentModel?: string },
+  args: CodexResultCommonArgs & { output: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildOkResult({
     output: args.output,
@@ -1054,7 +1054,7 @@ function buildCodexOkResult(
  * scratchpad salvage; fall back to the incomplete diagnostic.
  */
 function buildCodexIncompleteResult(
-  args: CodexResultCommonArgs & { reason?: string; durationMs: number; parentModel?: string },
+  args: CodexResultCommonArgs & { reason?: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildIncompleteResult({
     usage: codexUsage(args),
@@ -1069,7 +1069,7 @@ function buildCodexIncompleteResult(
 }
 
 function buildCodexMaxTurnsExitResult(
-  args: CodexResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; parentModel?: string },
+  args: CodexResultCommonArgs & { lastOutput: string; reason?: string; durationMs: number; mainModel?: string },
 ): RunResult {
   return sharedBuildMaxTurnsExitResult({
     usage: codexUsage(args),

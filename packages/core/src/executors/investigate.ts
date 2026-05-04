@@ -171,7 +171,7 @@ export async function executeInvestigate(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: ctx.batchId ?? randomUUID(),
     wallClockMs,
-    parentModel: ctx.parentModel ?? config.defaults?.parentModel,
+    mainModel: ctx.mainModel ?? config.defaults?.mainModel,
     specReviewVerdict: reviewVerdicts.specReviewVerdict,
     qualityReviewVerdict: reviewVerdicts.qualityReviewVerdict,
     roundsUsed: reviewVerdicts.roundsUsed,

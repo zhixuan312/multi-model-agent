@@ -12,7 +12,7 @@ const specs = (n: number): TaskSpec[] => Array.from({ length: n }, (_, i) => ({
   cwd: '/tmp',
   reviewPolicy: 'full',
   effort: undefined,
-  parentModel: undefined,
+  mainModel: undefined,
   autoCommit: true,
 } as TaskSpec));
 

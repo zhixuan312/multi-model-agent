@@ -66,7 +66,7 @@ export async function executeDebug(
   );
   const prompt = parts.join('\n\n');
 
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const taskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
@@ -79,7 +79,7 @@ export async function executeDebug(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
-    parentModel,
+    mainModel,
     autoCommit: false,
   };
   const runtime = contextBlockStore ? { contextBlockStore } : undefined;
@@ -110,7 +110,7 @@ export async function executeDebug(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
-    parentModel,
+    mainModel,
     specReviewVerdict: verdicts.specReviewVerdict,
     qualityReviewVerdict: verdicts.qualityReviewVerdict,
     roundsUsed: verdicts.roundsUsed,

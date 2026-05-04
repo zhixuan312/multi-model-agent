@@ -161,7 +161,7 @@ export async function executeDelegate(
 
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const awaitingClarification = intakeResult.clarifications.length > 0;
   const tasksTotal = readySpecs.length;
@@ -188,7 +188,7 @@ export async function executeDelegate(
     batchId,
     tasks: resolvedReadySpecs,
     wallClockMs,
-    parentModel,
+    mainModel,
     ...(clarificationId !== undefined && { clarificationId }),
     ...(intakeResult.clarifications.length > 0 && { clarifications: intakeResult.clarifications }),
   };

@@ -6,7 +6,7 @@ import { richRunResult } from './fixtures/rich-runresult.js';
 
 describe('V3 completeness ratchet', () => {
   it('schema parse passes on rich fixture', () => {
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: richRunResult(), client: 'test', parentModel: 'claude-opus-4-7' });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: richRunResult(), client: 'test', mainModel: 'claude-opus-4-7' });
     const result = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(result.success).toBe(true);
   });
@@ -20,7 +20,7 @@ describe('V3 completeness ratchet', () => {
     const rr = richRunResult();
     rr.durationMs = 154897;
     rr.stageStats!.implementing.durationMs = 154898;
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const stageSum = ev.stages.reduce((s, st) => s + st.durationMs, 0);
     expect(ev.totalDurationMs).toBeGreaterThanOrEqual(stageSum);
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
@@ -29,7 +29,7 @@ describe('V3 completeness ratchet', () => {
 
   it('top-level totals exactly equal sum of stage costs/tokens', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const sum = (key: 'costUSD' | 'inputTokens' | 'outputTokens' | 'cachedReadTokens' | 'cachedNonReadTokens') =>
       ev.stages.reduce((s, st) => s + ((st as any)[key] ?? 0), 0);
     expect(ev.totalCostUSD).toBeCloseTo(sum('costUSD'), 6);
@@ -41,20 +41,20 @@ describe('V3 completeness ratchet', () => {
 
   it('escalationCount uses the existing distinctProviders-1 formula', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const distinct = new Set(rr.escalationLog!.map(a => a.provider)).size;
     expect(ev.escalationCount).toBe(Math.max(0, distinct - 1));
   });
 
   it('fallbackCount derives from runResult.agents.fallbackOverrides.length', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     expect(ev.fallbackCount).toBe(rr.agents!.fallbackOverrides!.length);
   });
 
   it('committing stage filesCommittedCount equals unique files across commits', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const commit = ev.stages.find(s => s.name === 'committing')!;
     expect((commit as any).filesCommittedCount).toBe(2); // src/a.ts, src/b.ts
     expect((commit as any).branchCreated).toBe(false);
@@ -62,7 +62,7 @@ describe('V3 completeness ratchet', () => {
 
   it('verifying stage outcome and skipReason are wired', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const verify = ev.stages.find(s => s.name === 'verifying')!;
     expect((verify as any).outcome).toBe('passed');
     expect((verify as any).skipReason).toBeNull();
@@ -70,7 +70,7 @@ describe('V3 completeness ratchet', () => {
 
   it('every TASK_COMPLETED field marked "derived" produces a non-default value on the rich fixture', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: 'claude-opus-4-7' });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: 'claude-opus-4-7' });
     for (const [field, cov] of Object.entries(TASK_COMPLETED_FIELD_COVERAGE)) {
       if (cov.kind !== 'derived') continue;
       const v = (ev as any)[field];
@@ -83,7 +83,7 @@ describe('V3 completeness ratchet', () => {
 
   it('every STAGE_FIELD_COVERAGE entry marked "derived" produces non-default values', () => {
     const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: 'claude-opus-4-7' });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: 'claude-opus-4-7' });
     for (const [stageName, fields] of Object.entries(STAGE_FIELD_COVERAGE)) {
       const stage = ev.stages.find(s => s.name === stageName);
       expect(stage).toBeDefined();
@@ -124,7 +124,7 @@ describe('V3 clamping ratchet', () => {
     // Keep durationMs high enough so R4 doesn't fire (sum of clamped stage
     // durations must not exceed totalDurationMs).
     rr.durationMs = 86_400_000;
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
 
     const impl = ev.stages.find(s => s.name === 'implementing')!;
     expect((impl as any).turnCount).toBe(250);
@@ -153,7 +153,7 @@ describe('V3 clamping ratchet', () => {
     for (const s of Object.values(rr.stageStats!)) {
       if ((s as { entered: boolean }).entered) (s as { costUSD: number }).costUSD = 1000;
     }
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     expect(ev.totalCostUSD).toBe(800);
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(true);
@@ -169,7 +169,7 @@ describe('V3 clamping ratchet', () => {
     rr.stageStats!.implementing.outputTokens = 1_000_000;
     (rr.stageStats!.implementing as any).cachedReadTokens = 10_000_000;
     (rr.stageStats!.implementing as any).cachedNonReadTokens = 10_000_000;
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
 
     // Per-stage values are clamped.
     const impl = ev.stages.find(s => s.name === 'implementing')!;
@@ -205,7 +205,7 @@ describe('V3 clamping ratchet', () => {
     }
     rr.concerns = concerns as any;
     rr.qualityReviewStatus = 'changes_required';
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const qr = ev.stages.find(s => s.name === 'quality_review');
     expect(qr).toBeDefined();
     expect((qr as any).findingsBySeverity.high).toBe(60);
@@ -217,7 +217,7 @@ describe('V3 clamping ratchet', () => {
     for (const s of Object.values(rr.stageStats!)) {
       if ((s as { entered: boolean }).entered) (s as any).durationMs = 100_000_000;
     }
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
+    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     expect(ev.totalDurationMs).toBe(86_400_000);
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(true);

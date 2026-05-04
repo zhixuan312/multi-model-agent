@@ -54,7 +54,7 @@ export interface RunTasksOptions {
       runResult: RunResult;
       client: string;
       triggeringSkill: string;
-      parentModel: string | null;
+      mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;

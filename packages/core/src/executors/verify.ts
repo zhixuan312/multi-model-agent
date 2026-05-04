@@ -93,7 +93,7 @@ export async function executeVerify(
 ): Promise<VerifyOutput> {
   const { config, contextBlockStore } = ctx;
 
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
@@ -106,7 +106,7 @@ export async function executeVerify(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
-    parentModel,
+    mainModel,
   };
 
   function resolved() {
@@ -179,7 +179,7 @@ export async function executeVerify(
       proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
-      parentModel,
+      mainModel,
       specReviewVerdict: verdicts.specReviewVerdict,
       qualityReviewVerdict: verdicts.qualityReviewVerdict,
       roundsUsed: verdicts.roundsUsed,
@@ -232,7 +232,7 @@ export async function executeVerify(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
-    parentModel,
+    mainModel,
     specReviewVerdict: verdicts.specReviewVerdict,
     qualityReviewVerdict: verdicts.qualityReviewVerdict,
     roundsUsed: verdicts.roundsUsed,

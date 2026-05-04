@@ -89,7 +89,7 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.implementerModel).toBe('deepseek-v4-pro');
@@ -140,7 +140,7 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
       taskSpec: { filePaths: [] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.implementerModel).toBe('gemini-2.5-pro');

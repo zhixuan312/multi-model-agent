@@ -224,11 +224,11 @@ describe('HeartbeatTimer', () => {
     expect(events.length).toBe(countAfterStop);
   });
 
-  it('headline with parentModel shows saved cost', () => {
+  it('headline with mainModel shows saved cost', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
-      parentModel: 'claude-opus-4-6',
+      mainModel: 'claude-opus-4-6',
       intervalMs: 10_000,
     });
     timer.start(3);
@@ -241,7 +241,7 @@ describe('HeartbeatTimer', () => {
     expect(final.headline).toContain('x)');
   });
 
-  it('headline without parentModel shows actual cost', () => {
+  it('headline without mainModel shows actual cost', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
@@ -274,7 +274,7 @@ describe('HeartbeatTimer', () => {
     const events: ProgressEvent[] = [];
     const timer = new HeartbeatTimer((e) => events.push(e), {
       provider: 'gpt-5.4',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
       intervalMs: 10_000,
       batchId: 'b-1',
     });

@@ -137,7 +137,7 @@ export async function executeReview(
   const { config, contextBlockStore } = ctx;
 
   const hasContextBlocks = Array.isArray(input.contextBlockIds) && input.contextBlockIds.length > 0;
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
@@ -150,7 +150,7 @@ export async function executeReview(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
-    parentModel,
+    mainModel,
   };
 
   const mode = resolveDispatchMode(input.code, input.filePaths);
@@ -219,7 +219,7 @@ export async function executeReview(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
-    parentModel,
+    mainModel,
     specReviewVerdict: verdicts.specReviewVerdict,
     qualityReviewVerdict: verdicts.qualityReviewVerdict,
     roundsUsed: verdicts.roundsUsed,

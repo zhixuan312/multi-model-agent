@@ -17,7 +17,7 @@ describe('Task 21: stage tier and implementerTier', () => {
       } as any,
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
-      parentModel: null,
+      mainModel: null,
       reviewPolicy: 'none',
       verifyCommandPresent: false,
     };
@@ -44,7 +44,7 @@ describe('Task 21: stage tier and implementerTier', () => {
       } as any,
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
-      parentModel: null,
+      mainModel: null,
       reviewPolicy: 'none',
       verifyCommandPresent: false,
     };

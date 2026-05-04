@@ -107,7 +107,7 @@ export async function executeRetry(
 
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   return {
     headline: composeTerminalHeadline({ tool: 'retry', awaitingClarification: false, tasksTotal: subset.length, tasksCompleted: results.length }),
@@ -120,6 +120,6 @@ export async function executeRetry(
     batchId: retryBatchId,
     retryBatchId,
     wallClockMs,
-    parentModel,
+    mainModel,
   };
 }

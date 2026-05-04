@@ -45,7 +45,7 @@ export interface ExecutionContext {
   bus?: EventBus;
   contextBlockStore: ContextBlockStore;
   /** The parent model name, resolved from env at context-build time. */
-  parentModel?: string;
+  mainModel?: string;
   /** BatchId owning this execution — threaded to runTasks so HeartbeatTimer can tag ticks. */
   batchId?: string;
   /** Callback invoked on every heartbeat tick; pushes a running headline to the caller's store. */
@@ -58,7 +58,7 @@ export interface ExecutionContext {
       runResult: RunResult;
       client: string;
       triggeringSkill: string;
-      parentModel: string | null;
+      mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;
@@ -77,7 +77,7 @@ export interface ExecutionContextInput {
   logger: HttpServerLog;
   bus?: EventBus;
   contextBlockStore: ContextBlockStore;
-  parentModel?: string;
+  mainModel?: string;
   batchId?: string;
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   /** Telemetry recorder — fire-and-forget, failures are silently dropped. */
@@ -88,7 +88,7 @@ export interface ExecutionContextInput {
       runResult: RunResult;
       client: string;
       triggeringSkill: string;
-      parentModel: string | null;
+      mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;
@@ -120,7 +120,7 @@ export interface ExecutorOutput {
   contextBlockId?: string;
   clarificationId?: string;
   wallClockMs?: number;
-  parentModel?: string;
+  mainModel?: string;
   specReviewVerdict?: ReviewVerdict;
   qualityReviewVerdict?: ReviewVerdict;
   roundsUsed?: number;

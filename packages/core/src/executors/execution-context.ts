@@ -10,7 +10,7 @@ export function buildExecutionContext(input: ExecutionContextInput): ExecutionCo
     config: input.config,
     logger: input.logger,
     contextBlockStore: input.contextBlockStore,
-    ...(input.parentModel !== undefined && { parentModel: input.parentModel }),
+    ...(input.mainModel !== undefined && { mainModel: input.mainModel }),
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     ...(input.recordHeartbeat !== undefined && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder !== undefined && { recorder: input.recorder }),

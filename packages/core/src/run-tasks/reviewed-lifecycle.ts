@@ -320,7 +320,7 @@ export async function executeReviewedLifecycle(
       runResult: RunResult;
       client: string;
       triggeringSkill: string;
-      parentModel: string | null;
+      mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;
@@ -476,7 +476,7 @@ export async function executeReviewedLifecycle(
         },
         {
           provider: resolved.provider.config.model,
-          parentModel: task.parentModel,
+          mainModel: task.mainModel,
           ...(heartbeatWiring?.batchId !== undefined && { batchId: heartbeatWiring.batchId }),
           ...(heartbeatWiring?.recordHeartbeat !== undefined && { recordHeartbeat: heartbeatWiring.recordHeartbeat }),
         },
@@ -2040,7 +2040,7 @@ export async function executeReviewedLifecycle(
           runResult: __finalRunResult,
           client: _client ?? 'claude-code',
           triggeringSkill: _triggeringSkill ?? 'direct',
-          parentModel: task.parentModel ?? null,
+          mainModel: task.mainModel ?? null,
           reviewPolicy,
           verifyCommandPresent: !!(task.verifyCommand && task.verifyCommand.length > 0),
         });

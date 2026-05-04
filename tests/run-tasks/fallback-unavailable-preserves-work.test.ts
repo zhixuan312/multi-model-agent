@@ -142,7 +142,7 @@ describe('Test 12 Part B — event-builder unit with salvage RunResult', () => {
       taskSpec: { filePaths: ['src/feature.ts'] },
       runResult,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.terminalStatus).toBe('unavailable');
@@ -321,7 +321,7 @@ describe('Test 14 — implementerModel lookup precedence', () => {
     route: 'delegate' as const,
     taskSpec: { filePaths: [] },
     client: 'test-client',
-    parentModel: null,
+    mainModel: null,
   };
 
   it('case 1: models.implementer set → that name wins', () => {
@@ -438,7 +438,7 @@ describe('Test 12 Part A — lifecycle regression', () => {
       taskSpec: { filePaths: ['src/feature.ts'] },
       runResult: result,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.terminalStatus).toBe('unavailable');
@@ -524,7 +524,7 @@ describe('Test 15 — Item 5: idle fields are 0 not null', () => {
       taskSpec: { filePaths: [] },
       runResult,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     const result = ValidatedTaskCompletedEventSchema.safeParse(event);
@@ -567,7 +567,7 @@ describe('Test 15 — Item 5: idle fields are 0 not null', () => {
       taskSpec: { filePaths: [] },
       runResult,
       client: 'test-client',
-      parentModel: null,
+      mainModel: null,
     });
 
     // Force a null into a stage field that the schema now rejects.

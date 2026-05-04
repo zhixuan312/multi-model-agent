@@ -23,7 +23,7 @@ describe('event-builder tier vocabulary', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find(s => s.name === 'implementing')!;
     expect(stage.tier).toBe('complex');
@@ -36,7 +36,7 @@ describe('event-builder tier vocabulary', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find(s => s.name === 'implementing')!;
     expect(stage.tier).toBe('standard');
@@ -56,7 +56,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     expect(ev.tierUsage.standard).toBeDefined();
     expect(ev.tierUsage.standard!.inputTokens).toBe(100);
@@ -76,7 +76,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     expect(ev.tierUsage.standard?.inputTokens).toBe(100);
     expect(ev.tierUsage.complex?.inputTokens).toBe(200);
@@ -96,7 +96,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
     expect(ev.parentEquivalentCostUSD).toBeGreaterThan(0);
     expect(ev.parentEquivalentCostUSD).toEqual(expect.any(Number));
@@ -115,7 +115,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     expect(ev.parentModel).toBeNull();
     expect(ev.parentEquivalentCostUSD).toBeNull();
@@ -129,7 +129,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
     // parentModel is canonicalized via normalizeModel (strips vendor prefixes
     // and version suffixes). It must be non-null when parentModel is provided.
@@ -149,7 +149,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const impl = ev.stages.find(s => s.name === 'implementing')!;
     expect((impl as any).round).toBe(2);
@@ -170,7 +170,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
     expect(ev.inputTokens).toBe(300);
     expect(ev.outputTokens).toBe(80);

@@ -224,7 +224,7 @@ const defaultsSchema = z.object({
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
-  parentModel: z.string().min(1).optional(),
+  mainModel: z.string().min(1).optional(),
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,

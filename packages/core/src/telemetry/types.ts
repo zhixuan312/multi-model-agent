@@ -364,12 +364,26 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   }
 });
 
+// ── Wire-telemetry record (§3.5) ─────────────────────────────────────────
+// Validates the wire shape emitted by buildWirePayload (internal→wire translation).
+// Internal records carry mainModel*; the wire carries parentModel* + deprecated-fields constants.
+
+export const WireTelemetryRecordSchema = z.object({
+  parentModel: z.string().nullable(),
+  parentModelFamily: ModelFamilyEnum,
+  // SCHEMA_VERSION 4 deprecated-fields constants (back-compat for backend ingestion)
+  capabilities: z.array(z.enum(['web_search', 'web_fetch', 'other'])).length(0),
+  clarificationRequested: z.literal(false),
+  briefQualityWarningCount: z.literal(0),
+}).passthrough();
+
 // ── Inferred TS types ────────────────────────────────────────────────────
 
 export type BatchWrapper = z.infer<typeof BatchWrapperSchema>;
 export type StageEntryType = z.infer<typeof StageEntrySchema>;
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
 export type UploadBatchType = z.infer<typeof UploadBatchSchema>;
+export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
 export type ConcernCategoryType = z.infer<typeof ConcernCategory>;
 export type ErrorCodeType = z.infer<typeof ErrorCode>;
 export type FindingsBySeverity = z.infer<typeof FindingsBySeveritySchema>;

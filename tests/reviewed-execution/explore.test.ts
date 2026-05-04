@@ -572,16 +572,16 @@ describe('explore lifecycle envelope field propagation', () => {
     }
   });
 
-  it('parentModel propagates to output envelope', async () => {
+  it('mainModel propagates to output envelope', async () => {
     const provider = sequencedProvider([
       { run: async () => okResult(internalOk) },
       { run: async () => okResult(externalOk) },
       { run: async () => okResult(synthWithThreads(3)) },
     ]);
-    const { ctx } = makeCtx(provider, { parentModel: 'claude-sonnet-4-6' } as Partial<ExecutionContext>);
+    const { ctx } = makeCtx(provider, { mainModel: 'claude-sonnet-4-6' } as Partial<ExecutionContext>);
 
     const out = await executeExplore(ctx, defaultArgs());
-    expect(out.parentModel).toBe('claude-sonnet-4-6');
+    expect(out.mainModel).toBe('claude-sonnet-4-6');
   });
 
   it('batchId is threaded through to output', async () => {

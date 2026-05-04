@@ -149,7 +149,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
 
     // --- Shape assertions ---
@@ -231,7 +231,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
 
     // Σ stages === top-level fields
@@ -268,7 +268,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
 
     expect(event.parentModel).toBeNull();
@@ -296,7 +296,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rrExpensive,
       client: 'test',
-      parentModel: 'claude-haiku-4-6',
+      mainModel: 'claude-haiku-4-6',
     });
 
     expect(eventExpensive.costDeltaVsParentUSD).toBeGreaterThan(0);
@@ -320,7 +320,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rrCheap,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
 
     expect(eventCheap.costDeltaVsParentUSD).toBeLessThan(0);
@@ -353,7 +353,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
     });
 
     // Stage entry has costUSD: 0 (null coerced via extractStageData)
@@ -406,7 +406,7 @@ describe('multi-round stage entries', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
 
     const impl = event.stages.find(s => s.name === 'implementing')!;

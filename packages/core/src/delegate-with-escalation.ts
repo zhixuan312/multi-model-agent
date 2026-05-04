@@ -143,7 +143,7 @@ export async function delegateWithEscalation(
         sandboxPolicy: task.sandboxPolicy,
         expectedCoverage: task.expectedCoverage,
         skipCompletionHeuristic: task.skipCompletionHeuristic,
-        parentModel: task.parentModel,
+        mainModel: task.mainModel,
         maxCostUSD: adjustedMaxCostUSD,
         formatConstraints: task.formatConstraints,
         customToolset: task.customToolset,

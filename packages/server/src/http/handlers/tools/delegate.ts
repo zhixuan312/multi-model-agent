@@ -20,7 +20,7 @@ function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: Task
       timeoutMs: t.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000,
       maxCostUSD: t.maxCostUSD ?? config.defaults?.maxCostUSD ?? 10,
       sandboxPolicy: t.sandboxPolicy ?? config.defaults?.sandboxPolicy ?? 'cwd-only',
-      parentModel: t.parentModel ?? config.defaults?.parentModel ?? process.env['PARENT_MODEL_NAME'],
+      mainModel: t.mainModel ?? config.defaults?.mainModel ?? process.env['PARENT_MODEL_NAME'],
     }));
 }
 

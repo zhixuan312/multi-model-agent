@@ -21,7 +21,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 200, outputTokens: 100, totalTokens: 300, costUSD: 0.005 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -58,7 +58,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 0.01 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -91,7 +91,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.002 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -119,7 +119,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 200, outputTokens: 100, totalTokens: 300, costUSD: 0.005 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 

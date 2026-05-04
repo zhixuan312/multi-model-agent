@@ -46,7 +46,7 @@ export function buildExecutionContext(
     logger: deps.logger,
     bus: deps.bus,
     contextBlockStore: pc.contextBlocks,
-    parentModel: process.env['PARENT_MODEL_NAME'],
+    mainModel: process.env['PARENT_MODEL_NAME'],
     batchId,
     recordHeartbeat,
     recorder,

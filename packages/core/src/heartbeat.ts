@@ -75,7 +75,7 @@ export interface HeartbeatTickInfo {
 
 export interface HeartbeatTimerOptions {
   provider: string;
-  parentModel?: string;
+  mainModel?: string;
   intervalMs?: number;
   /**
    * Optional callback invoked on every HeartbeatTimer tick (including the
@@ -104,7 +104,7 @@ export interface TransitionFields {
 export class HeartbeatTimer {
   private readonly onProgress: (event: ProgressEvent) => void;
   private readonly intervalMs: number;
-  private readonly parentModel: string | undefined;
+  private readonly mainModel: string | undefined;
   private readonly _recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
   private readonly _batchId?: string;
   private timer: ReturnType<typeof setInterval> | null = null;
@@ -148,7 +148,7 @@ export class HeartbeatTimer {
   ) {
     this.onProgress = onProgress;
     this.provider = options.provider;
-    this.parentModel = options.parentModel;
+    this.mainModel = options.mainModel;
     this.intervalMs = options.intervalMs ?? 5000;
     this._recordHeartbeat = options.recordHeartbeat;
     this._batchId = options.batchId;
@@ -444,7 +444,7 @@ export class HeartbeatTimer {
   }
 
   private composeCostClause(): string | null {
-    if (this.parentModel && this.costDeltaVsParentUSD !== null && this.costUSD !== null && this.costDeltaVsParentUSD < 0) {
+    if (this.mainModel && this.costDeltaVsParentUSD !== null && this.costUSD !== null && this.costDeltaVsParentUSD < 0) {
       const saved = -this.costDeltaVsParentUSD;
       if (this.costUSD > 0) {
         const parentCost = this.costUSD - this.costDeltaVsParentUSD;

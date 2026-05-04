@@ -134,7 +134,7 @@ export async function executeAudit(
 
   const hasContextBlocks = Array.isArray(input.contextBlockIds) && input.contextBlockIds.length > 0;
 
-  const parentModel = ctx.parentModel ?? config.defaults?.parentModel ?? undefined;
+  const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   const baseTaskSpec: Partial<TaskSpec> = {
     agentType: 'complex',
@@ -147,7 +147,7 @@ export async function executeAudit(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
     cwd: ctx.projectContext.cwd,
     contextBlockIds: input.contextBlockIds,
-    parentModel,
+    mainModel,
   };
   const runtime = contextBlockStore ? { contextBlockStore } : undefined;
 
@@ -188,7 +188,7 @@ export async function executeAudit(
       proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
-      parentModel,
+      mainModel,
       ...verdicts,
       ...(ctxId !== undefined && { contextBlockId: ctxId }),
     };
@@ -240,7 +240,7 @@ export async function executeAudit(
     proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
-    parentModel,
+    mainModel,
     ...verdicts,
     ...(ctxId !== undefined && { contextBlockId: ctxId }),
   };
