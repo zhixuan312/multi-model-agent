@@ -15,6 +15,7 @@
   "POST /execute-plan",
   "POST /explore",
   "POST /investigate",
+  "POST /register-context-block",
   "POST /retry",
   "POST /review",
   "POST /tools/delegate",

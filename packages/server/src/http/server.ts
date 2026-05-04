@@ -49,7 +49,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
   '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
-  '/control/retry', '/control/batch-slice', '/context-blocks',
+  '/control/retry', '/control/batch-slice', '/context-blocks', '/register-context-block',
 ]);
 
 /**
@@ -186,6 +186,7 @@ async function registerControlHandlers(
     });
   }
   router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
+  router.register('POST', '/register-context-block', buildCreateContextBlockHandler({ projectRegistry, config }));
   router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   router.register('POST', '/clarifications/confirm', buildClarificationsHandler({ batchRegistry }));
 }

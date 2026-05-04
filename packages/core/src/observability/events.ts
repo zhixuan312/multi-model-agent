@@ -24,6 +24,7 @@ const BatchBase = z.object({
 const RouteEnum = z.enum([
   'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
   'explore_internal', 'explore_external', 'explore_synthesize',
+  'register-context-block',
 ]);
 
 const TierEnum = z.enum(['standard', 'complex']);
