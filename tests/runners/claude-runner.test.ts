@@ -850,6 +850,49 @@ describe('runClaude', () => {
       expect(result.status).toBe('ok');
       expect(result.usage.cachedTokens).toBeNull();
     });
+
+    // 3.12.4 regression: pre-3.12.4 only the terminal `result` message
+    // contributed to usage. Mid-stream timeouts and errors left usage at
+    // zero even after dozens of billable assistant turns. Per-turn capture
+    // from each assistant message keeps usage live so partial-result paths
+    // (timeout, abort, mid-stream error) report real numbers.
+    it('captures per-turn usage from assistant messages so timeouts surface real partial usage', async () => {
+      const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
+
+      // Helper: assistant message WITH usage (matches Anthropic API shape).
+      const assistantMsgWithUsage = (text: string, inputTokens: number, outputTokens: number) => ({
+        type: 'assistant' as const,
+        message: {
+          role: 'assistant' as const,
+          content: [{ type: 'text' as const, text }],
+          usage: {
+            input_tokens: inputTokens,
+            output_tokens: outputTokens,
+          },
+        },
+        parent_tool_use_id: null,
+      });
+
+      // Stream that NEVER emits a `result` message — simulates a mid-stream
+      // close (the pre-3.12.4 failure mode where reviewer timed out before
+      // the SDK closed the conversation properly).
+      (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
+        (async function* () {
+          yield assistantMsgWithUsage(VALID_FINAL_OUTPUT, 500, 200);
+          yield assistantMsgWithUsage(VALID_FINAL_OUTPUT, 800, 300);
+          yield assistantMsgWithUsage(VALID_FINAL_OUTPUT, 1200, 400);
+          // No result message — stream ends here, runner builds an
+          // incomplete result via the drained branch.
+        })(),
+      );
+
+      const result = await runClaude('prompt', {}, providerConfig, defaults);
+
+      // Status will be incomplete (no result message), but usage MUST
+      // reflect the per-turn merges: 500+800+1200 input, 200+300+400 output.
+      expect(result.usage.inputTokens).toBe(2500);
+      expect(result.usage.outputTokens).toBe(900);
+    });
   });
 
   // ---------------------------------------------------------------------------
