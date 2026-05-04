@@ -367,7 +367,7 @@ describe('delegateWithEscalation', () => {
       'needs_context',
       'blocked',
       'failed',
-      'review_loop_aborted',
+      'review_loop_capped',
       null,
     ]).toContain(
       (result.terminationReason as { workerSelfAssessment: unknown }).workerSelfAssessment,

@@ -956,7 +956,7 @@ export async function executeReviewedLifecycle(
     return {
       ...base,
       status: 'incomplete',
-      workerStatus: 'review_loop_aborted',
+      workerStatus: 'review_loop_capped',
       terminationReason: terminationReason === 'round_cap'
         ? 'round_cap'
         : {
@@ -964,7 +964,7 @@ export async function executeReviewedLifecycle(
             turnsUsed: base.turns,
             hasFileArtifacts: (base.filesWritten ?? []).length > 0,
             usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
-            workerSelfAssessment: 'review_loop_aborted',
+            workerSelfAssessment: 'review_loop_capped',
             wasPromoted: false,
             ...(wallClockMs !== undefined ? { wallClockMs } : {}),
           },
