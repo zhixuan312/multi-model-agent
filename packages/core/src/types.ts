@@ -234,7 +234,7 @@ export interface RunResult {
   terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
-  structuredError?: { code: 'verify_command_error' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted' | 'incomplete_no_summary' | 'reviewer_separation_unsatisfiable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
+  structuredError?: { code: 'validator_verify_command_failed' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted' | 'incomplete_no_summary' | 'reviewer_separation_unsatisfiable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
   specReviewReason?: string

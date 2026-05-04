@@ -9,7 +9,9 @@ export type ErrorCode =
   | 'api_aborted'
   | 'max_turns'
   | 'error'
-  | 'unknown';
+  | 'unknown'
+  | 'validator_verify_command_failed'
+  | 'validator_dirty_worktree';
 
 export function retryableFor(status: string): boolean {
   return ['timeout', 'network_error', 'api_error'].includes(status);

@@ -1071,7 +1071,7 @@ export async function executeReviewedLifecycle(
       status: 'error',
       workerStatus: 'done_with_concerns',
       error: failedStep?.errorMessage ?? 'verify command error',
-      errorCode: 'verify_command_error',
+      errorCode: 'validator_verify_command_failed',
       commits,
       commitError,
       verification,
@@ -1097,7 +1097,7 @@ export async function executeReviewedLifecycle(
         status: 'error',
         workerStatus: 'failed',
         error: failedStep?.errorMessage ?? 'verify command error',
-        errorCode: 'verify_command_error',
+        errorCode: 'validator_verify_command_failed',
         commits,
         commitError,
         verification,
@@ -1307,7 +1307,7 @@ export async function executeReviewedLifecycle(
           escalationLog: [],
           parsedFindings: null,
           error: `task.cwd ${cwd} had pre-existing modifications`,
-          errorCode: 'dirty_worktree',
+          errorCode: 'validator_dirty_worktree',
           commits,
         });
       }

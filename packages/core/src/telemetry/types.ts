@@ -44,10 +44,10 @@ export const ConcernCategory = z.enum([
 ]);
 
 export const ErrorCode = z.enum([
-  'verify_command_error',
+  'validator_verify_command_failed',
   'commit_metadata_invalid',
   'commit_metadata_repair_modified_files',
-  'dirty_worktree',
+  'validator_dirty_worktree',
   'diff_review_rejected',
   'runner_crash',
   'executor_error',
