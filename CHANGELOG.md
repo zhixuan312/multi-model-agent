@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.6] - 2026-05-04
+
+### Fixed
+- **Standardized findings format across all read-only routes (audit, debug, review, verify) so the deterministic extractor and the LLM reviewer agree on the same single source of truth.** Pre-3.12.6 each executor's prompt described the format informally and the deterministic extractor's `SECTION_RE` only recognized Markdown-heading patterns (`## 1. Title`) — DeepSeek-as-implementer happened to produce bold-numbered findings (`**1.**` on its own line + labeled bullets), which the extractor missed entirely. 3.12.5's transport-failure salvage path then returned 0 findings even when the worker had produced 30 of them. Three coordinated changes:
+  - **`SECTION_RE` recognizes both forms** — Markdown headings (`## Finding 1: Title`, `### 2. Title`, `## [3] Title`) AND bold-wrapped numbered headers (`**1.**`, `**Finding 2:** Title`, `**[3]** Title`). Critically, fixed the trailing whitespace bug where `\s*(.*)$` was eating newlines (since `\s` matches `\n` in JS regex), capturing the line BELOW the heading as the title — replaced with `[ \t]*(.*)$`.
+  - **`claimFromBody` derives titles from labeled body lines** (`Issue:`, `Title:`, `Summary:`, `Claim:`, `Description:`, `Problem:`, `Finding:`) when the section heading was titleless (the bare `**N.**` form), so dashboard rows show real one-line claims instead of "Finding 1, Finding 2, ...".
+  - **All four executor prompts (audit, debug, review, verify) now emit the same canonical `## Finding N: <title>` + bullet-labeled format** with explicit "MUST start with" rules. Both the structured reviewer and the deterministic fallback extract from this format, so a successful reviewer pass and a fallback-after-timeout produce identical structured output. Live test on the goal.md audit narrative (timed out at the 9m+ mark): 30 findings recovered with correct severity rollup (1 critical / 4 high / 8 medium / 17 low) — exactly what the implementer wrote.
+
 ## [3.12.5] - 2026-05-04
 
 ### Fixed
