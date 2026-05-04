@@ -6,7 +6,8 @@ export function richRunResult(): RunResult {
   return {
     output: 'rich worker output',
     status: 'ok',
-    usage: { inputTokens: 1000, outputTokens: 200, totalTokens: 1200, costUSD: 0.05, costDeltaVsParentUSD: null },
+    usage: { inputTokens: 1000, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    cost: { costUSD: 0.05, costDeltaVsParentUSD: null },
     turns: 14,
     filesRead: ['src/a.ts', 'src/b.ts'],
     filesWritten: ['src/a.ts'],

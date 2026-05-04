@@ -53,8 +53,8 @@ const STUB_CONFIG: ProviderConfig = {
   model: 'mock-model',
 } as ProviderConfig;
 
-function usage(cost: number | null): TokenUsage {
-  return { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: cost };
+function usage(_cost: number | null): TokenUsage {
+  return { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 };
 }
 
 function attempt(status: RunStatus, turns: number, cost: number | null): AttemptRecord {

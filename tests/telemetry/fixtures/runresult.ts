@@ -3,7 +3,7 @@ import type { RunResult } from '../../../packages/core/src/types.js';
 const BASE_RUN_RESULT: RunResult = {
   output: 'Task completed successfully.',
   status: 'ok',
-  usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 0.005 },
+  usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
   turns: 3,
   filesRead: ['/tmp/test/a.ts'],
   filesWritten: ['/tmp/test/b.ts'],
@@ -65,7 +65,7 @@ export const COST_EXCEEDED: RunResult = {
   status: 'cost_exceeded',
   terminationReason: 'cost_ceiling' as unknown as RunResult['terminationReason'],
   workerStatus: 'failed',
-  usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 1.50 },
+  usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
 };
 
 export const BRIEF_TOO_VAGUE: RunResult = {

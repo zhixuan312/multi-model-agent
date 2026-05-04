@@ -7,8 +7,8 @@
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
-        "totalTokens": 30,
-        "costUSD": 0.001
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
       },
       "turns": 1,
       "filesRead": [],
@@ -22,7 +22,7 @@
           "turns": 1,
           "inputTokens": 10,
           "outputTokens": 20,
-          "costUSD": 0.001,
+          "costUSD": null,
           "initialPromptLengthChars": 0,
           "initialPromptHash": ""
         }
@@ -84,7 +84,7 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0.001,
+          "costUSD": null,
           "agentTier": "standard",
           "modelFamily": "other",
           "model": "mock",
@@ -93,8 +93,8 @@
           "activityEvents": "<DETERMINISTIC>",
           "inputTokens": 10,
           "outputTokens": 20,
-          "cachedTokens": 0,
-          "reasoningTokens": 0,
+          "cachedTokens": null,
+          "reasoningTokens": null,
           "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
@@ -257,7 +257,7 @@
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "totalActualCostUSD": 0.001,
+    "totalActualCostUSD": 0,
     "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {

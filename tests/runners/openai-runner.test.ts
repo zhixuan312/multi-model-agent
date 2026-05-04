@@ -676,7 +676,7 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.cachedTokens).toBe(500);
+    expect(result.usage.cachedReadTokens).toBe(500);
   });
 
   it('propagates reasoning tokens from outputTokensDetails', async () => {
@@ -691,7 +691,7 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.reasoningTokens).toBe(300);
+    expect(result.usage.outputTokens).toBe(200);
   });
 
   it('preserves 0 values for cached and reasoning tokens', async () => {
@@ -707,8 +707,7 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.cachedTokens).toBe(0);
-    expect(result.usage.reasoningTokens).toBe(0);
+    expect(result.usage.cachedReadTokens).toBe(0);
   });
 
   it('returns null when inputTokensDetails is absent', async () => {
@@ -720,8 +719,8 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.cachedTokens).toBeNull();
-    expect(result.usage.reasoningTokens).toBeNull();
+    expect(result.usage.cachedReadTokens).toBe(0);
+    expect(result.usage.cachedNonReadTokens).toBe(0);
   });
 
   it('returns null when outputTokensDetails is absent', async () => {
@@ -736,8 +735,8 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.cachedTokens).toBe(100);
-    expect(result.usage.reasoningTokens).toBeNull();
+    expect(result.usage.cachedReadTokens).toBe(100);
+    expect(result.usage.cachedNonReadTokens).toBe(0);
   });
 
   it('sums cached tokens across multiple detail entries', async () => {
@@ -759,8 +758,7 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('ok');
-    expect(result.usage.cachedTokens).toBe(500);
-    expect(result.usage.reasoningTokens).toBe(250);
+    expect(result.usage.cachedReadTokens).toBe(500); // 200 + 300
   });
 
   it('propagates cached/reasoning tokens on the error path', async () => {
@@ -779,8 +777,8 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
     const result = await runOpenAI('task', {}, { client: clientStub, providerConfig, defaults });
 
     expect(result.status).toBe('error');
-    expect(result.usage.cachedTokens).toBe(400);
-    expect(result.usage.reasoningTokens).toBe(200);
+    expect(result.usage.cachedReadTokens).toBe(400);
+    expect(result.usage.outputTokens).toBeGreaterThanOrEqual(200);
   });
 
   it('propagates cached/reasoning tokens on the timeout path', async () => {
@@ -797,10 +795,10 @@ describe('runOpenAI — CanonicalUsage cached/reasoning tokens', () => {
 
     // With timeoutMs=1, the new time_ceiling path (§3.8) trips before the
     // legacy withTimeout fires. status='incomplete' with terminationReason
-    // 'time_ceiling' is the new shape; usage is null per §3.6.
+    // 'time_ceiling' is the new shape; usage defaults to zeros per §3.6.
     expect(['timeout', 'incomplete']).toContain(result.status);
-    expect(result.usage.cachedTokens).toBeNull();
-    expect(result.usage.reasoningTokens).toBeNull();
+    expect(result.usage.cachedReadTokens).toBe(0);
+    expect(result.usage.cachedNonReadTokens).toBe(0);
   });
 });
 

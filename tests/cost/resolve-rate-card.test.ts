@@ -29,10 +29,10 @@ describe('resolveRateCard', () => {
     expect(card!.cachedReadCostPerMTok).toBeCloseTo(card!.inputCostPerMTok * 0.10, 10);
   });
 
-  it('reasoningCostPerMTok defaults to outputCostPerMTok', () => {
+  it('reasoningCostPerMTok has been removed from rate cards (reasoning merged into output)', () => {
     const card = resolveRateCard('claude-sonnet-4-6');
     expect(card).not.toBeNull();
-    expect(card!.reasoningCostPerMTok).toBe(card!.outputCostPerMTok);
+    expect((card as any).reasoningCostPerMTok).toBeUndefined();
   });
 
   it('override wins over profile and defaults', () => {

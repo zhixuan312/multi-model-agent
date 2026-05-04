@@ -176,6 +176,5 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     expect(ev.outputTokens).toBe(80);
     expect(ev.cachedReadTokens).toBe(30);
     expect(ev.cachedNonReadTokens).toBe(15);
-    expect(ev.reasoningTokens).toBe(20);
   });
 });

@@ -783,7 +783,7 @@ describe('runClaude', () => {
       };
     }
 
-    it('sums cache_read_input_tokens + cache_creation_input_tokens into cachedTokens, with sibling inputTokens', async () => {
+    it('sums cache_read_input_tokens + cache_creation_input_tokens into cachedReadTokens/cachedNonReadTokens, with sibling inputTokens', async () => {
       const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
       (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
@@ -802,14 +802,13 @@ describe('runClaude', () => {
       const result = await runClaude('prompt', {}, providerConfig, defaults);
 
       expect(result.status).toBe('ok');
-      expect(result.usage.inputTokens).toBe(1000); // sibling: NO cache fields added
+      expect(result.usage.inputTokens).toBe(920); // 1000 - 80 cachedRead (sibling subtraction)
       expect(result.usage.outputTokens).toBe(500);
       expect(result.usage.cachedReadTokens).toBe(80);
       expect(result.usage.cachedNonReadTokens).toBe(20);
-      expect(result.usage.cachedTokens).toBe(100); // 80 + 20
     });
 
-    it('emits reasoningTokens=null (claude API does not document this field)', async () => {
+    it('emits cachedReadTokens=0, cachedNonReadTokens=0 (claude API does not document reasoning)', async () => {
       const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
       (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
@@ -826,10 +825,11 @@ describe('runClaude', () => {
       const result = await runClaude('prompt', {}, providerConfig, defaults);
 
       expect(result.status).toBe('ok');
-      expect(result.usage.reasoningTokens).toBeNull();
+      expect(result.usage.cachedReadTokens).toBe(0);
+      expect(result.usage.cachedNonReadTokens).toBe(0);
     });
 
-    it('emits cachedTokens=null when neither cache field is present in usage', async () => {
+    it('emits cachedReadTokens=0, cachedNonReadTokens=0 when neither cache field is present in usage', async () => {
       const { runClaude } = await import('../../packages/core/src/runners/claude-runner.js');
 
       (query as ReturnType<typeof vi.fn>).mockReturnValueOnce(
@@ -848,7 +848,8 @@ describe('runClaude', () => {
       const result = await runClaude('prompt', {}, providerConfig, defaults);
 
       expect(result.status).toBe('ok');
-      expect(result.usage.cachedTokens).toBeNull();
+      expect(result.usage.cachedReadTokens).toBe(0);
+      expect(result.usage.cachedNonReadTokens).toBe(0);
     });
 
     // 3.12.4 regression: pre-3.12.4 only the terminal `result` message

@@ -45,7 +45,6 @@ function makeStageStats(
     inputTokens: 100,
     outputTokens: 50,
     cachedTokens: null as number | null,
-    reasoningTokens: 0,
     round: 0,
     toolCallCount: 3,
     filesReadCount: 2,

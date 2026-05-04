@@ -15,14 +15,15 @@ function makeMockResult(
   return {
     output,
     status,
-    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD },
+    usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    cost: { costUSD, costDeltaVsParentUSD: null },
     turns: 5,
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [],
-  };
+  } as RunResult;
 }
 
 /** Helper: returns different results on successive calls. */

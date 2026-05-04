@@ -56,8 +56,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `inputTokens` | integer (0–5,000,000) | New (non-cached) input tokens. As of 3.12.2 schema v4: sibling semantics — `inputTokens` does NOT include cache reads or cache writes. |
 | `outputTokens` | integer (0–500,000) | Total output token volume |
 | `cachedReadTokens` | integer (0–5,000,000) | Cache-read token volume — billed at the cache-read rate (~10% of input). Replaces the prior `cachedTokens` field as of 3.12.2. |
-| `cachedCreationTokens` | integer (0–5,000,000) | Cache-write/creation token volume — billed at the cache-creation rate (Anthropic: 1.25× input; other providers: no premium). Added in 3.12.2 to bill cache writes correctly. |
-| `reasoningTokens` | integer (0–500,000) | Reasoning token volume (separate from output) |
+| `cachedNonReadTokens` | integer (0–5,000,000) | Cache-creation (non-read) token volume — billed at the cache-write rate (1.25× input for Anthropic; = input for most others). |
 
 #### Run totals (4 fields)
 
@@ -75,7 +74,7 @@ A keyed record `{ standard?, complex?, main? }` where each present tier carries 
 | Sub-field (per tier) | Type |
 |---|---|
 | `model` | string — the last model that ran on this tier within the task (forensic label; for accurate reverse-pricing iterate `stages[]`) |
-| `inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedCreationTokens`, `reasoningTokens` | integer — same semantics as the top-level token fields, restricted to stages on this tier |
+| `inputTokens`, `outputTokens`, `cachedReadTokens`, `cachedNonReadTokens` | integer — same semantics as the top-level token fields, restricted to stages on this tier |
 | `costUSD` | float or null — sum of `stage.costUSD` for stages on this tier (null per honest-null if any contributing stage was null) |
 
 #### Lifecycle counts (3 fields)
@@ -112,8 +111,7 @@ Each stage is a discriminated-union entry on `(name, round)`. As of 3.12.2 (sche
 | `inputTokens` | integer — sibling semantics (excludes cache) as of 3.12.2 schema v4. |
 | `outputTokens` | integer |
 | `cachedReadTokens` | integer or null — cache-read tokens. Replaces `cachedTokens` as of 3.12.2 schema v4. |
-| `cachedCreationTokens` | integer or null — cache-write tokens. Added in 3.12.2 schema v4. |
-| `reasoningTokens` | integer |
+| `cachedNonReadTokens` | integer or null — cache-creation (non-read) tokens. Formerly `cachedCreationTokens`. |
 | `toolCallCount` | integer |
 | `filesReadCount` | integer |
 | `filesWrittenCount` | integer |
@@ -150,8 +148,7 @@ As of 3.12.2 (schema v4), cost is computed via a single pure function `priceToke
 cost =   inputTokens          × inputRate          (non-cached new input only)
        + outputTokens         × outputRate
        + cachedReadTokens     × cachedReadRate     (default: input × 0.10)
-       + cachedCreationTokens × cachedCreationRate (Anthropic: input × 1.25; others: input)
-       + reasoningTokens      × reasoningRate      (default: output)
+       + cachedNonReadTokens  × cachedNonReadRate  (Anthropic: input × 1.25; others: input)
 ```
 
 Per-stage cost is computed at that stage's own model rate. The top-level `totalCostUSD` is the sum of per-stage costs (equivalently: the sum of `tierUsage[T].costUSD` across tiers).
@@ -226,6 +223,6 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
-| 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedCreationTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `parentModel` (specific identity alongside `parentModelFamily`), and `parentEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
+| 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `parentModel` (specific identity alongside `parentModelFamily`), and `parentEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
 | 2026-04-29 | 3 | V3 schema: single `task.completed` event type; exact integer/numeric fields replace bucketed approximations; stages array replaces fixed-key stage map; `session.started`, `install.changed`, `skill.installed` event types removed; `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted` removed; `language`, `tzOffsetBucket` removed from batch wrapper; cost formula uses 4-term cached/reasoning rates; consent re-confirmation required on V2→V3 upgrade. |
 | 2026-04-26 | 1 | Initial privacy policy. Document all `task.completed`, `session.started`, `install.changed`, and `skill.installed` fields. Enum-only, bucketed values only, no free-form text, no content capture. Telemetry off by default. |
