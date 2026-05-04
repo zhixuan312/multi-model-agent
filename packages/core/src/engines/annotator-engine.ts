@@ -1,4 +1,5 @@
 import type { RunnerShell } from '../runner-shell/shell.js';
+import { AnnotatorOutputParser } from './annotator-output-parser.js';
 
 export interface AnnotatedFinding {
   id: string;
@@ -16,6 +17,8 @@ export interface AnnotatorOutput {
 }
 
 export class AnnotatorEngine {
+  private parser = new AnnotatorOutputParser();
+
   constructor(
     private shell: RunnerShell,
     private promptBuilder: { build: (implFindings: unknown[]) => string },
@@ -49,17 +52,16 @@ export class AnnotatorEngine {
     workerOutput: string,
     expectedCount: number,
   ): AnnotatorOutput {
-    const m = text.match(/```json\n([\s\S]+?)\n```/);
-    if (!m) return { verdict: 'error', findings: [] };
-    let obj: any;
+    let parsed;
     try {
-      obj = JSON.parse(m[1]);
+      parsed = this.parser.parse(text);
     } catch {
       return { verdict: 'error', findings: [] };
     }
-    if (!Array.isArray(obj.findings))
+    if (parsed.verdict === 'error') return parsed;
+    if (!Array.isArray(parsed.findings))
       return { verdict: 'error', findings: [] };
-    const findings: AnnotatedFinding[] = obj.findings.map(
+    const findings: AnnotatedFinding[] = parsed.findings.map(
       (f: any, i: number) => {
         const rawConf = f.annotatorConfidence;
         const numeric =

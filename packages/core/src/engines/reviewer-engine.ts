@@ -1,4 +1,5 @@
 import type { RunnerShell } from '../runner-shell/shell.js';
+import { ReviewerOutputParser } from './reviewer-output-parser.js';
 
 export type ReviewVerdict = 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
 
@@ -17,6 +18,8 @@ export interface ReviewerOutput {
 }
 
 export class ReviewerEngine {
+  private parser = new ReviewerOutputParser();
+
   constructor(
     private shell: RunnerShell,
     private promptBuilder: { build: (artifact: string) => string },
@@ -33,7 +36,7 @@ export class ReviewerEngine {
         userMessage,
         toolDefinitions: [],
       });
-      return this.parse(result.finalAssistantText);
+      return this.parser.parse(result.finalAssistantText);
     } catch {
       return {
         verdict: 'error',
@@ -42,35 +45,5 @@ export class ReviewerEngine {
         findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
       };
     }
-  }
-
-  private parse(text: string): ReviewerOutput {
-    const m = text.match(/```json\n([\s\S]+?)\n```/);
-    if (!m) throw new Error('reviewer output missing JSON block');
-    const obj = JSON.parse(m[1]);
-    if (
-      !['approved', 'concerns', 'changes_required', 'error', 'skipped'].includes(
-        obj.verdict,
-      )
-    ) {
-      throw new Error(`reviewer verdict invalid: ${obj.verdict}`);
-    }
-    return {
-      verdict: obj.verdict,
-      findings: obj.findings ?? [],
-      concernCategories:
-        obj.concernCategories ??
-        Array.from(new Set((obj.findings ?? []).map((f: any) => f.category))),
-      findingsBySeverity:
-        obj.findingsBySeverity ?? this.tallyBySeverity(obj.findings ?? []),
-    };
-  }
-
-  private tallyBySeverity(
-    findings: ReviewFinding[],
-  ): ReviewerOutput['findingsBySeverity'] {
-    const t = { critical: 0, high: 0, medium: 0, low: 0 };
-    for (const f of findings) t[f.severity] += 1;
-    return t;
   }
 }
