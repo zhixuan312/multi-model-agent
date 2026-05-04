@@ -154,6 +154,13 @@ const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
 
+export const pricingSchema = z.object({
+  inputUSDPerMillion: z.number().nonnegative().finite(),
+  outputUSDPerMillion: z.number().nonnegative().finite(),
+  cachedReadUSDPerMillion: z.number().nonnegative().finite(),
+  cachedNonReadUSDPerMillion: z.number().nonnegative().finite(),
+}).strict();
+
 const capabilitiesSchema = z.array(z.enum(['web_search', 'web_fetch'])).optional();
 
 const baseAgentFields = {
