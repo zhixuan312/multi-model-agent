@@ -10,7 +10,7 @@ export interface EvidenceInput {
   baselineHead: string;
   commits: Commit[];
   verification: VerifyStageResult;
-  reviewPolicy: 'full' | 'spec_only' | 'diff_only' | 'off';
+  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
 }
 
 export async function buildEvidence(i: EvidenceInput): Promise<{ block: string; diffTruncated: boolean; fullDiff: string }> {

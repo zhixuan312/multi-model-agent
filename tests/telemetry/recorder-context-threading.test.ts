@@ -18,13 +18,13 @@ describe('recorder context threading', () => {
     expect(ev.verifyCommandPresent).toBe(true);
   });
 
-  it('normalizes reviewPolicy "off" to "none" on the wire', () => {
+  it('reviewPolicy=none preserves reviewPolicy=none wire value', () => {
     const ctx: any = {
       route: 'delegate',
       taskSpec: { filePaths: [] },
       runResult: { status: 'ok', terminationReason: { cause: 'finished' }, durationMs: 100 } as any,
       client: 'claude-code', triggeringSkill: 'mma-delegate', parentModel: null,
-      reviewPolicy: 'off', verifyCommandPresent: false,
+      reviewPolicy: 'none', verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);
     expect(ev.reviewPolicy).toBe('none');

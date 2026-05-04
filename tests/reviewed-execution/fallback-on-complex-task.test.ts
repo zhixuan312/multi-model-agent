@@ -134,7 +134,7 @@ describe('reviewed lifecycle fallback on complex task transport failure', () => 
         agentType: 'complex',
         cwd: makeCwd(),
         filePaths: ['src/a.ts'],
-        reviewPolicy: 'spec_only',
+        reviewPolicy: 'full',
       }],
       makeConfig(),
       {
@@ -176,9 +176,10 @@ describe('reviewed lifecycle fallback on complex task transport failure', () => 
       }),
     ]);
     expect(complexAttempts).toBeGreaterThan(0);
-    expect(calls.slice(-2)).toEqual([
+    expect(calls.slice(-3)).toEqual([
       'standard:fallback-impl',
       'standard:spec-review',
+      'standard:quality-review',
     ]);
   });
 });

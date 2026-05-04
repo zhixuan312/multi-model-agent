@@ -454,9 +454,9 @@
                           "description": "Review lifecycle policy for this task. Default: full.",
                           "enum": [
                             "full",
-                            "spec_only",
+                            "quality_only",
                             "diff_only",
-                            "off"
+                            "none"
                           ],
                           "type": "string"
                         },
@@ -584,9 +584,9 @@
                               "description": "Review lifecycle policy for this task. Default: full.",
                               "enum": [
                                 "full",
-                                "spec_only",
+                                "quality_only",
                                 "diff_only",
-                                "off"
+                                "none"
                               ],
                               "type": "string"
                             },

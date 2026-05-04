@@ -60,7 +60,7 @@ const noFilesProvider: Provider = mockProvider({
 describe('RunResult.agents carries resolved capabilities + toolMode', () => {
   it('populates implementerCapabilities from agent config capabilities', async () => {
     const config = makeConfig({ standardCapabilities: ['web_search', 'web_fetch'] });
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -84,7 +84,7 @@ describe('RunResult.agents carries resolved capabilities + toolMode', () => {
 
   it('populates implementerCapabilities from model profile when agent has no explicit capabilities', async () => {
     const config = makeConfig(); // no explicit capabilities on standard
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -104,7 +104,7 @@ describe('RunResult.agents carries resolved capabilities + toolMode', () => {
 
   it('returns toolMode matching task.tools', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off', tools: 'readonly' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none', tools: 'readonly' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -122,7 +122,7 @@ describe('RunResult.agents carries resolved capabilities + toolMode', () => {
 
   it('returns toolMode from defaults when task.tools is unset', async () => {
     const config = makeConfig({ defaultTools: 'no-shell' });
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -140,7 +140,7 @@ describe('RunResult.agents carries resolved capabilities + toolMode', () => {
 
   it('toolMode is one of the valid ToolMode values', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -163,7 +163,7 @@ describe('RunResult.agents carries resolved capabilities + toolMode', () => {
       standardCapabilities: [],
       complexCapabilities: ['web_search'],
     });
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     // resolved.slot is 'complex' even though the task would normally request 'standard'
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'complex',

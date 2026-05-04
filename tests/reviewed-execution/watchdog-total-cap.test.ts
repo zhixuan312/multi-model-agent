@@ -171,7 +171,7 @@ describe('total wall-clock cap', () => {
           prompt: 'edit src/a.ts. Done when tsc passes.',
           agentType: 'standard' as const,
           cwd,
-          reviewPolicy: 'off', // single delegate call, fast path
+          reviewPolicy: 'none', // single delegate call, fast path
         } as any,
       ],
       config,
@@ -197,7 +197,7 @@ describe('total wall-clock cap', () => {
           prompt: 'edit src/a.ts. Done when tsc passes.',
           agentType: 'standard' as const,
           cwd,
-          reviewPolicy: 'off',
+          reviewPolicy: 'none',
         } as any,
       ],
       config,
@@ -232,7 +232,7 @@ describe('total wall-clock cap', () => {
           prompt: 'edit src/a.ts. Done when tsc passes.',
           agentType: 'standard' as const,
           cwd,
-          reviewPolicy: 'off',
+          reviewPolicy: 'none',
         } as any,
       ],
       config,

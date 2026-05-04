@@ -241,9 +241,9 @@ describe('StageStatsMap type safety', () => {
 // Integration tests — verify that executeReviewedLifecycle actually
 // wires stageStats into the returned RunResult, not just the unit helpers.
 describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
-  it('populates stageStats when reviewPolicy=off and no file artifacts', async () => {
+  it('populates stageStats when reviewPolicy=none and no file artifacts', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -295,7 +295,7 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
 
   it('populates stageStats when provider returns incomplete', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -331,7 +331,7 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
     const cwd = initCleanRepo();
     const task: TaskSpec = {
       prompt: 'test',
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       autoCommit: true,
       verifyCommand: ['true'],
       cwd,
@@ -359,7 +359,7 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
 
   it('records terminal as the final heartbeat stage', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {
@@ -381,7 +381,7 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
 
   it('all 8 stage entries are present', async () => {
     const config = makeConfig();
-    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+    const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
     const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
       slot: 'standard',
       provider: {

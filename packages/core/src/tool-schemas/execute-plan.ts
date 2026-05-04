@@ -6,7 +6,7 @@ import { buildOutputEnvelopeSchema } from './shared-output.js';
 // commonToolFields (filePaths + contextBlockIds) are inlined to avoid cross-package coupling.
 const taskSchema = z.object({
   task: z.string().trim().min(1, 'Task descriptor must be non-empty'),
-  reviewPolicy: z.enum(['full', 'spec_only', 'diff_only', 'off']).optional().default('full')
+  reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']).optional().default('full')
     .describe('Review lifecycle policy for this task. Default: full.'),
 }).strict();
 

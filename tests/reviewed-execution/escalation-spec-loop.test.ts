@@ -125,7 +125,7 @@ describe('reviewed execution spec-loop escalation', () => {
     const escalationEvents: Array<{ loop: string; attempt: number }> = [];
 
     const [result] = await runTasks(
-      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'spec_only' }],
+      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'full' }],
       config,
       { batchId: 'batch-escalation-spec-loop', bus: makeBus(escalationEvents) },
     );

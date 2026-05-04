@@ -18,7 +18,7 @@ describe('Task 21: stage tier and implementerTier', () => {
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
       parentModel: null,
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);
@@ -45,7 +45,7 @@ describe('Task 21: stage tier and implementerTier', () => {
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
       parentModel: null,
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);

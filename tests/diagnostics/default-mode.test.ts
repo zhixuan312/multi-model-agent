@@ -68,7 +68,7 @@ interface CaptureOptions {
 async function runReviewedLifecycleAndCaptureLines(opts: CaptureOptions): Promise<string[]> {
   const lines: string[] = [];
   const config = makeConfig();
-  const task: TaskSpec = { prompt: 'test', reviewPolicy: 'off' };
+  const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
   const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
     slot: 'standard',
     provider: {

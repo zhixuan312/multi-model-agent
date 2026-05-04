@@ -29,7 +29,7 @@ export interface BuildContext {
   runResult: RunResult;
   client: string;
   parentModel: string | null;
-  reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off' | 'none';
+  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommandPresent?: boolean;
 }
 
@@ -113,15 +113,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   // Canonicalize parentModel for emission (matches implementerModel emission path).
   const parentNormalized = parentModel ? normalizeModel(parentModel) : null;
 
-  const rawReviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
-  // Normalize TaskSpec-level values to wire enum:
-  //   'off'       → 'none' (wire form for no-review)
-  //   'spec_only' → 'full' (wire collapses spec_only to full; downstream consumers
-  //                  read per-stage entries to see that quality_review didn't run)
-  const reviewPolicy =
-    rawReviewPolicy === 'off' ? 'none' :
-    rawReviewPolicy === 'spec_only' ? 'full' :
-    rawReviewPolicy;
+  const reviewPolicy = ctx.reviewPolicy ?? (QUALITY_ONLY_ROUTES.has(route) ? 'quality_only' : 'full');
   const verifyCommandPresent = ctx.verifyCommandPresent ?? false;
 
   const implModelRaw = runResult.models?.implementer ?? null;

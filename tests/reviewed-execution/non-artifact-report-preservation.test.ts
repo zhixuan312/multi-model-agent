@@ -41,11 +41,11 @@ const config: MultiModelConfig = {
   server: {} as any,
 };
 
-describe('non-artifact report preservation (reviewPolicy: off)', () => {
+describe('non-artifact report preservation (reviewPolicy: none)', () => {
   it('does not replace the worker structured report with a no-artifacts wrapper', async () => {
     const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'preserve-')));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard' as const, cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard' as const, cwd, reviewPolicy: 'none' } as any],
       config,
     );
 

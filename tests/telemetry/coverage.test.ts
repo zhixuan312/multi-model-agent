@@ -24,7 +24,7 @@ const UNCOVERED_ALLOWLIST = new Set<string>([
   'fallback_unavailable', // requires both tiers unavailable; covered by reviewed-execution fallback integration tests.
   'escalation', // requires review rework/escalation policy path; covered by reviewed-execution escalation tests.
   'escalation_unavailable', // requires escalated tier missing/unavailable; covered by reviewed-execution escalation tests.
-  'review_decision', // emitted on review-enabled paths; canonical fixture uses reviewPolicy=off to stay focused and fast.
+  'review_decision', // emitted on review-enabled paths; canonical fixture uses reviewPolicy=none to stay focused and fast.
   'verify_step', // requires artifact-producing task with verify command; covered by verify-stage tests.
   'verify_skipped', // requires artifact-producing task with no verify command; covered by verify-stage tests.
   'read_only_review.quality', // requires quality_only route; covered by read-only-review telemetry tests.
@@ -163,7 +163,7 @@ describe('emit-vs-persist round-trip parity', () => {
     const bus = new EventBus([captureSink, new LocalLogSink(writer)]);
     const config: MultiModelConfig = { agents: { standard: { type: 'openai-compatible', model: 'std', baseUrl: 'https://ex.invalid/v1' }, complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' } }, defaults: { tools: 'readonly', timeoutMs: 60_000, sandboxPolicy: 'cwd-only' }, server: {} as any };
 
-    await runTasks([{ prompt: 'do it. done when complete.', agentType: 'standard', cwd: process.cwd(), reviewPolicy: 'off' } as any], config, { batchId: '00000000-0000-4000-8000-000000000001', bus });
+    await runTasks([{ prompt: 'do it. done when complete.', agentType: 'standard', cwd: process.cwd(), reviewPolicy: 'none' } as any], config, { batchId: '00000000-0000-4000-8000-000000000001', bus });
 
     const persisted = lines.map(line => JSON.parse(line.trim()));
     expect(persisted.length).toBe(emitted.length);

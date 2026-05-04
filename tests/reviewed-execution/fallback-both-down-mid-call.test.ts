@@ -70,7 +70,7 @@ describe('reviewed lifecycle fallback when both providers go down mid-call', () 
     const busEmit = vi.fn();
 
     const [result] = await runTasks(
-      [{ prompt: 'implement something', agentType: 'standard', reviewPolicy: 'off', skipCompletionHeuristic: true }],
+      [{ prompt: 'implement something', agentType: 'standard', reviewPolicy: 'none', skipCompletionHeuristic: true }],
       config,
       { batchId: 'batch-t31', bus: { emit: busEmit } },
     );

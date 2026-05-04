@@ -148,7 +148,7 @@ describe('reviewed lifecycle reviewer-only fallback', () => {
         agentType: 'standard',
         cwd: makeCwd(),
         filePaths: ['src/a.ts'],
-        reviewPolicy: 'spec_only',
+        reviewPolicy: 'full',
       }],
       makeConfig(),
       {

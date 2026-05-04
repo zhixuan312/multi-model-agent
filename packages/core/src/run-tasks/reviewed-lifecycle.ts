@@ -320,7 +320,7 @@ export async function executeReviewedLifecycle(
       client: string;
       triggeringSkill: string;
       parentModel: string | null;
-      reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off';
+      reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;
   },
@@ -336,7 +336,7 @@ export async function executeReviewedLifecycle(
   if (reviewPolicy === 'quality_only' && !READ_ONLY_TOOL_NAMES.has(routeKey as string)) {
     throw new Error(
       `reviewPolicy 'quality_only' is only valid for read-only routes; received '${routeKey}'. ` +
-      `Use 'full', 'spec_only', 'diff_only', or 'off' for artifact-producing routes.`,
+      `Use 'full', 'quality_only', 'diff_only', or 'none' for artifact-producing routes.`,
     );
   }
 
@@ -372,8 +372,7 @@ export async function executeReviewedLifecycle(
   const { outputTargets } = partitionFilePaths(task.filePaths, task.cwd ?? process.cwd());
 
   const stageCount =
-    reviewPolicy === 'off' ? 1 :
-    reviewPolicy === 'spec_only' ? 3 :
+    reviewPolicy === 'none' ? 1 :
     reviewPolicy === 'quality_only' ? 3 :
     5;
   const verbose = diagnostics?.verbose ?? false;
@@ -702,7 +701,7 @@ export async function executeReviewedLifecycle(
   // these from all early-exit paths. Reassigned after the corresponding
   // review stage runs.
   let specStatus: string = 'error';
-  let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is spec_only' };
+  let qualityResult: LegacyQualityReviewResult = { status: 'skipped', report: undefined, findings: [], errorReason: (reviewPolicy === 'full' || reviewPolicy === 'quality_only') ? 'all_tiers_unavailable' : 'skipped: reviewPolicy is diff_only or none' };
   const reviewRounds = () => ({ spec: specAttemptIndex, quality: qualityAttemptIndex, metadata: metadataRepair, cap: Math.max(maxSpecRows, maxQualityRows) });
   const taskCostUSD = () => (heartbeat ? heartbeat.getHeartbeatTickInfo().costUSD : null);
 
@@ -1266,7 +1265,7 @@ export async function executeReviewedLifecycle(
   // Tracks the final RunResult across every exit path so the `finally` block
   // below fires `recorder.recordTaskCompleted` exactly once regardless of which
   // `return` the lifecycle takes — the success path, every early return inside
-  // the try (reviewPolicy='off', diff-only, all-tiers-unavailable, …), and the
+  // the try (reviewPolicy='none', diff-only, all-tiers-unavailable, …), and the
   // catch path. Without this, the recorder only fires on 2 of ~5 exit paths.
   let __finalRunResult: RunResult | undefined;
   const __recordOnce = (r: RunResult): RunResult => {
@@ -1426,15 +1425,15 @@ export async function executeReviewedLifecycle(
     const filePathsSkipped = !filePathsInteracted;
 
     if (implResult.filesWritten.length === 0 && reviewPolicy !== 'quality_only') {
-      if (reviewPolicy === 'off') {
+      if (reviewPolicy === 'none') {
         transitionStage('verifying', 'terminal', null, {});
         const terminal = resolveOffTerminal({
           ...implResult,
           workerStatus,
           specReviewStatus: 'skipped',
           qualityReviewStatus: 'skipped',
-          specReviewReason: 'skipped: reviewPolicy is off',
-          qualityReviewReason: 'skipped: reviewPolicy is off',
+          specReviewReason: 'skipped: reviewPolicy is none',
+          qualityReviewReason: 'skipped: reviewPolicy is none',
           agents: agentEnvelope('skipped', 'skipped'),
           models: {
             implementer: implModel,
@@ -1509,15 +1508,15 @@ export async function executeReviewedLifecycle(
       };
     }
 
-    if (reviewPolicy === 'off') {
+    if (reviewPolicy === 'none') {
       transitionStage('verifying', 'terminal', null, {});
       const terminal = resolveOffTerminal({
         ...implResult,
         workerStatus,
         specReviewStatus: 'skipped',
         qualityReviewStatus: 'skipped',
-        specReviewReason: 'skipped: reviewPolicy is off',
-        qualityReviewReason: 'skipped: reviewPolicy is off',
+        specReviewReason: 'skipped: reviewPolicy is none',
+        qualityReviewReason: 'skipped: reviewPolicy is none',
         agents: agentEnvelope('skipped', 'skipped'),
         models: {
           implementer: implModel,

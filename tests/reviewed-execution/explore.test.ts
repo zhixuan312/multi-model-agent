@@ -170,7 +170,7 @@ describe('explore reviewed-lifecycle integration', () => {
     expect(synth.structuredReport.explore.threads).toHaveLength(3);
     expect(synth.structuredReport.explore.recommendedNextStep).toBeTruthy();
 
-    // Review verdicts: reviewPolicy is 'off' for all explore tasks → skipped
+    // Review verdicts: reviewPolicy is 'none' for all explore tasks → skipped
     expect(out.specReviewVerdict).toBe('skipped');
     expect(out.qualityReviewVerdict).toBe('skipped');
     expect(out.roundsUsed).toBe(0);
@@ -527,7 +527,7 @@ describe('explore lifecycle envelope field propagation', () => {
     }
   });
 
-  it('review verdicts are not_applicable because reviewPolicy is off', async () => {
+  it('review verdicts are not_applicable because reviewPolicy is none', async () => {
     const provider = sequencedProvider([
       { run: async () => okResult(internalOk) },
       { run: async () => okResult(externalOk) },

@@ -36,7 +36,7 @@ export async function runMetadataRepairTurn(input: MetadataRepairInput): Promise
     ...input.task,
     prompt,
     cwd: input.cwd,
-    reviewPolicy: 'off',
+    reviewPolicy: 'none',
     tools: 'none',
   });
 

@@ -125,14 +125,14 @@ describe('reviewed lifecycle no-progress break before spec escalation', () => {
     const escalationEvents: Array<{ loop: string; attempt: number }> = [];
 
     const [result] = await runTasks(
-      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'spec_only' }],
+      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'full' }],
       config,
       { batchId: 'batch-no-progress-before-escalation', bus: makeBus(escalationEvents) as any },
     );
 
     expect(result.status).toBe('incomplete');
     expect(result.specReviewStatus).toBe('changes_required');
-    expect(result.qualityReviewStatus).toBe('skipped');
+    expect(result.qualityReviewStatus).toBe('approved');
     expect(result.agents?.implementerHistory).toEqual(['standard', 'standard']);
     expect(result.agents?.specReviewerHistory).toEqual(['complex', 'complex']);
     expect(escalationEvents).toEqual([]);

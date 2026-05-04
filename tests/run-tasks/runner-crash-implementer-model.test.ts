@@ -65,7 +65,7 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
     const task: TaskSpec = {
       prompt: 'implement feature X',
       agentType: 'standard' as const,
-      reviewPolicy: 'off' as const,
+      reviewPolicy: 'none' as const,
       timeoutMs: 300_000,
     };
 
@@ -114,7 +114,7 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
     const task: TaskSpec = {
       prompt: 'implement feature X',
       agentType: 'standard' as const,
-      reviewPolicy: 'off' as const,
+      reviewPolicy: 'none' as const,
       timeoutMs: 300_000,
     };
 

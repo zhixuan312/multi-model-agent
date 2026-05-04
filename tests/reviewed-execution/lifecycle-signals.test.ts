@@ -39,7 +39,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(capExhaustingProvider({ kind: 'turn', partialOutput: '## Summary\npartial\n' }));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.capExhausted).toBe('turn');
@@ -51,7 +51,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(capExhaustingProvider({ kind: 'cost', partialOutput: '## Summary\nx\n' }));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.capExhausted).toBe('cost');
@@ -61,7 +61,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(capExhaustingProvider({ kind: 'wall_clock', partialOutput: '## Summary\nx\n' }));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.capExhausted).toBe('wall_clock');
@@ -71,7 +71,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(throwingProvider(new Error('runner crashed')));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.workerError).toBeInstanceOf(Error);
@@ -83,7 +83,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(clarificationProvider({ proposedInterpretation: 'please clarify' }));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.lifecycleClarificationRequested).toBe(true);
@@ -95,7 +95,7 @@ describe('lifecycle propagates cap / clarification / worker-error signals', () =
     const cwd = makeCwd();
     const config = makeConfig(mockProvider({ stage: 'ok', output: '## Summary\ndone\n' }));
     const [result] = await runTasks(
-      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+      [{ prompt: 'go', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
       config,
     );
     expect(result.capExhausted).toBeUndefined();

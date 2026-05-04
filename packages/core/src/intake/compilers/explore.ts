@@ -123,7 +123,7 @@ End with \`## Recommended next step\` — which single thread to pursue first an
         sandboxPolicy: 'cwd-only' as const,
         cwd,
         agentType: 'complex' as const,
-        reviewPolicy: 'off' as const,
+        reviewPolicy: 'none' as const,
         originalInput: baseOriginalInput,
       },
       {
@@ -131,7 +131,7 @@ End with \`## Recommended next step\` — which single thread to pursue first an
         prompt: externalPrompt,
         tools: 'readonly' as const,
         agentType: 'complex' as const,
-        reviewPolicy: 'off' as const,
+        reviewPolicy: 'none' as const,
         originalInput: baseOriginalInput,
       },
       {
@@ -139,7 +139,7 @@ End with \`## Recommended next step\` — which single thread to pursue first an
         prompt: synthesizerPrompt,
         tools: 'none' as const,
         agentType: 'complex' as const,
-        reviewPolicy: 'off' as const,
+        reviewPolicy: 'none' as const,
         originalInput: baseOriginalInput,
       },
     ],

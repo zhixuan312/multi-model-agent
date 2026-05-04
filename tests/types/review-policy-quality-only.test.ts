@@ -15,17 +15,17 @@ describe("reviewPolicy: 'quality_only'", () => {
     expect(d.reviewPolicy).toBe('quality_only');
   });
 
-  it('delegate Zod schema rejects quality_only at the HTTP boundary', () => {
+  it('delegate Zod schema accepts quality_only', () => {
     const result = delegateInputSchema.safeParse({
       tasks: [{ prompt: 'x', reviewPolicy: 'quality_only' }],
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 
-  it('execute-plan Zod schema rejects quality_only at the HTTP boundary', () => {
+  it('execute-plan Zod schema accepts quality_only', () => {
     const result = executePlanInputSchema.safeParse({
       tasks: [{ task: 'x', reviewPolicy: 'quality_only' }],
     });
-    expect(result.success).toBe(false);
+    expect(result.success).toBe(true);
   });
 });

@@ -73,7 +73,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     const task: TaskSpec = {
       prompt: 'implement feature X',
       agentType: 'standard' as const,
-      reviewPolicy: 'off' as const,
+      reviewPolicy: 'none' as const,
       timeoutMs: 300_000,
     };
 
@@ -132,7 +132,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     };
 
     const result = await executeReviewedLifecycle(
-      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'off', timeoutMs: 300_000 },
+      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
       { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
       makeConfig(),
       0,
@@ -171,7 +171,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     };
 
     const result = await executeReviewedLifecycle(
-      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'off', timeoutMs: 300_000 },
+      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
       { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
       makeConfig(),
       0,
@@ -205,7 +205,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     };
 
     const result = await executeReviewedLifecycle(
-      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'off', timeoutMs: 300_000 },
+      { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
       { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
       makeConfig(),
       0,
@@ -256,7 +256,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     const task: TaskSpec = {
       prompt: 'implement feature X',
       agentType: 'standard' as const,
-      reviewPolicy: 'off' as const,
+      reviewPolicy: 'none' as const,
       timeoutMs: 300_000,
     };
 
@@ -379,7 +379,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
     const task: TaskSpec = {
       prompt: 'edit src/a.ts',
       agentType: 'standard' as const,
-      reviewPolicy: 'off' as const,
+      reviewPolicy: 'none' as const,
       timeoutMs: 300_000,
     };
 

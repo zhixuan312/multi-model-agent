@@ -97,7 +97,7 @@ describe('reviewed lifecycle fallback when both spec reviewer tiers are down', (
   it('skips spec review without aborting the lifecycle', async () => {
     providerCalls.length = 0;
     const [result] = await runTasks(
-      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'spec_only' }],
+      [{ prompt: 'update src/a.ts to satisfy the spec', agentType: 'standard', reviewPolicy: 'full' }],
       config,
       { batchId: 'batch-reviewer-both-down' },
     );

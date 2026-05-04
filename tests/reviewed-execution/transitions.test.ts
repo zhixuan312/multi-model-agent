@@ -81,14 +81,14 @@ describe('stage transitions via transitionStage helper', () => {
     expect(s.quality_rework.maxIdleMs).toBe(0);
   });
 
-  it('reviewPolicy=off fires terminal transition early from verifying', async () => {
+  it('reviewPolicy=none fires terminal transition early from verifying', async () => {
     // Stages entered: implementing → terminal.
     // Spec/quality review stages are skipped entirely.
     const results = await runTasks(
       [{
         prompt: 'do the task at src/a.ts. Done when tsc passes.',
         agentType: 'standard' as const,
-        reviewPolicy: 'off',
+        reviewPolicy: 'none',
       }],
       config,
     );

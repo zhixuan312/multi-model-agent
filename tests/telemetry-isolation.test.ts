@@ -94,7 +94,7 @@ describe('Sam test — telemetry failure NEVER throws to the user task', () => {
     const config = makeConfig();
     const task: TaskSpec = {
       prompt: 'test',
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
     };
     const resolved = makeResolved(config);
 

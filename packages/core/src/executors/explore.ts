@@ -427,7 +427,7 @@ export async function executeExplore(
 
   // --- Review verdicts ---
 
-  // explore tasks have reviewPolicy: 'off' — reviews are always skipped.
+  // explore tasks have reviewPolicy: 'none' — reviews are always skipped.
   const reviewVerdicts = mapReviewVerdicts(synthResult, true);
 
   // --- Aggregate ---

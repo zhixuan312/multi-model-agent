@@ -70,31 +70,31 @@ describe('full reviewed lifecycle', () => {
     expect(results[0].agents?.qualityReviewer).toBe('complex');
   });
 
-  it('reviewPolicy=off bypasses reviews', async () => {
+  it('reviewPolicy=none bypasses reviews', async () => {
     const results = await runTasks(
       [{
         prompt: 'do the task at src/a.ts. Done when tsc passes.',
         agentType: 'standard' as const,
-        reviewPolicy: 'off',
+        reviewPolicy: 'none',
       }],
       config,
     );
     expect(results[0].specReviewStatus).toBe('skipped');
     expect(results[0].qualityReviewStatus).toBe('skipped');
-    expect(results[0].specReviewReason).toBe('skipped: reviewPolicy is off');
-    expect(results[0].qualityReviewReason).toBe('skipped: reviewPolicy is off');
+    expect(results[0].specReviewReason).toBe('skipped: reviewPolicy is none');
+    expect(results[0].qualityReviewReason).toBe('skipped: reviewPolicy is none');
   });
 
-  it('reviewPolicy=spec_only skips quality review', async () => {
+  it('reviewPolicy=full runs both spec and quality review', async () => {
     const results = await runTasks(
       [{
         prompt: 'do the task at src/a.ts. Done when tsc passes.',
         agentType: 'standard' as const,
-        reviewPolicy: 'spec_only',
+        reviewPolicy: 'full',
       }],
       config,
     );
     expect(results[0].specReviewStatus).toBe('approved');
-    expect(results[0].qualityReviewStatus).toBe('skipped');
+    expect(results[0].qualityReviewStatus).toBe('approved');
   });
 });

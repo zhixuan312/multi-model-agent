@@ -55,7 +55,7 @@ export interface RunTasksOptions {
       client: string;
       triggeringSkill: string;
       parentModel: string | null;
-      reviewPolicy?: 'full' | 'spec_only' | 'quality_only' | 'diff_only' | 'off';
+      reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
     }) => void;
   };

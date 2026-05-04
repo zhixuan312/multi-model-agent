@@ -58,7 +58,7 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 | `tasks[].contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 | `tasks[].maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted. |
 | `tasks[].verifyCommand` | string[] | no | See verify-and-review snippet below |
-| `tasks[].reviewPolicy` | `"full"` / `"spec_only"` / `"diff_only"` / `"off"` | no | See verify-and-review snippet below. Default `"full"` |
+| `tasks[].reviewPolicy` | `"full"` / `"quality_only"` / `"diff_only"` / `"none"` | no | See verify-and-review snippet below. Default `"full"` |
 
 @include _shared/verify-and-review.md
 

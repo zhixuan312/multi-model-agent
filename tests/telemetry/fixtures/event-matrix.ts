@@ -70,7 +70,7 @@ export async function runCanonicalRuntimeFixtureAndCaptureEvents(provider: Provi
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'mma-telemetry-fixture-')));
 
   await runTasks(
-    [{ prompt: 'implement a tiny change. done when complete.', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+    [{ prompt: 'implement a tiny change. done when complete.', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
     configFor(provider),
     { batchId: randomUUID(), bus, route: 'delegate' },
   );

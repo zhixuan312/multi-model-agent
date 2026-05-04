@@ -90,7 +90,7 @@ describe('committing stage gating', () => {
 
     const task: TaskSpec = {
       prompt: 'create src/output.ts',
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       autoCommit: true,
       cwd,
     };
@@ -134,7 +134,7 @@ describe('committing stage gating', () => {
 
     const task: TaskSpec = {
       prompt: 'create src/auto.ts and commit',
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       autoCommit: true,
       cwd,
     };
@@ -169,7 +169,7 @@ describe('committing stage gating', () => {
 
     const task: TaskSpec = {
       prompt: 'read README.md',
-      reviewPolicy: 'off',
+      reviewPolicy: 'none',
       autoCommit: true,
       cwd,
     };

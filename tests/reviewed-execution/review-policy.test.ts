@@ -114,9 +114,9 @@ function makeRepo(): string {
 }
 
 describe('reviewPolicy branching', () => {
-  it('reviewPolicy=off + verification.passed → done', async () => {
+  it('reviewPolicy=none + verification.passed → done', async () => {
     reset('passed');
-    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'off', verifyCommand: ['npm test'] }], config);
+    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'none', verifyCommand: ['npm test'] }], config);
 
     expect(result.workerStatus).toBe('done');
     expect(result.specReviewStatus).toBe('skipped');
@@ -124,9 +124,9 @@ describe('reviewPolicy branching', () => {
     expect(result.verification?.status).toBe('passed');
   });
 
-  it('reviewPolicy=off + verification.failed → done_with_concerns with verification concern', async () => {
+  it('reviewPolicy=none + verification.failed → done_with_concerns with verification concern', async () => {
     reset('failed');
-    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'off', verifyCommand: ['npm test'] }], config);
+    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'none', verifyCommand: ['npm test'] }], config);
 
     expect(result.workerStatus).toBe('done_with_concerns');
     expect(result.concerns).toContainEqual(expect.objectContaining({ source: 'verification' }));
@@ -165,16 +165,16 @@ describe('reviewPolicy branching', () => {
     expect(result.structuredError?.code).toBe('diff_review_rejected');
   });
 
-  it('reviewPolicy=spec_only skips quality_review', async () => {
+  it('reviewPolicy=full runs both spec and quality review', async () => {
     reset('passed');
-    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', reviewPolicy: 'spec_only' }], config);
+    const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', reviewPolicy: 'full' }], config);
 
     expect(result.specReviewStatus).toBe('approved');
-    expect(result.qualityReviewStatus).toBe('skipped');
+    expect(result.qualityReviewStatus).toBe('approved');
     expect(specReviewCalls).toBe(1);
-    expect(qualityReviewCalls).toBe(0);
+    expect(qualityReviewCalls).toBe(1);
     expect(result.reviewRounds).toBeDefined();
     expect(result.reviewRounds!.spec).toBeGreaterThanOrEqual(1);
-    expect(result.reviewRounds!.quality).toBe(0);
+    expect(result.reviewRounds!.quality).toBeGreaterThanOrEqual(1);
   });
 });

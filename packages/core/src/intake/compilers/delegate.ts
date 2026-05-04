@@ -1,7 +1,7 @@
 import type { DraftTask, DelegateSource } from '../types.js';
 import { createDraftId } from '../draft-id.js';
 
-export type ReviewPolicy = 'full' | 'spec_only' | 'diff_only' | 'off';
+export type ReviewPolicy = 'full' | 'quality_only' | 'diff_only' | 'none';
 
 export interface DelegateTaskInput {
   prompt: string;

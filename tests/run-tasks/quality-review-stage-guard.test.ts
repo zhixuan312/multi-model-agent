@@ -69,9 +69,8 @@ import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 
 describe('quality_review stage guard', () => {
   it.each([
-    ['spec_only', false],
     ['diff_only', false],
-    ['off', false],
+    ['none', false],
     ['full', true],
   ] as const)('reviewPolicy=%s → quality_review.entered=%s', async (policy, expected) => {
     const [result] = await runTasks(

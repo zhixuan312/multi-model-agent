@@ -103,7 +103,7 @@ function makeCwd(): string {
   return realpathSync(mkdtempSync(join(tmpdir(), 'reviewpolicy-off-fallback-')));
 }
 
-describe('reviewPolicy=off initial implementation fallback', () => {
+describe('reviewPolicy=none initial implementation fallback', () => {
   it('runs the implementation call through the fallback wrapper without firing review events', async () => {
     const fallbackEvents: Array<Record<string, unknown>> = [];
     const emittedEvents: Array<Record<string, unknown>> = [];
@@ -125,7 +125,7 @@ describe('reviewPolicy=off initial implementation fallback', () => {
         agentType: 'standard',
         cwd: makeCwd(),
         filePaths: ['src/a.ts'],
-        reviewPolicy: 'off',
+        reviewPolicy: 'none',
       }],
       makeConfig(),
       {

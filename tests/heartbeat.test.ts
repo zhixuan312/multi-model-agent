@@ -347,7 +347,7 @@ describe('HeartbeatTimer', () => {
       provider: 'test',
       intervalMs: 10_000,
     });
-    timer.start(1); // reviewPolicy='off' starts the pipeline at 1
+    timer.start(1); // reviewPolicy='none' starts the pipeline at 1
     timer.setStage('verifying', 4); // autoCommit=true path advances past cap
     timer.stop();
     const final = events.find(e => e.final)!;
