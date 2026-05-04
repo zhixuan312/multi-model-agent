@@ -136,6 +136,13 @@ export interface OpenAIRunnerOptions {
   client: OpenAI;
   providerConfig: ProviderConfig;
   defaults: { timeoutMs: number; tools: ToolMode };
+  /** Optional HTTP-level usage capture; when present, the runner prefers it
+   *  over `state.usage` whenever the SDK reports zero tokens despite turns
+   *  having occurred (DeepSeek streaming path drops usage on multi-turn
+   *  tool-use; see openai-usage-interceptor.ts for the SDK source).
+   *  Provider.ts wraps `client.chat.completions.create` and passes the
+   *  resulting accumulator here. */
+  usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator;
 }
 
 /**
@@ -481,7 +488,7 @@ export async function runOpenAI(
        * Build a cost_exceeded result.
        */
       function buildCostExceededResult(turnsAtFailure: number): RunResult {
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
@@ -542,7 +549,7 @@ export async function runOpenAI(
         });
 
         if (validation.valid) {
-          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel);
+          const ok = buildOkResult(stripped, currentResult, tracker, runner.providerConfig, Date.now() - taskStartMs, parentModel, runner.usageAccumulator);
 
           if (runMode === 'review' && useOutputType) {
             const parsed = reviewerOutputType.safeParse(currentResult.finalOutput);
@@ -729,7 +736,7 @@ export async function runOpenAI(
         const filesRead = tracker.getReads();
         const filesWritten = tracker.getWrites();
         const toolCalls = tracker.getToolCalls();
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
         emit({ kind: 'done', status: 'incomplete' });
         const hasSalvage = !scratchpad.isEmpty();
         const turnsAtFailure = currentResult?.state.usage.requests ?? 0;
@@ -756,7 +763,7 @@ export async function runOpenAI(
       if (err instanceof Error && '__timeCeiling' in err) {
         const ceilingMs = (err as Record<string, unknown>).__timeCeiling as number;
         emit({ kind: 'done', status: 'incomplete' });
-        const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
+        const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
         return sharedBuildTimeCeilingResult({
           usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, totalTokens: partial.totalTokens, costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD ?? null, cachedTokens: partial.cachedTokens ?? null, reasoningTokens: partial.reasoningTokens ?? null },
           turns: currentResult?.state.usage.requests ?? 0,
@@ -778,7 +785,7 @@ export async function runOpenAI(
       const msg = err instanceof Error ? err.message : String(err);
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
+      const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
@@ -809,7 +816,7 @@ export async function runOpenAI(
     () => {
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
-      const partial = partialUsage(currentResult, runner.providerConfig, parentModel);
+      const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
       return {
         output: hasSalvage
           ? scratchpad.latest()
@@ -896,16 +903,45 @@ function extractCanonicalTokens(usage: {
   };
 }
 
-export function openAIUsage(currentResult: AgentRunOutput, providerConfig: ProviderConfig, parentModel?: string): SharedResultUsage {
-  const u = currentResult.state.usage;
-  const { cachedReadTokens, reasoningTokens } = extractCanonicalTokens(u);
-  const cachedRead = cachedReadTokens ?? 0;
-  const reasoning = reasoningTokens ?? 0;
-  const nonCachedInput = Math.max(0, u.inputTokens - cachedRead);
+export function openAIUsage(
+  currentResult: AgentRunOutput,
+  providerConfig: ProviderConfig,
+  parentModel?: string,
+  usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
+): SharedResultUsage {
+  const sdk = currentResult.state.usage;
+  const sdkExtra = extractCanonicalTokens(sdk);
+  // SDK fallback path. Use the HTTP-level accumulator (if present) when
+  // the SDK reports zero input tokens despite at least one completed
+  // request — the @openai/agents stream consumer is known to drop usage
+  // on multi-turn DeepSeek calls. Trust SDK numbers when they're present
+  // (OpenAI proper) so we don't double-count or lose details the
+  // accumulator can't see (e.g. reasoning tokens for o1-style models).
+  const sdkLooksDropped = sdk.inputTokens === 0
+    && sdk.outputTokens === 0
+    && sdk.requests > 0
+    && (usageAccumulator?.hasObservedUsage() ?? false);
+  let inputTokensRaw: number;
+  let outputTokens: number;
+  let cachedRead: number;
+  let reasoning: number;
+  if (sdkLooksDropped) {
+    const snap = usageAccumulator!.snapshot();
+    inputTokensRaw = snap.promptTokens;
+    outputTokens = snap.completionTokens;
+    cachedRead = snap.cachedReadTokens;
+    reasoning = snap.reasoningTokens;
+  } else {
+    inputTokensRaw = sdk.inputTokens;
+    outputTokens = sdk.outputTokens;
+    cachedRead = sdkExtra.cachedReadTokens ?? 0;
+    reasoning = sdkExtra.reasoningTokens ?? 0;
+  }
+  const nonCachedInput = Math.max(0, inputTokensRaw - cachedRead);
   const workerCard = resolveProviderRateCard(providerConfig);
   const tokenCounts: TokenCounts = {
     inputTokens: nonCachedInput,
-    outputTokens: u.outputTokens,
+    outputTokens,
     cachedReadTokens: cachedRead,
     cachedCreationTokens: 0,
     reasoningTokens: reasoning,
@@ -918,17 +954,18 @@ export function openAIUsage(currentResult: AgentRunOutput, providerConfig: Provi
       costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
     }
   }
-  const legacyCached = cachedReadTokens !== null ? cachedRead : null;
+  const totalTokens = inputTokensRaw + outputTokens;
+  const legacyCached = sdkExtra.cachedReadTokens !== null || sdkLooksDropped ? cachedRead : null;
   return {
-    inputTokens: u.inputTokens,
-    outputTokens: u.outputTokens,
-    totalTokens: u.totalTokens,
+    inputTokens: inputTokensRaw,
+    outputTokens,
+    totalTokens,
     costUSD,
     costDeltaVsParentUSD,
     cachedTokens: legacyCached,
-    cachedReadTokens,
+    cachedReadTokens: sdkLooksDropped ? cachedRead : sdkExtra.cachedReadTokens,
     cachedCreationTokens: null,
-    reasoningTokens,
+    reasoningTokens: sdkLooksDropped ? reasoning : sdkExtra.reasoningTokens,
   };
 }
 
@@ -939,10 +976,11 @@ function buildOkResult(
   providerConfig: ProviderConfig,
   durationMs: number,
   parentModel?: string,
+  usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): RunResult {
   return sharedBuildOkResult({
     output,
-    usage: openAIUsage(currentResult, providerConfig, parentModel),
+    usage: openAIUsage(currentResult, providerConfig, parentModel, usageAccumulator),
     turns: currentResult.state.usage.requests,
     tracker,
     durationMs,
@@ -957,9 +995,10 @@ function buildSupervisionExhaustedResult(
   durationMs: number,
   parentModel?: string,
   opts?: { reason?: string },
+  usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): RunResult {
   return sharedBuildIncompleteResult({
-    usage: openAIUsage(currentResult, providerConfig, parentModel),
+    usage: openAIUsage(currentResult, providerConfig, parentModel, usageAccumulator),
     turns: currentResult.state.usage.requests,
     tracker,
     scratchpad,
@@ -1020,43 +1059,43 @@ function partialUsage(
   result: AgentRunOutput | undefined,
   providerConfig: ProviderConfig,
   parentModel?: string,
+  usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
 ): RunResult['usage'] {
   if (!result) {
+    // No SDK result yet — but if the HTTP interceptor saw at least one
+    // response, surface that as the partial. Otherwise zeros.
+    if (usageAccumulator?.hasObservedUsage()) {
+      const snap = usageAccumulator.snapshot();
+      const tc: TokenCounts = {
+        inputTokens: Math.max(0, snap.promptTokens - snap.cachedReadTokens),
+        outputTokens: snap.completionTokens,
+        cachedReadTokens: snap.cachedReadTokens,
+        cachedCreationTokens: 0,
+        reasoningTokens: snap.reasoningTokens,
+      };
+      const card = resolveProviderRateCard(providerConfig);
+      const costUSD = card ? priceTokens(tc, card) : null;
+      const parentCard = parentModel ? resolveRateCard(parentModel) : null;
+      const costDeltaVsParentUSD = (costUSD !== null && parentCard)
+        ? costUSD - priceTokens(tc, parentCard)
+        : null;
+      return {
+        inputTokens: snap.promptTokens,
+        outputTokens: snap.completionTokens,
+        totalTokens: snap.promptTokens + snap.completionTokens,
+        costUSD,
+        costDeltaVsParentUSD,
+        cachedTokens: snap.cachedReadTokens || null,
+        cachedReadTokens: snap.cachedReadTokens || null,
+        cachedCreationTokens: null,
+        reasoningTokens: snap.reasoningTokens || null,
+      };
+    }
     return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, cachedReadTokens: null, cachedCreationTokens: null, reasoningTokens: null };
   }
-  const usage = result.state.usage;
-  const { cachedReadTokens, reasoningTokens } = extractCanonicalTokens(usage);
-  const cachedRead = cachedReadTokens ?? 0;
-  const reasoning = reasoningTokens ?? 0;
-  const nonCachedInput = Math.max(0, usage.inputTokens - cachedRead);
-  const workerCard = resolveProviderRateCard(providerConfig);
-  const tokenCounts: TokenCounts = {
-    inputTokens: nonCachedInput,
-    outputTokens: usage.outputTokens,
-    cachedReadTokens: cachedRead,
-    cachedCreationTokens: 0,
-    reasoningTokens: reasoning,
-  };
-  const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
-  let costDeltaVsParentUSD: number | null = null;
-  if (costUSD !== null && parentModel) {
-    const parentCard = resolveRateCard(parentModel);
-    if (parentCard) {
-      costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
-    }
-  }
-  const legacyCached = cachedReadTokens !== null ? cachedRead : null;
-  return {
-    inputTokens: usage.inputTokens,
-    outputTokens: usage.outputTokens,
-    totalTokens: usage.totalTokens,
-    costUSD,
-    costDeltaVsParentUSD,
-    cachedTokens: legacyCached,
-    cachedReadTokens,
-    cachedCreationTokens: null,
-    reasoningTokens,
-  };
+  // Reuse openAIUsage's SDK-vs-accumulator selection logic so the timeout
+  // / cost-exceeded paths get the same fallback semantics as the ok path.
+  return openAIUsage(result, providerConfig, parentModel, usageAccumulator);
 }
 
 /**

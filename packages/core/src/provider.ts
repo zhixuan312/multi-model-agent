@@ -48,6 +48,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
 
         case 'openai-compatible': {
           const { runOpenAI } = await import('./runners/openai-runner.js');
+          const { wrapClientForUsageCapture } = await import('./runners/openai-usage-interceptor.js');
           const { default: OpenAI } = await import('openai');
           const apiKey = agentConfig.apiKey
             ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
@@ -55,7 +56,12 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
             apiKey: apiKey || 'not-needed',
             baseURL: agentConfig.baseUrl,
           });
-          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults };
+          // 3.12.4: HTTP-level usage capture as a fallback for the
+          // @openai/agents SDK's stream-aggregation bug (DeepSeek and other
+          // openai-compatible providers can drop per-chunk usage on
+          // multi-turn streams). See openai-usage-interceptor.ts.
+          const usageAccumulator = wrapClientForUsageCapture(client);
+          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults, usageAccumulator };
           return await runOpenAI(prompt, options, runnerOpts);
         }
 
@@ -96,6 +102,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
 
         case 'openai-compatible': {
           const { runOpenAIReview } = await import('./runners/openai-runner.js');
+          const { wrapClientForUsageCapture } = await import('./runners/openai-usage-interceptor.js');
           const { default: OpenAI } = await import('openai');
           const apiKey = agentConfig.apiKey
             ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
@@ -103,7 +110,8 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
             apiKey: apiKey || 'not-needed',
             baseURL: agentConfig.baseUrl,
           });
-          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults };
+          const usageAccumulator = wrapClientForUsageCapture(client);
+          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults, usageAccumulator };
           return await runOpenAIReview(parts, options, runnerOpts);
         }
 

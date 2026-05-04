@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.4] - 2026-05-04
+
+### Fixed
+- **`claude-runner` per-turn usage capture from assistant messages.** Pre-3.12.4 the runner only merged usage from the terminal `result` SDK message — which only fires on conversation completion. Any timeout, mid-stream error, or aborted run left the running `usage` accumulator at zero even after dozens of billable assistant turns, producing telemetry rows with `turnCount: 21, toolCallCount: 12, costUSD: 0, inputTokens: 0` (3.12.3 row 682 was the smoking gun). The runner now extracts `msg.message.usage` (Anthropic API's per-message `usage` field, surfaced by `claude-agent-sdk`) on every `'assistant'`-typed SDK message and merges it into the running accumulator. The `'result'`-message branch now REPLACES the accumulator with its cumulative number when present (preserving the pre-3.12.4 contract for successful runs and avoiding double-counting). Affects every `type: 'claude'` and `type: 'claude-compatible'` provider, including users running DeepSeek through Claude-compatible mode. Test: `claude-runner.test.ts` — *captures per-turn usage from assistant messages so timeouts surface real partial usage*.
+- **`openai-runner` HTTP-level usage interceptor for openai-compatible providers.** The `@openai/agents` SDK's stream consumer (`openaiChatCompletionsStreaming.js:38`) overwrites its captured `usage` on every chunk: `usage = chunk.usage || undefined`. For OpenAI proper this is benign, but DeepSeek and similar providers can have intermediate chunks with `usage:undefined` AFTER an earlier chunk reported real numbers, wiping the captured value. New `openai-usage-interceptor.ts` wraps `client.chat.completions.create` at provider construction time, capturing usage from BOTH non-streaming responses and streaming chunks (taking the last seen non-null usage per request). The runner reads from this accumulator as a fallback whenever `state.usage.inputTokens === 0` despite turns having occurred (`openAIUsage` and `partialUsage`). Tests: `openai-usage-interceptor.test.ts` (4 tests covering non-streaming, streaming-with-undefined-chunks, multi-call accumulation, and the zero-token refusal edge case).
+
 ## [3.12.3] - 2026-05-04
 
 ### Fixed
