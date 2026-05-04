@@ -811,7 +811,7 @@ describe('schema v4: split cached fields and nullable cost', () => {
 // ── Schema v4: tierUsage and parentModel ─────────────────────────────────
 
 describe('schema v4: tierUsage and parentModel', () => {
-  it('event accepts tierUsage with subset of {standard, complex, main} keys', () => {
+  it('event accepts tierUsage with subset of {standard, complex} keys', () => {
     const ev = makeValidEvent({ tierUsage: { standard: validTierUsage } });
     expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
   });
