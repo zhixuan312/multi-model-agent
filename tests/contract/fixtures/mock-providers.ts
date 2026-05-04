@@ -428,12 +428,14 @@ export function mockAdapter(opts: {
 }): RunnerAdapter {
   let i = 0;
   return {
+    providerType: 'claude',
     async turn() {
       const t = opts.turns[i++] ?? { assistantText: '', toolCalls: [] };
       return {
         assistantText: t.assistantText,
         toolCalls: t.toolCalls,
         usage: opts.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+        finishReason: t.toolCalls.length > 0 ? 'tool_use' as const : 'stop' as const,
       };
     },
   };

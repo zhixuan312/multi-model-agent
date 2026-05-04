@@ -1,13 +1,8 @@
-import type { RunInput, RunResult, ExecutionContext } from './types.js';
-import type { RunnerAdapter, AdapterTurnResult, AdapterCapabilities } from './adapter.js';
+import type { RunInput, RunResult, ExecutionContext, ToolCall } from './types.js';
+import type { RunnerAdapter, AdapterTurnResult, AdapterTurnRecord, AdapterCapabilities } from './adapter.js';
 
 const DEFAULT_CAPABILITIES: AdapterCapabilities = {
   cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [],
-};
-
-type AdapterTurnRecord = {
-  assistantText: string;
-  toolCalls: Array<{ name: string; input: unknown; result?: unknown; id?: string }>;
 };
 
 export class RunnerShell {
@@ -16,7 +11,7 @@ export class RunnerShell {
   async run(input: RunInput): Promise<RunResult> {
     const ctx: ExecutionContext = { cwd: input.cwd, callCache: new Map() };
     const usage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
-    const allToolCalls: Array<{ name: string; input: unknown; result?: unknown; id?: string }> = [];
+    const allToolCalls: ToolCall[] = [];
     const history: AdapterTurnRecord[] = [];
     let finalText = '';
     let stoppedByAdapter = false;
@@ -50,16 +45,17 @@ export class RunnerShell {
 
       for (const call of turnResult.toolCalls) {
         const def = input.toolDefinitions.find(d => d.name === call.name);
-        let enriched: AdapterTurnRecord['toolCalls'][number];
+        let result: unknown;
         if (!def) {
-          enriched = { ...call, result: { error: `unknown tool: ${call.name}` } };
+          result = { error: `unknown tool: ${call.name}` };
         } else {
           try {
-            enriched = { ...call, result: await def.execute(call.input, ctx) };
+            result = await def.execute(call.input, ctx);
           } catch (err) {
-            enriched = { ...call, result: { error: `tool execution failed: ${err instanceof Error ? err.message : String(err)}` } };
+            result = { error: `tool execution failed: ${err instanceof Error ? err.message : String(err)}` };
           }
         }
+        const enriched = { name: call.name, input: call.input, result };
         allToolCalls.push(enriched);
         turnRecord.toolCalls.push(enriched);
       }

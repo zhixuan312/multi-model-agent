@@ -1,10 +1,15 @@
 import type { TokenUsage } from '../runners/types.js';
 import type { ToolDefinition } from './types.js';
 
+export interface AdapterTurnRecord {
+  assistantText: string;
+  toolCalls: Array<{ name: string; input: unknown; result: unknown }>;
+}
+
 export interface AdapterTurnInput {
   systemPrompt: string;
   userMessage: string;
-  priorTurns: unknown[];
+  priorTurns: AdapterTurnRecord[];
   toolDefinitions: ToolDefinition[];
   capabilities: AdapterCapabilities;
 }
@@ -13,6 +18,8 @@ export interface AdapterTurnResult {
   assistantText: string;
   toolCalls: { name: string; input: unknown }[];
   usage: TokenUsage;
+  finishReason: 'stop' | 'tool_use' | 'max_tokens' | 'error';
+  errorCode?: string;
 }
 
 export interface AdapterCapabilities {
@@ -25,5 +32,6 @@ export interface AdapterCapabilities {
 }
 
 export interface RunnerAdapter {
+  readonly providerType: 'claude' | 'claude-compatible' | 'openai' | 'openai-compatible' | 'codex';
   turn(input: AdapterTurnInput): Promise<AdapterTurnResult>;
 }
