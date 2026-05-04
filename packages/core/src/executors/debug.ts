@@ -47,12 +47,22 @@ export async function executeDebug(
   const fileSection = buildFilePathsPrompt(input.filePaths);
   if (fileSection) parts.push(fileSection);
   parts.push(
-    'Use hypothesis-driven debugging. Number each finding (1, 2, 3, ...). For each, on its own line, state:',
-    '  Severity: critical | high | medium | low',
-    '  Hypothesis: the candidate cause',
-    '  Evidence: trace, log, or code path with file:line',
-    '  Fix: proposed change',
-    'The reviewer will extract structured findings — do NOT emit JSON.',
+    'Use hypothesis-driven debugging. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+    '',
+    '## Finding 1: <one-line title>',
+    '- Severity: critical | high | medium | low',
+    '- Hypothesis: the candidate cause',
+    '- Evidence: trace, log, or code path with file:line',
+    '- Fix: proposed change',
+    '',
+    '## Finding 2: <one-line title>',
+    '- Severity: ...',
+    '- ...',
+    '',
+    'Rules:',
+    '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
+    '- Severity / Hypothesis / Evidence / Fix bullets are on their own lines with the labels exactly as shown.',
+    '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
   );
   const prompt = parts.join('\n\n');
 

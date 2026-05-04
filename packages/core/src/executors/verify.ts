@@ -37,12 +37,22 @@ function buildVerifyPrompt(
   const checklistText = checklist.map((item, i) => `${i + 1}. ${item}`).join('\n');
   parts.push(`Checklist:\n${checklistText}`);
   parts.push(
-    'For each checklist item, write one numbered section with:',
-    '  Severity: critical | high | medium | low (low = pass; high/medium = fail)',
-    '  Item: the criterion text',
-    '  Result: PASS or FAIL',
-    '  Evidence: file:line + what it shows, OR command + output',
-    'The reviewer will extract structured findings — do NOT emit JSON.',
+    'For each checklist item, use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+    '',
+    '## Finding 1: <one-line title (the criterion summary)>',
+    '- Severity: critical | high | medium | low (low = pass; high/medium = fail)',
+    '- Item: the criterion text',
+    '- Result: PASS or FAIL',
+    '- Evidence: file:line + what it shows, OR command + output',
+    '',
+    '## Finding 2: <one-line title>',
+    '- Severity: ...',
+    '- ...',
+    '',
+    'Rules:',
+    '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1, one per checklist item.',
+    '- Severity / Item / Result / Evidence bullets are on their own lines with the labels exactly as shown.',
+    '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
   );
   return parts.join('\n\n');
 }

@@ -75,12 +75,22 @@ function buildAuditPrompt(
     );
   } else {
     parts.push(
-      'Produce a narrative audit report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state:',
-      '  Severity: critical | high | medium | low',
-      '  Location: file:line (when applicable)',
-      '  Issue: one-paragraph explanation',
-      '  Suggestion: one-line fix recommendation',
-      'The reviewer will extract structured findings from your report — do NOT emit JSON.',
+      'Produce a narrative audit report. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+      '',
+      '## Finding 1: <one-line title>',
+      '- Severity: critical | high | medium | low',
+      '- Location: file:line (when applicable)',
+      '- Issue: one-paragraph explanation',
+      '- Suggestion: one-line fix recommendation',
+      '',
+      '## Finding 2: <one-line title>',
+      '- Severity: ...',
+      '- ...',
+      '',
+      'Rules:',
+      '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
+      '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
+      '- Do NOT emit JSON. The structured reviewer extracts from this format; if that pass fails the deterministic fallback extracts from this same format — both produce identical structured output, so the format is the single source of truth.',
     );
   }
   return parts.join('\n\n');
