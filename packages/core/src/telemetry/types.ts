@@ -56,6 +56,7 @@ export const ErrorCode = z.enum([
   'rate_limit_exceeded',
   'incomplete_no_summary',
   'reviewer_separation_unsatisfiable',
+  'guard_wall_clock',
   'other',
 ]);
 

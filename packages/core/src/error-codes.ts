@@ -22,6 +22,7 @@ export type ErrorCode =
   // guard_* — bounded-execution guards
   | 'guard_cost_ceiling'
   | 'guard_time_ceiling'
+  | 'guard_wall_clock'
   | 'guard_idle_timeout'
   // review_* — review-path terminal outcomes
   | 'review_diff_rejected'
