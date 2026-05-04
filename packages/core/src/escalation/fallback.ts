@@ -1,6 +1,7 @@
 import type { Provider, AgentType, RunResult } from '../types.js';
 import type { RunStatus } from '../runners/types.js';
 import { canonicalIdentity, identityEquals, type CanonicalIdentity } from '../routing/canonical-model-identity.js';
+import { otherTier } from '../routing/tier-policy.js';
 
 export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'api_error',
@@ -18,10 +19,6 @@ export function markUnavailable(
   reason: FallbackReason,
 ): void {
   if (!map.has(tier)) map.set(tier, reason);
-}
-
-export function otherTier(t: AgentType): AgentType {
-  return t === 'standard' ? 'complex' : 'standard';
 }
 
 /** Two providers are "identical" iff they resolve to the same effective backend

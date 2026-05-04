@@ -104,6 +104,7 @@ export {
 export { resolveAgent } from './routing/resolve-agent.js';
 export type { ResolvedAgent } from './routing/resolve-agent.js';
 export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
+export { otherTier } from './routing/tier-policy.js';
 
 // Intake pipeline
 export { compileDelegateTasks, compileDelegatePrompt } from './intake/compilers/delegate.js';
