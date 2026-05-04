@@ -29,6 +29,8 @@ export interface ContextBlockStore {
   get(id: string): string | undefined;
   /** Delete an entry. Returns `true` if the entry existed. */
   delete(id: string): boolean;
+  /** Walk entries and evict those past the idle TTL. Returns count evicted. */
+  runIdleSweep(now: number, idleTtlMs: number): number;
 }
 
 /**
@@ -145,6 +147,20 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
   unpin(id: string): void {
     const entry = this.entries.get(id);
     if (entry && entry.pinCount > 0) entry.pinCount -= 1;
+  }
+
+  /** Walk entries and evict those past the idle TTL. Returns count evicted.
+   *  An entry is considered idle when `now - addedAtMs > idleTtlMs`. */
+  runIdleSweep(now: number, idleTtlMs: number): number {
+    let evicted = 0;
+    for (const [id, entry] of this.entries) {
+      if (entry.pinCount > 0) continue;
+      if (now - entry.addedAtMs > idleTtlMs) {
+        this.entries.delete(id);
+        evicted++;
+      }
+    }
+    return evicted;
   }
 
   /** Return the current pin count for an entry, or 0 if unknown. */
