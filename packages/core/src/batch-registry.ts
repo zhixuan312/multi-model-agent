@@ -44,6 +44,8 @@ export interface BatchEntryInput<Result = unknown> {
 // Stored entry — runningHeadlineSnapshot REQUIRED.
 export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
   runningHeadlineSnapshot: HeadlineSnapshot;
+  /** taskIndex -> terminal context blockId; lazily created on first record */
+  terminalBlockIds?: Map<number, string>;
 }
 
 export interface BatchRegistryOptions {
@@ -110,6 +112,17 @@ export class BatchRegistry {
 
   delete(batchId: string): boolean {
     return this.map.delete(batchId);
+  }
+
+  recordTerminalBlock(batchId: string, taskIndex: number, blockId: string): void {
+    const entry = this.map.get(batchId);
+    if (!entry) throw new Error(`unknown batchId: ${batchId}`);
+    if (!entry.terminalBlockIds) entry.terminalBlockIds = new Map();
+    entry.terminalBlockIds.set(taskIndex, blockId);
+  }
+
+  getTerminalBlock(batchId: string, taskIndex: number): string | undefined {
+    return this.map.get(batchId)?.terminalBlockIds?.get(taskIndex);
   }
 
   size(): number {
