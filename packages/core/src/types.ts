@@ -15,6 +15,8 @@ export type AgentType = 'standard' | 'complex';
 export type AgentCapability = 'web_search' | 'web_fetch';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
+export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';
+export type ErrorCode = 'validator_verify_command_failed' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'diff_review_rejected' | 'runner_crash' | 'rate_limit_exceeded' | 'executor_error' | 'api_error' | 'provider_transport_failure' | 'timeout' | 'api_aborted' | 'incomplete_no_summary' | 'reviewer_separation_unsatisfiable';
 
 /**
  * Stages whose execution we record per-stage stats for.
