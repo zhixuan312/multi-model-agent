@@ -170,7 +170,12 @@ The rate limiting middleware is commented out in the API gateway configuration.
     }
   });
 
-  it('propagates transport failure on first attempt as error', async () => {
+  it('propagates transport failure on first attempt as error; no fabricated catch-all when worker has no structured findings', async () => {
+    // 3.12.5: status propagates the outage (operators see verdict='error'),
+    // and salvage is attempted against the worker output. When the worker
+    // narrative has no parseable numbered sections, the salvage suppresses
+    // the synthetic catch-all so we don't fabricate a finding from
+    // infrastructure failure — pre-3.12.5 behavior preserved for this case.
     const provider = makeProvider(async () => {
       return makeErrorResult('api_error');
     });
@@ -187,13 +192,11 @@ The rate limiting middleware is commented out in the API gateway configuration.
     );
     expect(result.status).toBe('api_error');
     expect(result.findings).toEqual([]);
+    expect(result.annotatedFindings).toBeUndefined();
     expect(result.errorReason).toBeDefined();
   });
 
-  it('propagates transport failure on retry as error, NOT fallback', async () => {
-    // Round-2 finding #1: transport failure on retry MUST propagate as error,
-    // not silently fall back. Fallback is for parse failure of a real response,
-    // never for infrastructure failure.
+  it('propagates transport failure on retry as error; no fabricated catch-all', async () => {
     let calls = 0;
     const provider = makeProvider(async () => {
       calls += 1;
@@ -218,6 +221,58 @@ The rate limiting middleware is commented out in the API gateway configuration.
     expect(result.findings).toEqual([]);
     expect(result.annotatedFindings).toBeUndefined();
     expect(result.errorReason).toBeDefined();
+  });
+
+  it('salvages real audit findings from numbered narrative when reviewer times out (3.12.5 regression)', async () => {
+    // The motivating case: audit's implementer produces a numbered Markdown
+    // narrative with Severity lines (per audit.ts's prompt contract), then
+    // the AnnotatorEngine reviewer hits its 120s timeout. Pre-3.12.5 this
+    // returned findings: [], findingsBySeverity all 0 — even though the
+    // implementer found ~50+ real issues. Now the deterministic extractor
+    // recovers the structured findings from the narrative and the dashboard
+    // sees real numbers in `findingsBySeverity` despite the verdict='error'.
+    const auditNarrative = [
+      '# Audit Report',
+      '',
+      '## 1. SQL Injection in user lookup',
+      'Severity: critical',
+      'Location: src/db/users.ts:42',
+      'Issue: User input is concatenated directly into the query string.',
+      'Suggestion: Use parameterized queries.',
+      '',
+      '## 2. Hard-coded API key',
+      'Severity: high',
+      'Location: src/auth/oauth.ts:18',
+      'Issue: API key is committed to the repository.',
+      'Suggestion: Move to environment variable.',
+      '',
+      '## 3. Missing input validation',
+      'Severity: medium',
+      'Location: src/api/upload.ts:55',
+      'Issue: File uploads accept any extension.',
+      'Suggestion: Whitelist allowed mime types.',
+      '',
+    ].join('\n');
+
+    const provider = makeProvider(async () => makeErrorResult('timeout'));
+    const result = await runQualityReview(
+      provider,
+      { prompt: 'audit security', scope: [], doneCondition: 'complete' },
+      fakeReport,
+      {},
+      [],
+      [],
+      undefined,
+      buildAuditQualityPrompt,
+      auditNarrative,
+    );
+
+    expect(result.status).toBe('timeout');                // operator sees outage
+    expect(result.errorReason).toBeDefined();             // and the reason
+    expect(result.annotatedFindings).toBeDefined();
+    expect(result.annotatedFindings!.length).toBe(3);     // 3 numbered sections recovered
+    const sevs = result.annotatedFindings!.map(f => f.severity).sort();
+    expect(sevs).toEqual(['critical', 'high', 'medium']);
   });
 
   it('returns empty annotatedFindings when fallback extraction finds no issues', async () => {

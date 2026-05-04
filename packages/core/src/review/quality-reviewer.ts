@@ -82,6 +82,27 @@ function addMetrics(a: QualityReviewMetrics, b: QualityReviewMetrics): QualityRe
 /** Backward-compat alias kept until reviewed-lifecycle is migrated to the new shape (Task 6). */
 export type LegacyQualityReviewResult = QualityReviewResult;
 
+/**
+ * Like fallbackExtractFindings but suppresses the synthetic single
+ * "reviewer parse failed; deterministic fallback emitted single catch-all"
+ * finding. The transport-failure salvage path needs this stricter contract:
+ * we want REAL structured findings from the implementer's numbered narrative,
+ * not a fabricated catch-all just because the LLM never responded. Returning
+ * [] here means the caller leaves `annotatedFindings` undefined on the
+ * envelope, preserving the pre-3.12.5 contract for read-only routes whose
+ * implementer didn't produce numbered narrative content.
+ *
+ * The synthetic catch-all is identifiable by its claim string (matches
+ * fallbackExtractFindings's no-sections branch verbatim).
+ */
+function realFindingsFromWorker(workerOutput: string): AnnotatedFinding[] {
+  const findings = fallbackExtractFindings(workerOutput);
+  if (findings.length === 1 && findings[0]!.claim.startsWith('reviewer parse failed')) {
+    return [];
+  }
+  return findings;
+}
+
 export async function runQualityReview(
   reviewerProvider: Provider,
   packet: { prompt: string; scope: string[]; doneCondition: string },
@@ -184,7 +205,22 @@ async function runAnnotationReview(
   // Attempt 1
   const attempt1 = await callReviewer(basePrompt);
   if (attempt1.kind === 'transport') {
-    return { status: attempt1.status, findings: [], errorReason: attempt1.errorReason, metrics: attempt1.metrics };
+    // 3.12.5: even when the LLM reviewer transport-fails, run the deterministic
+    // narrative extractor on the worker output so AnnotatedFindings carry
+    // real findings into the dashboard's findingsBySeverity rollup. The
+    // transport status (error/timeout/api_error/network_error/api_aborted)
+    // is preserved so operators still see the outage in `verdict`/`errorReason`,
+    // but the implementer's structured narrative isn't lost just because the
+    // reviewer's annotator pass couldn't run. Pre-3.12.5 returned empty
+    // findings here, masking ~50+ real audit findings in 3.12.4 telemetry.
+    const salvage = realFindingsFromWorker(workerOutput);
+    return {
+      status: attempt1.status,
+      findings: [],
+      ...(salvage.length > 0 ? { annotatedFindings: salvage } : {}),
+      errorReason: attempt1.errorReason,
+      metrics: attempt1.metrics,
+    };
   }
   metrics = addMetrics(metrics, attempt1.metrics);
 
@@ -201,12 +237,19 @@ async function runAnnotationReview(
   // Attempt 2 — strict reminder
   const reminderPrompt = `${basePrompt}\n\nIMPORTANT: Your previous response was not parseable (${parsed1.reason}). Emit ONLY the findings JSON array now, in a single \`\`\`json fenced code block as the LAST block in your response. No surrounding prose required.`;
   const attempt2 = await callReviewer(reminderPrompt);
-  // Round-2 finding #1: transport failure on retry MUST propagate as error, not
-  // silently fall back. Fallback is for parse failure of a real response,
-  // never for infrastructure failure. Otherwise telemetry hides outages.
   if (attempt2.kind === 'transport') {
+    // 3.12.5: same salvage-on-transport-failure as attempt1 above. Status
+    // still propagates the transport error so operators see the outage,
+    // but findings from the implementer's narrative are not discarded.
     metrics = addMetrics(metrics, attempt2.metrics);
-    return { status: attempt2.status, findings: [], errorReason: attempt2.errorReason, metrics };
+    const salvage = realFindingsFromWorker(workerOutput);
+    return {
+      status: attempt2.status,
+      findings: [],
+      ...(salvage.length > 0 ? { annotatedFindings: salvage } : {}),
+      errorReason: attempt2.errorReason,
+      metrics,
+    };
   }
   metrics = addMetrics(metrics, attempt2.metrics);
 
