@@ -77,6 +77,38 @@ describe('BatchRegistry', () => {
       expect(reg.get('b50')).toBeDefined();
     });
 
+    it('LRU eviction releases pinned context blocks for non-terminal entries', () => {
+      const pinned: string[] = [];
+      const unpinned: string[] = [];
+      const store = {
+        pin(id: string) { pinned.push(id); },
+        unpin(id: string) { unpinned.push(id); },
+      };
+      const reg = new BatchRegistry({ max: 3 }, { contextBlockStore: store });
+      for (let i = 0; i < 5; i++) {
+        reg.register({
+          batchId: `b${i}`,
+          projectCwd: '/tmp',
+          tool: 'delegate',
+          state: 'pending',
+          startedAt: Date.now(),
+          stateChangedAt: Date.now(),
+          blockIds: [`block-${i}`],
+          blocksReleased: false,
+        });
+      }
+      expect(pinned).toHaveLength(5);
+      reg.prune();
+      expect(reg.size()).toBe(3);
+      // b0 and b1 were LRU-evicted — their blocks must be unpinned
+      expect(unpinned).toContain('block-0');
+      expect(unpinned).toContain('block-1');
+      // b2, b3, b4 survive
+      expect(unpinned).not.toContain('block-2');
+      expect(unpinned).not.toContain('block-3');
+      expect(unpinned).not.toContain('block-4');
+    });
+
     it('non-terminal entries are not time-window pruned', () => {
       const reg = new BatchRegistry({ batchTtlMs: 1000, max: 10 });
       reg.register({

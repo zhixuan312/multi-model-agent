@@ -218,12 +218,16 @@ export class BatchRegistry {
     }
   }
 
-  /** Two-step retention: time-window prune (expired + stale terminal entries), then LRU prune to max. */
+  /** Two-step retention: time-window prune (expired + stale terminal entries), then LRU prune to max.
+   *
+   * Step 1 expired branch relies on runExpirySweep() having already called release()
+   * during the transition into expired — so no release call here. */
   prune(): void {
     const now = Date.now();
     // Step 1: time-window prune — drop expired entries and stale terminal entries
     for (const [key, entry] of this.map) {
       if (entry.state === 'expired') {
+        // release() was already called by runExpirySweep() during the complete/failed → expired transition
         this.map.delete(key);
       } else if (
         (entry.state === 'complete' || entry.state === 'failed') &&
@@ -238,6 +242,8 @@ export class BatchRegistry {
     while (this.map.size > this.options.max) {
       const oldest = this.map.keys().next().value;
       if (oldest === undefined) break;
+      const entry = this.map.get(oldest);
+      if (entry) this.release(entry);
       this.map.delete(oldest);
     }
   }
