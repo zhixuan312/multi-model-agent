@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.5] - 2026-05-04
+
+### Fixed
+- **Audit / read-only routes recover findingsBySeverity counts when reviewer transport-fails.** Pre-3.12.5 a reviewer timeout / network error / api error returned `findings: []` and the dashboard's `findingsBySeverity` rolled up to `{critical: 0, high: 0, medium: 0, low: 0}` even when the implementer's narrative contained ~50 real critical/high findings (3.12.4 row 682 was the smoking gun — implementer found dozens of issues, AnnotatorEngine timed out at 120s, structured rollup lost everything). `runAnnotationReview` now runs the deterministic narrative extractor (`fallbackExtractFindings`) on the worker output when the LLM reviewer transport-fails on either attempt. Status still propagates the transport error so operators see the outage in `verdict` / `errorReason`, but `annotatedFindings` carries the structured findings into `concerns` → `event-builder.ts:buildReviewStage` → `findingsBySeverity` rollup → DB column. The synthetic single catch-all from `fallbackExtractFindings` (its no-sections branch) is suppressed by a new `realFindingsFromWorker` wrapper so transport failure on a worker output without numbered sections doesn't fabricate a finding from infrastructure noise. Affects audit, review, verify, debug, explore — every read-only route that uses the AnnotatorEngine path. Tests: 3 in `quality-reviewer-extraction.test.ts` (transport-failure-with-real-narrative, transport-failure-without-structured-content × 2).
+
 ## [3.12.4] - 2026-05-04
 
 ### Fixed
