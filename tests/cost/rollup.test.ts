@@ -3,7 +3,7 @@ import { rollupByTier, sumTokens } from '../../packages/core/src/cost/rollup.js'
 import type { TokenCounts } from '../../packages/core/src/cost/compute.js';
 
 type StageLike = TokenCounts & {
-  tier: 'standard' | 'complex' | 'main';
+  tier: 'standard' | 'complex';
   model: string;
   costUSD: number | null;
 };

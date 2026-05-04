@@ -25,7 +25,7 @@ describe('Task 21: stage tier and implementerTier', () => {
     expect(ev.implementerTier).toBe('standard');
     for (const s of ev.stages) {
       expect(s.tier).toBeDefined();
-      expect(['standard', 'complex', 'main']).toContain(s.tier);
+      expect(['standard', 'complex']).toContain(s.tier);
     }
   });
 

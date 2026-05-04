@@ -1,7 +1,7 @@
 import type { TokenCounts } from './compute.js';
 
 export interface StageLike extends TokenCounts {
-  tier: 'standard' | 'complex' | 'main';
+  tier: 'standard' | 'complex';
   model: string;
   costUSD: number | null;
 }
@@ -14,7 +14,6 @@ export interface TierUsage extends TokenCounts {
 export type TierRollup = {
   standard?: TierUsage;
   complex?:  TierUsage;
-  main?:     TierUsage;
 };
 
 export function sumTokens(stages: ReadonlyArray<TokenCounts>): TokenCounts {

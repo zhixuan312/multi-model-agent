@@ -104,7 +104,7 @@ export const StageEntryBase = z.object({
   name: StageNameEnum,
   round: z.number().int().min(0),
   model: z.string().regex(STRICT_ID_REGEX),
-  tier: z.enum(['standard', 'complex', 'main']),
+  tier: z.enum(['standard', 'complex']),
   durationMs: z.number().int().min(0).max(3_600_000),
   costUSD: z.number().min(0).max(100).nullable(),
   inputTokens: z.number().int().min(0).max(5_000_000),
@@ -174,7 +174,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
-  implementerTier: z.enum(['standard', 'complex', 'main']),
+  implementerTier: z.enum(['standard', 'complex']),
   parentModel: z.string().nullable(),
   parentModelFamily: ModelFamilyEnum,
 
@@ -182,7 +182,6 @@ export const TaskCompletedEventSchema = z.object({
   tierUsage: z.object({
     standard: TierUsageSchema.optional(),
     complex: TierUsageSchema.optional(),
-    main: TierUsageSchema.optional(),
   }),
 
   // Outcome

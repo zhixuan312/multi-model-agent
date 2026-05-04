@@ -71,7 +71,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
 
   // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
   const tierUsage = rollupByTier(stages.map(s => ({
-    tier: s.tier as 'standard' | 'complex' | 'main',
+    tier: s.tier as 'standard' | 'complex',
     model: s.model,
     costUSD: s.costUSD,
     inputTokens: s.inputTokens,
@@ -139,7 +139,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
       ?? runResult.models?.implementer
       ?? runResult.stageStats?.implementing?.model
       ?? 'custom',
-    implementerTier: (runResult.stageStats?.implementing?.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
+    implementerTier: (runResult.stageStats?.implementing?.agentTier as 'standard' | 'complex') ?? 'standard',
     terminalStatus: deriveTerminalStatus(runResult),
     workerStatus: deriveWorkerStatus(runResult),
     errorCode: deriveErrorCode(runResult),
@@ -228,7 +228,7 @@ function extractStageData(
   if (!raw || !raw.entered) return null;
   return {
     model: raw.model ? normalizeModel(raw.model).canonical ?? raw.model : 'custom',
-    tier: (raw.agentTier as 'standard' | 'complex' | 'main') ?? 'standard',
+    tier: (raw.agentTier as 'standard' | 'complex') ?? 'standard',
     round: (raw as any).round ?? 0,
     durationMs: clampDurationMsStage(raw.durationMs ?? 0),
     costUSD: clampStageCost(raw.costUSD ?? 0),
