@@ -719,7 +719,7 @@ describe('runCodex', () => {
   // ---------------------------------------------------------------------------
   // Task B2: CanonicalUsage — cached/reasoning token extraction
   // ---------------------------------------------------------------------------
-  it('extracts cached_input_tokens to cachedTokens/cachedReadTokens and reasoning_tokens to reasoningTokens, cachedCreationTokens=0', async () => {
+  it('extracts cached_input_tokens to cachedTokens/cachedReadTokens and reasoning_tokens to reasoningTokens, cachedNonReadTokens=0', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
@@ -747,11 +747,11 @@ describe('runCodex', () => {
     expect(result.status).toBe('ok');
     expect(result.usage.cachedTokens).toBe(100);
     expect(result.usage.cachedReadTokens).toBe(100);
-    expect(result.usage.cachedCreationTokens).toBeNull();
+    expect(result.usage.cachedNonReadTokens).toBeNull();
     expect(result.usage.reasoningTokens).toBe(50);
   });
 
-  it('emits cachedTokens=null, cachedReadTokens=null, cachedCreationTokens=null when provider does not include cached_input_tokens', async () => {
+  it('emits cachedTokens=null, cachedReadTokens=null, cachedNonReadTokens=null when provider does not include cached_input_tokens', async () => {
     const { getCodexAuth } = await import('../../packages/core/src/auth/codex-oauth.js');
     vi.mocked(getCodexAuth).mockReturnValue({ accessToken: 'tok', accountId: 'a' });
 
@@ -779,7 +779,7 @@ describe('runCodex', () => {
     expect(result.status).toBe('ok');
     expect(result.usage.cachedTokens).toBeNull();
     expect(result.usage.cachedReadTokens).toBeNull();
-    expect(result.usage.cachedCreationTokens).toBeNull();
+    expect(result.usage.cachedNonReadTokens).toBeNull();
     expect(result.usage.reasoningTokens).toBeNull();
   });
 

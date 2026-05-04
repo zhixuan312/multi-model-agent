@@ -73,7 +73,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
       return {
         output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
         status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
         turns: 0,
         filesRead: [],
         filesWritten: [],
@@ -123,7 +123,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
       return {
         output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
         status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
         turns: 0,
         filesRead: [],
         filesWritten: [],

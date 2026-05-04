@@ -11,7 +11,7 @@ describe('PRIVACY.md ↔ schema sync', () => {
       'route', 'client', 'terminalStatus', 'implementerModel', 'eventId',
       'totalDurationMs', 'totalCostUSD', 'costDeltaVsParentUSD', 'parentEquivalentCostUSD',
       'inputTokens', 'outputTokens',
-      'cachedReadTokens', 'cachedCreationTokens', 'reasoningTokens',
+      'cachedReadTokens', 'cachedNonReadTokens', 'reasoningTokens',
       'tierUsage', 'parentModel', 'round',
       'concernCount', 'escalationCount', 'fallbackCount',
       'stallCount', 'taskMaxIdleMs',

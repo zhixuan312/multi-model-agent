@@ -805,7 +805,7 @@ describe('runClaude', () => {
       expect(result.usage.inputTokens).toBe(1000); // sibling: NO cache fields added
       expect(result.usage.outputTokens).toBe(500);
       expect(result.usage.cachedReadTokens).toBe(80);
-      expect(result.usage.cachedCreationTokens).toBe(20);
+      expect(result.usage.cachedNonReadTokens).toBe(20);
       expect(result.usage.cachedTokens).toBe(100); // 80 + 20
     });
 

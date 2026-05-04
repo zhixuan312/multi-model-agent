@@ -12,7 +12,6 @@ import {
   clampInputTokens,
   clampOutputTokens,
   clampCachedTokens,
-  clampReasoningTokens,
   clampToolCallCount,
   clampFilesReadCount,
   clampFilesWrittenCount,
@@ -77,16 +76,14 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     inputTokens: s.inputTokens,
     outputTokens: s.outputTokens,
     cachedReadTokens: s.cachedReadTokens ?? 0,
-    cachedCreationTokens: s.cachedCreationTokens ?? 0,
-    reasoningTokens: s.reasoningTokens ?? 0,
+    cachedNonReadTokens: s.cachedNonReadTokens ?? 0,
   })));
 
   const allTokens = sumTokens(stages.map(s => ({
     inputTokens: s.inputTokens,
     outputTokens: s.outputTokens,
     cachedReadTokens: s.cachedReadTokens ?? 0,
-    cachedCreationTokens: s.cachedCreationTokens ?? 0,
-    reasoningTokens: s.reasoningTokens ?? 0,
+    cachedNonReadTokens: s.cachedNonReadTokens ?? 0,
   })));
 
   // Honest-null: ANY contributing stage with costUSD: null poisons the total.
@@ -100,8 +97,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
   const totalInputTokens = clampInputTokens(allTokens.inputTokens);
   const totalOutputTokens = clampOutputTokens(allTokens.outputTokens);
   const totalCachedReadTokens = clampCachedTokens(allTokens.cachedReadTokens);
-  const totalCachedCreationTokens = clampCachedTokens(allTokens.cachedCreationTokens);
-  const totalReasoningTokens = clampReasoningTokens(allTokens.reasoningTokens);
+  const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
   const parentCard = resolveRateCard(parentModel);
   const parentEquivalentCostUSD = parentCard ? priceTokens(allTokens, parentCard) : null;
@@ -149,8 +145,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventTy
     inputTokens: totalInputTokens,
     outputTokens: totalOutputTokens,
     cachedReadTokens: totalCachedReadTokens,
-    cachedCreationTokens: totalCachedCreationTokens,
-    reasoningTokens: totalReasoningTokens,
+    cachedNonReadTokens: totalCachedNonReadTokens,
     totalDurationMs,
     totalCostUSD,
     parentEquivalentCostUSD,
@@ -235,8 +230,7 @@ function extractStageData(
     inputTokens: clampInputTokens((raw as any).inputTokens ?? 0),
     outputTokens: clampOutputTokens((raw as any).outputTokens ?? 0),
     cachedReadTokens: clampCachedTokens((raw as any).cachedReadTokens ?? 0),
-    cachedCreationTokens: clampCachedTokens((raw as any).cachedCreationTokens ?? 0),
-    reasoningTokens: clampReasoningTokens((raw as any).reasoningTokens ?? 0),
+    cachedNonReadTokens: clampCachedTokens((raw as any).cachedNonReadTokens ?? 0),
     toolCallCount: clampToolCallCount((raw as any).toolCallCount ?? 0),
     filesReadCount: clampFilesReadCount((raw as any).filesReadCount ?? 0),
     filesWrittenCount: clampFilesWrittenCount((raw as any).filesWrittenCount ?? 0),

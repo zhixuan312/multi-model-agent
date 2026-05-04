@@ -49,7 +49,7 @@ function buildFallbackResult(msg: string): RunResult {
   return {
     output: '',
     status: 'error',
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: 0, reasoningTokens: 0 },
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     turns: 0,
     filesRead: [],
     filesWritten: [],

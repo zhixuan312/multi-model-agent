@@ -68,18 +68,16 @@ export const FindingsBySeveritySchema = z.object({
   low: z.number().int().min(0).max(200),
 }).strict();
 
-// Shared base: matches the TokenCounts interface in cost/compute.ts.
-// Single source of truth for "the five token classes". Future additions
-// (e.g., a new token class) update one place.
-export const TokenCountsSchema = z.object({
+// Shared base: matches the TokenUsage interface in runners/types.ts.
+// Single source of truth for canonical 4-field token shape.
+export const TokenUsageSchema = z.object({
   inputTokens: z.number().int().min(0),
   outputTokens: z.number().int().min(0),
   cachedReadTokens: z.number().int().min(0),
-  cachedCreationTokens: z.number().int().min(0),
-  reasoningTokens: z.number().int().min(0),
+  cachedNonReadTokens: z.number().int().min(0),
 });
 
-export const TierUsageSchema = TokenCountsSchema.extend({
+export const TierUsageSchema = TokenUsageSchema.extend({
   model: z.string(),
   costUSD: z.number().nullable(),
 });
@@ -98,7 +96,7 @@ const StageNameEnum = z.enum([
 ]);
 
 // Base fields shared by all stage variants.
-// Field set kept in lockstep with TokenCountsSchema — when a new token class
+// Field set kept in lockstep with TokenUsageSchema — when a new token class
 // is added there, the token fields here must be updated too.
 export const StageEntryBase = z.object({
   name: StageNameEnum,
@@ -110,8 +108,7 @@ export const StageEntryBase = z.object({
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
   cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  cachedCreationTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
+  cachedNonReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
   toolCallCount: z.number().int().min(0).max(5000),
   filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
@@ -193,8 +190,7 @@ export const TaskCompletedEventSchema = z.object({
   inputTokens: z.number().int().min(0).max(5_000_000),
   outputTokens: z.number().int().min(0).max(500_000),
   cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  cachedCreationTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  reasoningTokens: z.number().int().min(0).max(500_000).nullable(),
+  cachedNonReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
 
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
@@ -276,32 +272,22 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
       input: acc.input + st.inputTokens,
       output: acc.output + st.outputTokens,
       cachedRead: acc.cachedRead + (st.cachedReadTokens ?? 0),
-      cachedCreation: acc.cachedCreation + (st.cachedCreationTokens ?? 0),
-      reasoning: acc.reasoning + (st.reasoningTokens ?? 0),
+      cachedNonRead: acc.cachedNonRead + (st.cachedNonReadTokens ?? 0),
     }),
-    { input: 0, output: 0, cachedRead: 0, cachedCreation: 0, reasoning: 0 },
+    { input: 0, output: 0, cachedRead: 0, cachedNonRead: 0 },
   );
   if (
     tokenSum.input < event.inputTokens ||
     tokenSum.output < event.outputTokens ||
     tokenSum.cachedRead < (event.cachedReadTokens ?? 0) ||
-    tokenSum.cachedCreation < (event.cachedCreationTokens ?? 0) ||
-    tokenSum.reasoning < (event.reasoningTokens ?? 0)
+    tokenSum.cachedNonRead < (event.cachedNonReadTokens ?? 0)
   ) {
     ctx.addIssue({ code: 'custom', message: 'R5: top-level token counts must not exceed sum of stage token counts' });
   }
 
-  // R5b: per stage, reasoningTokens ≤ outputTokens (subset semantics).
-  // When reasoningTokens is null the provider didn't expose it; skip validation.
-  for (const st of event.stages) {
-    if (st.reasoningTokens !== null && st.reasoningTokens > st.outputTokens) {
-      ctx.addIssue({ code: 'custom', message: 'R5b: reasoningTokens must not exceed outputTokens per stage' });
-    }
-  }
-
-  // R6b: non-negativity of cachedReadTokens and cachedCreationTokens is
+  // R6b: non-negativity of cachedReadTokens and cachedNonReadTokens is
   // enforced by z.number().int().min(0). The soft-warning case
-  // (cachedReadTokens + cachedCreationTokens > 100 × inputTokens) lives in
+  // (cachedReadTokens + cachedNonReadTokens > 100 × inputTokens) lives in
   // recorder.ts validation_warnings; see Task 11.5.
 
   // R7: (name, round) uniqueness across the stages array.

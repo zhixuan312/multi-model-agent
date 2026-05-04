@@ -18,8 +18,8 @@ import {
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
-import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
-import type { InternalRunnerEvent, RunOptions } from './types.js';
+import { priceTokens, subtractTokens, resolveRateCard, type RateCard } from '../cost/compute.js';
+import type { InternalRunnerEvent, RunOptions, TokenUsage } from './types.js';
 import { injectionTypeFor } from './injection-type.js';
 import {
   reviewerEmittedFindingSchema,
@@ -219,9 +219,9 @@ export async function runOpenAI(
   let lastTurnCostUSD = 0;
 
   // Per-turn cumulative → delta tracking state (§3.5 point 2)
-  let lastCumulative: TokenCounts = {
+  let lastCumulative: TokenUsage = {
     inputTokens: 0, outputTokens: 0,
-    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+    cachedReadTokens: 0, cachedNonReadTokens: 0,
   };
 
   // The tracker fires `onToolCall` synchronously inside every
@@ -431,12 +431,11 @@ export async function runOpenAI(
       cumulativeReasoningTokens: reasoning > 0 ? reasoning : undefined,
     });
     // Track cost for this turn using per-turn delta from cumulative
-    const cur: TokenCounts = {
+    const cur: TokenUsage = {
       inputTokens: Math.max(0, result.state.usage.inputTokens - cachedRead),
       outputTokens: result.state.usage.outputTokens,
       cachedReadTokens: cachedRead,
-      cachedCreationTokens: 0,
-      reasoningTokens: reasoning,
+      cachedNonReadTokens: 0,
     };
     const turnTokens = subtractTokens(cur, lastCumulative);
     lastCumulative = cur;
@@ -492,7 +491,8 @@ export async function runOpenAI(
         return {
           output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
           status: 'cost_exceeded',
-          usage: partial,
+          usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, cachedReadTokens: partial.cachedReadTokens, cachedNonReadTokens: partial.cachedNonReadTokens },
+          cost: { costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD },
           turns: turnsAtFailure,
           filesRead: tracker.getReads(),
           directoriesListed: tracker.getDirectoriesListed(),
@@ -747,7 +747,8 @@ export async function runOpenAI(
           status: 'incomplete',
           errorCode: 'degenerate_exhausted',
           error: `agent exhausted time/cost budget after ${turnsAtFailure} turns`,
-          usage: partial,
+          usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, cachedReadTokens: partial.cachedReadTokens, cachedNonReadTokens: partial.cachedNonReadTokens },
+          cost: { costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD },
           turns: turnsAtFailure,
           filesRead,
           directoriesListed: tracker.getDirectoriesListed(),
@@ -765,7 +766,7 @@ export async function runOpenAI(
         emit({ kind: 'done', status: 'incomplete' });
         const partial = partialUsage(currentResult, runner.providerConfig, parentModel, runner.usageAccumulator);
         return sharedBuildTimeCeilingResult({
-          usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, totalTokens: partial.totalTokens, costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD ?? null, cachedTokens: partial.cachedTokens ?? null, reasoningTokens: partial.reasoningTokens ?? null },
+          usage: partial,
           turns: currentResult?.state.usage.requests ?? 0,
           tracker,
           scratchpad,
@@ -789,7 +790,8 @@ export async function runOpenAI(
       return {
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${msg}`,
         status,
-        usage: partial,
+        usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, cachedReadTokens: partial.cachedReadTokens, cachedNonReadTokens: partial.cachedNonReadTokens },
+        cost: { costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -828,7 +830,8 @@ export async function runOpenAI(
         toolCalls: tracker.getToolCalls(),
         // Preserve partial usage from the last successful agentRun so the
         // caller sees real numbers, not zeros, on a timeout.
-        usage: partial,
+        usage: { inputTokens: partial.inputTokens, outputTokens: partial.outputTokens, cachedReadTokens: partial.cachedReadTokens, cachedNonReadTokens: partial.cachedNonReadTokens },
+        cost: { costUSD: partial.costUSD, costDeltaVsParentUSD: partial.costDeltaVsParentUSD },
         turns: currentResult?.state.usage.requests ?? 0,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -895,11 +898,10 @@ function sumReasoningTokens(details?: Array<Record<string, number>>): number | n
 function extractCanonicalTokens(usage: {
   inputTokensDetails?: Array<Record<string, number>>;
   outputTokensDetails?: Array<Record<string, number>>;
-}): Pick<CanonicalUsage, 'cachedReadTokens' | 'cachedCreationTokens' | 'reasoningTokens'> {
+}): Pick<CanonicalUsage, 'cachedReadTokens' | 'cachedNonReadTokens'> {
   return {
     cachedReadTokens: sumCachedReadTokens(usage.inputTokensDetails),
-    cachedCreationTokens: null,
-    reasoningTokens: sumReasoningTokens(usage.outputTokensDetails),
+    cachedNonReadTokens: null,
   };
 }
 
@@ -924,27 +926,23 @@ export function openAIUsage(
   let inputTokensRaw: number;
   let outputTokens: number;
   let cachedRead: number;
-  let reasoning: number;
   if (sdkLooksDropped) {
     const snap = usageAccumulator!.snapshot();
     inputTokensRaw = snap.promptTokens;
     outputTokens = snap.completionTokens;
     cachedRead = snap.cachedReadTokens;
-    reasoning = snap.reasoningTokens;
   } else {
     inputTokensRaw = sdk.inputTokens;
     outputTokens = sdk.outputTokens;
     cachedRead = sdkExtra.cachedReadTokens ?? 0;
-    reasoning = sdkExtra.reasoningTokens ?? 0;
   }
   const nonCachedInput = Math.max(0, inputTokensRaw - cachedRead);
   const workerCard = resolveProviderRateCard(providerConfig);
-  const tokenCounts: TokenCounts = {
+  const tokenCounts: TokenUsage = {
     inputTokens: nonCachedInput,
     outputTokens,
     cachedReadTokens: cachedRead,
-    cachedCreationTokens: 0,
-    reasoningTokens: reasoning,
+    cachedNonReadTokens: 0,
   };
   const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
   let costDeltaVsParentUSD: number | null = null;
@@ -954,18 +952,13 @@ export function openAIUsage(
       costDeltaVsParentUSD = costUSD - priceTokens(tokenCounts, parentCard);
     }
   }
-  const totalTokens = inputTokensRaw + outputTokens;
-  const legacyCached = sdkExtra.cachedReadTokens !== null || sdkLooksDropped ? cachedRead : null;
   return {
-    inputTokens: inputTokensRaw,
+    inputTokens: nonCachedInput,
     outputTokens,
-    totalTokens,
+    cachedReadTokens: cachedRead,
+    cachedNonReadTokens: 0,
     costUSD,
     costDeltaVsParentUSD,
-    cachedTokens: legacyCached,
-    cachedReadTokens: sdkLooksDropped ? cachedRead : sdkExtra.cachedReadTokens,
-    cachedCreationTokens: null,
-    reasoningTokens: sdkLooksDropped ? reasoning : sdkExtra.reasoningTokens,
   };
 }
 
@@ -1060,18 +1053,17 @@ function partialUsage(
   providerConfig: ProviderConfig,
   parentModel?: string,
   usageAccumulator?: import('./openai-usage-interceptor.js').UsageAccumulator,
-): RunResult['usage'] {
+): SharedResultUsage {
   if (!result) {
     // No SDK result yet — but if the HTTP interceptor saw at least one
     // response, surface that as the partial. Otherwise zeros.
     if (usageAccumulator?.hasObservedUsage()) {
       const snap = usageAccumulator.snapshot();
-      const tc: TokenCounts = {
+      const tc: TokenUsage = {
         inputTokens: Math.max(0, snap.promptTokens - snap.cachedReadTokens),
         outputTokens: snap.completionTokens,
         cachedReadTokens: snap.cachedReadTokens,
-        cachedCreationTokens: 0,
-        reasoningTokens: snap.reasoningTokens,
+        cachedNonReadTokens: 0,
       };
       const card = resolveProviderRateCard(providerConfig);
       const costUSD = card ? priceTokens(tc, card) : null;
@@ -1080,18 +1072,15 @@ function partialUsage(
         ? costUSD - priceTokens(tc, parentCard)
         : null;
       return {
-        inputTokens: snap.promptTokens,
+        inputTokens: Math.max(0, snap.promptTokens - snap.cachedReadTokens),
         outputTokens: snap.completionTokens,
-        totalTokens: snap.promptTokens + snap.completionTokens,
+        cachedReadTokens: snap.cachedReadTokens,
+        cachedNonReadTokens: 0,
         costUSD,
         costDeltaVsParentUSD,
-        cachedTokens: snap.cachedReadTokens || null,
-        cachedReadTokens: snap.cachedReadTokens || null,
-        cachedCreationTokens: null,
-        reasoningTokens: snap.reasoningTokens || null,
       };
     }
-    return { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, cachedReadTokens: null, cachedCreationTokens: null, reasoningTokens: null };
+    return { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0, costUSD: null, costDeltaVsParentUSD: null };
   }
   // Reuse openAIUsage's SDK-vs-accumulator selection logic so the timeout
   // / cost-exceeded paths get the same fallback semantics as the ok path.

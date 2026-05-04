@@ -15,11 +15,11 @@ export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {
   let totalActualCostUSD = 0;
   let totalCostDeltaVsParentUSD = 0;
   for (const r of results) {
-    if (r.usage.costUSD !== null && r.usage.costUSD !== undefined) {
-      totalActualCostUSD += r.usage.costUSD;
+    if (r.cost?.costUSD !== null && r.cost?.costUSD !== undefined) {
+      totalActualCostUSD += r.cost.costUSD;
     }
-    if (r.usage.costDeltaVsParentUSD !== null && r.usage.costDeltaVsParentUSD !== undefined) {
-      totalCostDeltaVsParentUSD += r.usage.costDeltaVsParentUSD;
+    if (r.cost?.costDeltaVsParentUSD !== null && r.cost?.costDeltaVsParentUSD !== undefined) {
+      totalCostDeltaVsParentUSD += r.cost.costDeltaVsParentUSD;
     }
   }
   return { totalActualCostUSD, totalCostDeltaVsParentUSD };

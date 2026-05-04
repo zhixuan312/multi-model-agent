@@ -80,7 +80,7 @@ export async function executeRetry(
     const fallback: RunResult = {
       output: '',
       status: 'error' as RunResult['status'],
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
       turns: 0,
       filesRead: [],
       filesWritten: [],

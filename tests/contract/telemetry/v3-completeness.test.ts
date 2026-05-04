@@ -30,13 +30,13 @@ describe('V3 completeness ratchet', () => {
   it('top-level totals exactly equal sum of stage costs/tokens', () => {
     const rr = richRunResult();
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
-    const sum = (key: 'costUSD' | 'inputTokens' | 'outputTokens' | 'cachedReadTokens' | 'cachedCreationTokens' | 'reasoningTokens') =>
+    const sum = (key: 'costUSD' | 'inputTokens' | 'outputTokens' | 'cachedReadTokens' | 'cachedNonReadTokens' | 'reasoningTokens') =>
       ev.stages.reduce((s, st) => s + ((st as any)[key] ?? 0), 0);
     expect(ev.totalCostUSD).toBeCloseTo(sum('costUSD'), 6);
     expect(ev.inputTokens).toBe(sum('inputTokens'));
     expect(ev.outputTokens).toBe(sum('outputTokens'));
     expect(ev.cachedReadTokens).toBe(sum('cachedReadTokens'));
-    expect(ev.cachedCreationTokens).toBe(sum('cachedCreationTokens'));
+    expect(ev.cachedNonReadTokens).toBe(sum('cachedNonReadTokens'));
     expect(ev.reasoningTokens).toBe(sum('reasoningTokens'));
   });
 
@@ -118,7 +118,7 @@ describe('V3 clamping ratchet', () => {
     rr.stageStats!.implementing.inputTokens = 10_000_000;
     rr.stageStats!.implementing.outputTokens = 1_000_000;
     (rr.stageStats!.implementing as any).cachedReadTokens = 10_000_000;
-    (rr.stageStats!.implementing as any).cachedCreationTokens = 10_000_000;
+    (rr.stageStats!.implementing as any).cachedNonReadTokens = 10_000_000;
     (rr.stageStats!.implementing as any).reasoningTokens = 1_000_000;
     rr.stageStats!.implementing.toolCallCount = 9999;
     rr.stageStats!.implementing.filesReadCount = 9999;
@@ -135,7 +135,7 @@ describe('V3 clamping ratchet', () => {
     expect(impl.inputTokens).toBe(5_000_000);
     expect(impl.outputTokens).toBe(500_000);
     expect((impl as any).cachedReadTokens).toBe(5_000_000);
-    expect((impl as any).cachedCreationTokens).toBe(5_000_000);
+    expect((impl as any).cachedNonReadTokens).toBe(5_000_000);
     expect((impl as any).reasoningTokens).toBe(500_000);
     expect((impl as any).toolCallCount).toBe(5000);
     expect((impl as any).filesReadCount).toBe(5000);
@@ -171,7 +171,7 @@ describe('V3 clamping ratchet', () => {
     rr.stageStats!.implementing.inputTokens = 10_000_000;
     rr.stageStats!.implementing.outputTokens = 1_000_000;
     (rr.stageStats!.implementing as any).cachedReadTokens = 10_000_000;
-    (rr.stageStats!.implementing as any).cachedCreationTokens = 10_000_000;
+    (rr.stageStats!.implementing as any).cachedNonReadTokens = 10_000_000;
     (rr.stageStats!.implementing as any).reasoningTokens = 1_000_000;
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', parentModel: null });
 
@@ -180,14 +180,14 @@ describe('V3 clamping ratchet', () => {
     expect(impl.inputTokens).toBe(5_000_000);
     expect(impl.outputTokens).toBe(500_000);
     expect((impl as any).cachedReadTokens).toBe(5_000_000);
-    expect((impl as any).cachedCreationTokens).toBe(5_000_000);
+    expect((impl as any).cachedNonReadTokens).toBe(5_000_000);
     expect((impl as any).reasoningTokens).toBe(500_000);
 
     // Top-level totals are clamped to schema maxima.
     expect(ev.inputTokens).toBe(5_000_000);
     expect(ev.outputTokens).toBe(500_000);
     expect(ev.cachedReadTokens).toBe(5_000_000);
-    expect(ev.cachedCreationTokens).toBe(5_000_000);
+    expect(ev.cachedNonReadTokens).toBe(5_000_000);
     expect(ev.reasoningTokens).toBe(500_000);
 
     // Sum of per-stage (clamped) values may exceed top-level clamped total —

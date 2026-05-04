@@ -1,12 +1,12 @@
-import type { TokenCounts } from './compute.js';
+import type { TokenUsage } from '../runners/types.js';
 
-export interface StageLike extends TokenCounts {
+export interface StageLike extends TokenUsage {
   tier: 'standard' | 'complex';
   model: string;
   costUSD: number | null;
 }
 
-export interface TierUsage extends TokenCounts {
+export interface TierUsage extends TokenUsage {
   model: string;
   costUSD: number | null;
 }
@@ -16,17 +16,16 @@ export type TierRollup = {
   complex?:  TierUsage;
 };
 
-export function sumTokens(stages: ReadonlyArray<TokenCounts>): TokenCounts {
-  const acc: TokenCounts = {
+export function sumTokens(stages: ReadonlyArray<TokenUsage>): TokenUsage {
+  const acc: TokenUsage = {
     inputTokens: 0, outputTokens: 0,
-    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+    cachedReadTokens: 0, cachedNonReadTokens: 0,
   };
   for (const s of stages) {
     acc.inputTokens          += s.inputTokens;
     acc.outputTokens         += s.outputTokens;
     acc.cachedReadTokens     += s.cachedReadTokens;
-    acc.cachedCreationTokens += s.cachedCreationTokens;
-    acc.reasoningTokens      += s.reasoningTokens;
+    acc.cachedNonReadTokens  += s.cachedNonReadTokens;
   }
   return acc;
 }
@@ -42,16 +41,14 @@ export function rollupByTier(stages: ReadonlyArray<StageLike>): TierRollup {
         inputTokens: s.inputTokens,
         outputTokens: s.outputTokens,
         cachedReadTokens: s.cachedReadTokens,
-        cachedCreationTokens: s.cachedCreationTokens,
-        reasoningTokens: s.reasoningTokens,
+        cachedNonReadTokens: s.cachedNonReadTokens,
       };
     } else {
       cur.model = s.model; // last-seen
       cur.inputTokens          += s.inputTokens;
       cur.outputTokens         += s.outputTokens;
       cur.cachedReadTokens     += s.cachedReadTokens;
-      cur.cachedCreationTokens += s.cachedCreationTokens;
-      cur.reasoningTokens      += s.reasoningTokens;
+      cur.cachedNonReadTokens  += s.cachedNonReadTokens;
       // honest-null: any contributing null poisons the tier total
       cur.costUSD = (cur.costUSD === null || s.costUSD === null) ? null : cur.costUSD + s.costUSD;
     }

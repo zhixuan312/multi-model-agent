@@ -21,21 +21,22 @@ export type RunStatus =
   | 'cost_exceeded'
   | 'unavailable';
 
+/** Canonical 4-field token-count shape. reasoningTokens are summed into
+ *  outputTokens by each runner before emitting. totalTokens, cachedTokens,
+ *  and per-provider breakdowns are computed on demand — they are not stored. */
 export interface TokenUsage {
   inputTokens: number
   outputTokens: number
-  totalTokens: number
+  cachedReadTokens: number
+  cachedNonReadTokens: number
+}
+
+/** Cost fields formerly co-located in TokenUsage (3.12). These are NOT token
+ *  counts; they live on RunResult alongside usage. */
+export interface CostBreakdown {
   costUSD: number | null
   /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
   costDeltaVsParentUSD: number | null
-  /** Input tokens served from cache rather than computed. null = provider does not expose this dimension. */
-  cachedTokens: number | null
-  /** Cache read tokens — input tokens retrieved from prompt cache. null = provider does not expose this dimension. */
-  cachedReadTokens?: number | null
-  /** Cache creation tokens — input tokens written to prompt cache. null = provider does not expose this dimension. */
-  cachedCreationTokens?: number | null
-  /** Output tokens attributed to reasoning/thinking. null = provider does not expose this dimension. */
-  reasoningTokens: number | null
 }
 
 export interface TerminationReason {
@@ -134,7 +135,7 @@ export type InternalRunnerEvent =
       cumulativeInputTokens: number
       cumulativeOutputTokens: number
       cumulativeCachedReadTokens?: number
-      cumulativeCachedCreationTokens?: number
+      cumulativeCachedNonReadTokens?: number
       cumulativeReasoningTokens?: number
     }
   | {

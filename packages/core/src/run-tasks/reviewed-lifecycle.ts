@@ -35,7 +35,8 @@ import { findModelCapabilities, findModelProfile } from '../routing/model-profil
 import { canonicalIdentity } from '../routing/canonical-model-identity.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
-import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts } from '../cost/compute.js';
+import { priceTokens, subtractTokens, resolveRateCard } from '../cost/compute.js';
+import type { TokenUsage } from '../runners/types.js';
 import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS, MAX_TIME_PRESTOP_RATIO } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -589,12 +590,11 @@ export async function executeReviewedLifecycle(
           heartbeat?.markEvent('llm');
           const providerConfig = _activeRunnerProviderConfig ?? resolved.provider.config;
           // §3.5 point 2: per-turn delta tracking from cumulative usage
-          const cur: TokenCounts = {
+          const cur: TokenUsage = {
             inputTokens: event.cumulativeInputTokens,
             outputTokens: event.cumulativeOutputTokens,
             cachedReadTokens: event.cumulativeCachedReadTokens ?? 0,
-            cachedCreationTokens: event.cumulativeCachedCreationTokens ?? 0,
-            reasoningTokens: event.cumulativeReasoningTokens ?? 0,
+            cachedNonReadTokens: event.cumulativeCachedNonReadTokens ?? 0,
           };
           const turnTokens = subtractTokens(cur, _lastCumulative);
           _lastCumulative = cur;
@@ -782,9 +782,9 @@ export async function executeReviewedLifecycle(
   let _prevRunningCost: number | null = null;
   // Per-turn delta tracking state (§3.5 point 2). Reset at each
   // provider.run() boundary via `runAccounted`.
-  let _lastCumulative: TokenCounts = {
+  let _lastCumulative: TokenUsage = {
     inputTokens: 0, outputTokens: 0,
-    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+    cachedReadTokens: 0, cachedNonReadTokens: 0,
   };
   let _rateCardUnresolved = false;
   const runningCostUSD = () => {
@@ -807,7 +807,7 @@ export async function executeReviewedLifecycle(
     _currentRunnerCostUSD = 0;
     _lastCumulative = {
       inputTokens: 0, outputTokens: 0,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0,
     };
     _rateCardUnresolved = false;
     try {
@@ -870,7 +870,7 @@ export async function executeReviewedLifecycle(
         stage: stageName,
         entered: true,
         durationMs: existing?.durationMs ?? salvageSource?.durationMs ?? null,
-        costUSD: existing?.costUSD ?? salvageSource?.usage?.costUSD ?? null,
+        costUSD: existing?.costUSD ?? salvageSource?.cost?.costUSD ?? null,
         agentTier: implementerAgentInfo.tier,
         modelFamily: modelFamily(implementerAgentInfo.model),
         model: implementerAgentInfo.model,
@@ -879,8 +879,8 @@ export async function executeReviewedLifecycle(
         activityEvents: 0,
         inputTokens: salvageSource?.usage?.inputTokens ?? null,
         outputTokens: salvageSource?.usage?.outputTokens ?? null,
-        cachedTokens: salvageSource?.usage?.cachedTokens ?? null,
-        reasoningTokens: salvageSource?.usage?.reasoningTokens ?? null,
+        cachedTokens: null,
+        reasoningTokens: null,
         turnCount: salvageSource?.turns ?? null,
         toolCallCount: (salvageSource?.toolCalls?.length) || null,
         filesReadCount: (salvageSource?.filesRead?.length) || null,
@@ -1037,7 +1037,7 @@ export async function executeReviewedLifecycle(
     return signalize({
       output: '',
       status: 'error',
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
       turns: 0,
       filesRead: [],
       filesWritten: [],
@@ -1298,7 +1298,7 @@ export async function executeReviewedLifecycle(
         return withVerification({
           output: `Sub-agent error: task.cwd ${cwd} had pre-existing modifications`,
           status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null, costDeltaVsParentUSD: null, cachedTokens: null, reasoningTokens: null },
+          usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
           turns: 0,
           filesRead: [],
           filesWritten: [],
@@ -1375,13 +1375,13 @@ export async function executeReviewedLifecycle(
     endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle), {
       inputTokens: implResult.usage?.inputTokens ?? 0,
       outputTokens: implResult.usage?.outputTokens ?? 0,
-      cachedTokens: (implResult.usage as any)?.cachedTokens ?? 0,
-      reasoningTokens: (implResult.usage as any)?.reasoningTokens ?? 0,
+      cachedTokens: ((implResult.usage?.cachedReadTokens ?? 0) + (implResult.usage?.cachedNonReadTokens ?? 0)) || undefined,
+      reasoningTokens: undefined,
       turnCount: implResult.turns,
       toolCallCount: implResult.toolCalls?.length ?? 0,
       filesReadCount: implResult.filesRead?.length ?? 0,
       filesWrittenCount: implResult.filesWritten?.length ?? 0,
-      costUSD: implResult.usage?.costUSD ?? undefined,
+      costUSD: implResult.cost?.costUSD ?? undefined,
     });
     specAttemptIndex = 1;
 
@@ -2059,9 +2059,9 @@ export async function executeReviewedLifecycle(
           toolCalls: r.toolCalls?.length ?? 0,
           inputTokens: r.usage.inputTokens,
           outputTokens: r.usage.outputTokens,
-          cachedTokens: r.usage.cachedTokens ?? null,
-          reasoningTokens: r.usage.reasoningTokens ?? null,
-          costUSD: r.usage.costUSD,
+          cachedTokens: ((r.usage.cachedReadTokens ?? 0) + (r.usage.cachedNonReadTokens ?? 0)) || null,
+          reasoningTokens: null,
+          costUSD: r.cost?.costUSD,
           taskMaxIdleMs: r.taskMaxIdleMs ?? null,
           stallTriggered: r.stallTriggered ?? false,
           stages_json: diagnostics?.logger?.expectedPath() ?? null,

@@ -11,8 +11,8 @@ import {
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
-import { priceTokens, subtractTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
-import type { InternalRunnerEvent, RunOptions } from './types.js';
+import { priceTokens, subtractTokens, resolveRateCard, type RateCard } from '../cost/compute.js';
+import type { InternalRunnerEvent, RunOptions, TokenUsage } from './types.js';
 import { READONLY_TOOL_IDS } from '../tools/definitions.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations, type ToolImplementations } from '../tools/definitions.js';
@@ -295,9 +295,9 @@ export async function runCodex(
   let lastTurnCostUSD = 0;
 
   // Per-turn cumulative → delta tracking state (§4.2)
-  let lastCumulative: TokenCounts = {
+  let lastCumulative: TokenUsage = {
     inputTokens: 0, outputTokens: 0,
-    cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+    cachedReadTokens: 0, cachedNonReadTokens: 0,
   };
 
   /**
@@ -328,16 +328,12 @@ export async function runCodex(
       output: `Cost ceiling exceeded: maxCostUSD=${options.maxCostUSD}`,
       status: 'cost_exceeded',
       usage: {
-        inputTokens: usage.inputTokens,
-        outputTokens: usage.outputTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
-        costUSD: costUSD ?? 0,
-        costDeltaVsParentUSD,
-        cachedTokens: usage.cachedReadTokens,
-        cachedReadTokens: usage.cachedReadTokens,
-        cachedCreationTokens: usage.cachedCreationTokens,
-        reasoningTokens: usage.reasoningTokens,
+        inputTokens: tc.inputTokens,
+        outputTokens: tc.outputTokens,
+        cachedReadTokens: tc.cachedReadTokens,
+        cachedNonReadTokens: tc.cachedNonReadTokens,
       },
+      cost: { costUSD, costDeltaVsParentUSD },
       turns,
       filesRead: tracker.getReads(),
       directoriesListed: tracker.getDirectoriesListed(),
@@ -516,15 +512,12 @@ export async function runCodex(
           }
           return sharedBuildTimeCeilingResult({
             usage: {
-              inputTokens: usage.inputTokens,
-              outputTokens: usage.outputTokens,
-              totalTokens: usage.inputTokens + usage.outputTokens,
+              inputTokens: tc.inputTokens,
+              outputTokens: tc.outputTokens,
+              cachedReadTokens: tc.cachedReadTokens,
+              cachedNonReadTokens: tc.cachedNonReadTokens,
               costUSD,
               costDeltaVsParentUSD,
-              cachedTokens: usage.cachedReadTokens,
-              cachedReadTokens: usage.cachedReadTokens,
-              cachedCreationTokens: usage.cachedCreationTokens,
-              reasoningTokens: usage.reasoningTokens,
             },
             turns,
             tracker,
@@ -602,8 +595,7 @@ export async function runCodex(
                 inputTokens: wideUsage.input_tokens ?? 0,
                 outputTokens: wideUsage.output_tokens ?? 0,
                 cachedReadTokens: wideUsage.cached_input_tokens ?? null,
-                cachedCreationTokens: null,
-                reasoningTokens: wideUsage.reasoning_tokens ?? null,
+                cachedNonReadTokens: null,
               };
               usage = mergeUsage(usage, turnUsage);
             }
@@ -712,8 +704,7 @@ export async function runCodex(
           cumulativeInputTokens: usage.inputTokens,
           cumulativeOutputTokens: usage.outputTokens,
           ...(usage.cachedReadTokens != null && { cumulativeCachedReadTokens: usage.cachedReadTokens }),
-          ...(usage.cachedCreationTokens != null && { cumulativeCachedCreationTokens: usage.cachedCreationTokens }),
-          ...(usage.reasoningTokens != null && { cumulativeReasoningTokens: usage.reasoningTokens }),
+          ...(usage.cachedNonReadTokens != null && { cumulativeCachedNonReadTokens: usage.cachedNonReadTokens }),
         });
 
         // Track cost for this turn using per-turn delta from cumulative
@@ -749,7 +740,6 @@ export async function runCodex(
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               cachedReadTokens: usage.cachedReadTokens,
-              reasoningTokens: usage.reasoningTokens,
               turns,
               output: stripped,
               durationMs: Date.now() - taskStartMs,
@@ -774,7 +764,6 @@ export async function runCodex(
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               cachedReadTokens: usage.cachedReadTokens,
-              reasoningTokens: usage.reasoningTokens,
               turns,
               reason: `supervision loop exhausted after ${degenerateRetries} degenerate retries without tool calls (last kind: ${validation.kind ?? 'unknown'})`,
               durationMs: Date.now() - taskStartMs,
@@ -843,7 +832,6 @@ export async function runCodex(
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens,
-        reasoningTokens: usage.reasoningTokens,
         turns,
         lastOutput: output,
         reason: `loop exited after ${turns} turns without producing a clean final answer`,
@@ -916,16 +904,12 @@ export async function runCodex(
         output: hasSalvage ? scratchpad.latest() : `Sub-agent error: ${detailed}`,
         status,
         usage: {
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          totalTokens: usage.inputTokens + usage.outputTokens,
-          costUSD,
-          costDeltaVsParentUSD,
-          cachedTokens: usage.cachedReadTokens,
-          cachedReadTokens: usage.cachedReadTokens,
-          cachedCreationTokens: usage.cachedCreationTokens,
-          reasoningTokens: usage.reasoningTokens,
+          inputTokens: tc.inputTokens,
+          outputTokens: tc.outputTokens,
+          cachedReadTokens: tc.cachedReadTokens,
+          cachedNonReadTokens: tc.cachedNonReadTokens,
         },
+        cost: { costUSD, costDeltaVsParentUSD },
         turns,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -971,16 +955,12 @@ export async function runCodex(
         filesWritten: tracker.getWrites(),
         toolCalls: tracker.getToolCalls(),
         usage: {
-          inputTokens: usage.inputTokens,
-          outputTokens: usage.outputTokens,
-          totalTokens: usage.inputTokens + usage.outputTokens,
-          costUSD,
-          costDeltaVsParentUSD,
-          cachedTokens: usage.cachedReadTokens,
-          cachedReadTokens: usage.cachedReadTokens,
-          cachedCreationTokens: usage.cachedCreationTokens,
-          reasoningTokens: usage.reasoningTokens,
+          inputTokens: tc.inputTokens,
+          outputTokens: tc.outputTokens,
+          cachedReadTokens: tc.cachedReadTokens,
+          cachedNonReadTokens: tc.cachedNonReadTokens,
         },
+        cost: { costUSD, costDeltaVsParentUSD },
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -1008,7 +988,6 @@ interface CodexResultCommonArgs {
   inputTokens: number;
   outputTokens: number;
   cachedReadTokens: number | null;
-  reasoningTokens: number | null;
   turns: number;
 }
 
@@ -1019,28 +998,26 @@ function resolveProviderRateCard(config: ProviderConfig): RateCard | null {
   });
 }
 
-function usageTokenCounts(u: CanonicalUsage): TokenCounts {
+function usageTokenCounts(u: CanonicalUsage): TokenUsage {
   const cachedRead = u.cachedReadTokens ?? 0;
   return {
     inputTokens: Math.max(0, u.inputTokens - cachedRead),
     outputTokens: u.outputTokens,
     cachedReadTokens: cachedRead,
-    cachedCreationTokens: 0,
-    reasoningTokens: u.reasoningTokens ?? 0,
+    cachedNonReadTokens: 0,
   };
 }
 
 function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): SharedResultUsage {
-  const { providerConfig, inputTokens, outputTokens, cachedReadTokens, reasoningTokens, parentModel } = args;
+  const { providerConfig, inputTokens, outputTokens, cachedReadTokens, parentModel } = args;
   const cachedRead = cachedReadTokens ?? 0;
   const nonCachedInput = Math.max(0, inputTokens - cachedRead);
   const workerCard = resolveProviderRateCard(providerConfig);
-  const tokenCounts: TokenCounts = {
+  const tokenCounts: TokenUsage = {
     inputTokens: nonCachedInput,
     outputTokens,
     cachedReadTokens: cachedRead,
-    cachedCreationTokens: 0,
-    reasoningTokens: reasoningTokens ?? 0,
+    cachedNonReadTokens: 0,
   };
   const costUSD = workerCard ? priceTokens(tokenCounts, workerCard) : null;
   let costDeltaVsParentUSD: number | null = null;
@@ -1051,15 +1028,12 @@ function codexUsage(args: CodexResultCommonArgs & { parentModel?: string }): Sha
     }
   }
   return {
-    inputTokens,
+    inputTokens: nonCachedInput,
     outputTokens,
-    totalTokens: inputTokens + outputTokens,
+    cachedReadTokens: cachedRead,
+    cachedNonReadTokens: 0,
     costUSD,
     costDeltaVsParentUSD,
-    cachedTokens: cachedReadTokens,
-    cachedReadTokens,
-    cachedCreationTokens: null,
-    reasoningTokens,
   };
 }
 

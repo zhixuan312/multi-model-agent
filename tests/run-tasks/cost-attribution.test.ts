@@ -19,7 +19,7 @@ function makeStageStats(
     inputTokens: number;
     outputTokens: number;
     cachedReadTokens: number;
-    cachedCreationTokens: number;
+    cachedNonReadTokens: number;
     reasoningTokens: number;
     round: number;
     verdict: string | null;
@@ -64,7 +64,7 @@ function makeStageStats(
 // contaminate tier rollups in token/cost math tests.
 const ZERO_COMMITTING = makeStageStats('committing', {
   inputTokens: 0, outputTokens: 0,
-  cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+  cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
   costUSD: 0, turnCount: 0, toolCallCount: 0,
   filesReadCount: 0, filesWrittenCount: 0,
 });
@@ -122,7 +122,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           inputTokens: 1_000_000,
           outputTokens: 500_000,
           cachedReadTokens: 200_000,
-          cachedCreationTokens: 50_000,
+          cachedNonReadTokens: 50_000,
           reasoningTokens: 0,
         }),
         spec_review: makeStageStats('spec_review', {
@@ -132,7 +132,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           inputTokens: 500_000,
           outputTokens: 100_000,
           cachedReadTokens: 0,
-          cachedCreationTokens: 0,
+          cachedNonReadTokens: 0,
           reasoningTokens: 50_000,
           verdict: 'approved',
           roundsUsed: 1,
@@ -170,7 +170,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     expect(event.tierUsage.standard!.inputTokens).toBe(1_000_000);
     expect(event.tierUsage.standard!.outputTokens).toBe(500_000);
     expect(event.tierUsage.standard!.cachedReadTokens).toBe(200_000);
-    expect(event.tierUsage.standard!.cachedCreationTokens).toBe(50_000);
+    expect(event.tierUsage.standard!.cachedNonReadTokens).toBe(50_000);
 
     expect(event.tierUsage.complex!.inputTokens).toBe(500_000);
     expect(event.tierUsage.complex!.outputTokens).toBe(100_000);
@@ -183,7 +183,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     const sumIn  = event.tierUsage.standard!.inputTokens + event.tierUsage.complex!.inputTokens;
     const sumOut = event.tierUsage.standard!.outputTokens + event.tierUsage.complex!.outputTokens;
     const sumCachedRead     = event.tierUsage.standard!.cachedReadTokens     + event.tierUsage.complex!.cachedReadTokens;
-    const sumCachedCreation = event.tierUsage.standard!.cachedCreationTokens + event.tierUsage.complex!.cachedCreationTokens;
+    const sumCachedCreation = event.tierUsage.standard!.cachedNonReadTokens + event.tierUsage.complex!.cachedNonReadTokens;
     const sumReasoning      = event.tierUsage.standard!.reasoningTokens      + event.tierUsage.complex!.reasoningTokens;
 
     const expectedParent = priceTokens(
@@ -191,7 +191,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
         inputTokens: sumIn,
         outputTokens: sumOut,
         cachedReadTokens: sumCachedRead,
-        cachedCreationTokens: sumCachedCreation,
+        cachedNonReadTokens: sumCachedCreation,
         reasoningTokens: sumReasoning,
       },
       parentCard!,
@@ -212,13 +212,13 @@ describe('cost attribution: mixed-tier task with rework round', () => {
         implementing: makeStageStats('implementing', {
           agentTier: 'standard',
           inputTokens: 1000, outputTokens: 500,
-          cachedReadTokens: 100, cachedCreationTokens: 50, reasoningTokens: 20,
+          cachedReadTokens: 100, cachedNonReadTokens: 50, reasoningTokens: 20,
           costUSD: 0.10,
         }),
         spec_review: makeStageStats('spec_review', {
           agentTier: 'complex',
           inputTokens: 2000, outputTokens: 300,
-          cachedReadTokens: 200, cachedCreationTokens: 100, reasoningTokens: 80,
+          cachedReadTokens: 200, cachedNonReadTokens: 100, reasoningTokens: 80,
           costUSD: 0.50,
           verdict: 'approved', roundsUsed: 1,
         }),
@@ -244,7 +244,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       inputTokens: s.inputTokens,
       outputTokens: s.outputTokens,
       cachedReadTokens: s.cachedReadTokens ?? 0,
-      cachedCreationTokens: s.cachedCreationTokens ?? 0,
+      cachedNonReadTokens: s.cachedNonReadTokens ?? 0,
       reasoningTokens: s.reasoningTokens ?? 0,
     }));
     const summed = sumTokens(stageTokens);
@@ -252,14 +252,14 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     expect(event.inputTokens).toBe(summed.inputTokens);
     expect(event.outputTokens).toBe(summed.outputTokens);
     expect(event.cachedReadTokens).toBe(summed.cachedReadTokens);
-    expect(event.cachedCreationTokens).toBe(summed.cachedCreationTokens);
+    expect(event.cachedNonReadTokens).toBe(summed.cachedNonReadTokens);
     expect(event.reasoningTokens).toBe(summed.reasoningTokens);
   });
 
   it('parentModel: null → parentEquivalentCostUSD and costDeltaVsParentUSD are null', () => {
     const rr = makeRunResult({
       stageStats: {
-        implementing:   makeStageStats('implementing', { agentTier: 'standard', inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0, costUSD: 0.005 }),
+        implementing:   makeStageStats('implementing', { agentTier: 'standard', inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0, costUSD: 0.005 }),
         verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
         spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
         spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
@@ -287,7 +287,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     // Worker is more expensive than parent → positive delta
     const rrExpensive = makeRunResult({
       stageStats: {
-        implementing:   makeStageStats('implementing', { agentTier: 'complex', model: 'gpt-5.5', inputTokens: 500_000, outputTokens: 100_000, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0, costUSD: 20.0 }),
+        implementing:   makeStageStats('implementing', { agentTier: 'complex', model: 'gpt-5.5', inputTokens: 500_000, outputTokens: 100_000, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0, costUSD: 20.0 }),
         verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
         spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
         spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
@@ -311,7 +311,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     // Worker is cheaper than parent → negative delta (saved money)
     const rrCheap = makeRunResult({
       stageStats: {
-        implementing:   makeStageStats('implementing', { agentTier: 'standard', model: 'claude-haiku-4-6', inputTokens: 100_000, outputTokens: 10_000, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0, costUSD: 0.001 }),
+        implementing:   makeStageStats('implementing', { agentTier: 'standard', model: 'claude-haiku-4-6', inputTokens: 100_000, outputTokens: 10_000, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0, costUSD: 0.001 }),
         verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
         spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
         spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
@@ -342,7 +342,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
         implementing: makeStageStats('implementing', {
           agentTier: 'standard',
           inputTokens: 100, outputTokens: 50,
-          cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+          cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
           costUSD: null, // will become 0 in stage entry
         }),
         verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
@@ -385,7 +385,7 @@ describe('multi-round stage entries', () => {
           agentTier: 'standard',
           model: 'claude-sonnet',
           inputTokens: 500, outputTokens: 200,
-          cachedReadTokens: 100, cachedCreationTokens: 50, reasoningTokens: 30,
+          cachedReadTokens: 100, cachedNonReadTokens: 50, reasoningTokens: 30,
           round: 2,
           costUSD: 0.015,
         }),
@@ -393,7 +393,7 @@ describe('multi-round stage entries', () => {
           agentTier: 'complex',
           model: 'gpt-5.5',
           inputTokens: 300, outputTokens: 80,
-          cachedReadTokens: 20, cachedCreationTokens: 10, reasoningTokens: 40,
+          cachedReadTokens: 20, cachedNonReadTokens: 10, reasoningTokens: 40,
           round: 1,
           costUSD: 0.005,
           verdict: 'changes_required',
@@ -420,13 +420,13 @@ describe('multi-round stage entries', () => {
     expect(impl).toBeDefined();
     expect((impl as any).round).toBe(2);
     expect((impl as any).cachedReadTokens).toBe(100);
-    expect((impl as any).cachedCreationTokens).toBe(50);
+    expect((impl as any).cachedNonReadTokens).toBe(50);
 
     const specReview = event.stages.find(s => s.name === 'spec_review')!;
     expect(specReview).toBeDefined();
     expect((specReview as any).round).toBe(1);
     expect((specReview as any).cachedReadTokens).toBe(20);
-    expect((specReview as any).cachedCreationTokens).toBe(10);
+    expect((specReview as any).cachedNonReadTokens).toBe(10);
 
     // Review stage carries verdict and roundsUsed
     expect((specReview as any).verdict).toBe('changes_required');
@@ -435,10 +435,10 @@ describe('multi-round stage entries', () => {
 
   it('rollupByTier aggregates independently per tier', () => {
     const stages = [
-      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.01 as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 30, cachedCreationTokens: 20, reasoningTokens: 10 },
-      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.02 as number | null, inputTokens: 200, outputTokens: 100, cachedReadTokens: 60, cachedCreationTokens: 40, reasoningTokens: 20 },
-      { tier: 'complex' as const, model: 'gpt-5.5', costUSD: 0.50 as number | null, inputTokens: 300, outputTokens: 150, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 50 },
-      { tier: 'complex' as const, model: 'gpt-5.5', costUSD: 0.30 as number | null, inputTokens: 400, outputTokens: 200, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 60 },
+      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.01 as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 30, cachedNonReadTokens: 20, reasoningTokens: 10 },
+      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.02 as number | null, inputTokens: 200, outputTokens: 100, cachedReadTokens: 60, cachedNonReadTokens: 40, reasoningTokens: 20 },
+      { tier: 'complex' as const, model: 'gpt-5.5', costUSD: 0.50 as number | null, inputTokens: 300, outputTokens: 150, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 50 },
+      { tier: 'complex' as const, model: 'gpt-5.5', costUSD: 0.30 as number | null, inputTokens: 400, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 60 },
     ];
 
     const rolled = rollupByTier(stages);
@@ -448,7 +448,7 @@ describe('multi-round stage entries', () => {
     expect(rolled.standard!.inputTokens).toBe(300);
     expect(rolled.standard!.outputTokens).toBe(150);
     expect(rolled.standard!.cachedReadTokens).toBe(90);
-    expect(rolled.standard!.cachedCreationTokens).toBe(60);
+    expect(rolled.standard!.cachedNonReadTokens).toBe(60);
     expect(rolled.standard!.reasoningTokens).toBe(30);
     expect(rolled.standard!.costUSD).toBeCloseTo(0.03, 10);
 
@@ -460,8 +460,8 @@ describe('multi-round stage entries', () => {
 
   it('rollupByTier honest-null: any null costUSD in a tier poisons that tier total', () => {
     const stages = [
-      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.01 as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0 },
-      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: null as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0 },
+      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: 0.01 as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0 },
+      { tier: 'standard' as const, model: 'claude-sonnet', costUSD: null as number | null, inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0 },
     ];
 
     const rolled = rollupByTier(stages);

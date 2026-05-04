@@ -9,10 +9,10 @@ const ANTHROPIC_MODELS = [
 ];
 
 describe('Anthropic profile completeness', () => {
-  it.each(ANTHROPIC_MODELS)('%s has cachedCreationCostPerMTok ≈ inputCostPerMTok × 1.25', (model) => {
+  it.each(ANTHROPIC_MODELS)('%s has cachedNonReadCostPerMTok ≈ inputCostPerMTok × 1.25', (model) => {
     const profile = findModelProfile(model);
     expect(profile.inputCostPerMTok).toBeDefined();
-    expect(profile.cachedCreationCostPerMTok).toBeDefined();
-    expect(profile.cachedCreationCostPerMTok!).toBeCloseTo(profile.inputCostPerMTok! * 1.25, 6);
+    expect(profile.cachedNonReadCostPerMTok).toBeDefined();
+    expect(profile.cachedNonReadCostPerMTok!).toBeCloseTo(profile.inputCostPerMTok! * 1.25, 6);
   });
 });

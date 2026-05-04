@@ -514,7 +514,7 @@ export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): 
     errorCode,
     retryable: false,
     turns: 0,
-    usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: 0, costDeltaVsParentUSD: 0, cachedTokens: null, reasoningTokens: null },
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     filesRead: [],
     filesWritten: [],
     toolCalls: [],

@@ -1,17 +1,10 @@
-export interface TokenCounts {
-  inputTokens: number;          // non-cached input only
-  outputTokens: number;
-  cachedReadTokens: number;
-  cachedCreationTokens: number;
-  reasoningTokens: number;
-}
+import type { TokenUsage } from '../runners/types.js';
 
 export interface RateCard {
   inputCostPerMTok: number;
   outputCostPerMTok: number;
   cachedReadCostPerMTok: number;
-  cachedCreationCostPerMTok: number;
-  reasoningCostPerMTok: number;
+  cachedNonReadCostPerMTok: number;
 }
 
 import { findModelProfile } from '../routing/model-profiles.js';
@@ -23,25 +16,31 @@ export function resolveRateCard(
   if (!model) return null;
   const profile = findModelProfile(model);
   const input = override?.inputCostPerMTok ?? profile.inputCostPerMTok;
-  const output = override?.outputCostPerMTok ?? profile.outputCostPerMTok;
+  const rawOutput = override?.outputCostPerMTok ?? profile.outputCostPerMTok;
   if (
-    input === undefined || output === undefined ||
-    !Number.isFinite(input) || !Number.isFinite(output) ||
-    input < 0 || output < 0
+    input === undefined || rawOutput === undefined ||
+    !Number.isFinite(input) || !Number.isFinite(rawOutput) ||
+    input < 0 || rawOutput < 0
   ) {
     return null;
   }
 
+  // reasoning tokens are folded into outputTokens by each runner.
+  // When a model had a separate (higher) reasoning rate, use that as the
+  // output rate to avoid undercounting cost.
+  const reasoning = profile.reasoningCostPerMTok;
+  const output = (reasoning !== undefined && Number.isFinite(reasoning) && reasoning > rawOutput)
+    ? reasoning
+    : rawOutput;
+
   const cachedRead = override?.cachedReadCostPerMTok ?? profile.cachedReadCostPerMTok ?? input * 0.10;
-  const cachedCreation = override?.cachedCreationCostPerMTok ?? profile.cachedCreationCostPerMTok ?? input;
-  const reasoning = override?.reasoningCostPerMTok ?? profile.reasoningCostPerMTok ?? output;
+  const cachedNonRead = override?.cachedNonReadCostPerMTok ?? profile.cachedNonReadCostPerMTok ?? input;
 
   return {
     inputCostPerMTok: input,
     outputCostPerMTok: output,
     cachedReadCostPerMTok: cachedRead,
-    cachedCreationCostPerMTok: cachedCreation,
-    reasoningCostPerMTok: reasoning,
+    cachedNonReadCostPerMTok: cachedNonRead,
   };
 }
 
@@ -56,9 +55,9 @@ export function resolveRateCard(
  *   new delta. Without this branch, lastCumulative would never re-anchor and
  *   every subsequent turn would also produce zero deltas, freezing the meter.
  */
-export function subtractTokens(cur: TokenCounts, prev: TokenCounts): TokenCounts {
-  const fields: Array<keyof TokenCounts> = [
-    'inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedCreationTokens', 'reasoningTokens',
+export function subtractTokens(cur: TokenUsage, prev: TokenUsage): TokenUsage {
+  const fields: Array<keyof TokenUsage> = [
+    'inputTokens', 'outputTokens', 'cachedReadTokens', 'cachedNonReadTokens',
   ];
   const allDecreased = fields.every(f => cur[f] <= prev[f]) && fields.some(f => cur[f] < prev[f]);
   if (allDecreased) {
@@ -66,7 +65,7 @@ export function subtractTokens(cur: TokenCounts, prev: TokenCounts): TokenCounts
     console.warn(`[cost] subtractTokens: detected counter reset (all fields ≤ prev); treating cur as full delta`);
     return { ...cur };
   }
-  const out = {} as TokenCounts;
+  const out = {} as TokenUsage;
   for (const f of fields) {
     const raw = cur[f] - prev[f];
     if (raw < 0) {
@@ -80,14 +79,14 @@ export function subtractTokens(cur: TokenCounts, prev: TokenCounts): TokenCounts
 
 /**
  * Pure pricing — multiplies each token class by its rate. No defaults applied here.
- * Defaults live in resolveRateCard.
+ * Defaults live in resolveRateCard. reasoningTokens are folded into outputTokens
+ * by each runner before emission, so there is no separate reasoning term.
  */
-export function priceTokens(t: TokenCounts, r: RateCard): number {
+export function priceTokens(t: TokenUsage, r: RateCard): number {
   return (
     t.inputTokens          * r.inputCostPerMTok          +
     t.outputTokens         * r.outputCostPerMTok         +
     t.cachedReadTokens     * r.cachedReadCostPerMTok     +
-    t.cachedCreationTokens * r.cachedCreationCostPerMTok +
-    t.reasoningTokens      * r.reasoningCostPerMTok
+    t.cachedNonReadTokens  * r.cachedNonReadCostPerMTok
   ) / 1_000_000;
 }

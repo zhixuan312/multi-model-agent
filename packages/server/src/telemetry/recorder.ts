@@ -70,7 +70,7 @@ function checkR6b(event: TaskCompletedEventType): Array<{ rule: string; path: st
   for (let i = 0; i < event.stages.length; i++) {
     const s = event.stages[i];
     if (s.inputTokens > 0) {
-      const cachedSum = (s.cachedReadTokens ?? 0) + (s.cachedCreationTokens ?? 0);
+      const cachedSum = (s.cachedReadTokens ?? 0) + (s.cachedNonReadTokens ?? 0);
       if (cachedSum > 100 * s.inputTokens) {
         warnings.push({ rule: 'R6b', path: `stages[${i}]` });
       }

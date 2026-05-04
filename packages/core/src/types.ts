@@ -1,5 +1,6 @@
 import type {
   AttemptRecord,
+  CostBreakdown,
   RunOptions,
   RunStatus,
   TerminationReason,
@@ -219,6 +220,7 @@ export interface RunResult {
   output: string
   status: RunStatus
   usage: TokenUsage
+  cost?: CostBreakdown
   turns: number
   filesRead: string[]
   filesWritten: string[]

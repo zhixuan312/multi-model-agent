@@ -8,7 +8,8 @@ import {
   type ReviewPromptParts,
   type ReviewRunOptions,
 } from '../types.js';
-import { priceTokens, resolveRateCard, type TokenCounts, type RateCard } from '../cost/compute.js';
+import { priceTokens, resolveRateCard, type RateCard } from '../cost/compute.js';
+import type { TokenUsage } from './types.js';
 import type { InternalRunnerEvent, RunOptions } from './types.js';
 import { FileTracker } from '../tools/tracker.js';
 import { createToolImplementations } from '../tools/definitions.js';
@@ -229,12 +230,11 @@ export async function runClaude(
    */
   function buildCostExceededResult(): RunResult {
     const finalRateCard = resolveConfigRateCard();
-    const finalTokens: TokenCounts = {
+    const finalTokens: TokenUsage = {
       inputTokens: usage.inputTokens,
       outputTokens: usage.outputTokens,
       cachedReadTokens: usage.cachedReadTokens ?? 0,
-      cachedCreationTokens: usage.cachedCreationTokens ?? 0,
-      reasoningTokens: usage.reasoningTokens ?? 0,
+      cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
     };
     const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
     const parentCard = resolveRateCard(parentModel);
@@ -248,12 +248,10 @@ export async function runClaude(
       usage: {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
-        totalTokens: usage.inputTokens + usage.outputTokens,
-        costUSD: finalCostUSD,
-        costDeltaVsParentUSD,
-        cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
-        reasoningTokens: null,
+        cachedReadTokens: usage.cachedReadTokens ?? 0,
+        cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
       },
+      cost: { costUSD: finalCostUSD, costDeltaVsParentUSD },
       turns,
       filesRead: tracker.getReads(),
       directoriesListed: tracker.getDirectoriesListed(),
@@ -465,12 +463,11 @@ export async function runClaude(
           const timeCeilingMs = checkTimeCeiling(taskStartMs, timeoutMs);
           if (timeCeilingMs !== null) {
             const finalRateCard = resolveConfigRateCard();
-            const finalTokens: TokenCounts = {
+            const finalTokens: TokenUsage = {
               inputTokens: usage.inputTokens,
               outputTokens: usage.outputTokens,
               cachedReadTokens: usage.cachedReadTokens ?? 0,
-              cachedCreationTokens: usage.cachedCreationTokens ?? 0,
-              reasoningTokens: usage.reasoningTokens ?? 0,
+              cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
             };
             const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
             const parentCard = resolveRateCard(parentModel);
@@ -482,11 +479,10 @@ export async function runClaude(
               usage: {
                 inputTokens: usage.inputTokens,
                 outputTokens: usage.outputTokens,
-                totalTokens: usage.inputTokens + usage.outputTokens,
+                cachedReadTokens: usage.cachedReadTokens ?? 0,
+                cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
                 costUSD: finalCostUSD,
                 costDeltaVsParentUSD,
-                cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
-                reasoningTokens: null,
               },
               turns,
               tracker,
@@ -526,8 +522,7 @@ export async function runClaude(
                 inputTokens: u.input_tokens ?? 0,
                 outputTokens: u.output_tokens ?? 0,
                 cachedReadTokens: u.cache_read_input_tokens ?? null,
-                cachedCreationTokens: u.cache_creation_input_tokens ?? null,
-                reasoningTokens: null,
+                cachedNonReadTokens: u.cache_creation_input_tokens ?? null,
               };
               usage = mergeUsage(usage, perTurn);
             }
@@ -629,8 +624,8 @@ export async function runClaude(
 
           // --- CanonicalUsage: extract claude-specific cache fields ---
           // cache_read_input_tokens + cache_creation_input_tokens are
-          // Claude's per-request cache counters; we sum them into
-          // cachedTokens (nullable: null when the API exposes neither).
+          // Claude's per-request cache counters; we map them to
+          // cachedReadTokens / cachedNonReadTokens.
           let cacheRead: number | undefined;
           let cacheCreate: number | undefined;
           if ('usage' in msg && msg.usage) {
@@ -654,8 +649,7 @@ export async function runClaude(
               inputTokens: turnInputTokens,
               outputTokens: turnOutputTokens,
               cachedReadTokens: cacheRead ?? usage.cachedReadTokens,
-              cachedCreationTokens: cacheCreate ?? usage.cachedCreationTokens,
-              reasoningTokens: usage.reasoningTokens,
+              cachedNonReadTokens: cacheCreate ?? usage.cachedNonReadTokens,
             };
           } else if (cacheRead !== undefined || cacheCreate !== undefined) {
             // Result reported cache fields but no input/output — preserve
@@ -663,7 +657,7 @@ export async function runClaude(
             usage = {
               ...usage,
               cachedReadTokens: cacheRead ?? usage.cachedReadTokens,
-              cachedCreationTokens: cacheCreate ?? usage.cachedCreationTokens,
+              cachedNonReadTokens: cacheCreate ?? usage.cachedNonReadTokens,
             };
           }
           // else: result reported nothing useful — leave per-turn accumulator alone.
@@ -682,18 +676,16 @@ export async function runClaude(
             cumulativeInputTokens: usage.inputTokens,
             cumulativeOutputTokens: usage.outputTokens,
             ...(usage.cachedReadTokens != null && { cumulativeCachedReadTokens: usage.cachedReadTokens }),
-            ...(usage.cachedCreationTokens != null && { cumulativeCachedCreationTokens: usage.cachedCreationTokens }),
-            ...(usage.reasoningTokens != null && { cumulativeReasoningTokens: usage.reasoningTokens }),
+            ...(usage.cachedNonReadTokens != null && { cumulativeCachedNonReadTokens: usage.cachedNonReadTokens }),
           });
 
           // Track cost for this turn (Task 25)
           const rateCard = resolveConfigRateCard();
-          const turnTokens: TokenCounts = {
+          const turnTokens: TokenUsage = {
             inputTokens: turnInputTokens,
             outputTokens: turnOutputTokens,
             cachedReadTokens: cacheRead ?? 0,
-            cachedCreationTokens: cacheCreate ?? 0,
-            reasoningTokens: 0,
+            cachedNonReadTokens: cacheCreate ?? 0,
           };
           const turnCost = rateCard ? priceTokens(turnTokens, rateCard) : null;
           if (turnCost !== null) {
@@ -815,12 +807,11 @@ export async function runClaude(
       emit({ kind: 'done', status });
       const hasSalvage = !scratchpad.isEmpty();
       const finalRateCard = resolveConfigRateCard();
-      const finalTokens: TokenCounts = {
+      const finalTokens: TokenUsage = {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens ?? 0,
-        cachedCreationTokens: usage.cachedCreationTokens ?? 0,
-        reasoningTokens: usage.reasoningTokens ?? 0,
+        cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
       };
       const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
       const parentCard = resolveRateCard(parentModel);
@@ -834,12 +825,10 @@ export async function runClaude(
         usage: {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          totalTokens: usage.inputTokens + usage.outputTokens,
-          costUSD: finalCostUSD,
-          costDeltaVsParentUSD,
-          cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
-          reasoningTokens: null,
+          cachedReadTokens: usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
         },
+        cost: { costUSD: finalCostUSD, costDeltaVsParentUSD },
         turns,
         filesRead: tracker.getReads(),
         directoriesListed: tracker.getDirectoriesListed(),
@@ -887,12 +876,11 @@ export async function runClaude(
       emit({ kind: 'done', status: 'timeout' });
       const hasSalvage = !scratchpad.isEmpty();
       const finalRateCard = resolveConfigRateCard();
-      const finalTokens: TokenCounts = {
+      const finalTokens: TokenUsage = {
         inputTokens: usage.inputTokens,
         outputTokens: usage.outputTokens,
         cachedReadTokens: usage.cachedReadTokens ?? 0,
-        cachedCreationTokens: usage.cachedCreationTokens ?? 0,
-        reasoningTokens: usage.reasoningTokens ?? 0,
+        cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
       };
       const finalCostUSD = finalRateCard ? priceTokens(finalTokens, finalRateCard) : null;
       const parentCard = resolveRateCard(parentModel);
@@ -910,12 +898,10 @@ export async function runClaude(
         usage: {
           inputTokens: usage.inputTokens,
           outputTokens: usage.outputTokens,
-          totalTokens: usage.inputTokens + usage.outputTokens,
-          costUSD: finalCostUSD,
-          costDeltaVsParentUSD,
-          cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
-          reasoningTokens: null,
+          cachedReadTokens: usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
         },
+        cost: { costUSD: finalCostUSD, costDeltaVsParentUSD },
         turns,
         outputIsDiagnostic: !hasSalvage,
         escalationLog: [],
@@ -951,8 +937,7 @@ function effectiveClaudeCost(
   outputTokens: number,
   sdkCost: number | null,
   cachedReadTokens = 0,
-  cachedCreationTokens = 0,
-  reasoningTokens = 0,
+  cachedNonReadTokens = 0,
 ): number | null {
   const rateCard = resolveRateCard(providerConfig.model, {
     ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
@@ -962,8 +947,7 @@ function effectiveClaudeCost(
     inputTokens,
     outputTokens,
     cachedReadTokens,
-    cachedCreationTokens,
-    reasoningTokens,
+    cachedNonReadTokens,
   }, rateCard) : null;
   return computed ?? sdkCost;
 }
@@ -974,12 +958,11 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     ...(providerConfig.inputCostPerMTok !== undefined && { inputCostPerMTok: providerConfig.inputCostPerMTok }),
     ...(providerConfig.outputCostPerMTok !== undefined && { outputCostPerMTok: providerConfig.outputCostPerMTok }),
   });
-  const tokens: TokenCounts = {
-    inputTokens: usage.inputTokens,
+  const tokens: TokenUsage = {
+    inputTokens: Math.max(0, usage.inputTokens - (usage.cachedReadTokens ?? 0)),
     outputTokens: usage.outputTokens,
     cachedReadTokens: usage.cachedReadTokens ?? 0,
-    cachedCreationTokens: usage.cachedCreationTokens ?? 0,
-    reasoningTokens: usage.reasoningTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
   };
   const costUSD = rateCard ? priceTokens(tokens, rateCard) : null;
   const parentCard = resolveRateCard(parentModel);
@@ -988,15 +971,12 @@ function claudeUsage(args: ClaudeResultCommonArgs & { parentModel?: string }): S
     ? null
     : costUSD - parentEquivCostUSD;
   return {
-    inputTokens: usage.inputTokens,
+    inputTokens: Math.max(0, usage.inputTokens - (usage.cachedReadTokens ?? 0)),
     outputTokens: usage.outputTokens,
-    totalTokens: usage.inputTokens + usage.outputTokens,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
     costUSD,
     costDeltaVsParentUSD,
-    cachedTokens: (usage.cachedReadTokens ?? 0) + (usage.cachedCreationTokens ?? 0) || null,
-    cachedReadTokens: usage.cachedReadTokens,
-    cachedCreationTokens: usage.cachedCreationTokens,
-    reasoningTokens: usage.reasoningTokens,
   };
 }
 

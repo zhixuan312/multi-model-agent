@@ -157,7 +157,7 @@ export async function delegateWithEscalation(
       const maxRetries = maxRetriesForStatus(result.status);
       if (result.status === 'ok' || maxRetries === 0 || attempt >= maxRetries) break;
 
-      const attemptCost = result.usage.costUSD ?? 0;
+      const attemptCost = result.cost?.costUSD ?? 0;
       cumulativeCostUSD += attemptCost;
       if (task.maxCostUSD !== undefined && cumulativeCostUSD >= task.maxCostUSD) break;
 
@@ -177,7 +177,7 @@ export async function delegateWithEscalation(
       turns: result.turns,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
-      costUSD: result.usage.costUSD,
+      costUSD: result.cost?.costUSD ?? null,
       initialPromptLengthChars,
       initialPromptHash,
       reason:

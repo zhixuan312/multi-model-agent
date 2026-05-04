@@ -16,13 +16,10 @@ import type { TextScratchpad } from '../../tools/scratchpad.js';
 export interface SharedResultUsage {
   inputTokens: number;
   outputTokens: number;
-  totalTokens: number;
+  cachedReadTokens: number;
+  cachedNonReadTokens: number;
   costUSD: number | null;
   costDeltaVsParentUSD: number | null;
-  cachedTokens: number | null;
-  cachedReadTokens?: number | null;
-  cachedCreationTokens?: number | null;
-  reasoningTokens: number | null;
 }
 
 export interface ReviewedRunResultFields {
@@ -37,13 +34,8 @@ function usageShape(u: SharedResultUsage): TokenUsage {
   return {
     inputTokens: u.inputTokens,
     outputTokens: u.outputTokens,
-    totalTokens: u.totalTokens,
-    costUSD: u.costUSD,
-    costDeltaVsParentUSD: u.costDeltaVsParentUSD,
-    cachedTokens: u.cachedTokens,
     cachedReadTokens: u.cachedReadTokens,
-    cachedCreationTokens: u.cachedCreationTokens,
-    reasoningTokens: u.reasoningTokens,
+    cachedNonReadTokens: u.cachedNonReadTokens,
   };
 }
 
@@ -59,6 +51,7 @@ export function buildOkResult(args: {
     output,
     status: 'ok',
     usage: usageShape(usage),
+    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),
@@ -104,6 +97,7 @@ export function buildIncompleteResult(args: {
     status: 'incomplete',
     ...(stampExhausted && { errorCode: 'degenerate_exhausted' as const }),
     usage: usageShape(usage),
+    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
     turns,
     filesRead,
     directoriesListed: tracker.getDirectoriesListed(),
@@ -135,6 +129,7 @@ export function buildForceSalvageResult(args: {
       : `[${providerLabel} sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
     status: 'incomplete',
     usage: usageShape(usage),
+    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),
@@ -168,6 +163,7 @@ export function buildMaxTurnsExitResult(args: {
     status: 'incomplete',
     errorCode: 'degenerate_exhausted',
     usage: usageShape(usage),
+    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),
@@ -198,6 +194,7 @@ export function buildTimeCeilingResult(args: {
     output: hasSalvage ? scratchpad.latest() : diagnostic,
     status: 'incomplete',
     usage: usageShape(usage),
+    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),

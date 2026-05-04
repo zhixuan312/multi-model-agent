@@ -1,25 +1,24 @@
 import { describe, it, expect } from 'vitest';
 import { rollupByTier, sumTokens } from '../../packages/core/src/cost/rollup.js';
-import type { TokenCounts } from '../../packages/core/src/cost/compute.js';
+import type { TokenUsage } from '../../packages/core/src/runners/types.js';
 
-type StageLike = TokenCounts & {
+type StageLike = TokenUsage & {
   tier: 'standard' | 'complex';
   model: string;
   costUSD: number | null;
 };
 
-const makeStage = (tier: StageLike['tier'], model: string, t: Partial<TokenCounts>, cost: number | null): StageLike => ({
+const makeStage = (tier: StageLike['tier'], model: string, t: Partial<TokenUsage>, cost: number | null): StageLike => ({
   tier, model, costUSD: cost,
   inputTokens: t.inputTokens ?? 0, outputTokens: t.outputTokens ?? 0,
-  cachedReadTokens: t.cachedReadTokens ?? 0, cachedCreationTokens: t.cachedCreationTokens ?? 0,
-  reasoningTokens: t.reasoningTokens ?? 0,
+  cachedReadTokens: t.cachedReadTokens ?? 0, cachedNonReadTokens: t.cachedNonReadTokens ?? 0,
 });
 
 describe('sumTokens', () => {
   it('empty array → all zeros', () => {
     expect(sumTokens([])).toEqual({
       inputTokens: 0, outputTokens: 0,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0,
     });
   });
   it('sums each field independently', () => {
@@ -50,20 +49,19 @@ describe('rollupByTier', () => {
     expect(r.complex).toBeUndefined();
   });
   it('mixed-tier with rework rounds — tier swap on round 2', () => {
-    // SPEC_LOOP_STANDARD row 2: impl=complex, reviewer=standard
     const stages = [
-      makeStage('standard', 'deepseek-v4-pro', { inputTokens: 1000, outputTokens: 100 }, 0.10),  // implementing
-      makeStage('complex',  'gpt-5.5',         { inputTokens: 500,  outputTokens: 50  }, 0.20),  // spec_review r0
-      makeStage('complex',  'gpt-5.5',         { inputTokens: 600,  outputTokens: 60  }, 0.25),  // spec_review r1
-      makeStage('standard', 'deepseek-v4-pro', { inputTokens: 700,  outputTokens: 70  }, 0.07),  // spec_review r2 (swap)
-      makeStage('complex',  'gpt-5.5',         { inputTokens: 800,  outputTokens: 80  }, 0.32),  // spec_rework r0 (impl=complex)
+      makeStage('standard', 'deepseek-v4-pro', { inputTokens: 1000, outputTokens: 100 }, 0.10),
+      makeStage('complex',  'gpt-5.5',         { inputTokens: 500,  outputTokens: 50  }, 0.20),
+      makeStage('complex',  'gpt-5.5',         { inputTokens: 600,  outputTokens: 60  }, 0.25),
+      makeStage('standard', 'deepseek-v4-pro', { inputTokens: 700,  outputTokens: 70  }, 0.07),
+      makeStage('complex',  'gpt-5.5',         { inputTokens: 800,  outputTokens: 80  }, 0.32),
     ];
     const r = rollupByTier(stages);
-    expect(r.standard!.inputTokens).toBe(1700);   // 1000 + 700
+    expect(r.standard!.inputTokens).toBe(1700);
     expect(r.standard!.costUSD).toBeCloseTo(0.17, 10);
-    expect(r.complex!.inputTokens).toBe(1900);    // 500 + 600 + 800
+    expect(r.complex!.inputTokens).toBe(1900);
     expect(r.complex!.costUSD).toBeCloseTo(0.77, 10);
-    expect(r.complex!.model).toBe('gpt-5.5');     // last seen
+    expect(r.complex!.model).toBe('gpt-5.5');
   });
   it('null costUSD propagates to tier (honest-null)', () => {
     const stages = [

@@ -26,7 +26,7 @@ const validStageBase = {
   inputTokens: 100,
   outputTokens: 50,
   cachedReadTokens: 0,
-  cachedCreationTokens: 0,
+  cachedNonReadTokens: 0,
   reasoningTokens: 0,
   toolCallCount: 3,
   filesReadCount: 2,
@@ -41,7 +41,7 @@ const validTierUsage = {
   inputTokens: 500,
   outputTokens: 200,
   cachedReadTokens: 50,
-  cachedCreationTokens: 10,
+  cachedNonReadTokens: 10,
   reasoningTokens: 30,
   costUSD: 0.05,
 };
@@ -59,7 +59,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}): Recor
     inputTokens: 100,
     outputTokens: 50,
     cachedReadTokens: 0,
-    cachedCreationTokens: 0,
+    cachedNonReadTokens: 0,
     reasoningTokens: 0,
     toolCallCount: 3,
     filesReadCount: 2,
@@ -136,7 +136,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     inputTokens: sum('inputTokens'),
     outputTokens: sum('outputTokens'),
     cachedReadTokens: sum('cachedReadTokens'),
-    cachedCreationTokens: sum('cachedCreationTokens'),
+    cachedNonReadTokens: sum('cachedNonReadTokens'),
     reasoningTokens: sum('reasoningTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s: number, st: Record<string, unknown>) => s + ((st.costUSD as number) ?? 0), 0),
@@ -255,14 +255,14 @@ describe('V4 telemetry types', () => {
         inputTokens: 100,
         outputTokens: 50,
         cachedReadTokens: 0,
-        cachedCreationTokens: 0,
+        cachedNonReadTokens: 0,
         reasoningTokens: 0,
         stages: [
           makeStage('implementing', {
             inputTokens: 100,
             outputTokens: 50,
             cachedReadTokens: 0,
-            cachedCreationTokens: 0,
+            cachedNonReadTokens: 0,
             reasoningTokens: 0,
           }),
         ],
@@ -658,7 +658,7 @@ describe('StageEntrySchema', () => {
       inputTokens: 0,
       outputTokens: 0,
       cachedReadTokens: 0,
-      cachedCreationTokens: 0,
+      cachedNonReadTokens: 0,
       reasoningTokens: 0,
       toolCallCount: 0,
       filesReadCount: 0,
@@ -681,41 +681,41 @@ describe('StageEntrySchema', () => {
 
 // ── Nullable cached tokens (§3.6) ────────────────────────────────────────
 
-describe('nullable cachedReadTokens and cachedCreationTokens', () => {
-  it('StageEntrySchema accepts null cachedReadTokens and cachedCreationTokens', () => {
-    const stage = makeStage('implementing', { cachedReadTokens: null, cachedCreationTokens: null });
+describe('nullable cachedReadTokens and cachedNonReadTokens', () => {
+  it('StageEntrySchema accepts null cachedReadTokens and cachedNonReadTokens', () => {
+    const stage = makeStage('implementing', { cachedReadTokens: null, cachedNonReadTokens: null });
     const result = StageEntrySchema.safeParse(stage);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.cachedReadTokens).toBeNull();
-      expect(result.data.cachedCreationTokens).toBeNull();
+      expect(result.data.cachedNonReadTokens).toBeNull();
     }
   });
 
-  it('TaskCompletedEventSchema accepts null cachedReadTokens and cachedCreationTokens', () => {
+  it('TaskCompletedEventSchema accepts null cachedReadTokens and cachedNonReadTokens', () => {
     const event = makeValidEvent({
       cachedReadTokens: null,
-      cachedCreationTokens: null,
+      cachedNonReadTokens: null,
       stages: [
-        makeStage('implementing', { cachedReadTokens: null, cachedCreationTokens: null }),
-        makeStage('spec_review', { cachedReadTokens: null, cachedCreationTokens: null }),
-        makeStage('quality_review', { cachedReadTokens: null, cachedCreationTokens: null }),
-        makeStage('verifying', { cachedReadTokens: null, cachedCreationTokens: null }),
-        makeStage('committing', { cachedReadTokens: null, cachedCreationTokens: null }),
+        makeStage('implementing', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('spec_review', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('quality_review', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('verifying', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('committing', { cachedReadTokens: null, cachedNonReadTokens: null }),
       ],
     });
     const result = ValidatedTaskCompletedEventSchema.safeParse(event);
     expect(result.success).toBe(true);
     if (result.success) {
       expect(result.data.cachedReadTokens).toBeNull();
-      expect(result.data.cachedCreationTokens).toBeNull();
+      expect(result.data.cachedNonReadTokens).toBeNull();
     }
   });
 
   it('R5 validation uses ?? 0 for null cached tokens (honest-null treats missing as zero for aggregate checks)', () => {
     const event = makeValidEvent({
       cachedReadTokens: null,
-      cachedCreationTokens: null,
+      cachedNonReadTokens: null,
       reasoningTokens: null,
       inputTokens: 200,
       outputTokens: 100,
@@ -724,7 +724,7 @@ describe('nullable cachedReadTokens and cachedCreationTokens', () => {
           inputTokens: 200,
           outputTokens: 100,
           cachedReadTokens: null,
-          cachedCreationTokens: null,
+          cachedNonReadTokens: null,
           reasoningTokens: null,
         }),
       ],
@@ -738,14 +738,14 @@ describe('nullable cachedReadTokens and cachedCreationTokens', () => {
       inputTokens: 200,
       outputTokens: 1,
       cachedReadTokens: null,
-      cachedCreationTokens: null,
+      cachedNonReadTokens: null,
       reasoningTokens: null,
       stages: [
         makeStage('implementing', {
           inputTokens: 200,
           outputTokens: 1,
           cachedReadTokens: null,
-          cachedCreationTokens: null,
+          cachedNonReadTokens: null,
           reasoningTokens: null,
         }),
       ],
@@ -761,7 +761,7 @@ describe('schema v4: round on stages and R7 uniqueness', () => {
   it('StageEntryBase requires round (≥0)', () => {
     const stage = { name: 'implementing', round: 0, tier: 'standard', model: 'm',
       durationMs: 1000, costUSD: 0.01, inputTokens: 100, outputTokens: 50,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
       toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
       turnCount: 0, maxIdleMs: 0, totalIdleMs: 0 };
     expect(StageEntryBase.safeParse(stage).success).toBe(true);

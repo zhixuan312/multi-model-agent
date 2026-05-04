@@ -80,7 +80,7 @@ export async function executeInvestigate(
     const fallback: RunResult = {
       output: '',
       status: 'error' as const,
-      usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0, costUSD: null },
+      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
       turns: 0,
       filesRead: [],
       filesWritten: [],

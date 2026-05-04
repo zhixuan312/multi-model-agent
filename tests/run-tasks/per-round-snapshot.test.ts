@@ -5,46 +5,46 @@ describe('subtractTokens (per-turn delta tracking)', () => {
   it('returns per-field difference for normal growth', () => {
     const prev: TokenCounts = {
       inputTokens: 100, outputTokens: 50,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const cur: TokenCounts = {
       inputTokens: 300, outputTokens: 150,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const d = subtractTokens(cur, prev);
     expect(d.inputTokens).toBe(200);
     expect(d.outputTokens).toBe(100);
     expect(d.cachedReadTokens).toBe(0);
-    expect(d.cachedCreationTokens).toBe(0);
+    expect(d.cachedNonReadTokens).toBe(0);
     expect(d.reasoningTokens).toBe(0);
   });
 
   it('returns per-field difference with cached and reasoning growth', () => {
     const prev: TokenCounts = {
       inputTokens: 500, outputTokens: 200,
-      cachedReadTokens: 100, cachedCreationTokens: 50, reasoningTokens: 0,
+      cachedReadTokens: 100, cachedNonReadTokens: 50, reasoningTokens: 0,
     };
     const cur: TokenCounts = {
       inputTokens: 1200, outputTokens: 500,
-      cachedReadTokens: 300, cachedCreationTokens: 100, reasoningTokens: 80,
+      cachedReadTokens: 300, cachedNonReadTokens: 100, reasoningTokens: 80,
     };
     const d = subtractTokens(cur, prev);
     expect(d.inputTokens).toBe(700);
     expect(d.outputTokens).toBe(300);
     expect(d.cachedReadTokens).toBe(200);
-    expect(d.cachedCreationTokens).toBe(50);
+    expect(d.cachedNonReadTokens).toBe(50);
     expect(d.reasoningTokens).toBe(80);
   });
 
   it('clamps single-field decrease to 0 (provider reporting glitch)', () => {
     const prev: TokenCounts = {
       inputTokens: 500, outputTokens: 200,
-      cachedReadTokens: 100, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 100, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     // inputTokens went backward (glitch), but output and cached grew
     const cur: TokenCounts = {
       inputTokens: 400, outputTokens: 300,
-      cachedReadTokens: 150, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 150, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const d = subtractTokens(cur, prev);
     expect(d.inputTokens).toBe(0); // clamped
@@ -55,12 +55,12 @@ describe('subtractTokens (per-turn delta tracking)', () => {
   it('detects counter reset (all fields ≤ prev) and treats cur as full delta', () => {
     const prev: TokenCounts = {
       inputTokens: 5000, outputTokens: 3000,
-      cachedReadTokens: 500, cachedCreationTokens: 200, reasoningTokens: 0,
+      cachedReadTokens: 500, cachedNonReadTokens: 200, reasoningTokens: 0,
     };
     // Counter reset (new sub-agent session)
     const cur: TokenCounts = {
       inputTokens: 100, outputTokens: 50,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const d = subtractTokens(cur, prev);
     // All fields ≤ prev, so cur becomes the delta
@@ -72,11 +72,11 @@ describe('subtractTokens (per-turn delta tracking)', () => {
   it('handles first-turn snapshot (prev all zeros)', () => {
     const prev: TokenCounts = {
       inputTokens: 0, outputTokens: 0,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const cur: TokenCounts = {
       inputTokens: 1000, outputTokens: 500,
-      cachedReadTokens: 200, cachedCreationTokens: 0, reasoningTokens: 50,
+      cachedReadTokens: 200, cachedNonReadTokens: 0, reasoningTokens: 50,
     };
     const d = subtractTokens(cur, prev);
     expect(d.inputTokens).toBe(1000);
@@ -91,14 +91,14 @@ describe('priceTokens with delay tracking', () => {
     inputCostPerMTok: 3.0,
     outputCostPerMTok: 15.0,
     cachedReadCostPerMTok: 0.3,
-    cachedCreationCostPerMTok: 3.0,
+    cachedNonReadCostPerMTok: 3.0,
     reasoningCostPerMTok: 15.0,
   };
 
   it('prices a turn with no cached/reasoning tokens', () => {
     const tokens: TokenCounts = {
       inputTokens: 1000, outputTokens: 500,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const cost = priceTokens(tokens, rateCard);
     // (1000 * 3 + 500 * 15) / 1_000_000 = (3000 + 7500) / 1e6 = 0.0105
@@ -108,7 +108,7 @@ describe('priceTokens with delay tracking', () => {
   it('prices a turn with cached reads and reasoning', () => {
     const tokens: TokenCounts = {
       inputTokens: 2000, outputTokens: 1000,
-      cachedReadTokens: 500, cachedCreationTokens: 100, reasoningTokens: 200,
+      cachedReadTokens: 500, cachedNonReadTokens: 100, reasoningTokens: 200,
     };
     const cost = priceTokens(tokens, rateCard);
     // (2000*3 + 1000*15 + 500*0.3 + 100*3 + 200*15) / 1e6
@@ -123,18 +123,18 @@ describe('priceTokens with delay tracking', () => {
 
     const prev1: TokenCounts = {
       inputTokens: 0, outputTokens: 0,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const cur1: TokenCounts = {
       inputTokens: 1000, outputTokens: 500,
-      cachedReadTokens: 200, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 200, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     const delta1 = subtractTokens(cur1, prev1);
     const cost1 = priceTokens(delta1, rateCard);
 
     const cur2: TokenCounts = {
       inputTokens: 2500, outputTokens: 1200,
-      cachedReadTokens: 500, cachedCreationTokens: 100, reasoningTokens: 80,
+      cachedReadTokens: 500, cachedNonReadTokens: 100, reasoningTokens: 80,
     };
     const delta2 = subtractTokens(cur2, cur1);
     const cost2 = priceTokens(delta2, rateCard);
@@ -182,22 +182,22 @@ describe('per-round delta tracking end-to-end contract', () => {
 
     // Simulate 3 turn_complete events from a single runner invocation:
     const events = [
-      { cumulativeInputTokens: 1000, cumulativeOutputTokens: 500, cumulativeCachedReadTokens: 100, cumulativeCachedCreationTokens: 0, cumulativeReasoningTokens: 0 },
-      { cumulativeInputTokens: 2500, cumulativeOutputTokens: 1200, cumulativeCachedReadTokens: 300, cumulativeCachedCreationTokens: 0, cumulativeReasoningTokens: 50 },
-      { cumulativeInputTokens: 4000, cumulativeOutputTokens: 2000, cumulativeCachedReadTokens: 500, cumulativeCachedCreationTokens: 100, cumulativeReasoningTokens: 150 },
+      { cumulativeInputTokens: 1000, cumulativeOutputTokens: 500, cumulativeCachedReadTokens: 100, cumulativeCachedNonReadTokens: 0, cumulativeReasoningTokens: 0 },
+      { cumulativeInputTokens: 2500, cumulativeOutputTokens: 1200, cumulativeCachedReadTokens: 300, cumulativeCachedNonReadTokens: 0, cumulativeReasoningTokens: 50 },
+      { cumulativeInputTokens: 4000, cumulativeOutputTokens: 2000, cumulativeCachedReadTokens: 500, cumulativeCachedNonReadTokens: 100, cumulativeReasoningTokens: 150 },
     ];
 
     const rateCard = {
       inputCostPerMTok: 3.0,
       outputCostPerMTok: 15.0,
       cachedReadCostPerMTok: 0.3,
-      cachedCreationCostPerMTok: 3.0,
+      cachedNonReadCostPerMTok: 3.0,
       reasoningCostPerMTok: 15.0,
     };
 
     let lastCumulative: TokenCounts = {
       inputTokens: 0, outputTokens: 0,
-      cachedReadTokens: 0, cachedCreationTokens: 0, reasoningTokens: 0,
+      cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0,
     };
     let accumulatedCost = 0;
 
@@ -206,7 +206,7 @@ describe('per-round delta tracking end-to-end contract', () => {
         inputTokens: e.cumulativeInputTokens,
         outputTokens: e.cumulativeOutputTokens,
         cachedReadTokens: e.cumulativeCachedReadTokens,
-        cachedCreationTokens: e.cumulativeCachedCreationTokens,
+        cachedNonReadTokens: e.cumulativeCachedNonReadTokens,
         reasoningTokens: e.cumulativeReasoningTokens,
       };
       const turnTokens = subtractTokens(cur, lastCumulative);
