@@ -37,6 +37,11 @@ const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'inve
 const VERIFY_ROUTES = new Set(['delegate', 'execute-plan', 'verify']);
 
 export function buildTaskCompletedEvent(ctx: BuildContext): TaskCompletedEventType {
+  // TODO(v4-phase-2 task 2.8): translate internal `mainModel*` field names to wire `parentModel*`.
+  // See docs/superpowers/plans/0.4.0/backend-ingestion-recipe.md for the exact field mapping
+  // (mainModel/Family/Tier/AgentModel -> parentModel/Family/Tier/AgentModel).
+  // SCHEMA_VERSION 4 wire compat: also emit deprecated-fields constants here
+  // (capabilities=[], clarificationRequested=false, briefQualityWarningCount=0, triggeringSkill=null).
   const { route, runResult, client, parentModel } = ctx;
 
   const stages = buildStages(route, runResult);
