@@ -66,12 +66,22 @@ function buildReviewPrompt(
     );
   } else {
     parts.push(
-      'Produce a narrative code review. Number each finding (1, 2, 3, ...). For each, on its own line, state:',
-      '  Severity: critical | high | medium | low',
-      '  Location: file:line',
-      '  Issue: one-paragraph explanation',
-      '  Suggestion: one-line fix recommendation',
-      'The reviewer will extract structured findings — do NOT emit JSON.',
+      'Produce a narrative code review. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+      '',
+      '## Finding 1: <one-line title>',
+      '- Severity: critical | high | medium | low',
+      '- Location: file:line',
+      '- Issue: one-paragraph explanation',
+      '- Suggestion: one-line fix recommendation',
+      '',
+      '## Finding 2: <one-line title>',
+      '- Severity: ...',
+      '- ...',
+      '',
+      'Rules:',
+      '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
+      '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
+      '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
     );
   }
   return parts.join('\n\n');
