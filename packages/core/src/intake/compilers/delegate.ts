@@ -44,7 +44,7 @@ export function compileDelegateTasks(
       filePaths: task.filePaths,
       agentType: task.agentType,
       contextBlockIds: task.contextBlockIds,
-      reviewPolicy: task.reviewPolicy ?? 'full',
+      reviewPolicy: task.reviewPolicy,
       verifyCommand: task.verifyCommand,
     };
   });

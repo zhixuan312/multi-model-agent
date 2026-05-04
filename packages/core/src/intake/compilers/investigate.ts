@@ -46,8 +46,6 @@ export function compileInvestigate(
       filePaths: canonicalizedFilePaths,
     } as unknown as Record<string, unknown>,
     question: input.question,
-    agentType: 'complex' as const,
-    reviewPolicy: 'quality_only',
     tools: input.tools ?? 'readonly',
     filePaths: canonicalizedFilePaths,
     sandboxPolicy: 'cwd-only',

@@ -29,7 +29,6 @@ export function compileExecutePlan(
   return input.tasks.map((rawTask, index) => {
     const taskInput = normalizeTask(rawTask);
     const task = taskInput.task;
-    const reviewPolicy = taskInput.reviewPolicy ?? 'full';
     const prompt = [
       'Below are the plan and/or spec documents for this project:',
       '',
@@ -61,8 +60,7 @@ export function compileExecutePlan(
         task,
       } as ExecutePlanSource,
       prompt,
-      reviewPolicy,
-      agentType: 'standard',
+      reviewPolicy: taskInput.reviewPolicy,
       verifyCommand: input.verifyCommand,
     };
   });

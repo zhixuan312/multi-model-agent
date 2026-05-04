@@ -2,6 +2,7 @@ import type { TaskSpec } from '../types.js';
 import type { MultiModelConfig } from '../types.js';
 import type { DraftTask, SourceRoute } from './types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
+import { ROUTE_DEFAULTS } from './infer.js';
 
 /**
  * Worker output contract per route.
@@ -15,16 +16,6 @@ import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
  */
 export const OUTPUT_CONTRACT_CLAUSES: Partial<Record<SourceRoute, string>> = {
   execute_plan: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
-};
-
-export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
-  delegate_tasks: {},
-  review_code: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  debug_task: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  verify_work: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  audit_document: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  execute_plan: { agentType: 'standard', reviewPolicy: 'full' },
-  investigate_codebase: { agentType: 'complex', reviewPolicy: 'quality_only' },
 };
 
 export function resolveDraft(

@@ -1,4 +1,26 @@
-import type { DraftTask } from './types.js';
+import type { AgentType } from '../types.js';
+import type { DraftTask, SourceRoute } from './types.js';
+
+export interface BriefDefaults {
+  agentType?: AgentType;
+  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
+}
+
+export const ROUTE_DEFAULTS: Record<SourceRoute, BriefDefaults> = {
+  delegate_tasks:       { agentType: 'standard', reviewPolicy: 'full' },
+  execute_plan:         { agentType: 'standard', reviewPolicy: 'full' },
+  audit_document:       { agentType: 'complex',  reviewPolicy: 'quality_only' },
+  review_code:          { agentType: 'complex',  reviewPolicy: 'quality_only' },
+  verify_work:          { agentType: 'complex',  reviewPolicy: 'quality_only' },
+  debug_task:           { agentType: 'complex',  reviewPolicy: 'quality_only' },
+  investigate_codebase: { agentType: 'complex',  reviewPolicy: 'quality_only' },
+};
+
+export function inferDefaults(route: SourceRoute): BriefDefaults {
+  const defaults = ROUTE_DEFAULTS[route];
+  if (!defaults) throw new Error(`no defaults table entry for route '${route}'`);
+  return defaults;
+}
 
 const FILE_PATH_PATTERN = /\b([\w./\\-]+\.\w{1,5})\b/g;
 const KNOWN_EXTENSIONS = new Set([
