@@ -25,14 +25,28 @@ const createBodySchema = z.object({
  * POST /context-blocks — stores a new context block for the authenticated cwd.
  * Requires cwd query param (cwd-gated).
  */
+const MAX_BODY_BYTES = 50 * 1024 * 1024;
+
 export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): RawHandler {
   return async (
-    _req: IncomingMessage,
+    req: IncomingMessage,
     res: ServerResponse,
     _params: Record<string, string>,
     ctx,
   ) => {
     const cwd = ctx.cwd!;
+
+    // ── 0. Pre-body size cap ───────────────────────────────────────────────
+    const contentLength = Number(req.headers['content-length'] ?? 0);
+    if (contentLength > MAX_BODY_BYTES) {
+      sendError(
+        res,
+        413,
+        'request_entity_too_large',
+        `register_context_block payload exceeds ${MAX_BODY_BYTES} bytes`,
+      );
+      return;
+    }
 
     // ── 1. Validate body ───────────────────────────────────────────────────
     const parsed = createBodySchema.safeParse(ctx.body);

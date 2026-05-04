@@ -130,6 +130,65 @@ describe('LRU TTL refresh', () => {
   });
 });
 
+describe('InMemoryContextBlockStore — v4.0 defaults', () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+  });
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('default TTL is 24 hours idle', () => {
+    const store = new InMemoryContextBlockStore();
+    store.register('content', { id: 'a' });
+    // 23 hours later — still within default 24h TTL
+    vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+    expect(store.get('a')).toBe('content');
+  });
+
+  it('default TTL resets on get()', () => {
+    const store = new InMemoryContextBlockStore();
+    store.register('content', { id: 'a' });
+    // 23 hours later, get resets the idle timer
+    vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+    expect(store.get('a')).toBe('content');
+    // Another 23 hours — still alive because timer was reset
+    vi.advanceTimersByTime(23 * 60 * 60 * 1000);
+    expect(store.get('a')).toBe('content');
+  });
+
+  it('evicts after 24h idle without access', () => {
+    const store = new InMemoryContextBlockStore();
+    store.register('content', { id: 'a' });
+    vi.advanceTimersByTime(25 * 60 * 60 * 1000);
+    expect(store.get('a')).toBeUndefined();
+  });
+
+  it('default maxEntries is 500', () => {
+    const store = new InMemoryContextBlockStore();
+    for (let i = 0; i < 500; i++) store.register('x', { id: `k${i}` });
+    expect(store.size).toBe(500);
+    store.register('y', { id: 'k500' });
+    expect(store.size).toBe(500); // LRU evicted oldest
+    expect(store.get('k0')).toBeUndefined();
+  });
+
+  it('emits warning when entry exceeds 10 MiB', () => {
+    const warns: string[] = [];
+    const orig = process.stderr.write.bind(process.stderr);
+    (process.stderr as unknown as { write: typeof process.stderr.write }).write = ((
+      chunk: string | Uint8Array,
+    ) => {
+      warns.push(typeof chunk === 'string' ? chunk : new TextDecoder().decode(chunk));
+      return true;
+    }) as typeof process.stderr.write;
+    const store = new InMemoryContextBlockStore();
+    store.register('x'.repeat(11 * 1024 * 1024), { id: 'big' });
+    process.stderr.write = orig;
+    expect(warns.some((w) => w.includes('>10 MiB'))).toBe(true);
+  });
+});
+
 describe('ContextBlockNotFoundError', () => {
   it('carries the missing id and has a helpful message', () => {
     const err = new ContextBlockNotFoundError('missing-id');

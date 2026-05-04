@@ -64,9 +64,9 @@ interface Entry {
 }
 
 export interface InMemoryContextBlockStoreOptions {
-  /** TTL in milliseconds. Defaults to 30 minutes. */
+  /** Idle TTL in milliseconds. Defaults to 24 hours; resets on `get()`. */
   ttlMs?: number;
-  /** Max number of entries before LRU eviction. Defaults to 100. */
+  /** Max number of entries before LRU eviction. Defaults to 500. */
   maxEntries?: number;
 }
 
@@ -91,12 +91,19 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
   private tick = 0;
 
   constructor(opts: InMemoryContextBlockStoreOptions = {}) {
-    this.ttlMs = opts.ttlMs ?? 30 * 60 * 1000;
-    this.maxEntries = opts.maxEntries ?? 100;
+    this.ttlMs = opts.ttlMs ?? 24 * 60 * 60 * 1000;
+    this.maxEntries = opts.maxEntries ?? 500;
   }
 
   register(content: string, opts: { id?: string } = {}): RegisteredBlock {
     const id = opts.id ?? randomUUID();
+    const byteSize = Buffer.byteLength(content, 'utf8');
+    const SIZE_WARN_BYTES = 10 * 1024 * 1024;
+    if (byteSize > SIZE_WARN_BYTES) {
+      process.stderr.write(
+        `[mma] WARN context-block ${id} is ${(byteSize / 1024 / 1024).toFixed(1)} MiB (>10 MiB)\n`,
+      );
+    }
     const now = Date.now();
     this.entries.set(id, { content, addedAtMs: now, lastAccessTick: ++this.tick, pinCount: 0 });
     this.evictIfOverBound();
