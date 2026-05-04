@@ -7,10 +7,7 @@ export interface DelegateTaskInput {
   prompt: string;
   done?: string;
   filePaths?: string[];
-  // Intentionally flexible: the delegate tool schema accepts runtime-defined
-  // agent names as strings. execute-plan is stricter because it exposes only the
-  // built-in standard/complex slots at intake.
-  agentType?: string;
+  agentType?: 'standard' | 'complex';
   contextBlockIds?: string[];
   reviewPolicy?: ReviewPolicy;
   verifyCommand?: string[];

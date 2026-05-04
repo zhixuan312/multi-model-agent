@@ -1,4 +1,4 @@
-import type { TaskSpec } from '../types.js';
+import type { AgentType, TaskSpec } from '../types.js';
 
 export type BriefQualityWarning =
   | 'outsourced_discovery'
@@ -37,7 +37,7 @@ export interface DraftTask {
   prompt: string;
   done?: string;
   filePaths?: string[];
-  agentType?: string;
+  agentType?: AgentType;
   assumptions?: string[];
   questions?: string[];
   confirmed?: boolean;

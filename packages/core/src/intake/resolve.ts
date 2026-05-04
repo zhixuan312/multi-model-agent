@@ -44,7 +44,7 @@ export function resolveDraft(
     prompt,
     done: draft.done,
     filePaths: draft.filePaths,
-    agentType: agentType as 'standard' | 'complex',
+    agentType,
     reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,

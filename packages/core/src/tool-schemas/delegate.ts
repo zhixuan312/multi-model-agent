@@ -2,14 +2,11 @@
 import { z } from 'zod';
 import { buildOutputEnvelopeSchema } from './shared-output.js';
 
-// Inline copy of the task shape from packages/mcp/src/cli.ts buildTaskSchema().
-// agentType is z.string() here (not an enum) because core does not know the
-// runtime agent names — the MCP layer constrains to an enum at registration time.
 const taskSchema = z.object({
   prompt: z.string().describe(
     'The task instruction. Required.',
   ),
-  agentType: z.string().optional().describe(
+  agentType: z.enum(['standard', 'complex']).optional().describe(
     'How hard the task is. Default: standard (cost-effective). Set to complex for harder reasoning or ambiguous scope.',
   ),
   filePaths: z.array(z.string()).optional().describe(

@@ -419,6 +419,10 @@
                       "properties": {
                         "agentType": {
                           "description": "How hard the task is. Default: standard (cost-effective). Set to complex for harder reasoning or ambiguous scope.",
+                          "enum": [
+                            "standard",
+                            "complex"
+                          ],
                           "type": "string"
                         },
                         "contextBlockIds": {
