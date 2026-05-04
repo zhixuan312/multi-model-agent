@@ -41,6 +41,7 @@ export type ErrorCode =
   // lifecycle_* — lifecycle orchestration
   | 'lifecycle_review_loop_capped'
   | 'lifecycle_round_cap_exceeded'
+  | 'lifecycle_idle_exceeded'
   // sentinel
   | 'other';
 
