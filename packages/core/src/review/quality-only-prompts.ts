@@ -11,7 +11,7 @@
  *     low}. The reviewer is authoritative — there is no separate
  *     `reviewerSeverity` field. Map worker-stated "mid" -> "medium". When
  *     the worker did not state a severity, judge from impact.
- *  5. Score each finding's reviewerConfidence (0-100) — how confident YOU
+ *  5. Score each finding's annotatorConfidence (0-100) — how confident YOU
  *     would be defending the finding's correctness if challenged.
  *  6. Quote evidence VERBATIM (≥20 chars) from the worker's output. The
  *     downstream parser flags non-substring quotes via
@@ -40,14 +40,14 @@ the worker presented them. Example:
     "claim": "Remote code execution via unsanitized input in src/handler.ts:42",
     "evidence": "user input is passed directly into shellExec() without escaping",
     "suggestion": "Use a parameterized API or escape input",
-    "reviewerConfidence": 90
+    "annotatorConfidence": 90
   },
   {
     "id": "F2",
     "severity": "medium",
     "claim": "Auth check missing on /admin endpoint",
     "evidence": "router.get('/admin', adminHandler) — no auth middleware applied",
-    "reviewerConfidence": 60
+    "annotatorConfidence": 60
   }
 ]
 ` + '```' + `
@@ -66,7 +66,7 @@ Field rules:
 - ` + '`evidence`' + `: REQUIRED, ≥20 chars, MUST be a verbatim quote from the
    worker's output. The parser flags non-substring quotes — quote precisely.
 - ` + '`suggestion`' + `: optional; quote or paraphrase the worker's recommended fix.
-- ` + '`reviewerConfidence`' + `: integer 0-100. How confident YOU (reviewer) are
+- ` + '`annotatorConfidence`' + `: integer 0-100. How confident YOU (reviewer) are
    that the finding is correct, on-brief, and well-grounded:
      80-100: defend without hesitation
      60-79:  plausible, minor gaps

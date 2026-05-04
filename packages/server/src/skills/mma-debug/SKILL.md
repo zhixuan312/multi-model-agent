@@ -85,14 +85,14 @@ Every finding has the same shape:
 | `claim` | string | One-sentence summary. |
 | `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
 | `suggestion?` | string | Optional fix recommendation. |
-| `reviewerConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
+| `annotatorConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
 | `evidenceGrounded` | boolean | True when `evidence` is a verbatim substring of worker output. |
 
 ### Verdict states (`qualityReviewVerdict`)
 
 - `'annotated'` — every finding is structured. May be reviewer-emitted (with
-  numeric `reviewerConfidence`) or deterministic-fallback (with
-  `reviewerConfidence: null`). The route ALWAYS reaches `'annotated'` unless
+  numeric `annotatorConfidence`) or deterministic-fallback (with
+  `annotatorConfidence: null`). The route ALWAYS reaches `'annotated'` unless
   the reviewer call itself fails transport.
 - `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW=disabled`).
 - `'error'` — only when the reviewer call fails transport (network / 5xx).
@@ -101,11 +101,11 @@ Every finding has the same shape:
 
 1. Show ALL findings — never silently drop. Confidence and grounding are
    soft signals, not gates.
-2. Default sort: severity (critical → low) then `reviewerConfidence` desc
+2. Default sort: severity (critical → low) then `annotatorConfidence` desc
    (nulls last).
 3. `severity` is the reviewer's authoritative final value — use it directly.
 4. Mark findings with `evidenceGrounded: false` or
-   `reviewerConfidence < 70` as "lower-trust" (collapsed section, lighter
+   `annotatorConfidence < 70` as "lower-trust" (collapsed section, lighter
    color, or `(low confidence)` annotation). User decides what to do.
 5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
 

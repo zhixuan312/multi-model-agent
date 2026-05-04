@@ -15,22 +15,22 @@ describe('severity vocabulary contract', () => {
 
   it('annotatedFindingSchema.severity accepts exactly critical/high/medium/low', () => {
     for (const v of VALID) {
-      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), reviewerConfidence: 80, evidenceGrounded: true };
+      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), annotatorConfidence: 80, evidenceGrounded: true };
       expect(annotatedFindingSchema.safeParse(sample).success).toBe(true);
     }
     for (const v of INVALID) {
-      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), reviewerConfidence: 80, evidenceGrounded: true };
+      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), annotatorConfidence: 80, evidenceGrounded: true };
       expect(annotatedFindingSchema.safeParse(sample).success).toBe(false);
     }
   });
 
   it('reviewerEmittedFindingSchema.severity accepts exactly critical/high/medium/low', () => {
     for (const v of VALID) {
-      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), reviewerConfidence: 80 };
+      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), annotatorConfidence: 80 };
       expect(reviewerEmittedFindingSchema.safeParse(sample).success).toBe(true);
     }
     for (const v of INVALID) {
-      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), reviewerConfidence: 80 };
+      const sample = { id: 'F1', severity: v, claim: 'x', evidence: 'y'.repeat(20), annotatorConfidence: 80 };
       expect(reviewerEmittedFindingSchema.safeParse(sample).success).toBe(false);
     }
   });

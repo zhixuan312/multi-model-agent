@@ -23,7 +23,7 @@ const REVIEWER_OUTPUT = [
     id: 'F1', severity: 'high',
     claim: 'silent error swallowing in parseConfig',
     evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.',
-    reviewerConfidence: 80,
+    annotatorConfidence: 80,
   }]),
   '```',
 ].join('\n');
@@ -35,7 +35,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: async (prompt: string) => {
-      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      const isReviewer = typeof prompt === 'string' && prompt.includes('annotatorConfidence');
       if (isReviewer) {
         return {
           output: REVIEWER_OUTPUT,
@@ -275,7 +275,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     const builder = (ctx: { workerOutput: string; brief: string }) => {
       builderCalled = true;
       receivedBrief = ctx.brief;
-      return `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+      return `Annotation prompt\n\n${ctx.workerOutput}\n\nannotatorConfidence: score each finding 0-100`;
     };
 
     const result = await executeReviewedLifecycle(
@@ -292,7 +292,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(result.annotatedFindings).toBeDefined();
     expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
     expect(result.annotatedFindings![0]!.severity).toBe('high');
-    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0]!.annotatorConfidence).toBe(80);
     expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
   });
 
@@ -331,7 +331,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     };
     const bus = new EventBus([sink]);
     const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+      `Annotation prompt\n\n${ctx.workerOutput}\n\nannotatorConfidence: score each finding 0-100`;
 
     await executeReviewedLifecycle(
       task, resolved, config, 0,
@@ -398,7 +398,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     };
 
     const builder = (ctx: { workerOutput: string; brief: string }) =>
-      `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+      `Annotation prompt\n\n${ctx.workerOutput}\n\nannotatorConfidence: score each finding 0-100`;
 
     const result = await executeReviewedLifecycle(
       task, resolved, config, 0,

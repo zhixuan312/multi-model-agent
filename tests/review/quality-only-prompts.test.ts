@@ -51,7 +51,7 @@ describe('quality-only-prompts (extraction shape)', () => {
       expect(prompt).toMatch(/F1.*F2/s);
     });
 
-    it(`${name}: documents reviewerConfidence range`, () => {
+    it(`${name}: documents annotatorConfidence range`, () => {
       const prompt = builder(ctx);
       expect(prompt).toMatch(/0-100|0\s*-\s*100/);
     });

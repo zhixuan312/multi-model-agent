@@ -20,7 +20,7 @@ import { z } from 'zod';
  *   worker output, false otherwise. Findings are never DROPPED for
  *   ungrounded evidence — the field is a soft trust signal for the main agent.
  * - suggestion: optional. For investigate, may be a follow-up question.
- * - reviewerConfidence: integer 0–100 in the normal annotation path. NULL
+ * - annotatorConfidence: integer 0–100 in the normal annotation path. NULL
  *   in the deterministic fallback path (regex-extracted findings — no LLM
  *   confidence available).
  * - evidenceGrounded: parser-assigned. True when evidence is a substring
@@ -32,7 +32,7 @@ export const annotatedFindingSchema = z.object({
   claim: z.string().min(1),
   evidence: z.string().min(20),
   suggestion: z.string().optional(),
-  reviewerConfidence: z.number().int().min(0).max(100).nullable(),
+  annotatorConfidence: z.number().int().min(0).max(100).nullable(),
   evidenceGrounded: z.boolean(),
 }).strict();
 
@@ -54,7 +54,7 @@ export const reviewerEmittedFindingSchema = z.object({
   claim: z.string().min(1),
   evidence: z.string().min(20),
   suggestion: z.string().optional(),
-  reviewerConfidence: z.number().int().min(0).max(100),
+  annotatorConfidence: z.number().int().min(0).max(100),
 }).strict();
 
 export const reviewerEmittedFindingsSchema = z.array(reviewerEmittedFindingSchema).refine(

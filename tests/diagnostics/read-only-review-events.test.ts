@@ -38,8 +38,8 @@ const NARRATIVE_WORKER_OUTPUT = [
 const REVIEWER_OUTPUT = [
   '```json',
   JSON.stringify([
-    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', reviewerConfidence: 80 },
-    { id: 'F2', severity: 'medium', claim: 'unguarded property access', evidence: 'The property access is unguarded against undefined req.body.user and will throw in production.', reviewerConfidence: 40 },
+    { id: 'F1', severity: 'high', claim: 'silent error swallowing', evidence: 'The function silently swallows errors and returns null — this is the issue and it needs a guard added at the top.', annotatorConfidence: 80 },
+    { id: 'F2', severity: 'medium', claim: 'unguarded property access', evidence: 'The property access is unguarded against undefined req.body.user and will throw in production.', annotatorConfidence: 40 },
   ]),
   '```',
 ].join('\n');
@@ -54,8 +54,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: vi.fn(async (prompt: string) => {
-      // The reviewer prompts include the rubric "reviewerConfidence"
-      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      // The reviewer prompts include the rubric "annotatorConfidence"
+      const isReviewer = typeof prompt === 'string' && prompt.includes('annotatorConfidence');
       if (isReviewer) {
         return {
           output: reviewerOutputState.output,
@@ -132,7 +132,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     expect(result.annotatedFindings).toBeDefined();
     expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
     expect(result.annotatedFindings![0]!.severity).toBe('high');
-    expect(result.annotatedFindings![0]!.reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0]!.annotatorConfidence).toBe(80);
     expect(result.annotatedFindings![0]!.evidenceGrounded).toBe(true);
 
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
@@ -216,7 +216,7 @@ describe('read-only review telemetry (annotation model, 3.8.1)', () => {
     expect(result.status).toBe('ok');
     expect(result.annotatedFindings).toBeDefined();
     expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
-    expect(result.annotatedFindings!.every((f) => f.reviewerConfidence === null)).toBe(true);
+    expect(result.annotatedFindings!.every((f) => f.annotatorConfidence === null)).toBe(true);
 
     const qualityEvents = capturedEvents.filter((e) => e.event === 'read_only_review.quality');
     expect(qualityEvents).toHaveLength(1);

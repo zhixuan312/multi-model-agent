@@ -177,7 +177,7 @@ export function fallbackExtractFindings(workerOutput: string): AnnotatedFinding[
       severity: 'medium',
       claim: 'reviewer parse failed; deterministic fallback emitted single catch-all from worker output',
       evidence,
-      reviewerConfidence: null,
+      annotatorConfidence: null,
       evidenceGrounded: eNorm.length >= 20 && normalizedWorker.includes(eNorm),
     }];
   }
@@ -196,7 +196,7 @@ export function fallbackExtractFindings(workerOutput: string): AnnotatedFinding[
       severity,
       claim: derivedClaim,
       evidence,
-      reviewerConfidence: null,
+      annotatorConfidence: null,
       evidenceGrounded: eNorm.length >= 20 && normalizedWorker.includes(eNorm),
     };
   });

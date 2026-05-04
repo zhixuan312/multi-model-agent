@@ -22,7 +22,7 @@ const REVIEWER_OUTPUT = [
     id: 'F1', severity: 'high',
     claim: 'silent error swallowing in parseConfig',
     evidence: 'The function silently swallows errors and returns null.',
-    reviewerConfidence: 80,
+    annotatorConfidence: 80,
   }]),
   '```',
 ].join('\n');
@@ -160,7 +160,7 @@ async function runReviewedLifecycleAndCaptureEvents(opts?: {
   const bus = new EventBus([sink]);
 
   const builder = (ctx: { workerOutput: string; brief: string }) =>
-    `Annotation prompt\n\n${ctx.workerOutput}\n\nreviewerConfidence: score each finding 0-100`;
+    `Annotation prompt\n\n${ctx.workerOutput}\n\nannotatorConfidence: score each finding 0-100`;
 
   const heartbeatCfg = {
     batchId: '00000000-0000-4000-8000-000000000000',

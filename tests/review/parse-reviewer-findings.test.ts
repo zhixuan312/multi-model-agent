@@ -15,14 +15,14 @@ const VALID_FINDINGS = [
     severity: 'critical' as const,
     claim: 'SQL injection in query builder',
     evidence: 'const q = "SELECT * FROM users WHERE id = " + req.params.id',
-    reviewerConfidence: 95,
+    annotatorConfidence: 95,
   },
   {
     id: 'F2',
     severity: 'high' as const,
     claim: 'Unguarded property access in auth middleware',
     evidence: 'src/auth/login.ts:89 has an unguarded property access against undefined req.body.user',
-    reviewerConfidence: 85,
+    annotatorConfidence: 85,
     suggestion: 'Use optional chaining or a guard clause',
   },
   {
@@ -30,7 +30,7 @@ const VALID_FINDINGS = [
     severity: 'medium' as const,
     claim: 'Error handler swallows exceptions silently',
     evidence: 'the error handler in src/errors/handler.ts swallows all exceptions silently without logging',
-    reviewerConfidence: 70,
+    annotatorConfidence: 70,
   },
 ];
 
@@ -84,8 +84,8 @@ describe('parseReviewerFindings', () => {
 
   it('returns error on duplicate finding ids', () => {
     const dupes = JSON.stringify([
-      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_FINDINGS[0].evidence, reviewerConfidence: 80 },
-      { id: 'F1', severity: 'medium', claim: 'b', evidence: VALID_FINDINGS[0].evidence, reviewerConfidence: 70 },
+      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_FINDINGS[0].evidence, annotatorConfidence: 80 },
+      { id: 'F1', severity: 'medium', claim: 'b', evidence: VALID_FINDINGS[0].evidence, annotatorConfidence: 70 },
     ]);
     const result = parseReviewerFindings(`\`\`\`json\n${dupes}\n\`\`\``, WORKER_OUTPUT);
     expect(result.ok).toBe(false);
@@ -93,9 +93,9 @@ describe('parseReviewerFindings', () => {
     expect(result.reason).toMatch(/duplicate/);
   });
 
-  it('returns error when reviewerConfidence is out of range', () => {
+  it('returns error when annotatorConfidence is out of range', () => {
     const bad = JSON.stringify([
-      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_FINDINGS[0].evidence, reviewerConfidence: 150 },
+      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_FINDINGS[0].evidence, annotatorConfidence: 150 },
     ]);
     const result = parseReviewerFindings(`\`\`\`json\n${bad}\n\`\`\``, WORKER_OUTPUT);
     expect(result.ok).toBe(false);
@@ -108,7 +108,7 @@ describe('parseReviewerFindings', () => {
         severity: 'high' as const,
         claim: 'Fabricated issue not present in worker output',
         evidence: 'this exact sentence does not appear anywhere in the worker output text',
-        reviewerConfidence: 90,
+        annotatorConfidence: 90,
       },
     ]);
     const result = parseReviewerFindings(`\`\`\`json\n${fabricated}\n\`\`\``, WORKER_OUTPUT);
@@ -126,7 +126,7 @@ describe('parseReviewerFindings', () => {
         severity: 'high' as const,
         claim: 'SQL injection',
         evidence: 'const   q  =  "SELECT * FROM users WHERE id = "  +  req.params.id',
-        reviewerConfidence: 90,
+        annotatorConfidence: 90,
       },
     ]);
     const result = parseReviewerFindings(`\`\`\`json\n${withExtraSpaces}\n\`\`\``, WORKER_OUTPUT);
@@ -150,7 +150,7 @@ describe('parseReviewerFindings', () => {
         severity: 'low' as const,
         claim: 'Short evidence',
         evidence: 'src/db/query.ts',
-        reviewerConfidence: 50,
+        annotatorConfidence: 50,
       },
     ]);
     const result = parseReviewerFindings(`\`\`\`json\n${shortEvidence}\n\`\`\``, WORKER_OUTPUT);
@@ -160,7 +160,7 @@ describe('parseReviewerFindings', () => {
   });
 
   it('extracts the last json block when multiple are present', () => {
-    const firstBlock = JSON.stringify([{ id: 'FX', severity: 'low', claim: 'first', evidence: VALID_FINDINGS[0].evidence, reviewerConfidence: 50 }]);
+    const firstBlock = JSON.stringify([{ id: 'FX', severity: 'low', claim: 'first', evidence: VALID_FINDINGS[0].evidence, annotatorConfidence: 50 }]);
     const secondBlock = JSON.stringify(VALID_FINDINGS);
     const reviewerOutput = `Example:\n\`\`\`json\n${firstBlock}\n\`\`\`\n\nReal findings:\n\`\`\`json\n${secondBlock}\n\`\`\``;
     const result = parseReviewerFindings(reviewerOutput, WORKER_OUTPUT);

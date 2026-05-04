@@ -19,8 +19,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       callState.callCount++;
       callState.lastPrompt = typeof prompt === 'string' ? prompt : JSON.stringify(prompt);
       // Discriminate by prompt content: the annotation reviewer prompt embeds
-      // the rubric "reviewerConfidence". Anything else is the implementer.
-      const isReviewer = typeof prompt === 'string' && prompt.includes('reviewerConfidence');
+      // the rubric "annotatorConfidence". Anything else is the implementer.
+      const isReviewer = typeof prompt === 'string' && prompt.includes('annotatorConfidence');
       if (!isReviewer) {
         return {
           output: [
@@ -54,7 +54,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
             id: 'F1', severity: 'high',
             claim: 'email field is present',
             evidence: 'The login form contains an email input field with proper validation attributes.',
-            reviewerConfidence: 80,
+            annotatorConfidence: 80,
           }]),
           '```',
         ].join('\n'),
@@ -117,7 +117,7 @@ describe('executeVerify quality-only reviewed lifecycle', () => {
     const findings = out.results[0].annotatedFindings;
     if (findings && findings.length > 0) {
       expect(findings[0]!.severity).toBe('high');
-      expect(findings[0]!.reviewerConfidence).toBe(80);
+      expect(findings[0]!.annotatorConfidence).toBe(80);
       expect(findings[0]!.evidenceGrounded).toBe(true);
     }
   });

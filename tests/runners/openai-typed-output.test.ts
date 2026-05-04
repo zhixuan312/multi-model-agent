@@ -53,7 +53,7 @@ const { Agent: MockAgent, run: mockRun } = vi.mocked(
 /**
  * A well-formed reviewer output matching the `reviewerOutputType` Zod schema.
  * Each finding has severity, claim, evidence (>= 20 chars), id, and
- * reviewerConfidence. The evidence strings are chosen to be verbatim
+ * annotatorConfidence. The evidence strings are chosen to be verbatim
  * substrings of the worker output below so `evidenceGrounded` is true.
  */
 const findingsPayload = {
@@ -64,7 +64,7 @@ const findingsPayload = {
       claim: 'SQL injection in login endpoint allows authentication bypass',
       evidence: 'the query string is concatenated directly into the SQL without parameterization',
       suggestion: 'Use parameterized queries immediately',
-      reviewerConfidence: 95,
+      annotatorConfidence: 95,
     },
     {
       id: 'F2',
@@ -72,7 +72,7 @@ const findingsPayload = {
       claim: 'Missing rate limiting on password reset endpoint',
       evidence: 'the password reset handler has no rate limit middleware applied',
       suggestion: 'Add rate limiting with a 5/minute window',
-      reviewerConfidence: 90,
+      annotatorConfidence: 90,
     },
     {
       id: 'F3',
@@ -80,7 +80,7 @@ const findingsPayload = {
       claim: 'Error messages expose internal stack traces to clients',
       evidence: 'the catch block returns err.stack directly in the 500 response body',
       suggestion: 'Replace with a generic error message in production',
-      reviewerConfidence: 85,
+      annotatorConfidence: 85,
     },
     {
       id: 'F4',
@@ -88,7 +88,7 @@ const findingsPayload = {
       claim: 'Console.log statements left in production authentication module',
       evidence: 'there are leftover console.log calls in the auth middleware file',
       suggestion: 'Remove or replace with structured logging',
-      reviewerConfidence: 80,
+      annotatorConfidence: 80,
     },
   ],
 };
@@ -264,8 +264,8 @@ describe('runOpenAI — typed reviewer findings round-trip (runMode: review)', (
     expect(findings[1].suggestion).toContain('rate limiting');
 
     // Confidence scores preserved
-    expect(findings[0].reviewerConfidence).toBe(95);
-    expect(findings[3].reviewerConfidence).toBe(80);
+    expect(findings[0].annotatorConfidence).toBe(95);
+    expect(findings[3].annotatorConfidence).toBe(80);
 
     // The output field should be the worker's narrative text (extracted from
     // newItems), not the structured object stringified

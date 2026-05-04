@@ -12,7 +12,7 @@ export { fallbackExtractFindings } from './fallback-extraction.js';
 
 /**
  * Result of the read-only annotation review pass.
- * - 'annotated' — reviewer ran, every worker finding has reviewerConfidence (and optionally reviewerSeverity).
+ * - 'annotated' — reviewer ran, every worker finding has annotatorConfidence (and optionally reviewerSeverity).
  * - 'error' — reviewer crashed, output unparseable, or id-set mismatch with worker.
  * - 'skipped' — kill switch, no provider, or worker emitted no findings (nothing to annotate).
  *

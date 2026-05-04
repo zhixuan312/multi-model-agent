@@ -64,7 +64,7 @@ describe('fallbackExtractFindings — captured implementer fixtures', () => {
     for (const f of findings) {
       expect(f.evidenceGrounded).toBe(true);
       expect(f.id).toMatch(/^F\d+$/);
-      expect(f.reviewerConfidence).toBeNull();
+      expect(f.annotatorConfidence).toBeNull();
     }
   });
 

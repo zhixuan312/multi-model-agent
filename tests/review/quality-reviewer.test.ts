@@ -184,7 +184,7 @@ function validReviewerJson(): string {
     claim: 'null pointer deref',
     evidence: 'On line 42 of a.ts, the variable x is dereferenced without a null check, which would cause a runtime crash when the input is empty.',
     suggestion: 'Add null guard before deref',
-    reviewerConfidence: 80,
+    annotatorConfidence: 80,
   }]);
 }
 

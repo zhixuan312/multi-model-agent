@@ -153,7 +153,7 @@ Every finding has the same shape:
 | `claim` | string | One-sentence summary. |
 | `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
 | `suggestion?` | string | Optional fix recommendation. |
-| `reviewerConfidence` | `number \| null` | 0–100; `null` from deterministic fallback. |
+| `annotatorConfidence` | `number \| null` | 0–100; `null` from deterministic fallback. |
 | `evidenceGrounded` | boolean | True iff `evidence` is verbatim from worker output. |
 
 `qualityReviewVerdict` is `'annotated'` (normal), `'skipped'` (kill switch), or `'error'` (reviewer transport failure). See `mma-investigate` SKILL.md for finding-rendering conventions — same shape.

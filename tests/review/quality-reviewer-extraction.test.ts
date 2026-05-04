@@ -67,7 +67,7 @@ function validReviewerJson(): string {
     claim: 'null pointer deref',
     evidence: VALID_EVIDENCE,
     suggestion: 'Add null guard before deref',
-    reviewerConfidence: 80,
+    annotatorConfidence: 80,
   }]);
 }
 
@@ -96,7 +96,7 @@ describe('runQualityReview annotation path — extraction pipeline', () => {
     expect(result.annotatedFindings![0].id).toBe('F1');
     expect(result.annotatedFindings![0].severity).toBe('high');
     expect(result.annotatedFindings![0].evidenceGrounded).toBe(true);
-    expect(result.annotatedFindings![0].reviewerConfidence).toBe(80);
+    expect(result.annotatedFindings![0].annotatorConfidence).toBe(80);
   });
 
   it('retries with reminder prompt when first response is unparseable, then succeeds', async () => {
@@ -164,9 +164,9 @@ The rate limiting middleware is commented out in the API gateway configuration.
     expect(result.status).toBe('annotated');
     expect(result.annotatedFindings).toBeDefined();
     expect(result.annotatedFindings!.length).toBeGreaterThanOrEqual(1);
-    // Fallback extracted findings have null reviewerConfidence
+    // Fallback extracted findings have null annotatorConfidence
     for (const f of result.annotatedFindings!) {
-      expect(f.reviewerConfidence).toBeNull();
+      expect(f.annotatorConfidence).toBeNull();
     }
   });
 

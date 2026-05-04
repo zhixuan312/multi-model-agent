@@ -14,15 +14,15 @@ describe('annotatedFindingSchema', () => {
   it('accepts a critical-severity finding', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'critical', claim: 'remote code execution',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 95, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 95, evidenceGrounded: true,
     });
     expect(result.success).toBe(true);
   });
 
-  it('accepts null reviewerConfidence (fallback path)', () => {
+  it('accepts null annotatorConfidence (fallback path)', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: null, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: null, evidenceGrounded: true,
     });
     expect(result.success).toBe(true);
   });
@@ -30,7 +30,7 @@ describe('annotatedFindingSchema', () => {
   it('rejects reviewerSeverity (field removed in 3.10.5)', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 80, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 80, evidenceGrounded: true,
       reviewerSeverity: 'medium',
     });
     expect(result.success).toBe(false);
@@ -39,7 +39,7 @@ describe('annotatedFindingSchema', () => {
   it('requires evidenceGrounded', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 80,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 80,
     });
     expect(result.success).toBe(false);
   });
@@ -47,7 +47,7 @@ describe('annotatedFindingSchema', () => {
   it('rejects evidence shorter than 20 chars', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x', evidence: 'too short',
-      reviewerConfidence: 50, evidenceGrounded: false,
+      annotatorConfidence: 50, evidenceGrounded: false,
     });
     expect(result.success).toBe(false);
   });
@@ -55,15 +55,15 @@ describe('annotatedFindingSchema', () => {
   it('rejects unknown severity', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'urgent', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 50, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 50, evidenceGrounded: true,
     });
     expect(result.success).toBe(false);
   });
 
-  it('rejects out-of-range reviewerConfidence when not null', () => {
+  it('rejects out-of-range annotatorConfidence when not null', () => {
     const result = annotatedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 150, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 150, evidenceGrounded: true,
     });
     expect(result.success).toBe(false);
   });
@@ -72,18 +72,18 @@ describe('annotatedFindingSchema', () => {
 describe('annotatedFindingsSchema', () => {
   it('rejects duplicate ids', () => {
     const result = annotatedFindingsSchema.safeParse([
-      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_EVIDENCE, reviewerConfidence: 50, evidenceGrounded: true },
-      { id: 'F1', severity: 'low', claim: 'b', evidence: VALID_EVIDENCE, reviewerConfidence: 30, evidenceGrounded: true },
+      { id: 'F1', severity: 'high', claim: 'a', evidence: VALID_EVIDENCE, annotatorConfidence: 50, evidenceGrounded: true },
+      { id: 'F1', severity: 'low', claim: 'b', evidence: VALID_EVIDENCE, annotatorConfidence: 30, evidenceGrounded: true },
     ]);
     expect(result.success).toBe(false);
   });
 });
 
 describe('reviewerEmittedFindingSchema', () => {
-  it('rejects null reviewerConfidence (only the parser-output schema allows null)', () => {
+  it('rejects null annotatorConfidence (only the parser-output schema allows null)', () => {
     const result = reviewerEmittedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: null,
+      evidence: VALID_EVIDENCE, annotatorConfidence: null,
     });
     expect(result.success).toBe(false);
   });
@@ -91,7 +91,7 @@ describe('reviewerEmittedFindingSchema', () => {
   it('does NOT include evidenceGrounded (parser adds it)', () => {
     const result = reviewerEmittedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 80, evidenceGrounded: true,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 80, evidenceGrounded: true,
     });
     expect(result.success).toBe(false);
   });
@@ -99,7 +99,7 @@ describe('reviewerEmittedFindingSchema', () => {
   it('rejects reviewerSeverity (field removed)', () => {
     const result = reviewerEmittedFindingSchema.safeParse({
       id: 'F1', severity: 'high', claim: 'x',
-      evidence: VALID_EVIDENCE, reviewerConfidence: 80,
+      evidence: VALID_EVIDENCE, annotatorConfidence: 80,
       reviewerSeverity: 'medium',
     });
     expect(result.success).toBe(false);

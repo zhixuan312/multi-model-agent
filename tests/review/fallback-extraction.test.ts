@@ -35,7 +35,7 @@ The JWT secret is hardcoded in config.ts line 42.
     expect(result[0]!.severity).toBe('high');
     expect(result[0]!.claim).toContain('SQL Injection');
     expect(result[0]!.evidenceGrounded).toBe(true);
-    expect(result[0]!.reviewerConfidence).toBeNull();
+    expect(result[0]!.annotatorConfidence).toBeNull();
 
     expect(result[1]!.id).toBe('F2');
     expect(result[1]!.severity).toBe('medium');
@@ -141,7 +141,7 @@ This has a made-up severity label.
     expect(result).toHaveLength(1);
     expect(result[0]!.id).toBe('F1');
     expect(result[0]!.severity).toBe('medium');
-    expect(result[0]!.reviewerConfidence).toBeNull();
+    expect(result[0]!.annotatorConfidence).toBeNull();
     expect(result[0]!.evidenceGrounded).toBe(true);
   });
 

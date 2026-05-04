@@ -1787,7 +1787,7 @@ export async function executeReviewedLifecycle(
         const annotated = qualityResult.annotatedFindings ?? [];
         // meanConfidence skips null entries (fallback path); null when ALL are null.
         const numericConfidences = annotated
-          .map(f => f.reviewerConfidence)
+          .map(f => f.annotatorConfidence)
           .filter((c): c is number => c !== null);
         const meanConfidence = numericConfidences.length > 0
           ? Math.round((numericConfidences.reduce((s, c) => s + c, 0) / numericConfidences.length) * 100) / 100
