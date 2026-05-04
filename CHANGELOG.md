@@ -5,6 +5,11 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [3.12.7] - 2026-05-04
+
+### Fixed
+- **`SEVERITY_RE` and `CLAIM_LABEL_RE` recognize bullet-prefixed lines.** 3.12.6 standardized the read-only-tool implementer prompts to emit findings as Markdown bullets (`- Severity: high`, `- Issue: ...`, `- Suggestion: ...`), but the deterministic extractor's regexes still expected bare label lines (`Severity: high`). Result: live 3.12.6 audit on `goal.md` returned 11 findings (good — extractor found the sections) but ALL classified as `medium` (bad — severity regex didn't match the bulleted lines, defaulted), masking the real distribution (2 high / 5 medium / 4 low). Both regexes now accept optional bullet prefixes (`-`, `*`, `+`) and bold wrappers (`**Severity:**`). Live re-test on the same audit narrative recovers the exact severity breakdown the implementer wrote.
+
 ## [3.12.6] - 2026-05-04
 
 ### Fixed
