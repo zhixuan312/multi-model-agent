@@ -18,6 +18,7 @@ import type {
   AttemptRecord,
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
+import type { RunnerAdapter } from '../../../packages/core/src/runner-shell/adapter.js';
 
 export type Stage =
   | 'ok'
@@ -417,6 +418,23 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     config: STUB_CONFIG,
     async run(): Promise<RunResult> {
       throw new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
+    },
+  };
+}
+
+export function mockAdapter(opts: {
+  turns: Array<{ assistantText: string; toolCalls: { name: string; input: unknown }[] }>;
+  usage?: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
+}): RunnerAdapter {
+  let i = 0;
+  return {
+    async turn() {
+      const t = opts.turns[i++] ?? { assistantText: '', toolCalls: [] };
+      return {
+        assistantText: t.assistantText,
+        toolCalls: t.toolCalls,
+        usage: opts.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      };
     },
   };
 }
