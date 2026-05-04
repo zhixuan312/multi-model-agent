@@ -50,7 +50,14 @@ function mapSeverity(raw: string): Severity {
 // is the `Severity:` label line) and produce a junk title. Restricting to
 // horizontal whitespace keeps each heading bounded to its own line.
 const SECTION_RE = /^(?:#{2,6}[ \t]+|\*\*[ \t]*)(?:Finding\s+)?(?:\[(\d+)\]|(\d+))(?:\*\*)?[ \t]*[\.\:\)\-\—\–]?(?:\*\*)?[ \t]*(.*)$/gim;
-const SEVERITY_RE = /^Severity:\s*(critical|high|medium|mid|low)\s*$/gim;
+// Severity line — accepts optional Markdown-bullet prefixes (`-`, `*`, `+`)
+// and optional bold wrappers, since 3.12.6 standardized the implementer
+// prompt to emit findings as bulleted bodies (`- Severity: high`). Pre-3.12.6
+// expected bare `Severity: ...` and quietly defaulted everything to medium
+// when bullets were present — even though the implementer wrote real
+// severities — producing dashboards that always showed "11 medium, 0 of
+// anything else" for read-only audits.
+const SEVERITY_RE = /^[ \t]*(?:[-*+][ \t]+)?\**[ \t]*Severity[ \t]*:[ \t]*\**[ \t]*(critical|high|medium|mid|low)\**[ \t]*$/gim;
 
 interface RawSection {
   startIdx: number;
@@ -122,7 +129,10 @@ function buildEvidence(sectionText: string, title: string, workerNumber: string)
  * Description, Problem, Finding. Strips Markdown bold wrappers from
  * label and value. Truncates at 160 chars to keep dashboard rows readable.
  */
-const CLAIM_LABEL_RE = /^\s*\**\s*(?:Issue|Title|Summary|Claim|Description|Problem|Finding)\s*:?\**\s*(.+?)\s*$/im;
+// Allow optional bullet prefixes (`-`, `*`, `+`) since 3.12.6 standardized
+// the implementer prompt to emit labeled bullets (`- Issue: ...`). The
+// optional `\**` captures bold-wrapped labels (`**Issue:**`).
+const CLAIM_LABEL_RE = /^[ \t]*(?:[-*+][ \t]+)?\**[ \t]*(?:Issue|Title|Summary|Claim|Description|Problem|Finding)[ \t]*:?\**[ \t]*(.+?)[ \t]*$/im;
 function claimFromBody(sectionText: string): string {
   const body = sectionText.split('\n').slice(1).join('\n');
   const m = CLAIM_LABEL_RE.exec(body);
