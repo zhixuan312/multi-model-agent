@@ -51,6 +51,7 @@ export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
 export interface BatchRegistryOptions {
   clarificationTimeoutMs?: number;
   batchTtlMs?: number;
+  max?: number;
 }
 
 export interface BatchRegistryDeps {
@@ -76,6 +77,7 @@ export class BatchRegistry {
     this.options = {
       clarificationTimeoutMs: options.clarificationTimeoutMs ?? 24 * 60 * 60 * 1000,
       batchTtlMs: options.batchTtlMs ?? 60 * 60 * 1000,
+      max: options.max ?? 200,
     };
     this.deps = deps;
   }
@@ -213,6 +215,30 @@ export class BatchRegistry {
     }
     for (const batchId of toDelete) {
       this.map.delete(batchId);
+    }
+  }
+
+  /** Two-step retention: time-window prune (expired + stale terminal entries), then LRU prune to max. */
+  prune(): void {
+    const now = Date.now();
+    // Step 1: time-window prune — drop expired entries and stale terminal entries
+    for (const [key, entry] of this.map) {
+      if (entry.state === 'expired') {
+        this.map.delete(key);
+      } else if (
+        (entry.state === 'complete' || entry.state === 'failed') &&
+        now - entry.stateChangedAt > this.options.batchTtlMs
+      ) {
+        this.release(entry);
+        this.map.delete(key);
+      }
+    }
+    // Step 2: LRU prune to max (Map iteration order = insertion order;
+    // oldest entries at head are evicted first)
+    while (this.map.size > this.options.max) {
+      const oldest = this.map.keys().next().value;
+      if (oldest === undefined) break;
+      this.map.delete(oldest);
     }
   }
 

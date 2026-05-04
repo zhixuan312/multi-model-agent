@@ -119,3 +119,62 @@ describe('BatchCache', () => {
     expect(cache.get(id)).toBeUndefined();
   });
 });
+
+describe('BatchCache two-step retention', () => {
+  it('time-window prune removes stale entries first', () => {
+    vi.useFakeTimers();
+    const t0 = Date.now();
+    vi.setSystemTime(t0);
+    const cache = new BatchCache({ ttlMs: 1000, max: 10 });
+    const id = '00000000-0000-0000-0000-000000000012';
+    cache.remember(id, specs(1));
+    vi.setSystemTime(t0 + 2000);
+    cache.prune();
+    expect(cache.get(id)).toBeUndefined();
+    vi.useRealTimers();
+  });
+
+  it('LRU prune fires only after time-window leaves >max', () => {
+    const cache = new BatchCache({ ttlMs: 24 * 60 * 60 * 1000, max: 200 });
+    for (let i = 0; i < 250; i++) {
+      cache.remember(`k${i}`, specs(1));
+    }
+    cache.prune();
+    expect(cache.size).toBe(200);
+    // Oldest 50 evicted (k0..k49)
+    expect(cache.get('k0')).toBeUndefined();
+    expect(cache.get('k49')).toBeUndefined();
+    expect(cache.get('k50')).toBeDefined();
+  });
+
+  it('time-window removes expired entries before LRU, preserving recent ones', () => {
+    vi.useFakeTimers();
+    const t0 = Date.now();
+    vi.setSystemTime(t0);
+    const cache = new BatchCache({ ttlMs: 1000, max: 5 });
+    // Insert 3 fresh entries
+    cache.remember('fresh1', specs(1));
+    cache.remember('fresh2', specs(1));
+    cache.remember('fresh3', specs(1));
+    // Advance time past TTL
+    vi.setSystemTime(t0 + 2000);
+    // Insert 2 more fresh entries — these get fresh expiresAt
+    cache.remember('fresh4', specs(1));
+    cache.remember('fresh5', specs(1));
+    // Now insert 3 more to trigger over-max: total 8, but 3 old ones should be pruned by time-window first
+    cache.remember('extra1', specs(1));
+    cache.remember('extra2', specs(1));
+    cache.remember('extra3', specs(1));
+
+    cache.prune();
+    // Time-window step drops fresh1,fresh2,fresh3 (expired). That leaves 5 entries
+    // (fresh4,fresh5,extra1,extra2,extra3) at max=5, so LRU fires 0 evictions.
+    expect(cache.size).toBe(5);
+    expect(cache.get('fresh1')).toBeUndefined();
+    expect(cache.get('fresh2')).toBeUndefined();
+    expect(cache.get('fresh3')).toBeUndefined();
+    expect(cache.get('fresh4')).toBeDefined();
+    expect(cache.get('fresh5')).toBeDefined();
+    vi.useRealTimers();
+  });
+});

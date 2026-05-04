@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { BatchRegistry } from '../packages/core/src/batch-registry.js';
 
 describe('BatchRegistry', () => {
@@ -30,6 +30,68 @@ describe('BatchRegistry', () => {
     it('returns undefined for unknown batchId on get', () => {
       const reg = new BatchRegistry();
       expect(reg.getTerminalBlock('nope', 0)).toBeUndefined();
+    });
+  });
+
+  describe('two-step retention', () => {
+    it('time-window prune removes expired and stale terminal entries', () => {
+      vi.useFakeTimers();
+      const t0 = Date.now();
+      vi.setSystemTime(t0);
+      const reg = new BatchRegistry({ batchTtlMs: 1000, max: 10 });
+      reg.register({
+        batchId: 'b1',
+        projectCwd: '/tmp',
+        tool: 'delegate',
+        state: 'pending',
+        startedAt: t0,
+        stateChangedAt: t0,
+        blockIds: [],
+        blocksReleased: false,
+      });
+      reg.complete('b1', { ok: true });
+      vi.setSystemTime(t0 + 2000);
+      reg.prune();
+      expect(reg.get('b1')).toBeUndefined();
+      vi.useRealTimers();
+    });
+
+    it('LRU prune fires after time-window leaves >max', () => {
+      const reg = new BatchRegistry({ max: 200 });
+      for (let i = 0; i < 250; i++) {
+        reg.register({
+          batchId: `b${i}`,
+          projectCwd: '/tmp',
+          tool: 'delegate',
+          state: 'pending',
+          startedAt: Date.now(),
+          stateChangedAt: Date.now(),
+          blockIds: [],
+          blocksReleased: false,
+        });
+      }
+      reg.prune();
+      expect(reg.size()).toBe(200);
+      expect(reg.get('b0')).toBeUndefined();
+      expect(reg.get('b49')).toBeUndefined();
+      expect(reg.get('b50')).toBeDefined();
+    });
+
+    it('non-terminal entries are not time-window pruned', () => {
+      const reg = new BatchRegistry({ batchTtlMs: 1000, max: 10 });
+      reg.register({
+        batchId: 'b1',
+        projectCwd: '/tmp',
+        tool: 'delegate',
+        state: 'pending',
+        startedAt: Date.now() - 5000,
+        stateChangedAt: Date.now() - 5000,
+        blockIds: [],
+        blocksReleased: false,
+      });
+      reg.prune();
+      expect(reg.get('b1')).toBeDefined();
+      expect(reg.get('b1')!.state).toBe('pending');
     });
   });
 });

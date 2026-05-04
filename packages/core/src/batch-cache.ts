@@ -14,8 +14,8 @@ export interface BatchCacheOptions {
   max?: number;
 }
 
-const DEFAULT_TTL_MS = 30 * 60 * 1000;
-const DEFAULT_MAX = 100;
+const DEFAULT_TTL_MS = 24 * 60 * 60 * 1000;
+const DEFAULT_MAX = 200;
 
 export class BatchCache {
   private readonly map = new Map<string, BatchEntry>();
@@ -82,6 +82,24 @@ export class BatchCache {
 
   clear(): void {
     this.map.clear();
+  }
+
+  /** Two-step retention: time-window prune (expired entries), then LRU prune to max. */
+  prune(): void {
+    const now = Date.now();
+    // Step 1: time-window prune — drop entries past their expiresAt deadline
+    for (const [key, entry] of this.map) {
+      if (entry.expiresAt < now) {
+        this.map.delete(key);
+      }
+    }
+    // Step 2: LRU prune to max (Map iteration order = insertion order;
+    // touch() re-inserts at the tail so live entries float, oldest at head)
+    while (this.map.size > this.max) {
+      const oldest = this.map.keys().next().value;
+      if (oldest === undefined) break;
+      this.map.delete(oldest);
+    }
   }
 
   get size(): number {
