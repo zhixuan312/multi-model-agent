@@ -25,7 +25,8 @@ function okResult(output: string): RunResult {
   return {
     output,
     status: 'ok',
-    usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: 0.001 },
+    usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    cost: { costUSD: 0.001, costDeltaVsParentUSD: null },
     turns: 1,
     filesRead: [],
     filesWritten: [],

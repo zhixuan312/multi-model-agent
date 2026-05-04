@@ -25,13 +25,13 @@ export interface SpecReviewMetrics {
 
 export type SpecReviewOrSkipped = SpecReviewResult | SkippedReviewResult;
 
-function extractMetrics(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): SpecReviewMetrics {
+function extractMetrics(r: { cost?: { costUSD?: number | null } | null; usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[] }): SpecReviewMetrics {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
     toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.usage?.costUSD ?? 0,
+    costUSD: r.cost?.costUSD ?? r.usage?.costUSD ?? 0,
   };
 }
 

@@ -812,7 +812,8 @@ export async function executeReviewedLifecycle(
     _rateCardUnresolved = false;
     try {
       const result = await call();
-      const actualCost = (result as { usage?: { costUSD?: number | null } | null; metrics?: { costUSD?: number | null } } | null)?.usage?.costUSD
+      const actualCost = (result as { cost?: { costUSD?: number | null } | null; usage?: { costUSD?: number | null } | null; metrics?: { costUSD?: number | null } } | null)?.cost?.costUSD
+        ?? (result as { usage?: { costUSD?: number | null } | null; metrics?: { costUSD?: number | null } } | null)?.usage?.costUSD
         ?? (result as { metrics?: { costUSD?: number | null } } | null)?.metrics?.costUSD
         ?? _currentRunnerCostUSD;
       _completedRunnerCostUSD = (_completedRunnerCostUSD ?? 0) + actualCost;

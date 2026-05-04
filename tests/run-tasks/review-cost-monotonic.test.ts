@@ -68,7 +68,8 @@ function makeMockCreateProvider() {
       return {
         output: isReviewer ? REVIEWER_OUTPUT : IMPL_OUTPUT,
         status: 'ok' as const,
-        usage: { inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens, totalTokens: tokens.inputTokens + tokens.outputTokens, costUSD: tokens.costUSD },
+        usage: { inputTokens: tokens.inputTokens, outputTokens: tokens.outputTokens, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+        cost: { costUSD: tokens.costUSD, costDeltaVsParentUSD: null },
         turns: 1,
         filesRead: ['src/a.ts'],
         filesWritten: ['report.md'],
