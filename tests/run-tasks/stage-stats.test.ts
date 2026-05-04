@@ -130,7 +130,7 @@ describe('endBaseStage', () => {
 });
 
 describe('endVerifyStage', () => {
-  const agent = { tier: 'complex' as const, family: 'gpt', model: 'gpt-5.5' };
+  const agent = { tier: 'complex' as const, model: 'gpt-5.5' };
 
   it('records passed verification', () => {
     const stats = emptyStats();
