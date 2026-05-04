@@ -70,7 +70,7 @@ const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
   'audit', 'review', 'verify', 'investigate', 'debug',
 ]);
 
-const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedTokens: null, reasoningTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null } as const;
+const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null } as const;
 
 export function emptyStats(): StageStatsMap {
   return {
@@ -97,7 +97,7 @@ export function endBaseStage(
   agent: { tier: 'standard' | 'complex'; model: string },
   finalCostUSD: number | null,
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
-  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number },
 ): void {
   // Cast through unknown — TS can't narrow stats[name] on a union-typed index;
   // the runtime invariant (set name's slot to its matching variant) is enforced
@@ -116,8 +116,8 @@ export function endBaseStage(
     activityEvents: idle?.activityEvents ?? 0,
     inputTokens: metrics?.inputTokens ?? null,
     outputTokens: metrics?.outputTokens ?? null,
-    cachedTokens: metrics?.cachedTokens ?? null,
-    reasoningTokens: metrics?.reasoningTokens ?? null,
+    cachedReadTokens: metrics?.cachedReadTokens ?? null,
+    cachedNonReadTokens: metrics?.cachedNonReadTokens ?? null,
     turnCount: metrics?.turnCount ?? null,
     toolCallCount: metrics?.toolCallCount ?? null,
     filesReadCount: metrics?.filesReadCount ?? null,
@@ -140,7 +140,7 @@ export function endReviewStage(
   // for spec_review and quality_review) — the caller accumulates per-call
   // wall time and passes the sum, instead of `Date.now() - t0` which would
   // span the entire review block including subsequent stages.
-  metrics?: { inputTokens?: number; outputTokens?: number; cachedTokens?: number; reasoningTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
+  metrics?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number; turnCount?: number; toolCallCount?: number; filesReadCount?: number; filesWrittenCount?: number; costUSD?: number; durationMs?: number },
 ): void {
   const durationMs = metrics?.durationMs !== undefined ? metrics.durationMs : Date.now() - t0;
   // Idle-tracker leak guard: stageIdle is reset at every transitionStage(),
@@ -171,8 +171,8 @@ export function endReviewStage(
     activityEvents: idle?.activityEvents ?? 0,
     inputTokens: metrics?.inputTokens ?? null,
     outputTokens: metrics?.outputTokens ?? null,
-    cachedTokens: metrics?.cachedTokens ?? null,
-    reasoningTokens: metrics?.reasoningTokens ?? null,
+    cachedReadTokens: metrics?.cachedReadTokens ?? null,
+    cachedNonReadTokens: metrics?.cachedNonReadTokens ?? null,
     turnCount: metrics?.turnCount ?? null,
     toolCallCount: metrics?.toolCallCount ?? null,
     filesReadCount: metrics?.filesReadCount ?? null,
@@ -193,8 +193,8 @@ export interface ReworkAccumulator {
   costUSD: number;
   inputTokens: number;
   outputTokens: number;
-  cachedTokens: number;
-  reasoningTokens: number;
+  cachedReadTokens: number;
+  cachedNonReadTokens: number;
   turnCount: number;
   toolCallCount: number;
   filesReadCount: number;
@@ -208,7 +208,7 @@ export function emptyReworkAcc(): ReworkAccumulator {
   return {
     occurred: false,
     durationMs: 0, costUSD: 0,
-    inputTokens: 0, outputTokens: 0, cachedTokens: 0, reasoningTokens: 0,
+    inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0,
     turnCount: 0, toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
     maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0,
   };
@@ -216,7 +216,7 @@ export function emptyReworkAcc(): ReworkAccumulator {
 
 export function accumulateReworkIteration(
   acc: ReworkAccumulator,
-  result: { usage?: { inputTokens?: number | null; outputTokens?: number | null; costUSD?: number | null; cachedTokens?: number | null; reasoningTokens?: number | null } | null; turns?: number; toolCalls?: unknown[]; filesRead?: unknown[]; filesWritten?: unknown[] },
+  result: { usage?: { inputTokens?: number | null; outputTokens?: number | null; costUSD?: number | null; cachedReadTokens?: number | null; cachedNonReadTokens?: number | null } | null; turns?: number; toolCalls?: unknown[]; filesRead?: unknown[]; filesWritten?: unknown[] },
   iterDurationMs: number,
   idle: { maxIdleMs: number; totalIdleMs: number; activityEvents: number } | null,
 ): void {
@@ -225,8 +225,8 @@ export function accumulateReworkIteration(
   acc.costUSD += result.usage?.costUSD ?? 0;
   acc.inputTokens += result.usage?.inputTokens ?? 0;
   acc.outputTokens += result.usage?.outputTokens ?? 0;
-  acc.cachedTokens += (result.usage as { cachedTokens?: number } | null | undefined)?.cachedTokens ?? 0;
-  acc.reasoningTokens += (result.usage as { reasoningTokens?: number } | null | undefined)?.reasoningTokens ?? 0;
+  acc.cachedReadTokens += result.usage?.cachedReadTokens ?? 0;
+  acc.cachedNonReadTokens += result.usage?.cachedNonReadTokens ?? 0;
   acc.turnCount += result.turns ?? 0;
   acc.toolCallCount += result.toolCalls?.length ?? 0;
   acc.filesReadCount += result.filesRead?.length ?? 0;
@@ -258,8 +258,8 @@ export function commitReworkStage(
     activityEvents: acc.activityEvents,
     inputTokens: acc.inputTokens,
     outputTokens: acc.outputTokens,
-    cachedTokens: acc.cachedTokens,
-    reasoningTokens: acc.reasoningTokens,
+    cachedReadTokens: acc.cachedReadTokens,
+    cachedNonReadTokens: acc.cachedNonReadTokens,
     turnCount: acc.turnCount,
     toolCallCount: acc.toolCallCount,
     filesReadCount: acc.filesReadCount,
@@ -290,8 +290,8 @@ export function endVerifyStage(
     activityEvents: idle?.activityEvents ?? 0,
     inputTokens: null,
     outputTokens: null,
-    cachedTokens: null,
-    reasoningTokens: null,
+    cachedReadTokens: null,
+    cachedNonReadTokens: null,
     turnCount: null,
     toolCallCount: null,
     filesReadCount: null,
@@ -412,8 +412,8 @@ export async function executeReviewedLifecycle(
       }
       if (event === 'task_completed') {
         if ('stages_json' in cleaned) { cleaned.stages = cleaned.stages_json; delete cleaned.stages_json; }
-        if (!('cachedTokens' in cleaned)) cleaned.cachedTokens = null;
-        if (!('reasoningTokens' in cleaned)) cleaned.reasoningTokens = null;
+        if (!('cachedReadTokens' in cleaned)) cleaned.cachedReadTokens = null;
+        if (!('cachedNonReadTokens' in cleaned)) cleaned.cachedNonReadTokens = null;
         if (!('stages' in cleaned)) cleaned.stages = JSON.stringify(stats);
       }
 
@@ -879,8 +879,8 @@ export async function executeReviewedLifecycle(
         activityEvents: 0,
         inputTokens: salvageSource?.usage?.inputTokens ?? null,
         outputTokens: salvageSource?.usage?.outputTokens ?? null,
-        cachedTokens: null,
-        reasoningTokens: null,
+        cachedReadTokens: null,
+        cachedNonReadTokens: null,
         turnCount: salvageSource?.turns ?? null,
         toolCallCount: (salvageSource?.toolCalls?.length) || null,
         filesReadCount: (salvageSource?.filesRead?.length) || null,
@@ -1375,8 +1375,8 @@ export async function executeReviewedLifecycle(
     endBaseStage(stats, 'implementing', implT0, implC0, implementerAgentInfo, runningCostUSD(), snapshotIdle(stageIdle), {
       inputTokens: implResult.usage?.inputTokens ?? 0,
       outputTokens: implResult.usage?.outputTokens ?? 0,
-      cachedTokens: ((implResult.usage?.cachedReadTokens ?? 0) + (implResult.usage?.cachedNonReadTokens ?? 0)) || undefined,
-      reasoningTokens: undefined,
+      cachedReadTokens: implResult.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: implResult.usage?.cachedNonReadTokens ?? 0,
       turnCount: implResult.turns,
       toolCallCount: implResult.toolCalls?.length ?? 0,
       filesReadCount: implResult.filesRead?.length ?? 0,
@@ -2059,8 +2059,8 @@ export async function executeReviewedLifecycle(
           toolCalls: r.toolCalls?.length ?? 0,
           inputTokens: r.usage.inputTokens,
           outputTokens: r.usage.outputTokens,
-          cachedTokens: ((r.usage.cachedReadTokens ?? 0) + (r.usage.cachedNonReadTokens ?? 0)) || null,
-          reasoningTokens: null,
+          cachedReadTokens: r.usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: r.usage.cachedNonReadTokens ?? 0,
           costUSD: r.cost?.costUSD,
           taskMaxIdleMs: r.taskMaxIdleMs ?? null,
           stallTriggered: r.stallTriggered ?? false,

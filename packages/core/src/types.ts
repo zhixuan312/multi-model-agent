@@ -43,11 +43,11 @@ interface BaseStageStats {
   totalIdleMs:   number | null;
   activityEvents:number | null;
   // Per-stage telemetry metrics — populated at stage completion.
-  inputTokens:        number | null;
-  outputTokens:       number | null;
-  cachedTokens:       number | null;
-  reasoningTokens:    number | null;
-  turnCount:          number | null;
+  inputTokens:         number | null;
+  outputTokens:        number | null;
+  cachedReadTokens:    number | null;
+  cachedNonReadTokens: number | null;
+  turnCount:           number | null;
   toolCallCount:      number | null;
   filesReadCount:     number | null;
   filesWrittenCount:  number | null;

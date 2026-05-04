@@ -118,7 +118,7 @@ function synthWithThreads(n: number): string {
 const VOLATILE_NUMERIC_KEYS = new Set([
   // camelCase
   'durationMs', 'elapsed', 'idleMs', 'costUSD', 'inputTokens', 'outputTokens',
-  'cachedTokens', 'reasoningTokens', 'totalTokens', 'cost_used_usd', 'cost_cap_usd',
+  'cachedReadTokens', 'cachedNonReadTokens', 'totalTokens', 'cost_used_usd', 'cost_cap_usd',
   'wallClockMs', 'internalDurationMs', 'externalDurationMs', 'thresholdMs',
   'timeoutMs', 'taskMaxIdleMs', 'maxIdleMs', 'totalIdleMs', 'activityEvents',
   'stage_idle_ms', 'round',
