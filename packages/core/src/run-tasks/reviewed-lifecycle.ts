@@ -1920,7 +1920,7 @@ export async function executeReviewedLifecycle(
 
     const specAggregateStatus = reviewPolicy === 'quality_only'
       ? 'skipped' as const
-      : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'network_error', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+      : (['approved', 'changes_required', 'skipped', 'error', 'api_error', 'provider_transport_failure', 'timeout'].includes(specStatus) ? specStatus : 'error') as 'approved' | 'changes_required' | 'skipped' | 'error' | 'api_error' | 'provider_transport_failure' | 'timeout';
 
     // R3 invariant: review-stage entries must record the actual REVIEWER's
     // model, not the implementer's. The last-used reviewer tier is the one
@@ -1945,7 +1945,7 @@ export async function executeReviewedLifecycle(
 
     finalizeSpecReviewStage();
     finalizeQualityReviewStage();
-    const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'network_error' | 'timeout';
+    const qualityAggregateStatus = qualityResult.status as 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'api_error' | 'provider_transport_failure' | 'timeout';
     const aggregated = aggregateResult(
       finalReport,
       specReport,
@@ -1970,8 +1970,8 @@ export async function executeReviewedLifecycle(
         : finalImplResult.status === 'ok' && fileArtifactsMissing
           ? 'incomplete'
           : finalImplResult.status;
-    const specEnvelopeStatus = (specStatus === 'api_error' || specStatus === 'network_error' || specStatus === 'timeout' || specStatus === 'api_aborted' ? 'error' : specStatus) as 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable';
-    const qualityEnvelopeStatus = qualityResult.status === 'api_error' || qualityResult.status === 'network_error' || qualityResult.status === 'timeout' || qualityResult.status === 'api_aborted' ? 'error' : qualityResult.status;
+    const specEnvelopeStatus = (specStatus === 'api_error' || specStatus === 'provider_transport_failure' || specStatus === 'timeout' || specStatus === 'api_aborted' ? 'error' : specStatus) as 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable';
+    const qualityEnvelopeStatus = qualityResult.status === 'api_error' || qualityResult.status === 'provider_transport_failure' || qualityResult.status === 'timeout' || qualityResult.status === 'api_aborted' ? 'error' : qualityResult.status;
 
     const runResult: RunResult = {
       ...finalImplResult,

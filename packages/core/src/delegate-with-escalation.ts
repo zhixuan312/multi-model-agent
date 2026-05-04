@@ -47,7 +47,7 @@ export interface DelegateOptions {
   assignedTier?: AgentType;
 }
 
-const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'network_error']);
+const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'provider_transport_failure']);
 const TIMEOUT_STATUS = 'timeout';
 const MAX_RETRIES = 2;
 const BASE_DELAY_MS = 1000;

@@ -371,7 +371,7 @@ function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
     switch (tr.cause) {
       case 'api_error':
       case 'api_aborted': return 'api_error';
-      case 'network_error': return 'network_error';
+      case 'provider_transport_failure': return 'provider_transport_failure';
     }
   }
   return null;

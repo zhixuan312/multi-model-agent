@@ -58,10 +58,10 @@ describe('delegateWithEscalation retry', () => {
     expect(provider.run).toHaveBeenCalledTimes(2);
   });
 
-  it('retries network_error up to 2 times (3 total attempts)', async () => {
+  it('retries provider_transport_failure up to 2 times (3 total attempts)', async () => {
     const provider = sequenceProvider([
-      makeMockResult('network_error', 'net fail 1'),
-      makeMockResult('network_error', 'net fail 2'),
+      makeMockResult('provider_transport_failure', 'net fail 1'),
+      makeMockResult('provider_transport_failure', 'net fail 2'),
       makeMockResult('ok', 'success'),
     ]);
 

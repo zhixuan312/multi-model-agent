@@ -125,7 +125,7 @@ export function classifyError(err: unknown): { status: RunStatus; reason: string
   //    explicitly mention "network".
   if (code === 'ECONNREFUSED' || code === 'ENOTFOUND' || /network/i.test(message)) {
     return {
-      status: 'network_error',
+      status: 'provider_transport_failure',
       reason: message || 'network error',
     };
   }

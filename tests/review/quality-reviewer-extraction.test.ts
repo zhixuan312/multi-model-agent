@@ -29,7 +29,7 @@ function makeOkResult(output: string): RunResult {
   };
 }
 
-function makeErrorResult(status: 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted'): RunResult {
+function makeErrorResult(status: 'error' | 'api_error' | 'provider_transport_failure' | 'timeout' | 'api_aborted'): RunResult {
   return {
     output: '',
     status,
@@ -203,7 +203,7 @@ The rate limiting middleware is commented out in the API gateway configuration.
       if (calls === 1) {
         return makeOkResult('No JSON here.');
       }
-      return makeErrorResult('network_error');
+      return makeErrorResult('provider_transport_failure');
     });
     const result = await runQualityReview(
       provider,
@@ -217,7 +217,7 @@ The rate limiting middleware is commented out in the API gateway configuration.
       workerOutputWithEvidence(),
     );
     expect(calls).toBeGreaterThanOrEqual(2);
-    expect(result.status).toBe('network_error');
+    expect(result.status).toBe('provider_transport_failure');
     expect(result.findings).toEqual([]);
     expect(result.annotatedFindings).toBeUndefined();
     expect(result.errorReason).toBeDefined();

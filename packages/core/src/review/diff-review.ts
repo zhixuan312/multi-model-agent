@@ -11,7 +11,7 @@ export type DiffReviewVerdict =
   | { kind: 'approve'; status?: 'approved'; concerns: [] }
   | { kind: 'concerns'; status?: 'changes_required'; concerns: DiffReviewConcern[] }
   | { kind: 'reject'; status?: 'changes_required'; message: string }
-  | { kind: 'transport_failure'; status: 'api_error' | 'network_error' | 'timeout' | 'api_aborted'; concerns: DiffReviewConcern[]; reason?: string };
+  | { kind: 'transport_failure'; status: 'api_error' | 'provider_transport_failure' | 'timeout' | 'api_aborted'; concerns: DiffReviewConcern[]; reason?: string };
 
 export type DiffReviewOrSkipped = DiffReviewVerdict | SkippedReviewResult;
 
@@ -61,7 +61,7 @@ export async function runDiffReview(input: DiffReviewInput): Promise<DiffReviewV
     abortSignal: input.abortSignal,
     timeoutMs: remaining,
   });
-  if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
+  if (result.status === 'api_error' || result.status === 'provider_transport_failure' || result.status === 'timeout' || result.status === 'api_aborted') {
     return { kind: 'transport_failure', status: result.status, concerns: [] };
   }
   const trimmed = result.output.trim();

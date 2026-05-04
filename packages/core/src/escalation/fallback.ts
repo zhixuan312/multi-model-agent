@@ -5,7 +5,7 @@ import { otherTier } from '../routing/tier-policy.js';
 
 export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'api_error',
-  'network_error',
+  'provider_transport_failure',
   'timeout',
 ]);
 
@@ -523,7 +523,7 @@ export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): 
 export function isReviewTransportFailure(
   r: { status?: string },
 ): boolean {
-  return r.status === 'api_error' || r.status === 'network_error' || r.status === 'timeout';
+  return r.status === 'api_error' || r.status === 'provider_transport_failure' || r.status === 'timeout';
 }
 
 function scoreWork<T>(r: T | undefined): number {

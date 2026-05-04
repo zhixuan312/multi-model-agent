@@ -52,7 +52,7 @@ export const ErrorCode = z.enum([
   'runner_crash',
   'executor_error',
   'api_error',
-  'network_error',
+  'provider_transport_failure',
   'rate_limit_exceeded',
   'incomplete_no_summary',
   'reviewer_separation_unsatisfiable',

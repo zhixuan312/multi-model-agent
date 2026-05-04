@@ -27,11 +27,11 @@ export { fallbackExtractFindings } from './fallback-extraction.js';
  * - 'annotated' — read-only annotation path; populated `annotatedFindings`.
  * - 'approved' / 'changes_required' — artifact-route gating path; `findings` +
  *   `report` carry the gating signal.
- * - 'error' / 'api_error' / 'network_error' / 'timeout' — review failed.
+ * - 'error' / 'api_error' / 'provider_transport_failure' / 'timeout' — review failed.
  * - 'skipped' — kill switch, no provider, or worker emitted no findings.
  */
 export interface QualityReviewResult {
-  status: 'approved' | 'changes_required' | 'annotated' | 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted' | 'skipped';
+  status: 'approved' | 'changes_required' | 'annotated' | 'error' | 'api_error' | 'provider_transport_failure' | 'timeout' | 'api_aborted' | 'skipped';
   annotatedFindings?: AnnotatedFinding[];
   report?: ParsedStructuredReport;
   findings: string[];
@@ -148,7 +148,7 @@ export async function runQualityReview(
   }
 
   if (result.status !== 'ok') {
-    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
+    if (result.status === 'api_error' || result.status === 'provider_transport_failure' || result.status === 'timeout' || result.status === 'api_aborted') {
       return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
     }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };
@@ -288,7 +288,7 @@ async function runAnnotationReview(
      *  parseReviewerFindings). */
     parsedFindings: AnnotatedFinding[] | null;
   };
-  type CallTransport = { kind: 'transport'; status: 'error' | 'api_error' | 'network_error' | 'timeout' | 'api_aborted'; errorReason: string; metrics: QualityReviewMetrics };
+  type CallTransport = { kind: 'transport'; status: 'error' | 'api_error' | 'provider_transport_failure' | 'timeout' | 'api_aborted'; errorReason: string; metrics: QualityReviewMetrics };
 
   async function callReviewer(prompt: string): Promise<CallOk | CallTransport> {
     let result;
@@ -303,7 +303,7 @@ async function runAnnotationReview(
     }
     const m = extractMetrics(result);
     if (result.status !== 'ok') {
-      if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout' || result.status === 'api_aborted') {
+      if (result.status === 'api_error' || result.status === 'provider_transport_failure' || result.status === 'timeout' || result.status === 'api_aborted') {
         return { kind: 'transport', status: result.status, errorReason: `review agent returned status: ${result.status}`, metrics: m };
       }
       return { kind: 'transport', status: 'error', errorReason: `review agent returned status: ${result.status}`, metrics: m };

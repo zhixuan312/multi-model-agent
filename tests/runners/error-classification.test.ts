@@ -29,27 +29,27 @@ describe('classifyError', () => {
     });
   });
 
-  // ─── network_error branch ───────────────────────────────────────────────
-  describe('network_error', () => {
-    it('classifies ECONNREFUSED as network_error', () => {
+  // ─── provider_transport_failure branch ───────────────────────────────────────────────
+  describe('provider_transport_failure', () => {
+    it('classifies ECONNREFUSED as provider_transport_failure', () => {
       const err = Object.assign(new Error('connect ECONNREFUSED'), {
         code: 'ECONNREFUSED',
       });
       const { status, reason } = classifyError(err);
-      expect(status).toBe('network_error');
+      expect(status).toBe('provider_transport_failure');
       expect(reason).toContain('ECONNREFUSED');
     });
 
-    it('classifies ENOTFOUND as network_error', () => {
+    it('classifies ENOTFOUND as provider_transport_failure', () => {
       const err = Object.assign(new Error('getaddrinfo ENOTFOUND api.example.com'), {
         code: 'ENOTFOUND',
       });
-      expect(classifyError(err).status).toBe('network_error');
+      expect(classifyError(err).status).toBe('provider_transport_failure');
     });
 
-    it('classifies any message matching /network/i as network_error', () => {
+    it('classifies any message matching /network/i as provider_transport_failure', () => {
       const { status } = classifyError(new Error('network unreachable'));
-      expect(status).toBe('network_error');
+      expect(status).toBe('provider_transport_failure');
     });
 
     it('falls back to a non-empty reason when the message is empty', () => {

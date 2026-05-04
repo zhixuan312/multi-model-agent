@@ -5,8 +5,8 @@ describe('retryableFor', () => {
   it('returns true for timeout', () => {
     expect(retryableFor('timeout')).toBe(true);
   });
-  it('returns true for network_error', () => {
-    expect(retryableFor('network_error')).toBe(true);
+  it('returns true for provider_transport_failure', () => {
+    expect(retryableFor('provider_transport_failure')).toBe(true);
   });
   it('returns true for api_error', () => {
     expect(retryableFor('api_error')).toBe(true);

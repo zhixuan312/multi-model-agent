@@ -6,7 +6,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import type { SkippedReviewResult } from './skipped-result.js';
 
 export interface SpecReviewResult {
-  status: 'approved' | 'changes_required' | 'error' | 'api_error' | 'network_error' | 'timeout';
+  status: 'approved' | 'changes_required' | 'error' | 'api_error' | 'provider_transport_failure' | 'timeout';
   report?: ParsedStructuredReport;
   findings: string[];
   errorReason?: string;
@@ -85,7 +85,7 @@ export async function runSpecReview(
   }
 
   if (result.status !== 'ok') {
-    if (result.status === 'api_error' || result.status === 'network_error' || result.status === 'timeout') {
+    if (result.status === 'api_error' || result.status === 'provider_transport_failure' || result.status === 'timeout') {
       return { status: result.status, findings: [], errorReason: `review agent returned status: ${result.status}` };
     }
     return { status: 'error', findings: [], errorReason: `review agent returned status: ${result.status}`, metrics };

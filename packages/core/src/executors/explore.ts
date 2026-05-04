@@ -35,7 +35,7 @@ export interface ExploreExecutorInput {
 
 function isFailed(result: RunResult): boolean {
   return result.status === 'error' || result.status === 'api_error'
-    || result.status === 'network_error' || result.status === 'unavailable'
+    || result.status === 'provider_transport_failure' || result.status === 'unavailable'
     || result.status === 'api_aborted' || result.status === 'timeout'
     || result.status === 'cost_exceeded' || result.status === 'brief_too_vague'
     || result.status === 'incomplete';

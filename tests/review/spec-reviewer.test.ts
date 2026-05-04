@@ -144,7 +144,7 @@ describe('runSpecReview taskDeadlineMs / abortSignal plumbing', () => {
       undefined,
       ctrl.signal,
     );
-    expect(['error', 'api_error', 'network_error', 'timeout']).toContain(result.status);
+    expect(['error', 'api_error', 'provider_transport_failure', 'timeout']).toContain(result.status);
     expect(calls).toBeGreaterThanOrEqual(1);
   });
 });

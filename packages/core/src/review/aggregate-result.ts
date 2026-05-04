@@ -7,7 +7,7 @@ type ReviewAggregateStatus =
   | 'skipped'
   | 'error'
   | 'api_error'
-  | 'network_error'
+  | 'provider_transport_failure'
   | 'timeout';
 
 export function aggregateResult(

@@ -194,14 +194,14 @@ describe('delegateWithEscalation', () => {
     const secondErr: Provider = {
       name: 'second',
       config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr, true)),
+      run: vi.fn().mockResolvedValue(makeMockResult('provider_transport_failure', longErr, true)),
     };
 
     const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [firstErr, secondErr]);
 
     expect(result.output).toBe(longErr);
-    expect(result.status).toBe('network_error');
+    expect(result.status).toBe('provider_transport_failure');
     expect(result.escalationLog).toHaveLength(2);
   });
 

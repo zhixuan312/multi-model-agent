@@ -15,7 +15,7 @@ export function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['ter
     case 'cost_exceeded': return 'cost_exceeded';
     case 'brief_too_vague': return 'brief_too_vague';
     case 'api_error':
-    case 'network_error':
+    case 'provider_transport_failure':
     case 'api_aborted':
     case 'error': return 'error';
     default: return 'incomplete';

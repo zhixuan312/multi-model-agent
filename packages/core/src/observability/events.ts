@@ -41,7 +41,7 @@ const ProviderTypeEnum = z.enum(['claude', 'openai-compatible', 'codex']);
 
 const RunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
-  'network_error', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
+  'provider_transport_failure', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
 ]);
 
 const ReviewVerdictEnum = z.enum([
