@@ -425,11 +425,13 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
 export function mockAdapter(opts: {
   turns: Array<{ assistantText: string; toolCalls: { name: string; input: unknown }[] }>;
   usage?: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
+  throwOnTurn?: Error;
 }): RunnerAdapter {
   let i = 0;
   return {
     providerType: 'claude',
     async turn() {
+      if (opts.throwOnTurn) throw opts.throwOnTurn;
       const t = opts.turns[i++] ?? { assistantText: '', toolCalls: [] };
       return {
         assistantText: t.assistantText,
