@@ -21,10 +21,25 @@ export function buildReviewHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
+    const input = parsed.data;
+
+    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
+    // the new lifecycle.
+    if (deps.routeDispatcher) {
+      const result = await deps.routeDispatcher.dispatch({
+        route: 'review',
+        toolCategory: 'read_only',
+        rawRequest: input,
+      });
+      sendJson(res, result.status, result.body);
+      return;
+    }
+
+    // Legacy path (async-dispatch via executeReview) — kept as fallback until
+    // server.ts wires routeDispatcher for all tool routes.
     const flag = resolveReadOnlyReviewFlag();
     if (flag.isEnabledFor('review_code') && !assertCrossTierConfigured(deps.config, res)) return;
 
-    const input = parsed.data;
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
