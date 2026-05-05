@@ -3,5 +3,6 @@
   "version": "<DETERMINISTIC>",
   "pid": "<DETERMINISTIC>",
   "startedAt": "<DETERMINISTIC>",
-  "uptimeMs": "<DETERMINISTIC>"
+  "uptimeMs": "<DETERMINISTIC>",
+  "drift": "<DETERMINISTIC>"
 }

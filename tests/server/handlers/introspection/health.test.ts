@@ -36,13 +36,14 @@ describe('GET /health', () => {
     }
   });
 
-  it('body keys are exactly ok/version/pid/startedAt/uptimeMs — no counters, no project data', async () => {
+  it('body keys are exactly ok/version/pid/startedAt/uptimeMs/drift — no counters, no project data', async () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/health`);
       const body = await res.json() as Record<string, unknown>;
-      expect(new Set(Object.keys(body))).toEqual(new Set(['ok', 'version', 'pid', 'startedAt', 'uptimeMs']));
+      expect(new Set(Object.keys(body))).toEqual(new Set(['ok', 'version', 'pid', 'startedAt', 'uptimeMs', 'drift']));
       expect(body['ok']).toBe(true);
+      expect(Array.isArray(body['drift'])).toBe(true);
     } finally {
       await s.stop();
     }

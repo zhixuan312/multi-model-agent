@@ -26,7 +26,7 @@ function canonicalVersion(skillName: string): string | null {
   }
 }
 
-export function makeSkillManifestSync(perClientInstallDirs: Record<string, string>): SkillManifestSync {
+export function makeSkillManifestSync(perClientInstallDirs: Partial<Record<Client, string>>): SkillManifestSync {
   return {
     driftReport(): DriftEntry[] {
       const drift: DriftEntry[] = [];

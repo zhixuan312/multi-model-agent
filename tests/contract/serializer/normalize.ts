@@ -35,6 +35,8 @@ const VOLATILE_KEYS = new Set([
   'totalIdleMs',
   'activityEvents',
   'taskMaxIdleMs',
+  // v4.0 — skill manifest drift varies per machine
+  'drift',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);

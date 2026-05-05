@@ -212,7 +212,15 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
 
   // GET /health — unauthenticated liveness + minimal identity
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  router.register('GET', '/health', buildHealthHandler({ version: SERVER_VERSION, serverStartedAt }));
+  let skillManifestSync: import('../install/skill-manifest-sync.js').SkillManifestSync | undefined;
+  try {
+    const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
+    const { discoverPerClientInstallDirs } = await import('../install/discover.js');
+    skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
+  } catch {
+    // best-effort — drift check must not block server start
+  }
+  router.register('GET', '/health', buildHealthHandler({ version: SERVER_VERSION, serverStartedAt, skillManifestSync }));
 
   // Register tool handlers (Phase 6)
   await registerToolHandlers(router, config, batchRegistry, projectRegistry);
