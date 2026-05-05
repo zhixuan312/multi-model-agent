@@ -151,7 +151,22 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
     // Stage 5 — finalize
     run_verify_command: noop,
     git_commit: noop,
-    compose_response: terminalHandler.handler.bind(terminalHandler),
+    compose_response: (state: LifecycleState): void => {
+      terminalHandler.handler.bind(terminalHandler)(state);
+      const lastResult = state.lastRunResult as { finalAssistantText?: string; toolCalls?: unknown[]; workerStatus?: string; errorCode?: string } | undefined;
+      const workerOutput = lastResult?.finalAssistantText ?? '';
+      let structuredReport: unknown = null;
+      const m = workerOutput.match(/```json\n([\s\S]+?)\n```/);
+      if (m) {
+        try { structuredReport = JSON.parse(m[1]); } catch { /* leave null */ }
+      }
+      (state as any).responseEnvelope = [{
+        terminalStatus: state.terminalStatus ?? 'error',
+        structuredReport,
+        workerStatus: lastResult?.workerStatus,
+        errorCode: lastResult?.errorCode,
+      }];
+    },
     register_terminal_block: noop,
     emit_task_terminal: noop,
     persist_to_batch_registry: noop,

@@ -2,6 +2,7 @@
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
 import type { EventBus } from '@zhixuan92/multi-model-agent-core';
+import type { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
@@ -17,4 +18,6 @@ export interface HandlerDeps {
   bus: EventBus;
   projectRegistry: ProjectRegistry;
   batchRegistry: BatchRegistry;
+  /** Optional RouteDispatcher for v4.0 lifecycle dispatch. When set, handlers use the new path. */
+  routeDispatcher?: RouteDispatcher;
 }

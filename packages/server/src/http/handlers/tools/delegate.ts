@@ -26,7 +26,6 @@ function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: Task
 
 export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
-    // Step 7: Validate body against delegate.inputSchema
     const parsed = delegate.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
       sendError(res, 400, 'invalid_request', 'Request body validation failed', {
@@ -36,9 +35,23 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
     }
 
     const input = parsed.data;
+
+    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
+    // the new lifecycle. Falls back to legacy asyncDispatch when not present.
+    if (deps.routeDispatcher) {
+      const result = await deps.routeDispatcher.dispatch({
+        route: 'delegate',
+        toolCategory: 'artifact_producing',
+        rawRequest: input,
+      });
+      sendJson(res, result.status, result.body);
+      return;
+    }
+
+    // Legacy path (async-dispatch via executeDelegate) — kept as fallback until
+    // the per-tool integration test passes and Step 8 flips the live route.
     const cwd = ctx.cwd!;
 
-    // Step 8: Get or create project context, update activity timestamp
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
       sendError(res, 503, reserveResult.error, reserveResult.message);
@@ -46,10 +59,8 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
     }
     const pc = reserveResult.projectContext;
     pc.lastActivityAt = Date.now();
-    // Release the reservation (HTTP requests are not session-based)
     deps.projectRegistry.cancelReservation(cwd);
 
-    // Step 9: Async-dispatch
     const blockIds = input.tasks.flatMap(t => t.contextBlockIds ?? []);
     const { batchId, statusUrl } = asyncDispatch({
       tool: 'delegate',

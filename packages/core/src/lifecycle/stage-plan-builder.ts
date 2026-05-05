@@ -7,19 +7,20 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
   const isResearch = category === 'research';
 
   const rows: StageRow[] = [
-    // Stage 1 — Ingress (rows 1.1–1.5; spec C10 lines 1284–1290)
+    // Stage 1 — Ingress (rows 1.1–1.4; spec C10 lines 1284–1290)
     { rowId: '1.1', stageName: 'accept_http_request',       runCondition: () => true, isRework: false, handlerKey: 'accept_http_request' },
     { rowId: '1.2', stageName: 'verify_loopback',           runCondition: () => true, isRework: false, handlerKey: 'verify_loopback' },
     { rowId: '1.3', stageName: 'validate_workspace',        runCondition: () => true, isRework: false, handlerKey: 'validate_workspace' },
     { rowId: '1.4', stageName: 'load_project_state',        runCondition: () => true, isRework: false, handlerKey: 'load_project_state' },
-    { rowId: '1.5', stageName: 'prepare_execution_context', runCondition: () => true, isRework: false, handlerKey: 'prepare_execution_context' },
 
-    // Stage 2 — Intake (rows 2.1–2.4; spec C10 lines 1291–1295)
+    // Stage 2 — Intake (rows 2.1–2.5; spec C10 lines 1291–1295)
     { rowId: '2.1', stageName: 'parse_brief',               runCondition: () => true, isRework: false, handlerKey: 'parse_brief' },
     { rowId: '2.2', stageName: 'verify_referenced_blocks',  runCondition: (s) => Array.isArray((s as any).contextBlockIds) && (s as any).contextBlockIds.length > 0,
       isRework: false, handlerKey: 'verify_referenced_blocks' },
     { rowId: '2.3', stageName: 'apply_defaults',            runCondition: () => true, isRework: false, handlerKey: 'apply_defaults' },
     { rowId: '2.4', stageName: 'mark_intake_complete',      runCondition: () => true, isRework: false, handlerKey: 'mark_intake_complete' },
+    // 2.5: prepare_execution_context — runs after intake so cwd/userMessage/systemPrompt are available
+    { rowId: '2.5', stageName: 'prepare_execution_context', runCondition: () => true, isRework: false, handlerKey: 'prepare_execution_context' },
 
     // Stage 3 — Initial Run (row 3.1; route 'register-context-block' skips this)
     { rowId: '3.1', stageName: 'run_initial_impl', schemaStage: 'implementing',

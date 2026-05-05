@@ -77,6 +77,15 @@ export type { ProjectContext } from './project-context.js';
 export { runTasks } from './run-tasks/index.js';
 export type { RunTasksOptions } from './run-tasks/index.js';
 
+// Lifecycle
+export { ToolSurfaceRegistry } from './lifecycle/tool-surface-registry.js';
+export type { SurfaceEntry } from './lifecycle/tool-surface-registry.js';
+export { RouteDispatcher } from './lifecycle/route-dispatcher.js';
+export type { DispatchInput, DispatchOutput } from './lifecycle/route-dispatcher.js';
+
+// Runner shell
+export { RunnerShell } from './runner-shell/shell.js';
+
 // Heartbeat
 export { HeartbeatTimer, formatElapsed } from './heartbeat.js';
 export type {
@@ -176,3 +185,24 @@ export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './observability/events.j
 export type { EventType } from './observability/events.js';
 export { JsonlWriter } from './diagnostics/jsonl-writer.js';
 export type { JsonlWriterOptions } from './diagnostics/jsonl-writer.js';
+
+// Review engine (v4.0 lifecycle)
+export {
+  ReviewerEngine,
+  ReviewerPromptBuilder,
+  specTemplate,
+  qualityAPTemplate,
+  diffTemplate,
+} from './review/reviewer-engine.js';
+export type { ReviewTemplate } from './review/reviewer-engine.js';
+
+// Intake-pipeline slots
+export { delegateSlot } from './intake-pipeline/slots/delegate.js';
+export type { DelegateInput, DelegateBrief } from './intake-pipeline/slots/delegate.js';
+
+// Reporting slots
+export { delegateReportSchema } from './reporting/slots/delegate-report.js';
+export type { DelegateStructuredReport } from './reporting/slots/delegate-report.js';
+
+// Headline templates
+export { delegateHeadlineTemplate } from './reporting/headlines/delegate.js';
