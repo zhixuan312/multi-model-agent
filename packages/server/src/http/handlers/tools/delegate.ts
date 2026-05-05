@@ -37,7 +37,7 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
     const input = parsed.data;
 
     // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle. Falls back to legacy asyncDispatch when not present.
+    // the new lifecycle.
     if (deps.routeDispatcher) {
       const result = await deps.routeDispatcher.dispatch({
         route: 'delegate',
@@ -49,7 +49,7 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
     }
 
     // Legacy path (async-dispatch via executeDelegate) — kept as fallback until
-    // the per-tool integration test passes and Step 8 flips the live route.
+    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);

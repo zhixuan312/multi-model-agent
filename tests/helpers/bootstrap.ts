@@ -22,11 +22,9 @@ function makeIntakeValidator(): StageHandler {
       state.errorCode = 'intake_brief_invalid';
       return;
     }
-    // Every route must carry a userMessage; absence = malformed brief
-    if (typeof req.userMessage !== 'string' || req.userMessage.trim().length === 0) {
-      state.terminal = true;
-      state.errorCode = 'intake_brief_invalid';
-    }
+    // Per-tool tests override parse_brief with their own slot compiler.
+    // The default validator only checks that the request is a valid object;
+    // it does not enforce per-route shape constraints here.
   };
 }
 
@@ -104,7 +102,7 @@ export interface BootstrapDeps {
   store?: ContextBlockStore;
 }
 
-export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
+export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   const registry = deps.registry ?? new BatchRegistry();
   const store = deps.store ?? new InMemoryContextBlockStore();
   const emitter = new EventEmitter();
@@ -179,6 +177,7 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
 
   return Object.assign(new RouteDispatcher(handlers), {
     overrideHandler(key: string, fn: StageHandler) { handlers[key] = fn; },
+    shell,
   });
 }
 
@@ -186,7 +185,7 @@ export function bootstrapWithMockAdapterAndOverrides(
   adapter: RunnerAdapter,
   overrides: Partial<Record<string, StageHandler>> = {},
   deps: BootstrapDeps = {},
-): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
+): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   const dispatcher = bootstrapWithMockAdapter(adapter, deps);
   for (const [k, fn] of Object.entries(overrides)) {
     if (fn) dispatcher.overrideHandler(k, fn);
@@ -198,6 +197,6 @@ export function bootstrapWithMockAdapterAndRegistry(
   adapter: RunnerAdapter,
   registry: BatchRegistry,
   store: ContextBlockStore,
-): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
+): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   return bootstrapWithMockAdapter(adapter, { registry, store });
 }

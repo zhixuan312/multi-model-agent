@@ -125,7 +125,9 @@ export class ReviewerEngine {
     if (text === 'APPROVE') return { verdict: 'approved' };
     if (text.startsWith('CONCERNS:')) return { verdict: 'concerns' };
     if (text.startsWith('REJECT:')) return { verdict: 'changes_required' };
-    return { verdict: 'approved' };
+    // Unrecognized output (truncated, malformed, or error response) defaults to 'concerns'
+    // so it requires human review rather than silently passing.
+    return { verdict: 'concerns' };
   }
 
   private parseVerdict(text: string): { verdict: string; concerns: string[] } {
@@ -134,10 +136,13 @@ export class ReviewerEngine {
       try {
         const p = JSON.parse(m[1]);
         return { verdict: p.verdict ?? 'approved', concerns: p.concerns ?? [] };
-      } catch { /* fall through */ }
+      } catch { /* fall through to structured fallback */ }
     }
-    if (text.toLowerCase().includes('changes_required')) return { verdict: 'changes_required', concerns: [] };
-    if (text.toLowerCase().includes('concerns')) return { verdict: 'concerns', concerns: [] };
+    const lower = text.toLowerCase();
+    // Match on word boundaries to avoid substring false positives
+    // (e.g. "no concerns" or "addresses all concerns" must not trigger 'concerns')
+    if (/\bchanges_required\b/.test(lower)) return { verdict: 'changes_required', concerns: [] };
+    if (/\bconcerns\b/.test(lower)) return { verdict: 'concerns', concerns: [] };
     return { verdict: 'approved', concerns: [] };
   }
 }
