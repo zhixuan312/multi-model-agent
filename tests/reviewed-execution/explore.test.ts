@@ -1,8 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { MultiModelConfig, Provider, RunResult } from '../../packages/core/src/types.js';
-import { EventBus } from '../../packages/core/src/events/bus.js';
-import type { EventSink, EventType } from '../../packages/core/src/events/bus.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
+import type { EventSink, EventType } from '../../packages/core/src/events/event-emitter.js';
 
 const providerState = vi.hoisted(() => ({ activeProvider: undefined as Provider | undefined }));
 
@@ -113,13 +113,13 @@ function defaultArgs(): ExploreExecutorInput {
   };
 }
 
-function collectingBus(): { bus: EventBus; events: EventType[] } {
+function collectingBus(): { bus: EventEmitter; events: EventType[] } {
   const events: EventType[] = [];
   const sink: EventSink = {
     name: 'test-collector',
     emit: (e) => { events.push(e); },
   };
-  return { bus: new EventBus([sink]), events };
+  return { bus: new EventEmitter([sink]), events };
 }
 
 const internalOk = '## Reusable components\n1. src/signal.ts:10 — signal base class\n## Baseline-defining anchors\n2. src/momentum.ts:45 — current momentum\n## Adjacent prior art\n3. src/mean-reversion.ts:88 — old MR experiment\n## Unresolved\n';

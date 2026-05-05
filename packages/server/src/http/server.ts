@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventBus, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import { EventEmitter, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
 import { Router } from './router.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
@@ -102,7 +102,7 @@ async function registerToolHandlers(
     writer,
   });
 
-  const bus = new EventBus([
+  const bus = new EventEmitter([
     new LocalLogSink(writer),
     new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
   ]);
@@ -158,7 +158,7 @@ async function registerControlHandlers(
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
     const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
-    const bus = new EventBus([
+    const bus = new EventEmitter([
       new LocalLogSink(writer),
       new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
     ]);

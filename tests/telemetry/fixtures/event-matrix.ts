@@ -5,7 +5,7 @@ import { join } from 'node:path';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 import { EventSchemas } from '../../../packages/core/src/events/observability-events.js';
-import { EventBus, type EventSink } from '../../../packages/core/src/events/bus.js';
+import { EventEmitter, type EventSink } from '../../../packages/core/src/events/event-emitter.js';
 
 const BATCH_ID = '00000000-0000-4000-8000-000000000001';
 const TS = '2026-05-02T00:00:00.000Z';
@@ -66,7 +66,7 @@ function configFor(provider: Provider): MultiModelConfig {
 export async function runCanonicalRuntimeFixtureAndCaptureEvents(provider: Provider): Promise<Record<string, unknown>[]> {
   const events: Record<string, unknown>[] = [];
   const sink: EventSink = { name: 'capture', emit(event) { events.push(structuredClone(event as Record<string, unknown>)); } };
-  const bus = new EventBus([sink]);
+  const bus = new EventEmitter([sink]);
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'mma-telemetry-fixture-')));
 
   await runTasks(

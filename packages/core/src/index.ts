@@ -141,8 +141,8 @@ export type {
 } from './events/http-server-log.js';
 
 // Observability
-export { EventBus } from './events/bus.js';
-export type { EventSink } from './events/bus.js';
+export { EventEmitter } from './events/event-emitter.js';
+export type { EventSink } from './events/event-emitter.js';
 export { LocalLogSink } from './events/local-log-sink.js';
 export { TelemetrySink } from './events/telemetry-sink.js';
 export type { Recorder } from './events/telemetry-sink.js';

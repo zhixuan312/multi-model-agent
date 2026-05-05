@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
-import { EventBus } from '../../packages/core/src/events/bus.js';
-import type { EventType, EventSink } from '../../packages/core/src/events/bus.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
+import type { EventType, EventSink } from '../../packages/core/src/events/event-emitter.js';
 import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/events/observability-events.js';
 
 const capturedEvents: EventType[] = [];
@@ -108,9 +108,9 @@ const config: MultiModelConfig = {
 
 import { buildAuditQualityPrompt } from '../../packages/core/src/review/quality-only-prompts.js';
 
-function makeBus(): { bus: EventBus; sink: CaptureSink } {
+function makeBus(): { bus: EventEmitter; sink: CaptureSink } {
   const sink = new CaptureSink();
-  const bus = new EventBus([sink]);
+  const bus = new EventEmitter([sink]);
   return { bus, sink };
 }
 

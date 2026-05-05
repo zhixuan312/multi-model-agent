@@ -5,7 +5,7 @@ import type { HttpServerLog } from '../../events/http-server-log.js';
 import type { ContextBlockStore } from '../../stores/context-block-tool.js';
 import type { NotApplicable } from '../../reporting/not-applicable.js';
 import type { HeartbeatTickInfo } from '../../bounded-execution/activity-tracker.js';
-import type { EventBus } from '../../events/bus.js';
+import type { EventEmitter } from '../../events/event-emitter.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {
@@ -41,8 +41,8 @@ export interface ExecutionContext {
    * through the same scoped logger.
    */
   logger: HttpServerLog;
-  /** EventBus for structured observability events — dual-sink: local JSONL + cloud telemetry. */
-  bus?: EventBus;
+  /** EventEmitter for structured observability events — dual-sink: local JSONL + cloud telemetry. */
+  bus?: EventEmitter;
   contextBlockStore: ContextBlockStore;
   /** The parent model name, resolved from env at context-build time. */
   mainModel?: string;
@@ -75,7 +75,7 @@ export interface ExecutionContextInput {
   projectContext: ProjectContext;
   config: MultiModelConfig;
   logger: HttpServerLog;
-  bus?: EventBus;
+  bus?: EventEmitter;
   contextBlockStore: ContextBlockStore;
   mainModel?: string;
   batchId?: string;

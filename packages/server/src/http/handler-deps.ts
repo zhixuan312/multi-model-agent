@@ -1,7 +1,7 @@
 // packages/server/src/http/handler-deps.ts
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
-import type { EventBus } from '@zhixuan92/multi-model-agent-core';
+import type { EventEmitter } from '@zhixuan92/multi-model-agent-core';
 import type { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
@@ -14,8 +14,8 @@ export interface HandlerDeps {
   /** Full multi-model config (agents + defaults). May be undefined in unit tests. */
   config: MultiModelConfig;
   logger: HttpServerLog;
-  /** EventBus for structured observability — dual-sink: local JSONL + cloud telemetry. */
-  bus: EventBus;
+  /** EventEmitter for structured observability — dual-sink: local JSONL + cloud telemetry. */
+  bus: EventEmitter;
   projectRegistry: ProjectRegistry;
   batchRegistry: BatchRegistry;
   /** Optional RouteDispatcher for v4.0 lifecycle dispatch. When set, handlers use the new path. */

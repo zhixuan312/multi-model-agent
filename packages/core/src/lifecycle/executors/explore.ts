@@ -3,7 +3,7 @@ import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/explore/schema.js';
 import type { RunResult, MultiModelConfig } from '../../types.js';
 import type { ResearchToolDefinition } from '../../research/types.js';
-import type { EventBus } from '../../events/bus.js';
+import type { EventEmitter } from '../../events/event-emitter.js';
 import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { createProvider } from '../../providers/provider-factory.js';
@@ -84,7 +84,7 @@ interface LifecycleCallArgs {
   resolved: ReturnType<typeof resolveAgent>;
   config: MultiModelConfig;
   ctx: ExecutionContext;
-  bus?: EventBus;
+  bus?: EventEmitter;
   route: string;
 }
 

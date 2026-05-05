@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { EventSchemas, CLOUD_EVENT_NAMES } from '../../packages/core/src/events/observability-events.js';
-import { EventBus, type EventSink } from '../../packages/core/src/events/bus.js';
+import { EventEmitter, type EventSink } from '../../packages/core/src/events/event-emitter.js';
 import { LocalLogSink } from '../../packages/core/src/events/local-log-sink.js';
 import { TelemetrySink, type Recorder } from '../../packages/core/src/events/telemetry-sink.js';
 import { JsonlWriter } from '../../packages/core/src/events/jsonl-writer.js';
@@ -46,7 +46,7 @@ const UNCOVERED_ALLOWLIST = new Set<string>([
   'turn_complete', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'tool_call', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'text_emission', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
-  'task.completed', // cloud event is produced by telemetry recorder path, not EventBus local fixture.
+  'task.completed', // cloud event is produced by telemetry recorder path, not EventEmitter local fixture.
   'session.started', // session/install/skill lifecycle occurs outside runTasks fixture.
   'install.changed', // install lifecycle occurs outside runTasks fixture.
   'skill.installed', // skill install lifecycle occurs outside runTasks fixture.
@@ -125,17 +125,17 @@ describe('schema example fixtures', () => {
   });
 });
 
-describe('EventBus emit-time validation', () => {
+describe('EventEmitter emit-time validation', () => {
   const nullSink: EventSink = { name: 'null', emit() {} };
 
   it('throws on malformed known event in test mode', () => {
-    const bus = new EventBus([nullSink]);
+    const bus = new EventEmitter([nullSink]);
     expect(() => bus.emit({ event: 'task_started', ts: '2026-05-02T00:00:00.000Z', batchId: '00000000-0000-4000-8000-000000000001', taskIndex: 0, route: 'delegate' } as any)).toThrow(/emit-time schema violation/);
   });
 
   it('passes unknown diagnostic event names through without validation', () => {
     const emitted: Record<string, unknown>[] = [];
-    const bus = new EventBus([{ name: 'recording', emit(event) { emitted.push(event as any); } }]);
+    const bus = new EventEmitter([{ name: 'recording', emit(event) { emitted.push(event as any); } }]);
     expect(() => bus.emit({ event: 'heartbeat_timer', arbitraryField: 42 } as any)).not.toThrow();
     expect(emitted[0].event).toBe('heartbeat_timer');
   });
@@ -144,9 +144,9 @@ describe('EventBus emit-time validation', () => {
     const originalEnv = process.env.NODE_ENV;
     try {
       process.env.NODE_ENV = 'development';
-      expect(() => new EventBus([nullSink]).emit({ event: 'task_started' } as any)).toThrow(/emit-time schema violation/);
+      expect(() => new EventEmitter([nullSink]).emit({ event: 'task_started' } as any)).toThrow(/emit-time schema violation/);
       process.env.NODE_ENV = 'production';
-      expect(() => new EventBus([nullSink]).emit({ event: 'task_started' } as any)).not.toThrow();
+      expect(() => new EventEmitter([nullSink]).emit({ event: 'task_started' } as any)).not.toThrow();
     } finally {
       process.env.NODE_ENV = originalEnv;
     }
@@ -161,7 +161,7 @@ describe('emit-vs-persist round-trip parity', () => {
     let fd = 1;
     const writer = new JsonlWriter({ dir: '/tmp/mma-test-jsonl', openSync: () => fd++, writeSync: (_fd, data) => { lines.push(data); }, closeSync: () => {}, mkdirSync: () => {}, now: () => new Date('2026-05-02T00:00:00.000Z') });
     const captureSink: EventSink = { name: 'capture', emit(event) { emitted.push(structuredClone(event as Record<string, unknown>)); } };
-    const bus = new EventBus([captureSink, new LocalLogSink(writer)]);
+    const bus = new EventEmitter([captureSink, new LocalLogSink(writer)]);
     const config: MultiModelConfig = { agents: { standard: { type: 'openai-compatible', model: 'std', baseUrl: 'https://ex.invalid/v1' }, complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' } }, defaults: { tools: 'readonly', timeoutMs: 60_000, sandboxPolicy: 'cwd-only' }, server: {} as any };
 
     await runTasks([{ prompt: 'do it. done when complete.', agentType: 'standard', cwd: process.cwd(), reviewPolicy: 'none' } as any], config, { batchId: '00000000-0000-4000-8000-000000000001', bus });
@@ -179,7 +179,7 @@ describe('TelemetrySink cloud-event filtering', () => {
   it('forwards only cloud-bound events to the recorder', () => {
     const enqueued: Record<string, unknown>[] = [];
     const recorder: Recorder = { enqueue(event) { enqueued.push(structuredClone(event)); } };
-    const bus = new EventBus([new TelemetrySink(recorder)]);
+    const bus = new EventEmitter([new TelemetrySink(recorder)]);
     for (const fixture of syntheticFixtureEvents()) bus.emit(fixture as any);
     expect(enqueued.length).toBe(syntheticFixtureEvents().filter(e => CLOUD_EVENT_NAMES.has(e.event as any)).length);
     expect(enqueued.every(e => CLOUD_EVENT_NAMES.has(e.event as any))).toBe(true);

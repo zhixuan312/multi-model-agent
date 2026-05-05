@@ -7,7 +7,7 @@ import type {
 import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
-import type { EventBus } from '../events/bus.js';
+import type { EventEmitter } from '../events/event-emitter.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
@@ -61,8 +61,8 @@ export interface RunTasksOptions {
   client?: string;
   /** Triggering skill for telemetry (e.g. 'mma-delegate', 'direct'). */
   triggeringSkill?: string;
-  /** EventBus for structured observability events. */
-  bus?: EventBus;
+  /** EventEmitter for structured observability events. */
+  bus?: EventEmitter;
   /** Per-route quality review prompt builder (for quality_only reviewPolicy). */
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
 }

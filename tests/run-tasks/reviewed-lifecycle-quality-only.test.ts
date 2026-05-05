@@ -2,8 +2,8 @@ import { describe, it, expect, vi } from 'vitest';
 import { executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/events/observability-events.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
-import type { EventSink } from '../../packages/core/src/events/bus.js';
-import { EventBus } from '../../packages/core/src/events/bus.js';
+import type { EventSink } from '../../packages/core/src/events/event-emitter.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
@@ -329,7 +329,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       name: 'capture',
       emit: event => { events.push(event); },
     };
-    const bus = new EventBus([sink]);
+    const bus = new EventEmitter([sink]);
     const builder = (ctx: { workerOutput: string; brief: string }) =>
       `Annotation prompt\n\n${ctx.workerOutput}\n\nannotatorConfidence: score each finding 0-100`;
 

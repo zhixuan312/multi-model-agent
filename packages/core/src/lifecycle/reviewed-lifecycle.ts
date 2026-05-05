@@ -117,7 +117,7 @@ export async function executeReviewedLifecycle(
   _route?: string,
   _client?: string,
   _triggeringSkill?: string,
-  bus?: import('../events/bus.js').EventBus,
+  bus?: import('../events/event-emitter.js').EventEmitter,
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
@@ -187,7 +187,7 @@ export async function executeReviewedLifecycle(
 
       // Keep verbose-line field names stable while emitting schema-declared
       // telemetry envelopes in their authoritative persisted shape. EventSchemas
-      // validate the full envelope at EventBus.emit in dev/test, so production
+      // validate the full envelope at EventEmitter.emit in dev/test, so production
       // emission paths must construct schema-shaped keys before persistence.
       if (schemaEvent === 'task_started') {
         cleaned.route = routeKey || 'delegate';

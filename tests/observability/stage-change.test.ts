@@ -3,7 +3,7 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import { EventBus } from '../../packages/core/src/events/bus.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 import type { EventType } from '../../packages/core/src/events/observability-events.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -86,7 +86,7 @@ describe('stage_change emissions (P5)', () => {
   // or more without double-firing.
   it('emits each (from→to) stage_change at most once', async () => {
     const captured: EventType[] = [];
-    const bus = new EventBus([{ name: 'capture', emit: (ev) => { captured.push(ev); } }]);
+    const bus = new EventEmitter([{ name: 'capture', emit: (ev) => { captured.push(ev); } }]);
 
     await runTasks(
       [{ prompt: 'do the task at src/a.ts. Done when tsc passes.', agentType: 'standard' as const }],
