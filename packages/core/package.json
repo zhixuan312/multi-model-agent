@@ -73,8 +73,8 @@
       "import": "./dist/run-tasks/commit-stage.js"
     },
     "./run-tasks/verify-stage": {
-      "types": "./dist/run-tasks/verify-stage.d.ts",
-      "import": "./dist/run-tasks/verify-stage.js"
+      "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
+      "import": "./dist/lifecycle/handlers/verify-stage.js"
     },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",

@@ -1,4 +1,7 @@
-import { spawn } from 'node:child_process';
+import { spawn, execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileP = promisify(execFile);
 
 export type VerifyStepStatus = 'passed' | 'failed_exit' | 'spawn_error' | 'timeout' | 'signal' | 'system_error';
 
@@ -11,6 +14,7 @@ export interface VerifyStepResult {
   stdoutTail: string;
   stderrTail: string;
   errorMessage: string | null;
+  errorCode?: string;
 }
 
 export interface VerifyStageInput {
@@ -18,6 +22,14 @@ export interface VerifyStageInput {
   verifyCommand: string[] | undefined;
   taskTimeoutMs: number;
   taskStartMs: number;
+  /** Env-var names to forward to the child process. When undefined, the child
+   *  inherits the full parent environment (backward-compatible). When provided,
+   *  only those named vars (plus a few essential implicit ones: PATH, HOME,
+   *  SHELL, TMPDIR, LANG) are forwarded — secrets and unknown vars are excluded. */
+  permittedEnv?: string[];
+  /** When true, runs `git status --porcelain` in cwd after verification and
+   *  populates `dirtyFiles` with any modified/new paths. */
+  checkDirtyTree?: boolean;
 }
 
 export interface VerifyStageResult {
@@ -25,6 +37,9 @@ export interface VerifyStageResult {
   steps: VerifyStepResult[];
   totalDurationMs: number;
   skipReason?: 'no_command';
+  /** File paths that were modified by the verify command (only populated when
+   *  `checkDirtyTree: true` was set and git reported changes). */
+  dirtyFiles?: string[];
 }
 
 const TAIL_BYTES = 8 * 1024;
@@ -55,11 +70,23 @@ class RollingTail {
   }
 }
 
+const IMPLICIT_ENV = ['PATH', 'HOME', 'SHELL', 'TMPDIR', 'LANG', 'PWD', 'USER', 'LOGNAME', 'TERM'];
+
+function buildEnv(permittedEnv: string[] | undefined): typeof process.env | undefined {
+  if (permittedEnv === undefined) return undefined; // inherit full parent env
+  const filtered: Record<string, string | undefined> = {};
+  for (const name of [...IMPLICIT_ENV, ...permittedEnv]) {
+    if (process.env[name] !== undefined) filtered[name] = process.env[name];
+  }
+  return filtered as typeof process.env;
+}
+
 async function runStep(
   cmd: string,
   cwd: string,
   timeoutMs: number,
   errorMessageHint: string | null,
+  permittedEnv?: string[],
 ): Promise<VerifyStepResult> {
   const start = Date.now();
   return new Promise((resolve) => {
@@ -70,9 +97,11 @@ async function runStep(
     // Use explicit `bash -lc <cmd>` on POSIX for deterministic behavior; `shell: true` on Windows.
     // detached=true on POSIX so we can kill the process group (catches grandchildren).
     // (Audit-r2 plan finding 7.)
+    const spawnOpts: any = { cwd, env: buildEnv(permittedEnv) };
+    if (process.platform !== 'win32') spawnOpts.detached = true;
     const child = process.platform === 'win32'
-      ? spawn(cmd, { shell: true, cwd })
-      : spawn('/bin/bash', ['-lc', cmd], { cwd, detached: true });
+      ? spawn(cmd, { shell: true, ...spawnOpts })
+      : spawn('/bin/bash', ['-lc', cmd], spawnOpts);
 
     const finish = (r: VerifyStepResult): void => {
       if (!resolved) {
@@ -90,6 +119,7 @@ async function runStep(
       stdoutTail: stdout.toString(),
       stderrTail: stderr.toString(),
       errorMessage: errorMessageHint ?? 'per_step_timeout',
+      errorCode: 'validator_verify_command_failed',
     });
 
     const to = setTimeout(() => {
@@ -117,6 +147,7 @@ async function runStep(
         stdoutTail: stdout.toString(),
         stderrTail: stderr.toString(),
         errorMessage: err.message,
+        errorCode: 'validator_verify_command_failed',
       });
     });
 
@@ -133,6 +164,7 @@ async function runStep(
           stdoutTail: stdout.toString(),
           stderrTail: stderr.toString(),
           errorMessage: `terminated by ${sig}`,
+          errorCode: 'validator_verify_command_failed',
         });
       } else if (code === 0) {
         finish({
@@ -155,6 +187,7 @@ async function runStep(
           stdoutTail: stdout.toString(),
           stderrTail: stderr.toString(),
           errorMessage: null,
+          errorCode: 'validator_verify_command_failed',
         });
       }
     });
@@ -170,7 +203,7 @@ function aggregateStatus(steps: VerifyStepResult[]): VerifyStageResult['status']
 }
 
 export async function runVerifyStage(input: VerifyStageInput): Promise<VerifyStageResult> {
-  if (!input.verifyCommand) {
+  if (!input.verifyCommand || input.verifyCommand.length === 0) {
     return { status: 'skipped', steps: [], totalDurationMs: 0, skipReason: 'no_command' };
   }
 
@@ -192,14 +225,35 @@ export async function runVerifyStage(input: VerifyStageInput): Promise<VerifySta
         stdoutTail: '',
         stderrTail: '',
         errorMessage: 'task_timeout_budget_exhausted',
+        errorCode: 'validator_verify_command_failed',
       });
       break;
     }
 
-    const step = await runStep(cmd, input.cwd, stepTimeout, null);
+    const step = await runStep(cmd, input.cwd, stepTimeout, null, input.permittedEnv);
     steps.push(step);
     if (step.status !== 'passed') break;
   }
 
-  return { status: aggregateStatus(steps), steps, totalDurationMs: Date.now() - overallStart };
+  const result: VerifyStageResult = {
+    status: aggregateStatus(steps),
+    steps,
+    totalDurationMs: Date.now() - overallStart,
+  };
+
+  // Dirty-tree check: run `git status --porcelain` after verification to detect
+  // if the verify command modified the worktree. Do NOT auto-commit these changes.
+  if (input.checkDirtyTree) {
+    try {
+      const { stdout } = await execFileP('git', ['status', '--porcelain'], { cwd: input.cwd, timeout: 10000 });
+      const dirtyFiles = stdout.trim().split('\n').filter(Boolean);
+      if (dirtyFiles.length > 0) {
+        result.dirtyFiles = dirtyFiles;
+      }
+    } catch {
+      // If git status fails (e.g., not a git repo), leave dirtyFiles undefined.
+    }
+  }
+
+  return result;
 }
