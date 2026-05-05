@@ -2,10 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
 import { exploreSlot } from '../../packages/core/src/intake-pipeline/slots/explore.js';
-import type { ExploreInput } from '../../packages/core/src/intake-pipeline/slots/explore.js';
+import type { ExploreInput, ExploreBrief } from '../../packages/core/src/intake-pipeline/slots/explore.js';
 import { exploreReportSchema } from '../../packages/core/src/reporting/slots/explore-report.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import type { RunnerShell } from '../../packages/core/src/runner-shell/shell.js';
 
 function makeExploreParseBrief(): StageHandler {
   return (state: LifecycleState): void => {
@@ -40,6 +41,55 @@ function makeExploreComposeResponse(): StageHandler {
       workerStatus: lastResult?.workerStatus,
       errorCode: lastResult?.errorCode,
     }];
+  };
+}
+
+function makeExploreMultiTaskRunner(shell: RunnerShell): StageHandler {
+  return async (state: LifecycleState): Promise<void> => {
+    const briefs = (state as any).exploreBriefs as ExploreBrief[] | undefined;
+    if (!briefs || briefs.length === 0) {
+      state.terminal = true;
+      state.errorCode = 'intake_brief_invalid';
+      return;
+    }
+    const results: Array<{ result: Awaited<ReturnType<RunnerShell['run']>>; brief: ExploreBrief }> = [];
+    for (const brief of briefs) {
+      state.userMessage = brief.brief;
+      (state as any).reviewPolicy = brief.reviewPolicy;
+      (state as any).cwd = brief.cwd;
+      state.runInput = {
+        ...(state.runInput as any),
+        userMessage: brief.brief,
+        cwd: brief.cwd,
+      };
+      const result = await shell.run(state.runInput as any);
+      results.push({ result, brief });
+    }
+    (state as any).exploreResults = results;
+    state.lastRunResult = results[results.length - 1]?.result;
+  };
+}
+
+function makeExploreMultiTaskComposeResponse(): StageHandler {
+  return (state: LifecycleState): void => {
+    const results = (state as any).exploreResults as Array<{ result: { finalAssistantText?: string; workerStatus?: string; errorCode?: string }; brief: ExploreBrief }> | undefined;
+    if (!results) {
+      (state as any).responseEnvelope = [];
+      return;
+    }
+    (state as any).responseEnvelope = results.map(({ result }) => {
+      const workerOutput = result.finalAssistantText ?? '';
+      let structuredReport: unknown = null;
+      try {
+        structuredReport = exploreReportSchema.parse(workerOutput);
+      } catch { /* leave null */ }
+      return {
+        terminalStatus: result.errorCode ? 'error' : 'ok',
+        structuredReport,
+        workerStatus: result.workerStatus,
+        errorCode: result.errorCode,
+      };
+    });
   };
 }
 
@@ -225,5 +275,44 @@ describe('explore via v4.0 lifecycle', () => {
     });
 
     expect(result.status).toBe(200);
+  });
+
+  it('runs 3 tasks (internal/external/synth) with no review or annotation', async () => {
+    const adapter = mockAdapter({ turns: [
+      { assistantText: '```json\n{"topic":"x","internalFindings":[{"source":"a.ts","summary":"auth module"}],"externalFindings":[],"synthesis":""}\n```', toolCalls: [] },
+      { assistantText: '```json\n{"topic":"x","internalFindings":[],"externalFindings":[{"url":"https://example.com","title":"Example","summary":"relevant docs"}],"synthesis":""}\n```', toolCalls: [] },
+      { assistantText: '```json\n{"topic":"x","internalFindings":[{"source":"a.ts","summary":"auth module"}],"externalFindings":[{"url":"https://example.com","title":"Example","summary":"relevant docs"}],"synthesis":"internal auth module aligns with external docs on OAuth2 flow"}\n```', toolCalls: [] },
+    ] });
+
+    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
+      parse_brief: makeExploreParseBrief(),
+    });
+
+    dispatcher.overrideHandler('run_initial_impl', makeExploreMultiTaskRunner(dispatcher.shell));
+    dispatcher.overrideHandler('compose_response', makeExploreMultiTaskComposeResponse());
+
+    const result = await dispatcher.dispatch({
+      route: 'explore',
+      toolCategory: 'research',
+      rawRequest: { topic: 'x' },
+    });
+
+    expect(result.status).toBe(200);
+    const body: any = result.body;
+    expect(body).toHaveLength(3);
+
+    // Task 0 — internal
+    expect(body[0]?.terminalStatus).toBe('ok');
+    expect(body[0]?.structuredReport?.internalFindings).toHaveLength(1);
+    expect(body[0]?.structuredReport?.internalFindings[0].source).toBe('a.ts');
+
+    // Task 1 — external
+    expect(body[1]?.terminalStatus).toBe('ok');
+    expect(body[1]?.structuredReport?.externalFindings).toHaveLength(1);
+    expect(body[1]?.structuredReport?.externalFindings[0].url).toBe('https://example.com');
+
+    // Task 2 — synth
+    expect(body[2]?.terminalStatus).toBe('ok');
+    expect(body[2]?.structuredReport?.synthesis).toContain('OAuth2');
   });
 });
