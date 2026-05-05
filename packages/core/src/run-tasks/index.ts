@@ -11,7 +11,6 @@ import type { HttpServerLog } from '../diagnostics/http-server-log.js';
 import type { EventBus } from '../observability/bus.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
-import { inferEffort } from '../effort-inference.js';
 import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
 import { errorResult } from './execute-task.js';
 import type { ResolvedTask } from './execute-task.js';
@@ -105,16 +104,6 @@ export async function runTasks(
       };
     }
   });
-
-  for (const r of resolved) {
-    if ('error' in r) continue;
-    if (r.task.effort === undefined) {
-      const inferred = inferEffort(r.task.prompt);
-      if (inferred !== undefined) {
-        r.task = { ...r.task, effort: inferred };
-      }
-    }
-  }
 
   if (resolved.length > 1) {
     const PARALLEL_SAFETY_SUFFIX =

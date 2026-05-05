@@ -165,16 +165,6 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 
 If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
-## Reasoning effort: auto-inferred
-
-Independent of tier, every task runs through `inferEffort(prompt)` (`run-tasks/index.ts`) when `effort` is undefined:
-
-- Code block > 20 lines in the prompt → `low` (treated as exact-write).
-- File path + action verb (`edit`/`modify`/`update`/`fix`/`refactor`/`replace`) → `medium`.
-- Otherwise → falls through to provider config default.
-
-This is automatic and not caller-overridable from any `mma-*` skill — it shapes how hard the worker thinks within its tier.
-
 ## General flow
 
 1. Call the matching `mma-*` skill → receive `{ batchId, statusUrl }`.
