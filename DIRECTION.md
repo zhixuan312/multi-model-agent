@@ -75,7 +75,7 @@ mmagent serve               # daemon, stays running
 mmagent install-skill       # writes skill files into the detected client
 ```
 
-The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache, clarifications) survive.
+The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache) survive.
 
 ### The two-slot model
 
@@ -92,8 +92,8 @@ These are labor categories, not intelligence tiers. The user decides what "stand
 
 Every task goes through intake and implementation. Artifact-producing tasks also go through cross-agent review:
 
-1. **Intake** — We interpret the request, infer missing details, and compile it into a concrete execution plan. If the intent is clear, execution proceeds immediately. If ambiguous, we return a proposed interpretation for the caller to confirm.
-2. **Implement** — The actual work. Full tool access, cost ceiling enforcement, sandbox confinement. We infer effort level from task shape and provide progress heartbeats during execution.
+1. **Intake** — We interpret the request, infer missing details, and compile it into a concrete execution plan. The intake pipeline normalizes the brief and routes the work; ambiguous briefs proceed with the most likely interpretation rather than pausing for confirmation.
+2. **Implement** — The actual work. Full tool access, cost ceiling enforcement, sandbox confinement. The intake pipeline shapes effort from task signals and progress heartbeats stream during execution.
 3. **Spec review** — Did the output satisfy the brief? Run by the *other* agent (cross-agent review).
 4. **Quality review** — Is the work safe, correct, maintainable? Also the *other* agent. Review continues until approved, findings plateau, or the safety limit is reached.
 
@@ -105,7 +105,7 @@ Non-artifact tasks (audits, analyses, read-only investigations) skip stages 3 an
 
 **Specialized presets**: `audit_document`, `review_code`, `verify_work`, `debug_task`, `execute_plan` — opinionated defaults for common workflows. Each returns a context block ID as an explicit output — the caller passes this ID to subsequent calls to enable delta mode, where round 2+ tracks which prior findings were fixed. We create the content block; the caller controls when and whether to use it.
 
-**Orchestration**: `register_context_block`, `retry_tasks`, `get_batch_slice`, `confirm_clarifications` — context management, batch operations, and clarification workflows. These help the caller manage state across calls without us maintaining workflow state.
+**Orchestration**: `register_context_block`, `retry_tasks`, `get_batch_slice` — context management and batch operations. These help the caller manage state across calls without us maintaining workflow state.
 
 ### What comes back
 
@@ -121,7 +121,7 @@ The horizontal layer works. But "works" isn't the bar — **seamless** is. The c
 
 What this means concretely:
 
-- **Intake intelligence** — We should understand what the caller wants from minimal input. A terse prompt with file paths should be enough. The intake pipeline interprets, infers, and executes — or asks one precise clarifying question. Never force the caller to construct elaborate task specs for straightforward work.
+- **Intake intelligence** — We should understand what the caller wants from minimal input. A terse prompt with file paths should be enough. The intake pipeline interprets, infers, and executes immediately — never forces the caller to construct elaborate task specs for straightforward work.
 - **Response clarity** — Every response should give the caller exactly what it needs to make the next decision. Headlines, structured verdicts, cost evidence. No post-processing, no parsing, no arithmetic. The caller quotes the result and moves on.
 - **Reliability at scale** — Parallel fan-out across files, graceful handling of provider failures, automatic retry with escalation, bounded execution that never surprises. multi-model-agent should be the most predictable thing in the stack.
 - **Provider expansion** — As new providers emerge and existing ones deepen, adding them should be configuration, not code. The routing layer, tool adapters, and model profiles absorb new providers without platform changes.
