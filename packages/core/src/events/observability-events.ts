@@ -1,73 +1,18 @@
 import { z } from 'zod';
+import {
+  TaskBase, BatchBase,
+  RouteEnum, TierEnum, DiagLoopEnum, DiagRoleEnum, DiagReasonEnum,
+  ProviderTypeEnum, RunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
+  VerifySkipReasonEnum, WorkerStatusEnum,
+} from './event-base.js';
 
-// ---------------------------------------------------------------------------
-// Helpers
-// ---------------------------------------------------------------------------
+export {
+  RouteEnum, TierEnum, DiagLoopEnum, DiagRoleEnum, DiagReasonEnum,
+  ProviderTypeEnum, RunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
+  VerifySkipReasonEnum, WorkerStatusEnum,
+} from './event-base.js';
 
-const ts = (): string => new Date().toISOString();
-
-// ---------------------------------------------------------------------------
-// Base schemas
-// ---------------------------------------------------------------------------
-
-/** Shared base for task-level events (has taskIndex). */
-const TaskBase = z.object({
-  ts: z.string().datetime({ offset: true }),
-  batchId: z.string().uuid(),
-  taskIndex: z.number().int().min(0),
-});
-
-/** Shared base for batch-level events (no taskIndex). */
-const BatchBase = z.object({
-  ts: z.string().datetime({ offset: true }),
-  batchId: z.string().uuid(),
-});
-
-// ---------------------------------------------------------------------------
-// Reusable enum / literal helpers
-// ---------------------------------------------------------------------------
-
-const RouteEnum = z.enum([
-  'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
-  'explore_internal', 'explore_external', 'explore_synthesize',
-  'register-context-block',
-]);
-
-const TierEnum = z.enum(['standard', 'complex']);
-
-const DiagLoopEnum = z.enum(['spec', 'quality', 'diff']);
-
-const DiagRoleEnum = z.enum([
-  'implementer', 'specReviewer', 'qualityReviewer', 'diffReviewer',
-]);
-
-const DiagReasonEnum = z.enum(['transport_failure', 'not_configured', 'reviewer_separation_unsatisfiable']);
-
-const ProviderTypeEnum = z.enum(['claude', 'openai-compatible', 'codex']);
-
-const RunStatusEnum = z.enum([
-  'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
-  'provider_transport_failure', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
-]);
-
-const ReviewVerdictEnum = z.enum([
-  'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
-]);
-
-const VerifyOutcomeEnum = z.enum(['passed', 'failed', 'skipped', 'not_applicable']);
-
-const VerifySkipReasonEnum = z.enum([
-  'no_command', 'dirty_worktree', 'not_applicable', 'other',
-]);
-
-const WorkerStatusEnum = z.enum([
-  'done', 'done_with_concerns', 'needs_context', 'blocked',
-  'review_loop_aborted', 'failed',
-]);
-
-// ---------------------------------------------------------------------------
-// Lifecycle events (14)
-// ---------------------------------------------------------------------------
+// === Lifecycle events (14) ===
 
 export const TaskStartedEvent = TaskBase.extend({
   event: z.literal('task_started'),
@@ -217,9 +162,7 @@ export const CostCheckEvent = TaskBase.extend({
   cost_available: z.boolean(),
 }).strict();
 
-// ---------------------------------------------------------------------------
-// Explore-specific events (6) — batch-level, no taskIndex
-// ---------------------------------------------------------------------------
+// === Explore-specific events (6) — batch-level, no taskIndex ===
 
 export const ExploreParallelStartEvent = BatchBase.extend({
   event: z.literal('explore_parallel_start'),
@@ -344,9 +287,7 @@ export const TaskCompletedLocalEvent = TaskBase.extend({
   stages: z.string(),  // JSON-stringified StageStatsMap; parse with StageStatsMapSchema
 }).passthrough();
 
-// ---------------------------------------------------------------------------
-// Runner-internal events (5)
-// ---------------------------------------------------------------------------
+// === Runner-internal events (5) ===
 
 export const WorkerStartEvent = TaskBase.extend({
   event: z.literal('worker_start'),
@@ -387,67 +328,23 @@ export const TextEmissionEvent = TaskBase.extend({
   turnIndex: z.number().int().min(0),
 }).strict();
 
-// ---------------------------------------------------------------------------
-// Cloud-bound events (4)
-//
-// Mirror the existing telemetry/types.ts schemas but use `event` as the
-// discriminator so they fit into the discriminated union. The TelemetrySink
-// filters these by event name; fields match the v1 upload shapes.
-// Task 6 extends task.completed with 11 new v2 fields.
-// ---------------------------------------------------------------------------
+// Cloud-bound events live in cloud-events.ts; re-imported here for the
+// discriminated union and schema index below.
+import {
+  TaskCompletedCloudEvent,
+  SessionStartedCloudEvent,
+  InstallChangedCloudEvent,
+  SkillInstalledCloudEvent,
+} from './cloud-events.js';
+export {
+  TaskCompletedCloudEvent,
+  SessionStartedCloudEvent,
+  InstallChangedCloudEvent,
+  SkillInstalledCloudEvent,
+  CLOUD_EVENT_NAMES,
+} from './cloud-events.js';
 
-export const TaskCompletedCloudEvent = z.object({
-  event: z.literal('task.completed'),
-  ts: z.string().datetime({ offset: true }),
-  // v1 core fields (mirror telemetry/types.ts TaskCompletedEvent)
-  route: RouteEnum,
-  agentType: TierEnum,
-  toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
-  triggeredFromSkill: z.string(),
-  client: z.string(),
-  fileCountBucket: z.enum(['0', '1-5', '6-20', '21-50', '51+']),
-  durationBucket: z.enum(['<10s', '10s-1m', '1m-5m', '5m-30m', '30m+']),
-  costBucket: z.enum(['$0', '<$0.01', '$0.01-$0.10', '$0.10-$1', '$1+']),
-  savedCostBucket: z.enum(['$0', '<$0.10', '$0.10-$1', '$1+', 'unknown']),
-  implementerModelFamily: z.string(),
-  implementerModel: z.string(),
-  terminalStatus: z.enum([
-    'ok', 'incomplete', 'timeout', 'error', 'cost_exceeded',
-    'brief_too_vague', 'unavailable',
-  ]),
-  workerStatus: WorkerStatusEnum,
-  errorCode: z.string().nullable(),
-  escalated: z.boolean(),
-  fallbackTriggered: z.boolean(),
-  topToolNames: z.array(z.string()).max(20),
-  stages: z.record(z.string(), z.unknown()),
-}).passthrough();
-
-export const SessionStartedCloudEvent = z.object({
-  event: z.literal('session.started'),
-  ts: z.string().datetime({ offset: true }),
-  configFlavor: z.record(z.string(), z.unknown()),
-  providersConfigured: z.array(z.enum(['claude', 'openai-compatible', 'codex'])).max(3),
-}).passthrough();
-
-export const InstallChangedCloudEvent = z.object({
-  event: z.literal('install.changed'),
-  ts: z.string().datetime({ offset: true }),
-  fromVersion: z.string().nullable(),
-  toVersion: z.string(),
-  trigger: z.enum(['fresh_install', 'upgrade', 'downgrade']),
-}).passthrough();
-
-export const SkillInstalledCloudEvent = z.object({
-  event: z.literal('skill.installed'),
-  ts: z.string().datetime({ offset: true }),
-  skill: z.string(),
-  client: z.string(),
-}).passthrough();
-
-// ---------------------------------------------------------------------------
-// Discriminated union
-// ---------------------------------------------------------------------------
+// === Discriminated union ===
 
 export const Event = z.discriminatedUnion('event', [
   // Lifecycle
@@ -493,17 +390,7 @@ export const Event = z.discriminatedUnion('event', [
 
 export type EventType = z.infer<typeof Event>;
 
-/** Cloud-bound event discriminator values — used by TelemetrySink to filter. */
-export const CLOUD_EVENT_NAMES = new Set([
-  'task.completed',
-  'session.started',
-  'install.changed',
-  'skill.installed',
-] as const);
-
-// ---------------------------------------------------------------------------
-// Schema index for coverage invariants and emit-time validation
-// ---------------------------------------------------------------------------
+// === Schema index for coverage invariants and emit-time validation ===
 
 /**
  * Map from event discriminator to its full-envelope Zod schema.
@@ -557,418 +444,3 @@ export const EventSchemas: Record<string, z.ZodType> = {
   'skill.installed':  SkillInstalledCloudEvent,
 };
 
-// ---------------------------------------------------------------------------
-// EventBuilder — typed constructors per event kind
-//
-// One constructor per event discriminator. Each auto-fills `ts` and returns
-// the fully-typed envelope. This closes the event-type catalog at compile
-// time: callers can't misspell an event name or omit a required field.
-// ---------------------------------------------------------------------------
-
-export const EventBuilder = {
-  // -- Lifecycle (task-level) -------------------------------------------------
-
-  taskStarted(params: {
-    batchId: string;
-    taskIndex: number;
-    route: z.infer<typeof RouteEnum>;
-    cwd: string;
-  }): z.infer<typeof TaskStartedEvent> {
-    return { event: 'task_started', ts: ts(), ...params };
-  },
-
-  stageChange(params: {
-    batchId: string;
-    taskIndex: number;
-    from: string;
-    to: string;
-    attempt?: number;
-    attemptCap?: number;
-    implTier?: z.infer<typeof TierEnum>;
-    reviewerTier?: z.infer<typeof TierEnum>;
-    escalated?: boolean;
-  }): z.infer<typeof StageChangeEvent> {
-    return { event: 'stage_change', ts: ts(), ...params } as z.infer<typeof StageChangeEvent>;
-  },
-
-  heartbeat(params: {
-    batchId: string;
-    taskIndex: number;
-    elapsed: string;
-    stage: string;
-    round?: number;
-    cap?: number;
-    tools: number;
-    read: number;
-    wrote: number;
-    text: number;
-    cost: number | null;
-    idle_ms: number;
-    stage_idle_ms: number;
-  }): z.infer<typeof HeartbeatEvent> {
-    return { event: 'heartbeat', ts: ts(), ...params };
-  },
-
-  fallback(params: {
-    batchId: string;
-    taskIndex: number;
-    loop: z.infer<typeof DiagLoopEnum>;
-    attempt: number;
-    role: z.infer<typeof DiagRoleEnum>;
-    assignedTier: z.infer<typeof TierEnum>;
-    usedTier: z.infer<typeof TierEnum>;
-    reason: z.infer<typeof DiagReasonEnum>;
-    triggeringStatus?: z.infer<typeof RunStatusEnum>;
-    violatesSeparation: boolean;
-    fallbackSeparationRespected?: boolean;
-    assignedIdentity?: {
-      providerType: string;
-      normalizedEndpoint: string;
-      modelId: string;
-    } | null;
-    usedIdentity?: {
-      providerType: string;
-      normalizedEndpoint: string;
-      modelId: string;
-    } | null;
-  }): z.infer<typeof FallbackEvent> {
-    return { event: 'fallback', ts: ts(), ...params };
-  },
-
-  fallbackUnavailable(params: {
-    batchId: string;
-    taskIndex: number;
-    loop: z.infer<typeof DiagLoopEnum>;
-    attempt: number;
-    role: z.infer<typeof DiagRoleEnum>;
-    assignedTier: z.infer<typeof TierEnum>;
-    reason: z.infer<typeof DiagReasonEnum>;
-  }): z.infer<typeof FallbackUnavailableEvent> {
-    return { event: 'fallback_unavailable', ts: ts(), ...params };
-  },
-
-  escalation(params: {
-    batchId: string;
-    taskIndex: number;
-    loop: z.infer<typeof DiagLoopEnum>;
-    attempt: number;
-    baseTier: z.infer<typeof TierEnum>;
-    implTier: z.infer<typeof TierEnum>;
-    reviewerTier: z.infer<typeof TierEnum>;
-  }): z.infer<typeof EscalationEvent> {
-    return { event: 'escalation', ts: ts(), ...params };
-  },
-
-  escalationUnavailable(params: {
-    batchId: string;
-    taskIndex: number;
-    loop: z.infer<typeof DiagLoopEnum>;
-    attempt: number;
-    role: z.infer<typeof DiagRoleEnum>;
-    wantedTier: z.infer<typeof TierEnum>;
-    reason: z.infer<typeof DiagReasonEnum>;
-  }): z.infer<typeof EscalationUnavailableEvent> {
-    return { event: 'escalation_unavailable', ts: ts(), ...params };
-  },
-
-  reviewDecision(params: {
-    batchId: string;
-    taskIndex: number;
-    stage: z.infer<typeof DiagLoopEnum>;
-    verdict: z.infer<typeof ReviewVerdictEnum>;
-    round: number;
-  }): z.infer<typeof ReviewDecisionEvent> {
-    return { event: 'review_decision', ts: ts(), ...params };
-  },
-
-  verifyStep(params: {
-    batchId: string;
-    taskIndex: number;
-    command: string;
-    status: 'passed' | 'failed' | 'error';
-    exitCode?: number;
-    signal?: string;
-    durationMs: number;
-    errorMessage?: string;
-  }): z.infer<typeof VerifyStepEvent> {
-    return { event: 'verify_step', ts: ts(), ...params };
-  },
-
-  verifySkipped(params: {
-    batchId: string;
-    taskIndex: number;
-    reason: z.infer<typeof VerifySkipReasonEnum>;
-    stage: string;
-  }): z.infer<typeof VerifySkippedEvent> {
-    return { event: 'verify_skipped', ts: ts(), ...params };
-  },
-
-  readOnlyReviewQuality(params: {
-    batchId: string;
-    taskIndex: number;
-    route: string;
-    verdict: z.infer<typeof ReviewVerdictEnum>;
-    iterationIndex: number;
-    findingsReviewed: number;
-    meanConfidence: number | null;
-    durationMs: number;
-    costUSD: number | null;
-  }): z.infer<typeof ReadOnlyReviewQualityEvent> {
-    return { event: 'read_only_review.quality', ts: ts(), ...params };
-  },
-
-  readOnlyReviewTerminal(params: {
-    batchId: string;
-    taskIndex: number;
-    route: string;
-    roundsUsed: number;
-    finalQualityVerdict: z.infer<typeof ReviewVerdictEnum>;
-    costUSD: number | null;
-    durationMs: number;
-  }): z.infer<typeof ReadOnlyReviewTerminalEvent> {
-    return { event: 'read_only_review.terminal', ts: ts(), ...params };
-  },
-
-  stallAbort(params: {
-    batchId: string;
-    taskIndex: number;
-    idle_ms: number;
-    threshold_ms: number;
-  }): z.infer<typeof StallAbortEvent> {
-    return { event: 'stall_abort', ts: ts(), ...params };
-  },
-
-  timeCheck(params: {
-    batchId: string;
-    taskIndex: number;
-    stage: string;
-    tripped: boolean;
-    wallClockMs: number;
-    timeoutMs: number;
-  }): z.infer<typeof TimeCheckEvent> {
-    return { event: 'time_check', ts: ts(), ...params };
-  },
-
-  costCheck(params: {
-    batchId: string;
-    taskIndex: number;
-    stage: string;
-    tripped: boolean;
-    cost_used_usd: number;
-    cost_cap_usd: number;
-    cost_available: boolean;
-  }): z.infer<typeof CostCheckEvent> {
-    return { event: 'cost_check', ts: ts(), ...params };
-  },
-
-  taskCompleted(params: {
-    batchId: string;
-    taskIndex: number;
-    status: string;
-    workerStatus: string | null;
-    turns: number;
-    durationMs: number | null;
-    filesRead: number;
-    filesWritten: number;
-    toolCalls: number;
-    inputTokens: number;
-    outputTokens: number;
-    cachedReadTokens: number;
-    cachedNonReadTokens: number;
-    costUSD: number | null;
-    taskMaxIdleMs: number | null;
-    stallTriggered: boolean;
-    stages: string;
-  } & Record<string, unknown>): z.infer<typeof TaskCompletedLocalEvent> {
-    return { event: 'task_completed', ts: ts(), ...params } as z.infer<typeof TaskCompletedLocalEvent>;
-  },
-
-  // -- Lifecycle (batch-level) ------------------------------------------------
-
-  batchCompleted(params: {
-    batchId: string;
-    tool: string;
-    durationMs: number;
-    taskCount: number;
-  }): z.infer<typeof BatchCompletedEvent> {
-    return { event: 'batch_completed', ts: ts(), ...params };
-  },
-
-  batchFailed(params: {
-    batchId: string;
-    tool: string;
-    durationMs: number;
-    errorCode: string;
-    errorMessage: string;
-  }): z.infer<typeof BatchFailedEvent> {
-    return { event: 'batch_failed', ts: ts(), ...params };
-  },
-
-  // -- Explore (batch-level) --------------------------------------------------
-
-  exploreParallelStart(params: {
-    batchId: string;
-    internalRoute: string;
-    externalRoute: string;
-  }): z.infer<typeof ExploreParallelStartEvent> {
-    return { event: 'explore_parallel_start', ts: ts(), ...params };
-  },
-
-  exploreParallelEnd(params: {
-    batchId: string;
-    internalOk: boolean;
-    externalOk: boolean;
-    internalDurationMs: number;
-    externalDurationMs: number;
-  }): z.infer<typeof ExploreParallelEndEvent> {
-    return { event: 'explore_parallel_end', ts: ts(), ...params };
-  },
-
-  exploreInternalUnavailable(params: {
-    batchId: string;
-    reason: string;
-  }): z.infer<typeof ExploreInternalUnavailableEvent> {
-    return { event: 'explore_internal_unavailable', ts: ts(), ...params };
-  },
-
-  exploreExternalUnavailable(params: {
-    batchId: string;
-    reason: string;
-  }): z.infer<typeof ExploreExternalUnavailableEvent> {
-    return { event: 'explore_external_unavailable', ts: ts(), ...params };
-  },
-
-  exploreSynthesizeStart(params: {
-    batchId: string;
-    internalAvailable: boolean;
-    externalAvailable: boolean;
-  }): z.infer<typeof ExploreSynthesizeStartEvent> {
-    return { event: 'explore_synthesize_start', ts: ts(), ...params };
-  },
-
-  exploreSynthesizeEnd(params: {
-    batchId: string;
-    threadCount: number;
-    recommendedNextStep: boolean;
-    durationMs: number;
-  }): z.infer<typeof ExploreSynthesizeEndEvent> {
-    return { event: 'explore_synthesize_end', ts: ts(), ...params };
-  },
-
-  exploreThreadStarted(params: {
-    batchId: string;
-    threadIndex: number;
-  }): z.infer<typeof ExploreThreadStartedEvent> {
-    return { event: 'explore_thread_started', ts: ts(), ...params };
-  },
-
-  exploreThreadCompleted(params: {
-    batchId: string;
-    threadIndex: number;
-  }): z.infer<typeof ExploreThreadCompletedEvent> {
-    return { event: 'explore_thread_completed', ts: ts(), ...params };
-  },
-
-  // -- Runner internals (task-level) ------------------------------------------
-
-  workerStart(params: {
-    batchId: string;
-    taskIndex: number;
-    model: string;
-    providerType: z.infer<typeof ProviderTypeEnum>;
-    tier: z.infer<typeof TierEnum>;
-  }): z.infer<typeof WorkerStartEvent> {
-    return { event: 'worker_start', ts: ts(), ...params };
-  },
-
-  turnStart(params: {
-    batchId: string;
-    taskIndex: number;
-    turnIndex: number;
-    providerType: z.infer<typeof ProviderTypeEnum>;
-    model: string;
-  }): z.infer<typeof TurnStartEvent> {
-    return { event: 'turn_start', ts: ts(), ...params };
-  },
-
-  turnComplete(params: {
-    batchId: string;
-    taskIndex: number;
-    turnIndex: number;
-    inputTokens: number;
-    outputTokens: number;
-    cachedReadTokens: number;
-    cachedNonReadTokens: number;
-    costUSD: number;
-    durationMs: number;
-    providerType: z.infer<typeof ProviderTypeEnum>;
-    model: string;
-  }): z.infer<typeof TurnCompleteEvent> {
-    return { event: 'turn_complete', ts: ts(), ...params };
-  },
-
-  toolCall(params: {
-    batchId: string;
-    taskIndex: number;
-    tool: string;
-    turnIndex: number;
-  }): z.infer<typeof ToolCallEvent> {
-    return { event: 'tool_call', ts: ts(), ...params };
-  },
-
-  textEmission(params: {
-    batchId: string;
-    taskIndex: number;
-    chars: number;
-    turnIndex: number;
-  }): z.infer<typeof TextEmissionEvent> {
-    return { event: 'text_emission', ts: ts(), ...params };
-  },
-
-  // -- Cloud-bound ------------------------------------------------------------
-
-  taskCompletedCloud(params: {
-    route: z.infer<typeof RouteEnum>;
-    agentType: z.infer<typeof TierEnum>;
-    toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
-    triggeredFromSkill: string;
-    client: string;
-    fileCountBucket: '0' | '1-5' | '6-20' | '21-50' | '51+';
-    durationBucket: '<10s' | '10s-1m' | '1m-5m' | '5m-30m' | '30m+';
-    costBucket: '$0' | '<$0.01' | '$0.01-$0.10' | '$0.10-$1' | '$1+';
-    savedCostBucket: '$0' | '<$0.10' | '$0.10-$1' | '$1+' | 'unknown';
-    implementerModelFamily: string;
-    implementerModel: string;
-    terminalStatus: 'ok' | 'incomplete' | 'timeout' | 'error' | 'cost_exceeded' | 'brief_too_vague' | 'unavailable';
-    workerStatus: z.infer<typeof WorkerStatusEnum>;
-    errorCode: string | null;
-    escalated: boolean;
-    fallbackTriggered: boolean;
-    topToolNames: string[];
-    stages: Record<string, unknown>;
-  } & Record<string, unknown>): z.infer<typeof TaskCompletedCloudEvent> {
-    return { event: 'task.completed', ts: ts(), ...params } as z.infer<typeof TaskCompletedCloudEvent>;
-  },
-
-  sessionStartedCloud(params: {
-    configFlavor: Record<string, unknown>;
-    providersConfigured: Array<'claude' | 'openai-compatible' | 'codex'>;
-  } & Record<string, unknown>): z.infer<typeof SessionStartedCloudEvent> {
-    return { event: 'session.started', ts: ts(), ...params } as z.infer<typeof SessionStartedCloudEvent>;
-  },
-
-  installChangedCloud(params: {
-    fromVersion: string | null;
-    toVersion: string;
-    trigger: 'fresh_install' | 'upgrade' | 'downgrade';
-  } & Record<string, unknown>): z.infer<typeof InstallChangedCloudEvent> {
-    return { event: 'install.changed', ts: ts(), ...params } as z.infer<typeof InstallChangedCloudEvent>;
-  },
-
-  skillInstalledCloud(params: {
-    skill: string;
-    client: string;
-  } & Record<string, unknown>): z.infer<typeof SkillInstalledCloudEvent> {
-    return { event: 'skill.installed', ts: ts(), ...params } as z.infer<typeof SkillInstalledCloudEvent>;
-  },
-};
