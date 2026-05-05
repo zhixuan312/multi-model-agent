@@ -54,7 +54,6 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     client: 'test-client',
     agentType: 'standard',
     toolMode: 'full',
-    capabilities: [],
     reviewPolicy: 'full',
     verifyCommandPresent: false,
     implementerModel: 'gpt-5',
@@ -135,7 +134,6 @@ function makeHealthyContext(): BuildContext {
       agents: {
         implementer: 'standard' as const,
         implementerToolMode: 'full' as const,
-        implementerCapabilities: [] as string[],
       },
       stageStats: {
         implementing: {

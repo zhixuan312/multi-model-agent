@@ -110,7 +110,7 @@ export async function executeVerify(
   };
 
   function resolved() {
-    return resolveAgent('complex', [], config);
+    return resolveAgent('complex', config);
   }
 
   function expand(task: TaskSpec) {

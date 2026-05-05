@@ -20,8 +20,6 @@ import {
   clampDurationMsTotal,
 } from './clamp.js';
 
-const KNOWN_CAPABILITIES = new Set(['web_search', 'web_fetch']);
-
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'register-context-block';
   taskSpec: { filePaths?: string[] };
@@ -125,9 +123,6 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     client,
     agentType: runResult.agents?.implementer === 'complex' ? 'complex' : 'standard',
     toolMode: (runResult.agents?.implementerToolMode ?? 'full') as 'none' | 'readonly' | 'no-shell' | 'full',
-    capabilities: (runResult.agents?.implementerCapabilities ?? [])
-      .filter(c => KNOWN_CAPABILITIES.has(c))
-      .slice(0, 3) as Array<'web_search' | 'web_fetch'>,
     reviewPolicy,
     verifyCommandPresent,
     implementerModel:

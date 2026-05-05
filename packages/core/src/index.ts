@@ -8,7 +8,6 @@ export type {
   ToolMode,
   SandboxPolicy,
   AgentType,
-  AgentCapability,
   AgentConfig,
   Effort,
   CostTier,

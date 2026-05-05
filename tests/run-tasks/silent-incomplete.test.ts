@@ -77,10 +77,10 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: primaryProvider,
-      capabilityOverride: false,
+  
     };
 
     const config = makeConfig();
@@ -133,7 +133,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
 
     const result = await executeReviewedLifecycle(
       { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
-      { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
+      { slot: 'standard', provider: primaryProvider },
       makeConfig(),
       0,
       undefined, undefined, undefined, undefined, 'delegate',
@@ -172,7 +172,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
 
     const result = await executeReviewedLifecycle(
       { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
-      { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
+      { slot: 'standard', provider: primaryProvider },
       makeConfig(),
       0,
       undefined, undefined, undefined, undefined, 'delegate',
@@ -206,7 +206,7 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
 
     const result = await executeReviewedLifecycle(
       { prompt: 'implement feature X', agentType: 'standard', reviewPolicy: 'none', timeoutMs: 300_000 },
-      { slot: 'standard', provider: primaryProvider, capabilityOverride: false },
+      { slot: 'standard', provider: primaryProvider },
       makeConfig(),
       0,
       undefined, undefined, undefined, undefined, 'delegate',
@@ -260,10 +260,10 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: primaryProvider,
-      capabilityOverride: false,
+  
     };
 
     const config = makeConfig();
@@ -383,10 +383,10 @@ describe('Item 9: silent incomplete is now self-explanatory', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: primaryProvider,
-      capabilityOverride: false,
+  
     };
 
     const config = makeConfig();

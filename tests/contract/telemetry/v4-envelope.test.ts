@@ -78,7 +78,6 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     client: 'claude-code',
     agentType: 'standard' as const,
     toolMode: 'full' as const,
-    capabilities: [] as Array<'web_search' | 'web_fetch'>,
     reviewPolicy: route === 'delegate' ? 'full' as const : 'quality_only' as const,
     verifyCommandPresent: route === 'verify',
     implementerModel: 'claude-sonnet',
@@ -273,7 +272,7 @@ describe('V4 envelope contract', () => {
     const batch = UploadBatchSchema.parse({
       schemaVersion: 4,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
-      mmagentVersion: '3.12.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [event],
@@ -282,11 +281,11 @@ describe('V4 envelope contract', () => {
     expect(batch.schemaVersion).toBe(4);
   });
 
-  it('rejects V3 schema version in batch', () => {
+  it('rejects pre-v4 schema versions in batch', () => {
     const result = UploadBatchSchema.safeParse({
       schemaVersion: 3,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
-      mmagentVersion: '3.10.0',
+      mmagentVersion: '4.0.0',
       os: 'darwin',
       nodeMajor: 22,
       events: [ValidatedTaskCompletedEventSchema.parse(makeEvent('delegate'))],

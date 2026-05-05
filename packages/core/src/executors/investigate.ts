@@ -50,7 +50,7 @@ export async function executeInvestigate(
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
   };
 
-  const resolved = resolveAgent('complex', [], config);
+  const resolved = resolveAgent('complex', config);
 
   const startMs = Date.now();
   let result: RunResult;

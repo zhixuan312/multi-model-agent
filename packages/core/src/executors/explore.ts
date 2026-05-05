@@ -129,7 +129,7 @@ export async function executeExplore(
   // ExecutorOutput envelope instead of throwing.
   let resolved: ReturnType<typeof resolveAgent>;
   try {
-    resolved = resolveAgent('complex', [], config);
+    resolved = resolveAgent('complex', config);
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     const fallback = buildFallbackResult(err.message);
@@ -185,8 +185,8 @@ export async function executeExplore(
   let internalProvider: ReturnType<typeof resolveAgent>;
   let externalProvider: ReturnType<typeof resolveAgent>;
   try {
-    internalProvider = resolveAgent('complex', [], config);
-    externalProvider = resolveAgent('complex', [], config);
+    internalProvider = resolveAgent('complex', config);
+    externalProvider = resolveAgent('complex', config);
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     const fallback = buildFallbackResult(err.message);
@@ -316,7 +316,7 @@ export async function executeExplore(
   // Create a fresh provider for the synthesizer.
   let synthProvider: ReturnType<typeof resolveAgent>;
   try {
-    synthProvider = resolveAgent('complex', [], config);
+    synthProvider = resolveAgent('complex', config);
   } catch (e) {
     const err = e instanceof Error ? e : new Error(String(e));
     const fallback = buildFallbackResult(err.message);

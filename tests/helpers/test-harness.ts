@@ -1,12 +1,9 @@
 /**
- * Shared test helpers used across the v4.0 migration test suite.
+ * Shared test helpers used across the test suite.
  *
- * Imported by Phase 1.7 (agentType validation), Phase 2.4 (context-block 413),
- * Phase 4.6 (RouteDispatcher 400), Phase 7.6 (/health), and others. If a later
- * phase adds a new helper, append it here — do NOT redefine inline in a test.
- *
- * NOTE: Phase 0.4a authors this file against v3.12 types so it compiles now;
- * Phase 1.10 will tighten the TokenUsage shape to the v4 4-field form.
+ * Used for HTTP handler invocation, mock providers, and other test fixtures
+ * common across multiple test files. If a new helper is needed by 2+ tests,
+ * append it here — do NOT redefine inline in each test file.
  */
 import type { Provider, RunResult, TaskSpec } from '../../packages/core/src/types.js';
 
@@ -75,7 +72,7 @@ export interface MockProviderOptions {
 }
 
 /**
- * Loose mockProvider that satisfies the v3.12 Provider interface (run/runReview)
+ * Loose mockProvider that satisfies the Provider interface (run/runReview)
  * for tests that don't actually exercise the runner. Real runner tests should
  * use the canonical mock-providers in tests/contract/fixtures/mock-providers.ts.
  */

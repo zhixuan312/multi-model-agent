@@ -172,7 +172,6 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       client: 'test-client',
       agentType: 'standard',
       toolMode: 'full',
-      capabilities: [] as string[],
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'custom',
@@ -215,7 +214,6 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       client: 'test-client',
       agentType: 'standard',
       toolMode: 'full',
-      capabilities: [] as string[],
       reviewPolicy: 'full',
       verifyCommandPresent: false,
       implementerModel: 'deepseek-v4-pro',
@@ -388,10 +386,10 @@ describe('Test 12 Part A — lifecycle regression', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: primaryProvider,
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(

@@ -31,7 +31,7 @@ import {
   type UnavailableMap,
   type FallbackReason,
 } from '../escalation/fallback.js';
-import { findModelCapabilities, findModelProfile } from '../routing/model-profiles.js';
+import { findModelProfile } from '../routing/model-profiles.js';
 import { canonicalIdentity } from '../routing/canonical-model-identity.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
@@ -303,7 +303,7 @@ export function endVerifyStage(
 
 export async function executeReviewedLifecycle(
   task: TaskSpec,
-  resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean },
+  resolved: { slot: AgentType; provider: Provider },
   config: MultiModelConfig,
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
@@ -920,8 +920,6 @@ export async function executeReviewedLifecycle(
   }
 
   const implementerToolMode = task.tools ?? config.defaults.tools;
-  const agentConfig = config.agents[resolved.slot];
-  const implementerCapabilities = (agentConfig.capabilities ?? findModelCapabilities(agentConfig.model) ?? []) as ('web_search' | 'web_fetch')[];
 
   const agentEnvelope = (specReviewer: AgentType | 'skipped' | 'not_applicable', qualityReviewer: AgentType | 'skipped' | 'not_applicable') => {
     // Identity = the slot the executor *resolved to* before any per-call
@@ -936,7 +934,6 @@ export async function executeReviewedLifecycle(
       implementer,
       ...(implementerHistory.length > 1 || implementerHistory.some(t => t !== implementer) ? { implementerHistory } : {}),
       implementerToolMode,
-      implementerCapabilities,
       specReviewer,
       ...(specReviewerHistory.length > 0 && (specReviewerHistory.length > 1 || specReviewerHistory.some(t => t === 'skipped')) ? { specReviewerHistory } : {}),
       qualityReviewer,

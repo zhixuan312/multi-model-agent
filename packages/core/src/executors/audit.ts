@@ -201,7 +201,7 @@ export async function executeAudit(
   const startMs = Date.now();
   let result: RunResult;
   try {
-    const resolved = resolveAgent('complex', [], config);
+    const resolved = resolveAgent('complex', config);
     result = await executeReviewedLifecycle(
       task,
       resolved,

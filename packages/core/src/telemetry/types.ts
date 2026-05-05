@@ -166,7 +166,6 @@ export const TaskCompletedEventSchema = z.object({
   // Configuration
   agentType: z.enum(['standard', 'complex']),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
-  capabilities: z.array(z.enum(['web_search', 'web_fetch', 'other'])).max(3),
   reviewPolicy: z.enum(['full', 'quality_only', 'diff_only', 'none']),
   verifyCommandPresent: z.boolean(),
 

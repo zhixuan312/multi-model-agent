@@ -61,7 +61,7 @@ const outputEnvelopeSchema = z.object({
     details: z.unknown().optional(),
   }).optional().describe('Terminal error if the batch failed'),
   annotatorConfidence: z.number().min(0).max(1).optional()
-    .describe('Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)'),
+    .describe('Annotator confidence score (0-1) when the review policy produced annotations'),
   specReviewVerdict: z.enum(['approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable']).optional(),
   qualityReviewVerdict: z.enum(['approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable']).optional(),
   roundsUsed: z.number().int().min(0).optional().describe('Number of agent rounds consumed'),

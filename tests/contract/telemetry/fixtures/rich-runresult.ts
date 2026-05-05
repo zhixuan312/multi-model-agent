@@ -44,7 +44,7 @@ export function richRunResult(): RunResult {
       committing:      { stage: 'committing',      entered: true, durationMs: 500,   costUSD: 0.001, agentTier: 'standard', modelFamily: 'openai', model: 'gpt-5', maxIdleMs: 50,   totalIdleMs: 100,  activityEvents: 1,  inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, cachedNonReadTokens: null, round: 1, turnCount: null, toolCallCount: 1, filesReadCount: 1, filesWrittenCount: 1 },
     },
     models: { implementer: 'gpt-5', specReviewer: 'claude-sonnet', qualityReviewer: 'claude-sonnet' },
-    agents: { implementer: 'standard', implementerToolMode: 'full', implementerCapabilities: [], specReviewer: 'standard', qualityReviewer: 'standard', fallbackOverrides: [{ role: 'implementer' as const, loop: 'spec' as const, attempt: 0, assigned: 'complex' as const, used: 'complex' as const, reason: 'unavailable' as const, triggeringStatus: undefined, bothUnavailable: false }] },
+    agents: { implementer: 'standard', implementerToolMode: 'full', specReviewer: 'standard', qualityReviewer: 'standard', fallbackOverrides: [{ role: 'implementer' as const, loop: 'spec' as const, attempt: 0, assigned: 'complex' as const, used: 'complex' as const, reason: 'unavailable' as const, triggeringStatus: undefined, bothUnavailable: false }] },
     taskMaxIdleMs: 1000,
     stallCount: 1,
     sandboxViolationCount: 1,

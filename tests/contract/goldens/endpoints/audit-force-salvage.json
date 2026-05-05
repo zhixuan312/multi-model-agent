@@ -241,7 +241,6 @@
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
-        "implementerCapabilities": [],
         "specReviewer": "not_applicable",
         "qualityReviewer": "standard"
       },

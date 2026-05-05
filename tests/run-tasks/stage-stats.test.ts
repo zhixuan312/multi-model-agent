@@ -244,14 +244,14 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
   it('populates stageStats when reviewPolicy=none and no file artifacts', async () => {
     const config = makeConfig();
     const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: mockProvider({ stage: 'ok', output: 'done' }).run,
       },
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -296,14 +296,14 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
   it('populates stageStats when provider returns incomplete', async () => {
     const config = makeConfig();
     const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: mockProvider({ stage: 'incomplete', output: 'partial work' }).run,
       },
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -336,14 +336,14 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
       verifyCommand: ['true'],
       cwd,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: mockProvider({ stage: 'ok', output: 'done' }).run,
       },
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -360,14 +360,14 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
   it('records terminal as the final heartbeat stage', async () => {
     const config = makeConfig();
     const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: mockProvider({ stage: 'ok', output: 'done' }).run,
       },
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -382,14 +382,14 @@ describe('executeReviewedLifecycle wires stageStats into RunResult', () => {
   it('all 8 stage entries are present', async () => {
     const config = makeConfig();
     const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
         config: config.agents.standard,
         run: mockProvider({ stage: 'ok', output: 'done' }).run,
       },
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);

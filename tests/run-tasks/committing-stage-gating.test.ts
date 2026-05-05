@@ -93,10 +93,10 @@ describe('committing stage gating', () => {
       autoCommit: true,
       cwd,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider,
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -137,10 +137,10 @@ describe('committing stage gating', () => {
       autoCommit: true,
       cwd,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider,
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);
@@ -172,10 +172,10 @@ describe('committing stage gating', () => {
       autoCommit: true,
       cwd,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider,
-      capabilityOverride: false,
+  
     };
 
     const r = await executeReviewedLifecycle(task, resolved, config, 0);

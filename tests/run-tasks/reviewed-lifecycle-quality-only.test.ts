@@ -115,7 +115,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -132,7 +132,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     await expect(
@@ -147,7 +147,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -164,7 +164,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(task, resolved, config, 0, undefined, undefined, undefined, undefined, 'audit');
@@ -182,7 +182,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -199,7 +199,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(task, resolved, config, 0, undefined, undefined, undefined, undefined, 'audit');
@@ -215,7 +215,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       agentType: 'complex' as const,
       reviewPolicy: 'quality_only' as const,
     };
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -232,7 +232,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(task, resolved, config, 0, undefined, undefined, undefined, undefined, 'audit');
@@ -249,7 +249,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       reviewPolicy: 'quality_only' as const,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -266,7 +266,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     let builderCalled = false;
@@ -304,7 +304,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       reviewPolicy: 'quality_only' as const,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -321,7 +321,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     const events: unknown[] = [];
@@ -377,7 +377,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
       reviewPolicy: 'quality_only' as const,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: {
         name: 'mock-standard',
@@ -394,7 +394,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
           escalationLog: [],
         }),
       },
-      capabilityOverride: false,
+  
     };
 
     const builder = (ctx: { workerOutput: string; brief: string }) =>

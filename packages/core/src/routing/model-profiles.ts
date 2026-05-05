@@ -140,7 +140,6 @@ export const modelProfileSchema = z.object({
   /** Per-model-family default for the watchdog input-token soft limit.
    *  See spec A.1.4. */
   inputTokenSoftLimit: z.number().int().positive(),
-  capabilities: z.array(z.enum(['web_search', 'web_fetch'])).default([]),
 });
 
 export type ModelProfile = z.infer<typeof modelProfileSchema>;
@@ -153,7 +152,6 @@ const DEFAULT_PROFILE: ModelProfile = {
   bestFor: 'general tasks (unprofiled model — defaults applied)',
   supportsEffort: false,
   inputTokenSoftLimit: 100_000,
-  capabilities: [],
 };
 
 // === Hierarchical JSON schema (short field names for human readability) ===
@@ -173,7 +171,6 @@ const profileEntrySchema = z.object({
   cachedNonRead:  z.number().finite().nonnegative().optional(),
   reasoning: z.number().finite().nonnegative().optional(),
   inputTokenSoftLimit: z.number().int().positive().optional(),
-  capabilities: z.array(z.enum(['web_search', 'web_fetch'])).optional(),
 });
 
 const providerGroupSchema = z.object({
@@ -185,7 +182,6 @@ const providerGroupSchema = z.object({
     family: ModelFamilyEnum.optional(),
     supportsEffort: z.boolean(),
     inputTokenSoftLimit: z.number().int().positive(),
-    capabilities: z.array(z.enum(['web_search', 'web_fetch'])),
   }),
   profiles: z.array(profileEntrySchema).min(1),
 });
@@ -214,7 +210,7 @@ function findParentProfile(prefix: string, resolved: Map<string, ModelProfile>):
  */
 function resolveEntry(
   entry: ProfileEntry,
-  providerDefaults: { family?: ModelFamily; supportsEffort: boolean; inputTokenSoftLimit: number; capabilities: ('web_search' | 'web_fetch')[] },
+  providerDefaults: { family?: ModelFamily; supportsEffort: boolean; inputTokenSoftLimit: number },
   providerMeta: { rateSource?: string; rateLookupDate?: string },
   resolved: Map<string, ModelProfile>,
 ): ModelProfile {
@@ -229,7 +225,6 @@ function resolveEntry(
     bestFor: 'general tasks',
     supportsEffort: providerDefaults.supportsEffort,
     inputTokenSoftLimit: providerDefaults.inputTokenSoftLimit,
-    capabilities: [...providerDefaults.capabilities],
     rateSource: providerMeta.rateSource,
     rateLookupDate: providerMeta.rateLookupDate,
   };
@@ -248,7 +243,6 @@ function resolveEntry(
     if (parent.cachedNonReadCostPerMTok !== undefined) result.cachedNonReadCostPerMTok = parent.cachedNonReadCostPerMTok;
     if (parent.reasoningCostPerMTok !== undefined) result.reasoningCostPerMTok = parent.reasoningCostPerMTok;
     result.inputTokenSoftLimit = parent.inputTokenSoftLimit;
-    result.capabilities = [...parent.capabilities];
   }
 
   // Layer entry overrides (short names → long names)
@@ -265,7 +259,6 @@ function resolveEntry(
   if (entry.cachedNonRead  !== undefined) result.cachedNonReadCostPerMTok  = entry.cachedNonRead;
   if (entry.reasoning !== undefined) result.reasoningCostPerMTok = entry.reasoning;
   if (entry.inputTokenSoftLimit !== undefined) result.inputTokenSoftLimit = entry.inputTokenSoftLimit;
-  if (entry.capabilities !== undefined) result.capabilities = [...entry.capabilities];
 
   return result;
 }
@@ -325,10 +318,6 @@ export function findModelProfile(modelId: string): ModelProfile {
     }
   }
   return { ...DEFAULT_PROFILE };
-}
-
-export function findModelCapabilities(modelId: string): ('web_search' | 'web_fetch')[] {
-  return findModelProfile(modelId).capabilities ?? [];
 }
 
 export function getEffectiveCostTier(config: ProviderConfig): CostTier {

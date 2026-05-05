@@ -10,7 +10,6 @@ export const TASK_COMPLETED_FIELD_COVERAGE: Record<string, FieldCoverage> = {
   client:                   { kind: 'derived', source: 'BuildContext.client' },
   agentType:                { kind: 'derived', source: 'runResult.agents.implementer' },
   toolMode:                 { kind: 'derived', source: 'runResult.agents.implementerToolMode' },
-  capabilities:             { kind: 'derived', source: 'runResult.agents.implementerCapabilities (filtered to KNOWN_CAPABILITIES)' },
   reviewPolicy:             { kind: 'derived', source: 'BuildContext.reviewPolicy or route default' },
   verifyCommandPresent:     { kind: 'derived', source: 'BuildContext.verifyCommandPresent' },
   implementerModel:         { kind: 'derived', source: 'runResult.models.implementer (normalized)' },

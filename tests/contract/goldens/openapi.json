@@ -8,7 +8,7 @@
         },
         "properties": {
           "annotatorConfidence": {
-            "description": "Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)",
+            "description": "Annotator confidence score (0-1) when the review policy produced annotations",
             "maximum": 1,
             "minimum": 0,
             "type": "number"
@@ -358,7 +358,7 @@
                       },
                       "properties": {
                         "annotatorConfidence": {
-                          "description": "Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)",
+                          "description": "Annotator confidence score (0-1) when the review policy produced annotations",
                           "maximum": 1,
                           "minimum": 0,
                           "type": "number"

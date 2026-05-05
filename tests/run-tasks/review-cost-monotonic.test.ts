@@ -150,10 +150,10 @@ async function runReviewedLifecycleAndCaptureEvents(opts?: {
   };
 
   const implProvider = (createProvider as any)('standard') as Provider;
-  const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+  const resolved: { slot: AgentType; provider: Provider } = {
     slot: 'standard',
     provider: implProvider,
-    capabilityOverride: false,
+
   };
 
   const events: unknown[] = [];

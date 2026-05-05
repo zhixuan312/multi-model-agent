@@ -69,10 +69,10 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: crashingProvider,
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(
@@ -118,10 +118,10 @@ describe('Item 18: runner_crash preserves resolved implementerModel', () => {
       timeoutMs: 300_000,
     };
 
-    const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+    const resolved: { slot: AgentType; provider: Provider } = {
       slot: 'standard',
       provider: crashingProvider,
-      capabilityOverride: false,
+  
     };
 
     const result = await executeReviewedLifecycle(

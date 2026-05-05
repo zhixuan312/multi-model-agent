@@ -69,7 +69,7 @@ async function runReviewedLifecycleAndCaptureLines(opts: CaptureOptions): Promis
   const lines: string[] = [];
   const config = makeConfig();
   const task: TaskSpec = { prompt: 'test', reviewPolicy: 'none' };
-  const resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } = {
+  const resolved: { slot: AgentType; provider: Provider } = {
     slot: 'standard',
     provider: {
       name: 'mock-standard',
@@ -80,7 +80,7 @@ async function runReviewedLifecycleAndCaptureLines(opts: CaptureOptions): Promis
         delayMs: opts.mockDelayMs,
       }).run,
     },
-    capabilityOverride: false,
+
   };
 
   const taskCount = opts.taskCount ?? 1;

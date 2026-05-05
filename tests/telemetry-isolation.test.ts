@@ -54,7 +54,6 @@ function makeConfig(): MultiModelConfig {
 function makeResolved(config: MultiModelConfig): {
   slot: AgentType;
   provider: Provider;
-  capabilityOverride: boolean;
 } {
   return {
     slot: 'standard',
@@ -63,7 +62,7 @@ function makeResolved(config: MultiModelConfig): {
       config: config.agents.standard,
       run: mockProvider({ stage: 'ok', output: 'done' }).run,
     },
-    capabilityOverride: false,
+
   };
 }
 

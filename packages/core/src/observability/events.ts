@@ -402,7 +402,6 @@ export const TaskCompletedCloudEvent = z.object({
   // v1 core fields (mirror telemetry/types.ts TaskCompletedEvent)
   route: RouteEnum,
   agentType: TierEnum,
-  capabilities: z.array(z.enum(['web_search', 'web_fetch', 'other'])).max(3),
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
   triggeredFromSkill: z.string(),
   client: z.string(),
@@ -931,7 +930,6 @@ export const EventBuilder = {
   taskCompletedCloud(params: {
     route: z.infer<typeof RouteEnum>;
     agentType: z.infer<typeof TierEnum>;
-    capabilities: Array<'web_search' | 'web_fetch' | 'other'>;
     toolMode: 'none' | 'readonly' | 'no-shell' | 'full';
     triggeredFromSkill: string;
     client: string;

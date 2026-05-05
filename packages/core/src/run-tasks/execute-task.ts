@@ -24,7 +24,7 @@ export function errorResult(error: string): RunResult {
 }
 
 export type ResolvedTask =
-  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider; capabilityOverride: boolean } }
+  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider } }
   | { task: TaskSpec; error: string; errorCode: string };
 
 export function withDoneCondition(task: TaskSpec): TaskSpec {

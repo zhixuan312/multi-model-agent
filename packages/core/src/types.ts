@@ -12,7 +12,6 @@ import type { ResearchToolDefinition } from './research/types.js';
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';
 export type AgentType = 'standard' | 'complex';
-export type AgentCapability = 'web_search' | 'web_fetch';
 export type Effort = 'none' | 'low' | 'medium' | 'high';
 export type CostTier = 'free' | 'low' | 'medium' | 'high';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';
@@ -108,7 +107,6 @@ export interface AgentConfig {
   baseUrl?: string
   apiKey?: string
   apiKeyEnv?: string
-  capabilities?: AgentCapability[]
   inputCostPerMTok?: number
   outputCostPerMTok?: number
   timeoutMs?: number
@@ -150,7 +148,6 @@ export interface TaskSpec {
   formatConstraints?: FormatConstraints
   skipCompletionHeuristic?: boolean
   expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
-  requiredCapabilities?: AgentCapability[]
   testCommand?: string
   verifyCommand?: string[]
   autoCommit?: boolean
@@ -165,10 +162,10 @@ export interface TaskSpec {
   customToolset?: ResearchToolDefinition[]
 }
 
-export interface CodexProviderConfig { type: 'codex'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface ClaudeProviderConfig { type: 'claude'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface ClaudeCompatibleProviderConfig { type: 'claude-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: ('web_search' | 'image_generation' | 'code_interpreter')[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface OpenAICompatibleProviderConfig { type: 'openai-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; hostedTools?: 'web_search'[]; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface CodexProviderConfig { type: 'codex'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface ClaudeProviderConfig { type: 'claude'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface ClaudeCompatibleProviderConfig { type: 'claude-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface OpenAICompatibleProviderConfig { type: 'openai-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
 export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | ClaudeCompatibleProviderConfig | OpenAICompatibleProviderConfig
 
 export interface MultiModelConfig {
@@ -286,7 +283,6 @@ export interface RunResult {
     implementer: 'standard' | 'complex' | 'not_run'
     implementerHistory?: AgentType[]
     implementerToolMode?: 'none' | 'readonly' | 'no-shell' | 'full'
-    implementerCapabilities?: ('web_search' | 'web_fetch')[]
     specReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'
     specReviewerHistory?: (AgentType | 'skipped')[]
     qualityReviewer: 'standard' | 'complex' | 'skipped' | 'not_applicable'

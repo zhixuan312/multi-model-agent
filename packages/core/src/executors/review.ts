@@ -112,7 +112,7 @@ async function runSingleReview(
   ctx: ExecutionContext,
   taskIndex: number,
 ): Promise<RunResult> {
-  const resolved = resolveAgent(agentType, [], config);
+  const resolved = resolveAgent(agentType, config);
   return executeReviewedLifecycle(
     task,
     resolved,

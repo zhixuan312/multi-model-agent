@@ -3,7 +3,6 @@ import type {
   TaskSpec,
   MultiModelConfig,
   AgentType,
-  AgentCapability,
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
@@ -90,17 +89,13 @@ export async function runTasks(
     const task = entry;
     const agentType: AgentType = task.agentType ?? 'standard';
     try {
-      const resolved_agent = resolveAgent(
-        agentType,
-        (task.requiredCapabilities ?? []) as AgentCapability[],
-        config,
-      );
+      const resolved_agent = resolveAgent(agentType, config);
       return { task, resolved: resolved_agent };
     } catch (err) {
       return {
         task,
         error: err instanceof Error ? err.message : String(err),
-        errorCode: 'capability_missing',
+        errorCode: 'agent_not_configured',
       };
     }
   });
