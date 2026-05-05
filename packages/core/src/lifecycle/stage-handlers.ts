@@ -71,6 +71,14 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // Stage 3 — Initial run (substantive)
     run_initial_impl: runInitialImpl,
 
+    // 3.5 — placeholder; the early-exit logic gates on `runCondition` (zero
+    // files written + reviewPolicy != quality_only + artifact_producing).
+    // When the gate fires, this handler short-circuits the lifecycle by
+    // setting terminal=true. Actual implementation lands with Step 5
+    // (run_initial_impl decomposition); for now it's a no-op so the driver
+    // doesn't throw on missing-key.
+    check_files_written: noop,
+
     // Stage 4 — Spec + quality + diff review chains
     // The executor (via reviewed-lifecycle.ts) runs all review rounds today.
     // These rows reserve the keys for future per-round decomposition.

@@ -7,12 +7,43 @@ export interface StageRow {
   runCondition: (state: LifecycleState) => boolean;
   isRework: boolean;
   handlerKey: string;
+  /**
+   * When true, this row's handler runs even after a prior row set
+   * `state.terminal = true`. Used by settle/compose/terminal/persist/flush
+   * rows that must populate authoritative chain-pass + envelope state on
+   * hard-fail paths. The driver loop honors this attribute; non-terminal-safe
+   * rows (the default) short-circuit when `state.terminal` is set.
+   */
+  runOnTerminal?: boolean;
 }
 
 export interface StagePlan {
   toolCategory: ToolCategory;
   rows: StageRow[];
 }
+
+/**
+ * Per-round review verdict shape. Matches the verdict values that
+ * spec-reviewer.ts and quality-reviewer.ts actually produce. `'concerns'` was
+ * removed in #45 Step 0 — no spec/quality reviewer in this codebase emits it
+ * (the diff reviewer's `kind: 'concerns'` is a separate, kind-typed value
+ * mapped to envelope `'approved'`; see Behavioral change #1 in the plan).
+ */
+type SpecRoundVerdict =
+  | 'approved'
+  | 'changes_required'
+  | 'error'
+  | 'skipped';
+
+type QualityRoundVerdict =
+  | 'approved'
+  | 'changes_required'
+  | 'annotated'
+  | 'error'
+  | 'skipped';
+
+type DiffEnvelopeVerdict = 'approved' | 'changes_required' | 'error' | 'skipped';
+type DiffReviewKind = 'approve' | 'concerns' | 'reject' | 'transport_failure';
 
 export interface LifecycleState {
   terminal: boolean;
@@ -24,18 +55,67 @@ export interface LifecycleState {
   shutdownInProgress: boolean;
   route?: string;
   toolCategory?: ToolCategory;
+  request?: unknown;
+
   // Per-row verdict slots (cascade semantics — undefined as shorting token):
-  specReviewRound1Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  specReviewRound2Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  specReviewRound3Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  qualityReviewRound1Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated';
-  qualityReviewRound2Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  qualityReviewRound3Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  diffReviewVerdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
-  // Chain-pass slots (set by LifecycleDriver after final round in chain returns 'approved' or
-  // chain skipped via cascade; consumed by row 4.11 diff_review predicate):
+  specReviewRound1Verdict?: SpecRoundVerdict;
+  specReviewRound2Verdict?: SpecRoundVerdict;
+  specReviewRound3Verdict?: SpecRoundVerdict;
+  qualityReviewRound1Verdict?: QualityRoundVerdict;
+  qualityReviewRound2Verdict?: QualityRoundVerdict;
+  qualityReviewRound3Verdict?: QualityRoundVerdict;
+
+  // Diff review: store both the raw kind (for telemetry) and the envelope-
+  // mapped status (for downstream gates/response). See Step 4 of the plan.
+  diffReviewVerdict?: DiffEnvelopeVerdict;
+  diffReviewKind?: DiffReviewKind;
+
+  // Chain-pass slots (set by settle_spec_chain / settle_quality_chain;
+  // consumed by row 4.11 diff_review and quality_review_round_1 predicates):
   specChainPassed?: boolean;
   qualityChainPassed?: boolean;
-  // ... other state fields
-  [key: string]: unknown;
+
+  // Dispatcher / executor wiring (populated by prepare_execution_context and
+  // run_initial_impl; consumed by compose_response):
+  executor?: (rawRequest: unknown, state: LifecycleState) => Promise<unknown>;
+  executorResult?: unknown;
+  responseEnvelope?: unknown;
+
+  // StagePlan row 5.2 gate inputs (typed; previously read via `(s as any)`):
+  autoCommit?: boolean;
+  filesChanged?: string[];
+  readOnlyTask?: boolean;
+  verifyCommandPresent?: boolean;
+  contextBlockIds?: string[];
+
+  // Slots populated by Step 1+ handlers as the decomposition advances. Listed
+  // here so the type narrows over time and silently-misspelled writes are
+  // caught at compile. Exact value types are firmed up in the steps that
+  // populate them; `unknown` is the placeholder until then.
+  task?: unknown;
+  executionContext?: unknown;
+  lastRunResult?: unknown;
+  verifyResult?: unknown;
+  commits?: unknown;
+  commitError?: string;
+  stageStats?: unknown;
+  terminalRunResult?: unknown;
+  currentStage?: string;
+  errorCode?: string | null;
+
+  // Slots used by existing pre-#45 handlers (execution-context-builder,
+  // task-executor, derive-terminal-status). Typed as `unknown` until the
+  // owning step (Step 1 / Step 5 / Step 6) firms them up.
+  cwd?: string;
+  runInput?: unknown;
+  systemPrompt?: string;
+  userMessage?: string;
+  maxTurns?: number;
+  callCache?: unknown;
+  taskIndex?: number;
+  artifactsCheck?: string;
+  verifyOutcome?: string;
+  guardFires?: string[];
+  terminalStatus?: string;
+  terminationReason?: string | null;
 }
