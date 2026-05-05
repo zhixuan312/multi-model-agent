@@ -1,5 +1,6 @@
 import type { StageHandler } from './lifecycle-driver.js';
 import type { LifecycleState } from './stage-plan-types.js';
+import { runVerifyCommandHandler } from './handlers/run-verify-command-handler.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -99,7 +100,13 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // Stage 5 — Finalize (verify + commit happen in executor; response
     // composed here, terminal block + telemetry will move out of executor
     // when persistence cutover lands)
-    run_verify_command: noop,
+    //
+    // run_verify_command is wired to the real handler implementation. The
+    // handler is idempotent: it skips when state.verifyResult is already set
+    // (which is what the legacy executor does today via DelegateOutput.results
+    // — until Step 5 plumbs verifyResult through state, the handler defensively
+    // no-ops on missing state.task/state.executionContext).
+    run_verify_command: runVerifyCommandHandler,
     git_commit: noop,
     compose_response: composeResponse,
     register_terminal_block: noop,
