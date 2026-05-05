@@ -93,7 +93,7 @@ export interface LifecycleState {
   // caught at compile. Exact value types are firmed up in the steps that
   // populate them; `unknown` is the placeholder until then.
   task?: unknown;
-  executionContext?: unknown;
+  executionContext?: import('./lifecycle-context.js').ExecutionContext;
   lastRunResult?: unknown;
   verifyResult?: unknown;
   commits?: unknown;
