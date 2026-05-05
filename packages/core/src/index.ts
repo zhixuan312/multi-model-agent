@@ -81,7 +81,7 @@ export type { RunTasksOptions } from './run-tasks/index.js';
 export { ToolSurfaceRegistry } from './lifecycle/tool-surface-registry.js';
 export type { SurfaceEntry } from './lifecycle/tool-surface-registry.js';
 export { RouteDispatcher } from './lifecycle/route-dispatcher.js';
-export type { DispatchInput, DispatchOutput } from './lifecycle/route-dispatcher.js';
+export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifecycle/route-dispatcher.js';
 
 // Runner shell
 export { RunnerShell } from './runner-shell/shell.js';

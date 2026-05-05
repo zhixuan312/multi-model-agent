@@ -18,13 +18,22 @@ export interface DispatchOutput {
 
 export type DriverFactory = (plan: StagePlan, handlers: Record<string, StageHandler>) => LifecycleDriver;
 
+export type ContextBlockHandler = (rawRequest: unknown) => Promise<DispatchOutput>;
+
 export class RouteDispatcher {
   constructor(
     private handlers: Record<string, StageHandler>,
     private buildDriver: DriverFactory = (plan, handlers) => new LifecycleDriver(plan, handlers),
+    private contextBlockHandler?: ContextBlockHandler,
   ) {}
 
   async dispatch(input: DispatchInput): Promise<DispatchOutput> {
+    if (input.route === 'register-context-block') {
+      if (!this.contextBlockHandler) {
+        throw new Error('RouteDispatcher: no contextBlockHandler registered for register-context-block');
+      }
+      return this.contextBlockHandler(input.rawRequest);
+    }
     try {
       const plan = buildStagePlan(input.toolCategory);
       const driver = this.buildDriver(plan, this.handlers);
