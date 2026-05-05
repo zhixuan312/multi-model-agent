@@ -10,6 +10,14 @@ import {
   specReworkRound2Handler,
   settleSpecChainHandler,
 } from './handlers/spec-chain-handlers.js';
+import {
+  qualityReviewRound1Handler,
+  qualityReviewRound2Handler,
+  qualityReviewRound3Handler,
+  qualityReworkRound1Handler,
+  qualityReworkRound2Handler,
+  settleQualityChainHandler,
+} from './handlers/quality-chain-handlers.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -102,12 +110,16 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     rework_for_spec_round_2: specReworkRound2Handler,
     spec_review_round_3: specReviewRound3Handler,
     settle_spec_chain: settleSpecChainHandler,
-    quality_review_round_1: noop,
-    rework_for_quality_round_1: noop,
-    quality_review_round_2: noop,
-    rework_for_quality_round_2: noop,
-    quality_review_round_3: noop,
-    settle_quality_chain: noop,
+    // Quality chain (rows 4.7–4.12) wired to real handlers in
+    // quality-chain-handlers.ts. Symmetric with spec chain. Annotator path
+    // (read-only routes) returns 'annotated' which never triggers rework
+    // (the rework gate is `qualityReviewRound1Verdict === 'changes_required'`).
+    quality_review_round_1: qualityReviewRound1Handler,
+    rework_for_quality_round_1: qualityReworkRound1Handler,
+    quality_review_round_2: qualityReviewRound2Handler,
+    rework_for_quality_round_2: qualityReworkRound2Handler,
+    quality_review_round_3: qualityReviewRound3Handler,
+    settle_quality_chain: settleQualityChainHandler,
     review_diff: noop,
 
     // Stage 5 — Finalize (verify + commit happen in executor; response
