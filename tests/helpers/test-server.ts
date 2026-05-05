@@ -73,7 +73,7 @@ export async function startTestServer(overrides?: DeepPartial<ServerConfig>): Pr
   writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 
   const config = buildTestConfig(tokenFile, overrides as Record<string, unknown> | undefined);
-  const server = await startServer(config);
+  const server = await startServer(config, { driftReport: () => [] });
 
   return {
     url: `http://127.0.0.1:${server.port}`,

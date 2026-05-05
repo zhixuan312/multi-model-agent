@@ -121,7 +121,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
   };
 
-  const server = await startServer(config);
+  const server = await startServer(config, { driftReport: () => [] });
   const baseUrl = `http://127.0.0.1:${server.port}`;
 
   return {

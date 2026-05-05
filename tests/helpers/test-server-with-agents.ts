@@ -72,7 +72,10 @@ export async function startTestServerWithAgents(
 
   // startServer accepts ServerConfig but we pass MultiModelConfig (superset).
   // The server checks for .agents to decide whether to register tool handlers.
-  const server = await startServer(config as unknown as import('@zhixuan92/multi-model-agent-core').ServerConfig);
+  const server = await startServer(
+    config as unknown as import('@zhixuan92/multi-model-agent-core').ServerConfig,
+    { driftReport: () => [] },
+  );
 
   return {
     url: `http://127.0.0.1:${server.port}`,

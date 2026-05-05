@@ -188,7 +188,10 @@ async function registerControlHandlers(
   router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
 }
 
-export async function startServer(config: ServerConfig): Promise<RunningServer> {
+export async function startServer(
+  config: ServerConfig,
+  injectedManifestSync?: import('../install/skill-manifest-sync.js').SkillManifestSync,
+): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
   const router = new Router();
@@ -210,17 +213,21 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   // Capture serverStartedAt before health registration so /health can expose it.
   const serverStartedAt = Date.now();
 
-  // GET /health — unauthenticated liveness + minimal identity
+  // GET /health — unauthenticated liveness + skill manifest drift check
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  let skillManifestSync: import('../install/skill-manifest-sync.js').SkillManifestSync | undefined;
-  try {
-    const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
-    const { discoverPerClientInstallDirs } = await import('../install/discover.js');
-    skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
-  } catch {
-    // best-effort — drift check must not block server start
+  let skillManifestSync: import('../install/skill-manifest-sync.js').SkillManifestSync;
+  if (injectedManifestSync) {
+    skillManifestSync = injectedManifestSync;
+  } else {
+    try {
+      const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
+      const { discoverPerClientInstallDirs } = await import('../install/discover.js');
+      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    } catch {
+      skillManifestSync = { driftReport: () => [] };
+    }
   }
-  router.register('GET', '/health', buildHealthHandler({ version: SERVER_VERSION, serverStartedAt, skillManifestSync }));
+  router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
   // Register tool handlers (Phase 6)
   await registerToolHandlers(router, config, batchRegistry, projectRegistry);

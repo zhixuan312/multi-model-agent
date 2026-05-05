@@ -19,7 +19,7 @@
 Retry up to 3 times with exponential backoff (1 s → 2 s → 4 s).
 If the server is unreachable, check that `mmagent serve` is running:
 ```bash
-curl -s http://localhost:$PORT/health   # expects { ok: true }
+curl -s http://localhost:$PORT/health   # expects { "status": "ok" }  (v4.0 — see spec C13)
 ```
 
 ### Auth errors (401)
