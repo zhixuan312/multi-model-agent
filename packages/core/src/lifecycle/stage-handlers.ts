@@ -18,6 +18,7 @@ import {
   qualityReworkRound2Handler,
   settleQualityChainHandler,
 } from './handlers/quality-chain-handlers.js';
+import { reviewDiffHandler } from './handlers/review-diff-handler.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -120,7 +121,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     rework_for_quality_round_2: qualityReworkRound2Handler,
     quality_review_round_3: qualityReviewRound3Handler,
     settle_quality_chain: settleQualityChainHandler,
-    review_diff: noop,
+    // review_diff (row 4.13) wired to real handler in review-diff-handler.ts.
+    // Idempotent on state.diffReviewVerdict; defensive no-op on missing
+    // verifyResult / executionContext / reviewer provider. Verdict mapping
+    // preserves the kind: 'concerns' → envelope 'approved' counter-intuitive
+    // path from reviewed-lifecycle.ts:1361.
+    review_diff: reviewDiffHandler,
 
     // Stage 5 — Finalize (verify + commit happen in executor; response
     // composed here, terminal block + telemetry will move out of executor
