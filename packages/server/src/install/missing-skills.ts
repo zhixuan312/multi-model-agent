@@ -26,6 +26,19 @@ export function findMissingSkills(
     .map((name) => ({ name, targets: [...targets] }));  // defensive copy per skill
 }
 
+/**
+ * Skills present in the manifest but NOT in `supportedSkills`. These are
+ * orphaned — previously installed but no longer shipped. The `targets`
+ * for each orphan is the entry's recorded targets (so the caller knows
+ * which client dirs to clean).
+ */
+export function findOrphanedSkills(
+  manifestEntries: ManifestEntry[],
+  supportedSkills: readonly string[],
+): ManifestEntry[] {
+  return manifestEntries.filter((e) => !supportedSkills.includes(e.name));
+}
+
 function unionTargets(entries: ManifestEntry[]): Client[] {
   const seen = new Set<Client>();
   const out: Client[] = [];

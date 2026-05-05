@@ -53,7 +53,8 @@ export {
 
 export type { InstallResult } from '../install/orchestrate.js';
 export { doInstall, doUninstall } from '../install/orchestrate.js';
-import { doInstall, doUninstall, type InstallResult } from '../install/orchestrate.js';
+import { doInstall, doUninstall, type InstallResult, activeCleanup } from '../install/orchestrate.js';
+import { resolveClientInstallDir } from '../install/manifest-resolve.js';
 
 /**
  * Return codes for `main()`.
@@ -318,6 +319,20 @@ export async function main(deps: MainDeps = {}): Promise<number> {
     }
 
     printResult(stdout, result, json, manifestUpdated);
+  }
+
+  // Active cleanup: after a bulk install (all skills, not uninstall, not dry-run),
+  // scan per-client install dirs and remove orphaned mma-* skills.
+  if (!skill && !uninstall && !dryRun) {
+    for (const target of resolvedTargets) {
+      const installDir = resolveClientInstallDir(target, homeDir);
+      if (installDir !== null) {
+        const removed = activeCleanup(installDir, SUPPORTED_SKILLS);
+        if (removed.length > 0 && !json) {
+          stdout(`Cleaned up orphaned skills for ${target}: ${removed.join(', ')}\n`);
+        }
+      }
+    }
   }
 
   return firstError ?? ExitCode.SUCCESS;

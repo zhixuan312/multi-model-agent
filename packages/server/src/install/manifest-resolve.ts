@@ -1,12 +1,29 @@
 // Per-client install/uninstall dispatch — resolves a target client to the
 // concrete writer/remover pair. Extracted from cli/install-skill.ts as
 // part of Ch 7 Task 39.
+import path from 'node:path';
 import type { Client } from './manifest.js';
 import { notifySkillInstalled } from './notify.js';
 import { installClaudeCode, uninstallClaudeCode } from './claude-code.js';
 import { installGeminiCli, uninstallGeminiCli } from './gemini-cli.js';
 import { installCodexCli, uninstallCodexCli } from './codex-cli.js';
 import { installCursor, uninstallCursor } from './cursor.js';
+
+/**
+ * Return the per-client install directory where skills are written as
+ * subdirectories. Only claude-code and codex use the per-skill directory
+ * model; gemini and cursor use a single file/extension and return null.
+ */
+export function resolveClientInstallDir(target: Client, homeDir: string): string | null {
+  switch (target) {
+    case 'claude-code':
+      return path.join(homeDir, '.claude', 'skills');
+    case 'codex':
+      return path.join(homeDir, '.codex', 'skills');
+    default:
+      return null;
+  }
+}
 
 /** Thrown when a passed `--target` value is not a known client. */
 export class UnknownTargetError extends Error {

@@ -1,9 +1,14 @@
 // Install/uninstall orchestration. Pure logic — no CLI/argv handling.
 // Extracted from cli/install-skill.ts as part of Ch 7 Task 39.
+import fs from 'node:fs';
 import path from 'node:path';
 import type { Client } from './manifest.js';
-import { SkillNotFoundError, getSkillsRoot, readSkillContent } from './discover.js';
-import { writeSkillToClient, removeSkillFromClient } from './manifest-resolve.js';
+import { SkillNotFoundError, getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from './discover.js';
+import {
+  writeSkillToClient,
+  removeSkillFromClient,
+  resolveClientInstallDir,
+} from './manifest-resolve.js';
 
 export interface InstallResult {
   skill: string;
@@ -14,6 +19,31 @@ export interface InstallResult {
   skipped: Client[];
   /** Files would be written but were not (dry-run mode). */
   dryRun: boolean;
+  /** Orphaned skill names removed during cleanup, per client. */
+  orphanedSkills?: Partial<Record<Client, string[]>>;
+}
+
+/**
+ * Scan an install directory for `mma-*` subdirectories and remove any that
+ * are not in `canonicalSkills`. Returns the list of removed skill names.
+ *
+ * Only applies to clients that use per-skill directories (claude-code, codex).
+ * Gemini and Cursor use single-file models and are handled separately.
+ */
+export function activeCleanup(installDir: string, canonicalSkills: readonly string[]): string[] {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(installDir);
+  } catch {
+    return [];
+  }
+  const present = entries.filter((name) => name.startsWith('mma-'));
+  const orphaned = present.filter((name) => !canonicalSkills.includes(name));
+  for (const orphan of orphaned) {
+    const dirPath = path.join(installDir, orphan);
+    fs.rmSync(dirPath, { recursive: true, force: true });
+  }
+  return orphaned;
 }
 
 /**
@@ -31,6 +61,8 @@ export function doInstall(
     version?: string;
     cwd?: string;
     force?: boolean;
+    /** When true, scan install dirs and remove orphaned mma-* skills not in SUPPORTED_SKILLS. */
+    cleanupOrphans?: boolean;
   },
 ): InstallResult {
   const checkedPath = path.join(getSkillsRoot(opts.skillsRoot), skillName, 'SKILL.md');
@@ -55,7 +87,28 @@ export function doInstall(
     }
   }
 
-  return { skill: skillName, action: 'installed', targets: installed, skipped, dryRun: opts.dryRun };
+  // Active cleanup: runs after writes complete. Opt-in so single-skill
+  // invocations don't accidentally wipe other canonical skills.
+  let orphanedSkills: Partial<Record<Client, string[]>> | undefined;
+  if (opts.cleanupOrphans && !opts.dryRun) {
+    orphanedSkills = {};
+    for (const target of targets) {
+      const installDir = resolveClientInstallDir(target, opts.homeDir);
+      if (installDir !== null) {
+        const removed = activeCleanup(installDir, SUPPORTED_SKILLS);
+        if (removed.length > 0) orphanedSkills[target] = removed;
+      }
+    }
+  }
+
+  return {
+    skill: skillName,
+    action: 'installed',
+    targets: installed,
+    skipped,
+    dryRun: opts.dryRun,
+    ...(orphanedSkills ? { orphanedSkills } : {}),
+  };
 }
 
 /**
