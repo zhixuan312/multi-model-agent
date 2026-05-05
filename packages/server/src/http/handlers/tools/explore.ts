@@ -9,9 +9,6 @@ import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
 export function buildExploreHandler(deps: HandlerDeps): RawHandler {
   return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
     const parsed = explore.inputSchema.safeParse(ctx.body);
@@ -37,8 +34,6 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
 
     // Legacy path (async-dispatch via executeExplore) — kept as fallback until
     // server.ts wires routeDispatcher for all tool routes.
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('explore') && !assertCrossTierConfigured(deps.config, res)) return;
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);

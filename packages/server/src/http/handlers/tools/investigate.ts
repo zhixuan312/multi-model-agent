@@ -10,9 +10,6 @@ import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
 export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
   return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
     // Step 1: schema.
@@ -39,8 +36,6 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
 
     // Legacy path (async-dispatch via executeInvestigate) — kept as fallback until
     // server.ts wires routeDispatcher for all tool routes.
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('investigate_codebase') && !assertCrossTierConfigured(deps.config, res)) return;
     const cwd = ctx.cwd!;
 
     // Step 2: reservation lifecycle (mirrors audit.ts; reservation is just a cwd-validity gate).

@@ -8,9 +8,6 @@ import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../router.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
 export function buildAuditHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = audit.inputSchema.safeParse(ctx.body);
@@ -37,9 +34,6 @@ export function buildAuditHandler(deps: HandlerDeps): RawHandler {
 
     // Legacy path (async-dispatch via executeAudit) — kept as fallback until
     // server.ts wires routeDispatcher for all tool routes.
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('audit_document') && !assertCrossTierConfigured(deps.config, res)) return;
-
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
