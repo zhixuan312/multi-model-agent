@@ -8,7 +8,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
 import { buildDebugQualityPrompt } from '../review/quality-only-prompts.js';
-import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 

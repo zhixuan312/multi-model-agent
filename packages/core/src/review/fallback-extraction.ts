@@ -1,7 +1,7 @@
 import {
   normalizeWhitespace,
   type AnnotatedFinding,
-} from '../executors/_shared/findings-schema.js';
+} from './findings-schema.js';
 
 type Severity = 'critical' | 'high' | 'medium' | 'low';
 

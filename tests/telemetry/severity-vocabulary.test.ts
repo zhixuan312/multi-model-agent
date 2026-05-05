@@ -1,5 +1,5 @@
 import { SeverityBin } from '../../packages/core/src/telemetry/types.js';
-import { annotatedFindingSchema, reviewerEmittedFindingSchema } from '../../packages/core/src/executors/_shared/findings-schema.js';
+import { annotatedFindingSchema, reviewerEmittedFindingSchema } from '../../packages/core/src/review/findings-schema.js';
 
 type IfEqual<X, Y> =
   (<T>() => T extends X ? 1 : 2) extends (<T>() => T extends Y ? 1 : 2) ? true : false;

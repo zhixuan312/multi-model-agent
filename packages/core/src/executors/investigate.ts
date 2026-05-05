@@ -14,7 +14,7 @@ import {
 import { parseInvestigationReport, type ParsedInvestigation } from '../reporting/parse-investigation-report.js';
 import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-status.js';
 import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
-import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
 import { buildInvestigateQualityPrompt } from '../review/quality-only-prompts.js';

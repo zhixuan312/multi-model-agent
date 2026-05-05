@@ -2,7 +2,7 @@ import {
   reviewerEmittedFindingsSchema,
   normalizeWhitespace,
   type AnnotatedFinding,
-} from '../executors/_shared/findings-schema.js';
+} from './findings-schema.js';
 
 interface ParseOk {
   ok: true;

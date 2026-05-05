@@ -1,4 +1,4 @@
-import type { RunResult, ReviewVerdict } from '../../types.js';
+import type { RunResult, ReviewVerdict } from '../types.js';
 
 /**
  * Map RunResult review fields (from executeReviewedLifecycle) into the

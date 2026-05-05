@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { mapReviewVerdicts } from '../../packages/core/src/executors/_shared/review-verdict-mapping.js';
+import { mapReviewVerdicts } from '../../packages/core/src/review/review-verdict-mapping.js';
 
 describe('mapReviewVerdicts', () => {
   it('maps lifecycle approve to envelope approve, roundsUsed=1 when no rework', () => {

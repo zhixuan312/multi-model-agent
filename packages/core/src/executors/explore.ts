@@ -19,7 +19,7 @@ import {
 } from '../reporting/parse-explore-report.js';
 import { deriveExploreStatus } from '../reporting/derive-explore-status.js';
 import { composeExploreHeadline } from '../reporting/compose-explore-headline.js';
-import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 
 export interface ExploreExecutorInput {
   input: Input;

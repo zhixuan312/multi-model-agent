@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { fallbackExtractFindings } from '../../packages/core/src/review/fallback-extraction.js';
-import { annotatedFindingsSchema } from '../../packages/core/src/executors/_shared/findings-schema.js';
+import { annotatedFindingsSchema } from '../../packages/core/src/review/findings-schema.js';
 
 function expectSchemaValid(out: unknown) {
   const r = annotatedFindingsSchema.safeParse(out);

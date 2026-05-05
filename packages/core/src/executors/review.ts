@@ -6,7 +6,7 @@ import type { TaskSpec, RunResult } from '../types.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
 import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
 import { buildReviewQualityPrompt } from '../review/quality-only-prompts.js';
-import { mapReviewVerdicts } from './_shared/review-verdict-mapping.js';
+import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';

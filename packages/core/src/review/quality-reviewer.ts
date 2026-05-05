@@ -3,7 +3,7 @@ import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import { buildQualityReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
-import type { AnnotatedFinding } from '../executors/_shared/findings-schema.js';
+import type { AnnotatedFinding } from './findings-schema.js';
 import { parseReviewerFindings, type ParseReviewerFindingsResult } from './parse-reviewer-findings.js';
 import { fallbackExtractFindings } from './fallback-extraction.js';
 

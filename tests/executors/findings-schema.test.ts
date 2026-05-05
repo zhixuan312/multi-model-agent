@@ -5,7 +5,7 @@ import {
   reviewerEmittedFindingSchema,
   evidenceIsGrounded,
   normalizeWhitespace,
-} from '../../packages/core/src/executors/_shared/findings-schema.js';
+} from '../../packages/core/src/review/findings-schema.js';
 
 const VALID_EVIDENCE =
   'src/auth/login.ts:89 — req.body.user is dereferenced without a guard, throws on missing body';
