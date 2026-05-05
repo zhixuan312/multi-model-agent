@@ -1,6 +1,6 @@
 import { execFileSync } from 'child_process';
 import { resolve, relative } from 'path';
-import type { CommitFields } from './reporting/structured-report.js';
+import type { CommitFields } from '../reporting/structured-report.js';
 
 export interface AutoCommitResult {
   sha?: string;

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileAuditDocument } from '../../../packages/core/src/intake/compilers/audit.js';
+import { compileAuditDocument } from '../../../packages/core/src/intake/brief-compiler-slots/audit.js';
 
 describe('audit compiler', () => {
   it('returns single draft for <=1 file', () => {

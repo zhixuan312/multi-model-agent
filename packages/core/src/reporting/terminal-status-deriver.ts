@@ -1,7 +1,7 @@
-export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped';
+import type { WorkerStatus, VerifyOutcome } from '../types.js';
+export type { WorkerStatus, VerifyOutcome };
 export type OverallReviewVerdict = 'approved' | 'concerns' | 'annotated' | 'not_applicable';
 export type ArtifactsCheck = 'pass' | 'fail' | 'not_applicable';
-export type VerifyOutcome = 'passed' | 'failed' | 'skipped' | 'not_applicable';
 export type TerminalStatus = 'ok' | 'incomplete' | 'timeout' | 'error' | 'cost_exceeded' | 'brief_too_vague' | 'unavailable';
 
 export interface TerminalInputs {

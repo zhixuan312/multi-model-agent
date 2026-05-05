@@ -4,15 +4,15 @@
 // This function only handles transient retries (api_error / network_error).
 // Rename to delegateWithRetries deferred to 3.6.0.
 
-import type { TaskSpec, RunResult, Provider, AgentType } from './types.js';
+import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
 import type {
   AttemptRecord,
   InternalRunnerEvent,
   RunStatus,
   TerminationReason,
-} from './providers/runner-types.js';
-import { retryableFor } from './error-codes.js';
-import { hasCompletedWork, extractToolName } from './providers/supervision.js';
+} from '../providers/runner-types.js';
+import { retryableFor } from '../error-codes.js';
+import { hasCompletedWork, extractToolName } from '../providers/supervision.js';
 
 function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';

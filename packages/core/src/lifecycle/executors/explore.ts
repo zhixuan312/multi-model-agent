@@ -12,7 +12,7 @@ import { notApplicable } from '../../reporting/not-applicable.js';
 import {
   compileExplore,
   type ResolvedContextBlock,
-} from '../../intake/compilers/explore.js';
+} from '../../intake/brief-compiler-slots/explore.js';
 import {
   parseExploreReport,
   type ParsedExploreReport,

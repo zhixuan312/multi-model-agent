@@ -1,7 +1,7 @@
 import { execFile } from 'node:child_process';
 import { isAbsolute, normalize, relative, sep } from 'node:path';
 import { promisify } from 'node:util';
-import { composeCommitMessage } from '../../auto-commit.js';
+import { composeCommitMessage } from '../../lifecycle/auto-commit.js';
 import type { CommitFields } from '../../reporting/structured-report.js';
 
 const exec = promisify(execFile);

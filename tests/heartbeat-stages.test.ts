@@ -1,5 +1,5 @@
 import { describe, it, expectTypeOf } from 'vitest';
-import type { HeartbeatStage } from '../packages/core/src/heartbeat.js';
+import type { HeartbeatStage } from '../packages/core/src/bounded-execution/activity-tracker.js';
 
 describe('HeartbeatStage covers all telemetry stage names', () => {
   it('includes verifying, diff_review, committing, terminal', () => {

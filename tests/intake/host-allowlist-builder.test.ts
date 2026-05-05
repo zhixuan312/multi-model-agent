@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildHostAllowlist, extractURLHosts } from '../../packages/core/src/research/allowlist.js';
+import { buildHostAllowlist, extractURLHosts } from '../../packages/core/src/intake/host-allowlist-builder.js';
 
 describe('extractURLHosts', () => {
   it('extracts and IDNA-normalizes URL hosts from text', () => {

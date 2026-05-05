@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inferMissingFields } from '../../packages/core/src/intake/infer.js';
+import { inferMissingFields } from '../../packages/core/src/intake/field-inferer.js';
 import type { DraftTask, DelegateSource } from '../../packages/core/src/intake/types.js';
 
 function makeDraft(overrides: Partial<DraftTask> = {}): DraftTask {

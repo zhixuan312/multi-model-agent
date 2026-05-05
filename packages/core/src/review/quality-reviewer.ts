@@ -1,5 +1,5 @@
 import type { Provider } from '../types.js';
-import { delegateWithEscalation } from '../delegate-with-escalation.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { buildQualityReviewPrompt } from './reviewer-prompt.js';
 import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';

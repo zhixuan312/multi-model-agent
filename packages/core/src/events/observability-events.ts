@@ -62,7 +62,7 @@ const VerifySkipReasonEnum = z.enum([
 
 const WorkerStatusEnum = z.enum([
   'done', 'done_with_concerns', 'needs_context', 'blocked',
-  'review_loop_capped', 'failed',
+  'review_loop_aborted', 'failed',
 ]);
 
 // ---------------------------------------------------------------------------

@@ -15,7 +15,7 @@ import type {
 } from '../types.js';
 import type { RunStatus, InternalRunnerEvent } from '../providers/runner-types.js';
 import { createProvider } from '../providers/provider-factory.js';
-import { delegateWithEscalation } from '../delegate-with-escalation.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import {
   pickEscalation,
   pickReviewer,
@@ -33,7 +33,7 @@ import {
 } from '../escalation/fallback.js';
 import { findModelProfile } from '../config/model-profiles.js';
 import { canonicalIdentity } from '../config/canonical-model-identity.js';
-import { HeartbeatTimer } from '../heartbeat.js';
+import { HeartbeatTimer } from '../bounded-execution/activity-tracker.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
 import { priceTokens, subtractTokens, resolveRateCard } from '../bounded-execution/cost-compute.js';
 import type { TokenUsage } from '../providers/runner-types.js';
@@ -50,7 +50,7 @@ import type { CommitFields } from '../reporting/structured-report.js';
 import { runCommitStage, readbackCommit } from './handlers/commit-stage.js';
 import { runVerifyStage, type VerifyStageResult } from './handlers/verify-stage.js';
 import { runMetadataRepairTurn } from './metadata-repair.js';
-import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.js';
+import { partitionFilePaths, checkOutputTargets } from '../bounded-execution/file-artifact-check.js';
 import type { RunTasksProgressCallback } from './run-tasks.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
@@ -96,7 +96,7 @@ export async function executeReviewedLifecycle(
   config: MultiModelConfig,
   taskIndex: number,
   onProgress?: RunTasksProgressCallback,
-  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void },
+  heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../bounded-execution/activity-tracker.js').HeartbeatTickInfo) => void },
   diagnostics?: {
     logger?: import('../events/http-server-log.js').HttpServerLog;
     verbose?: boolean;
@@ -442,11 +442,11 @@ export async function executeReviewedLifecycle(
   // Track the current stage so the terminal transition can pass an accurate
   // `from`. Initialized to 'implementing' (matching HeartbeatTimer.start's
   // initial stage). Updated on every transitionStage call.
-  let currentStage: import('../heartbeat.js').HeartbeatStage = 'implementing';
+  let currentStage: import('../bounded-execution/activity-tracker.js').HeartbeatStage = 'implementing';
 
   function transitionStage(
     from: import('../types.js').StageName | 'terminal',
-    to:   import('../heartbeat.js').HeartbeatStage,
+    to:   import('../bounded-execution/activity-tracker.js').HeartbeatStage,
     heartbeatPayload: HeartbeatTransitionPayload | null,
     jsonlPayload: Record<string, EventField> | null,
   ): void {
@@ -743,7 +743,7 @@ export async function executeReviewedLifecycle(
     return {
       ...base,
       status: 'incomplete',
-      workerStatus: 'review_loop_capped',
+      workerStatus: 'review_loop_aborted',
       terminationReason: terminationReason === 'round_cap'
         ? 'round_cap'
         : {
@@ -751,7 +751,7 @@ export async function executeReviewedLifecycle(
             turnsUsed: base.turns,
             hasFileArtifacts: (base.filesWritten ?? []).length > 0,
             usedShell: (base.toolCalls ?? []).some(c => c.startsWith('shell') || c.startsWith('runShell')),
-            workerSelfAssessment: 'review_loop_capped',
+            workerSelfAssessment: 'review_loop_aborted',
             wasPromoted: false,
             ...(wallClockMs !== undefined ? { wallClockMs } : {}),
           },

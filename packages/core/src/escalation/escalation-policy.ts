@@ -1,12 +1,13 @@
 import type { AgentType } from '../types.js';
 import { otherTier } from '../config/tier-policy-registry.js';
 
-export type ToolCategory = 'artifact_producing' | 'read_only' | 'research';
+export type ToolCategory = 'artifact_producing' | 'read_only' | 'research' | 'assist';
 
 export const ATTEMPT_BUDGETS: Record<ToolCategory, number> = {
   artifact_producing: 7,    // 3 spec + 3 quality + 1 diff
   read_only: 2,              // 1 implementer + 1 annotator (no rework)
   research: 3,               // explore-style (no review)
+  assist: 1,                 // register_context_block, retry_tasks — sync state ops, no rework
 };
 
 export class EscalationPolicy {

@@ -1,5 +1,5 @@
 import { OUTPUT_CONTRACT_CLAUSES } from '../../packages/core/src/intake/resolve.js';
-import { ROUTE_DEFAULTS } from '../../packages/core/src/intake/infer.js';
+import { ROUTE_DEFAULTS } from '../../packages/core/src/intake/field-inferer.js';
 
 describe('resolve.ts — investigate_codebase entries', () => {
   it('OUTPUT_CONTRACT_CLAUSES does NOT include investigate_codebase', () => {

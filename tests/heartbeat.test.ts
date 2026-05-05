@@ -1,4 +1,4 @@
-import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
+import { HeartbeatTimer } from '../packages/core/src/bounded-execution/activity-tracker.js';
 import type { ProgressEvent } from '../packages/core/src/providers/runner-types.js';
 
 describe('HeartbeatTimer', () => {

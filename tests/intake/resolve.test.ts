@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { resolveDraft, OUTPUT_CONTRACT_CLAUSES } from '../../packages/core/src/intake/resolve.js';
-import { ROUTE_DEFAULTS } from '../../packages/core/src/intake/infer.js';
+import { ROUTE_DEFAULTS } from '../../packages/core/src/intake/field-inferer.js';
 import type { DraftTask, DelegateSource } from '../../packages/core/src/intake/types.js';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 

@@ -5,7 +5,7 @@ import type {
   AgentType,
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
-import type { HeartbeatTickInfo } from '../heartbeat.js';
+import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventBus } from '../events/bus.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';

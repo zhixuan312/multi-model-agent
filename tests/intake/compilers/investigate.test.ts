@@ -1,4 +1,4 @@
-import { compileInvestigate } from '../../../packages/core/src/intake/compilers/investigate.js';
+import { compileInvestigate } from '../../../packages/core/src/intake/brief-compiler-slots/investigate.js';
 
 describe('compileInvestigate', () => {
   it('produces a single TaskSpec with the right route and tools default', () => {

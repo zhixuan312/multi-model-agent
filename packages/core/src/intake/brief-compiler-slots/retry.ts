@@ -15,8 +15,8 @@ export interface RetryBrief {
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
   contextBlockIds: string[];
   originalTaskIndex: number;
-  /** Inherited from the original tool — NOT 'assist'. Used for runtime budget selection. */
-  inheritedToolCategory: 'artifact_producing' | 'read_only' | 'research';
+  /** Inherited from the original tool — used for runtime budget selection. */
+  inheritedToolCategory: 'artifact_producing' | 'read_only' | 'research' | 'assist';
 }
 
 export function makeRetrySlot(registry: BatchRegistry): BriefSlotFiller<RetryInput, RetryBrief[]> {

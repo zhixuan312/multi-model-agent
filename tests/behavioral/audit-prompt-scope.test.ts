@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { MockRunner } from './fixtures/mock-runner.js';
-import { compileAuditDocument } from '../../packages/core/src/intake/compilers/audit.js';
+import { compileAuditDocument } from '../../packages/core/src/intake/brief-compiler-slots/audit.js';
 
 async function dispatchAuditFixture({ runner }: { runner: MockRunner }) {
   const drafts = compileAuditDocument(

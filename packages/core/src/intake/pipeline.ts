@@ -7,7 +7,7 @@ import type {
   ReadyDraft,
   HardError,
 } from './types.js';
-import { inferMissingFields } from './infer.js';
+import { inferMissingFields } from './field-inferer.js';
 import { classifyDraft } from './classify.js';
 import { resolveDraft } from './resolve.js';
 

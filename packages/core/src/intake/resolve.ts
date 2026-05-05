@@ -2,7 +2,7 @@ import type { TaskSpec } from '../types.js';
 import type { MultiModelConfig } from '../types.js';
 import type { DraftTask, SourceRoute } from './types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
-import { ROUTE_DEFAULTS } from './infer.js';
+import { ROUTE_DEFAULTS } from './field-inferer.js';
 
 /**
  * Worker output contract per route.

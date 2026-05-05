@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { compileAuditDocument } from '../../packages/core/src/intake/compilers/audit.js';
-import { compileInvestigate } from '../../packages/core/src/intake/compilers/investigate.js';
+import { compileAuditDocument } from '../../packages/core/src/intake/brief-compiler-slots/audit.js';
+import { compileInvestigate } from '../../packages/core/src/intake/brief-compiler-slots/investigate.js';
 
 const FORBIDDEN = [
   /findings\[\]/i,

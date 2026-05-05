@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { compileExplore } from '../../../packages/core/src/intake/compilers/explore.js';
+import { compileExplore } from '../../../packages/core/src/intake/brief-compiler-slots/explore.js';
 
 const baseInput = {
   currentContext: 'a'.repeat(20),

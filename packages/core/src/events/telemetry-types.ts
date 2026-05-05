@@ -183,7 +183,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
-  workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_capped']),
+  workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_aborted']),
   errorCode: ErrorCode.nullable(),
 
   // Token economics

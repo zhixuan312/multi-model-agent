@@ -4,7 +4,7 @@ import type { RunResult, MultiModelConfig, ReviewVerdict } from '../../types.js'
 import type { HttpServerLog } from '../../events/http-server-log.js';
 import type { ContextBlockStore } from '../../stores/context-block-tool.js';
 import type { NotApplicable } from '../../reporting/not-applicable.js';
-import type { HeartbeatTickInfo } from '../../heartbeat.js';
+import type { HeartbeatTickInfo } from '../../bounded-execution/activity-tracker.js';
 import type { EventBus } from '../../events/bus.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */

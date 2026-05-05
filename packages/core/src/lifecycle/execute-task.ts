@@ -5,7 +5,7 @@ import type {
   AgentType,
 } from '../types.js';
 import type { InternalRunnerEvent } from '../providers/runner-types.js';
-import { delegateWithEscalation } from '../delegate-with-escalation.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 
 export function errorResult(error: string): RunResult {
   return {

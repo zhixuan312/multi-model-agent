@@ -10,7 +10,7 @@ import { notApplicable } from '../../reporting/not-applicable.js';
 import {
   compileInvestigate,
   type ResolvedContextBlock,
-} from '../../intake/compilers/investigate.js';
+} from '../../intake/brief-compiler-slots/investigate.js';
 import { parseInvestigationReport, type ParsedInvestigation } from '../../reporting/parse-investigation-report.js';
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { composeInvestigateTerminalHeadline } from '../../reporting/compose-investigate-headline.js';

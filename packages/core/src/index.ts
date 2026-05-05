@@ -84,13 +84,13 @@ export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifec
 export { RunnerShell } from './providers/runner-shell.js';
 
 // Heartbeat
-export { HeartbeatTimer, formatElapsed } from './heartbeat.js';
+export { HeartbeatTimer, formatElapsed } from './bounded-execution/activity-tracker.js';
 export type {
   HeartbeatTimerOptions,
   HeartbeatStage,
   TransitionFields,
   HeartbeatTickInfo,
-} from './heartbeat.js';
+} from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
 export { resolveAgent } from './escalation/agent-resolver.js';
@@ -99,16 +99,16 @@ export { findModelProfile, getEffectiveCostTier } from './config/model-profiles.
 export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline
-export { compileDelegateTasks, compileDelegatePrompt } from './intake/compilers/delegate.js';
-export { compileReviewCode } from './intake/compilers/review.js';
-export { compileDebugTask } from './intake/compilers/debug.js';
-export { compileVerifyWork } from './intake/compilers/verify.js';
-export { compileAuditDocument } from './intake/compilers/audit.js';
-export { compileExecutePlan } from './intake/compilers/execute-plan.js';
-export type { ExecutePlanInput } from './intake/compilers/execute-plan.js';
+export { compileDelegateTasks, compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
+export { compileReviewCode } from './intake/brief-compiler-slots/review.js';
+export { compileDebugTask } from './intake/brief-compiler-slots/debug.js';
+export { compileVerifyWork } from './intake/brief-compiler-slots/verify.js';
+export { compileAuditDocument } from './intake/brief-compiler-slots/audit.js';
+export { compileExecutePlan } from './intake/brief-compiler-slots/execute-plan.js';
+export type { ExecutePlanInput } from './intake/brief-compiler-slots/execute-plan.js';
 export { runIntakePipeline } from './intake/pipeline.js';
 export { classifyDraft } from './intake/classify.js';
-export { inferMissingFields } from './intake/infer.js';
+export { inferMissingFields } from './intake/field-inferer.js';
 export { resolveDraft } from './intake/resolve.js';
 export { validateSource } from './intake/source-schema.js';
 export type {

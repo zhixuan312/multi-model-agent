@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { delegateWithEscalation } from '../packages/core/src/delegate-with-escalation.js';
+import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
   RunResult,

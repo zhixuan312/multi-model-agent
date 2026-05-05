@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileVerifyWork } from '../../../packages/core/src/intake/compilers/verify.js';
+import { compileVerifyWork } from '../../../packages/core/src/intake/brief-compiler-slots/verify.js';
 
 describe('verify compiler', () => {
   it('returns single draft for <=1 file', () => {

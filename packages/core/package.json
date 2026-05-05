@@ -88,17 +88,13 @@
       "types": "./dist/review/evidence.d.ts",
       "import": "./dist/review/evidence.js"
     },
-    "./heartbeat": {
-      "types": "./dist/heartbeat.d.ts",
-      "import": "./dist/heartbeat.js"
+    "./bounded-execution/activity-tracker": {
+      "types": "./dist/bounded-execution/activity-tracker.d.ts",
+      "import": "./dist/bounded-execution/activity-tracker.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
-    },
-    "./readiness/readiness": {
-      "types": "./dist/readiness/readiness.d.ts",
-      "import": "./dist/readiness/readiness.js"
     },
     "./reporting/structured-report": {
       "types": "./dist/reporting/structured-report.d.ts",
@@ -136,29 +132,29 @@
       "types": "./dist/intake/types.d.ts",
       "import": "./dist/intake/types.js"
     },
-    "./intake/compilers/delegate": {
-      "types": "./dist/intake/compilers/delegate.d.ts",
-      "import": "./dist/intake/compilers/delegate.js"
+    "./intake/brief-compiler-slots/delegate": {
+      "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/delegate.js"
     },
-    "./intake/compilers/review": {
-      "types": "./dist/intake/compilers/review.d.ts",
-      "import": "./dist/intake/compilers/review.js"
+    "./intake/brief-compiler-slots/review": {
+      "types": "./dist/intake/brief-compiler-slots/review.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/review.js"
     },
-    "./intake/compilers/debug": {
-      "types": "./dist/intake/compilers/debug.d.ts",
-      "import": "./dist/intake/compilers/debug.js"
+    "./intake/brief-compiler-slots/debug": {
+      "types": "./dist/intake/brief-compiler-slots/debug.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/debug.js"
     },
-    "./intake/compilers/verify": {
-      "types": "./dist/intake/compilers/verify.d.ts",
-      "import": "./dist/intake/compilers/verify.js"
+    "./intake/brief-compiler-slots/verify": {
+      "types": "./dist/intake/brief-compiler-slots/verify.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/verify.js"
     },
-    "./intake/compilers/audit": {
-      "types": "./dist/intake/compilers/audit.d.ts",
-      "import": "./dist/intake/compilers/audit.js"
+    "./intake/brief-compiler-slots/audit": {
+      "types": "./dist/intake/brief-compiler-slots/audit.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/audit.js"
     },
-    "./intake/compilers/execute-plan": {
-      "types": "./dist/intake/compilers/execute-plan.d.ts",
-      "import": "./dist/intake/compilers/execute-plan.js"
+    "./intake/brief-compiler-slots/execute-plan": {
+      "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
     },
     "./intake/pipeline": {
       "types": "./dist/intake/pipeline.d.ts",
@@ -168,25 +164,13 @@
       "types": "./dist/intake/classify.d.ts",
       "import": "./dist/intake/classify.js"
     },
-    "./intake/infer": {
-      "types": "./dist/intake/infer.d.ts",
-      "import": "./dist/intake/infer.js"
+    "./intake/field-inferer": {
+      "types": "./dist/intake/field-inferer.d.ts",
+      "import": "./dist/intake/field-inferer.js"
     },
     "./intake/resolve": {
       "types": "./dist/intake/resolve.d.ts",
       "import": "./dist/intake/resolve.js"
-    },
-    "./intake/clarification-store": {
-      "types": "./dist/intake/clarification-store.d.ts",
-      "import": "./dist/intake/clarification-store.js"
-    },
-    "./intake/confirm": {
-      "types": "./dist/intake/confirm.d.ts",
-      "import": "./dist/intake/confirm.js"
-    },
-    "./intake/feature-flag": {
-      "types": "./dist/intake/feature-flag.d.ts",
-      "import": "./dist/intake/feature-flag.js"
     },
     "./intake/source-schema": {
       "types": "./dist/intake/source-schema.d.ts",
@@ -216,13 +200,13 @@
       "types": "./dist/events/jsonl-writer.d.ts",
       "import": "./dist/events/jsonl-writer.js"
     },
-    "./auto-commit": {
-      "types": "./dist/auto-commit.d.ts",
-      "import": "./dist/auto-commit.js"
+    "./lifecycle/auto-commit": {
+      "types": "./dist/lifecycle/auto-commit.d.ts",
+      "import": "./dist/lifecycle/auto-commit.js"
     },
-    "./file-artifact-check": {
-      "types": "./dist/file-artifact-check.d.ts",
-      "import": "./dist/file-artifact-check.js"
+    "./bounded-execution/file-artifact-check": {
+      "types": "./dist/bounded-execution/file-artifact-check.d.ts",
+      "import": "./dist/bounded-execution/file-artifact-check.js"
     },
     "./lifecycle/executors": {
       "types": "./dist/lifecycle/executors/index.d.ts",
@@ -288,6 +272,46 @@
       "types": "./dist/tools/index.d.ts",
       "import": "./dist/tools/index.js"
     },
+    "./tools/audit/tool-config": {
+      "types": "./dist/tools/audit/tool-config.d.ts",
+      "import": "./dist/tools/audit/tool-config.js"
+    },
+    "./tools/debug/tool-config": {
+      "types": "./dist/tools/debug/tool-config.d.ts",
+      "import": "./dist/tools/debug/tool-config.js"
+    },
+    "./tools/delegate/tool-config": {
+      "types": "./dist/tools/delegate/tool-config.d.ts",
+      "import": "./dist/tools/delegate/tool-config.js"
+    },
+    "./tools/execute-plan/tool-config": {
+      "types": "./dist/tools/execute-plan/tool-config.d.ts",
+      "import": "./dist/tools/execute-plan/tool-config.js"
+    },
+    "./tools/explore/tool-config": {
+      "types": "./dist/tools/explore/tool-config.d.ts",
+      "import": "./dist/tools/explore/tool-config.js"
+    },
+    "./tools/investigate/tool-config": {
+      "types": "./dist/tools/investigate/tool-config.d.ts",
+      "import": "./dist/tools/investigate/tool-config.js"
+    },
+    "./tools/register-context-block/tool-config": {
+      "types": "./dist/tools/register-context-block/tool-config.d.ts",
+      "import": "./dist/tools/register-context-block/tool-config.js"
+    },
+    "./tools/retry/tool-config": {
+      "types": "./dist/tools/retry/tool-config.d.ts",
+      "import": "./dist/tools/retry/tool-config.js"
+    },
+    "./tools/review/tool-config": {
+      "types": "./dist/tools/review/tool-config.d.ts",
+      "import": "./dist/tools/review/tool-config.js"
+    },
+    "./tools/verify/tool-config": {
+      "types": "./dist/tools/verify/tool-config.d.ts",
+      "import": "./dist/tools/verify/tool-config.js"
+    },
     "./tools/delegate/schema": {
       "types": "./dist/tools/delegate/schema.d.ts",
       "import": "./dist/tools/delegate/schema.js"
@@ -323,6 +347,10 @@
     "./tools/retry/schema": {
       "types": "./dist/tools/retry/schema.d.ts",
       "import": "./dist/tools/retry/schema.js"
+    },
+    "./tools/register-context-block/schema": {
+      "types": "./dist/tools/register-context-block/schema.d.ts",
+      "import": "./dist/tools/register-context-block/schema.js"
     },
     "./events/consent-rules": {
       "types": "./dist/events/consent-rules.d.ts",

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { delegateWithEscalation } from '../packages/core/src/delegate-with-escalation.js';
+import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
   RunResult,
@@ -367,7 +367,7 @@ describe('delegateWithEscalation', () => {
       'needs_context',
       'blocked',
       'failed',
-      'review_loop_capped',
+      'review_loop_aborted',
       null,
     ]).toContain(
       (result.terminationReason as { workerSelfAssessment: unknown }).workerSelfAssessment,

@@ -1,6 +1,6 @@
 import type { Provider, TaskSpec, AgentType } from '../types.js';
 import type { CommitFields } from '../reporting/structured-report.js';
-import { delegateWithEscalation } from '../delegate-with-escalation.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { withDoneCondition } from './execute-task.js';
 

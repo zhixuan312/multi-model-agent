@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
+import { HeartbeatTimer } from '../packages/core/src/bounded-execution/activity-tracker.js';
 
 describe('HeartbeatTimer.getHeadlineSnapshot', () => {
   it('emits prefix without elapsed and a stats clause that grows as counters fire', () => {

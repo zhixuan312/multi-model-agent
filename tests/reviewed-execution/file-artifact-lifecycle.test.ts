@@ -46,7 +46,7 @@ vi.mock('fs', () => ({
   existsSync: vi.fn((p: string) => existingFiles.has(p)),
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/auto-commit', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/lifecycle/auto-commit', () => ({
   autoCommitFiles: vi.fn().mockReturnValue({}),
 }));
 
