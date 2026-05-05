@@ -201,6 +201,8 @@ export { delegateSlot } from './intake-pipeline/slots/delegate.js';
 export type { DelegateInput, DelegateBrief } from './intake-pipeline/slots/delegate.js';
 export { executePlanSlot } from './intake-pipeline/slots/execute-plan.js';
 export type { ExecutePlanBrief } from './intake-pipeline/slots/execute-plan.js';
+export { makeRetrySlot } from './intake-pipeline/slots/retry.js';
+export type { RetryInput, RetryBrief } from './intake-pipeline/slots/retry.js';
 
 // Plan extractor
 export { extractPlanSection, PlanExtractionError } from './intake-pipeline/plan-extractor.js';

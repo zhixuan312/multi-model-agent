@@ -1,3 +1,5 @@
+import type { ToolCategory } from './routing/escalation-policy.js';
+
 export type BatchState = 'pending' | 'awaiting_clarification' | 'complete' | 'failed' | 'expired';
 
 export function isTerminal(s: BatchState): boolean {
@@ -15,6 +17,15 @@ export interface HeadlineSnapshot {
   dispatchedAt: number;
   /** Optional fallback headline string for queue / pre-dispatch phases. */
   fallback: string;
+}
+
+/** Lightweight task spec stored in BatchRegistry entries for retry lookups. */
+export interface RegistryTaskSpec {
+  brief: string;
+  cwd: string;
+  agentType: 'standard' | 'complex';
+  reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
+  contextBlockIds: string[];
 }
 
 // Input accepted by register() — runningHeadlineSnapshot OPTIONAL here so existing callers don't break.
@@ -39,6 +50,10 @@ export interface BatchEntryInput<Result = unknown> {
   tasksCompleted?: number;
   lastHeartbeatAt?: number;
   running?: Array<{ worker: string; turn: number }>;
+  /** Tool category of the original request — populated for retry inheritance. */
+  toolCategory?: ToolCategory;
+  /** Original task specs — populated so retry slots can reconstruct briefs. */
+  tasks?: RegistryTaskSpec[];
 }
 
 // Stored entry — runningHeadlineSnapshot REQUIRED.
