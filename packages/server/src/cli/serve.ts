@@ -168,6 +168,20 @@ export async function startServe(
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);
 
+  // Drift check — warn if installed skills don't match the canonical manifest.
+  try {
+    const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
+    const { discoverPerClientInstallDirs } = await import('../install/discover.js');
+    const sync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    const drift = sync.driftReport();
+    if (drift.length > 0) {
+      const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
+      stderr(`[mmagent] WARN: skill manifest drift detected: ${summary}. Re-run 'mmagent install-skill' to reconcile.\n`);
+    }
+  } catch {
+    // best-effort — never let drift check block serve
+  }
+
   // Pass the full MultiModelConfig (not just the server block) so
   // registerToolHandlers sees `agents` and registers real tool endpoints.
   // Stripping to { server } here caused a 3.1.0 regression where tool

@@ -122,7 +122,6 @@ Skills are the surface your AI client sees. `mmagent install-skill` writes them 
 | Skill | Target endpoint | Use when |
 |---|---|---|
 | `mma-context-blocks` | `POST/DELETE /context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
-| `mma-clarifications` | `POST /clarifications/confirm` | A previous batch's terminal envelope returned a `proposedInterpretation` string — the service is paused waiting for you to confirm or correct its read. |
 | `mma-retry` | `POST /retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
 
 The `multi-model-agent` skill (no `mma-` prefix) is a top-level overview your client reads first to pick which `mma-*` skill applies.
