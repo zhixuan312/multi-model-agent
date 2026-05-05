@@ -1,6 +1,6 @@
 import type { LifecycleState } from '../stage-plan-types.js';
-import { makeToolDefinitions } from '../../runner-shell/tool-definitions.js';
-import { CallCache } from '../../tools/call-cache.js';
+import { makeToolDefinitions } from '../../providers/tool-definitions.js';
+import { CallCache } from '../../providers/call-cache.js';
 
 export class ExecutionContextBuilder {
   handler = (state: LifecycleState): void => {

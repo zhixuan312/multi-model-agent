@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../../packages/core/src/telemetry/types.js';
-import { TASK_COMPLETED_FIELD_COVERAGE, STAGE_FIELD_COVERAGE } from '../../../packages/core/src/telemetry/field-coverage.js';
+import { buildTaskCompletedEvent } from '../../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../../packages/core/src/events/telemetry-types.js';
+import { TASK_COMPLETED_FIELD_COVERAGE, STAGE_FIELD_COVERAGE } from '../../../packages/core/src/events/field-coverage.js';
 import { richRunResult } from './fixtures/rich-runresult.js';
 
 describe('V3 completeness ratchet', () => {

@@ -1,12 +1,12 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { exploreSlot } from '../../packages/core/src/intake-pipeline/slots/explore.js';
-import type { ExploreInput, ExploreBrief } from '../../packages/core/src/intake-pipeline/slots/explore.js';
-import { exploreReportSchema } from '../../packages/core/src/reporting/slots/explore-report.js';
+import { exploreSlot } from '../../packages/core/src/intake/brief-compiler-slots/explore.js';
+import type { ExploreInput, ExploreBrief } from '../../packages/core/src/intake/brief-compiler-slots/explore.js';
+import { exploreReportSchema } from '../../packages/core/src/reporting/report-parser-slots/explore-report.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
-import type { RunnerShell } from '../../packages/core/src/runner-shell/shell.js';
+import type { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
 
 function makeExploreParseBrief(): StageHandler {
   return (state: LifecycleState): void => {
@@ -216,7 +216,7 @@ describe('explore via v4.0 lifecycle', () => {
   });
 
   it('headline template formats results correctly', async () => {
-    const { exploreHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/explore.js');
+    const { exploreHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/explore.js');
     const headline = exploreHeadlineTemplate.compose({
       report: {
         topic: 'test',
@@ -231,7 +231,7 @@ describe('explore via v4.0 lifecycle', () => {
   });
 
   it('headline template shows zero findings', async () => {
-    const { exploreHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/explore.js');
+    const { exploreHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/explore.js');
     const headline = exploreHeadlineTemplate.compose({
       report: { topic: 'empty', internalFindings: [], externalFindings: [], synthesis: '' },
       status: 'error',

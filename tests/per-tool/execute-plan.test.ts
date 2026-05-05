@@ -4,9 +4,9 @@ import { join, sep } from 'node:path';
 import { tmpdir } from 'node:os';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { executePlanSlot } from '../../packages/core/src/intake-pipeline/slots/execute-plan.js';
-import type { ExecutePlanInput } from '../../packages/core/src/intake-pipeline/slots/execute-plan.js';
-import { executePlanReportSchema } from '../../packages/core/src/reporting/slots/execute-plan-report.js';
+import { executePlanSlot } from '../../packages/core/src/intake/brief-compiler-slots/execute-plan.js';
+import type { ExecutePlanInput } from '../../packages/core/src/intake/brief-compiler-slots/execute-plan.js';
+import { executePlanReportSchema } from '../../packages/core/src/reporting/report-parser-slots/execute-plan-report.js';
 import { ReviewerEngine, ReviewerPromptBuilder, specTemplate, qualityAPTemplate, diffTemplate } from '../../packages/core/src/review/reviewer-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
@@ -121,7 +121,7 @@ function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler
   };
 }
 
-function makeReworkHandler(shell: import('../../packages/core/src/runner-shell/shell.js').RunnerShell): StageHandler {
+function makeReworkHandler(shell: import('../../packages/core/src/providers/runner-shell.js').RunnerShell): StageHandler {
   return async (state: LifecycleState) => {
     const result = await shell.run((state as any).runInput);
     state.lastRunResult = result;

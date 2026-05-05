@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import type { Commit } from '../runners/base/result-builders.js';
+import type { Commit } from '../providers/base/result-builders.js';
 import type { VerifyStageResult } from '../lifecycle/handlers/verify-stage.js';
 
 const exec = promisify(execFile);

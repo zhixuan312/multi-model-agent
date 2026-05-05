@@ -5,7 +5,7 @@ import type {
   RunStatus,
   TerminationReason,
   TokenUsage,
-} from './runners/types.js';
+} from './providers/runner-types.js';
 import type { BriefQualityPolicy } from './intake/types.js';
 import type { VerifyStageResult, VerifyStepStatus } from './lifecycle/handlers/verify-stage.js';
 import type { ResearchToolDefinition } from './research/types.js';

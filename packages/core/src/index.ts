@@ -27,7 +27,7 @@ export type {
   RunTasksRuntime,
   ProgressEvent,
   InternalRunnerEvent,
-} from './runners/types.js';
+} from './providers/runner-types.js';
 export type {
   BatchTimings,
   BatchProgress,
@@ -37,7 +37,7 @@ export type {
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
-} from './routing/types.js';
+} from './escalation/types.js';
 export type {
   BriefQualityPolicy,
 } from './intake/types.js';
@@ -51,37 +51,37 @@ export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, ty
 export {
   InMemoryContextBlockStore,
   ContextBlockNotFoundError,
-} from './context/context-block-store.js';
+} from './stores/context-block-tool.js';
 export type {
   ContextBlockStore,
   RegisteredBlock,
   InMemoryContextBlockStoreOptions,
-} from './context/context-block-store.js';
-export { expandContextBlocks } from './context/expand-context-blocks.js';
+} from './stores/context-block-tool.js';
+export { expandContextBlocks } from './stores/expand-context-blocks.js';
 
 // Provider
-export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './provider.js';
+export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
 
 // Batch cache
-export { BatchCache } from './batch-cache.js';
-export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './batch-cache.js';
+export { BatchCache } from './stores/batch-cache.js';
+export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/batch-cache.js';
 
 // Project context
-export { createProjectContext } from './project-context.js';
-export type { ProjectContext } from './project-context.js';
+export { createProjectContext } from './stores/project-context-registry.js';
+export type { ProjectContext } from './stores/project-context-registry.js';
 
 // Run tasks
 export { runTasks } from './lifecycle/run-tasks.js';
 export type { RunTasksOptions } from './lifecycle/run-tasks.js';
 
 // Lifecycle
-export { ToolSurfaceRegistry } from './lifecycle/tool-surface-registry.js';
-export type { SurfaceEntry } from './lifecycle/tool-surface-registry.js';
+export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';
+export type { SurfaceEntry } from './tool-surface/tool-surface-registry.js';
 export { RouteDispatcher } from './lifecycle/route-dispatcher.js';
 export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifecycle/route-dispatcher.js';
 
 // Runner shell
-export { RunnerShell } from './runner-shell/shell.js';
+export { RunnerShell } from './providers/runner-shell.js';
 
 // Heartbeat
 export { HeartbeatTimer, formatElapsed } from './heartbeat.js';
@@ -93,10 +93,10 @@ export type {
 } from './heartbeat.js';
 
 // Agent resolution
-export { resolveAgent } from './routing/resolve-agent.js';
-export type { ResolvedAgent } from './routing/resolve-agent.js';
-export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
-export { otherTier } from './routing/tier-policy.js';
+export { resolveAgent } from './escalation/agent-resolver.js';
+export type { ResolvedAgent } from './escalation/agent-resolver.js';
+export { findModelProfile, getEffectiveCostTier } from './config/model-profiles.js';
+export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline
 export { compileDelegateTasks, compileDelegatePrompt } from './intake/compilers/delegate.js';
@@ -130,26 +130,26 @@ export type {
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
 // Batch registry
-export * from './batch-registry.js';
+export * from './stores/batch-registry.js';
 
 // Diagnostics
-export { createHttpServerLog } from './diagnostics/http-server-log.js';
+export { createHttpServerLog } from './events/http-server-log.js';
 export type {
   HttpServerLog,
   ShutdownCause,
   CreateHttpServerLogOptions,
-} from './diagnostics/http-server-log.js';
+} from './events/http-server-log.js';
 
 // Observability
-export { EventBus } from './observability/bus.js';
-export type { EventSink } from './observability/bus.js';
-export { LocalLogSink } from './observability/local-log-sink.js';
-export { TelemetrySink } from './observability/telemetry-sink.js';
-export type { Recorder } from './observability/telemetry-sink.js';
-export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './observability/events.js';
-export type { EventType } from './observability/events.js';
-export { JsonlWriter } from './diagnostics/jsonl-writer.js';
-export type { JsonlWriterOptions } from './diagnostics/jsonl-writer.js';
+export { EventBus } from './events/bus.js';
+export type { EventSink } from './events/bus.js';
+export { LocalLogSink } from './events/local-log-sink.js';
+export { TelemetrySink } from './events/telemetry-sink.js';
+export type { Recorder } from './events/telemetry-sink.js';
+export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
+export type { EventType } from './events/observability-events.js';
+export { JsonlWriter } from './events/jsonl-writer.js';
+export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 
 // Review engine (v4.0 lifecycle)
 export {
@@ -162,23 +162,23 @@ export {
 export type { ReviewTemplate } from './review/reviewer-engine.js';
 
 // Intake-pipeline slots
-export { delegateSlot } from './intake-pipeline/slots/delegate.js';
-export type { DelegateInput, DelegateBrief } from './intake-pipeline/slots/delegate.js';
-export { executePlanSlot } from './intake-pipeline/slots/execute-plan.js';
-export type { ExecutePlanBrief } from './intake-pipeline/slots/execute-plan.js';
-export { makeRetrySlot } from './intake-pipeline/slots/retry.js';
-export type { RetryInput, RetryBrief } from './intake-pipeline/slots/retry.js';
+export { delegateSlot } from './intake/brief-compiler-slots/delegate.js';
+export type { DelegateInput, DelegateBrief } from './intake/brief-compiler-slots/delegate.js';
+export { executePlanSlot } from './intake/brief-compiler-slots/execute-plan.js';
+export type { ExecutePlanBrief } from './intake/brief-compiler-slots/execute-plan.js';
+export { makeRetrySlot } from './intake/brief-compiler-slots/retry.js';
+export type { RetryInput, RetryBrief } from './intake/brief-compiler-slots/retry.js';
 
 // Plan extractor
-export { extractPlanSection, PlanExtractionError } from './intake-pipeline/plan-extractor.js';
-export type { PlanSection } from './intake-pipeline/plan-extractor.js';
+export { extractPlanSection, PlanExtractionError } from './intake/plan-extractor.js';
+export type { PlanSection } from './intake/plan-extractor.js';
 
 // Reporting slots
-export { delegateReportSchema } from './reporting/slots/delegate-report.js';
-export type { DelegateStructuredReport } from './reporting/slots/delegate-report.js';
-export { executePlanReportSchema } from './reporting/slots/execute-plan-report.js';
-export type { ExecutePlanReport } from './reporting/slots/execute-plan-report.js';
+export { delegateReportSchema } from './reporting/report-parser-slots/delegate-report.js';
+export type { DelegateStructuredReport } from './reporting/report-parser-slots/delegate-report.js';
+export { executePlanReportSchema } from './reporting/report-parser-slots/execute-plan-report.js';
+export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-plan-report.js';
 
 // Headline templates
-export { delegateHeadlineTemplate } from './reporting/headlines/delegate.js';
-export { executePlanHeadlineTemplate } from './reporting/headlines/execute-plan.js';
+export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
+export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';

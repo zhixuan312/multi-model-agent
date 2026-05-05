@@ -1,7 +1,7 @@
 // packages/server/src/http/handlers/control/retry.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as retry from '@zhixuan92/multi-model-agent-core/tool-schemas/retry';
+import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
 import { executeRetry } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/retry';
 import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
 import { sendError, sendJson } from '../../errors.js';

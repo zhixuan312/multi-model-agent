@@ -6,12 +6,12 @@ import { deleteInstallId } from './install-id.js';
 import { buildInstallMeta } from './install-meta.js';
 import { Queue } from './queue.js';
 import { readGeneration, bumpGeneration } from './generation.js';
-import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/telemetry/types';
-import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/telemetry/types';
+import { SCHEMA_VERSION, TaskCompletedEventSchema, ValidatedTaskCompletedEventSchema } from '@zhixuan92/multi-model-agent-core/events/telemetry-types';
+import type { TaskCompletedEventType, WireTelemetryRecord } from '@zhixuan92/multi-model-agent-core/events/telemetry-types';
 import {
   buildTaskCompletedEvent,
   type BuildContext,
-} from '@zhixuan92/multi-model-agent-core/telemetry/event-builder';
+} from '@zhixuan92/multi-model-agent-core/events/event-builder';
 
 export interface ValidationWarningsResult {
   warnings: Array<{ rule: string; path: string }>;

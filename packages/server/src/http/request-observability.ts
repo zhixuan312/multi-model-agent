@@ -1,7 +1,7 @@
 import { homedir } from 'node:os';
 import { join } from 'node:path';
-import { composeVerboseLine } from '@zhixuan92/multi-model-agent-core/diagnostics/verbose-line';
-import { spillRequestBody } from '@zhixuan92/multi-model-agent-core/diagnostics/request-spill';
+import { composeVerboseLine } from '@zhixuan92/multi-model-agent-core/events/verbose-line';
+import { spillRequestBody } from '@zhixuan92/multi-model-agent-core/events/request-spill';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const INLINE_BODY_LIMIT_BYTES = 16_384;

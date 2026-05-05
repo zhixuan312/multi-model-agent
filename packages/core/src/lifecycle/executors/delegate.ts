@@ -1,7 +1,7 @@
 // packages/core/src/executors/delegate.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../../tool-schemas/delegate.js';
+import type { Input } from '../../tools/delegate/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../run-tasks.js';
 import type { RunTasksOptions } from '../run-tasks.js';

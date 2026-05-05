@@ -6,7 +6,7 @@ import {
   type UnavailableMap,
 } from '../../packages/core/src/escalation/fallback.js';
 import type { Provider, RunResult, AgentType } from '../../packages/core/src/types.js';
-import { canonicalIdentity, identityEquals } from '../../packages/core/src/routing/canonical-model-identity.js';
+import { canonicalIdentity, identityEquals } from '../../packages/core/src/config/canonical-model-identity.js';
 
 function mockProvider(name: string, run: () => Promise<RunResult>, config?: unknown): Provider {
   // Default config varies by name so existing tests get DISTINCT effective providers

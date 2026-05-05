@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 import { richRunResult } from '../contract/telemetry/fixtures/rich-runresult.js';
 
 describe('V3 cross-field validation (warn-only since 3.10.3)', () => {

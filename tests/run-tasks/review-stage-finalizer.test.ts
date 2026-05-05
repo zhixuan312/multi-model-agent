@@ -24,7 +24,7 @@ function reviewOutput(status: string): string {
   return ['## Summary', status, '', '## Deviations from brief', '', '## Unresolved', ''].join('\n');
 }
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (_slot: string) => ({
     name: _slot,
     config: { type: 'openai-compatible' as const, model: `${_slot}-model`, baseUrl: 'https://ex.invalid/v1' },

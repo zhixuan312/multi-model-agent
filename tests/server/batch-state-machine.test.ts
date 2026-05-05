@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BatchRegistry, BatchState, isTerminal } from '../../packages/core/src/batch-registry.js';
-import type { BatchEntry } from '../../packages/core/src/batch-registry.js';
+import { BatchRegistry, BatchState, isTerminal } from '../../packages/core/src/stores/batch-registry.js';
+import type { BatchEntry } from '../../packages/core/src/stores/batch-registry.js';
 
 function makeEntry(batchId: string, overrides: Partial<BatchEntry> = {}): BatchEntry {
   return {

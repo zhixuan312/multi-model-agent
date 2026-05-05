@@ -3,7 +3,7 @@ import { runQualityReview } from '../../packages/core/src/review/quality-reviewe
 import { buildAuditQualityPrompt } from '../../packages/core/src/review/quality-only-prompts.js';
 import type { Provider } from '../../packages/core/src/types.js';
 import type { RunResult } from '../../packages/core/src/types.js';
-import type { RunOptions } from '../../packages/core/src/runners/types.js';
+import type { RunOptions } from '../../packages/core/src/providers/runner-types.js';
 import type { ParsedStructuredReport } from '../../packages/core/src/reporting/structured-report.js';
 
 const fakeReport: ParsedStructuredReport = {

@@ -1,5 +1,5 @@
 import type { MultiModelConfig } from '../types.js';
-import type { ContextBlockStore } from '../context/context-block-store.js';
+import type { ContextBlockStore } from '../stores/context-block-tool.js';
 import type {
   DraftTask,
   IntakeResult,

@@ -1,4 +1,4 @@
-import type { TokenUsage } from '../runners/types.js';
+import type { TokenUsage } from '../providers/runner-types.js';
 
 export interface Pricing {
   inputUSDPerMillion: number;

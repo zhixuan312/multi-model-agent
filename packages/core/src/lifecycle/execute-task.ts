@@ -4,7 +4,7 @@ import type {
   TaskSpec,
   AgentType,
 } from '../types.js';
-import type { InternalRunnerEvent } from '../runners/types.js';
+import type { InternalRunnerEvent } from '../providers/runner-types.js';
 import { delegateWithEscalation } from '../delegate-with-escalation.js';
 
 export function errorResult(error: string): RunResult {

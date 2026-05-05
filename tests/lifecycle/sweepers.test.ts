@@ -1,10 +1,10 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BatchRetentionSweeper } from '../../packages/core/src/lifecycle/sweepers/batch-retention.js';
-import { ProjectIdleCleanup } from '../../packages/core/src/lifecycle/sweepers/project-idle-cleanup.js';
-import { ContextBlockGCSweeper } from '../../packages/core/src/lifecycle/sweepers/context-block-gc.js';
-import { ShutdownCoordinator } from '../../packages/core/src/lifecycle/sweepers/shutdown-coordinator.js';
-import { InMemoryContextBlockStore } from '../../packages/core/src/context/context-block-store.js';
-import type { ProjectContext } from '../../packages/core/src/project-context.js';
+import { BatchRetentionSweeper } from '../../packages/core/src/cleanup/batch-retention-sweeper.js';
+import { ProjectIdleCleanup } from '../../packages/core/src/cleanup/project-idle-cleanup.js';
+import { ContextBlockGCSweeper } from '../../packages/core/src/cleanup/context-block-gc-sweeper.js';
+import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
+import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
+import type { ProjectContext } from '../../packages/core/src/stores/project-context-registry.js';
 
 describe('BatchRetentionSweeper', () => {
   it('tick calls registry.runExpirySweep', () => {

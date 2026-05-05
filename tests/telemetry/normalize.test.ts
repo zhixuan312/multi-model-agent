@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { normalizeModel } from '../../packages/core/src/telemetry/normalize.js';
-import type { ModelFamily } from '../../packages/core/src/routing/model-profiles.js';
+import { normalizeModel } from '../../packages/core/src/events/normalize.js';
+import type { ModelFamily } from '../../packages/core/src/config/model-profiles.js';
 
 describe('normalizeModel', () => {
   it.each([

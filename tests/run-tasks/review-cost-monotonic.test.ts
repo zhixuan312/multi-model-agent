@@ -1,8 +1,8 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
-import type { EventSink } from '../../packages/core/src/observability/bus.js';
-import { EventBus } from '../../packages/core/src/observability/bus.js';
-import type { InternalRunnerEvent } from '../../packages/core/src/runners/types.js';
+import type { EventSink } from '../../packages/core/src/events/bus.js';
+import { EventBus } from '../../packages/core/src/events/bus.js';
+import type { InternalRunnerEvent } from '../../packages/core/src/providers/runner-types.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
@@ -81,7 +81,7 @@ function makeMockCreateProvider() {
   });
 }
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: makeMockCreateProvider(),
 }));
 
@@ -140,7 +140,7 @@ async function runReviewedLifecycleAndCaptureEvents(opts?: {
   recordHeartbeat?: boolean;
 }) {
   const { executeReviewedLifecycle } = await import('../../packages/core/src/lifecycle/reviewed-lifecycle.js');
-  const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
+  const { createProvider } = await import('@zhixuan92/multi-model-agent-core/providers/provider-factory');
 
   const config = makeConfig();
   const task: TaskSpec = {
@@ -230,7 +230,7 @@ describe('review-cost-monotonic (§3.9)', () => {
 
   it('read_only_review.quality event passes Zod schema validation (costUSD >= 0 enforced by .min(0))', async () => {
     const { events } = await runReviewedLifecycleAndCaptureEvents();
-    const { ReadOnlyReviewQualityEvent } = await import('../../packages/core/src/observability/events.js');
+    const { ReadOnlyReviewQualityEvent } = await import('../../packages/core/src/events/observability-events.js');
 
     const reviewEvent = events.find(e => (e as { event?: string }).event === 'read_only_review.quality');
     expect(reviewEvent).toBeDefined();

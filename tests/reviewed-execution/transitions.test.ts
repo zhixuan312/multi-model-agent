@@ -7,7 +7,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 //   - stageStats idle fields (null for un-entered, populated for entered)
 //   - correct stage progression in the result
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => {
   const impl = {
     output: '## Summary\ndone\n\n## Files changed\n- src/a.ts: updated\n\n## Normalization decisions\n\n## Validations run\n- tsc: passed\n\n## Deviations from brief\n\n## Unresolved\n',
     status: 'ok' as const,

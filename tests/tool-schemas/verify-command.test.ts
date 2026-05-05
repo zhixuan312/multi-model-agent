@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inputSchema as delegateInputSchema } from '../../packages/core/src/tool-schemas/delegate.js';
+import { inputSchema as delegateInputSchema } from '../../packages/core/src/tools/delegate/schema.js';
 
 describe('TaskSpec.verifyCommand', () => {
   // baseTask includes maxCostUSD because Chapter 6 makes it required (Audit-r2 plan finding 1).

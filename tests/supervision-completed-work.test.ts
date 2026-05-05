@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { validateSubAgentOutput, hasCompletedWork, extractToolName } from '../packages/core/src/runners/supervision.js';
+import { validateSubAgentOutput, hasCompletedWork, extractToolName } from '../packages/core/src/providers/supervision.js';
 
 describe('supervision with completed work', () => {
   it('skips fragment/no_terminator when skipCompletionHeuristic is true', () => {

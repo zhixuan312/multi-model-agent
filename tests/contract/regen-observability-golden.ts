@@ -6,7 +6,7 @@ import { writeFileSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { z, type ZodObject } from 'zod';
-import { Event } from '../../packages/core/src/observability/events.js';
+import { Event } from '../../packages/core/src/events/observability-events.js';
 
 interface ManifestEntry {
   name: string;

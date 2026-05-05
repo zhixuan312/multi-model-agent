@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { debugSlot } from '../../packages/core/src/intake-pipeline/slots/debug.js';
-import type { DebugInput } from '../../packages/core/src/intake-pipeline/slots/debug.js';
-import { debugReportSchema } from '../../packages/core/src/reporting/slots/debug-report.js';
+import { debugSlot } from '../../packages/core/src/intake/brief-compiler-slots/debug.js';
+import type { DebugInput } from '../../packages/core/src/intake/brief-compiler-slots/debug.js';
+import { debugReportSchema } from '../../packages/core/src/reporting/report-parser-slots/debug-report.js';
 import { AnnotatorEngine } from '../../packages/core/src/review/annotator-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
@@ -184,7 +184,7 @@ describe('debug_task via v4.0 lifecycle', () => {
   });
 
   it('headline template formats results correctly', async () => {
-    const { debugHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/debug.js');
+    const { debugHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/debug.js');
     const headline = debugHeadlineTemplate.compose({
       report: { rootCause: 'off-by-one error in loop', hypothesesConsidered: ['a', 'b'], evidenceQuotes: ['line 5'] },
       status: 'ok',

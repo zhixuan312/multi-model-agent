@@ -11,7 +11,7 @@ const callState = vi.hoisted(() => ({
   lastPrompt: '',
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (): Provider => ({
     name: 'mock-complex',
     config: { type: 'openai-compatible' as const, model: 'cpx-model', baseUrl: 'https://ex.invalid/v1' },

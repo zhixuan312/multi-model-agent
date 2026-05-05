@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { RouteDispatcher } from '../../packages/core/src/lifecycle/route-dispatcher.js';
 import { LifecycleDriver } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState, StagePlan } from '../../packages/core/src/lifecycle/stage-plan-types.js';
-import { ContextBlockNotFoundError } from '../../packages/core/src/context/context-block-store.js';
+import { ContextBlockNotFoundError } from '../../packages/core/src/stores/context-block-tool.js';
 
 function minimalPlan(category: 'artifact_producing' | 'read_only' | 'research'): StagePlan {
   return {

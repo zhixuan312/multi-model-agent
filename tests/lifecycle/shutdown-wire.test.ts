@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { DeriveTerminalStatusHandler } from '../../packages/core/src/lifecycle/handlers/derive-terminal-status.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
-import { ShutdownCoordinator } from '../../packages/core/src/lifecycle/sweepers/shutdown-coordinator.js';
+import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
 
 describe('shutdown wire', () => {
   it('coordinator.signal() makes terminalStatus=unavailable', () => {

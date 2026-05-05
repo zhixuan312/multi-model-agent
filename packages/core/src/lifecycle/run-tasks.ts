@@ -4,12 +4,12 @@ import type {
   MultiModelConfig,
   AgentType,
 } from '../types.js';
-import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
+import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
-import type { HttpServerLog } from '../diagnostics/http-server-log.js';
-import type { EventBus } from '../observability/bus.js';
-import { resolveAgent } from '../routing/resolve-agent.js';
-import { expandContextBlocks } from '../context/expand-context-blocks.js';
+import type { HttpServerLog } from '../events/http-server-log.js';
+import type { EventBus } from '../events/bus.js';
+import { resolveAgent } from '../escalation/agent-resolver.js';
+import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
 import { errorResult } from './execute-task.js';
 import type { ResolvedTask } from './execute-task.js';

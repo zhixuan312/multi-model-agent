@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EventEmitter } from '../../packages/core/src/channels/event-emitter.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 
 describe('EventEmitter', () => {
   it('redacts secrets before fan-out', () => {

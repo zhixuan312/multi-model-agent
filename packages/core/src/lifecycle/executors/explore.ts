@@ -1,12 +1,12 @@
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../../tool-schemas/explore.js';
+import type { Input } from '../../tools/explore/schema.js';
 import type { RunResult, MultiModelConfig } from '../../types.js';
 import type { ResearchToolDefinition } from '../../research/types.js';
-import type { EventBus } from '../../observability/bus.js';
+import type { EventBus } from '../../events/bus.js';
 import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
-import { resolveAgent } from '../../routing/resolve-agent.js';
-import { createProvider } from '../../provider.js';
+import { resolveAgent } from '../../escalation/agent-resolver.js';
+import { createProvider } from '../../providers/provider-factory.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import {

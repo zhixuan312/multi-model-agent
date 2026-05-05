@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeAll, vi } from 'vitest';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { EventSchemas, CLOUD_EVENT_NAMES } from '../../packages/core/src/observability/events.js';
-import { EventBus, type EventSink } from '../../packages/core/src/observability/bus.js';
-import { LocalLogSink } from '../../packages/core/src/observability/local-log-sink.js';
-import { TelemetrySink, type Recorder } from '../../packages/core/src/observability/telemetry-sink.js';
-import { JsonlWriter } from '../../packages/core/src/diagnostics/jsonl-writer.js';
+import { EventSchemas, CLOUD_EVENT_NAMES } from '../../packages/core/src/events/observability-events.js';
+import { EventBus, type EventSink } from '../../packages/core/src/events/bus.js';
+import { LocalLogSink } from '../../packages/core/src/events/local-log-sink.js';
+import { TelemetrySink, type Recorder } from '../../packages/core/src/events/telemetry-sink.js';
+import { JsonlWriter } from '../../packages/core/src/events/jsonl-writer.js';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 import {
   runFixtureMatrixAndCaptureEvents,
@@ -14,7 +14,7 @@ import {
 
 let activeProvider: Provider;
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: () => activeProvider,
 }));
 

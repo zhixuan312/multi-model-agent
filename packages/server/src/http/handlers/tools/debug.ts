@@ -1,7 +1,7 @@
 // packages/server/src/http/handlers/tools/debug.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as debug from '@zhixuan92/multi-model-agent-core/tool-schemas/debug';
+import * as debug from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
 import { executeDebug } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/debug';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';

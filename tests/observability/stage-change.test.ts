@@ -3,12 +3,12 @@ import { readFileSync } from 'node:fs';
 import { fileURLToPath } from 'node:url';
 import { dirname, resolve } from 'node:path';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
-import { EventBus } from '../../packages/core/src/observability/bus.js';
-import type { EventType } from '../../packages/core/src/observability/events.js';
+import { EventBus } from '../../packages/core/src/events/bus.js';
+import type { EventType } from '../../packages/core/src/events/observability-events.js';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => {
   const impl = {
     output: '## Summary\ndone\n\n## Files changed\n- src/a.ts: updated\n\n## Normalization decisions\n\n## Validations run\n- tsc: passed\n\n## Deviations from brief\n\n## Unresolved\n',
     status: 'ok' as const,

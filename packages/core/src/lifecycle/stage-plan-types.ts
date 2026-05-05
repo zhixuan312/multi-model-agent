@@ -1,4 +1,4 @@
-import type { ToolCategory } from '../routing/escalation-policy.js';
+import type { ToolCategory } from '../escalation/escalation-policy.js';
 
 export interface StageRow {
   rowId: string;

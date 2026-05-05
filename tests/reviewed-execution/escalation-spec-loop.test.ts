@@ -39,7 +39,7 @@ function reviewOutput(status: 'approved' | 'changes_required', finding = ''): st
   ].join('\n');
 }
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: 'standard' | 'complex') => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },

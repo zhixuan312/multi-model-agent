@@ -6,7 +6,7 @@ import type { MultiModelConfig, Provider, RunResult } from '@zhixuan92/multi-mod
 
 const providers: Partial<Record<'standard' | 'complex', Provider>> = {};
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: 'standard' | 'complex') => {
     const provider = providers[slot];
     if (!provider) throw new Error(`missing provider for ${slot}`);

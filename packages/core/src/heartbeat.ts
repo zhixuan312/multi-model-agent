@@ -1,5 +1,5 @@
-import type { ProgressEvent } from './runners/types.js';
-import type { HeadlineSnapshot } from './batch-registry.js';
+import type { ProgressEvent } from './providers/runner-types.js';
+import type { HeadlineSnapshot } from './stores/batch-registry.js';
 
 export function formatElapsed(ms: number): string {
   const rounded = Math.round(ms / 1000);
@@ -459,7 +459,7 @@ export class HeartbeatTimer {
     return null;
   }
 
-  public getHeadlineSnapshot(): import('./batch-registry.js').HeadlineSnapshot {
+  public getHeadlineSnapshot(): import('./stores/batch-registry.js').HeadlineSnapshot {
     const prefix = this.composeHeadlinePrefix();
     const statsClause = this.composeStatsClause();
     const dispatchedAt = Number.isFinite(this.startTime) && this.startTime > 0

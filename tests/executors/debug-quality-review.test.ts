@@ -3,7 +3,7 @@ import { describe, it, expect, vi } from 'vitest';
 const mockProviderRun = vi.fn();
 const mockCreateProvider = vi.fn();
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => mockCreateProvider(slot),
 }));
 

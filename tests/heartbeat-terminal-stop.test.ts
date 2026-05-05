@@ -1,5 +1,5 @@
 import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
-import type { ProgressEvent } from '../packages/core/src/runners/types.js';
+import type { ProgressEvent } from '../packages/core/src/providers/runner-types.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 

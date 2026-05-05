@@ -9,7 +9,7 @@ import {
   UploadBatchSchema,
   STRICT_ID_REGEX,
   TierUsageSchema,
-} from '../../packages/core/src/telemetry/types.js';
+} from '../../packages/core/src/events/telemetry-types.js';
 
 // Use the validated schema for tests that check R1-R16 rules
 const Schema = ValidatedTaskCompletedEventSchema;

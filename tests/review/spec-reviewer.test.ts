@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { Provider, RunResult } from '../../packages/core/src/types.js';
-import type { RunOptions } from '../../packages/core/src/runners/types.js';
+import type { RunOptions } from '../../packages/core/src/providers/runner-types.js';
 import { runSpecReview } from '../../packages/core/src/review/spec-reviewer.js';
 import type { ParsedStructuredReport } from '../../packages/core/src/reporting/structured-report.js';
 

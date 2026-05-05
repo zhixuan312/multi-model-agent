@@ -2,8 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { LocalLogSink } from '../../packages/core/src/observability/local-log-sink.js';
-import { JsonlWriter } from '../../packages/core/src/diagnostics/jsonl-writer.js';
+import { LocalLogSink } from '../../packages/core/src/events/local-log-sink.js';
+import { JsonlWriter } from '../../packages/core/src/events/jsonl-writer.js';
 
 describe('LocalLogSink', () => {
   it('writes JSONL line per event', () => {

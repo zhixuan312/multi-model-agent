@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
-import { EventBus } from '../../packages/core/src/observability/bus.js';
-import type { EventType, EventSink } from '../../packages/core/src/observability/bus.js';
-import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
+import { EventBus } from '../../packages/core/src/events/bus.js';
+import type { EventType, EventSink } from '../../packages/core/src/events/bus.js';
+import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/events/observability-events.js';
 
 const capturedEvents: EventType[] = [];
 
@@ -49,7 +49,7 @@ const reviewerOutputState = vi.hoisted(() => ({
 }));
 reviewerOutputState.output = REVIEWER_OUTPUT;
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },

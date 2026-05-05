@@ -1,5 +1,5 @@
-import type { ContextBlockStore } from '../context/context-block-store.js';
-import type { BatchRegistry } from '../batch-registry.js';
+import type { ContextBlockStore } from '../stores/context-block-tool.js';
+import type { BatchRegistry } from '../stores/batch-registry.js';
 
 export class TerminalBlockRegistrar {
   constructor(private store: ContextBlockStore, private registry: BatchRegistry) {}

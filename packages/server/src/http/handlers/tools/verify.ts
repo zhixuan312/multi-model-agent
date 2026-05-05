@@ -1,7 +1,7 @@
 // packages/server/src/http/handlers/tools/verify.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as verify from '@zhixuan92/multi-model-agent-core/tool-schemas/verify';
+import * as verify from '@zhixuan92/multi-model-agent-core/tools/verify/schema';
 import { executeVerify } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/verify';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';

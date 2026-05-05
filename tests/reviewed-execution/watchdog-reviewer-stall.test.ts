@@ -13,7 +13,7 @@ let qualityReviewerCalls = 0;
 let diffReviewerCalls = 0;
 let reviewerShouldHang = false;
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },

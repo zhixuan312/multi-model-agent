@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 
 describe('Item 12: R4 invariant holds for all event-construction paths', () => {
   it('keeps totalDurationMs as wall-clock when stage sum exceeds runResult.durationMs', () => {

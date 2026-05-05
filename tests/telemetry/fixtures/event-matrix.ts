@@ -4,8 +4,8 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
 import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
-import { EventSchemas } from '../../../packages/core/src/observability/events.js';
-import { EventBus, type EventSink } from '../../../packages/core/src/observability/bus.js';
+import { EventSchemas } from '../../../packages/core/src/events/observability-events.js';
+import { EventBus, type EventSink } from '../../../packages/core/src/events/bus.js';
 
 const BATCH_ID = '00000000-0000-4000-8000-000000000001';
 const TS = '2026-05-02T00:00:00.000Z';

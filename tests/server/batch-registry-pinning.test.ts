@@ -1,7 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
-import { BatchRegistry } from '../../packages/core/src/batch-registry.js';
-import { InMemoryContextBlockStore } from '../../packages/core/src/context/context-block-store.js';
-import type { BatchEntry } from '../../packages/core/src/batch-registry.js';
+import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
+import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
+import type { BatchEntry } from '../../packages/core/src/stores/batch-registry.js';
 
 function makeEntry(batchId: string, blockIds: string[], overrides: Partial<BatchEntry> = {}): BatchEntry {
   return {

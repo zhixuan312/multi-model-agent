@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TerminalBlockRegistrar } from '../../packages/core/src/reporting/terminal-block-registrar.js';
-import { InMemoryContextBlockStore } from '../../packages/core/src/context/context-block-store.js';
-import { BatchRegistry } from '../../packages/core/src/batch-registry.js';
+import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
+import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 
 describe('TerminalBlockRegistrar', () => {
   it('registers a block and records to BatchRegistry', () => {

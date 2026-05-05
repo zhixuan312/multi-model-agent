@@ -115,7 +115,7 @@ export async function runQualityReview(
   workerOutput?: string,
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
-  onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
+  onProgress?: (e: import('../providers/runner-types.js').InternalRunnerEvent) => void,
   cwd: string = process.cwd(),
 ): Promise<QualityReviewResult> {
   // Read-only annotation path: triggered when caller passed a prompt builder
@@ -194,7 +194,7 @@ async function runAnnotationReview(
   cwd: string,
   taskDeadlineMs?: number,
   abortSignal?: AbortSignal,
-  onProgress?: (e: import('../runners/types.js').InternalRunnerEvent) => void,
+  onProgress?: (e: import('../providers/runner-types.js').InternalRunnerEvent) => void,
 ): Promise<QualityReviewResult> {
   const reviewerSlot: 'standard' | 'complex' =
     reviewerProvider.name === 'standard' ? 'standard' : 'complex';

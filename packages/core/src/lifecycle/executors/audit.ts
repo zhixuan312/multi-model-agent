@@ -1,11 +1,11 @@
 // packages/core/src/executors/audit.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../../tool-schemas/audit.js';
+import type { Input } from '../../tools/audit/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../run-tasks.js';
 import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
-import { resolveAgent } from '../../routing/resolve-agent.js';
+import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { buildAuditQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
@@ -112,7 +112,7 @@ function resolveDispatchMode(
 
 function autoRegisterContextBlock(
   results: import('../../types.js').RunResult[],
-  store: import('../../context/context-block-store.js').ContextBlockStore | undefined,
+  store: import('../../stores/context-block-tool.js').ContextBlockStore | undefined,
 ): string | undefined {
   if (!store) return undefined;
   const usable = results.filter(r => !r.outputIsDiagnostic && r.output.trim().length > 0);

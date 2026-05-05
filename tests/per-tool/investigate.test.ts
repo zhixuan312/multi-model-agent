@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { investigateSlot } from '../../packages/core/src/intake-pipeline/slots/investigate.js';
-import type { InvestigateInput } from '../../packages/core/src/intake-pipeline/slots/investigate.js';
-import { investigateReportSchema } from '../../packages/core/src/reporting/slots/investigate-report.js';
+import { investigateSlot } from '../../packages/core/src/intake/brief-compiler-slots/investigate.js';
+import type { InvestigateInput } from '../../packages/core/src/intake/brief-compiler-slots/investigate.js';
+import { investigateReportSchema } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 import { AnnotatorEngine } from '../../packages/core/src/review/annotator-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
@@ -207,7 +207,7 @@ describe('investigate via v4.0 lifecycle', () => {
   });
 
   it('headline template formats results correctly', async () => {
-    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/investigate.js');
+    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
     const headline = investigateHeadlineTemplate.compose({
       report: { question: 'x', answer: 'y', citations: [{ source: 'a.ts', quote: 'q' }, { source: 'b.ts', quote: 'w' }] },
       status: 'ok',
@@ -217,7 +217,7 @@ describe('investigate via v4.0 lifecycle', () => {
   });
 
   it('headline template uses singular for 1 citation', async () => {
-    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/investigate.js');
+    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
     const headline = investigateHeadlineTemplate.compose({
       report: { question: 'x', answer: 'y', citations: [{ source: 'a.ts', quote: 'q' }] },
       status: 'ok',

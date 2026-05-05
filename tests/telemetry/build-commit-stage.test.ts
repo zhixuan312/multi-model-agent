@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
 import type { RunResult } from '../../packages/core/src/types.js';
 import { HAPPY } from './fixtures/runresult.js';
 

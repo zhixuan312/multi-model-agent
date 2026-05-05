@@ -11,15 +11,15 @@ import {
   OpenAPIRegistry,
   OpenApiGeneratorV3,
 } from '@asteasolutions/zod-to-openapi';
-import * as delegate from '@zhixuan92/multi-model-agent-core/tool-schemas/delegate';
-import * as audit from '@zhixuan92/multi-model-agent-core/tool-schemas/audit';
-import * as review from '@zhixuan92/multi-model-agent-core/tool-schemas/review';
-import * as verify from '@zhixuan92/multi-model-agent-core/tool-schemas/verify';
-import * as debug from '@zhixuan92/multi-model-agent-core/tool-schemas/debug';
-import * as executePlan from '@zhixuan92/multi-model-agent-core/tool-schemas/execute-plan';
-import * as retry from '@zhixuan92/multi-model-agent-core/tool-schemas/retry';
-import * as investigate from '@zhixuan92/multi-model-agent-core/tool-schemas/investigate';
-import * as explore from '@zhixuan92/multi-model-agent-core/tool-schemas/explore';
+import * as delegate from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
+import * as audit from '@zhixuan92/multi-model-agent-core/tools/audit/schema';
+import * as review from '@zhixuan92/multi-model-agent-core/tools/review/schema';
+import * as verify from '@zhixuan92/multi-model-agent-core/tools/verify/schema';
+import * as debug from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
+import * as executePlan from '@zhixuan92/multi-model-agent-core/tools/execute-plan/schema';
+import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
+import * as investigate from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
+import * as explore from '@zhixuan92/multi-model-agent-core/tools/explore/schema';
 
 // Extend Zod once with openapi support.
 extendZodWithOpenApi(z);

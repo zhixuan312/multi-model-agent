@@ -1,9 +1,9 @@
 import { describe, it, expect, vi } from 'vitest';
 import { executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
-import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
+import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/events/observability-events.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
-import type { EventSink } from '../../packages/core/src/observability/bus.js';
-import { EventBus } from '../../packages/core/src/observability/bus.js';
+import type { EventSink } from '../../packages/core/src/events/bus.js';
+import { EventBus } from '../../packages/core/src/events/bus.js';
 
 vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
@@ -30,7 +30,7 @@ const REVIEWER_OUTPUT = [
 
 // Mock the provider factory so every tier created during escalation gets a mock.
 // Pattern adapted from tests/reviewed-execution/review-policy.test.ts.
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
@@ -416,7 +416,7 @@ describe('executeReviewedLifecycle — quality_only', () => {
     expect(qrConcerns[0]!.message).toContain('silent error swallowing');
 
     // V3 telemetry: buildTaskCompletedEvent rolls concerns into findingsBySeverity
-    const { buildTaskCompletedEvent } = await import('../../packages/core/src/telemetry/event-builder.js');
+    const { buildTaskCompletedEvent } = await import('../../packages/core/src/events/event-builder.js');
     const event = buildTaskCompletedEvent({
       route: 'audit',
       taskSpec: { filePaths: [] },

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { classifyConcern } from '../../packages/core/src/telemetry/concern-classifier.js';
+import { classifyConcern } from '../../packages/core/src/events/concern-classifier.js';
 
 const AUDIT_FIXTURES = [
   { message: 'PRQ-001 appears stale because the provider override is now wired through the core provider factory while the queue still documents it as dead.', expectedNot: 'other' },

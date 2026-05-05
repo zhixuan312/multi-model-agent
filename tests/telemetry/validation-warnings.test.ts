@@ -6,13 +6,13 @@ import {
   createRecorder,
   collectValidationWarnings,
 } from '../../packages/server/src/telemetry/recorder.js';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import type { BuildContext } from '../../packages/core/src/telemetry/event-builder.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import type { BuildContext } from '../../packages/core/src/events/event-builder.js';
 import {
   TaskCompletedEventSchema,
   UploadBatchSchema,
   type TaskCompletedEventType,
-} from '../../packages/core/src/telemetry/types.js';
+} from '../../packages/core/src/events/telemetry-types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 

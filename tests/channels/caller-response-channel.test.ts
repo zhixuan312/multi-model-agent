@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { CallerResponseChannel } from '../../packages/core/src/channels/caller-response-channel.js';
+import { CallerResponseChannel } from '../../packages/core/src/events/caller-response-channel.js';
 
 describe('CallerResponseChannel', () => {
   it('snapshots in taskIndex order', () => {

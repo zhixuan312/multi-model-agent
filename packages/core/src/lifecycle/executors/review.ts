@@ -1,16 +1,16 @@
 // packages/core/src/executors/review.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../../tool-schemas/review.js';
+import type { Input } from '../../tools/review/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { resolveAgent } from '../../routing/resolve-agent.js';
+import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
 import { buildReviewQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
-import { expandContextBlocks } from '../../context/expand-context-blocks.js';
+import { expandContextBlocks } from '../../stores/expand-context-blocks.js';
 import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 

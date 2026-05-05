@@ -156,7 +156,7 @@ describe('Task 23: forbiddenTiers gates reviewer separation by tier', () => {
     const cfg = { type: 'codex' as const, model: 'gpt-5.5' };
     const standard = mockProvider('standard', async () => okResult('standard'), cfg);
     const complex = mockProvider('complex', async () => okResult('complex'), cfg);
-    const { canonicalIdentity } = await import('../../packages/core/src/routing/canonical-model-identity.js');
+    const { canonicalIdentity } = await import('../../packages/core/src/config/canonical-model-identity.js');
     const identity = canonicalIdentity(cfg);
 
     const result = await runWithFallback<RunResult>({

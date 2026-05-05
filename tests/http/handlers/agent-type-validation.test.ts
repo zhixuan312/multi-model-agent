@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { inputSchema } from '../../../packages/core/src/tool-schemas/delegate.js';
+import { inputSchema } from '../../../packages/core/src/tools/delegate/schema.js';
 
 describe('agentType enum closure', () => {
   it('rejects free-form agentType at the Zod boundary', () => {

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { verifySlot } from '../../packages/core/src/intake-pipeline/slots/verify.js';
-import type { VerifyInput } from '../../packages/core/src/intake-pipeline/slots/verify.js';
-import { verifyReportSchema } from '../../packages/core/src/reporting/slots/verify-report.js';
+import { verifySlot } from '../../packages/core/src/intake/brief-compiler-slots/verify.js';
+import type { VerifyInput } from '../../packages/core/src/intake/brief-compiler-slots/verify.js';
+import { verifyReportSchema } from '../../packages/core/src/reporting/report-parser-slots/verify-report.js';
 import { AnnotatorEngine } from '../../packages/core/src/review/annotator-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
@@ -185,7 +185,7 @@ describe('verify_work via v4.0 lifecycle', () => {
   });
 
   it('headline template formats results correctly', async () => {
-    const { verifyHeadlineTemplate } = await import('../../packages/core/src/reporting/headlines/verify.js');
+    const { verifyHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/verify.js');
     const headline = verifyHeadlineTemplate.compose({
       report: { results: [{ item: 'x', pass: true, evidence: 'y' }, { item: 'z', pass: false, evidence: 'w' }] },
       status: 'ok',

@@ -12,7 +12,7 @@ import {
 
 let activeProvider: Provider;
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: () => activeProvider,
 }));
 

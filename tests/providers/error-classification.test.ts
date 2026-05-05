@@ -1,0 +1,142 @@
+import { classifyError, isProviderContextLimit } from '../../packages/core/src/providers/error-classification.js';
+
+describe('classifyError', () => {
+  // ─── api_aborted branch ────────────────────────────────────────────────
+  describe('api_aborted', () => {
+    it('classifies Error with name="AbortError" as api_aborted', () => {
+      const err = new Error('boom');
+      err.name = 'AbortError';
+      const { status, reason } = classifyError(err);
+      expect(status).toBe('api_aborted');
+      expect(reason).toMatch(/aborted/i);
+    });
+
+    it('classifies any Error whose message matches /aborted/i as api_aborted', () => {
+      const { status } = classifyError(new Error('Request was aborted'));
+      expect(status).toBe('api_aborted');
+    });
+
+    it('matches /aborted/i case-insensitively', () => {
+      const { status } = classifyError(new Error('stream ABORTED mid-flight'));
+      expect(status).toBe('api_aborted');
+    });
+
+    it('abort classification wins over an otherwise-HTTP-shaped error', () => {
+      // If both abort AND status are present, abort takes precedence so an
+      // abort-during-HTTP path never masquerades as an HTTP error.
+      const err = Object.assign(new Error('aborted during send'), { status: 499 });
+      expect(classifyError(err).status).toBe('api_aborted');
+    });
+  });
+
+  // ─── provider_transport_failure branch ───────────────────────────────────────────────
+  describe('provider_transport_failure', () => {
+    it('classifies ECONNREFUSED as provider_transport_failure', () => {
+      const err = Object.assign(new Error('connect ECONNREFUSED'), {
+        code: 'ECONNREFUSED',
+      });
+      const { status, reason } = classifyError(err);
+      expect(status).toBe('provider_transport_failure');
+      expect(reason).toContain('ECONNREFUSED');
+    });
+
+    it('classifies ENOTFOUND as provider_transport_failure', () => {
+      const err = Object.assign(new Error('getaddrinfo ENOTFOUND api.example.com'), {
+        code: 'ENOTFOUND',
+      });
+      expect(classifyError(err).status).toBe('provider_transport_failure');
+    });
+
+    it('classifies any message matching /network/i as provider_transport_failure', () => {
+      const { status } = classifyError(new Error('network unreachable'));
+      expect(status).toBe('provider_transport_failure');
+    });
+
+    it('falls back to a non-empty reason when the message is empty', () => {
+      const err = Object.assign(new Error(''), { code: 'ECONNREFUSED' });
+      const { reason } = classifyError(err);
+      expect(reason).toBe('network error');
+    });
+  });
+
+  // ─── provider_context_limit branch ─────────────────────────────────────
+  describe('provider_context_limit', () => {
+    it('classifies context-window errors as api_error with provider_context_limit reason', () => {
+      const err = Object.assign(new Error('context_length_exceeded'), { status: 400 });
+      const { status, reason } = classifyError(err);
+      expect(status).toBe('api_error');
+      expect(reason).toBe('provider_context_limit');
+    });
+
+    it('detects OpenAI maximum context length and plural messages signature', () => {
+      const err = Object.assign(
+        new Error("This model's maximum context length is 128000 tokens. Please reduce the length of the messages."),
+        { status: 400 },
+      );
+      expect(isProviderContextLimit(err)).toBe(true);
+      expect(classifyError(err).reason).toBe('provider_context_limit');
+    });
+
+    it('detects spaced context length exceeded signatures', () => {
+      expect(isProviderContextLimit(new Error('context length exceeded'))).toBe(true);
+    });
+  });
+
+  // ─── api_error branch ──────────────────────────────────────────────────
+  describe('api_error', () => {
+    it('classifies errors with a numeric .status as api_error', () => {
+      const err = Object.assign(new Error('Bad Request'), { status: 400 });
+      const { status, reason } = classifyError(err);
+      expect(status).toBe('api_error');
+      expect(reason).toContain('HTTP 400');
+      expect(reason).toContain('Bad Request');
+    });
+
+    it('formats api_error reason without trailing colon when message is empty', () => {
+      const err = Object.assign(new Error(''), { status: 503 });
+      const { reason } = classifyError(err);
+      expect(reason).toBe('HTTP 503');
+    });
+
+    it('does NOT classify .status as api_error when it is a non-numeric string', () => {
+      // OpenAI Responses API uses string statuses like 'completed' on
+      // successful responses. A raw string `.status` must not be mistaken
+      // for an HTTP error.
+      const err = Object.assign(new Error('weird shape'), { status: 'completed' });
+      expect(classifyError(err).status).toBe('error');
+    });
+  });
+
+  // ─── error fallback branch ─────────────────────────────────────────────
+  describe('error (fallback)', () => {
+    it('falls back to error for a generic Error', () => {
+      const { status, reason } = classifyError(new Error('something broke'));
+      expect(status).toBe('error');
+      expect(reason).toBe('something broke');
+    });
+
+    it('handles string throws', () => {
+      const { status, reason } = classifyError('string thrown directly');
+      expect(status).toBe('error');
+      expect(reason).toBe('string thrown directly');
+    });
+
+    it('handles null', () => {
+      const { status, reason } = classifyError(null);
+      expect(status).toBe('error');
+      expect(typeof reason).toBe('string');
+    });
+
+    it('handles undefined', () => {
+      const { status, reason } = classifyError(undefined);
+      expect(status).toBe('error');
+      expect(typeof reason).toBe('string');
+    });
+
+    it('handles POJO without message/status/code', () => {
+      const { status, reason } = classifyError({ foo: 'bar' });
+      expect(status).toBe('error');
+      expect(typeof reason).toBe('string');
+    });
+  });
+});

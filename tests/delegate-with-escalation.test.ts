@@ -5,7 +5,7 @@ import type {
   RunResult,
   Provider,
 } from '../packages/core/src/types.js';
-import type { InternalRunnerEvent } from '../packages/core/src/runners/types.js';
+import type { InternalRunnerEvent } from '../packages/core/src/providers/runner-types.js';
 
 function makeMockResult(
   status: RunResult['status'],

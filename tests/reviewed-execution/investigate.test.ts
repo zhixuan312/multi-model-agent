@@ -5,7 +5,7 @@ import type { MultiModelConfig, Provider } from '../../packages/core/src/types.j
 
 const providerState = vi.hoisted(() => ({ activeProvider: undefined as Provider | undefined }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: () => providerState.activeProvider,
 }));
 

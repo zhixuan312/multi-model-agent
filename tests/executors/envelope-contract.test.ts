@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import * as schemas from '@zhixuan92/multi-model-agent-core/tool-schemas/index';
+import * as schemas from '@zhixuan92/multi-model-agent-core/tools/index';
 
 const REQUIRED_FIELDS = ['headline','results','batchTimings','costSummary','structuredReport','error','proposedInterpretation'] as const;
 const full = {

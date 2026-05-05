@@ -44,29 +44,29 @@
       "types": "./dist/config/read-only-review-flag.d.ts",
       "import": "./dist/config/read-only-review-flag.js"
     },
-    "./routing/model-profiles": {
-      "types": "./dist/routing/model-profiles.d.ts",
-      "import": "./dist/routing/model-profiles.js"
+    "./config/model-profiles": {
+      "types": "./dist/config/model-profiles.d.ts",
+      "import": "./dist/config/model-profiles.js"
     },
-    "./routing/resolve-agent": {
-      "types": "./dist/routing/resolve-agent.d.ts",
-      "import": "./dist/routing/resolve-agent.js"
+    "./escalation/agent-resolver": {
+      "types": "./dist/escalation/agent-resolver.d.ts",
+      "import": "./dist/escalation/agent-resolver.js"
     },
-    "./provider": {
-      "types": "./dist/provider.d.ts",
-      "import": "./dist/provider.js"
+    "./providers/provider-factory": {
+      "types": "./dist/providers/provider-factory.d.ts",
+      "import": "./dist/providers/provider-factory.js"
     },
     "./lifecycle/run-tasks": {
       "types": "./dist/lifecycle/run-tasks.d.ts",
       "import": "./dist/lifecycle/run-tasks.js"
     },
-    "./diagnostics/verbose-line": {
-      "types": "./dist/diagnostics/verbose-line.d.ts",
-      "import": "./dist/diagnostics/verbose-line.js"
+    "./events/verbose-line": {
+      "types": "./dist/events/verbose-line.d.ts",
+      "import": "./dist/events/verbose-line.js"
     },
-    "./diagnostics/request-spill": {
-      "types": "./dist/diagnostics/request-spill.d.ts",
-      "import": "./dist/diagnostics/request-spill.js"
+    "./events/request-spill": {
+      "types": "./dist/events/request-spill.d.ts",
+      "import": "./dist/events/request-spill.js"
     },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
@@ -124,13 +124,13 @@
       "types": "./dist/error-codes.d.ts",
       "import": "./dist/error-codes.js"
     },
-    "./cost/cost-meter": {
-      "types": "./dist/cost/cost-meter.d.ts",
-      "import": "./dist/cost/cost-meter.js"
+    "./bounded-execution/cost-meter": {
+      "types": "./dist/bounded-execution/cost-meter.d.ts",
+      "import": "./dist/bounded-execution/cost-meter.js"
     },
-    "./tools/call-cache": {
-      "types": "./dist/tools/call-cache.d.ts",
-      "import": "./dist/tools/call-cache.js"
+    "./providers/call-cache": {
+      "types": "./dist/providers/call-cache.d.ts",
+      "import": "./dist/providers/call-cache.js"
     },
     "./intake/types": {
       "types": "./dist/intake/types.d.ts",
@@ -196,25 +196,25 @@
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
     },
-    "./observability/bus": {
-      "types": "./dist/observability/bus.d.ts",
-      "import": "./dist/observability/bus.js"
+    "./events/bus": {
+      "types": "./dist/events/bus.d.ts",
+      "import": "./dist/events/bus.js"
     },
-    "./observability/events": {
-      "types": "./dist/observability/events.d.ts",
-      "import": "./dist/observability/events.js"
+    "./events/observability-events": {
+      "types": "./dist/events/observability-events.d.ts",
+      "import": "./dist/events/observability-events.js"
     },
-    "./observability/local-log-sink": {
-      "types": "./dist/observability/local-log-sink.d.ts",
-      "import": "./dist/observability/local-log-sink.js"
+    "./events/local-log-sink": {
+      "types": "./dist/events/local-log-sink.d.ts",
+      "import": "./dist/events/local-log-sink.js"
     },
-    "./observability/telemetry-sink": {
-      "types": "./dist/observability/telemetry-sink.d.ts",
-      "import": "./dist/observability/telemetry-sink.js"
+    "./events/telemetry-sink": {
+      "types": "./dist/events/telemetry-sink.d.ts",
+      "import": "./dist/events/telemetry-sink.js"
     },
-    "./diagnostics/jsonl-writer": {
-      "types": "./dist/diagnostics/jsonl-writer.d.ts",
-      "import": "./dist/diagnostics/jsonl-writer.js"
+    "./events/jsonl-writer": {
+      "types": "./dist/events/jsonl-writer.d.ts",
+      "import": "./dist/events/jsonl-writer.js"
     },
     "./auto-commit": {
       "types": "./dist/auto-commit.d.ts",
@@ -280,57 +280,61 @@
       "types": "./dist/lifecycle/executors/shared-compute.d.ts",
       "import": "./dist/lifecycle/executors/shared-compute.js"
     },
-    "./tool-schemas": {
-      "types": "./dist/tool-schemas/index.d.ts",
-      "import": "./dist/tool-schemas/index.js"
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
     },
-    "./tool-schemas/delegate": {
-      "types": "./dist/tool-schemas/delegate.d.ts",
-      "import": "./dist/tool-schemas/delegate.js"
+    "./tools/index": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
     },
-    "./tool-schemas/audit": {
-      "types": "./dist/tool-schemas/audit.d.ts",
-      "import": "./dist/tool-schemas/audit.js"
+    "./tools/delegate/schema": {
+      "types": "./dist/tools/delegate/schema.d.ts",
+      "import": "./dist/tools/delegate/schema.js"
     },
-    "./tool-schemas/investigate": {
-      "types": "./dist/tool-schemas/investigate.d.ts",
-      "import": "./dist/tool-schemas/investigate.js"
+    "./tools/audit/schema": {
+      "types": "./dist/tools/audit/schema.d.ts",
+      "import": "./dist/tools/audit/schema.js"
     },
-    "./tool-schemas/explore": {
-      "types": "./dist/tool-schemas/explore.d.ts",
-      "import": "./dist/tool-schemas/explore.js"
+    "./tools/investigate/schema": {
+      "types": "./dist/tools/investigate/schema.d.ts",
+      "import": "./dist/tools/investigate/schema.js"
     },
-    "./tool-schemas/review": {
-      "types": "./dist/tool-schemas/review.d.ts",
-      "import": "./dist/tool-schemas/review.js"
+    "./tools/explore/schema": {
+      "types": "./dist/tools/explore/schema.d.ts",
+      "import": "./dist/tools/explore/schema.js"
     },
-    "./tool-schemas/verify": {
-      "types": "./dist/tool-schemas/verify.d.ts",
-      "import": "./dist/tool-schemas/verify.js"
+    "./tools/review/schema": {
+      "types": "./dist/tools/review/schema.d.ts",
+      "import": "./dist/tools/review/schema.js"
     },
-    "./tool-schemas/debug": {
-      "types": "./dist/tool-schemas/debug.d.ts",
-      "import": "./dist/tool-schemas/debug.js"
+    "./tools/verify/schema": {
+      "types": "./dist/tools/verify/schema.d.ts",
+      "import": "./dist/tools/verify/schema.js"
     },
-    "./tool-schemas/execute-plan": {
-      "types": "./dist/tool-schemas/execute-plan.d.ts",
-      "import": "./dist/tool-schemas/execute-plan.js"
+    "./tools/debug/schema": {
+      "types": "./dist/tools/debug/schema.d.ts",
+      "import": "./dist/tools/debug/schema.js"
     },
-    "./tool-schemas/retry": {
-      "types": "./dist/tool-schemas/retry.d.ts",
-      "import": "./dist/tool-schemas/retry.js"
+    "./tools/execute-plan/schema": {
+      "types": "./dist/tools/execute-plan/schema.d.ts",
+      "import": "./dist/tools/execute-plan/schema.js"
     },
-    "./telemetry/consent-rules": {
-      "types": "./dist/telemetry/consent-rules.d.ts",
-      "import": "./dist/telemetry/consent-rules.js"
+    "./tools/retry/schema": {
+      "types": "./dist/tools/retry/schema.d.ts",
+      "import": "./dist/tools/retry/schema.js"
     },
-    "./telemetry/event-builder": {
-      "types": "./dist/telemetry/event-builder.d.ts",
-      "import": "./dist/telemetry/event-builder.js"
+    "./events/consent-rules": {
+      "types": "./dist/events/consent-rules.d.ts",
+      "import": "./dist/events/consent-rules.js"
     },
-    "./telemetry/types": {
-      "types": "./dist/telemetry/types.d.ts",
-      "import": "./dist/telemetry/types.js"
+    "./events/event-builder": {
+      "types": "./dist/events/event-builder.d.ts",
+      "import": "./dist/events/event-builder.js"
+    },
+    "./events/telemetry-types": {
+      "types": "./dist/events/telemetry-types.d.ts",
+      "import": "./dist/events/telemetry-types.js"
     }
   },
   "scripts": {

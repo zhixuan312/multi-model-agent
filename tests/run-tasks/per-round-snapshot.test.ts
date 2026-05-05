@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { subtractTokens, priceTokens, resolveRateCard } from '../../packages/core/src/cost/compute.js';
-import type { TokenUsage } from '../../packages/core/src/runners/types.js';
+import { subtractTokens, priceTokens, resolveRateCard } from '../../packages/core/src/bounded-execution/cost-compute.js';
+import type { TokenUsage } from '../../packages/core/src/providers/runner-types.js';
 
 describe('subtractTokens (per-turn delta tracking)', () => {
   it('returns per-field difference for normal growth', () => {

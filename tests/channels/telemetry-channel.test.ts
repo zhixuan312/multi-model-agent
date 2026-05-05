@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { TelemetryChannel } from '../../packages/core/src/channels/telemetry-channel.js';
+import { TelemetryChannel } from '../../packages/core/src/events/telemetry-channel.js';
 
 describe('TelemetryChannel', () => {
   it('removes PII before upload', async () => {

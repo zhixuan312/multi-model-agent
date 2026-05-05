@@ -10,9 +10,9 @@ import type {
   InternalRunnerEvent,
   RunStatus,
   TerminationReason,
-} from './runners/types.js';
+} from './providers/runner-types.js';
 import { retryableFor } from './error-codes.js';
-import { hasCompletedWork, extractToolName } from './runners/supervision.js';
+import { hasCompletedWork, extractToolName } from './providers/supervision.js';
 
 function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';

@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { delegateSlot } from '../../packages/core/src/intake-pipeline/slots/delegate.js';
-import type { DelegateInput } from '../../packages/core/src/intake-pipeline/slots/delegate.js';
-import { delegateReportSchema } from '../../packages/core/src/reporting/slots/delegate-report.js';
+import { delegateSlot } from '../../packages/core/src/intake/brief-compiler-slots/delegate.js';
+import type { DelegateInput } from '../../packages/core/src/intake/brief-compiler-slots/delegate.js';
+import { delegateReportSchema } from '../../packages/core/src/reporting/report-parser-slots/delegate-report.js';
 import { ReviewerEngine, ReviewerPromptBuilder, specTemplate, qualityAPTemplate, diffTemplate } from '../../packages/core/src/review/reviewer-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
@@ -80,7 +80,7 @@ function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler
   };
 }
 
-function makeReworkHandler(shell: import('../../packages/core/src/runner-shell/shell.js').RunnerShell): StageHandler {
+function makeReworkHandler(shell: import('../../packages/core/src/providers/runner-shell.js').RunnerShell): StageHandler {
   return async (state: LifecycleState) => {
     const result = await shell.run((state as any).runInput);
     state.lastRunResult = result;

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { EventBus, type EventSink } from '../../packages/core/src/observability/bus.js';
-import type { EventType } from '../../packages/core/src/observability/events.js';
+import { EventBus, type EventSink } from '../../packages/core/src/events/bus.js';
+import type { EventType } from '../../packages/core/src/events/observability-events.js';
 
 describe('EventBus', () => {
   it('fans out to all sinks', () => {

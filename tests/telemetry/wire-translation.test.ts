@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildWirePayload } from '../../packages/core/src/telemetry/event-builder.js';
-import { WireTelemetryRecordSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildWirePayload } from '../../packages/core/src/events/event-builder.js';
+import { WireTelemetryRecordSchema } from '../../packages/core/src/events/telemetry-types.js';
 
 describe('TelemetryChannel wire-translation', () => {
   it('translates mainModel* to parentModel* on the wire', () => {

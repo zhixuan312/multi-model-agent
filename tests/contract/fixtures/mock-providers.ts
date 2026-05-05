@@ -18,7 +18,7 @@ import type {
   AttemptRecord,
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
-import type { RunnerAdapter } from '../../../packages/core/src/runner-shell/adapter.js';
+import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
 
 export type Stage =
   | 'ok'

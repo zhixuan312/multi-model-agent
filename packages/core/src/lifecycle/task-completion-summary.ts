@@ -5,7 +5,7 @@ import {
   clampInputTokens,
   clampOutputTokens,
   clampDurationMsTotal,
-} from '../telemetry/clamp.js';
+} from '../events/clamp.js';
 
 export interface TaskCompletionSummary {
   batchId: string;

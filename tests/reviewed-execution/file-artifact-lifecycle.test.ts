@@ -3,7 +3,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 let filesWritten: string[] = [];
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => {
   const makeResult = (overrides: Record<string, unknown>) => ({
     output: '## Summary\ndone\n\n## Files changed\n\n## Validations run\n\n## Deviations from brief\n\n## Unresolved\n',
     status: 'ok' as const,

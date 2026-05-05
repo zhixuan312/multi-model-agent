@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 import { emptyStats, executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
 
@@ -8,7 +8,7 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (_slot: string) => ({
     name: 'escalation-mock',
     config: { type: 'openai-compatible' as const, model: 'gpt-5.2', baseUrl: 'https://ex.invalid/v1' },

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndRegistry, bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { BatchRegistry } from '../../packages/core/src/batch-registry.js';
-import { InMemoryContextBlockStore } from '../../packages/core/src/context/context-block-store.js';
-import { makeRetrySlot } from '../../packages/core/src/intake-pipeline/slots/retry.js';
-import type { RetryInput } from '../../packages/core/src/intake-pipeline/slots/retry.js';
+import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
+import { InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
+import { makeRetrySlot } from '../../packages/core/src/intake/brief-compiler-slots/retry.js';
+import type { RetryInput } from '../../packages/core/src/intake/brief-compiler-slots/retry.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 

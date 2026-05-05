@@ -1,4 +1,4 @@
-import { SeverityBin } from '../../packages/core/src/telemetry/types.js';
+import { SeverityBin } from '../../packages/core/src/events/telemetry-types.js';
 import { annotatedFindingSchema, reviewerEmittedFindingSchema } from '../../packages/core/src/review/findings-schema.js';
 
 type IfEqual<X, Y> =

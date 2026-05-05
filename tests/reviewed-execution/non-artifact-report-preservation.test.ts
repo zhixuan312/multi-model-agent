@@ -6,7 +6,7 @@ import { join } from 'node:path';
 
 const workerOutput = '## Summary\nAuthoritative answer text.\n## Citations\n- src/a.ts:1 — c\n## Confidence\nhigh — verified\n';
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },

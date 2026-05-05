@@ -1,6 +1,6 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { TerminalStatusDeriver, TerminalInputs, WorkerStatus, OverallReviewVerdict, ArtifactsCheck, VerifyOutcome } from '../../reporting/terminal-status-deriver.js';
-import type { ShutdownCoordinator } from '../sweepers/shutdown-coordinator.js';
+import type { ShutdownCoordinator } from '../../cleanup/shutdown-coordinator.js';
 
 export class DeriveTerminalStatusHandler {
   constructor(private deriver: TerminalStatusDeriver, private coordinator: ShutdownCoordinator) {}

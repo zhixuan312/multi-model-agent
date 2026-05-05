@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
-import { inputSchema as delegateInputSchema } from '../../packages/core/src/tool-schemas/delegate.js';
-import { inputSchema as executePlanInputSchema } from '../../packages/core/src/tool-schemas/execute-plan.js';
+import { inputSchema as delegateInputSchema } from '../../packages/core/src/tools/delegate/schema.js';
+import { inputSchema as executePlanInputSchema } from '../../packages/core/src/tools/execute-plan/schema.js';
 import type { TaskSpec } from '../../packages/core/src/types.js';
 import type { DraftTask } from '../../packages/core/src/intake/types.js';
 

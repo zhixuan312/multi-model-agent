@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ValidatedTaskCompletedEventSchema, UploadBatchSchema } from '../../../packages/core/src/telemetry/types.js';
+import { ValidatedTaskCompletedEventSchema, UploadBatchSchema } from '../../../packages/core/src/events/telemetry-types.js';
 
 function makeStage(name: string, overrides: Record<string, unknown> = {}) {
   // R3: review stages must use a different tier than implementerTier.

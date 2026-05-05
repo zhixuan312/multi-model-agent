@@ -1,14 +1,14 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
-import { RunnerShell } from '../../packages/core/src/runner-shell/shell.js';
+import { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
 import { LifecycleDriver } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import { buildStagePlan } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
 import { ExecutionContextBuilder } from '../../packages/core/src/lifecycle/handlers/execution-context-builder.js';
 import { DeriveTerminalStatusHandler } from '../../packages/core/src/lifecycle/handlers/derive-terminal-status.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
-import { ShutdownCoordinator } from '../../packages/core/src/lifecycle/sweepers/shutdown-coordinator.js';
-import { EventEmitter } from '../../packages/core/src/channels/event-emitter.js';
+import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 
 describe('Phase-4 end-to-end LifecycleDriver fixture', () => {
   it('drives one task through Stages 1-6 with no review and reaches complete status', async () => {

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildOutputEnvelopeSchema } from '../../packages/core/src/tool-schemas/shared-output.js';
+import { buildOutputEnvelopeSchema } from '../../packages/core/src/tools/shared-output.js';
 
 const baseEnvelope = {
   headline: 'audit: 1/1 tasks complete',

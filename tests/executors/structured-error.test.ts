@@ -3,7 +3,7 @@ import type { RunResult } from '../../packages/core/src/types.js';
 import { executeDelegate } from '../../packages/core/src/lifecycle/executors/delegate.js';
 import { buildExecutionContext } from '../../packages/core/src/lifecycle/executors/execution-context.js';
 import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
-import type { ProjectContext } from '../../packages/core/src/project-context.js';
+import type { ProjectContext } from '../../packages/core/src/stores/project-context-registry.js';
 
 function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
   const pc = {

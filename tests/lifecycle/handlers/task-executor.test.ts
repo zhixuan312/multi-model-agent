@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { TaskExecutor } from '../../../packages/core/src/lifecycle/handlers/task-executor.js';
-import { RunnerShell } from '../../../packages/core/src/runner-shell/shell.js';
-import { EventEmitter } from '../../../packages/core/src/channels/event-emitter.js';
+import { RunnerShell } from '../../../packages/core/src/providers/runner-shell.js';
+import { EventEmitter } from '../../../packages/core/src/events/event-emitter.js';
 import { mockAdapter } from '../../contract/fixtures/mock-providers.js';
 
 describe('TaskExecutor', () => {

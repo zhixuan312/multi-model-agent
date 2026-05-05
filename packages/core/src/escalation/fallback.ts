@@ -1,7 +1,7 @@
 import type { Provider, AgentType, RunResult } from '../types.js';
-import type { RunStatus } from '../runners/types.js';
-import { canonicalIdentity, identityEquals, type CanonicalIdentity } from '../routing/canonical-model-identity.js';
-import { otherTier } from '../routing/tier-policy.js';
+import type { RunStatus } from '../providers/runner-types.js';
+import { canonicalIdentity, identityEquals, type CanonicalIdentity } from '../config/canonical-model-identity.js';
+import { otherTier } from '../config/tier-policy-registry.js';
 
 export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'api_error',

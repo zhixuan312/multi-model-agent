@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, readFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { VerboseLogChannel } from '../../packages/core/src/channels/verbose-log-channel.js';
+import { VerboseLogChannel } from '../../packages/core/src/events/verbose-log-channel.js';
 
 describe('VerboseLogChannel', () => {
   it('appends JSONL to file and stdout', () => {

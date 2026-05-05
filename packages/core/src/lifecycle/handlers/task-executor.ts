@@ -1,6 +1,6 @@
 import type { LifecycleState } from '../stage-plan-types.js';
-import type { RunnerShell } from '../../runner-shell/shell.js';
-import type { EventEmitter } from '../../channels/event-emitter.js';
+import type { RunnerShell } from '../../providers/runner-shell.js';
+import type { EventEmitter } from '../../events/event-emitter.js';
 
 export class TaskExecutor {
   constructor(private shell: RunnerShell, private emitter: EventEmitter) {}

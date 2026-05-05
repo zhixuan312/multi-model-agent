@@ -1,4 +1,4 @@
-import type { RunnerShell } from '../runner-shell/shell.js';
+import type { RunnerShell } from '../providers/runner-shell.js';
 import { buildAuditQualityPrompt } from './quality-only-prompts.js';
 
 export interface AnnotatorInput {

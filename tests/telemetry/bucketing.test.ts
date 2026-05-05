@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   bucketCost, bucketSavedCost, bucketDuration, bucketFileCount, bucketRoundsUsed,
-} from '../../packages/core/src/telemetry/bucketing.js';
+} from '../../packages/core/src/events/bucketing.js';
 
 describe('bucketing — every boundary explicitly tested', () => {
   // costBucket

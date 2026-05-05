@@ -1,14 +1,14 @@
 import { RouteDispatcher } from '../../packages/core/src/lifecycle/route-dispatcher.js';
-import { RunnerShell } from '../../packages/core/src/runner-shell/shell.js';
-import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/context/context-block-store.js';
-import { BatchRegistry } from '../../packages/core/src/batch-registry.js';
+import { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
+import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
+import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
 import { ExecutionContextBuilder } from '../../packages/core/src/lifecycle/handlers/execution-context-builder.js';
 import { DeriveTerminalStatusHandler } from '../../packages/core/src/lifecycle/handlers/derive-terminal-status.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
-import { ShutdownCoordinator } from '../../packages/core/src/lifecycle/sweepers/shutdown-coordinator.js';
-import { EventEmitter } from '../../packages/core/src/channels/event-emitter.js';
-import type { RunnerAdapter } from '../../packages/core/src/runner-shell/adapter.js';
+import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
+import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
+import type { RunnerAdapter } from '../../packages/core/src/providers/runner-adapter.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 

@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boot, type HarnessHandle } from './harness.js';
 import { mockProvider, failProvider } from './mock-providers.js';
-import type { EventType } from '../../../packages/core/src/observability/events.js';
+import type { EventType } from '../../../packages/core/src/events/observability-events.js';
 
 async function bootAndCapture(
   provider: ReturnType<typeof mockProvider>,

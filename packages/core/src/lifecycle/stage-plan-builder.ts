@@ -1,5 +1,5 @@
 import type { StagePlan, StageRow, LifecycleState } from './stage-plan-types.js';
-import type { ToolCategory } from '../routing/escalation-policy.js';
+import type { ToolCategory } from '../escalation/escalation-policy.js';
 
 export function buildStagePlan(category: ToolCategory): StagePlan {
   const isAP = category === 'artifact_producing';

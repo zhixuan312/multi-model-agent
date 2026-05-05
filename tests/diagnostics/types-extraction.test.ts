@@ -3,7 +3,7 @@ import type {
   ShutdownCause, SessionCloseReason, DiagLoop, DiagRole, DiagReason,
   EscalationEventParams, EscalationUnavailableEventParams,
   FallbackEventParams, FallbackUnavailableEventParams,
-} from '../../packages/core/src/diagnostics/types.js';
+} from '../../packages/core/src/events/diagnostics-types.js';
 
 describe('diagnostics/types extraction', () => {
   it('exports all primitive types', () => {

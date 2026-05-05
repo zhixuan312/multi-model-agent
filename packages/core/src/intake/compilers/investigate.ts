@@ -1,5 +1,5 @@
 import type { TaskSpec } from '../../types.js';
-import type { Input } from '../../tool-schemas/investigate.js';
+import type { Input } from '../../tools/investigate/schema.js';
 
 export interface ResolvedContextBlock {
   id: string;

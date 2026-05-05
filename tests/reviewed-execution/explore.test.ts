@@ -1,12 +1,12 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { MultiModelConfig, Provider, RunResult } from '../../packages/core/src/types.js';
-import { EventBus } from '../../packages/core/src/observability/bus.js';
-import type { EventSink, EventType } from '../../packages/core/src/observability/bus.js';
+import { EventBus } from '../../packages/core/src/events/bus.js';
+import type { EventSink, EventType } from '../../packages/core/src/events/bus.js';
 
 const providerState = vi.hoisted(() => ({ activeProvider: undefined as Provider | undefined }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: () => providerState.activeProvider,
 }));
 

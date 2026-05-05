@@ -6,7 +6,7 @@ import type { MultiModelConfig, Provider, RunResult } from '@zhixuan92/multi-mod
 
 let activeProvider: Provider;
 
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => {
     if (slot === 'standard') return activeProvider;
     throw new Error(`slot not configured: ${slot}`);

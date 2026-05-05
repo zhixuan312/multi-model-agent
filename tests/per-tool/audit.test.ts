@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { mockAdapter } from '../contract/fixtures/mock-providers.js';
 import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { auditSlot } from '../../packages/core/src/intake-pipeline/slots/audit.js';
-import type { AuditInput } from '../../packages/core/src/intake-pipeline/slots/audit.js';
-import { auditReportSchema } from '../../packages/core/src/reporting/slots/audit-report.js';
+import { auditSlot } from '../../packages/core/src/intake/brief-compiler-slots/audit.js';
+import type { AuditInput } from '../../packages/core/src/intake/brief-compiler-slots/audit.js';
+import { auditReportSchema } from '../../packages/core/src/reporting/report-parser-slots/audit-report.js';
 import { AnnotatorEngine } from '../../packages/core/src/review/annotator-engine.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';

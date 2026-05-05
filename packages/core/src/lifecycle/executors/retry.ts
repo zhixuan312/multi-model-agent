@@ -1,6 +1,6 @@
 // packages/core/src/executors/retry.ts
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../../tool-schemas/retry.js';
+import type { Input } from '../../tools/retry/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';

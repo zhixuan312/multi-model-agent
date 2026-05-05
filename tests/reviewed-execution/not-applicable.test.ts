@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 // Mock provider: implementer returns ok but with NO files written and NO write tool calls
-vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
+vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => {
   const noArtifactImpl = {
     output: 'Hi there! I greeted the user.',
     status: 'ok' as const,

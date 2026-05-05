@@ -13,8 +13,8 @@ import type {
   VerifyOutcome,
   VerifySkipReason,
 } from '../types.js';
-import type { RunStatus, InternalRunnerEvent } from '../runners/types.js';
-import { createProvider } from '../provider.js';
+import type { RunStatus, InternalRunnerEvent } from '../providers/runner-types.js';
+import { createProvider } from '../providers/provider-factory.js';
 import { delegateWithEscalation } from '../delegate-with-escalation.js';
 import {
   pickEscalation,
@@ -31,12 +31,12 @@ import {
   type UnavailableMap,
   type FallbackReason,
 } from '../escalation/fallback.js';
-import { findModelProfile } from '../routing/model-profiles.js';
-import { canonicalIdentity } from '../routing/canonical-model-identity.js';
+import { findModelProfile } from '../config/model-profiles.js';
+import { canonicalIdentity } from '../config/canonical-model-identity.js';
 import { HeartbeatTimer } from '../heartbeat.js';
 import { newStageIdleTracker, snapshotIdle, type StageIdleTracker } from './stage-idle-tracker.js';
-import { priceTokens, subtractTokens, resolveRateCard } from '../cost/compute.js';
-import type { TokenUsage } from '../runners/types.js';
+import { priceTokens, subtractTokens, resolveRateCard } from '../bounded-execution/cost-compute.js';
+import type { TokenUsage } from '../providers/runner-types.js';
 import { DEFAULT_TASK_TIMEOUT_MS, DEFAULT_STALL_TIMEOUT_MS, MAX_TIME_PRESTOP_RATIO } from '../config/schema.js';
 import { runSpecReview } from '../review/spec-reviewer.js';
 import { makeSkippedReviewResult } from '../review/skipped-result.js';
@@ -54,14 +54,14 @@ import { partitionFilePaths, checkOutputTargets } from '../file-artifact-check.j
 import type { RunTasksProgressCallback } from './run-tasks.js';
 import { extractWorkerStatus } from './worker-status.js';
 import { buildFallbackImplReport, readImplementerFileContents } from './fallback-report.js';
-import { composeVerboseLine, toVerboseFields } from '../diagnostics/verbose-line.js';
+import { composeVerboseLine, toVerboseFields } from '../events/verbose-line.js';
 import { computeTaskCompletionSummary, formatTaskDoneLine } from './task-completion-summary.js';
 import type {
   FallbackEventParams,
   FallbackUnavailableEventParams,
   EscalationEventParams,
   EscalationUnavailableEventParams,
-} from '../diagnostics/types.js';
+} from '../events/diagnostics-types.js';
 import { withDoneCondition } from './execute-task.js';
 import {
   READ_ONLY_TOOL_NAMES,
@@ -98,7 +98,7 @@ export async function executeReviewedLifecycle(
   onProgress?: RunTasksProgressCallback,
   heartbeatWiring?: { batchId?: string; recordHeartbeat?: (tick: import('../heartbeat.js').HeartbeatTickInfo) => void },
   diagnostics?: {
-    logger?: import('../diagnostics/http-server-log.js').HttpServerLog;
+    logger?: import('../events/http-server-log.js').HttpServerLog;
     verbose?: boolean;
     verboseStream?: (line: string) => void;
   },
@@ -117,7 +117,7 @@ export async function executeReviewedLifecycle(
   _route?: string,
   _client?: string,
   _triggeringSkill?: string,
-  bus?: import('../observability/bus.js').EventBus,
+  bus?: import('../events/bus.js').EventBus,
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string,
 ): Promise<RunResult> {
   const reviewPolicy = task.reviewPolicy ?? 'full';
@@ -206,7 +206,7 @@ export async function executeReviewedLifecycle(
         if (!('stages' in cleaned)) cleaned.stages = JSON.stringify(stats);
       }
 
-      bus.emit({ event: schemaEvent, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../observability/events.js').EventType);
+      bus.emit({ event: schemaEvent, ts: new Date().toISOString(), batchId: verboseBatchIdEarly, taskIndex, ...cleaned } as unknown as import('../events/observability-events.js').EventType);
     }
     if (verboseStreamRaw && (verbose || DEFAULT_MODE_EVENTS.has(event))) {
       verboseStreamRaw(composeVerboseLine({ event, ts: new Date().toISOString(), batch: shortBatchEarly, task: taskIndex, ...toVerboseFields(fields) }));

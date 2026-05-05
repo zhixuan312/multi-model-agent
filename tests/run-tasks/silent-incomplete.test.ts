@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 import { emptyStats, executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
 
