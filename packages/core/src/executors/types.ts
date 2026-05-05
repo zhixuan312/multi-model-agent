@@ -118,7 +118,6 @@ export interface ExecutorOutput {
   proposedInterpretation: string | NotApplicable;
   batchId: string;
   contextBlockId?: string;
-  clarificationId?: string;
   wallClockMs?: number;
   mainModel?: string;
   specReviewVerdict?: ReviewVerdict;

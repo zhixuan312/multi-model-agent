@@ -191,34 +191,6 @@ describe('GET /batch/:batchId', () => {
     }
   });
 
-  it('returns awaiting_clarification state with proposedInterpretation', async () => {
-    const s = await startTestServerWithAgents();
-    try {
-      const batchId = randomUUID();
-      s.batchRegistry.register({
-        batchId,
-        projectCwd: '/tmp/test',
-        tool: 'delegate',
-        state: 'pending',
-        startedAt: Date.now(),
-        stateChangedAt: Date.now(),
-        blockIds: [],
-        blocksReleased: false,
-      });
-      s.batchRegistry.requestClarification(batchId, 'Did you mean X or Y?');
-
-      const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
-      });
-      expect(res.status).toBe(200);
-      const json = await res.json() as { proposedInterpretation: string; results: { kind: string } };
-      expect(json.proposedInterpretation).toBe('Did you mean X or Y?');
-      expect(json.results.kind).toBe('not_applicable');
-    } finally {
-      await s.stop();
-    }
-  });
-
   it('returns expired state for an expired batch', async () => {
     const s = await startTestServerWithAgents();
     try {

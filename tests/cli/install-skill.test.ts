@@ -493,7 +493,7 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
     expect(SUPPORTED_SKILLS).toContain('multi-model-agent');
     expect(SUPPORTED_SKILLS).toContain('mma-investigate');
     expect(SUPPORTED_SKILLS).toContain('mma-explore');
-    expect(SUPPORTED_SKILLS).toHaveLength(12);
+    expect(SUPPORTED_SKILLS).toHaveLength(11);
   });
 
   it('ALL_CLIENTS includes all four clients', () => {

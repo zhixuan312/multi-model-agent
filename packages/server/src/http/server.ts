@@ -138,8 +138,7 @@ async function registerToolHandlers(
 }
 
 /**
- * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks,
- * POST /clarifications/confirm).
+ * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks).
  */
 async function registerControlHandlers(
   router: Router,
@@ -151,7 +150,6 @@ async function registerControlHandlers(
   const { buildRetryHandler } = await import('./handlers/control/retry.js');
   const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
-  const { buildClarificationsHandler } = await import('./handlers/control/clarifications.js');
   const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
@@ -188,7 +186,6 @@ async function registerControlHandlers(
   router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
   router.register('POST', '/register-context-block', buildCreateContextBlockHandler({ projectRegistry, config }));
   router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
-  router.register('POST', '/clarifications/confirm', buildClarificationsHandler({ batchRegistry }));
 }
 
 export async function startServer(config: ServerConfig): Promise<RunningServer> {
@@ -202,7 +199,6 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
 
   const batchRegistry = new BatchRegistry({
     batchTtlMs: config.server.limits.batchTtlMs,
-    clarificationTimeoutMs: config.server.limits.clarificationTimeoutMs,
   });
 
   const projectRegistry = new ProjectRegistry({

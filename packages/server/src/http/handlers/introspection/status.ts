@@ -149,7 +149,7 @@ export function buildStatusHandler(deps: StatusHandlerDeps): RawHandler {
     }[] = [];
 
     for (const entry of batchRegistry.entries()) {
-      if (entry.state === 'pending' || entry.state === 'awaiting_clarification') {
+      if (entry.state === 'pending') {
         inflight.push({
           batchId: entry.batchId,
           tool: entry.tool,

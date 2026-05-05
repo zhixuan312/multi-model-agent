@@ -1024,12 +1024,9 @@ export async function executeReviewedLifecycle(
         : result.status === 'timeout' || cause === 'timeout' || cause === 'time_ceiling' ? 'wall_clock'
           : result.status === 'incomplete' && result.turns > 1 ? 'turn'
             : undefined);
-    const lifecycleClarificationRequested = result.lifecycleClarificationRequested
-      ?? (result.status === 'brief_too_vague' || cause === 'brief_too_vague' ? true : undefined);
     return {
       ...result,
       ...(capExhausted !== undefined && { capExhausted }),
-      ...(lifecycleClarificationRequested !== undefined && { lifecycleClarificationRequested }),
     };
   }
 

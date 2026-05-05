@@ -175,12 +175,11 @@ export interface MultiModelConfig {
   agents: { standard: AgentConfig; complex: AgentConfig }
   defaults: { timeoutMs: number; stallTimeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; mainModel?: string }
   diagnostics?: { log: boolean; logDir?: string; verbose?: boolean }
-  clarifications?: { maxRoundsPerDraft?: number }
   server: {
     bind: string
     port: number
     auth: { tokenFile: string }
-    limits: { maxBodyBytes: number; batchTtlMs: number; idleProjectTimeoutMs: number; clarificationTimeoutMs: number; projectCap: number; maxBatchCacheSize: number; maxContextBlockBytes: number; maxContextBlocksPerProject: number; shutdownDrainMs: number }
+    limits: { maxBodyBytes: number; batchTtlMs: number; idleProjectTimeoutMs: number; projectCap: number; maxBatchCacheSize: number; maxContextBlockBytes: number; maxContextBlocksPerProject: number; shutdownDrainMs: number }
     autoUpdateSkills: boolean
   }
   research: ResearchConfig
@@ -265,7 +264,6 @@ export interface RunResult {
   /** Longest silent gap between LLM/tool/text activity events seen anywhere
    *  in the lifecycle (across all stages). Use to retro-tune stallTimeoutMs. */
   taskMaxIdleMs?: number | null
-  lifecycleClarificationRequested?: boolean
   workerError?: Error
   /** Per-stage raw stats (Phase 0). Bucketing happens in the telemetry event-builder. */
   stageStats?: StageStatsMap

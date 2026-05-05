@@ -47,53 +47,10 @@ export interface DraftTask {
   skipCompletionHeuristic?: boolean;
 }
 
-export interface StoredDraft {
-  draft: DraftTask;
-  taskIndex: number;
-  roundCount: number;
-  previousReasons?: string[];
-}
-
-export interface ClarificationSet {
-  id: string;
-  drafts: Map<string, StoredDraft>;
-  originalBatchId: string;
-  executedDraftIds: Set<string>;
-  createdAt: number;
-  lastAccessedAt: number;
-}
-
-export interface ConfirmationEntry {
-  prompt: string;
-  filePaths?: string[];
-  done?: string;
-}
-
-export interface ConfirmDraftError {
-  draftId: string;
-  errorCode: string;
-  message: string;
-}
-
-export interface ConfirmResult {
-  confirmedDrafts: DraftTask[];
-  errors: ConfirmDraftError[];
-  executedResultRefs: string[];
-}
-
 export type ClassificationResult = 
   | { draft: DraftTask; classification: 'ready'; reasons: [] }
   | { draft: DraftTask; classification: 'needs_confirmation'; reasons: string[] }
   | { draft: DraftTask; classification: 'unrecoverable'; reasons: string[] };
-
-export interface ClarificationEntry {
-  draftId: string;
-  taskIndex: number;
-  proposedDraft: { prompt: string; filePaths?: string[]; done?: string };
-  assumptions: string[];
-  questions: string[];
-  reason: string;
-}
 
 export interface HardError {
   draftId: string;
@@ -105,7 +62,6 @@ export interface HardError {
 export interface IntakeProgress {
   totalDrafts: number;
   readyDrafts: number;
-  clarificationDrafts: number;
   hardErrorDrafts: number;
   executedDrafts: number;
 }
@@ -118,7 +74,6 @@ export interface ReadyDraft {
 
 export interface IntakeResult {
   ready: ReadyDraft[];
-  clarifications: ClarificationEntry[];
   hardErrors: HardError[];
   intakeProgress: IntakeProgress;
 }

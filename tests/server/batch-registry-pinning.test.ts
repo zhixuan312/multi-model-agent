@@ -32,7 +32,7 @@ describe('BatchRegistry context-block refcount pinning', () => {
     vi.useFakeTimers();
     const blocks = new InMemoryContextBlockStore();
     const { id: bid } = blocks.register('content');
-    const reg = new BatchRegistry({ batchTtlMs: 1000, clarificationTimeoutMs: 60_000 }, { contextBlockStore: blocks });
+    const reg = new BatchRegistry({ batchTtlMs: 1000 }, { contextBlockStore: blocks });
     reg.register(makeEntry('b8b', [bid]));
     expect(blocks.refcount(bid)).toBe(1);
     reg.complete('b8b', {});
@@ -56,20 +56,6 @@ describe('BatchRegistry context-block refcount pinning', () => {
     // second fail is no-op — refcount stays 0
     reg.fail('b9', { code: 'E', message: 'second' });
     expect(blocks.refcount(bid)).toBe(0);
-  });
-
-  it('clarification timeout sweep releases blocks', () => {
-    vi.useFakeTimers();
-    const blocks = new InMemoryContextBlockStore();
-    const { id: bid } = blocks.register('content');
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 1000 }, { contextBlockStore: blocks });
-    reg.register(makeEntry('b10', [bid], { state: 'awaiting_clarification', stateChangedAt: Date.now() }));
-    expect(blocks.refcount(bid)).toBe(1);
-    vi.advanceTimersByTime(2000);
-    reg.runClarificationTimeoutSweep();
-    expect(reg.get('b10')?.state).toBe('failed');
-    expect(blocks.refcount(bid)).toBe(0);
-    vi.useRealTimers();
   });
 
   it('register with no blockIds — no pin/unpin calls (no error)', () => {

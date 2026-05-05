@@ -95,7 +95,7 @@ describe('resolveCallerIdentity', () => {
     const known = [
       'mma-delegate', 'mma-audit', 'mma-review', 'mma-verify', 'mma-debug',
       'mma-execute-plan', 'mma-retry', 'mma-investigate',
-      'mma-context-blocks', 'mma-clarifications',
+      'mma-context-blocks',
     ];
     for (const skill of known) {
       const req = fakeReq({

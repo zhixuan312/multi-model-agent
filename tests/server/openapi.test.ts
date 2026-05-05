@@ -82,17 +82,16 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/retry');
     expect(paths).toContain('/explore');
 
-    // 4 control routes
+    // 3 control routes
     expect(paths).toContain('/batch/{batchId}');
     expect(paths).toContain('/context-blocks');
     expect(paths).toContain('/context-blocks/{blockId}');
-    expect(paths).toContain('/clarifications/confirm');
 
     // 2 introspection routes
     expect(paths).toContain('/health');
     expect(paths).toContain('/status');
 
-    // Total: 15 paths
-    expect(paths.length).toBe(15);
+    // Total: 14 paths
+    expect(paths.length).toBe(14);
   });
 });

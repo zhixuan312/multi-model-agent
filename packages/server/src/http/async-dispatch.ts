@@ -74,40 +74,6 @@ export function asyncDispatch<TResult>(
         const result = await opts.executor(ctx, batchId);
         const resultObj = result as Record<string, unknown> | undefined;
 
-        // Clarification gate: when the executor returns clarifications, park the
-        // batch in awaiting_clarification instead of completing it. The resolver
-        // re-runs the executor when the caller confirms their interpretation.
-        const clarifications = resultObj?.clarifications;
-        if (Array.isArray(clarifications) && clarifications.length > 0) {
-          const proposed = resultObj?.proposedInterpretation;
-          const proposal = typeof proposed === 'string' && proposed.length > 0
-            ? proposed
-            : 'clarification needed';
-          const entryNow = batchRegistry.get(batchId);
-          if (entryNow) {
-            entryNow.resolveClarification = (interpretation: string) => {
-              void (async () => {
-                try {
-                  const reResult = await opts.executor(ctx, batchId);
-                  const entryAfter = batchRegistry.get(batchId);
-                  if (entryAfter) entryAfter.tasksCompleted = 1;
-                  batchRegistry.complete(batchId, reResult);
-                  const reObj = reResult as { results?: unknown[] } | undefined;
-                  const taskCount = Array.isArray(reObj?.results) ? reObj.results.length : 0;
-                  deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, taskCount } as any);
-                } catch (err) {
-                  const message = err instanceof Error ? err.message : String(err);
-                  const stack = err instanceof Error ? err.stack : undefined;
-                  batchRegistry.fail(batchId, { code: 'executor_error', message, ...(stack !== undefined && { stack }) });
-                  deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, errorCode: 'executor_error', errorMessage: message } as any);
-                }
-              })();
-            };
-          }
-          batchRegistry.requestClarification(batchId, proposal);
-          return;
-        }
-
         const entryAfter = batchRegistry.get(batchId);
         if (entryAfter) entryAfter.tasksCompleted = 1;
         batchRegistry.complete(batchId, result);

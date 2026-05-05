@@ -22,23 +22,21 @@ describe('intake pipeline integration', () => {
   it('classifies clear task as ready', () => {
     const result = runIntakePipeline([makeDraft()], CONFIG);
     expect(result.ready).toHaveLength(1);
-    expect(result.clarifications).toHaveLength(0);
     expect(result.hardErrors).toHaveLength(0);
   });
 
-  it('classifies vague task as needing clarification', () => {
+  it('treats needs_confirmation as ready (no clarification gate)', () => {
     const result = runIntakePipeline([makeDraft({ prompt: 'fix it', done: undefined })], CONFIG);
-    expect(result.ready).toHaveLength(0);
-    expect(result.clarifications).toHaveLength(1);
+    expect(result.ready).toHaveLength(1);
   });
 
-  it('progress invariant: ready + clarification + error = total', () => {
+  it('progress invariant: ready + hardError = total', () => {
     const result = runIntakePipeline([
       makeDraft({ draftId: 'a:0:root', prompt: 'task 1' }),
       makeDraft({ draftId: 'b:0:root', prompt: 'fix it' }),
     ], CONFIG);
     const p = result.intakeProgress;
-    expect(p.readyDrafts + p.clarificationDrafts + p.hardErrorDrafts).toBe(p.totalDrafts);
+    expect(p.readyDrafts + p.hardErrorDrafts).toBe(p.totalDrafts);
   });
 
   it('handles empty input', () => {

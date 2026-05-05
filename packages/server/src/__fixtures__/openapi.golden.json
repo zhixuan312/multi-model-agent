@@ -148,7 +148,7 @@
         ],
         "responses": {
           "200": {
-            "description": "Batch state (pending | awaiting_clarification | complete | failed | expired)"
+            "description": "Batch state (pending | complete | failed | expired)"
           },
           "401": {
             "description": "Missing or invalid Bearer token"
@@ -158,50 +158,6 @@
           }
         },
         "summary": "Poll batch status",
-        "tags": [
-          "Control"
-        ]
-      }
-    },
-    "/clarifications/confirm": {
-      "post": {
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "batchId": {
-                    "type": "string"
-                  },
-                  "interpretation": {
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "batchId",
-                  "interpretation"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "200": {
-            "description": "Clarification accepted"
-          },
-          "400": {
-            "description": "Invalid batch state"
-          },
-          "401": {
-            "description": "Missing or invalid Bearer token"
-          },
-          "404": {
-            "description": "Resource not found"
-          }
-        },
-        "summary": "Confirm a proposed interpretation to unblock an awaiting_clarification batch",
         "tags": [
           "Control"
         ]

@@ -1,5 +1,4 @@
 import { InMemoryContextBlockStore } from './context/context-block-store.js';
-import { ClarificationStore } from './intake/clarification-store.js';
 import { BatchCache } from './batch-cache.js';
 
 export interface ProjectContext {
@@ -7,7 +6,6 @@ export interface ProjectContext {
   readonly contextBlocks: InMemoryContextBlockStore;
   /** Per-project terminal-only retention index; authoritative live-batch lookup is via BatchRegistry.countActiveForProject(cwd). */
   readonly batchCache: BatchCache;
-  readonly clarifications: ClarificationStore;
   readonly createdAt: number;
   /** Wall-clock ms of last activity on this project context (HTTP request, session attach/detach). */
   lastActivityAt: number;
@@ -24,7 +22,6 @@ export function createProjectContext(cwd: string): ProjectContext {
     cwd,
     contextBlocks: new InMemoryContextBlockStore(),
     batchCache: new BatchCache(),
-    clarifications: new ClarificationStore(),
     createdAt: now,
     lastActivityAt: now,
     activeSessions: new Set<string>(),

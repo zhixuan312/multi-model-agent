@@ -1,6 +1,6 @@
 import type { ToolCategory } from './routing/escalation-policy.js';
 
-export type BatchState = 'pending' | 'awaiting_clarification' | 'complete' | 'failed' | 'expired';
+export type BatchState = 'pending' | 'complete' | 'failed' | 'expired';
 
 export function isTerminal(s: BatchState): boolean {
   return s === 'complete' || s === 'failed' || s === 'expired';
@@ -37,8 +37,6 @@ export interface BatchEntryInput<Result = unknown> {
   result?: Result;
   error?: { code: string; message: string; stack?: string };
   proposedInterpretation?: string;
-  confirmedInterpretation?: string;
-  resolveClarification?: (interpretation: string) => void;
   startedAt: number;
   stateChangedAt: number;
   blockIds: string[];
@@ -64,7 +62,6 @@ export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
 }
 
 export interface BatchRegistryOptions {
-  clarificationTimeoutMs?: number;
   batchTtlMs?: number;
   max?: number;
 }
@@ -90,7 +87,6 @@ export class BatchRegistry {
 
   constructor(options: BatchRegistryOptions = {}, deps: BatchRegistryDeps = {}) {
     this.options = {
-      clarificationTimeoutMs: options.clarificationTimeoutMs ?? 24 * 60 * 60 * 1000,
       batchTtlMs: options.batchTtlMs ?? 60 * 60 * 1000,
       max: options.max ?? 200,
     };
@@ -168,46 +164,6 @@ export class BatchRegistry {
     entry.error = error;
     entry.stateChangedAt = Date.now();
     this.release(entry);
-  }
-
-  requestClarification(batchId: string, proposal: string): void {
-    const entry = this.map.get(batchId);
-    if (!entry) return;
-    if (entry.state !== 'pending') throw new InvalidBatchStateError(entry.state);
-    entry.state = 'awaiting_clarification';
-    entry.proposedInterpretation = proposal;
-    entry.stateChangedAt = Date.now();
-  }
-
-  resumeFromClarification(batchId: string, interpretation: string): void {
-    const entry = this.map.get(batchId);
-    if (!entry) return;
-    if (entry.state !== 'awaiting_clarification') {
-      // idempotency: if already resumed with THIS interpretation, no-op
-      if (entry.confirmedInterpretation === interpretation) return;
-      throw new InvalidBatchStateError(entry.state);
-    }
-    entry.confirmedInterpretation = interpretation;
-    entry.state = 'pending';
-    entry.stateChangedAt = Date.now();
-    const resolver = entry.resolveClarification;
-    entry.resolveClarification = undefined;
-    if (resolver) resolver(interpretation);
-  }
-
-  runClarificationTimeoutSweep(): void {
-    const now = Date.now();
-    for (const entry of this.map.values()) {
-      if (
-        entry.state === 'awaiting_clarification' &&
-        now - entry.stateChangedAt > this.options.clarificationTimeoutMs
-      ) {
-        entry.state = 'failed';
-        entry.error = { code: 'clarification_abandoned', message: 'Clarification not received within timeout' };
-        entry.stateChangedAt = now;
-        this.release(entry);
-      }
-    }
   }
 
   runExpirySweep(): void {

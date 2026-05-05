@@ -14,7 +14,6 @@ export const SUPPORTED_SKILLS = [
   'mma-execute-plan',
   'mma-retry',
   'mma-context-blocks',
-  'mma-clarifications',
   'mma-investigate',
   'mma-explore',
 ] as const;

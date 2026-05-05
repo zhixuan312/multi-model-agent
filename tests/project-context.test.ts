@@ -2,12 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { createProjectContext } from '../packages/core/src/project-context.js';
 
 describe('createProjectContext', () => {
-  it('initializes all three stores with the given cwd', () => {
+  it('initializes all stores with the given cwd', () => {
     const pc = createProjectContext('/tmp/abc');
     expect(pc.cwd).toBe('/tmp/abc');
     expect(pc.contextBlocks).toBeDefined();
     expect(pc.batchCache).toBeDefined();
-    expect(pc.clarifications).toBeDefined();
   });
 
   it('starts with empty counters and sets', () => {

@@ -14,7 +14,6 @@ export interface BatchHandlerDeps {
  *
  * Status split (Theme 7):
  *  - pending                → 202 text/plain — body is the runningHeadline
- *  - awaiting_clarification → 200 JSON uniform 7-field envelope with proposedInterpretation populated
  *  - complete/failed/expired → 200 JSON uniform 7-field envelope
  *
  * Optional ?taskIndex=N slices `results` on a complete envelope.
@@ -66,20 +65,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         : snap.fallback;
       res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
       res.end(headline);
-      return;
-    }
-
-    if (entry.state === 'awaiting_clarification') {
-      const reason = 'batch awaiting clarification';
-      sendJson(res, 200, {
-        headline: `awaiting clarification: ${entry.proposedInterpretation ?? ''}`.trim(),
-        results: notApplicable(reason),
-        batchTimings: notApplicable(reason),
-        costSummary: notApplicable(reason),
-        structuredReport: notApplicable(reason),
-        error: notApplicable(reason),
-        proposedInterpretation: entry.proposedInterpretation ?? notApplicable('clarification proposed but interpretation unavailable'),
-      });
       return;
     }
 

@@ -128,9 +128,6 @@ export { runIntakePipeline } from './intake/pipeline.js';
 export { classifyDraft } from './intake/classify.js';
 export { inferMissingFields } from './intake/infer.js';
 export { resolveDraft } from './intake/resolve.js';
-export { ClarificationStore } from './intake/clarification-store.js';
-export { processConfirmations } from './intake/confirm.js';
-export { getMaxRoundsPerDraft } from './intake/feature-flag.js';
 export { validateSource } from './intake/source-schema.js';
 export type {
   DraftTask,
@@ -142,27 +139,13 @@ export type {
   VerifySource,
   AuditSource,
   ExecutePlanSource,
-  StoredDraft,
-  ClarificationSet,
-  ConfirmationEntry,
-  ConfirmDraftError,
-  ConfirmResult,
   ClassificationResult,
-  ClarificationEntry,
   HardError,
   IntakeProgress,
   ReadyDraft,
   IntakeResult,
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
-
-// Test seams (gated: NODE_ENV=test AND MMAGENT_TEST_SEAMS=1)
-export {
-  __forceClarification,
-  __forceClarificationGlobal,
-  __clearForcedClarification,
-  __consumeForcedClarification,
-} from './intake/force-clarification.js';
 
 // Batch registry
 export * from './batch-registry.js';

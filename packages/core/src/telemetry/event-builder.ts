@@ -155,7 +155,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
-    clarificationRequested: runResult.lifecycleClarificationRequested ?? false,
+    clarificationRequested: false,
     briefQualityWarningCount: Math.min(runResult.briefQualityWarnings?.length ?? 0, 20),
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
     stages,

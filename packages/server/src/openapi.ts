@@ -132,7 +132,7 @@ export function buildOpenApiDoc(): Record<string, unknown> {
       }),
     },
     responses: {
-      200: { description: 'Batch state (pending | awaiting_clarification | complete | failed | expired)' },
+      200: { description: 'Batch state (pending | complete | failed | expired)' },
       401: response401,
       404: response404,
     },
@@ -176,32 +176,6 @@ export function buildOpenApiDoc(): Record<string, unknown> {
     responses: {
       200: { description: 'Block deleted (or was already absent)' },
       401: response401,
-    },
-  });
-
-  registry.registerPath({
-    method: 'post',
-    path: '/clarifications/confirm',
-    summary: 'Confirm a proposed interpretation to unblock an awaiting_clarification batch',
-    tags: ['Control'],
-    request: {
-      body: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: z.object({
-              batchId: z.string(),
-              interpretation: z.string(),
-            }),
-          },
-        },
-      },
-    },
-    responses: {
-      200: { description: 'Clarification accepted' },
-      400: { description: 'Invalid batch state' },
-      401: response401,
-      404: response404,
     },
   });
 
