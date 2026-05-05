@@ -46,6 +46,7 @@ export class RouteDispatcher {
       reviewPolicy: (input.rawRequest as any).reviewPolicy ?? 'full',
       shutdownInProgress: false,
       route: input.route,
+      toolCategory: input.toolCategory,
       request: input.rawRequest,
     };
   }

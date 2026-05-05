@@ -23,6 +23,7 @@ export interface LifecycleState {
   reviewPolicy: 'full' | 'quality_only' | 'diff_only' | 'none';
   shutdownInProgress: boolean;
   route?: string;
+  toolCategory?: ToolCategory;
   // Per-row verdict slots (cascade semantics — undefined as shorting token):
   specReviewRound1Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
   specReviewRound2Verdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';

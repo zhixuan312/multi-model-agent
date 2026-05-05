@@ -91,9 +91,9 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
       isRework: false, handlerKey: 'review_diff' },
 
     // Stage 5 — finalize (rows 5.1–5.5)
-    // 5.1: run_verify_command — fires when verifyCommandPresent (and route !== 'verify' which IS the verification)
+    // 5.1: run_verify_command — fires for artifact-producing tools only; verify_work IS the verification
     { rowId: '5.1', stageName: 'run_verify_command', schemaStage: 'verifying',
-      runCondition: (s) => (s as any).verifyCommandPresent === true && s.route !== 'verify' && !s.terminal,
+      runCondition: (s) => s.toolCategory === 'artifact_producing' && s.route !== 'verify' && !s.terminal,
       isRework: false, handlerKey: 'run_verify_command' },
     // 5.2: git_commit — fires when autoCommit + filesChanged + !readOnlyTask
     { rowId: '5.2', stageName: 'git_commit', schemaStage: 'committing',
