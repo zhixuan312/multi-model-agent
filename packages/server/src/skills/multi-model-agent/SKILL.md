@@ -165,11 +165,25 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 
 If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
+## Context block defaults
+
+| Default | Value | Notes |
+|---|---|---|
+| Idle TTL | 24 h | Block eligible for eviction after 24 h with no active batch references |
+| `maxEntries` | 500 | Per-project cap on total context blocks |
+| Body cap | 50 MiB | Maximum `content` size per block |
+
+Context blocks are immutable after creation. To update content, register a new block and switch `contextBlockIds` to the new ID.
+
+## Terminal context block
+
+Every completed task across all routes automatically registers a terminal markdown context block with the full task report. The `blockId` is in each task result as `terminalBlockId`. This block is immutable, lives for the session duration (or idle-evicts after 24 h), and counts against the `maxEntries` quota. Use `terminalBlockId` values in downstream `contextBlockIds` to chain findings across workflow steps without re-inlining report content. No caller action needed — blocks are registered server-side at task completion.
+
 ## General flow
 
 1. Call the matching `mma-*` skill → receive `{ batchId, statusUrl }`.
 2. Poll `GET /batch/:id`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
-3. Read `results` / `error` from the 7-field terminal envelope.
+3. Read `results` / `error` from the 6-field terminal envelope.
 
 ## Common pitfalls
 

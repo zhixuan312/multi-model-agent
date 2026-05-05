@@ -129,4 +129,15 @@ Inline docs lose the file boundary, so the per-file parallel split degenerates t
 ❌ **Re-auditing the same files round after round without delta context**
 Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 findings as a context block (`mma-context-blocks`) and pass `contextBlockIds` to round 2.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, annotated findings, and per-file audit notes). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass round-N audit findings to round N+1 via `contextBlockIds`
+- Feed audit results into a downstream `mma-delegate` fix step
+- Accumulate findings across iterative audit rounds
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

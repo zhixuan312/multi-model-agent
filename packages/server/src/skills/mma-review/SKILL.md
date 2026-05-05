@@ -130,4 +130,15 @@ If the reviewer needs to check the diff against a design doc, register the doc o
 ❌ **Skipping review because "I already read it"**
 Self-review and cross-model review are not the same thing. The whole reason to delegate is the different blind spots. Read the findings; merge what you agree with.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, annotated findings, and per-file review notes). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass round-N review findings to round N+1 via `contextBlockIds`
+- Feed review results into a downstream `mma-delegate` fix step
+- Accumulate findings across iterative review rounds
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

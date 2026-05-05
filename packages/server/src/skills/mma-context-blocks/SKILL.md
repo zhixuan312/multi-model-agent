@@ -45,8 +45,8 @@ Store large documents once; reference them by ID in subsequent `mma-*` calls via
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `content` | string | yes | Document content (min 1 char) |
-| `ttlMs` | number | no | Time-to-live in ms; omit for session-scoped (default 1h) |
+| `content` | string | yes | Document content (min 1 char, max 50 MiB) |
+| `ttlMs` | number | no | Time-to-live in ms; omit for idle-expiry (default 24 h idle). A block that is not referenced by any active batch for 24 h is eligible for eviction. |
 
 #### Response (201)
 
@@ -101,8 +101,8 @@ Anti-pattern alert: **`re-inlined-shared-content`** (AP3). Pasting the same spec
 
 N×50KB transmissions; main context burns through tokens. **Fix:** register the spec once, pass `contextBlockIds: ["cb_xxx"]` to each task.
 
-❌ **Forgetting to delete short-TTL blocks**
-Blocks count against the project's context-block quota. **Fix:** explicitly `DELETE` after the dependent batches finish — or set a short `ttlMs` so they self-evict.
+❌ **Forgetting to delete unused blocks**
+Blocks count against the project's context-block quota (`maxEntries` 500). **Fix:** explicitly `DELETE` after the dependent batches finish — or let idle expiry (24 h) evict them.
 
 ❌ **Trying to update a block's content**
 Blocks are immutable. **Fix:** register a new block with the new content; switch the `contextBlockIds` to the new ID.

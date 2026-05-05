@@ -133,4 +133,15 @@ Verify CHECKS work; it doesn't DO work. If a checklist item fails, dispatch `mma
 ❌ **Skipping verify because "tests pass"**
 Tests verify the test cases that exist. Verify checks the acceptance criteria — which often include things tests don't (docs updated, no debug-print left, etc.).
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, checklist item verdicts, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass verification results to a downstream `mma-delegate` fix step
+- Feed verify findings into a re-verify round after fixes are applied
+- Accumulate evidence across iterative verify-fix-verify cycles
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

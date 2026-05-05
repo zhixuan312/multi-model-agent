@@ -138,4 +138,15 @@ Debug investigates and proposes; it doesn't necessarily write the fix. **Fix:** 
 ❌ **Skipping when an error message looks self-explanatory**
 Often the obvious cause isn't the real one. **Fix:** a 30-second debug pass costs less than a wrong fix that breaks something else.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, root-cause analysis, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass debug findings to a downstream `mma-delegate` fix step
+- Feed the root-cause analysis into `mma-verify` for acceptance checking
+- Carry debug context forward through the debug → fix → verify chain
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

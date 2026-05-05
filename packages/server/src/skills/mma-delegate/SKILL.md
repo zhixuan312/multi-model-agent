@@ -109,4 +109,15 @@ N tasks × 50KB = N transmissions. **Fix:** register the doc once via `mma-conte
 ❌ **Reading the worker's diff inline before review**
 The reviewer sees the full diff with the original prompt as context. Reading inline burns main-context tokens for no quality gain.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, structured report, per-file diffs, and findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass a prior task's report to a follow-up task via `contextBlockIds`
+- Chain delegate → review → verify without re-inlining findings
+- Accumulate round-N findings for round N+1 in iterative workflows
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

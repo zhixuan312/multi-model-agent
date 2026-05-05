@@ -187,4 +187,10 @@ The worker still produced threads and a synthesis. Read them — partial coverag
 ❌ **Inline-research instead of delegating**
 About to run 3+ WebSearch + grep calls just to enumerate options? That's the wrong tradeoff — the worker searches on its cheap budget; you read its synthesis on yours.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, exploration threads, synthesis, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Use `terminalBlockId` in downstream `contextBlockIds` to chain findings across the explore → brainstorm → plan workflow without re-inlining content. The block is registered server-side at task completion; no caller action is needed. Delete explicitly via `DELETE /context-blocks/:id` when no longer needed.
+
 @include _shared/error-handling.md

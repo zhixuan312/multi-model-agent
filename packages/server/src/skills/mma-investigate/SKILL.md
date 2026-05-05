@@ -173,4 +173,15 @@ The worker still produced citations and a confidence level. Read them — partia
 ❌ **Inline-reading instead of delegating**
 About to `Read` 3+ files just to answer one question? That's the wrong tradeoff — the worker reads on its cheap budget; you read its synthesis on yours.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, investigation synthesis, citations, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass investigation results to a downstream planning step
+- Feed codebase findings into `mma-execute-plan` as shared context
+- Carry investigation context forward through the investigate → plan → execute chain
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
+
 @include _shared/error-handling.md

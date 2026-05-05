@@ -18,7 +18,7 @@ The HTTP status is the state discriminator:
 | `200 application/json` | Terminal — body is the uniform 7-field envelope below |
 | `404` / `401` / `5xx` | Error — see Error response below; stop polling |
 
-The terminal JSON envelope always has these 7 fields. Each may be a real value or a `not_applicable` sentinel:
+The terminal JSON envelope always has these 6 fields. Each may be a real value or a `not_applicable` sentinel:
 
 ```json
 {
@@ -27,21 +27,20 @@ The terminal JSON envelope always has these 7 fields. Each may be a real value o
   "batchTimings": { /* timings */ },
   "costSummary": { /* cost roll-up */ },
   "structuredReport": { /* parsed sections */ },
-  "error": { "kind": "not_applicable", "reason": "batch succeeded" },
-  "proposedInterpretation": { "kind": "not_applicable", "reason": "batch not awaiting clarification" }
+  "error": { "kind": "not_applicable", "reason": "batch succeeded" }
 }
 ```
 
-Read the envelope by the shape of `error` and `proposedInterpretation`:
+Read the envelope by the shape of `error`:
 
 | Shape | Meaning |
 |---|---|
 | `error` is a real object (with `code` / `message`) | Batch failed — read `error.code` + `error.message` |
-| Both are `{kind: "not_applicable", ...}` sentinels | Batch succeeded — read `results` |
+| `error` is `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
 
 ### GET /batch/:id?taskIndex=N — single task slice
 
-Same 7-field envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
+Same 6-field envelope. `results` contains exactly the task at index `N`. Returns `404 unknown_task_index` if `N` is out of range.
 
 ### Error response (4xx / 5xx)
 

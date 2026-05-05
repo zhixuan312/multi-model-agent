@@ -103,4 +103,10 @@ Retry produces a NEW batchId; polling the original returns the old terminal stat
 ❌ **Using retry to change task config**
 Retry preserves the ORIGINAL config (prompt, agentType, filePaths, reviewPolicy). **Fix:** if you want different config, re-dispatch with `mma-delegate` / `mma-execute-plan`.
 
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report. The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Note: the retry batch produces its own terminal context blocks for each re-run task. The original batch's terminal context blocks remain intact and are not overwritten.
+
 @include _shared/error-handling.md
