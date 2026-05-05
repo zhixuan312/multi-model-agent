@@ -75,6 +75,13 @@ export interface LifecycleState {
   specChainPassed?: boolean;
   qualityChainPassed?: boolean;
 
+  // Per-chain attempt counters for telemetry parity with reviewed-lifecycle.ts
+  // (specAttemptIndex / qualityAttemptIndex). Populated by review-round handlers
+  // when they call pickEscalation. Quality starts at 1 because attemptIndex 0
+  // has impl: null in the quality loop and pickEscalation would throw.
+  specChainAttemptIndex?: number;
+  qualityChainAttemptIndex?: number;
+
   // Dispatcher / executor wiring (populated by prepare_execution_context and
   // run_initial_impl; consumed by compose_response):
   executor?: (rawRequest: unknown, state: LifecycleState) => Promise<unknown>;

@@ -2,6 +2,14 @@ import type { StageHandler } from './lifecycle-driver.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import { runVerifyCommandHandler } from './handlers/run-verify-command-handler.js';
 import { gitCommitHandler } from './handlers/git-commit-handler.js';
+import {
+  specReviewRound1Handler,
+  specReviewRound2Handler,
+  specReviewRound3Handler,
+  specReworkRound1Handler,
+  specReworkRound2Handler,
+  settleSpecChainHandler,
+} from './handlers/spec-chain-handlers.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -82,14 +90,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     check_files_written: noop,
 
     // Stage 4 — Spec + quality + diff review chains
-    // The executor (via reviewed-lifecycle.ts) runs all review rounds today.
-    // These rows reserve the keys for future per-round decomposition.
-    spec_review_round_1: noop,
-    rework_for_spec_round_1: noop,
-    spec_review_round_2: noop,
-    rework_for_spec_round_2: noop,
-    spec_review_round_3: noop,
-    settle_spec_chain: noop,
+    //
+    // Spec chain (rows 4.1–4.6) wired to real handlers in spec-chain-handlers.ts.
+    // Each handler is idempotent on its verdict slot and defensive-no-ops on
+    // missing state.task / state.executionContext / state.lastRunResult so the
+    // legacy executor still owns the chain in production until Step 5 lands
+    // the per-task data flow.
+    spec_review_round_1: specReviewRound1Handler,
+    rework_for_spec_round_1: specReworkRound1Handler,
+    spec_review_round_2: specReviewRound2Handler,
+    rework_for_spec_round_2: specReworkRound2Handler,
+    spec_review_round_3: specReviewRound3Handler,
+    settle_spec_chain: settleSpecChainHandler,
     quality_review_round_1: noop,
     rework_for_quality_round_1: noop,
     quality_review_round_2: noop,
