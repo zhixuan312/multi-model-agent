@@ -7,7 +7,7 @@
 //     filesWritten, toolCalls, outputIsDiagnostic, escalationLog
 //   - Stage-specific optional fields: terminationReason, specReviewStatus,
 //     qualityReviewStatus, workerStatus, etc.
-//   - Usage: { inputTokens, outputTokens, totalTokens, costUSD | null }
+//   - Usage: { inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens }
 
 import type {
   Provider,
