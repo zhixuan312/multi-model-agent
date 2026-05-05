@@ -5,6 +5,45 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.0] - 2026-05-04
+
+Major release: structural rebuild of the labor substrate. Same product surface as 3.12 minus the deliberate clarification removal; all callers must migrate per the Breaking changes list below.
+
+### Breaking changes
+
+- **`reviewPolicy` closed to 4 values:** `'full' | 'quality_only' | 'diff_only' | 'none'`. Removed `'spec_only'` and `'off'`. Callers using `'off'` should send `'none'`; callers using `'spec_only'` should send `'full'` (note: `'full'` runs both spec and quality reviews).
+- **`agentType` closed enum:** `'standard' | 'complex'`. Free-form values are rejected at HTTP/Zod with HTTP 400.
+- **`tier` labor-tier enum closed:** `'standard' | 'complex'`. `'main'` removed (kept only as a caller-role concept on `mainAgentModel`).
+- **`workerStatus` rename:** `'review_loop_aborted'` → `'review_loop_capped'`.
+- **`mainModelFamily` drops `'gpt-5'`:** family value is `'gpt'`; `'gpt-5'` is a model id.
+- **errorCode renames:** `verify_command_error` → `validator_verify_command_failed`; `dirty_worktree` → `validator_dirty_worktree`. Removed orphan `lifecycle_round_cap_exceeded`.
+- **errorCode dropped:** `intake_clarification_expired` (clarification flow removed).
+- **Token shape: 5 fields → 4.** `cachedCreationTokens` → `cachedNonReadTokens`; `reasoningTokens` removed (folded into `outputTokens`). Canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`.
+- **Wire field rename:** internal `mainModel*` ↔ wire `parentModel*`. Telemetry SCHEMA_VERSION bumped to 4.
+- **Annotator field rename:** `reviewerConfidence` → `annotatorConfidence`.
+- **Routes:** added `register-context-block`. Removed `confirm-clarifications`.
+- **Skills:** removed `mma-clarifications`. Re-installing the skill set actively cleans up orphan skill files.
+- **Defaults:** Context-block TTL 30 min absolute → 24 h idle (resets on `get()`); `maxEntries` 100 → 500; HTTP body cap 50 MiB hard `413`.
+- **Removed clarification flow** entirely (`ClarificationTool`, `ClarificationToken`, clarification-resume protocol, clarification-pause state, `proposedInterpretation` envelope field).
+
+### Internal changes (no caller impact)
+
+- **Architecture:** restructured into common-library sub-groups + tool slot fillers over a shared framework.
+- **Runner substrate:** `RunnerShell` + 3 thin adapters replaces three parallel runner files.
+- **Lifecycle:** `StagePlan` declarative + `LifecycleDriver` iterates predicates — no inline branching. `ReworkLoopDriver`, `RequestPipeline`, `AttemptRecorder`, `TelemetryFlushWorker`, `ReadinessClassifier`, `EffortInferer`, `CrossTierGuard` removed (subsumed or unneeded).
+- **Reviews:** `ReviewerEngine` (gating reviews) and `AnnotatorEngine` (annotation passes) split.
+- **Telemetry:** unified `EventEmitter` → three channels (`CallerResponseChannel`, `VerboseLogChannel`, `TelemetryChannel`). Deprecated-fields constants emitted on the wire for backend back-compat.
+- **Tests:** 2969 passing (356 files).
+
+### Backend compatibility
+
+The wire payload remains compatible with the existing telemetry backend. Deprecated fields are emitted as constants for back-compat:
+- `capabilities: []`
+- `clarificationRequested: false`
+- `briefQualityWarningCount: 0`
+
+The wire schema's `triggeringSkill` field is omitted by the daemon (optional in v4 wire schema; daemon never emits it).
+
 ## [3.12.7] - 2026-05-04
 
 ### Fixed
