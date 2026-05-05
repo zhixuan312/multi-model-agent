@@ -175,7 +175,7 @@ describe('runVerifyStage', () => {
     }
   });
 
-  it('INVARIANT 5: without permittedEnv, full parent env is inherited (backward compat)', async () => {
+  it('INVARIANT 5: without permittedEnv, full parent env is inherited (default behavior)', async () => {
     process.env.MMA_TEST_VAR = 'value-from-parent';
     try {
       const r = await runVerifyStage({

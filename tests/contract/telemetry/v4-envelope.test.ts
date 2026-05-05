@@ -78,7 +78,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     client: 'claude-code',
     agentType: 'standard' as const,
     toolMode: 'full' as const,
-    capabilities: [] as string[],
+    capabilities: [] as Array<'web_search' | 'web_fetch'>,
     reviewPolicy: route === 'delegate' ? 'full' as const : 'quality_only' as const,
     verifyCommandPresent: route === 'verify',
     implementerModel: 'claude-sonnet',
@@ -102,8 +102,6 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     fallbackCount: 0,
     stallCount: 0,
     taskMaxIdleMs: 0,
-    clarificationRequested: false,
-    briefQualityWarningCount: 0,
     sandboxViolationCount: 0,
     stages,
     ...overrides,
@@ -125,7 +123,7 @@ function getDefaultStages(route: string) {
   return stages;
 }
 
-describe('V3 envelope contract', () => {
+describe('V4 envelope contract', () => {
   it('delegate happy path (full review, 5 stages)', () => {
     const event = makeEvent('delegate');
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);

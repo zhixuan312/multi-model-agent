@@ -78,8 +78,6 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     fallbackCount: 0,
     stallCount: 0,
     taskMaxIdleMs: 5000,
-    clarificationRequested: false,
-    briefQualityWarningCount: 0,
     sandboxViolationCount: 0,
     stages: [
       {

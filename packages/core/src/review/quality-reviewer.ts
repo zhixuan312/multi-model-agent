@@ -16,8 +16,8 @@ export { fallbackExtractFindings } from './fallback-extraction.js';
  * - 'error' — reviewer crashed, output unparseable, or id-set mismatch with worker.
  * - 'skipped' — kill switch, no provider, or worker emitted no findings (nothing to annotate).
  *
- * The legacy gating-style fields (`findings: string[]`, `report: ParsedStructuredReport`) are kept
- * on the result for the artifact-route path which still uses the gating model.
+ * The artifact-route gating-style fields (`findings: string[]`, `report: ParsedStructuredReport`)
+ * carry the gating signal for delegate / execute_plan; read-only routes use `annotatedFindings`.
  */
 /**
  * Unified quality-review result. The status discriminates which fields are

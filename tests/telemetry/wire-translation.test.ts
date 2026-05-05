@@ -15,13 +15,6 @@ describe('TelemetryChannel wire-translation', () => {
     expect((wire as any).mainModelFamily).toBeUndefined();
   });
 
-  it('emits deprecated-fields constants for SCHEMA_VERSION 4 back-compat', () => {
-    const wire = buildWirePayload({});
-    expect(wire.capabilities).toEqual([]);
-    expect(wire.clarificationRequested).toBe(false);
-    expect(wire.briefQualityWarningCount).toBe(0);
-  });
-
   it('wire payload validates against WireTelemetryRecord schema', () => {
     const internal = {
       mainModel: 'claude-sonnet-4-5',

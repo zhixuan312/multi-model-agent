@@ -55,7 +55,6 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        // Map new wire input shape to legacy executor input shape
         return executeExecutePlan(executionCtx, {
           tasks: input.taskDescriptors,
           filePaths: input.filePaths,

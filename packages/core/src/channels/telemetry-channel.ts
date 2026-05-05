@@ -10,12 +10,6 @@ export class TelemetryChannel {
   }
 
   private toWire(internal: Record<string, unknown>): Record<string, unknown> {
-    return {
-      ...internal,
-      capabilities: [],
-      clarificationRequested: false,
-      briefQualityWarningCount: 0,
-      triggeringSkill: null,
-    };
+    return { ...internal };
   }
 }

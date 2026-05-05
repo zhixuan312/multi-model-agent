@@ -23,9 +23,9 @@ export interface VerifyStageInput {
   taskTimeoutMs: number;
   taskStartMs: number;
   /** Env-var names to forward to the child process. When undefined, the child
-   *  inherits the full parent environment (backward-compatible). When provided,
-   *  only those named vars (plus a few essential implicit ones: PATH, HOME,
-   *  SHELL, TMPDIR, LANG) are forwarded — secrets and unknown vars are excluded. */
+   *  inherits the full parent environment. When provided, only those named vars
+   *  (plus a few essential implicit ones: PATH, HOME, SHELL, TMPDIR, LANG) are
+   *  forwarded — secrets and unknown vars are excluded. */
   permittedEnv?: string[];
   /** When true, runs `git status --porcelain` in cwd after verification and
    *  populates `dirtyFiles` with any modified/new paths. */

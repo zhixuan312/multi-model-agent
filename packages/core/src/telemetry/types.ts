@@ -207,8 +207,6 @@ export const TaskCompletedEventSchema = z.object({
   // Operational signals
   stallCount: z.number().int().min(0).max(20),
   taskMaxIdleMs: z.number().int().min(0).max(1_200_000),
-  clarificationRequested: z.boolean(),
-  briefQualityWarningCount: z.number().int().min(0).max(20),
   sandboxViolationCount: z.number().int().min(0).max(100),
 
   // Stages array
@@ -367,15 +365,11 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
 
 // ── Wire-telemetry record (§3.5) ─────────────────────────────────────────
 // Validates the wire shape emitted by buildWirePayload (internal→wire translation).
-// Internal records carry mainModel*; the wire carries parentModel* + deprecated-fields constants.
+// Internal records carry mainModel*; the wire carries parentModel*.
 
 export const WireTelemetryRecordSchema = z.object({
   parentModel: z.string().nullable(),
   parentModelFamily: ModelFamilyEnum,
-  // SCHEMA_VERSION 4 deprecated-fields constants (back-compat for backend ingestion)
-  capabilities: z.array(z.enum(['web_search', 'web_fetch', 'other'])).length(0),
-  clarificationRequested: z.literal(false),
-  briefQualityWarningCount: z.literal(0),
 }).passthrough();
 
 // ── Inferred TS types ────────────────────────────────────────────────────

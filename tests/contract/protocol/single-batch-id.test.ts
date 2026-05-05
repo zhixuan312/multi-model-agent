@@ -24,8 +24,8 @@ describe('single batchId namespace (T4)', () => {
   });
   afterAll(async () => { await server.stop(); });
 
-  it('/retry accepts the same batchId returned by /tools/delegate', async () => {
-    const dispatch = await fetch(`${server.url}/tools/delegate?cwd=${process.cwd()}`, {
+  it('/retry accepts the same batchId returned by /delegate', async () => {
+    const dispatch = await fetch(`${server.url}/delegate?cwd=${process.cwd()}`, {
       method: 'POST', headers: { 'Authorization': `Bearer ${server.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [{ prompt: 'echo hi' }] })
     });

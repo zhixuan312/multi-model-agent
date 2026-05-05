@@ -100,13 +100,6 @@ export function manifestPath(homeDir?: string): string {
 
 // ─── Low-level I/O ───────────────────────────────────────────────────────────
 
-interface V1Entry {
-  name: string;
-  version: string;
-  installedAt: number;
-  targets: ClientValue[];
-}
-
 function backupCorrupted(p: string): string {
   const backup = `${p}.bak-${Date.now()}`;
   try { fs.renameSync(p, backup); } catch { /* ignore — best effort */ }
@@ -153,35 +146,7 @@ function readManifest(homeDir?: string): InstallManifest {
     return result.data;
   }
 
-  // v1 (legacy) — migrate to v2.
-  // v1 entries have `version` (skill version) instead of `skillVersion`.
-  if (
-    parsedVersion === 1 ||
-    (parsedVersion === undefined && parsed !== null && typeof parsed === 'object' && 'entries' in parsed)
-  ) {
-    const v1Entries = Array.isArray((parsed as { entries?: unknown }).entries)
-      ? ((parsed as { entries: unknown[] }).entries as V1Entry[])
-      : [];
-    const migrated: InstallManifest = {
-      version: 2,
-      entries: v1Entries
-        .filter((e) => e && typeof e === 'object' && typeof e.name === 'string')
-        .map((e) => ({
-          name: e.name,
-          skillVersion: typeof e.version === 'string' && e.version.length > 0 ? e.version : 'unknown',
-          installedAt: typeof e.installedAt === 'number' ? e.installedAt : 0,
-          targets: Array.isArray(e.targets)
-            ? e.targets.filter((t): t is ClientValue => (['claude-code', 'gemini', 'codex', 'cursor'] as const).includes(t as ClientValue))
-            : [],
-        })),
-    };
-    // Persist the migration so subsequent reads skip it.
-    writeManifest(migrated, homeDir);
-    process.stderr.write(`[mmagent] install-manifest.json migrated v1 → v2\n`);
-    return migrated;
-  }
-
-  // Unknown shape — back up and rebuild empty.
+  // Unrecognized shape (or pre-v2 manifest from an older mmagent) — back up and rebuild empty.
   const backup = backupCorrupted(p);
   process.stderr.write(`[mmagent] manifest unrecognized; rebuilt empty v2 (previous copy at ${backup})\n`);
   const empty = emptyManifest();

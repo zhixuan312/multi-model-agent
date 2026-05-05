@@ -18,6 +18,5 @@
   "POST /register-context-block",
   "POST /retry",
   "POST /review",
-  "POST /tools/delegate",
   "POST /verify"
 ]

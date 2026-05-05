@@ -48,7 +48,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
   '/control/retry', '/control/batch-slice', '/context-blocks', '/register-context-block',
 ]);
 
@@ -126,7 +126,6 @@ async function registerToolHandlers(
   const exploreHandler = buildExploreHandler(deps);
 
   router.register('POST', '/delegate', delegateHandler);
-  router.register('POST', '/tools/delegate', delegateHandler);
   router.register('POST', '/audit', auditHandler);
   router.register('POST', '/review', reviewHandler);
   router.register('POST', '/verify', verifyHandler);

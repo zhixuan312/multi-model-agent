@@ -95,9 +95,9 @@ describe('manifest', () => {
       fs.writeFileSync(
         manifestFile,
         JSON.stringify({
-          version: 1,
+          version: 2,
           entries: [
-            { name: 'mma-delegate', version: '1.0.0', installedAt: 1000, targets: ['claude-code'] },
+            { name: 'mma-delegate', skillVersion: '4.0.0', installedAt: 1000, targets: ['claude-code'] },
           ],
         }),
         'utf-8',

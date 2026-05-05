@@ -196,8 +196,6 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       fallbackCount: 0,
       stallCount: 0,
       taskMaxIdleMs: 0,
-      clarificationRequested: false,
-      briefQualityWarningCount: 0,
       sandboxViolationCount: 0,
       stages: [] as any[],
     };
@@ -241,8 +239,6 @@ describe('Test 13 — R2.1 rejects empty stages for unavailable', () => {
       fallbackCount: 1,
       stallCount: 0,
       taskMaxIdleMs: 0,
-      clarificationRequested: false,
-      briefQualityWarningCount: 0,
       sandboxViolationCount: 0,
       stages: [
         {

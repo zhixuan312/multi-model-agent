@@ -164,20 +164,14 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 
 /**
  * Translates an internal telemetry record (mainModel*) into the v4 wire shape
- * (parentModel* + deprecated-fields constants). Single point of wire translation.
+ * (parentModel*). Single point of wire translation.
  */
 export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
   const wire: Record<string, unknown> = {
     ...internalRecord,
-    // Wire-rename: internal mainModel* -> wire parentModel*
     parentModel: internalRecord.mainModel,
     parentModelFamily: internalRecord.mainModelFamily,
-    // SCHEMA_VERSION 4 deprecated-fields constants (back-compat for backend ingestion)
-    capabilities: [],
-    clarificationRequested: false,
-    briefQualityWarningCount: 0,
   };
-  // Strip internal-only fields the wire should not carry
   delete wire.mainModel;
   delete wire.mainModelFamily;
   return wire as unknown as WireTelemetryRecord;

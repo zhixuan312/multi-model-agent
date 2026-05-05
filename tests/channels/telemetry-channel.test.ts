@@ -11,11 +11,4 @@ describe('TelemetryChannel', () => {
     expect(uploaded[0].taskIndex).toBe(0);
   });
 
-  it('emits deprecated-fields constants', async () => {
-    const uploaded: any[] = [];
-    const ch = new TelemetryChannel({ upload: async (p) => { uploaded.push(p); } });
-    await ch.emitTaskBundle({ taskIndex: 0 });
-    expect(uploaded[0].capabilities).toEqual([]);
-    expect(uploaded[0].clarificationRequested).toBe(false);
-  });
 });
