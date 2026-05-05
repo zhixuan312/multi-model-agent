@@ -20,8 +20,7 @@ Each stage decomposes into sub-layers that always run in this order. The pipelin
 Stage 1 — INGRESS  (HTTP boundary)
   1.1  Transport          server/src/http/{server,router,loopback}.ts
   1.2  Authentication     server/src/http/auth.ts
-  1.3  Validation         server/src/http/{cwd-validator,cross-tier-guard,
-                          canonicalize-file-paths}.ts
+  1.3  Validation         server/src/http/{cwd-validator,canonicalize-file-paths}.ts
   1.4  Context binding    server/src/http/{project-registry,handler-deps,
                           request-pipeline,request-observability}.ts +
                           core/src/executors/execution-context.ts
@@ -29,10 +28,8 @@ Stage 1 — INGRESS  (HTTP boundary)
 Stage 2 — INTAKE  (interpret request → executable plan)
   2.1  Pipeline entry     core/src/intake/pipeline.ts
   2.2  Per-route compile  core/src/intake/compilers/<tool>.ts        ← vertical slice point
-  2.3  Quality assessment core/src/readiness/readiness.ts, intake/classify.ts
-  2.4  Inference          core/src/intake/{infer,resolve}.ts, effort-inference.ts
-  2.5  Clarification gate core/src/intake/{clarification-store,force-clarification,
-                          confirm}.ts
+  2.3  Brief classification core/src/intake/classify.ts
+  2.4  Inference          core/src/intake/{infer,resolve}.ts
 
 Stage 3 — DISPATCH  (pick agent, run implementer, supervise)
   3.1  Agent resolution   core/src/routing/{resolve-agent,model-profiles,
@@ -61,9 +58,9 @@ Stage 4 — REVIEW  (cross-agent verdict + rework)
 Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
   5.1  Output parsing     core/src/reporting/{structured-report,
                           parse-investigation-report,parse-explore-report}.ts
-  5.2  Status derivation  core/src/run-tasks/{derive-terminal-status,
-                          worker-status}.ts +
-                          reporting/derive-{explore,investigate}-status.ts
+  5.2  Status derivation  core/src/run-tasks/worker-status.ts +
+                          reporting/{terminal-status-deriver,
+                          derive-explore-status,derive-investigate-status}.ts
   5.3  Headline           core/src/reporting/compose-{terminal,running,explore,
                           investigate}-headline.ts, not-applicable.ts
   5.4  Telemetry emit     core/src/telemetry/{event-builder,normalize,clamp,
@@ -75,7 +72,7 @@ Stage 5 — REPORTING  (parse, derive, compose, persist, emit)
                           run-tasks/commit-stage.ts, auto-commit.ts
 ```
 
-Stages 3+4+5 are gated by each task's `reviewPolicy` (`full | spec_only | quality_only | diff_only | off`). Read-only presets set `quality_only` or `off`; artifact-producing presets keep `full`. The lifecycle inspects the policy and skips stages accordingly — there is no parallel "lite" lifecycle.
+Stages 3+4+5 are gated by each task's `reviewPolicy` (`full | quality_only | diff_only | none`). Read-only presets set `quality_only` or `none`; artifact-producing presets keep `full`. The lifecycle inspects the policy and skips stages accordingly — there is no parallel "lite" lifecycle.
 
 ## Vertical axis — the tool stack
 
@@ -110,7 +107,6 @@ Per-tool fill of the stack:
 | `retry_tasks` | replay prior batch | — | mma-retry |
 | `register_context_block` | state-only (no executor) | — | mma-context-blocks |
 | `get_batch_slice` | state-only | — | (used internally by mma-* skills) |
-| `confirm_clarifications` | state-only | — | mma-clarifications |
 
 Two invariants the layered stack enforces:
 
@@ -123,10 +119,10 @@ These layers underlie every stage and every tool. They aren't on either axis; th
 
 ```
 C.1  Identity & sandboxing      core/src/auth/{claude,codex}-oauth.ts,
-                                server/src/http/auth.ts, cross-tier-guard.ts,
+                                server/src/http/auth.ts,
                                 cwd-validator.ts, loopback.ts
 C.2  Bounded execution           core/src/cost/cost-meter.ts, heartbeat.ts,
-                                effort-inference.ts, escalation/{policy,fallback}.ts,
+                                escalation/{policy,fallback}.ts,
                                 file-artifact-check.ts, error-codes.ts
 C.3  Provider abstraction        core/src/provider.ts,
                                 runners/base/{types,result-builders,research-tools,
@@ -144,8 +140,7 @@ C.5  Telemetry & observability   core/src/telemetry/{event-builder,normalize,cla
                                 diagnostics/{jsonl-writer,http-server-log,
                                 request-spill,verbose-line}.ts
 C.6  State stores (in-process)   core/src/{project-context,batch-registry,
-                                batch-cache}.ts, context/context-block-store.ts,
-                                intake/clarification-store.ts
+                                batch-cache}.ts, context/context-block-store.ts
 C.7  Distribution                server/src/install/{claude-code,cursor,codex-cli,
                                 gemini-cli,discover,manifest,manifest-resolve,
                                 missing-skills,orchestrate,headers,notify,
@@ -162,7 +157,7 @@ Each provider runner calls into a `RunnerAdapter<ProviderTurn, ProviderUsage>` i
 ## Request lifecycle (concrete trace)
 
 1. **Ingress** — `server/src/http/server.ts` routes `POST /<tool>?cwd=<abs>` to a handler. Handlers reserve a `ProjectContext` per cwd and build an `ExecutionContext` via `core/src/executors/execution-context.ts`.
-2. **Intake** — `core/src/intake/pipeline.ts` compiles raw input into `DraftTask[]`, classifies brief quality, and decides whether to emit a clarification proposal. Route compilers live under `intake/compilers/`.
+2. **Intake** — `core/src/intake/pipeline.ts` compiles raw input into `DraftTask[]` and classifies brief quality. Route compilers live under `intake/compilers/`. v4.0 removed the clarification gate; ambiguous briefs proceed with the most likely interpretation.
 3. **Dispatch** — `core/src/run-tasks/index.ts::runTasks` drives each task through `reviewed-lifecycle.ts`, which calls `execute-task.ts` → `delegate-with-escalation.ts`. The escalation orchestrator picks a provider via `routing/resolve-agent.ts` and invokes `Provider.run(prompt, options)`, collecting `AttemptRecord`s.
 4. **Review** — `reviewed-lifecycle.ts` runs spec review, quality review, and (when applicable) diff review per the task's `reviewPolicy`, looping rework until approved, plateaued, or capped.
 5. **Reporting** — Results are aggregated into the uniform 7-field envelope (`ExecutorOutput`), telemetry events emitted via the observability bus, and the result stored in `BatchRegistry` for retrieval via `GET /batch/:id`.
@@ -196,6 +191,10 @@ Old path → new path map (for readers coming from pre-3.2.0):
 | `packages/mcp/` | Deleted. All MCP-layer concerns now live under `packages/server/` (HTTP service) + `packages/server/src/skills/` (distributed skill markdown) |
 | `ExecutionContext.providerFactory`, `.onProgress`, `.awaitClarification` | Deleted — all three were dead fields. `ExecutionContext` now has 7 fields; construction goes through `executors/execution-context.ts::buildExecutionContext` |
 | `buildXOkResult` / `buildXIncompleteResult` / `buildXForceSalvageResult` / `buildXMaxTurnsExitResult` duplicated across three runners | Shared builders in `runners/base/result-builders.ts`; runners pass pre-normalized usage. Adapter interface at `runners/base/types.ts` |
+| Clarification flow (`intake/{clarification-store,force-clarification,confirm}.ts`, `confirm_clarifications` route, `mma-clarifications` skill) | Deleted in v4.0. Intake routes ambiguous briefs by picking the most likely interpretation. `proposedInterpretation` is no longer in the response envelope |
+| `readiness/readiness.ts`, `effort-inference.ts`, `cross-tier-guard.ts` | Removed. Brief classification lives in `intake/classify.ts`; effort flows from intake/dispatch directly |
+| 5-field `TokenUsage` (`cachedCreationTokens`, `reasoningTokens`, …) | 4-field canonical shape: `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}`. `outputTokens` includes reasoning. SCHEMA_VERSION bumped to 4 |
+| `reviewPolicy` values `'spec_only'` / `'off'` | Removed. Closed enum is `'full' | 'quality_only' | 'diff_only' | 'none'` |
 
 Where to add:
 
