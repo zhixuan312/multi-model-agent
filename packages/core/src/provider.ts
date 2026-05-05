@@ -1,6 +1,11 @@
-import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig, ReviewPromptParts, ReviewRunOptions } from './types.js';
+import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig } from './types.js';
 import type { RunOptions } from './runners/types.js';
-import type { OpenAIRunnerOptions } from './runners/openai-runner.js';
+import { RunnerShell } from './runner-shell/shell.js';
+import { AnthropicMessagesAdapter } from './runner-shell/adapters/anthropic-messages.js';
+import { OpenAIChatAdapter } from './runner-shell/adapters/openai-chat.js';
+import { OpenAIResponsesAdapter } from './runner-shell/adapters/openai-responses.js';
+import { makeToolDefinitions } from './runner-shell/tool-definitions.js';
+import type { RunnerAdapter } from './runner-shell/adapter.js';
 
 let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
@@ -21,9 +26,55 @@ export function __setCoreTestProviderOverrideMap(map: Map<string, Provider> | nu
   coreTestProviderOverrideMap = map;
 }
 
+function buildAdapter(agentConfig: {
+  type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex';
+  model: string;
+  baseUrl?: string;
+  apiKey?: string;
+  apiKeyEnv?: string;
+}): RunnerAdapter {
+  const apiKey = agentConfig.apiKey
+    ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
+  const maxOutputTokens = 4096;
+
+  switch (agentConfig.type) {
+    case 'claude':
+    case 'claude-compatible':
+      return new AnthropicMessagesAdapter({
+        apiKey: apiKey || 'not-needed',
+        baseURL: agentConfig.baseUrl,
+        model: agentConfig.model,
+        maxOutputTokens,
+        providerType: agentConfig.type,
+      });
+    case 'openai-compatible':
+      return new OpenAIChatAdapter({
+        apiKey: apiKey || 'not-needed',
+        baseURL: agentConfig.baseUrl,
+        model: agentConfig.model,
+        maxOutputTokens,
+        providerType: 'openai-compatible',
+      });
+    case 'codex':
+      return new OpenAIResponsesAdapter({
+        apiKey: apiKey || 'not-needed',
+        baseURL: agentConfig.baseUrl,
+        model: agentConfig.model,
+        maxOutputTokens,
+      });
+  }
+}
+
+const SYSTEM_PROMPT = [
+  'You are a software engineering agent with access to file-system and shell tools.',
+  'Work step-by-step. Read files before editing them.',
+  'When you have completed the task, produce a final answer summarizing what you did.',
+].join('\n');
+
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
   if (coreTestProviderOverrideMap?.has(slot)) return coreTestProviderOverrideMap.get(slot)!;
   if (coreTestProviderOverride) return coreTestProviderOverride;
+
   const agentConfig = config.agents[slot];
   if (!agentConfig) {
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);
@@ -34,41 +85,50 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
 
   const run = async (prompt: string, options: RunOptions = {}): Promise<RunResult> => {
     try {
-      switch (agentConfig.type) {
-        case 'codex': {
-          const { runCodex } = await import('./runners/codex-runner.js');
-          return await runCodex(prompt, options, providerConfig, defaults);
-        }
+      const cwd = options.cwd ?? process.cwd();
+      const toolMode = options.tools ?? defaults.tools ?? 'full';
+      const maxTurns = 50;
 
-        case 'claude':
-        case 'claude-compatible': {
-          const { runClaude } = await import('./runners/claude-runner.js');
-          return await runClaude(prompt, options, providerConfig, defaults);
-        }
+      const toolDefinitions = toolMode !== 'none'
+        ? makeToolDefinitions({ cwd })
+        : [];
 
-        case 'openai-compatible': {
-          const { runOpenAI } = await import('./runners/openai-runner.js');
-          const { wrapClientForUsageCapture } = await import('./runners/openai-usage-interceptor.js');
-          const { default: OpenAI } = await import('openai');
-          const apiKey = agentConfig.apiKey
-            ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
-          const client = new OpenAI({
-            apiKey: apiKey || 'not-needed',
-            baseURL: agentConfig.baseUrl,
-          });
-          // 3.12.4: HTTP-level usage capture as a fallback for the
-          // @openai/agents SDK's stream-aggregation bug (DeepSeek and other
-          // openai-compatible providers can drop per-chunk usage on
-          // multi-turn streams). See openai-usage-interceptor.ts.
-          const usageAccumulator = wrapClientForUsageCapture(client);
-          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults, usageAccumulator };
-          return await runOpenAI(prompt, options, runnerOpts);
-        }
+      const effectiveSystemPrompt = options.instructionsSuffix
+        ? `${SYSTEM_PROMPT}\n\n${options.instructionsSuffix}`
+        : SYSTEM_PROMPT;
 
-        default: {
-          throw new Error(`Unreachable: unknown provider type`);
-        }
-      }
+      const adapter = buildAdapter(agentConfig);
+      const shell = new RunnerShell(adapter);
+
+      const result = await shell.run({
+        systemPrompt: effectiveSystemPrompt,
+        userMessage: prompt,
+        toolDefinitions,
+        maxTurns,
+        cwd,
+      });
+
+      const toolCallSummaries = result.toolCalls.map(tc => {
+        const inputPreview = typeof tc.input === 'object' && tc.input !== null
+          ? JSON.stringify(tc.input).slice(0, 120)
+          : String(tc.input ?? '').slice(0, 120);
+        return `${tc.name}(${inputPreview})`;
+      });
+
+      return {
+        output: result.finalAssistantText,
+        status: result.workerStatus === 'done' ? 'ok' : 'incomplete',
+        usage: result.usage,
+        turns: result.toolCalls.length,
+        filesRead: [],
+        filesWritten: [],
+        toolCalls: toolCallSummaries,
+        outputIsDiagnostic: false,
+        escalationLog: [],
+        parsedFindings: null,
+        workerStatus: result.workerStatus,
+        errorCode: result.errorCode,
+      };
     } catch (err) {
       return {
         output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
@@ -86,55 +146,5 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
     }
   };
 
-  const runReview = async (parts: ReviewPromptParts, options: ReviewRunOptions = {}): Promise<RunResult> => {
-    try {
-      switch (agentConfig.type) {
-        case 'codex': {
-          const { runCodexReview } = await import('./runners/codex-runner.js');
-          return await runCodexReview(parts, options, providerConfig, defaults);
-        }
-
-        case 'claude':
-        case 'claude-compatible': {
-          const { runClaudeReview } = await import('./runners/claude-runner.js');
-          return await runClaudeReview(parts, options, providerConfig, defaults);
-        }
-
-        case 'openai-compatible': {
-          const { runOpenAIReview } = await import('./runners/openai-runner.js');
-          const { wrapClientForUsageCapture } = await import('./runners/openai-usage-interceptor.js');
-          const { default: OpenAI } = await import('openai');
-          const apiKey = agentConfig.apiKey
-            ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
-          const client = new OpenAI({
-            apiKey: apiKey || 'not-needed',
-            baseURL: agentConfig.baseUrl,
-          });
-          const usageAccumulator = wrapClientForUsageCapture(client);
-          const runnerOpts: OpenAIRunnerOptions = { client, providerConfig, defaults, usageAccumulator };
-          return await runOpenAIReview(parts, options, runnerOpts);
-        }
-
-        default: {
-          throw new Error(`Unreachable: unknown provider type`);
-        }
-      }
-    } catch (err) {
-      return {
-        output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
-        status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-        turns: 0,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: true,
-        escalationLog: [],
-        parsedFindings: null,
-        error: err instanceof Error ? err.message : String(err),
-      };
-    }
-  };
-
-  return { name: slot, config: providerConfig, run, runReview };
+  return { name: slot, config: providerConfig, run };
 }
