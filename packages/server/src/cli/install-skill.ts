@@ -15,6 +15,7 @@
  * Tasks 9.5–9.8: Individual client writers.
  * Task 9.9: Uninstall wires all removers.
  */
+import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
@@ -196,16 +197,35 @@ function printResult(
 ): void {
   if (json) {
     stdout(JSON.stringify(result) + '\n');
+  } else if (result.dryRun) {
+    const verb = result.action === 'installed' ? 'Would install' : 'Would uninstall';
+    const destinations = result.targets.length > 0 ? result.targets : result.skipped;
+    const targetStr = destinations.length > 0 ? ` to: ${destinations.join(', ')}` : '';
+    stdout(`${verb} '${result.skill}'${targetStr}\n`);
   } else {
     const verb = result.action === 'installed' ? 'Installed' : 'Uninstalled';
     const targetStr = result.targets.length > 0 ? ` → ${result.targets.join(', ')}` : '';
-    const skippedStr = result.skipped.length > 0 ? ` (dry-run: ${result.skipped.join(', ')})` : '';
-    let line = `${verb} '${result.skill}'${targetStr}${skippedStr}\n`;
+    let line = `${verb} '${result.skill}'${targetStr}\n`;
     if (manifestUpdated) {
       line += 'Manifest updated.\n';
     }
     stdout(line);
   }
+}
+
+/**
+ * Scan an install directory for mma-* subdirectories that are not in the
+ * canonical SUPPORTED_SKILLS list. Returns the list of orphaned skill names
+ * without modifying the filesystem — used for --dry-run preview.
+ */
+function previewOrphanedSkills(installDir: string): string[] {
+  let entries: string[];
+  try {
+    entries = fs.readdirSync(installDir);
+  } catch {
+    return [];
+  }
+  return entries.filter((name) => name.startsWith('mma-') && !(SUPPORTED_SKILLS as readonly string[]).includes(name));
 }
 
 // ─── argv entry point ────────────────────────────────────────────────────────
@@ -321,15 +341,24 @@ export async function main(deps: MainDeps = {}): Promise<number> {
     printResult(stdout, result, json, manifestUpdated);
   }
 
-  // Active cleanup: after a bulk install (all skills, not uninstall, not dry-run),
-  // scan per-client install dirs and remove orphaned mma-* skills.
-  if (!skill && !uninstall && !dryRun) {
+  // Active cleanup: after a bulk install (all skills, not uninstall),
+  // scan per-client install dirs for orphaned mma-* skills.
+  // - dry-run: preview orphaned skills without removing them.
+  // - real run: remove orphaned skills.
+  if (!skill && !uninstall) {
     for (const target of resolvedTargets) {
       const installDir = resolveClientInstallDir(target, homeDir);
       if (installDir !== null) {
-        const removed = activeCleanup(installDir, SUPPORTED_SKILLS);
-        if (removed.length > 0 && !json) {
-          stdout(`Cleaned up orphaned skills for ${target}: ${removed.join(', ')}\n`);
+        if (dryRun) {
+          const orphaned = previewOrphanedSkills(installDir);
+          if (orphaned.length > 0 && !json) {
+            stdout(`Would clean up orphaned skills for ${target}: ${orphaned.join(', ')}\n`);
+          }
+        } else {
+          const removed = activeCleanup(installDir, SUPPORTED_SKILLS);
+          if (removed.length > 0 && !json) {
+            stdout(`Cleaned up orphaned skills for ${target}: ${removed.join(', ')}\n`);
+          }
         }
       }
     }

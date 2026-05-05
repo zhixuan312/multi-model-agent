@@ -10,7 +10,7 @@ import { describe, it, expect, beforeEach, afterEach } from 'vitest';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { mkdtempSync, existsSync, readFileSync, rmSync } from 'node:fs';
+import { mkdtempSync, existsSync, readFileSync, rmSync, mkdirSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 
 import {
@@ -29,6 +29,7 @@ import {
   doInstall,
   doUninstall,
   detectClients,
+  main,
   Client,
   SUPPORTED_SKILLS,
   ALL_CLIENTS,
@@ -498,5 +499,164 @@ describe('install-skill CLI: doInstall / doUninstall', () => {
 
   it('ALL_CLIENTS includes all four clients', () => {
     expect(ALL_CLIENTS).toEqual(['claude-code', 'gemini', 'codex', 'cursor']);
+  });
+});
+
+// ─── main() --dry-run tests ────────────────────────────────────────────────
+
+function capturer() {
+  const out: string[] = [];
+  const err: string[] = [];
+  return {
+    out,
+    err,
+    outFn: (s: string) => { out.push(s); return true; },
+    errFn: (s: string) => { err.push(s); return true; },
+  };
+}
+
+describe('install-skill CLI: main --dry-run', () => {
+  let fakeHome: string;
+  let fakeSkillsRoot: string;
+
+  beforeEach(() => {
+    fakeHome = makeFakeHome();
+    fakeSkillsRoot = makeFakeSkillsRoot({
+      'mma-delegate': '# mma-delegate skill content',
+      'mma-audit': '# mma-audit skill content',
+      'multi-model-agent': '# Overview skill',
+      'mma-review': '# Review',
+      'mma-verify': '# Verify',
+      'mma-debug': '# Debug',
+      'mma-execute-plan': '# Execute-plan',
+      'mma-retry': '# Retry',
+      'mma-context-blocks': '# Context blocks',
+      'mma-investigate': '# Investigate',
+      'mma-explore': '# Explore',
+    });
+    // Simulate claude-code client present
+    mkdirSync(path.join(fakeHome, '.claude', 'skills'), { recursive: true });
+    // Also create an orphaned skill from a previous install
+    mkdirSync(path.join(fakeHome, '.claude', 'skills', 'mma-clarifications'), { recursive: true });
+    writeFileSync(path.join(fakeHome, '.claude', 'skills', 'mma-clarifications', 'SKILL.md'), 'orphan', 'utf-8');
+    mkdirSync(path.join(fakeHome, '.claude', 'skills', 'mma-old-skill'), { recursive: true });
+    writeFileSync(path.join(fakeHome, '.claude', 'skills', 'mma-old-skill', 'SKILL.md'), 'orphan2', 'utf-8');
+  });
+
+  afterEach(() => {
+    removeFakeHome(fakeHome);
+    try { rmSync(fakeSkillsRoot, { recursive: true, force: true }); } catch { /* ignore */ }
+  });
+
+  it('prints plan without modifying disk', async () => {
+    const c = capturer();
+    const code = await main({
+      argv: ['--dry-run', 'mma-delegate', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      stdout: c.outFn,
+      stderr: c.errFn,
+    });
+    expect(code).toBe(0);
+
+    const joined = c.out.join('');
+    expect(joined).toMatch(/Would install 'mma-delegate'/);
+    expect(joined).toMatch(/claude-code/);
+
+    // No files written
+    const skillFile = path.join(fakeHome, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
+    expect(fs.existsSync(skillFile)).toBe(false);
+
+    // Manifest not updated
+    const entries = listEntries(fakeHome);
+    expect(entries).toHaveLength(0);
+  });
+
+  it('--json mode returns structured dry-run result', async () => {
+    const c = capturer();
+    const code = await main({
+      argv: ['--dry-run', '--json', 'mma-delegate', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      stdout: c.outFn,
+      stderr: c.errFn,
+    });
+    expect(code).toBe(0);
+    const parsed = JSON.parse(c.out[0]!);
+    expect(parsed.skill).toBe('mma-delegate');
+    expect(parsed.action).toBe('installed');
+    expect(parsed.dryRun).toBe(true);
+    expect(parsed.skipped).toContain('claude-code');
+  });
+
+  it('previews orphaned skills on bulk install dry-run', async () => {
+    const c = capturer();
+    const code = await main({
+      argv: ['--dry-run', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      stdout: c.outFn,
+      stderr: c.errFn,
+    });
+    expect(code).toBe(0);
+
+    const joined = c.out.join('');
+    expect(joined).toMatch(/Would clean up orphaned skills for claude-code/);
+    expect(joined).toMatch(/mma-clarifications/);
+    expect(joined).toMatch(/mma-old-skill/);
+
+    // Orphan files NOT removed (dry-run preview only)
+    expect(fs.existsSync(path.join(fakeHome, '.claude', 'skills', 'mma-clarifications'))).toBe(true);
+    expect(fs.existsSync(path.join(fakeHome, '.claude', 'skills', 'mma-old-skill'))).toBe(true);
+
+    // Manifest not updated
+    expect(listEntries(fakeHome)).toHaveLength(0);
+  });
+
+  it('does not preview orphans on single-skill dry-run', async () => {
+    const c = capturer();
+    const code = await main({
+      argv: ['--dry-run', 'mma-delegate', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      stdout: c.outFn,
+      stderr: c.errFn,
+    });
+    expect(code).toBe(0);
+
+    const joined = c.out.join('');
+    expect(joined).not.toMatch(/Would clean up/);
+    expect(joined).toMatch(/Would install 'mma-delegate'/);
+  });
+
+  it('dry-run --uninstall prints Would uninstall without removing files', async () => {
+    // First, actually install a skill so there's something to uninstall
+    await main({
+      argv: ['mma-delegate', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+    });
+    const skillFile = path.join(fakeHome, '.claude', 'skills', 'mma-delegate', 'SKILL.md');
+    expect(fs.existsSync(skillFile)).toBe(true);
+
+    // Now dry-run uninstall
+    const c = capturer();
+    const code = await main({
+      argv: ['--dry-run', '--uninstall', 'mma-delegate', '--target=claude-code'],
+      homeDir: fakeHome,
+      skillsRoot: fakeSkillsRoot,
+      stdout: c.outFn,
+      stderr: c.errFn,
+    });
+    expect(code).toBe(0);
+
+    const joined = c.out.join('');
+    expect(joined).toMatch(/Would uninstall 'mma-delegate'/);
+
+    // File still exists (dry-run didn't remove it)
+    expect(fs.existsSync(skillFile)).toBe(true);
+
+    // Manifest entry still present (dry-run didn't update manifest)
+    expect(listEntries(fakeHome).some((e) => e.name === 'mma-delegate')).toBe(true);
   });
 });
