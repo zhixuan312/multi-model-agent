@@ -9,7 +9,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
     turns: 1, filesRead: [], filesWritten: [],
     toolCalls: [],
-    outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
+    outputIsDiagnostic: false, escalationLog: [],retryable: false,
   };
   return {
     createProvider: (slot: string) => ({

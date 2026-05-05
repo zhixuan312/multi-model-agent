@@ -9,11 +9,9 @@ import type { ProgressEvent, RunTasksRuntime } from '../runners/types.js';
 import type { HeartbeatTickInfo } from '../heartbeat.js';
 import type { HttpServerLog } from '../diagnostics/http-server-log.js';
 import type { EventBus } from '../observability/bus.js';
-import type { BriefQualityWarning } from '../intake/types.js';
 import { resolveAgent } from '../routing/resolve-agent.js';
 import { expandContextBlocks } from '../context/expand-context-blocks.js';
 import { inferEffort } from '../effort-inference.js';
-import { evaluateReadiness } from '../readiness/readiness.js';
 import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
 import { errorResult } from './execute-task.js';
 import type { ResolvedTask } from './execute-task.js';
@@ -86,39 +84,6 @@ export async function runTasks(
     }
   });
 
-  const readinessResults = expandedTasks.map((entry) => {
-    if ('error' in entry) return undefined;
-    const task = entry as TaskSpec;
-    if (task.briefQualityPolicy === 'off') {
-      return { action: 'ignored' as const, missingPillars: [], layer2Warnings: [], layer3Hints: [], briefQualityWarnings: [] };
-    }
-    return evaluateReadiness(task, task.briefQualityPolicy ?? 'warn');
-  });
-
-  const refusedResults = expandedTasks.map((entry, idx) => {
-    if ('error' in entry) return undefined;
-    const readiness = readinessResults[idx];
-    if (!readiness) return undefined;
-    if (readiness.action === 'refuse') {
-      return {
-        output: `Brief too vague: missing ${readiness.missingPillars.join(', ')}`,
-        status: 'brief_too_vague' as const,
-        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-        turns: 0,
-        filesRead: [] as string[],
-        filesWritten: [] as string[],
-        toolCalls: [] as string[],
-        outputIsDiagnostic: true,
-        escalationLog: [] as RunResult['escalationLog'],
-        parsedFindings: null,
-        errorCode: 'brief_too_vague',
-        briefQualityWarnings: readiness.briefQualityWarnings as BriefQualityWarning[],
-        retryable: false,
-      };
-    }
-    return undefined;
-  });
-
   const resolved: ResolvedTask[] = expandedTasks.map((entry, idx): ResolvedTask => {
     if ('error' in entry) {
       return { task: tasks[idx], error: entry.error, errorCode: 'context_block_not_found' };
@@ -172,11 +137,6 @@ export async function runTasks(
       if ('error' in r) {
         return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
-      const refused = refusedResults[index];
-      if (refused) {
-        return Promise.resolve(refused);
-      }
-      const readiness = readinessResults[index];
       return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
         batchId: options.batchId,
         recordHeartbeat: options.recordHeartbeat,
@@ -184,14 +144,7 @@ export async function runTasks(
         logger: options.logger,
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
         verboseStream: options.verboseStream,
-      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus, options.qualityReviewPromptBuilder).then(
-        (result) => {
-          if (readiness && readiness.briefQualityWarnings.length > 0) {
-            return { ...result, briefQualityWarnings: readiness.briefQualityWarnings };
-          }
-          return result;
-        },
-      );
+      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus, options.qualityReviewPromptBuilder);
     }),
   );
 }

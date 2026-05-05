@@ -26,7 +26,6 @@ const mockWorker: RunResult = {
   toolCalls: ['readFile(src/bug.ts)'],
   outputIsDiagnostic: false,
   escalationLog: [],
-  briefQualityWarnings: [],
   retryable: false,
   durationMs: 1000,
 } as RunResult;
@@ -41,7 +40,6 @@ const mockReview: RunResult = {
   toolCalls: [],
   outputIsDiagnostic: false,
   escalationLog: [],
-  briefQualityWarnings: [],
   retryable: false,
   durationMs: 500,
 } as RunResult;
@@ -100,7 +98,6 @@ describe('executeAudit — quality_only review', () => {
       toolCalls: ['readFile(src/target.ts)'],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
       durationMs: 800,
     } as RunResult;
@@ -119,7 +116,6 @@ describe('executeAudit — quality_only review', () => {
       toolCalls: ['readFile(src/target.ts)'],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
       durationMs: 1000,
     } as RunResult;
@@ -134,7 +130,6 @@ describe('executeAudit — quality_only review', () => {
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
       durationMs: 500,
     } as RunResult;
@@ -149,7 +144,6 @@ describe('executeAudit — quality_only review', () => {
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
       durationMs: 500,
     } as RunResult;

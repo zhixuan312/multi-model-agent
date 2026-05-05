@@ -6,7 +6,7 @@ import type {
   TerminationReason,
   TokenUsage,
 } from './runners/types.js';
-import type { BriefQualityPolicy, BriefQualityWarning } from './intake/types.js';
+import type { BriefQualityPolicy } from './intake/types.js';
 import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
 import type { ResearchToolDefinition } from './research/types.js';
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
@@ -233,7 +233,6 @@ export interface RunResult {
   error?: string
   errorCode?: string
   retryable?: boolean
-  briefQualityWarnings?: BriefQualityWarning[]
   terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>

@@ -20,7 +20,6 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
     }),
   }),

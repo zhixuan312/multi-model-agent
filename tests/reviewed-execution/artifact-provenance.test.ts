@@ -85,7 +85,6 @@ function okResult(output: string): RunResult {
     toolCalls: ['readFile(src/a.ts)', 'writeFile(src/a.ts)'],
     outputIsDiagnostic: false,
     escalationLog: [],
-    briefQualityWarnings: [],
     retryable: false,
   };
 }

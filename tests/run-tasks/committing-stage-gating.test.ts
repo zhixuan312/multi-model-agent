@@ -64,7 +64,6 @@ commit: {"type":"feat","subject":"add file"}
     workerStatus: 'done' as const,
     terminationReason: { cause: 'finished' as const, turnsUsed: 1, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
     retryable: false,
-    briefQualityWarnings: [],
     ...overrides,
   };
 }

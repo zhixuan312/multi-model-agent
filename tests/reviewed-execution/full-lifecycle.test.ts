@@ -14,7 +14,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
     usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
     turns: 3, filesRead: ['src/a.ts'], filesWritten: ['src/a.ts'],
     toolCalls: ['readFile(src/a.ts)', 'writeFile(src/a.ts)'],
-    outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
+    outputIsDiagnostic: false, escalationLog: [],retryable: false,
   };
 
   const review = {
@@ -22,7 +22,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
     status: 'ok' as const,
     usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
     turns: 1, filesRead: [], filesWritten: [], toolCalls: [],
-    outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
+    outputIsDiagnostic: false, escalationLog: [],retryable: false,
   };
 
   return {

@@ -19,7 +19,6 @@ const mockWorker: RunResult = {
   toolCalls: ['readFile(src/foo.ts)', 'writeFile(src/foo.ts)'],
   outputIsDiagnostic: false,
   escalationLog: [],
-  briefQualityWarnings: [],
   retryable: false,
   durationMs: 2000,
 } as RunResult;

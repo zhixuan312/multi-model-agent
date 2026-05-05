@@ -68,7 +68,6 @@ function mockProvider(): Provider {
       toolCalls: [],
       outputIsDiagnostic: false,
       escalationLog: [],
-      briefQualityWarnings: [],
       retryable: false,
     }),
   } as Provider;

@@ -25,7 +25,6 @@ const mockWorker: RunResult = {
   toolCalls: ['readFile(src/bug.ts)'],
   outputIsDiagnostic: false,
   escalationLog: [],
-  briefQualityWarnings: [],
   retryable: false,
   durationMs: 1000,
 } as RunResult;
@@ -40,7 +39,6 @@ const mockReview: RunResult = {
   toolCalls: [],
   outputIsDiagnostic: false,
   escalationLog: [],
-  briefQualityWarnings: [],
   retryable: false,
   durationMs: 500,
 } as RunResult;

@@ -12,7 +12,7 @@ function mockProvider(outputs: string[], status: 'ok' | 'timeout' = 'ok'): Provi
       status,
       usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
       turns: 1, filesRead: [], filesWritten: [], toolCalls: [],
-      outputIsDiagnostic: false, escalationLog: [], briefQualityWarnings: [], retryable: false,
+      outputIsDiagnostic: false, escalationLog: [],retryable: false,
     })),
   };
 }

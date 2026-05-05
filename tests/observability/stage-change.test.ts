@@ -19,7 +19,6 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
     toolCalls: ['readFile(src/a.ts)', 'writeFile(src/a.ts)'],
     outputIsDiagnostic: false,
     escalationLog: [],
-    briefQualityWarnings: [],
     retryable: false,
   };
   const review = {
@@ -32,7 +31,6 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => {
     toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [],
-    briefQualityWarnings: [],
     retryable: false,
   };
   return {
