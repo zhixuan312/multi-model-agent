@@ -1,7 +1,8 @@
 // packages/server/src/http/handlers/tools/execute-plan.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as executePlan from '@zhixuan92/multi-model-agent-core/tool-schemas/execute-plan';
+import { executePlanInputSchema } from '../../wire/execute-plan-wire.js';
+import type { ExecutePlanWireInput } from '../../wire/execute-plan-wire.js';
 import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/executors/execute-plan';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
@@ -11,30 +12,30 @@ import type { RawHandler } from '../../router.js';
 
 export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
-    const parsed = executePlan.inputSchema.safeParse(ctx.body);
+    const parsed = executePlanInputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      const fieldErrors: Record<string, string[]> = {};
-      for (const issue of parsed.error.issues) {
-        let path = issue.path.join('.');
-        if (path === '' && issue.message.includes('"agentType"')) {
-          path = 'agentType';
-        } else if (path.startsWith('tasks.') && issue.message === 'Invalid input') {
-          const task = issue.path.reduce<unknown>((value, segment) => {
-            if (value && typeof value === 'object') return (value as Record<string | number, unknown>)[segment as string | number];
-            return undefined;
-          }, ctx.body);
-          if (task && typeof task === 'object' && 'agentType' in task) {
-            path = `${path}.agentType`;
-          }
-        }
-        if (!fieldErrors[path]) fieldErrors[path] = [];
-        fieldErrors[path].push(issue.message);
-      }
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', { fieldErrors });
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
+        fieldErrors: parsed.error.flatten(),
+      });
       return;
     }
 
-    const input = parsed.data;
+    const input: ExecutePlanWireInput = parsed.data;
+
+    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
+    // the new lifecycle.
+    if (deps.routeDispatcher) {
+      const result = await deps.routeDispatcher.dispatch({
+        route: 'execute_plan',
+        toolCategory: 'artifact_producing',
+        rawRequest: input,
+      });
+      sendJson(res, result.status, result.body);
+      return;
+    }
+
+    // Legacy path (async-dispatch via executeExecutePlan) — kept as fallback until
+    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -46,16 +47,19 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    const blockIds = input.contextBlockIds ?? [];
     const { batchId, statusUrl } = asyncDispatch({
       tool: 'execute-plan',
       projectCwd: cwd,
-      blockIds,
+      blockIds: [],
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeExecutePlan(executionCtx, input);
+        // Map new wire input shape to legacy executor input shape
+        return executeExecutePlan(executionCtx, {
+          tasks: input.taskDescriptors,
+          filePaths: input.filePaths,
+        });
       },
     });
 

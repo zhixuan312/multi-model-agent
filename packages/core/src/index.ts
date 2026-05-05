@@ -199,10 +199,19 @@ export type { ReviewTemplate } from './review/reviewer-engine.js';
 // Intake-pipeline slots
 export { delegateSlot } from './intake-pipeline/slots/delegate.js';
 export type { DelegateInput, DelegateBrief } from './intake-pipeline/slots/delegate.js';
+export { executePlanSlot } from './intake-pipeline/slots/execute-plan.js';
+export type { ExecutePlanBrief } from './intake-pipeline/slots/execute-plan.js';
+
+// Plan extractor
+export { extractPlanSection, PlanExtractionError } from './intake-pipeline/plan-extractor.js';
+export type { PlanSection } from './intake-pipeline/plan-extractor.js';
 
 // Reporting slots
 export { delegateReportSchema } from './reporting/slots/delegate-report.js';
 export type { DelegateStructuredReport } from './reporting/slots/delegate-report.js';
+export { executePlanReportSchema } from './reporting/slots/execute-plan-report.js';
+export type { ExecutePlanReport } from './reporting/slots/execute-plan-report.js';
 
 // Headline templates
 export { delegateHeadlineTemplate } from './reporting/headlines/delegate.js';
+export { executePlanHeadlineTemplate } from './reporting/headlines/execute-plan.js';
