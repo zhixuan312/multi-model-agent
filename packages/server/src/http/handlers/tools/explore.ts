@@ -7,7 +7,7 @@ import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
 export function buildExploreHandler(deps: HandlerDeps): RawHandler {
   return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {

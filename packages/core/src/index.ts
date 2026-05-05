@@ -77,8 +77,21 @@ export type { RunTasksOptions } from './lifecycle/run-tasks.js';
 // Lifecycle
 export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';
 export type { SurfaceEntry } from './tool-surface/tool-surface-registry.js';
-export { RouteDispatcher } from './lifecycle/route-dispatcher.js';
-export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifecycle/route-dispatcher.js';
+export { LifecycleDispatcher } from './lifecycle/lifecycle-dispatcher.js';
+export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifecycle/lifecycle-dispatcher.js';
+
+// Transport (C1 substrate)
+export {
+  HTTPListener,
+  type HTTPListenerOptions,
+  type HTTPRequestHandler,
+  RouteDispatcher,
+  type RouteMetadata,
+  type ResponseShape,
+  isLoopbackAddress,
+  shouldRejectNonLoopback,
+  isAllowedHostHeader,
+} from './transport/index.js';
 
 // Runner shell
 export { RunnerShell } from './providers/runner-shell.js';

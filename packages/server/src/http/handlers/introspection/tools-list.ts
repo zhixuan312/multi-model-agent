@@ -1,7 +1,7 @@
 // packages/server/src/http/handlers/introspection/tools-list.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { buildOpenApiDoc, serializeOpenApiDoc } from '../../../openapi.js';
 
 // Build the OpenAPI document once at handler-creation time (module-level lazy

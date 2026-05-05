@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { notApplicable, type BatchRegistry, formatElapsed } from '@zhixuan92/multi-model-agent-core';
 
 export interface BatchHandlerDeps {

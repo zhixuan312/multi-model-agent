@@ -1,4 +1,4 @@
-import { RouteDispatcher } from '../../packages/core/src/lifecycle/route-dispatcher.js';
+import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
 import { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
 import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
@@ -102,7 +102,7 @@ export interface BootstrapDeps {
   store?: ContextBlockStore;
 }
 
-export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   const registry = deps.registry ?? new BatchRegistry();
   const store = deps.store ?? new InMemoryContextBlockStore();
   const emitter = new EventEmitter();
@@ -175,7 +175,7 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
     batch_retention_sweep_tick: noop,
   };
 
-  return Object.assign(new RouteDispatcher(handlers), {
+  return Object.assign(new LifecycleDispatcher(handlers), {
     overrideHandler(key: string, fn: StageHandler) { handlers[key] = fn; },
     shell,
   });
@@ -185,7 +185,7 @@ export function bootstrapWithMockAdapterAndOverrides(
   adapter: RunnerAdapter,
   overrides: Partial<Record<string, StageHandler>> = {},
   deps: BootstrapDeps = {},
-): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   const dispatcher = bootstrapWithMockAdapter(adapter, deps);
   for (const [k, fn] of Object.entries(overrides)) {
     if (fn) dispatcher.overrideHandler(k, fn);
@@ -197,6 +197,6 @@ export function bootstrapWithMockAdapterAndRegistry(
   adapter: RunnerAdapter,
   registry: BatchRegistry,
   store: ContextBlockStore,
-): RouteDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
   return bootstrapWithMockAdapter(adapter, { registry, store });
 }

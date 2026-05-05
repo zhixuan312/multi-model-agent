@@ -3,7 +3,7 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import type { ProjectRegistry } from '../../project-registry.js';
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
 

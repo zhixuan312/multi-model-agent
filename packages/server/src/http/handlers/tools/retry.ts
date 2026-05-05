@@ -7,7 +7,7 @@ import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-co
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 
 /** Same inject-defaults logic as delegate — fills harness fields from config. */
 function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: TaskSpec[]) => TaskSpec[] {

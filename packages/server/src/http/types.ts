@@ -11,3 +11,16 @@ export interface RequestContext {
 }
 
 export type Handler = (ctx: RequestContext, res: ServerResponse, params: Record<string, string>) => Promise<void> | void;
+
+/**
+ * Raw handler shape used by the C1 RouteDispatcher inside the server.
+ * Server-specific because it carries RequestContext (caller identity, cwd, body).
+ * The core RouteDispatcher is generic; this is the concrete H instantiation
+ * the server registers.
+ */
+export type RawHandler = (
+  req: IncomingMessage,
+  res: ServerResponse,
+  params: Record<string, string>,
+  ctx: RequestContext,
+) => Promise<void> | void;

@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import type { DriftEntry, SkillManifestSync } from '../../../install/skill-manifest-sync.js';
 
 export type { DriftEntry } from '../../../install/skill-manifest-sync.js';

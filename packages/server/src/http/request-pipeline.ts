@@ -2,15 +2,15 @@
 // decompress → JSON parse → cwd validation → handler dispatch.
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
-import { Router } from './router.js';
+import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import { sendError } from './errors.js';
 import { readBody } from './middleware/body-reader.js';
 import { decompressBody } from './middleware/decompress.js';
 import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
-import { isLoopbackAddress } from './loopback.js';
+import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
-import type { RequestContext } from './types.js';
+import type { RequestContext, RawHandler } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
@@ -21,7 +21,7 @@ export interface PipelineConfig {
 }
 
 export async function handleRequest(
-  router: Router,
+  router: RouteDispatcher<RawHandler>,
   token: string,
   req: IncomingMessage,
   res: ServerResponse,

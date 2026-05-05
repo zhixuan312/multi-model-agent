@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { RouteDispatcher } from '../../packages/core/src/lifecycle/route-dispatcher.js';
+import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
 import { LifecycleDriver } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState, StagePlan } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 import { ContextBlockNotFoundError } from '../../packages/core/src/stores/context-block-tool.js';
@@ -19,14 +19,14 @@ function driverWith(plan: StagePlan) {
     new LifecycleDriver(plan, handlers);
 }
 
-describe('RouteDispatcher', () => {
+describe('LifecycleDispatcher', () => {
   it('returns 200 with responseEnvelope on success', async () => {
     const envelope = { result: 'done' };
     const handlers = {
       accept_http_request: async (s: LifecycleState) => { s.responseEnvelope = envelope; },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
 
     const out = await dispatcher.dispatch({
       route: 'delegate',
@@ -43,7 +43,7 @@ describe('RouteDispatcher', () => {
       accept_http_request: () => { throw new ContextBlockNotFoundError('ctx-missing-1'); },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
 
     const out = await dispatcher.dispatch({
       route: 'delegate',
@@ -61,7 +61,7 @@ describe('RouteDispatcher', () => {
       accept_http_request: () => { throw new Error('boom'); },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
 
     await expect(dispatcher.dispatch({
       route: 'delegate',
@@ -76,7 +76,7 @@ describe('RouteDispatcher', () => {
       accept_http_request: async (s) => { captured = s; },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
 
     await dispatcher.dispatch({
       route: 'delegate',
@@ -93,7 +93,7 @@ describe('RouteDispatcher', () => {
       accept_http_request: async (s) => { captured = s; },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
 
     await dispatcher.dispatch({
       route: 'delegate',
@@ -110,7 +110,7 @@ describe('RouteDispatcher', () => {
       accept_http_request: async (s) => { captured = s; },
       verify_loopback: async () => {},
     };
-    const dispatcher = new RouteDispatcher(handlers, driverWith(minimalPlan('read_only')));
+    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('read_only')));
 
     await dispatcher.dispatch({ route: 'delegate', toolCategory: 'read_only', rawRequest: {} });
     expect(captured!.attemptBudget).toBe(2);

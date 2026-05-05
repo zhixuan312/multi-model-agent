@@ -1,7 +1,7 @@
 // tests/server/handlers/introspection/health.test.ts
 import { describe, it, expect } from 'vitest';
 import { startTestServer } from '../../../helpers/test-server.js';
-import { shouldRejectNonLoopback } from '../../../../packages/server/src/http/loopback.js';
+import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
 
 describe('GET /health', () => {
   it('returns 200 with { status: "ok" } when no drift — no other fields', async () => {

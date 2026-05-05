@@ -2,7 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import { startTestServer } from '../../../helpers/test-server.js';
 import { startTestServerWithAgents } from '../../../helpers/test-server-with-agents.js';
-import { shouldRejectNonLoopback } from '../../../../packages/server/src/http/loopback.js';
+import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
 
 describe('GET /status', () => {
   it('returns 401 without bearer token', async () => {

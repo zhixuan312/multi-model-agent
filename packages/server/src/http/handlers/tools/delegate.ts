@@ -8,7 +8,7 @@ import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 
 /** Builds injectDefaults for delegate/retry — fills harness-level TaskSpec fields from config. */
 function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: TaskSpec[]) => TaskSpec[] {

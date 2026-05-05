@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { z } from 'zod';
-import { RouteDispatcher, InMemoryContextBlockStore } from '../../packages/core/src/index.js';
+import { LifecycleDispatcher, InMemoryContextBlockStore } from '../../packages/core/src/index.js';
 import type { ContextBlockStore, ContextBlockHandler } from '../../packages/core/src/index.js';
 
 const MAX_BODY_BYTES = 50 * 1024 * 1024;
@@ -33,8 +33,8 @@ function createContextBlockHandler(store: ContextBlockStore): ContextBlockHandle
   };
 }
 
-function bootstrapWithDirectHandler(store: ContextBlockStore): RouteDispatcher {
-  return new RouteDispatcher({}, undefined, createContextBlockHandler(store));
+function bootstrapWithDirectHandler(store: ContextBlockStore): LifecycleDispatcher {
+  return new LifecycleDispatcher({}, undefined, createContextBlockHandler(store));
 }
 
 describe('register_context_block via v4.0', () => {

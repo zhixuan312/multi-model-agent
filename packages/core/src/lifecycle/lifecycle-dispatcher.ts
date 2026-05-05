@@ -20,7 +20,7 @@ export type DriverFactory = (plan: StagePlan, handlers: Record<string, StageHand
 
 export type ContextBlockHandler = (rawRequest: unknown) => Promise<DispatchOutput>;
 
-export class RouteDispatcher {
+export class LifecycleDispatcher {
   constructor(
     private handlers: Record<string, StageHandler>,
     private buildDriver: DriverFactory = (plan, handlers) => new LifecycleDriver(plan, handlers),

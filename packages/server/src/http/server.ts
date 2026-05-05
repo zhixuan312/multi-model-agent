@@ -5,7 +5,8 @@ import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import { EventEmitter, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
-import { Router } from './router.js';
+import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
+import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import type { ProjectRegistry } from './project-registry.js';
@@ -57,7 +58,7 @@ const CWD_REQUIRED_PATHS = new Set([
  * Imported dynamically to avoid circular-dependency issues and to keep startServer lean.
  */
 async function registerToolHandlers(
-  router: Router,
+  router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
@@ -140,7 +141,7 @@ async function registerToolHandlers(
  * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks).
  */
 async function registerControlHandlers(
-  router: Router,
+  router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
@@ -193,7 +194,7 @@ export async function startServer(
 ): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
-  const router = new Router();
+  const router = new RouteDispatcher<RawHandler>();
 
   // ── Create shared registries ───────────────────────────────────────────────
   const { BatchRegistry } = await import('@zhixuan92/multi-model-agent-core');
