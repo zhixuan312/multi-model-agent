@@ -1,25 +1,25 @@
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/explore.js';
-import type { RunResult, MultiModelConfig } from '../types.js';
-import type { ResearchToolDefinition } from '../research/types.js';
-import type { EventBus } from '../observability/bus.js';
-import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
-import { resolveAgent } from '../routing/resolve-agent.js';
-import { createProvider } from '../provider.js';
+import type { Input } from '../../tool-schemas/explore.js';
+import type { RunResult, MultiModelConfig } from '../../types.js';
+import type { ResearchToolDefinition } from '../../research/types.js';
+import type { EventBus } from '../../observability/bus.js';
+import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { resolveAgent } from '../../routing/resolve-agent.js';
+import { createProvider } from '../../provider.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
 import {
   compileExplore,
   type ResolvedContextBlock,
-} from '../intake/compilers/explore.js';
+} from '../../intake/compilers/explore.js';
 import {
   parseExploreReport,
   type ParsedExploreReport,
-} from '../reporting/parse-explore-report.js';
-import { deriveExploreStatus } from '../reporting/derive-explore-status.js';
-import { composeExploreHeadline } from '../reporting/compose-explore-headline.js';
-import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
+} from '../../reporting/parse-explore-report.js';
+import { deriveExploreStatus } from '../../reporting/derive-explore-status.js';
+import { composeExploreHeadline } from '../../reporting/compose-explore-headline.js';
+import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 
 export interface ExploreExecutorInput {
   input: Input;

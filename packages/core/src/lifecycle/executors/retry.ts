@@ -1,11 +1,11 @@
 // packages/core/src/executors/retry.ts
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/retry.js';
-import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
+import type { Input } from '../../tool-schemas/retry.js';
+import type { TaskSpec, RunResult } from '../../types.js';
+import { runTasks } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
-import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 
 // --- Ported from the inline retry_tasks registration in packages/mcp/src/cli.ts ---
 
@@ -61,7 +61,7 @@ export async function executeRetry(
   const retryBatchId = batchCache.remember(ctx.batchId, subset);
 
   const batchStartMs = Date.now();
-  let results: import('../types.js').RunResult[] = [];
+  let results: import('../../types.js').RunResult[] = [];
   let retryAborted = false;
   try {
     results = await runTasksImpl(injectDefaults(subset), config, {

@@ -1,7 +1,7 @@
 // packages/server/src/http/execution-context.ts
 import type { ProjectContext, HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
-import { buildExecutionContext as buildCoreExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/execution-context';
-import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/types';
+import { buildExecutionContext as buildCoreExecutionContext } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/execution-context';
+import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/types';
 import type { HandlerDeps } from './handler-deps.js';
 import { getRecorder } from '../telemetry/recorder.js';
 

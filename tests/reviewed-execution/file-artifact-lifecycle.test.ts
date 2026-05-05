@@ -50,7 +50,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/auto-commit', () => ({
   autoCommitFiles: vi.fn().mockReturnValue({}),
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 const config: MultiModelConfig = {
   agents: {

@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as delegate from '@zhixuan92/multi-model-agent-core/tool-schemas/delegate';
-import { executeDelegate } from '@zhixuan92/multi-model-agent-core/executors/delegate';
+import { executeDelegate } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/delegate';
 import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';

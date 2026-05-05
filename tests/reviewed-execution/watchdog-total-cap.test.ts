@@ -30,7 +30,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   }),
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/run-tasks/verify-stage', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/lifecycle/handlers/verify-stage', () => ({
   runVerifyStage: vi.fn(async () => ({
     status: 'passed' as const,
     steps: [{ command: 'true', status: 'passed' as const, durationMs: 1 }],
@@ -147,7 +147,7 @@ function makeConfig(
   };
 }
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function reset() {
   implementerCalls = 0;

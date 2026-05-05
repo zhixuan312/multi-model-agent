@@ -1,7 +1,7 @@
 // packages/server/src/http/async-dispatch.ts
 import { randomUUID } from 'node:crypto';
 import type { BatchRegistry, ProjectContext } from '@zhixuan92/multi-model-agent-core';
-import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/types';
+import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/types';
 import type { HandlerDeps } from './handler-deps.js';
 import { buildExecutionContext } from './execution-context.js';
 

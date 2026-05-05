@@ -140,7 +140,7 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 beforeEach(() => {
   calls.length = 0;

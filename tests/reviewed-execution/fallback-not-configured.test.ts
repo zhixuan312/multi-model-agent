@@ -13,7 +13,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   },
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function usage(cost = 0.001) {
   return { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: cost };

@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { mockProvider, capExhaustingProvider, clarificationProvider, throwingProvider } from '../contract/fixtures/mock-providers.js';
-import type { ExecutionContext } from '../../packages/core/src/executors/types.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 
 const providerState = vi.hoisted(() => ({ activeProvider: undefined as Provider | undefined }));
@@ -9,7 +9,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: () => providerState.activeProvider,
 }));
 
-import { executeInvestigate, type InvestigateExecutorInput } from '../../packages/core/src/executors/investigate.js';
+import { executeInvestigate, type InvestigateExecutorInput } from '../../packages/core/src/lifecycle/executors/investigate.js';
 import { mkdtempSync, mkdirSync, realpathSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

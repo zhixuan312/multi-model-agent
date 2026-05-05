@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as review from '@zhixuan92/multi-model-agent-core/tool-schemas/review';
-import { executeReview } from '@zhixuan92/multi-model-agent-core/executors/review';
+import { executeReview } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/review';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

@@ -8,7 +8,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
 }));
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeAudit } from '../../packages/core/src/executors/audit.js';
+import { executeAudit } from '../../packages/core/src/lifecycle/executors/audit.js';
 
 const workerOutput = JSON.stringify({
   findings: [

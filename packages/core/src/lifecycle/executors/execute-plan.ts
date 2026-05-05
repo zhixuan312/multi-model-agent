@@ -1,13 +1,13 @@
 // packages/core/src/executors/execute-plan.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/execute-plan.js';
-import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks, extractPlanSection } from '../run-tasks/index.js';
+import type { Input } from '../../tool-schemas/execute-plan.js';
+import type { TaskSpec, RunResult } from '../../types.js';
+import { runTasks, extractPlanSection } from '../run-tasks.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
-import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
-import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 
 /**
  * Build a compact worker prompt for one plan task.
@@ -62,8 +62,8 @@ function buildExecutePlanPrompt(
 }
 
 function autoRegisterContextBlock(
-  results: import('../types.js').RunResult[],
-  store: import('../context/context-block-store.js').ContextBlockStore | undefined,
+  results: import('../../types.js').RunResult[],
+  store: import('../../context/context-block-store.js').ContextBlockStore | undefined,
 ): string | undefined {
   if (!store) return undefined;
   const usable = results.filter(r => !r.outputIsDiagnostic && r.output.trim().length > 0);

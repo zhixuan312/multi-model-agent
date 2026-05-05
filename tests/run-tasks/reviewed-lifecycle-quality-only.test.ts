@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import { executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import { ReadOnlyReviewQualityEvent } from '../../packages/core/src/observability/events.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider, RunResult } from '../../packages/core/src/types.js';
 import type { EventSink } from '../../packages/core/src/observability/bus.js';

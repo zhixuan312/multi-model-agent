@@ -1,18 +1,18 @@
 // packages/core/src/executors/audit.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/audit.js';
-import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
-import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
-import { resolveAgent } from '../routing/resolve-agent.js';
-import { buildAuditQualityPrompt } from '../review/quality-only-prompts.js';
-import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
+import type { Input } from '../../tool-schemas/audit.js';
+import type { TaskSpec, RunResult } from '../../types.js';
+import { runTasks } from '../run-tasks.js';
+import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { resolveAgent } from '../../routing/resolve-agent.js';
+import { buildAuditQualityPrompt } from '../../review/quality-only-prompts.js';
+import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
-import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
-import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
-import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
+import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/audit-document.ts ---
 
@@ -111,8 +111,8 @@ function resolveDispatchMode(
 }
 
 function autoRegisterContextBlock(
-  results: import('../types.js').RunResult[],
-  store: import('../context/context-block-store.js').ContextBlockStore | undefined,
+  results: import('../../types.js').RunResult[],
+  store: import('../../context/context-block-store.js').ContextBlockStore | undefined,
 ): string | undefined {
   if (!store) return undefined;
   const usable = results.filter(r => !r.outputIsDiagnostic && r.output.trim().length > 0);

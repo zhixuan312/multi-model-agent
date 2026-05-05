@@ -37,7 +37,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: 'standard' | 'complex') => failProvider(slot),
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 beforeEach(() => {
   originalSetTimeout = globalThis.setTimeout;

@@ -16,7 +16,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: () => activeProvider,
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function makeConfig(provider: Provider): MultiModelConfig {
   activeProvider = provider;

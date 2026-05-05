@@ -32,7 +32,7 @@ export type {
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,
-} from './executors/types.js';
+} from './lifecycle/executors/types.js';
 export type {
   EligibilityFailureCheck,
   EligibilityFailure,
@@ -71,8 +71,8 @@ export { createProjectContext } from './project-context.js';
 export type { ProjectContext } from './project-context.js';
 
 // Run tasks
-export { runTasks } from './run-tasks/index.js';
-export type { RunTasksOptions } from './run-tasks/index.js';
+export { runTasks } from './lifecycle/run-tasks.js';
+export type { RunTasksOptions } from './lifecycle/run-tasks.js';
 
 // Lifecycle
 export { ToolSurfaceRegistry } from './lifecycle/tool-surface-registry.js';

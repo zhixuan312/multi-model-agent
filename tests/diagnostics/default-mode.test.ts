@@ -3,7 +3,7 @@ import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import { executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
 

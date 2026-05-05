@@ -105,7 +105,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   }),
 }));
 
-vi.mock('@zhixuan92/multi-model-agent-core/run-tasks/verify-stage', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/lifecycle/handlers/verify-stage', () => ({
   runVerifyStage: vi.fn(async () => ({
     status: 'skipped' as const, steps: [], totalDurationMs: 0,
     skipReason: 'no_command' as const,
@@ -140,7 +140,7 @@ const config: MultiModelConfig = {
   },
 };
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function reset() {
   specReviewVerdict = 'approved';

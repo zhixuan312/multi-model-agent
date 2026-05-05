@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ExecutionContext } from '../../packages/core/src/executors/types.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 
 // Track calls to differentiate implementer vs quality reviewer
@@ -72,7 +72,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   }),
 }));
 
-import { executeVerify } from '../../packages/core/src/executors/verify.js';
+import { executeVerify } from '../../packages/core/src/lifecycle/executors/verify.js';
 
 function makeContext(): { ctx: ExecutionContext; cwd: string } {
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'verify-qr-')));

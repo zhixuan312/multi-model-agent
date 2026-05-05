@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as audit from '@zhixuan92/multi-model-agent-core/tool-schemas/audit';
-import { executeAudit } from '@zhixuan92/multi-model-agent-core/executors/audit';
+import { executeAudit } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/audit';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

@@ -5,7 +5,7 @@ import { EventBus, type EventSink } from '../../packages/core/src/observability/
 import { LocalLogSink } from '../../packages/core/src/observability/local-log-sink.js';
 import { TelemetrySink, type Recorder } from '../../packages/core/src/observability/telemetry-sink.js';
 import { JsonlWriter } from '../../packages/core/src/diagnostics/jsonl-writer.js';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 import {
   runFixtureMatrixAndCaptureEvents,
   runCanonicalRuntimeFixtureAndCaptureEvents,

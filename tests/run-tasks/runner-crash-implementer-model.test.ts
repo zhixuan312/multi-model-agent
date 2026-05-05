@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { executeReviewedLifecycle } from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import { executeReviewedLifecycle } from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import type { MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
 
 vi.mock('fs/promises', () => ({

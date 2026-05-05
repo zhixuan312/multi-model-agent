@@ -13,7 +13,7 @@ let implementCalls = 0;
 let diffReviewOutput: string = 'APPROVE';
 let diffReviewStatus: string | undefined;
 
-vi.mock('@zhixuan92/multi-model-agent-core/run-tasks/verify-stage', () => ({
+vi.mock('@zhixuan92/multi-model-agent-core/lifecycle/handlers/verify-stage', () => ({
   runVerifyStage: vi.fn(async () => ({
     status: verifyStatus,
     steps: verifyStatus === 'skipped' ? [] : [{ command: 'npm test', status: verifyStatus, durationMs: 1 }],
@@ -92,7 +92,7 @@ const config: MultiModelConfig = {
   },
 };
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function reset(status: typeof verifyStatus = 'passed') {
   verifyStatus = status;

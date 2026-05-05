@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { newStageIdleTracker, snapshotIdle } from '../../packages/core/src/run-tasks/stage-idle-tracker.js';
+import { newStageIdleTracker, snapshotIdle } from '../../packages/core/src/lifecycle/stage-idle-tracker.js';
 
 describe('StageIdleTracker', () => {
   it('records max gap, sum of gaps >1s, and event count', () => {

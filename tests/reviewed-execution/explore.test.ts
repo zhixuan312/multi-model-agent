@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import type { ExecutionContext } from '../../packages/core/src/executors/types.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { MultiModelConfig, Provider, RunResult } from '../../packages/core/src/types.js';
 import { EventBus } from '../../packages/core/src/observability/bus.js';
 import type { EventSink, EventType } from '../../packages/core/src/observability/bus.js';
@@ -10,7 +10,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: () => providerState.activeProvider,
 }));
 
-import { executeExplore, type ExploreExecutorInput } from '../../packages/core/src/executors/explore.js';
+import { executeExplore, type ExploreExecutorInput } from '../../packages/core/src/lifecycle/executors/explore.js';
 import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

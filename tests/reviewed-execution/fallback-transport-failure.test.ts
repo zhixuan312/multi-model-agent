@@ -19,7 +19,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   },
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 const STRUCTURED_IMPL_OUTPUT = `## Summary
 implemented

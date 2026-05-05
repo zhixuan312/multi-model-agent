@@ -1,23 +1,23 @@
 // packages/core/src/executors/investigate.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/investigate.js';
-import type { RunResult } from '../types.js';
-import { executeReviewedLifecycle } from '../run-tasks/reviewed-lifecycle.js';
-import { resolveAgent } from '../routing/resolve-agent.js';
+import type { Input } from '../../tool-schemas/investigate.js';
+import type { RunResult } from '../../types.js';
+import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { resolveAgent } from '../../routing/resolve-agent.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
 import {
   compileInvestigate,
   type ResolvedContextBlock,
-} from '../intake/compilers/investigate.js';
-import { parseInvestigationReport, type ParsedInvestigation } from '../reporting/parse-investigation-report.js';
-import { deriveInvestigateWorkerStatus } from '../reporting/derive-investigate-status.js';
-import { composeInvestigateTerminalHeadline } from '../reporting/compose-investigate-headline.js';
-import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
-import { resolveReadOnlyReviewFlag } from '../config/read-only-review-flag.js';
-import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
-import { buildInvestigateQualityPrompt } from '../review/quality-only-prompts.js';
+} from '../../intake/compilers/investigate.js';
+import { parseInvestigationReport, type ParsedInvestigation } from '../../reporting/parse-investigation-report.js';
+import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
+import { composeInvestigateTerminalHeadline } from '../../reporting/compose-investigate-headline.js';
+import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
+import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
+import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { buildInvestigateQualityPrompt } from '../../review/quality-only-prompts.js';
 
 export interface InvestigateExecutorInput {
   input: Input;

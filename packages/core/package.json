@@ -56,9 +56,9 @@
       "types": "./dist/provider.d.ts",
       "import": "./dist/provider.js"
     },
-    "./run-tasks": {
-      "types": "./dist/run-tasks/index.d.ts",
-      "import": "./dist/run-tasks/index.js"
+    "./lifecycle/run-tasks": {
+      "types": "./dist/lifecycle/run-tasks.d.ts",
+      "import": "./dist/lifecycle/run-tasks.js"
     },
     "./diagnostics/verbose-line": {
       "types": "./dist/diagnostics/verbose-line.d.ts",
@@ -68,14 +68,6 @@
       "types": "./dist/diagnostics/request-spill.d.ts",
       "import": "./dist/diagnostics/request-spill.js"
     },
-    "./run-tasks/commit-stage": {
-      "types": "./dist/run-tasks/commit-stage.d.ts",
-      "import": "./dist/run-tasks/commit-stage.js"
-    },
-    "./run-tasks/verify-stage": {
-      "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
-      "import": "./dist/lifecycle/handlers/verify-stage.js"
-    },
     "./lifecycle/handlers/commit-stage": {
       "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
       "import": "./dist/lifecycle/handlers/commit-stage.js"
@@ -84,9 +76,9 @@
       "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
       "import": "./dist/lifecycle/handlers/verify-stage.js"
     },
-    "./run-tasks/metadata-repair": {
-      "types": "./dist/run-tasks/metadata-repair.d.ts",
-      "import": "./dist/run-tasks/metadata-repair.js"
+    "./lifecycle/metadata-repair": {
+      "types": "./dist/lifecycle/metadata-repair.d.ts",
+      "import": "./dist/lifecycle/metadata-repair.js"
     },
     "./review/diff-review": {
       "types": "./dist/review/diff-review.d.ts",
@@ -232,61 +224,61 @@
       "types": "./dist/file-artifact-check.d.ts",
       "import": "./dist/file-artifact-check.js"
     },
-    "./executors": {
-      "types": "./dist/executors/index.d.ts",
-      "import": "./dist/executors/index.js"
+    "./lifecycle/executors": {
+      "types": "./dist/lifecycle/executors/index.d.ts",
+      "import": "./dist/lifecycle/executors/index.js"
     },
-    "./executors/index": {
-      "types": "./dist/executors/index.d.ts",
-      "import": "./dist/executors/index.js"
+    "./lifecycle/executors/index": {
+      "types": "./dist/lifecycle/executors/index.d.ts",
+      "import": "./dist/lifecycle/executors/index.js"
     },
-    "./executors/delegate": {
-      "types": "./dist/executors/delegate.d.ts",
-      "import": "./dist/executors/delegate.js"
+    "./lifecycle/executors/delegate": {
+      "types": "./dist/lifecycle/executors/delegate.d.ts",
+      "import": "./dist/lifecycle/executors/delegate.js"
     },
-    "./executors/audit": {
-      "types": "./dist/executors/audit.d.ts",
-      "import": "./dist/executors/audit.js"
+    "./lifecycle/executors/audit": {
+      "types": "./dist/lifecycle/executors/audit.d.ts",
+      "import": "./dist/lifecycle/executors/audit.js"
     },
-    "./executors/investigate": {
-      "types": "./dist/executors/investigate.d.ts",
-      "import": "./dist/executors/investigate.js"
+    "./lifecycle/executors/investigate": {
+      "types": "./dist/lifecycle/executors/investigate.d.ts",
+      "import": "./dist/lifecycle/executors/investigate.js"
     },
-    "./executors/explore": {
-      "types": "./dist/executors/explore.d.ts",
-      "import": "./dist/executors/explore.js"
+    "./lifecycle/executors/explore": {
+      "types": "./dist/lifecycle/executors/explore.d.ts",
+      "import": "./dist/lifecycle/executors/explore.js"
     },
-    "./executors/review": {
-      "types": "./dist/executors/review.d.ts",
-      "import": "./dist/executors/review.js"
+    "./lifecycle/executors/review": {
+      "types": "./dist/lifecycle/executors/review.d.ts",
+      "import": "./dist/lifecycle/executors/review.js"
     },
-    "./executors/verify": {
-      "types": "./dist/executors/verify.d.ts",
-      "import": "./dist/executors/verify.js"
+    "./lifecycle/executors/verify": {
+      "types": "./dist/lifecycle/executors/verify.d.ts",
+      "import": "./dist/lifecycle/executors/verify.js"
     },
-    "./executors/debug": {
-      "types": "./dist/executors/debug.d.ts",
-      "import": "./dist/executors/debug.js"
+    "./lifecycle/executors/debug": {
+      "types": "./dist/lifecycle/executors/debug.d.ts",
+      "import": "./dist/lifecycle/executors/debug.js"
     },
-    "./executors/execute-plan": {
-      "types": "./dist/executors/execute-plan.d.ts",
-      "import": "./dist/executors/execute-plan.js"
+    "./lifecycle/executors/execute-plan": {
+      "types": "./dist/lifecycle/executors/execute-plan.d.ts",
+      "import": "./dist/lifecycle/executors/execute-plan.js"
     },
-    "./executors/retry": {
-      "types": "./dist/executors/retry.d.ts",
-      "import": "./dist/executors/retry.js"
+    "./lifecycle/executors/retry": {
+      "types": "./dist/lifecycle/executors/retry.d.ts",
+      "import": "./dist/lifecycle/executors/retry.js"
     },
-    "./executors/types": {
-      "types": "./dist/executors/types.d.ts",
-      "import": "./dist/executors/types.js"
+    "./lifecycle/executors/types": {
+      "types": "./dist/lifecycle/executors/types.d.ts",
+      "import": "./dist/lifecycle/executors/types.js"
     },
-    "./executors/execution-context": {
-      "types": "./dist/executors/execution-context.d.ts",
-      "import": "./dist/executors/execution-context.js"
+    "./lifecycle/executors/execution-context": {
+      "types": "./dist/lifecycle/executors/execution-context.d.ts",
+      "import": "./dist/lifecycle/executors/execution-context.js"
     },
-    "./executors/shared-compute": {
-      "types": "./dist/executors/shared-compute.d.ts",
-      "import": "./dist/executors/shared-compute.js"
+    "./lifecycle/executors/shared-compute": {
+      "types": "./dist/lifecycle/executors/shared-compute.d.ts",
+      "import": "./dist/lifecycle/executors/shared-compute.js"
     },
     "./tool-schemas": {
       "types": "./dist/tool-schemas/index.d.ts",

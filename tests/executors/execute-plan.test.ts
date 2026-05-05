@@ -7,7 +7,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
 }));
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeExecutePlan } from '../../packages/core/src/executors/execute-plan.js';
+import { executeExecutePlan } from '../../packages/core/src/lifecycle/executors/execute-plan.js';
 
 const mockWorker: RunResult = {
   output: 'Task completed: modified src/foo.ts',

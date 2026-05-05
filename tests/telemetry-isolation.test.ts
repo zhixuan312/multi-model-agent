@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { executeReviewedLifecycle } from '../packages/core/src/run-tasks/reviewed-lifecycle.js';
+import { executeReviewedLifecycle } from '../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import { mockProvider } from './contract/fixtures/mock-providers.js';
 import type {
   MultiModelConfig,

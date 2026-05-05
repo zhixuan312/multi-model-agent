@@ -1,4 +1,4 @@
-import { runCommitStage } from '@zhixuan92/multi-model-agent-core/run-tasks/commit-stage.js';
+import { runCommitStage } from '@zhixuan92/multi-model-agent-core/lifecycle/handlers/commit-stage';
 import { execSync } from 'node:child_process';
 import { mkdtempSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';

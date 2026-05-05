@@ -1,8 +1,8 @@
 import { describe, it, expect } from 'vitest';
 import type { RunResult } from '../../packages/core/src/types.js';
-import { executeDelegate } from '../../packages/core/src/executors/delegate.js';
-import { buildExecutionContext } from '../../packages/core/src/executors/execution-context.js';
-import type { ExecutionContext } from '../../packages/core/src/executors/types.js';
+import { executeDelegate } from '../../packages/core/src/lifecycle/executors/delegate.js';
+import { buildExecutionContext } from '../../packages/core/src/lifecycle/executors/execution-context.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { ProjectContext } from '../../packages/core/src/project-context.js';
 
 function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {

@@ -139,7 +139,7 @@ function makeConfig(): MultiModelConfig {
 async function runReviewedLifecycleAndCaptureEvents(opts?: {
   recordHeartbeat?: boolean;
 }) {
-  const { executeReviewedLifecycle } = await import('../../packages/core/src/run-tasks/reviewed-lifecycle.js');
+  const { executeReviewedLifecycle } = await import('../../packages/core/src/lifecycle/reviewed-lifecycle.js');
   const { createProvider } = await import('@zhixuan92/multi-model-agent-core/provider');
 
   const config = makeConfig();

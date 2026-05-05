@@ -1,16 +1,16 @@
 // packages/core/src/executors/delegate.ts
 import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
-import type { Input } from '../tool-schemas/delegate.js';
-import type { TaskSpec, RunResult } from '../types.js';
-import { runTasks } from '../run-tasks/index.js';
-import type { RunTasksOptions } from '../run-tasks/index.js';
-import { compileDelegateTasks } from '../intake/compilers/delegate.js';
-import type { DelegateTaskInput } from '../intake/compilers/delegate.js';
-import { runIntakePipeline } from '../intake/pipeline.js';
+import type { Input } from '../../tool-schemas/delegate.js';
+import type { TaskSpec, RunResult } from '../../types.js';
+import { runTasks } from '../run-tasks.js';
+import type { RunTasksOptions } from '../run-tasks.js';
+import { compileDelegateTasks } from '../../intake/compilers/delegate.js';
+import type { DelegateTaskInput } from '../../intake/compilers/delegate.js';
+import { runIntakePipeline } from '../../intake/pipeline.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../reporting/not-applicable.js';
-import { composeTerminalHeadline } from '../reporting/compose-terminal-headline.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
+import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 
 export interface DelegateOptions {
   /**

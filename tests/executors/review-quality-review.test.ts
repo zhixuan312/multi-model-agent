@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { executeReview } from '../../packages/core/src/executors/review.js';
+import { executeReview } from '../../packages/core/src/lifecycle/executors/review.js';
 import type { MultiModelConfig } from '../../packages/core/src/types.js';
 
 const workerResult = {

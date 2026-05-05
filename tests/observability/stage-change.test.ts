@@ -50,7 +50,7 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mock file content\nconst x = 1;\n'),
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 const config: MultiModelConfig = {
   agents: {
@@ -65,7 +65,7 @@ describe('stage_change emissions (P5)', () => {
   // not call emitTaskEvent('stage_change', ...). Stage transitions are
   // authoritative only via explicit emitTaskEvent calls at lifecycle points.
   it('heartbeat-tick handler does not emit stage_change', () => {
-    const sourcePath = resolve(__dirname, '../../packages/core/src/run-tasks/reviewed-lifecycle.ts');
+    const sourcePath = resolve(__dirname, '../../packages/core/src/lifecycle/reviewed-lifecycle.ts');
     const source = readFileSync(sourcePath, 'utf8');
 
     // Locate the heartbeat-tick branch and assert no stage_change emit inside it.

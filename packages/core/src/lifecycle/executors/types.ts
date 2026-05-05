@@ -1,11 +1,11 @@
 // packages/core/src/executors/types.ts
-import type { ProjectContext } from '../project-context.js';
-import type { RunResult, MultiModelConfig, ReviewVerdict } from '../types.js';
-import type { HttpServerLog } from '../diagnostics/http-server-log.js';
-import type { ContextBlockStore } from '../context/context-block-store.js';
-import type { NotApplicable } from '../reporting/not-applicable.js';
-import type { HeartbeatTickInfo } from '../heartbeat.js';
-import type { EventBus } from '../observability/bus.js';
+import type { ProjectContext } from '../../project-context.js';
+import type { RunResult, MultiModelConfig, ReviewVerdict } from '../../types.js';
+import type { HttpServerLog } from '../../diagnostics/http-server-log.js';
+import type { ContextBlockStore } from '../../context/context-block-store.js';
+import type { NotApplicable } from '../../reporting/not-applicable.js';
+import type { HeartbeatTickInfo } from '../../heartbeat.js';
+import type { EventBus } from '../../observability/bus.js';
 
 /** Aggregate timing metrics for a `delegate_tasks` batch. */
 export interface BatchTimings {

@@ -18,7 +18,7 @@ vi.mock('fs/promises', () => ({
   readFile: vi.fn().mockResolvedValue('// mocked implementer file content\n'),
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function makeConfig(): MultiModelConfig {
   return {

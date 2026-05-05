@@ -10,7 +10,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/provider', () => ({
   createProvider: (slot: AgentType) => providers[slot],
 }));
 
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 
 function makeConfig(): MultiModelConfig {
   return {

@@ -3,7 +3,7 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { executePlanInputSchema } from '../../wire/execute-plan-wire.js';
 import type { ExecutePlanWireInput } from '../../wire/execute-plan-wire.js';
-import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/executors/execute-plan';
+import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/execute-plan';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

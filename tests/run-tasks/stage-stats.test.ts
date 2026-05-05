@@ -12,7 +12,7 @@ import {
   accumulateReworkIteration,
   commitReworkStage,
   executeReviewedLifecycle,
-} from '../../packages/core/src/run-tasks/reviewed-lifecycle.js';
+} from '../../packages/core/src/lifecycle/reviewed-lifecycle.js';
 import { mockProvider } from '../contract/fixtures/mock-providers.js';
 import type { StageStatsMap, MultiModelConfig, TaskSpec, AgentType, Provider } from '../../packages/core/src/types.js';
 

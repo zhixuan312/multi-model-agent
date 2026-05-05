@@ -3,7 +3,7 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/run-tasks';
 import { EventSchemas } from '../../../packages/core/src/observability/events.js';
 import { EventBus, type EventSink } from '../../../packages/core/src/observability/bus.js';
 

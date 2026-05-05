@@ -3,7 +3,7 @@ import * as path from 'node:path';
 import { realpathSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as investigate from '@zhixuan92/multi-model-agent-core/tool-schemas/investigate';
-import { executeInvestigate } from '@zhixuan92/multi-model-agent-core/executors/investigate';
+import { executeInvestigate } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/investigate';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
