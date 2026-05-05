@@ -1,6 +1,6 @@
 ---
 name: multi-model-agent
-description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse, clarification resume) instead of defaulting to inline Agent dispatches
+description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
 when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
 version: "0.0.0-unreleased"
 ---
@@ -62,7 +62,6 @@ digraph picker {
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous batch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
-| `mma-clarifications` | Confirm or correct the service's proposed interpretation |
 
 ## Best practices
 
@@ -120,8 +119,6 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 3. **`re-inlined-shared-content`** — Caller pastes the same spec / plan / error log into 5 task prompts in one batch (or across rounds). Token cost scales linearly with N. Corrective: `mma-context-blocks` register once, pass `contextBlockIds` to every task. C3 fires the moment the same content is referenced a second time.
 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multi-task `mma-delegate` batches; `mma-retry` is the corrective there too.)
-
-5. **`clarification-as-info`** — Caller polls a batch, sees `proposedInterpretation` as a string, treats it as advisory, and waits for the batch to complete. The batch is paused — it will not complete until the caller responds via `mma-clarifications`. Corrective: a string `proposedInterpretation` is a hard gate, not an FYI. Either accept the proposal verbatim or correct it.
 
 ## Preflight: auto-start the daemon if it is not running
 
@@ -182,9 +179,7 @@ This is automatic and not caller-overridable from any `mma-*` skill — it shape
 
 1. Call the matching `mma-*` skill → receive `{ batchId, statusUrl }`.
 2. Poll `GET /batch/:id`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
-3. Read `results` / `error` / `proposedInterpretation` from the 7-field terminal envelope.
-
-If `proposedInterpretation` is a string (not the `not_applicable` sentinel) → use `mma-clarifications` to confirm/correct.
+3. Read `results` / `error` from the 7-field terminal envelope.
 
 ## Common pitfalls
 

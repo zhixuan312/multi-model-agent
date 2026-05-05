@@ -19,7 +19,6 @@ which terminal state you're in:
 | Shape | Meaning |
 |---|---|
 | `error` is a real object | Batch failed — read `error.code` + `error.message` |
-| `proposedInterpretation` is a string | Batch is awaiting clarification — invoke `mma-clarifications` |
 | Both are `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
 
 ### Poll loop (POSIX sh)

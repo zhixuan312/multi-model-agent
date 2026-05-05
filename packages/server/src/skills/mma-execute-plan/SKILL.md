@@ -62,8 +62,6 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 
 > **No `agentType` here.** Worker tier is hardcoded to `standard` for every plan task; sending `agentType` (top-level or per-task) is rejected with HTTP 400. For tasks that need `complex` tier, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
-If the batch reaches `awaiting_clarification`, use `mma-clarifications` to confirm or correct the proposed interpretation.
-
 ## Full example
 
 ```bash

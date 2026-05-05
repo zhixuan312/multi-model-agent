@@ -37,7 +37,6 @@ Read the envelope by the shape of `error` and `proposedInterpretation`:
 | Shape | Meaning |
 |---|---|
 | `error` is a real object (with `code` / `message`) | Batch failed — read `error.code` + `error.message` |
-| `proposedInterpretation` is a string | Batch is awaiting clarification — invoke `mma-clarifications` |
 | Both are `{kind: "not_applicable", ...}` sentinels | Batch succeeded — read `results` |
 
 ### GET /batch/:id?taskIndex=N — single task slice
