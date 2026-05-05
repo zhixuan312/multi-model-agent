@@ -286,9 +286,16 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new
+## What's new in 4.0.0
 
-Latest: **3.12.3** — Bug-fix patch closing the four real-world regressions surfaced by 3.12.2 telemetry. Reviewer cost + findings recovered for DeepSeek (and any openai-compatible non-OpenAI provider): runner stops forcing `Agent.outputType` on DeepSeek and treats structured-output parse failures as non-fatal everywhere, so `runAnnotationReview`'s text-parser fallback recovers findings from prose instead of dropping the whole call. `agents.implementer` now agrees with stage stats — both report `resolved.slot`; per-call fallback drift remains visible in `implementerHistory` + `fallbackOverrides`. Reviewer separation is **slot-based only**: `forbiddenIdentities` removed from spec/quality/diff reviewer fallback calls, so when the user puts the same model on different tiers the review still runs. `endReviewStage` clamps `totalIdleMs` to `durationMs` to prevent impossible idle ratios from the two-attempt review loop. All 2836 tests pass. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+- **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
+- **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning. Telemetry SCHEMA_VERSION bumped to 4.
+- **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
+- **Wire field rename.** Internal `mainModel*` ↔ wire `parentModel*`. `reviewerConfidence` → `annotatorConfidence`. errorCodes renamed: `verify_command_error` → `validator_verify_command_failed`; `dirty_worktree` → `validator_dirty_worktree`. Removed: `intake_clarification_expired`, `lifecycle_round_cap_exceeded`.
+- **New: `register_context_block` route.** Re-installing skills now actively cleans up orphan files. Context-block defaults: 24 h idle TTL, `maxEntries` 500, HTTP body cap 50 MiB hard `413`.
+- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces the three parallel runner files. 2969 tests pass.
+
+Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

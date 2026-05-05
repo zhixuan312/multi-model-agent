@@ -102,9 +102,14 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new
+## What's new in 4.0.0
 
-Latest: **3.12.3** — Bug-fix patch closing the four real-world regressions surfaced by 3.12.2 telemetry. Reviewer cost + findings recovered for DeepSeek (and any openai-compatible non-OpenAI provider): runner stops forcing `Agent.outputType` on DeepSeek and treats structured-output parse failures as non-fatal everywhere, so `runAnnotationReview`'s text-parser fallback recovers findings from prose instead of dropping the whole call. `agents.implementer` now agrees with stage stats — both report `resolved.slot`; per-call fallback drift remains visible in `implementerHistory` + `fallbackOverrides`. Reviewer separation is **slot-based only**: `forbiddenIdentities` removed from spec/quality/diff reviewer fallback calls, so when the user puts the same model on different tiers the review still runs. `endReviewStage` clamps `totalIdleMs` to `durationMs` to prevent impossible idle ratios from the two-attempt review loop. All 2836 tests pass. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+- **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
+- **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning; `reasoningTokens` and `cachedCreationTokens` removed. SCHEMA_VERSION → 4.
+- **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
+- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces three parallel runner files; `ReviewerEngine` and `AnnotatorEngine` split. `ReadinessClassifier`, `EffortInferer`, `AttemptRecorder`, `RequestPipeline`, `TelemetryFlushWorker`, `CrossTierGuard` removed. 2969 tests pass.
+
+Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 
