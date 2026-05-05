@@ -40,7 +40,6 @@ export type ErrorCode =
   | 'intake_brief_invalid'
   // lifecycle_* — lifecycle orchestration
   | 'lifecycle_review_loop_capped'
-  | 'lifecycle_round_cap_exceeded'
   | 'lifecycle_idle_exceeded'
   // sentinel
   | 'other';

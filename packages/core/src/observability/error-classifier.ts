@@ -14,7 +14,7 @@ const STRUCTURED_CODE_TO_ERRORCODE: Record<string, ErrorCode> = {
   'diff_review_rejected': 'review_diff_rejected',
   'degenerate_exhausted': 'runner_supervisor_interrupt',
   'time_ceiling': 'guard_time_ceiling',
-  'max_turns': 'lifecycle_round_cap_exceeded',
+  'max_turns': 'lifecycle_review_loop_capped',
   'reviewer_separation_unsatisfiable': 'config_main_agent_pricing_unresolvable',
 };
 
