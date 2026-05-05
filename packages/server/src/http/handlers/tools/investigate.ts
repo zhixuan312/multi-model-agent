@@ -25,6 +25,20 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     }
     const input = parsed.data;
 
+    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
+    // the new lifecycle.
+    if (deps.routeDispatcher) {
+      const result = await deps.routeDispatcher.dispatch({
+        route: 'investigate',
+        toolCategory: 'read_only',
+        rawRequest: input,
+      });
+      sendJson(res, result.status, result.body);
+      return;
+    }
+
+    // Legacy path (async-dispatch via executeInvestigate) — kept as fallback until
+    // server.ts wires routeDispatcher for all tool routes.
     const flag = resolveReadOnlyReviewFlag();
     if (flag.isEnabledFor('investigate_codebase') && !assertCrossTierConfigured(deps.config, res)) return;
     const cwd = ctx.cwd!;
