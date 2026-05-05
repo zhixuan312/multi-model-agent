@@ -76,6 +76,14 @@
       "types": "./dist/run-tasks/verify-stage.d.ts",
       "import": "./dist/run-tasks/verify-stage.js"
     },
+    "./lifecycle/handlers/commit-stage": {
+      "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
+      "import": "./dist/lifecycle/handlers/commit-stage.js"
+    },
+    "./lifecycle/handlers/verify-stage": {
+      "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
+      "import": "./dist/lifecycle/handlers/verify-stage.js"
+    },
     "./run-tasks/metadata-repair": {
       "types": "./dist/run-tasks/metadata-repair.d.ts",
       "import": "./dist/run-tasks/metadata-repair.js"

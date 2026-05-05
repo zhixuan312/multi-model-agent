@@ -1,5 +1,4 @@
 import type { RunResult } from '../types.js';
-import { deriveTerminalStatus } from './derive-terminal-status.js';
 import {
   clampStageCost,
   clampTaskCost,
@@ -31,6 +30,27 @@ export interface TaskCompletionSummary {
 // Clamping is identical to event-builder via shared helpers from
 // packages/core/src/telemetry/clamp.ts — guarantees the summary line and
 // the V3 event never disagree on cost/token/duration values.
+function deriveTerminalStatus(rr: RunResult): string {
+  const tr = rr.terminationReason;
+  if (tr === 'all_tiers_unavailable') return 'unavailable';
+  if (tr === 'cost_ceiling') return 'cost_exceeded';
+  if (tr === 'round_cap') return 'incomplete';
+  if (!tr || typeof tr !== 'object') return 'incomplete';
+  switch (tr.cause) {
+    case 'finished': return 'ok';
+    case 'incomplete':
+    case 'degenerate_exhausted': return 'incomplete';
+    case 'timeout': return 'timeout';
+    case 'cost_exceeded': return 'cost_exceeded';
+    case 'brief_too_vague': return 'brief_too_vague';
+    case 'api_error':
+    case 'provider_transport_failure':
+    case 'api_aborted':
+    case 'error': return 'error';
+    default: return 'incomplete';
+  }
+}
+
 export function computeTaskCompletionSummary(args: {
   runResult: RunResult;
   taskIndexZero: number;

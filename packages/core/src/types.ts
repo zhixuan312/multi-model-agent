@@ -7,7 +7,7 @@ import type {
   TokenUsage,
 } from './runners/types.js';
 import type { BriefQualityPolicy } from './intake/types.js';
-import type { VerifyStageResult, VerifyStepStatus } from './run-tasks/verify-stage.js';
+import type { VerifyStageResult, VerifyStepStatus } from './lifecycle/handlers/verify-stage.js';
 import type { ResearchToolDefinition } from './research/types.js';
 export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
 export type SandboxPolicy = 'none' | 'cwd-only';

@@ -1,4 +1,4 @@
-import type { VerifyStageResult } from '../run-tasks/verify-stage.js';
+import type { VerifyStageResult } from '../lifecycle/handlers/verify-stage.js';
 import type { SkippedReviewResult } from './skipped-result.js';
 
 export type DiffReviewConcern = {

@@ -4,7 +4,7 @@
 // sourced, how cost is computed, the exact diagnostic wording) are
 // passed in; the shared shape lives here.
 import type { Commit, RunResult } from '../../types.js';
-import type { VerifyStageResult, VerifyStepStatus } from '../../run-tasks/verify-stage.js';
+import type { VerifyStageResult, VerifyStepStatus } from '../../lifecycle/handlers/verify-stage.js';
 
 export type { Commit };
 import type { TokenUsage } from '../types.js';
