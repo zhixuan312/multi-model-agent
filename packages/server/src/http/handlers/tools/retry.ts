@@ -36,31 +36,23 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
     const input = parsed.data;
     const cwd = ctx.cwd!;
 
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle using the ORIGINAL batch's toolCategory for budget selection.
+    // Resolve original batch's toolCategory for dispatcher budget selection.
+    // Missing-batch and invalid-category cases fall through to the legacy
+    // executor path (which surfaces the error asynchronously inside the
+    // batch result) — matching pre-cutover behavior where retry's 202 was
+    // unconditional and validation happened lazily.
+    let originalToolCategory: 'artifact_producing' | 'read_only' | 'research' | undefined;
     if (deps.routeDispatcher) {
       const original = deps.batchRegistry.get(input.batchId);
-      if (!original) {
-        sendError(res, 404, 'batch_not_found', `batch "${input.batchId}" not found`);
-        return;
+      if (
+        original
+        && original.toolCategory
+        && (original.toolCategory as string) !== 'assist'
+      ) {
+        originalToolCategory = original.toolCategory as typeof originalToolCategory;
       }
-      if (!original.toolCategory || (original.toolCategory as string) === 'assist') {
-        sendError(res, 400, 'invalid_tool_category',
-          `retry: original batch '${input.batchId}' has missing or invalid toolCategory ` +
-          `'${original.toolCategory}' — refusing to retry with 'assist' (assist is route-level only)`);
-        return;
-      }
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'retry',
-        toolCategory: original.toolCategory,
-        rawRequest: { batchId: input.batchId, retryableFor: input.taskIndices, cwd },
-      });
-      sendJson(res, result.status, result.body);
-      return;
     }
 
-    // Legacy path (async-dispatch via executeRetry) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
       sendError(res, 503, reserveResult.error, reserveResult.message);
@@ -78,9 +70,19 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeRetry(executionCtx, input, {
+        const callExecutor = () => executeRetry(executionCtx, input, {
           injectDefaults: makeInjectDefaults(deps.config, cwd),
         });
+        if (deps.routeDispatcher && originalToolCategory) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'retry',
+            toolCategory: originalToolCategory,
+            rawRequest: { batchId: input.batchId, retryableFor: input.taskIndices, cwd },
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

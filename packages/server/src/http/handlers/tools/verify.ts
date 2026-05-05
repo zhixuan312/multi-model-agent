@@ -39,7 +39,17 @@ export function buildVerifyHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeVerify(executionCtx, input);
+        const callExecutor = () => executeVerify(executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'verify',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

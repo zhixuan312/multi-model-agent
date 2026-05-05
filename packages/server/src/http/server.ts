@@ -108,12 +108,16 @@ async function registerToolHandlers(
     new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
   ]);
 
+  const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
+  const routeDispatcher = new LifecycleDispatcher();
+
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
     bus,
     projectRegistry,
     batchRegistry,
+    routeDispatcher,
   };
 
   const delegateHandler = buildDelegateHandler(deps);
@@ -163,6 +167,8 @@ async function registerControlHandlers(
       new LocalLogSink(writer),
       new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
     ]);
+    const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
+    const routeDispatcher = new LifecycleDispatcher();
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -172,6 +178,7 @@ async function registerControlHandlers(
       bus,
       projectRegistry,
       batchRegistry,
+      routeDispatcher,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));

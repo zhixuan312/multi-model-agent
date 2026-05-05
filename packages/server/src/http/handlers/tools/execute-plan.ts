@@ -21,21 +21,6 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
     }
 
     const input: ExecutePlanWireInput = parsed.data;
-
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle.
-    if (deps.routeDispatcher) {
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'execute_plan',
-        toolCategory: 'artifact_producing',
-        rawRequest: input,
-      });
-      sendJson(res, result.status, result.body);
-      return;
-    }
-
-    // Legacy path (async-dispatch via executeExecutePlan) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -55,10 +40,20 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeExecutePlan(executionCtx, {
+        const callExecutor = () => executeExecutePlan(executionCtx, {
           tasks: input.taskDescriptors,
           filePaths: input.filePaths,
         });
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'execute_plan',
+            toolCategory: 'artifact_producing',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

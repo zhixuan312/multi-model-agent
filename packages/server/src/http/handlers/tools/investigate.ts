@@ -21,21 +21,6 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       return;
     }
     const input = parsed.data;
-
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle.
-    if (deps.routeDispatcher) {
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'investigate',
-        toolCategory: 'read_only',
-        rawRequest: input,
-      });
-      sendJson(res, result.status, result.body);
-      return;
-    }
-
-    // Legacy path (async-dispatch via executeInvestigate) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     // Step 2: reservation lifecycle (mirrors audit.ts; reservation is just a cwd-validity gate).
@@ -89,12 +74,24 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      executor: async (executionCtx) => executeInvestigate(executionCtx, {
-        input,
-        resolvedContextBlocks,
-        canonicalizedFilePaths,
-        relativeFilePathsForPrompt,
-      }),
+      executor: async (executionCtx) => {
+        const callExecutor = () => executeInvestigate(executionCtx, {
+          input,
+          resolvedContextBlocks,
+          canonicalizedFilePaths,
+          relativeFilePathsForPrompt,
+        });
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'investigate',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
+      },
     });
 
     await emitRequestReceived({ config: deps.config, batchId, route: req.url ?? '', parsed: input });

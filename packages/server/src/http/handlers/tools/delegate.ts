@@ -35,21 +35,6 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
     }
 
     const input = parsed.data;
-
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle.
-    if (deps.routeDispatcher) {
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'delegate',
-        toolCategory: 'artifact_producing',
-        rawRequest: input,
-      });
-      sendJson(res, result.status, result.body);
-      return;
-    }
-
-    // Legacy path (async-dispatch via executeDelegate) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -70,9 +55,20 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeDelegate(executionCtx, input, {
-          injectDefaults: makeInjectDefaults(deps.config, cwd),
-        });
+        const callExecutor = () =>
+          executeDelegate(executionCtx, input, {
+            injectDefaults: makeInjectDefaults(deps.config, cwd),
+          });
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'delegate',
+            toolCategory: 'artifact_producing',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

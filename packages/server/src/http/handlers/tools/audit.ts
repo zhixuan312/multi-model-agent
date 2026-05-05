@@ -19,21 +19,6 @@ export function buildAuditHandler(deps: HandlerDeps): RawHandler {
     }
 
     const input = parsed.data;
-
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle.
-    if (deps.routeDispatcher) {
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'audit',
-        toolCategory: 'read_only',
-        rawRequest: input,
-      });
-      sendJson(res, result.status, result.body);
-      return;
-    }
-
-    // Legacy path (async-dispatch via executeAudit) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -54,7 +39,17 @@ export function buildAuditHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeAudit(executionCtx, input);
+        const callExecutor = () => executeAudit(executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'audit',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

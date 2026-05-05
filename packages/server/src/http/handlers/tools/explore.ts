@@ -19,21 +19,6 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
       return;
     }
     const input = parsed.data;
-
-    // v4.0 lifecycle path: when a RouteDispatcher is wired, dispatch through
-    // the new lifecycle.
-    if (deps.routeDispatcher) {
-      const result = await deps.routeDispatcher.dispatch({
-        route: 'explore',
-        toolCategory: 'research',
-        rawRequest: input,
-      });
-      sendJson(res, result.status, result.body);
-      return;
-    }
-
-    // Legacy path (async-dispatch via executeExplore) — kept as fallback until
-    // server.ts wires routeDispatcher for all tool routes.
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -82,12 +67,24 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      executor: async (executionCtx) => executeExplore(executionCtx, {
-        input,
-        resolvedContextBlocks,
-        canonicalizedAnchors,
-        relativeAnchorsForPrompt,
-      }),
+      executor: async (executionCtx) => {
+        const callExecutor = () => executeExplore(executionCtx, {
+          input,
+          resolvedContextBlocks,
+          canonicalizedAnchors,
+          relativeAnchorsForPrompt,
+        });
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'explore',
+            toolCategory: 'research',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
+      },
     });
 
     await emitRequestReceived({ config: deps.config, batchId, route: req.url ?? '', parsed: input });
