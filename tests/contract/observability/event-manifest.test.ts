@@ -2,8 +2,8 @@ import manifest from '../goldens/observability/event-manifest.json' with { type:
 import { describe, expect, it } from 'vitest';
 
 describe('observability event manifest', () => {
-  it('contains exactly 13 events', () => {
-    expect(manifest.events).toHaveLength(13);
+  it('contains exactly 16 events', () => {
+    expect(manifest.events).toHaveLength(16);
   });
 
   it('every event has a unique name', () => {
@@ -42,6 +42,6 @@ describe('observability event manifest', () => {
   });
 
   it('version matches expected', () => {
-    expect(manifest.version).toBe('3.3.0');
+    expect(manifest.version).toBe('4.0.0');
   });
 });

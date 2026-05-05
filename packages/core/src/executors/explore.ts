@@ -376,6 +376,24 @@ export async function executeExplore(
 
   const threadCount = parsedReport?.threads.length ?? 0;
 
+  // Emit per-thread started/completed events
+  if (parsedReport) {
+    for (const thread of parsedReport.threads) {
+      ctx.bus?.emit({
+        event: 'explore_thread_started',
+        ts: new Date().toISOString(),
+        batchId,
+        threadIndex: thread.index,
+      });
+      ctx.bus?.emit({
+        event: 'explore_thread_completed',
+        ts: new Date().toISOString(),
+        batchId,
+        threadIndex: thread.index,
+      });
+    }
+  }
+
   ctx.bus?.emit({
     event: 'explore_synthesize_end',
     ts: new Date().toISOString(),

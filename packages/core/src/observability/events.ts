@@ -258,6 +258,16 @@ export const ExploreSynthesizeEndEvent = BatchBase.extend({
   durationMs: z.number().int().min(0),
 }).strict();
 
+export const ExploreThreadStartedEvent = BatchBase.extend({
+  event: z.literal('explore_thread_started'),
+  threadIndex: z.number().int().min(0),
+}).strict();
+
+export const ExploreThreadCompletedEvent = BatchBase.extend({
+  event: z.literal('explore_thread_completed'),
+  threadIndex: z.number().int().min(0),
+}).strict();
+
 export const BatchCompletedEvent = BatchBase.extend({
   event: z.literal('batch_completed'),
   tool: z.string(),
@@ -467,6 +477,8 @@ export const Event = z.discriminatedUnion('event', [
   ExploreExternalUnavailableEvent,
   ExploreSynthesizeStartEvent,
   ExploreSynthesizeEndEvent,
+  ExploreThreadStartedEvent,
+  ExploreThreadCompletedEvent,
   // Runner internals
   WorkerStartEvent,
   TurnStartEvent,
@@ -531,6 +543,8 @@ export const EventSchemas: Record<string, z.ZodType> = {
   explore_external_unavailable:   ExploreExternalUnavailableEvent,
   explore_synthesize_start:       ExploreSynthesizeStartEvent,
   explore_synthesize_end:         ExploreSynthesizeEndEvent,
+  explore_thread_started:         ExploreThreadStartedEvent,
+  explore_thread_completed:       ExploreThreadCompletedEvent,
   // Runner internals
   worker_start:    WorkerStartEvent,
   turn_start:      TurnStartEvent,
@@ -840,6 +854,20 @@ export const EventBuilder = {
     durationMs: number;
   }): z.infer<typeof ExploreSynthesizeEndEvent> {
     return { event: 'explore_synthesize_end', ts: ts(), ...params };
+  },
+
+  exploreThreadStarted(params: {
+    batchId: string;
+    threadIndex: number;
+  }): z.infer<typeof ExploreThreadStartedEvent> {
+    return { event: 'explore_thread_started', ts: ts(), ...params };
+  },
+
+  exploreThreadCompleted(params: {
+    batchId: string;
+    threadIndex: number;
+  }): z.infer<typeof ExploreThreadCompletedEvent> {
+    return { event: 'explore_thread_completed', ts: ts(), ...params };
   },
 
   // -- Runner internals (task-level) ------------------------------------------

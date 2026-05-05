@@ -40,6 +40,8 @@ const UNCOVERED_ALLOWLIST = new Set<string>([
   'explore_external_unavailable', // explore executor batch-level event, outside single-task canonical runTasks fixture.
   'explore_synthesize_start', // explore executor batch-level event, outside single-task canonical runTasks fixture.
   'explore_synthesize_end', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_thread_started', // explore executor batch-level event, outside single-task canonical runTasks fixture.
+  'explore_thread_completed', // explore executor batch-level event, outside single-task canonical runTasks fixture.
   'turn_start', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'turn_complete', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.
   'tool_call', // verbose-only runner internal event; schema example retained until runtime verbose fixture is added.

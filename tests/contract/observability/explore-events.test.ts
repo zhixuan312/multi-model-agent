@@ -175,13 +175,15 @@ describe('explore observability event contract', () => {
     }
   });
 
-  it('golden covers explore-specific batch events: always-emitted 4 present; 2 unavailable events are schema-declared but conditional', () => {
+  it('golden covers explore-specific batch events: always-emitted 6 present; 2 unavailable events are schema-declared but conditional', () => {
     const names = new Set(exploreEventsGolden.events.map((e: any) => e.event));
     // Always emitted in every explore batch.
     expect(names.has('explore_parallel_start'), 'explore_parallel_start missing').toBe(true);
     expect(names.has('explore_parallel_end'), 'explore_parallel_end missing').toBe(true);
     expect(names.has('explore_synthesize_start'), 'explore_synthesize_start missing').toBe(true);
     expect(names.has('explore_synthesize_end'), 'explore_synthesize_end missing').toBe(true);
+    expect(names.has('explore_thread_started'), 'explore_thread_started missing').toBe(true);
+    expect(names.has('explore_thread_completed'), 'explore_thread_completed missing').toBe(true);
     // explore_internal_unavailable and explore_external_unavailable are
     // schema-declared (events.ts) but only emitted when a worker degrades.
     // They are not in the happy-path golden; the explore executor tests in
