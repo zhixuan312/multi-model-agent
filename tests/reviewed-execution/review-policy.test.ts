@@ -154,7 +154,7 @@ describe('reviewPolicy branching', () => {
     expect(result.concerns).toContainEqual(expect.objectContaining({ source: 'diff_review' }));
   });
 
-  it('reviewPolicy=diff_only sets diffReviewStatus=changes_required on reject verdict', async () => {
+  it('reviewPolicy=diff_only sets diffReviewStatus=changes_required on changes_required verdict', async () => {
     reset('passed');
     diffReviewOutput = 'REJECT: unsafe deletion in core logic';
     const [result] = await runTasks([{ prompt: 'edit src/a.ts', agentType: 'standard', cwd: makeRepo(), autoCommit: true, reviewPolicy: 'diff_only', verifyCommand: ['npm test'] }], config);
