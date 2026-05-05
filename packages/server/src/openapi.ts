@@ -35,6 +35,39 @@ function sortKeys(obj: unknown): unknown {
   return sorted;
 }
 
+// ── v4.0 component schemas ───────────────────────────────────────────────────
+
+/** 4-field token usage shape (v4.0). */
+const tokenUsageSchema = z.object({
+  inputTokens: z.number().int().min(0).describe('Prompt/input tokens consumed'),
+  outputTokens: z.number().int().min(0).describe('Completion/output tokens produced'),
+  cachedReadTokens: z.number().int().min(0).describe('Input tokens served from cache read'),
+  cachedNonReadTokens: z.number().int().min(0).describe('Input tokens written to cache but not read'),
+});
+
+/** v4.0 output envelope (terminal response shape). */
+const outputEnvelopeSchema = z.object({
+  headline: z.string().min(1).describe('One-line summary of the outcome'),
+  results: z.array(z.unknown()).describe('Per-task result items'),
+  batchTimings: z.object({}).passthrough().describe('Wall-clock and per-phase timings'),
+  costSummary: z.object({
+    totalCostUSD: z.number().min(0).describe('Total estimated cost in USD'),
+    tokenUsage: tokenUsageSchema.describe('Aggregated token consumption'),
+  }).passthrough().describe('Cost and token metering summary'),
+  structuredReport: z.object({}).passthrough().describe('Structured report object (tool-specific schema)'),
+  error: z.object({
+    code: z.string().min(1),
+    message: z.string().min(1),
+    details: z.unknown().optional(),
+  }).optional().describe('Terminal error if the batch failed'),
+  annotatorConfidence: z.number().min(0).max(1).optional()
+    .describe('Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)'),
+  specReviewVerdict: z.enum(['approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable']).optional(),
+  qualityReviewVerdict: z.enum(['approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable']).optional(),
+  roundsUsed: z.number().int().min(0).optional().describe('Number of agent rounds consumed'),
+  blockId: z.string().optional().describe('Terminal context block id registered automatically for this task'),
+}).passthrough();
+
 /** Shared 202 response for async tool endpoints. */
 const asyncResponse202 = {
   description: 'Accepted — batch created',
@@ -115,6 +148,10 @@ function registerToolEndpoint(
 export function buildOpenApiDoc(): Record<string, unknown> {
   const registry = new OpenAPIRegistry();
 
+  // ── Component schemas ───────────────────────────────────────────────────────
+  registry.register('TokenUsage', tokenUsageSchema);
+  registry.register('OutputEnvelope', outputEnvelopeSchema);
+
   // ── Tool endpoints (POST, require cwd + auth) ───────────────────────────────
   for (const row of TOOL_ENDPOINTS) registerToolEndpoint(registry, row);
 
@@ -132,7 +169,17 @@ export function buildOpenApiDoc(): Record<string, unknown> {
       }),
     },
     responses: {
-      200: { description: 'Batch state (pending | complete | failed | expired)' },
+      200: {
+        description: 'Batch state — pending returns { status: "pending" }; complete returns the OutputEnvelope; failed returns OutputEnvelope with error; expired returns { status: "expired" }',
+        content: {
+          'application/json': {
+            schema: z.union([
+              z.object({ status: z.enum(['pending', 'expired']) }),
+              outputEnvelopeSchema,
+            ]),
+          },
+        },
+      },
       401: response401,
       404: response404,
     },
@@ -142,6 +189,32 @@ export function buildOpenApiDoc(): Record<string, unknown> {
     method: 'post',
     path: '/context-blocks',
     summary: 'Register a context block',
+    tags: ['Control'],
+    request: {
+      query: z.object({ cwd: z.string().describe('Project working directory') }),
+      body: {
+        required: true,
+        content: {
+          'application/json': {
+            schema: z.object({
+              content: z.string().describe('Block content (plain text or markdown)'),
+              label: z.string().optional().describe('Human-readable label'),
+            }),
+          },
+        },
+      },
+    },
+    responses: {
+      201: { description: 'Block created' },
+      400: { description: 'Validation error or content too large' },
+      401: response401,
+    },
+  });
+
+  registry.registerPath({
+    method: 'post',
+    path: '/register-context-block',
+    summary: 'Register a context block (alias)',
     tags: ['Control'],
     request: {
       query: z.object({ cwd: z.string().describe('Project working directory') }),
@@ -184,14 +257,24 @@ export function buildOpenApiDoc(): Record<string, unknown> {
   registry.registerPath({
     method: 'get',
     path: '/health',
-    summary: 'Liveness probe — no auth required',
+    summary: 'Liveness + skill manifest drift check — no auth required',
     tags: ['Introspection'],
     responses: {
       200: {
-        description: 'Server is alive',
+        description: 'Server is alive; status=ok when all installed skills match the manifest, status=drift when one or more skills are missing, outdated, or orphaned',
         content: {
           'application/json': {
-            schema: z.object({ ok: z.literal(true) }),
+            schema: z.union([
+              z.object({ status: z.literal('ok') }),
+              z.object({
+                status: z.literal('drift'),
+                drift: z.array(z.object({
+                  skill: z.string(),
+                  client: z.string(),
+                  issue: z.enum(['missing', 'outdated', 'orphan']),
+                })),
+              }),
+            ]),
           },
         },
       },
@@ -217,7 +300,7 @@ export function buildOpenApiDoc(): Record<string, unknown> {
     openapi: '3.0.3',
     info: {
       title: 'multi-model-agent',
-      version: '3.0.0',
+      version: '4.0.0',
     },
   });
 

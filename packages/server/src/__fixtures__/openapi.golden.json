@@ -1,11 +1,196 @@
 {
   "components": {
     "parameters": {},
-    "schemas": {}
+    "schemas": {
+      "OutputEnvelope": {
+        "additionalProperties": {
+          "nullable": true
+        },
+        "properties": {
+          "annotatorConfidence": {
+            "description": "Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)",
+            "maximum": 1,
+            "minimum": 0,
+            "type": "number"
+          },
+          "batchTimings": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Wall-clock and per-phase timings",
+            "properties": {},
+            "type": "object"
+          },
+          "blockId": {
+            "description": "Terminal context block id registered automatically for this task",
+            "type": "string"
+          },
+          "costSummary": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Cost and token metering summary",
+            "properties": {
+              "tokenUsage": {
+                "description": "Aggregated token consumption",
+                "properties": {
+                  "cachedNonReadTokens": {
+                    "description": "Input tokens written to cache but not read",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "cachedReadTokens": {
+                    "description": "Input tokens served from cache read",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "inputTokens": {
+                    "description": "Prompt/input tokens consumed",
+                    "minimum": 0,
+                    "type": "integer"
+                  },
+                  "outputTokens": {
+                    "description": "Completion/output tokens produced",
+                    "minimum": 0,
+                    "type": "integer"
+                  }
+                },
+                "required": [
+                  "inputTokens",
+                  "outputTokens",
+                  "cachedReadTokens",
+                  "cachedNonReadTokens"
+                ],
+                "type": "object"
+              },
+              "totalCostUSD": {
+                "description": "Total estimated cost in USD",
+                "minimum": 0,
+                "type": "number"
+              }
+            },
+            "required": [
+              "totalCostUSD",
+              "tokenUsage"
+            ],
+            "type": "object"
+          },
+          "error": {
+            "description": "Terminal error if the batch failed",
+            "properties": {
+              "code": {
+                "minLength": 1,
+                "type": "string"
+              },
+              "details": {
+                "nullable": true
+              },
+              "message": {
+                "minLength": 1,
+                "type": "string"
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ],
+            "type": "object"
+          },
+          "headline": {
+            "description": "One-line summary of the outcome",
+            "minLength": 1,
+            "type": "string"
+          },
+          "qualityReviewVerdict": {
+            "enum": [
+              "approved",
+              "concerns",
+              "changes_required",
+              "annotated",
+              "error",
+              "skipped",
+              "not_applicable"
+            ],
+            "type": "string"
+          },
+          "results": {
+            "description": "Per-task result items",
+            "items": {
+              "nullable": true
+            },
+            "type": "array"
+          },
+          "roundsUsed": {
+            "description": "Number of agent rounds consumed",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "specReviewVerdict": {
+            "enum": [
+              "approved",
+              "concerns",
+              "changes_required",
+              "annotated",
+              "error",
+              "skipped",
+              "not_applicable"
+            ],
+            "type": "string"
+          },
+          "structuredReport": {
+            "additionalProperties": {
+              "nullable": true
+            },
+            "description": "Structured report object (tool-specific schema)",
+            "properties": {},
+            "type": "object"
+          }
+        },
+        "required": [
+          "headline",
+          "results",
+          "batchTimings",
+          "costSummary",
+          "structuredReport"
+        ],
+        "type": "object"
+      },
+      "TokenUsage": {
+        "properties": {
+          "cachedNonReadTokens": {
+            "description": "Input tokens written to cache but not read",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "cachedReadTokens": {
+            "description": "Input tokens served from cache read",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "inputTokens": {
+            "description": "Prompt/input tokens consumed",
+            "minimum": 0,
+            "type": "integer"
+          },
+          "outputTokens": {
+            "description": "Completion/output tokens produced",
+            "minimum": 0,
+            "type": "integer"
+          }
+        },
+        "required": [
+          "inputTokens",
+          "outputTokens",
+          "cachedReadTokens",
+          "cachedNonReadTokens"
+        ],
+        "type": "object"
+      }
+    }
   },
   "info": {
     "title": "multi-model-agent",
-    "version": "3.0.0"
+    "version": "4.0.0"
   },
   "openapi": "3.0.3",
   "paths": {
@@ -148,7 +333,183 @@
         ],
         "responses": {
           "200": {
-            "description": "Batch state (pending | complete | failed | expired)"
+            "content": {
+              "application/json": {
+                "schema": {
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "pending",
+                            "expired"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
+                      ],
+                      "type": "object"
+                    },
+                    {
+                      "additionalProperties": {
+                        "nullable": true
+                      },
+                      "properties": {
+                        "annotatorConfidence": {
+                          "description": "Annotator confidence score (0-1) when the review policy produced annotations (was reviewerConfidence in 3.x)",
+                          "maximum": 1,
+                          "minimum": 0,
+                          "type": "number"
+                        },
+                        "batchTimings": {
+                          "additionalProperties": {
+                            "nullable": true
+                          },
+                          "description": "Wall-clock and per-phase timings",
+                          "properties": {},
+                          "type": "object"
+                        },
+                        "blockId": {
+                          "description": "Terminal context block id registered automatically for this task",
+                          "type": "string"
+                        },
+                        "costSummary": {
+                          "additionalProperties": {
+                            "nullable": true
+                          },
+                          "description": "Cost and token metering summary",
+                          "properties": {
+                            "tokenUsage": {
+                              "description": "Aggregated token consumption",
+                              "properties": {
+                                "cachedNonReadTokens": {
+                                  "description": "Input tokens written to cache but not read",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "cachedReadTokens": {
+                                  "description": "Input tokens served from cache read",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "inputTokens": {
+                                  "description": "Prompt/input tokens consumed",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                },
+                                "outputTokens": {
+                                  "description": "Completion/output tokens produced",
+                                  "minimum": 0,
+                                  "type": "integer"
+                                }
+                              },
+                              "required": [
+                                "inputTokens",
+                                "outputTokens",
+                                "cachedReadTokens",
+                                "cachedNonReadTokens"
+                              ],
+                              "type": "object"
+                            },
+                            "totalCostUSD": {
+                              "description": "Total estimated cost in USD",
+                              "minimum": 0,
+                              "type": "number"
+                            }
+                          },
+                          "required": [
+                            "totalCostUSD",
+                            "tokenUsage"
+                          ],
+                          "type": "object"
+                        },
+                        "error": {
+                          "description": "Terminal error if the batch failed",
+                          "properties": {
+                            "code": {
+                              "minLength": 1,
+                              "type": "string"
+                            },
+                            "details": {
+                              "nullable": true
+                            },
+                            "message": {
+                              "minLength": 1,
+                              "type": "string"
+                            }
+                          },
+                          "required": [
+                            "code",
+                            "message"
+                          ],
+                          "type": "object"
+                        },
+                        "headline": {
+                          "description": "One-line summary of the outcome",
+                          "minLength": 1,
+                          "type": "string"
+                        },
+                        "qualityReviewVerdict": {
+                          "enum": [
+                            "approved",
+                            "concerns",
+                            "changes_required",
+                            "annotated",
+                            "error",
+                            "skipped",
+                            "not_applicable"
+                          ],
+                          "type": "string"
+                        },
+                        "results": {
+                          "description": "Per-task result items",
+                          "items": {
+                            "nullable": true
+                          },
+                          "type": "array"
+                        },
+                        "roundsUsed": {
+                          "description": "Number of agent rounds consumed",
+                          "minimum": 0,
+                          "type": "integer"
+                        },
+                        "specReviewVerdict": {
+                          "enum": [
+                            "approved",
+                            "concerns",
+                            "changes_required",
+                            "annotated",
+                            "error",
+                            "skipped",
+                            "not_applicable"
+                          ],
+                          "type": "string"
+                        },
+                        "structuredReport": {
+                          "additionalProperties": {
+                            "nullable": true
+                          },
+                          "description": "Structured report object (tool-specific schema)",
+                          "properties": {},
+                          "type": "object"
+                        }
+                      },
+                      "required": [
+                        "headline",
+                        "results",
+                        "batchTimings",
+                        "costSummary",
+                        "structuredReport"
+                      ],
+                      "type": "object"
+                    }
+                  ]
+                }
+              }
+            },
+            "description": "Batch state — pending returns { status: \"pending\" }; complete returns the OutputEnvelope; failed returns OutputEnvelope with error; expired returns { status: \"expired\" }"
           },
           "401": {
             "description": "Missing or invalid Bearer token"
@@ -688,25 +1049,71 @@
             "content": {
               "application/json": {
                 "schema": {
-                  "properties": {
-                    "ok": {
-                      "enum": [
-                        true
+                  "anyOf": [
+                    {
+                      "properties": {
+                        "status": {
+                          "enum": [
+                            "ok"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status"
                       ],
-                      "type": "boolean"
+                      "type": "object"
+                    },
+                    {
+                      "properties": {
+                        "drift": {
+                          "items": {
+                            "properties": {
+                              "client": {
+                                "type": "string"
+                              },
+                              "issue": {
+                                "enum": [
+                                  "missing",
+                                  "outdated",
+                                  "orphan"
+                                ],
+                                "type": "string"
+                              },
+                              "skill": {
+                                "type": "string"
+                              }
+                            },
+                            "required": [
+                              "skill",
+                              "client",
+                              "issue"
+                            ],
+                            "type": "object"
+                          },
+                          "type": "array"
+                        },
+                        "status": {
+                          "enum": [
+                            "drift"
+                          ],
+                          "type": "string"
+                        }
+                      },
+                      "required": [
+                        "status",
+                        "drift"
+                      ],
+                      "type": "object"
                     }
-                  },
-                  "required": [
-                    "ok"
-                  ],
-                  "type": "object"
+                  ]
                 }
               }
             },
-            "description": "Server is alive"
+            "description": "Server is alive; status=ok when all installed skills match the manifest, status=drift when one or more skills are missing, outdated, or orphaned"
           }
         },
-        "summary": "Liveness probe — no auth required",
+        "summary": "Liveness + skill manifest drift check — no auth required",
         "tags": [
           "Introspection"
         ]
@@ -802,6 +1209,60 @@
         "summary": "Investigate the codebase and answer a question with structured citations",
         "tags": [
           "Tools"
+        ]
+      }
+    },
+    "/register-context-block": {
+      "post": {
+        "parameters": [
+          {
+            "description": "Project working directory",
+            "in": "query",
+            "name": "cwd",
+            "required": true,
+            "schema": {
+              "description": "Project working directory",
+              "type": "string"
+            }
+          }
+        ],
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "properties": {
+                  "content": {
+                    "description": "Block content (plain text or markdown)",
+                    "type": "string"
+                  },
+                  "label": {
+                    "description": "Human-readable label",
+                    "type": "string"
+                  }
+                },
+                "required": [
+                  "content"
+                ],
+                "type": "object"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "201": {
+            "description": "Block created"
+          },
+          "400": {
+            "description": "Validation error or content too large"
+          },
+          "401": {
+            "description": "Missing or invalid Bearer token"
+          }
+        },
+        "summary": "Register a context block (alias)",
+        "tags": [
+          "Control"
         ]
       }
     },

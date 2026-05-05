@@ -68,11 +68,11 @@ describe('OpenAPI document', () => {
     expect(JSON.parse(serialized)).toEqual(JSON.parse(golden));
   });
 
-  it('document covers all 8 tool endpoints and 4 control + 2 introspection routes', () => {
+  it('document covers all 9 tool endpoints and 4 control + 2 introspection routes', () => {
     const doc = buildOpenApiDoc();
     const paths = Object.keys(doc['paths'] as Record<string, unknown>);
 
-    // 8 tool routes (7 prior + /explore)
+    // 9 tool routes
     expect(paths).toContain('/delegate');
     expect(paths).toContain('/audit');
     expect(paths).toContain('/review');
@@ -80,18 +80,20 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/debug');
     expect(paths).toContain('/execute-plan');
     expect(paths).toContain('/retry');
+    expect(paths).toContain('/investigate');
     expect(paths).toContain('/explore');
 
-    // 3 control routes
+    // 4 control routes
     expect(paths).toContain('/batch/{batchId}');
     expect(paths).toContain('/context-blocks');
+    expect(paths).toContain('/register-context-block');
     expect(paths).toContain('/context-blocks/{blockId}');
 
     // 2 introspection routes
     expect(paths).toContain('/health');
     expect(paths).toContain('/status');
 
-    // Total: 14 paths
-    expect(paths.length).toBe(14);
+    // Total: 15 paths
+    expect(paths.length).toBe(15);
   });
 });

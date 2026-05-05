@@ -234,6 +234,9 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   const { buildToolsHandler } = await import('./handlers/introspection/tools-list.js');
   router.register('GET', '/tools', buildToolsHandler());
 
+  // GET /openapi — canonical OpenAPI route per spec C13 (same handler as /tools)
+  router.register('GET', '/openapi', buildToolsHandler());
+
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
   if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {
     router.register('GET', '/__routes', (_req, res) => {

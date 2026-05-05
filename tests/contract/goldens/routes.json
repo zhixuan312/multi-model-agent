@@ -3,6 +3,7 @@
   "GET /__routes",
   "GET /batch/:batchId",
   "GET /health",
+  "GET /openapi",
   "GET /status",
   "GET /tools",
   "POST /audit",
