@@ -65,14 +65,6 @@ export interface RunTasksOptions {
   bus?: EventEmitter;
   /** Per-route quality review prompt builder (for quality_only reviewPolicy). */
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  /**
-   * #45 Step 7a: opt-in to LifecycleDispatcher path. When true, each task runs
-   * through the StagePlan handlers (run_initial_impl direct + spec/quality/
-   * diff/verify/commit/terminal cascade) instead of executeReviewedLifecycle.
-   * Default false; flips to true once the dispatcher path matches contract
-   * goldens.
-   */
-  useLifecycleDispatcher?: boolean;
 }
 
 export async function runTasks(
@@ -129,11 +121,6 @@ export async function runTasks(
       if ('error' in r) {
         return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
-      // #45 Step 7e: routing through runTaskViaDispatcher unconditionally.
-      // The legacy executeReviewedLifecycle path is gone; the only remaining
-      // entry is the dispatcher's per-task StagePlan run. The
-      // useLifecycleDispatcher option is preserved on the type for caller
-      // back-compat (it's always-on) — drop after consumers stop passing it.
       return runTaskViaDispatcher({
         task: r.task,
         resolved: r.resolved,
