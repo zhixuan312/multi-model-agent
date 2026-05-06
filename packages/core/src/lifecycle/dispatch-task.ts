@@ -15,8 +15,25 @@ import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
-import { errorResult } from './execute-task.js';
-import type { ResolvedTask } from './execute-task.js';
+export function errorResult(error: string): RunResult {
+  return {
+    output: `Sub-agent error: ${error}`,
+    status: 'error',
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: true,
+    escalationLog: [],
+    parsedFindings: null,
+    error,
+  };
+}
+
+export type ResolvedTask =
+  | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider } }
+  | { task: TaskSpec; error: string; errorCode: string };
 
 export type RunTasksProgressCallback = (
   taskIndex: number,

@@ -2,7 +2,10 @@ import type { Provider, TaskSpec, AgentType } from '../types.js';
 import type { CommitFields } from '../reporting/structured-report.js';
 import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
-import { withDoneCondition } from './execute-task.js';
+function withDoneCondition(task: TaskSpec): TaskSpec {
+  if (!task.done) return task;
+  return { ...task, prompt: `${task.prompt}\n\n## Success Criteria\n${task.done}` };
+}
 
 export interface MetadataRepairInput {
   task: TaskSpec;
