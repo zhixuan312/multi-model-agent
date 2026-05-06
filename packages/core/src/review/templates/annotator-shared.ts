@@ -25,14 +25,16 @@ the worker presented them. Example:
     "claim": "Remote code execution via unsanitized input in src/handler.ts:42",
     "evidence": "user input is passed directly into shellExec() without escaping",
     "suggestion": "Use a parameterized API or escape input",
-    "annotatorConfidence": 90
+    "annotatorConfidence": 90,
+    "category": "security"
   },
   {
     "id": "F2",
     "severity": "medium",
     "claim": "Auth check missing on /admin endpoint",
     "evidence": "router.get('/admin', adminHandler) — no auth middleware applied",
-    "annotatorConfidence": 60
+    "annotatorConfidence": 60,
+    "category": "security"
   }
 ]
 ` + '```' + `
@@ -58,6 +60,12 @@ Field rules:
      40-59:  thin evidence
      20-39:  weak / off-brief
       0-19:  unsupported / fabricated
+- ` + '`category`' + `: optional, one of: "missing_test" | "scope_creep" |
+   "incomplete_impl" | "style_lint" | "security" | "performance" |
+   "maintainability" | "doc_gap" | "doc_drift" | "contract_violation" |
+   "coverage_gap" | "dead_code" | "queue_hygiene" | "other".
+   When omitted, the parser will infer from the claim text. Prefer to emit
+   it when the category is unambiguous from your reading.
 
 If the worker raised NO issues, return ` + '`[]`' + `. Surrounding prose is allowed
 but ignored by the parser — only the LAST ` + '```json' + ` block is read.

@@ -3,6 +3,7 @@ import {
   normalizeWhitespace,
   type AnnotatedFinding,
 } from './findings-schema.js';
+import { classifyConcern } from '../events/concern-classifier.js';
 
 interface ParseOk {
   ok: true;
@@ -86,7 +87,14 @@ export function parseReviewerFindings(
   for (const f of validated.data) {
     const grounded = evidenceIsGroundedAgainst(f.evidence, normalizedWorker);
     if (!grounded) ungroundedCount++;
-    annotated.push({ ...f, evidenceGrounded: grounded });
+    // Prefer reviewer-emitted category; fall back to deterministic regex
+    // classification over the claim. classifyConcern only reads `.message`
+    // (concern-classifier.ts:34) — `source`/`severity` are ignored but
+    // required by the parameter shape.
+    const category =
+      f.category
+      ?? classifyConcern({ source: 'quality_review', severity: f.severity, message: f.claim });
+    annotated.push({ ...f, evidenceGrounded: grounded, category });
   }
   return { ok: true, findings: annotated, ungroundedCount };
 }

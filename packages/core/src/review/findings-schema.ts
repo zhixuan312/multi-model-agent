@@ -1,5 +1,6 @@
 import { z } from 'zod';
 import { FindingConfidenceSchema } from '../events/event-base.js';
+import { ConcernCategory } from '../events/telemetry-types.js';
 
 /**
  * Single finding shape for the 5 read-only routes (audit / review / verify /
@@ -35,6 +36,10 @@ export const annotatedFindingSchema = z.object({
   suggestion: z.string().optional(),
   annotatorConfidence: FindingConfidenceSchema.nullable(),
   evidenceGrounded: z.boolean(),
+  // Per spec enums.md §5: per-finding concern category. Optional on the
+  // schema so existing goldens stay valid; the parser populates it from
+  // classifyConcern(claim) when the reviewer omits it.
+  category: ConcernCategory.optional(),
 }).strict();
 
 export const annotatedFindingsSchema = z.array(annotatedFindingSchema).refine(
@@ -56,6 +61,8 @@ export const reviewerEmittedFindingSchema = z.object({
   evidence: z.string().min(20),
   suggestion: z.string().optional(),
   annotatorConfidence: FindingConfidenceSchema,
+  // Optional on emission — see annotatedFindingSchema.category note.
+  category: ConcernCategory.optional(),
 }).strict();
 
 export const reviewerEmittedFindingsSchema = z.array(reviewerEmittedFindingSchema).refine(
