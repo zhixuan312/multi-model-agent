@@ -7,7 +7,7 @@ export interface RateCard {
   cachedNonReadCostPerMTok: number;
 }
 
-import { findModelProfile } from '../config/model-profiles.js';
+import { findModelProfile } from '../config/model-profile-registry.js';
 
 export function resolveRateCard(
   model: string | null | undefined,

@@ -44,9 +44,9 @@
       "types": "./dist/config/read-only-review-flag.d.ts",
       "import": "./dist/config/read-only-review-flag.js"
     },
-    "./config/model-profiles": {
-      "types": "./dist/config/model-profiles.d.ts",
-      "import": "./dist/config/model-profiles.js"
+    "./config/model-profile-registry": {
+      "types": "./dist/config/model-profile-registry.d.ts",
+      "import": "./dist/config/model-profile-registry.js"
     },
     "./escalation/agent-resolver": {
       "types": "./dist/escalation/agent-resolver.d.ts",

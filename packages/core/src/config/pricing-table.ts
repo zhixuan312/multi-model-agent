@@ -14,7 +14,7 @@
 // the main-agent shape uses `*USDPerMillion`. Both record the same
 // economic fact at different granularities.
 import { z } from 'zod';
-import { findModelProfile, type ModelProfile } from './model-profiles.js';
+import { findModelProfile, type ModelProfile } from './model-profile-registry.js';
 
 export const modelPricingSchema = z.object({
   inputCostPerMTok:          z.number().finite().nonnegative().optional(),

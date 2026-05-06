@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findModelProfile } from '../../packages/core/src/config/model-profiles.js';
+import { findModelProfile } from '../../packages/core/src/config/model-profile-registry.js';
 
 const ANTHROPIC_MODELS = [
   'claude-opus', 'claude-sonnet', 'claude-haiku',

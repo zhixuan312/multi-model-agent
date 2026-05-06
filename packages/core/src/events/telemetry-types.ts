@@ -1,5 +1,5 @@
 import { z } from 'zod';
-import { ModelFamilyEnum } from '../config/model-profiles.js';
+import { ModelFamilyEnum } from '../config/model-profile-registry.js';
 
 export const SCHEMA_VERSION = 4;
 

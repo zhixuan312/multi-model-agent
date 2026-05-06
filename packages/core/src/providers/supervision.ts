@@ -1,6 +1,6 @@
 import type { ProviderConfig } from '../types.js';
 import type { TaskSpec } from '../types.js';
-import type { ModelProfile } from '../config/model-profiles.js';
+import type { ModelProfile } from '../config/model-profile-registry.js';
 
 /**
  * Sub-agent completion supervision.

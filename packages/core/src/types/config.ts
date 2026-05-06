@@ -1,5 +1,5 @@
 // Per-protocol provider config + top-level MultiModelConfig + research
-// config. Imported by config/load.ts, config/schema.ts, config/model-profiles.ts,
+// config. Imported by config/load.ts, config/schema.ts, config/model-profile-registry.ts,
 // and many runtime callers. Matches spec architecture.md `types/` slot
 // (configuration is cross-cutting; the closed-enum surface lives here).
 import type { RunStatus } from '../providers/runner-types.js';

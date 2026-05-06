@@ -109,7 +109,7 @@ export type {
 // Agent resolution
 export { resolveAgent } from './escalation/agent-resolver.js';
 export type { ResolvedAgent } from './escalation/agent-resolver.js';
-export { findModelProfile, getEffectiveCostTier } from './config/model-profiles.js';
+export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
 export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline

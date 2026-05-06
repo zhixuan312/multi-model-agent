@@ -8,7 +8,7 @@ import {
   THINKING_DIAGNOSTIC_MARKER,
 } from '../../packages/core/src/providers/supervision.js';
 import type { ProviderConfig } from '../../packages/core/src/types.js';
-import type { ModelProfile } from '../../packages/core/src/config/model-profiles.js';
+import type { ModelProfile } from '../../packages/core/src/config/model-profile-registry.js';
 
 describe('validateCompletion — empty detection', () => {
   it('detects an empty string', () => {

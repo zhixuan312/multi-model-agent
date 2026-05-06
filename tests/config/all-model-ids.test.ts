@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ALL_MODEL_IDS } from '../../packages/core/src/config/model-profiles.js';
+import { ALL_MODEL_IDS } from '../../packages/core/src/config/model-profile-registry.js';
 
 describe('ALL_MODEL_IDS', () => {
   it('is non-empty in production-shaped builds', () => {

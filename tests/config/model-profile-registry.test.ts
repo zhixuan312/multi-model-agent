@@ -3,7 +3,7 @@ import {
   ALL_MODEL_IDS,
   findModelProfile,
   modelProfileSchema,
-} from '../../packages/core/src/config/model-profiles.js';
+} from '../../packages/core/src/config/model-profile-registry.js';
 
 const MODEL_FAMILIES = [
   'claude',

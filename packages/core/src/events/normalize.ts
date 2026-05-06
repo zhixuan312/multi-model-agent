@@ -1,5 +1,5 @@
-import { extractCanonicalModelName, findModelProfile } from '../config/model-profiles.js';
-import type { ModelFamily } from '../config/model-profiles.js';
+import { extractCanonicalModelName, findModelProfile } from '../config/model-profile-registry.js';
+import type { ModelFamily } from '../config/model-profile-registry.js';
 export type { ModelFamily };
 
 /**

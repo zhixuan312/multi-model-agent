@@ -2,7 +2,7 @@
 // StageStatsMap. Extracted from reviewed-lifecycle.ts so the orchestrator
 // stays focused on flow control. No closure state captured here.
 import type { StageStatsMap, ReviewVerdict, VerifyOutcome, VerifySkipReason } from '../types.js';
-import { findModelProfile } from '../config/model-profiles.js';
+import { findModelProfile } from '../config/model-profile-registry.js';
 
 export const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
   'audit', 'review', 'verify', 'investigate', 'debug',
