@@ -395,6 +395,10 @@
     "./tool-surface/skill-installers/gemini-cli": {
       "types": "./dist/tool-surface/skill-installers/gemini-cli.d.ts",
       "import": "./dist/tool-surface/skill-installers/gemini-cli.js"
+    },
+    "./tool-surface/skill-installer": {
+      "types": "./dist/tool-surface/skill-installer.d.ts",
+      "import": "./dist/tool-surface/skill-installer.js"
     }
   },
   "scripts": {
