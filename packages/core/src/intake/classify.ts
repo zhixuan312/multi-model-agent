@@ -97,8 +97,9 @@ export function classifyDraft(draft: DraftTask): ClassificationResult {
     // Behavior-change detection requires a dangerous *combination* (verb +
     // dangerous object/target), not a bare verb. The earlier broad pattern
     // (`delete|remove|drop|migrate|deploy|push|publish|send` alone) flagged
-    // ordinary technical English ("send a request", "publish docs") and
-    // wedged users in awaiting_clarification with no real safety win.
+    // ordinary technical English ("send a request", "publish docs") with no
+    // real safety win — kept the combination form below to focus on actual
+    // destructive intent.
     const dangerousCombos: RegExp[] = [
       /\brm\s+-rf?\b/i,
       /\bdrop\s+(?:the\s+)?(?:\w+\s+)?(?:table|database|schema|index)\b/i,
