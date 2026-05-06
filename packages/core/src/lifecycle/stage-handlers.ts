@@ -4,6 +4,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
 import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { pickEscalation } from '../escalation/policy.js';
+import { parseStructuredReport } from '../reporting/structured-report.js';
 import { runVerifyCommandHandler } from './handlers/run-verify-command-handler.js';
 import { gitCommitHandler } from './handlers/git-commit-handler.js';
 import {
@@ -262,6 +263,52 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       // missing artifacts (matches legacy invariant for the terminal envelope).
       if (enriched.fileArtifactsMissing === undefined) {
         enriched.fileArtifactsMissing = false;
+      }
+
+      // Step 7i: specReviewReason / qualityReviewReason. Stub based on the
+      // review-status outcome — matches legacy executor's invariant that
+      // these strings explain why a review was skipped/not_applicable.
+      if (enriched.specReviewReason === undefined) {
+        enriched.specReviewReason = enriched.specReviewStatus === 'not_applicable'
+          ? 'task produced no file artifacts to review'
+          : enriched.specReviewStatus === 'skipped'
+            ? 'spec review skipped (reviewPolicy or all reviewer tiers unavailable)'
+            : '';
+      }
+      if (enriched.qualityReviewReason === undefined) {
+        enriched.qualityReviewReason = enriched.qualityReviewStatus === 'not_applicable'
+          ? 'task produced no file artifacts to review'
+          : enriched.qualityReviewStatus === 'skipped'
+            ? 'quality review skipped (no files written or all reviewer tiers unavailable)'
+            : '';
+      }
+
+      // Step 7i: implementationReport / structuredReport from result.output.
+      // Legacy executor parsed these and attached them to the terminal
+      // RunResult. Mirror that behavior so consumers that read these fields
+      // (orchestrator contract tests, fallback-report extraction, etc) get
+      // the parsed report.
+      if (last.output && enriched.implementationReport === undefined) {
+        const parsed = parseStructuredReport(last.output);
+        enriched.implementationReport = parsed;
+        if (enriched.structuredReport === undefined) {
+          enriched.structuredReport = parsed;
+        }
+      }
+
+      // Step 7i: models block. Legacy executor populated this from the
+      // resolved provider config. Synthesize from ctx.implementerProvider
+      // and the reviewer-tier providers.
+      if (ctx && enriched.models === undefined) {
+        const implModel = (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? '';
+        const otherTier = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
+        const otherProvider = ctx.providers[otherTier];
+        const otherModel = (otherProvider?.config as { model?: string } | undefined)?.model ?? null;
+        enriched.models = {
+          implementer: implModel,
+          specReviewer: enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required' ? otherModel : null,
+          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' || enriched.qualityReviewStatus === 'annotated' ? otherModel : null,
+        };
       }
 
       state.responseEnvelope = enriched;

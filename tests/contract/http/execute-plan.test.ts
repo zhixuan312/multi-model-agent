@@ -42,8 +42,17 @@ describe('contract: POST /execute-plan', () => {
         expect(dispatch.status).toBe(202);
         const { batchId } = (await dispatch.json()) as { batchId: string };
         const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
-        const expected = (await import(`../goldens/endpoints/execute-plan-${stage}.json`, { with: { type: 'json' } })).default;
-        expect(terminal).toEqual(expected);
+        const goldenRel = `../goldens/endpoints/execute-plan-${stage}.json`;
+        if (process.env.CAPTURE_GOLDEN === '1') {
+          const { writeFileSync } = await import('node:fs');
+          const { resolve, dirname } = await import('node:path');
+          const { fileURLToPath } = await import('node:url');
+          const here = dirname(fileURLToPath(import.meta.url));
+          writeFileSync(resolve(here, goldenRel), JSON.stringify(terminal, null, 2) + '\n', 'utf8');
+        } else {
+          const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
+          expect(terminal).toEqual(expected);
+        }
       } finally {
         await h.close();
         rmSync(dir, { recursive: true, force: true });
