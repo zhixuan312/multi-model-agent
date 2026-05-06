@@ -1,7 +1,10 @@
-import type { Provider, AgentType, RunResult } from '../types.js';
+import type { Provider, AgentType } from '../types.js';
 import type { RunStatus } from '../providers/runner-types.js';
 import { canonicalIdentity, identityEquals, type CanonicalIdentity } from '../config/canonical-model-identity.js';
 import { otherTier } from '../config/tier-policy-registry.js';
+import { providersIdentical, scoreWork } from './fallback-helpers.js';
+
+export { providersIdentical, makeSyntheticRunResult, isReviewTransportFailure } from './fallback-helpers.js';
 
 export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'api_error',
@@ -19,15 +22,6 @@ export function markUnavailable(
   reason: FallbackReason,
 ): void {
   if (!map.has(tier)) map.set(tier, reason);
-}
-
-/** Two providers are "identical" iff they resolve to the same effective backend
- *  (type + model + baseUrl + apiKey wiring). When an operator points both tiers
- *  at the same backend (one-provider deployment), cross-tier fallback is
- *  structurally pointless — alt would just hit the same place. Comparing the
- *  serialized config catches this without a new operator-facing flag. */
-export function providersIdentical(a: Provider, b: Provider): boolean {
-  return JSON.stringify(a.config) === JSON.stringify(b.config);
 }
 
 export interface RunWithFallbackInput<T> {
@@ -493,43 +487,3 @@ export async function runWithFallback<T>(
   };
 }
 
-/** Lifecycle helper: builds the synthetic RunResult expected when both tiers are
- *  unavailable. Status is the new 'unavailable' value (NOT 'api_error') so
- *  re-passing the synthetic into runWithFallback's isTransportFailure cannot
- *  retrigger fallback.
- *
- *  IMPORTANT: This shape MUST satisfy `RunResult` (see types.ts). Confirmed
- *  required fields: output, status, usage, turns, filesRead, filesWritten,
- *  toolCalls, outputIsDiagnostic, escalationLog. All other RunResult fields
- *  are optional. */
-export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): RunResult {
-  return {
-    status: 'unavailable',
-    output: '',
-    outputIsDiagnostic: true,
-    error: `runWithFallback: both tiers unavailable (assigned=${assigned})`,
-    errorCode,
-    retryable: false,
-    turns: 0,
-    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    escalationLog: [],
-    parsedFindings: null,
-  };
-}
-
-export function isReviewTransportFailure(
-  r: { status?: string },
-): boolean {
-  return r.status === 'api_error' || r.status === 'provider_transport_failure' || r.status === 'timeout';
-}
-
-function scoreWork<T>(r: T | undefined): number {
-  if (!r) return 0;
-  const usage = (r as any).usage ?? {};
-  const turns = (r as any).turns ?? 0;
-  const filesWritten = ((r as any).filesWritten ?? []).length ?? 0;
-  return turns + filesWritten + (usage.inputTokens ?? 0) / 1000;
-}

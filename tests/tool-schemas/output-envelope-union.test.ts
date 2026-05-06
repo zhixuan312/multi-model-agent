@@ -18,9 +18,9 @@ const allSchemas = [
   ['retry', retry.outputSchema],
 ] as const;
 
-describe('every tool output schema accepts NotApplicable on all six sentinel-bearing fields', () => {
+describe('every tool output schema accepts NotApplicable on all five sentinel-bearing fields', () => {
   for (const [name, schema] of allSchemas) {
-    it(`${name}: accepts NotApplicable for results/batchTimings/costSummary/structuredReport/error/proposedInterpretation`, () => {
+    it(`${name}: accepts NotApplicable for results/batchTimings/costSummary/structuredReport/error`, () => {
       const envelope = {
         headline: 'test',
         results: notApplicable('test'),
@@ -28,7 +28,6 @@ describe('every tool output schema accepts NotApplicable on all six sentinel-bea
         costSummary: notApplicable('test'),
         structuredReport: notApplicable('test'),
         error: notApplicable('test'),
-        proposedInterpretation: notApplicable('test'),
       };
       expect(() => schema.parse(envelope)).not.toThrow();
     });
@@ -41,13 +40,12 @@ describe('every tool output schema accepts NotApplicable on all six sentinel-bea
         costSummary: { totalActualCostUSD: 0, costDeltaVsParentUSD: 0 },
         structuredReport: { summary: 'x' },
         error: { code: 'worker_timeout', message: 'timed out' },
-        proposedInterpretation: 'did you mean X?',
       };
       expect(() => schema.parse(envelope)).not.toThrow();
     });
 
     it(`${name}: rejects missing headline`, () => {
-      expect(() => schema.parse({ results: [], batchTimings: {}, costSummary: {}, structuredReport: {}, error: notApplicable('x'), proposedInterpretation: notApplicable('x') })).toThrow();
+      expect(() => schema.parse({ results: [], batchTimings: {}, costSummary: {}, structuredReport: {}, error: notApplicable('x') })).toThrow();
     });
   }
 });

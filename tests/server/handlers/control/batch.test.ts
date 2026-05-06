@@ -80,7 +80,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       const resAll = await fetch(`${s.url}/batch/${batchId}`, {
@@ -149,7 +148,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       // taskIndex=1 is out of range for a 1-element array
@@ -266,7 +264,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
@@ -275,7 +272,7 @@ describe('GET /batch/:batchId', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
       const body = await res.json();
-      for (const key of ['headline', 'results', 'batchTimings', 'costSummary', 'structuredReport', 'error', 'proposedInterpretation']) {
+      for (const key of ['headline', 'results', 'batchTimings', 'costSummary', 'structuredReport', 'error']) {
         expect(body, `missing ${key}`).toHaveProperty(key);
       }
     } finally {

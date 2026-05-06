@@ -1,6 +1,5 @@
 export interface TerminalHeadlineInput {
   tool: string;
-  awaitingClarification: boolean;
   tasksTotal: number;
   tasksCompleted: number;
   policyEscalated?: { spec?: boolean; quality?: boolean };
@@ -8,11 +7,9 @@ export interface TerminalHeadlineInput {
 }
 
 export function composeTerminalHeadline(input: TerminalHeadlineInput): string {
-  const { tool, awaitingClarification, tasksTotal, tasksCompleted } = input;
+  const { tool, tasksTotal, tasksCompleted } = input;
   const parts: string[] = [];
-  if (awaitingClarification) {
-    parts.push(`${tool}: awaiting clarification`);
-  } else if (tasksTotal <= 0) {
+  if (tasksTotal <= 0) {
     parts.push(`${tool}: no tasks executed`);
   } else {
     const completed = Math.max(0, Math.min(tasksCompleted, tasksTotal));

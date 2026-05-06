@@ -110,13 +110,12 @@ export async function executeRetry(
   const mainModel = ctx.mainModel ?? config.defaults?.mainModel ?? undefined;
 
   return {
-    headline: composeTerminalHeadline({ tool: 'retry', awaitingClarification: false, tasksTotal: subset.length, tasksCompleted: results.length }),
+    headline: composeTerminalHeadline({ tool: 'retry', tasksTotal: subset.length, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
     structuredReport: notApplicable('no structured report emitted by this executor'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: retryBatchId,
     retryBatchId,
     wallClockMs,

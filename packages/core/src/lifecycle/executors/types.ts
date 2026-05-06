@@ -115,7 +115,6 @@ export interface ExecutorOutput {
   costSummary: BatchAggregateCost | NotApplicable;
   structuredReport: Record<string, unknown> | NotApplicable;
   error: { code: string; message: string; details?: unknown } | NotApplicable;
-  proposedInterpretation: string | NotApplicable;
   batchId: string;
   contextBlockId?: string;
   wallClockMs?: number;

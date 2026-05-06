@@ -7,7 +7,7 @@ import { describe, it, expect } from 'vitest';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider, type Stage } from '../fixtures/mock-providers.js';
 
-const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'clarification', 'review-rework'];
+const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'review-rework'];
 const VALID_WORKER_STATUS = new Set(['done', 'partial', 'blocked', 'needs_input', 'reviewing']);
 const VALID_REVIEW_STATUS = new Set(['approved', 'changes_required', 'not_applicable']);
 

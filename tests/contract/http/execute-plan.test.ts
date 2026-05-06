@@ -6,7 +6,7 @@ import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
-const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'clarification', 'review-rework'];
+const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'review-rework'];
 
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<ReturnType<typeof normalize>> {
   for (let i = 0; i < 180; i++) {

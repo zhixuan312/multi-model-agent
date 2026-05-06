@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { boot } from './fixtures/harness.js';
 import { mockProvider } from './fixtures/mock-providers.js';
 
@@ -10,16 +10,6 @@ async function authedFetch(url: string, token: string, init?: RequestInit): Prom
       Authorization: `Bearer ${token}`,
     },
   });
-}
-
-async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<Record<string, unknown>> {
-  for (let i = 0; i < 180; i++) {
-    const poll = await authedFetch(`${baseUrl}/batch/${batchId}`, token);
-    if (poll.status === 200) return (await poll.json()) as Record<string, unknown>;
-    if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status}`);
-    await new Promise((r) => setTimeout(r, 50));
-  }
-  throw new Error(`poll timeout ${batchId}`);
 }
 
 describe('contract: polling lifecycle', () => {
@@ -48,7 +38,7 @@ describe('contract: polling lifecycle', () => {
 
       expect(terminal).not.toBeNull();
       const body = await terminal!.json() as Record<string, unknown>;
-      for (const k of ['results', 'headline', 'batchTimings', 'costSummary', 'structuredReport', 'error', 'proposedInterpretation']) {
+      for (const k of ['results', 'headline', 'batchTimings', 'costSummary', 'structuredReport', 'error']) {
         expect(body).toHaveProperty(k);
       }
     } finally {
@@ -86,29 +76,4 @@ describe('contract: polling lifecycle', () => {
     }
   });
 
-  it('awaiting-clarification envelope matches golden', async () => {
-    // Use a vague prompt that triggers intake-level clarification.
-    // The mock provider is never called because intake classifies the task
-    // as needs_confirmation before dispatch.
-    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-    try {
-      const dispatch = await authedFetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, h.token, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ tasks: [{ prompt: 'Can you help' }] }),
-      });
-      expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
-
-      const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
-      const body = terminal as Record<string, unknown>;
-
-      // No clarification gate — proposedInterpretation is always notApplicable
-      const notApp = (v: unknown) =>
-        typeof v === 'object' && v !== null && (v as Record<string, unknown>).kind === 'not_applicable';
-      expect(notApp(body.proposedInterpretation)).toBe(true);
-    } finally {
-      await h.close();
-    }
-  }, 30_000);
 });

@@ -26,7 +26,6 @@ export function buildOutputEnvelopeSchema(resultItemSchema: z.ZodTypeAny = z.unk
     costSummary: z.union([costSummarySchema, notApplicableSchema]),
     structuredReport: z.union([structuredReportSchema, notApplicableSchema]),
     error: z.union([errorSchema, notApplicableSchema]),
-    proposedInterpretation: z.union([z.string().min(1), notApplicableSchema]),
     specReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
     qualityReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
     roundsUsed: z.number().int().min(0).optional(),

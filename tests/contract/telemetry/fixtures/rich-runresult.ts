@@ -48,6 +48,5 @@ export function richRunResult(): RunResult {
     taskMaxIdleMs: 1000,
     stallCount: 1,
     sandboxViolationCount: 1,
-    lifecycleClarificationRequested: true,
   } as RunResult;
 }

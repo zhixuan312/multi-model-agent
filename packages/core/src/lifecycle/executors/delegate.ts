@@ -119,13 +119,12 @@ export async function executeDelegate(
   const tasksCompleted = results.length;
 
   return {
-    headline: composeTerminalHeadline({ tool: 'delegate', awaitingClarification: false, tasksTotal, tasksCompleted }),
+    headline: composeTerminalHeadline({ tool: 'delegate', tasksTotal, tasksCompleted }),
     results,
     batchTimings,
     costSummary,
     structuredReport: notApplicable('no structured report emitted by this executor'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId,
     tasks: resolvedReadySpecs,
     wallClockMs,

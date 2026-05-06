@@ -19,6 +19,7 @@ export const BatchBase = z.object({
 
 export const RouteEnum = z.enum([
   'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
+  'investigate', 'explore',
   'explore_internal', 'explore_external', 'explore_synthesize',
   'register-context-block',
 ]);
@@ -33,7 +34,7 @@ export const DiagRoleEnum = z.enum([
 
 export const DiagReasonEnum = z.enum(['transport_failure', 'not_configured', 'reviewer_separation_unsatisfiable']);
 
-export const ProviderTypeEnum = z.enum(['claude', 'openai-compatible', 'codex']);
+export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai-compatible', 'codex']);
 
 export const RunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
@@ -52,5 +53,7 @@ export const VerifySkipReasonEnum = z.enum([
 
 export const WorkerStatusEnum = z.enum([
   'done', 'done_with_concerns', 'needs_context', 'blocked',
-  'review_loop_aborted', 'failed',
+  'review_loop_capped', 'failed',
 ]);
+
+export const ReviewEngineTypeEnum = z.enum(['reviewer', 'annotator']);

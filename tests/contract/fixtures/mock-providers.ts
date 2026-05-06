@@ -25,7 +25,6 @@ export type Stage =
   | 'incomplete'
   | 'force-salvage'
   | 'max-turns'
-  | 'clarification'
   | 'review-rework'
   | 'slow';
 
@@ -169,30 +168,6 @@ function buildMaxTurns(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildClarificationNeeded(opts: MockProviderOptions): RunResult {
-  return {
-    output: opts.output ?? 'needs clarification',
-    status: 'brief_too_vague',
-    usage: usage(0.0005),
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [attempt('brief_too_vague', 1, 0.0005)],
-    durationMs: 0,
-    directoriesListed: [],
-    terminationReason: {
-      cause: 'brief_too_vague',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
-  };
-}
-
 function buildReviewRework(opts: MockProviderOptions): RunResult {
   return {
     output: opts.output ?? 'needs rework per review',
@@ -283,7 +258,6 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
       case 'force-salvage': return buildForceSalvage(opts as MockProviderOptions & { stage: Stage });
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
-      case 'clarification': return buildClarificationNeeded(opts as MockProviderOptions & { stage: Stage });
       case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
     }
@@ -345,19 +319,6 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
       return {
         ...buildMaxTurns({ stage: 'max-turns', output }),
         capExhausted: 'turn',
-      };
-    },
-  };
-}
-
-export function clarificationProvider(opts: { proposedInterpretation: string }): Provider {
-  return {
-    name: 'mock-clarification',
-    config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
-      return {
-        ...buildClarificationNeeded({ stage: 'clarification', output: opts.proposedInterpretation }),
-        lifecycleClarificationRequested: true,
       };
     },
   };

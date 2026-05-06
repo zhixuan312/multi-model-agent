@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import * as schemas from '@zhixuan92/multi-model-agent-core/tools/index';
 
-const REQUIRED_FIELDS = ['headline','results','batchTimings','costSummary','structuredReport','error','proposedInterpretation'] as const;
+const REQUIRED_FIELDS = ['headline','results','batchTimings','costSummary','structuredReport','error'] as const;
 const full = {
   headline: 'h',
   results: [],
@@ -9,10 +9,9 @@ const full = {
   costSummary: {},
   structuredReport: {},
   error: { kind: 'not_applicable' as const, reason: 'ok' },
-  proposedInterpretation: { kind: 'not_applicable' as const, reason: 'ok' },
 };
 
-describe('every executor output envelope has all 7 fields', () => {
+describe('every executor output envelope has all 6 required fields', () => {
   for (const [name, schema] of [
     ['delegate', schemas.delegate.outputSchema],
     ['audit', schemas.audit.outputSchema],

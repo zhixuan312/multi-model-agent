@@ -85,8 +85,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         costSummary: (fullResult?.['costSummary'] as unknown) ?? notApplicable(reason),
         structuredReport: (fullResult?.['structuredReport'] as unknown) ?? notApplicable(reason),
         error: errPayload,
-        proposedInterpretation:
-          (fullResult?.['proposedInterpretation'] as unknown) ?? notApplicable('batch not awaiting clarification'),
       });
       return;
     }

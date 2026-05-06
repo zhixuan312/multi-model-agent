@@ -179,13 +179,12 @@ export async function executeAudit(
     const verdicts = mapReviewVerdicts(results[0], !useQualityReview);
 
     return {
-      headline: composeTerminalHeadline({ tool: 'audit', awaitingClarification: false, tasksTotal: tasks.length, tasksCompleted: results.length }),
+      headline: composeTerminalHeadline({ tool: 'audit', tasksTotal: tasks.length, tasksCompleted: results.length }),
       results,
       batchTimings,
       costSummary,
       structuredReport: notApplicable('no structured report emitted by this executor'),
       error: notApplicable('batch succeeded'),
-      proposedInterpretation: notApplicable('batch not awaiting clarification'),
       batchId: randomUUID(),
       wallClockMs,
       mainModel,
@@ -231,13 +230,12 @@ export async function executeAudit(
   const verdicts = mapReviewVerdicts(result, !useQualityReview2);
 
   return {
-    headline: composeTerminalHeadline({ tool: 'audit', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
+    headline: composeTerminalHeadline({ tool: 'audit', tasksTotal: 1, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
     structuredReport: notApplicable('no structured report emitted by this executor'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
     mainModel,

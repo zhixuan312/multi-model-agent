@@ -101,13 +101,12 @@ export async function executeDebug(
   const verdicts = mapReviewVerdicts(results[0], !useQualityReview);
 
   return {
-    headline: composeTerminalHeadline({ tool: 'debug', awaitingClarification: false, tasksTotal: 1, tasksCompleted: results.length }),
+    headline: composeTerminalHeadline({ tool: 'debug', tasksTotal: 1, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
     structuredReport: notApplicable('no structured report emitted by this executor'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
     mainModel,

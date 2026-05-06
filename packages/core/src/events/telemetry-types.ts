@@ -43,22 +43,8 @@ export const ConcernCategory = z.enum([
   'other',
 ]);
 
-export const ErrorCode = z.enum([
-  'validator_verify_command_failed',
-  'commit_metadata_invalid',
-  'commit_metadata_repair_modified_files',
-  'validator_dirty_worktree',
-  'diff_review_rejected',
-  'runner_crash',
-  'executor_error',
-  'api_error',
-  'provider_transport_failure',
-  'rate_limit_exceeded',
-  'incomplete_no_summary',
-  'reviewer_separation_unsatisfiable',
-  'guard_wall_clock',
-  'other',
-]);
+import { ErrorCodeSchema } from '../error-codes.js';
+export const ErrorCode = ErrorCodeSchema;
 
 export const SeverityBin = z.enum(['critical', 'high', 'medium', 'low']);
 
@@ -160,7 +146,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry', 'investigate', 'register-context-block']),
+  route: z.enum(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry', 'investigate', 'explore', 'register-context-block']),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
@@ -183,7 +169,7 @@ export const TaskCompletedEventSchema = z.object({
 
   // Outcome
   terminalStatus: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
-  workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_aborted']),
+  workerStatus: z.enum(['done', 'done_with_concerns', 'needs_context', 'blocked', 'failed', 'review_loop_capped']),
   errorCode: ErrorCode.nullable(),
 
   // Token economics

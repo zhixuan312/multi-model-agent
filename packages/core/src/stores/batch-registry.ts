@@ -36,7 +36,6 @@ export interface BatchEntryInput<Result = unknown> {
   state: BatchState;
   result?: Result;
   error?: { code: string; message: string; stack?: string };
-  proposedInterpretation?: string;
   startedAt: number;
   stateChangedAt: number;
   blockIds: string[];

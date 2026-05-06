@@ -279,16 +279,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (enriched.specReviewReason === undefined) {
         enriched.specReviewReason = enriched.specReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
-          : enriched.specReviewStatus === 'skipped'
-            ? 'spec review skipped (reviewPolicy or all reviewer tiers unavailable)'
-            : '';
+          : '';
       }
       if (enriched.qualityReviewReason === undefined) {
         enriched.qualityReviewReason = enriched.qualityReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
-          : enriched.qualityReviewStatus === 'skipped'
-            ? 'quality review skipped (no files written or all reviewer tiers unavailable)'
-            : '';
+          : '';
       }
 
       // Step 7i: implementationReport / structuredReport from result.output.

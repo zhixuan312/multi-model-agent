@@ -8,7 +8,6 @@ const baseEnvelope = {
   costSummary: { totalActualCostUSD: 0, costDeltaVsParentUSD: 0 },
   structuredReport: { kind: 'not_applicable', reason: 'x' },
   error: { kind: 'not_applicable', reason: 'x' },
-  proposedInterpretation: { kind: 'not_applicable', reason: 'x' },
 } as const;
 
 describe('envelope verdict fields', () => {

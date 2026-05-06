@@ -94,10 +94,6 @@
     "kind": "not_applicable",
     "reason": "batch succeeded"
   },
-  "proposedInterpretation": {
-    "kind": "not_applicable",
-    "reason": "batch not awaiting clarification"
-  },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>"
 }

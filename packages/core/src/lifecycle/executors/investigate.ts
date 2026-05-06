@@ -114,15 +114,13 @@ export async function executeInvestigate(
   // Pull lifecycle signals (set by executeReviewedLifecycle).
   const capExhausted = (result as any)?.capExhausted as 'turn' | 'cost' | 'wall_clock' | undefined;
   const workerError = runtimeError ?? ((result as any)?.workerError as Error | undefined);
-  const lifecycleClarificationRequested = Boolean((result as any)?.lifecycleClarificationRequested);
 
   // Parse worker output.
   const parseResult = parseInvestigationReport(result?.output ?? '');
 
-  // needs_context combines lifecycle signal + parser flag.
-  const parserNeedsContext = parseResult.kind === 'structured_report'
+  // needs_context derives from the worker's structured report.
+  const needsContext = parseResult.kind === 'structured_report'
     && parseResult.investigation.needsCallerClarification;
-  const needsContext = lifecycleClarificationRequested || parserNeedsContext;
 
   const derived = deriveInvestigateWorkerStatus({
     needsContext,
@@ -168,7 +166,6 @@ export async function executeInvestigate(
     costSummary: computeAggregateCost([result]),
     structuredReport: notApplicable('per-task structured report carried on result'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: ctx.batchId ?? randomUUID(),
     wallClockMs,
     mainModel: ctx.mainModel ?? config.defaults?.mainModel,

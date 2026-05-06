@@ -23,7 +23,7 @@ export interface SharedResultUsage {
 }
 
 export interface ReviewedRunResultFields {
-  workerStatus: 'done' | 'done_with_concerns' | 'review_loop_aborted' | 'failed';
+  workerStatus: 'done' | 'done_with_concerns' | 'review_loop_capped' | 'failed';
   terminationReason?: 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable';
   reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>;

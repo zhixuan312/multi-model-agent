@@ -3,7 +3,6 @@ import { executeDelegate } from '../../packages/core/src/lifecycle/executors/del
 import { buildExecutionContext } from '../../packages/core/src/lifecycle/executors/execution-context.js';
 import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
 import type { ProjectContext } from '../../packages/core/src/stores/project-context-registry.js';
-import { isNotApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
 // ---------------------------------------------------------------------------
 // Test helpers
@@ -61,19 +60,6 @@ const runTasksOverride = async () => [{
 // ---------------------------------------------------------------------------
 
 describe('executeDelegate', () => {
-  it('returns proposedInterpretation as notApplicable (no clarification gate)', async () => {
-    const result = await executeDelegate(
-      makeCtx(),
-      { tasks: [{ prompt: 'Write a hello world function in TypeScript' }] },
-      { injectDefaults, runTasksOverride },
-    );
-
-    expect(isNotApplicable(result.proposedInterpretation)).toBe(true);
-    if (isNotApplicable(result.proposedInterpretation)) {
-      expect(result.proposedInterpretation.reason).toBe('batch not awaiting clarification');
-    }
-  });
-
   it('returns results as concrete values (no clarification gate)', async () => {
     const result = await executeDelegate(
       makeCtx(),

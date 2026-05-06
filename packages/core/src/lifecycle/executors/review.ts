@@ -210,13 +210,12 @@ export async function executeReview(
   const verdicts = mapReviewVerdicts(primaryResult ?? {}, !useQualityReview);
 
   return {
-    headline: composeTerminalHeadline({ tool: 'review', awaitingClarification: false, tasksTotal: taskSpecs.length, tasksCompleted: results.length }),
+    headline: composeTerminalHeadline({ tool: 'review', tasksTotal: taskSpecs.length, tasksCompleted: results.length }),
     results,
     batchTimings,
     costSummary,
     structuredReport: notApplicable('no structured report emitted by this executor'),
     error: notApplicable('batch succeeded'),
-    proposedInterpretation: notApplicable('batch not awaiting clarification'),
     batchId: randomUUID(),
     wallClockMs,
     mainModel,
