@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/execute-plan/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { runTasks, extractPlanSection } from '../dispatcher-bridge.js';
+import { runTasks, extractPlanSection } from '../dispatch-task.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';

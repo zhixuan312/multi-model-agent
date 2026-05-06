@@ -6,7 +6,7 @@ import { describe, it, expect } from 'vitest';
 import { writeFileSync, mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { extractPlanSection } from '@zhixuan92/multi-model-agent-core/lifecycle/dispatcher-bridge';
+import { extractPlanSection } from '@zhixuan92/multi-model-agent-core/lifecycle/dispatch-task';
 
 describe('contract: plan section extraction', () => {
   it('extracts the exact task heading and stops at the next same-or-higher heading', async () => {

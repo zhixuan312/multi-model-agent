@@ -4,7 +4,7 @@ import type { Input } from '../../tools/explore/schema.js';
 import type { RunResult, MultiModelConfig } from '../../types.js';
 import type { ResearchToolDefinition } from '../../research/types.js';
 import type { EventEmitter } from '../../events/event-emitter.js';
-import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
+import { runTaskViaDispatcher } from '../dispatch-task.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { createProvider } from '../../providers/provider-factory.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';

@@ -2,7 +2,7 @@
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/retry/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { runTasks } from '../dispatcher-bridge.js';
+import { runTasks } from '../dispatch-task.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';

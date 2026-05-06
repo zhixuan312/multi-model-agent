@@ -140,7 +140,7 @@ export { extractPlanSection } from './plan-extraction.js';
  * opt-in via runTasks's useLifecycleDispatcher flag — once contract
  * goldens match the legacy executor's output, the flag flips to default.
  */
-export interface RunTaskViaDispatcherInput {
+export interface DispatchTaskInput {
   task: TaskSpec;
   resolved: ResolvedAgent;
   config: MultiModelConfig;
@@ -168,7 +168,7 @@ function toolCategoryForRoute(route: string | undefined): ToolCategory {
   return 'artifact_producing';
 }
 
-function buildExecutionContext(input: RunTaskViaDispatcherInput): ExecutionContext {
+function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
   const { task, resolved, config } = input;
   const cwd = task.cwd ?? process.cwd();
   const timeoutMs = task.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000;
@@ -218,7 +218,7 @@ function buildExecutionContext(input: RunTaskViaDispatcherInput): ExecutionConte
 }
 
 export async function runTaskViaDispatcher(
-  input: RunTaskViaDispatcherInput,
+  input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
 ): Promise<RunResult> {
   const executionContext = buildExecutionContext(input);

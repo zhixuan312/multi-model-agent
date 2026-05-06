@@ -56,9 +56,9 @@
       "types": "./dist/providers/provider-factory.d.ts",
       "import": "./dist/providers/provider-factory.js"
     },
-    "./lifecycle/dispatcher-bridge": {
-      "types": "./dist/lifecycle/dispatcher-bridge.d.ts",
-      "import": "./dist/lifecycle/dispatcher-bridge.js"
+    "./lifecycle/dispatch-task": {
+      "types": "./dist/lifecycle/dispatch-task.d.ts",
+      "import": "./dist/lifecycle/dispatch-task.js"
     },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",
