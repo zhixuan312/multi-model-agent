@@ -205,7 +205,7 @@ export function buildTimeCeilingResult(args: {
     verification: DEFAULT_VERIFICATION,
     errorCode: 'time_ceiling',
     terminationReason: { cause: 'time_ceiling', turnsUsed: turns, hasFileArtifacts: tracker.getWrites().length > 0, usedShell: tracker.getToolCalls().some(c => c.startsWith('shell')), workerSelfAssessment: null, wasPromoted: false, wallClockMs },
-    capExhausted: 'wall_clock',
+    incompleteReason: 'timeout',
     durationMs,
     parsedFindings: null,
   };

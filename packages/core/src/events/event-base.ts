@@ -64,3 +64,5 @@ export const ReviewEngineTypeEnum = z.enum(['reviewer', 'annotator']);
  * Defined here so the closed-enum ratchet covers it before adoption.
  */
 export const EvidenceKindEnum = z.enum(['reproducer', 'code_path', 'fix']);
+
+export const IncompleteReasonEnum = z.enum(['turn_cap', 'cost_cap', 'timeout', 'missing_sections']);

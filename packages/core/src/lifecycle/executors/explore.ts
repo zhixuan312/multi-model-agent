@@ -405,12 +405,12 @@ export async function executeExplore(
   // --- Derive status ---
 
   const synthFailed = isFailed(synthResult) || synthError !== undefined;
-  const capExhausted = (synthResult as any)?.capExhausted as 'turn' | 'cost' | 'wall_clock' | undefined;
+  const incompleteReason = (synthResult as any)?.incompleteReason as 'turn_cap' | 'cost_cap' | 'timeout' | undefined;
   const workerError = synthError ?? ((synthResult as any)?.workerError as Error | undefined);
 
   const derived = deriveExploreStatus({
     workerError,
-    capExhausted,
+    incompleteReason,
     parseDiagnostics: parsedReport?.diagnostics ?? {
       malformed: false,
       insufficientThreads: false,

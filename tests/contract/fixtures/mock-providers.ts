@@ -290,7 +290,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
         return {
           ...buildIncomplete({ stage: 'incomplete', output }),
           status: 'cost_exceeded',
-          capExhausted: 'cost',
+          incompleteReason: 'cost_cap',
           terminationReason: {
             cause: 'cost_exceeded',
             turnsUsed: 1,
@@ -305,7 +305,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
         return {
           ...buildIncomplete({ stage: 'incomplete', output }),
           status: 'timeout',
-          capExhausted: 'wall_clock',
+          incompleteReason: 'timeout',
           terminationReason: {
             cause: 'timeout',
             turnsUsed: 1,
@@ -318,7 +318,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
       }
       return {
         ...buildMaxTurns({ stage: 'max-turns', output }),
-        capExhausted: 'turn',
+        incompleteReason: 'turn_cap',
       };
     },
   };

@@ -241,7 +241,7 @@ export interface RunResult {
   fileArtifactsMissing?: boolean
   commits?: Commit[]
   commitError?: string
-  capExhausted?: 'turn' | 'cost' | 'wall_clock'
+  incompleteReason?: 'turn_cap' | 'cost_cap' | 'timeout' | 'missing_sections'
   /** True when the orchestrator's stall watchdog fired and force-aborted
    *  the in-flight provider.run mid-task. Distinct from cap exhaustion —
    *  signals "no progress" rather than "budget exhausted". */

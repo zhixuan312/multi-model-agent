@@ -118,7 +118,7 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
     assigned: decision.impl,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
     unavailableTiers: qualityUnavailable,
-    isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined,
+    isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.incompleteReason === undefined,
     getStatus: (r) => r.status,
     makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
     call: (provider) =>

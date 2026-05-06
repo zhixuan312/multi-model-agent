@@ -1,20 +1,11 @@
 import type { InvestigationParseResult } from './parse-investigation-report.js';
 
-export type CapKind = 'turn' | 'cost' | 'wall_clock';
 export type IncompleteReason = 'turn_cap' | 'cost_cap' | 'timeout' | 'missing_sections';
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked';
 
-export function mapCapToReason(cap: CapKind): IncompleteReason {
-  switch (cap) {
-    case 'turn': return 'turn_cap';
-    case 'cost': return 'cost_cap';
-    case 'wall_clock': return 'timeout';
-  }
-}
-
 export interface DeriveInput {
   workerError?: Error;
-  capExhausted?: CapKind;
+  incompleteReason?: IncompleteReason;
   needsContext: boolean;
   parseResult: InvestigationParseResult;
 }
@@ -38,11 +29,11 @@ export function deriveInvestigateWorkerStatus(input: DeriveInput): DeriveOutput 
   if (sectionsBad) {
     return {
       workerStatus: 'done_with_concerns',
-      incompleteReason: input.capExhausted ? mapCapToReason(input.capExhausted) : 'missing_sections',
+      incompleteReason: input.incompleteReason ?? 'missing_sections',
     };
   }
-  if (input.capExhausted) {
-    return { workerStatus: 'done_with_concerns', incompleteReason: mapCapToReason(input.capExhausted) };
+  if (input.incompleteReason) {
+    return { workerStatus: 'done_with_concerns', incompleteReason: input.incompleteReason };
   }
   return { workerStatus: 'done' };
 }

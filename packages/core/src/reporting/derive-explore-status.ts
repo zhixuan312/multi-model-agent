@@ -1,6 +1,6 @@
 export interface DeriveStatusInput {
   workerError: Error | undefined;
-  capExhausted: 'turn' | 'cost' | 'wall_clock' | undefined;
+  incompleteReason: 'turn_cap' | 'cost_cap' | 'timeout' | undefined;
   parseDiagnostics: { malformed: boolean; insufficientThreads: boolean; droppedThreads: string[] };
   threads: number;
 }
@@ -20,9 +20,7 @@ export interface DeriveStatusOutput {
 
 export function deriveExploreStatus(input: DeriveStatusInput): DeriveStatusOutput {
   if (input.workerError) return { workerStatus: 'failed' };
-  if (input.capExhausted === 'turn') return { workerStatus: 'done_with_concerns', incompleteReason: 'turn_cap' };
-  if (input.capExhausted === 'cost') return { workerStatus: 'done_with_concerns', incompleteReason: 'cost_cap' };
-  if (input.capExhausted === 'wall_clock') return { workerStatus: 'done_with_concerns', incompleteReason: 'timeout' };
+  if (input.incompleteReason !== undefined) return { workerStatus: 'done_with_concerns', incompleteReason: input.incompleteReason };
   if (input.parseDiagnostics.malformed) return { workerStatus: 'done_with_concerns', incompleteReason: 'malformed_threads' };
   if (input.parseDiagnostics.insufficientThreads) return { workerStatus: 'done_with_concerns', incompleteReason: 'insufficient_threads' };
   if (input.parseDiagnostics.droppedThreads.length > 0) {
