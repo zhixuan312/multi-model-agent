@@ -227,9 +227,41 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       }
       if (Array.isArray(state.commits) && enriched.commits === undefined) {
         enriched.commits = state.commits as RunResult['commits'];
+      } else if (enriched.commits === undefined) {
+        // Match legacy executor's terminal-RunResult invariant: commits is
+        // always an array (possibly empty) on the final envelope.
+        enriched.commits = [];
       }
       if (typeof state.commitError === 'string' && enriched.commitError === undefined) {
         enriched.commitError = state.commitError;
+      }
+
+      // Step 7f: agents block. Legacy executor populated this from per-tier
+      // bookkeeping. Synthesize from ExecutionContext + chain verdicts.
+      const ctx = state.executionContext;
+      if (ctx && enriched.agents === undefined) {
+        const specReviewerTier =
+          enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required'
+            ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
+            : (enriched.specReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+        const qualityReviewerTier =
+          enriched.qualityReviewStatus === 'approved'
+            || enriched.qualityReviewStatus === 'changes_required'
+            || enriched.qualityReviewStatus === 'annotated'
+            ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
+            : (enriched.qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+        enriched.agents = {
+          implementer: ctx.assignedTier,
+          implementerToolMode: ctx.implementerToolMode ?? 'full',
+          specReviewer: specReviewerTier,
+          qualityReviewer: qualityReviewerTier,
+        };
+      }
+
+      // Step 7f: fileArtifactsMissing — false unless verification flagged
+      // missing artifacts (matches legacy invariant for the terminal envelope).
+      if (enriched.fileArtifactsMissing === undefined) {
+        enriched.fileArtifactsMissing = false;
       }
 
       state.responseEnvelope = enriched;
