@@ -4,6 +4,7 @@ export interface InvestigateReport {
   question: string;
   answer: string;
   citations: Array<{ source: string; quote: string }>;
+  confidence?: 'low' | 'medium' | 'high';
   incompleteReason?: string;
 }
 

@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import { FindingConfidenceSchema } from '../events/event-base.js';
 
 /**
  * Single finding shape for the 5 read-only routes (audit / review / verify /
@@ -32,7 +33,7 @@ export const annotatedFindingSchema = z.object({
   claim: z.string().min(1),
   evidence: z.string().min(20),
   suggestion: z.string().optional(),
-  annotatorConfidence: z.number().int().min(0).max(100).nullable(),
+  annotatorConfidence: FindingConfidenceSchema.nullable(),
   evidenceGrounded: z.boolean(),
 }).strict();
 
@@ -54,7 +55,7 @@ export const reviewerEmittedFindingSchema = z.object({
   claim: z.string().min(1),
   evidence: z.string().min(20),
   suggestion: z.string().optional(),
-  annotatorConfidence: z.number().int().min(0).max(100),
+  annotatorConfidence: FindingConfidenceSchema,
 }).strict();
 
 export const reviewerEmittedFindingsSchema = z.array(reviewerEmittedFindingSchema).refine(

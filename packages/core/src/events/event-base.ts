@@ -66,3 +66,6 @@ export const ReviewEngineTypeEnum = z.enum(['reviewer', 'annotator']);
 export const EvidenceKindEnum = z.enum(['reproducer', 'code_path', 'fix']);
 
 export const IncompleteReasonEnum = z.enum(['turn_cap', 'cost_cap', 'timeout', 'missing_sections']);
+
+export const InvestigationConfidenceEnum = z.enum(['low', 'medium', 'high']);
+export const FindingConfidenceSchema = z.number().int().min(0).max(100);
