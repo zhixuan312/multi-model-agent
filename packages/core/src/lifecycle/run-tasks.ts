@@ -11,6 +11,7 @@ import type { EventEmitter } from '../events/event-emitter.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
+import { runTaskViaDispatcher } from './dispatcher-bridge.js';
 import { errorResult } from './execute-task.js';
 import type { ResolvedTask } from './execute-task.js';
 
@@ -65,6 +66,14 @@ export interface RunTasksOptions {
   bus?: EventEmitter;
   /** Per-route quality review prompt builder (for quality_only reviewPolicy). */
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  /**
+   * #45 Step 7a: opt-in to LifecycleDispatcher path. When true, each task runs
+   * through the StagePlan handlers (run_initial_impl direct + spec/quality/
+   * diff/verify/commit/terminal cascade) instead of executeReviewedLifecycle.
+   * Default false; flips to true once the dispatcher path matches contract
+   * goldens.
+   */
+  useLifecycleDispatcher?: boolean;
 }
 
 export async function runTasks(
@@ -120,6 +129,26 @@ export async function runTasks(
     resolved.map((r, index): Promise<RunResult> => {
       if ('error' in r) {
         return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
+      }
+      if (options.useLifecycleDispatcher) {
+        return runTaskViaDispatcher({
+          task: r.task,
+          resolved: r.resolved,
+          config,
+          taskIndex: index,
+          ...(options.onProgress && { onProgress: options.onProgress }),
+          ...(options.batchId !== undefined && { batchId: options.batchId }),
+          ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
+          ...(options.logger && { logger: options.logger }),
+          verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
+          ...(options.verboseStream && { verboseStream: options.verboseStream }),
+          ...(options.recorder && { recorder: options.recorder }),
+          ...(options.route !== undefined && { route: options.route }),
+          ...(options.client !== undefined && { client: options.client }),
+          ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
+          ...(options.bus && { bus: options.bus }),
+          ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
+        });
       }
       return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
         batchId: options.batchId,

@@ -1,0 +1,149 @@
+import type {
+  TaskSpec,
+  RunResult,
+  MultiModelConfig,
+  Provider,
+  AgentType,
+} from '../types.js';
+import type { ProgressEvent } from '../providers/runner-types.js';
+import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
+import type { HttpServerLog } from '../events/http-server-log.js';
+import type { EventEmitter } from '../events/event-emitter.js';
+import type { ExecutionContext } from './lifecycle-context.js';
+import type { ResolvedAgent } from '../escalation/agent-resolver.js';
+import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
+import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
+import { resolveAgent } from '../escalation/agent-resolver.js';
+
+/**
+ * #45 Step 7a: per-task dispatcher bridge.
+ *
+ * Builds an ExecutionContext from runTasks's per-task parameters and runs
+ * a fresh StagePlan via LifecycleDispatcher. Returns the RunResult composed
+ * by compose_response from state.lastRunResult.
+ *
+ * This is the alternative entry point that activates the per-row handlers
+ * (verify, commit, spec/quality/diff chains, terminal). Today it's
+ * opt-in via runTasks's useLifecycleDispatcher flag — once contract
+ * goldens match the legacy executor's output, the flag flips to default.
+ */
+export interface RunTaskViaDispatcherInput {
+  task: TaskSpec;
+  resolved: ResolvedAgent;
+  config: MultiModelConfig;
+  taskIndex: number;
+  onProgress?: (taskIndex: number, event: ProgressEvent) => void;
+  batchId?: string;
+  recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
+  logger?: HttpServerLog;
+  verbose?: boolean;
+  verboseStream?: (line: string) => void;
+  recorder?: ExecutionContext['recorder'];
+  route?: string;
+  client?: string;
+  triggeringSkill?: string;
+  bus?: EventEmitter;
+  qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+}
+
+function toolCategoryForRoute(route: string | undefined): ToolCategory {
+  // Mirrors stage-plan-builder's ToolCategory mapping. Keep this in sync with
+  // server/src/http/handlers/tools/* — they pass the canonical category.
+  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'verify') return 'read_only';
+  if (route === 'explore') return 'research';
+  if (route === 'register-context-block') return 'assist';
+  return 'artifact_producing';
+}
+
+function buildExecutionContext(input: RunTaskViaDispatcherInput): ExecutionContext {
+  const { task, resolved, config } = input;
+  const cwd = task.cwd ?? process.cwd();
+  const timeoutMs = task.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000;
+  const stallTimeoutMs = config.defaults?.stallTimeoutMs ?? 300_000;
+  const startMs = Date.now();
+
+  const providers: Partial<Record<AgentType, Provider>> = {};
+  providers[resolved.slot] = resolved.provider;
+  // Best-effort: populate the other tier when configured. Not fatal if missing —
+  // pickEscalation throws at use-site if the unavailable tier is requested.
+  try {
+    const otherTier: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
+    const other = resolveAgent(otherTier, config);
+    providers[otherTier] = other.provider;
+  } catch {
+    /* other tier not configured — leave undefined */
+  }
+
+  return {
+    task,
+    taskIndex: input.taskIndex,
+    config,
+    cwd,
+    route: input.route ?? '',
+    client: input.client ?? '',
+    triggeringSkill: input.triggeringSkill ?? '',
+    mainModel: input.recorder ? null : null,
+    assignedTier: resolved.slot,
+    implementerProvider: resolved.provider,
+    escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
+    providers,
+    implementerIdentity: undefined,
+    timing: { startMs, timeoutMs, deadlineMs: startMs + timeoutMs, stallTimeoutMs },
+    budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
+    stall: { controller: new AbortController(), lastEventAtMs: startMs, fired: false },
+    implementerToolMode: task.tools,
+    ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
+    bus: input.bus,
+    heartbeat: undefined,
+    logger: input.logger,
+    verboseStream: input.verboseStream ?? ((line: string) => { process.stderr.write(line); }),
+    verbose: input.verbose ?? false,
+    ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
+    ...(input.recorder && { recorder: input.recorder }),
+    outputTargets: [],
+  };
+}
+
+export async function runTaskViaDispatcher(
+  input: RunTaskViaDispatcherInput,
+  dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
+): Promise<RunResult> {
+  const executionContext = buildExecutionContext(input);
+  const route = input.route ?? '';
+  const toolCategory = toolCategoryForRoute(route);
+
+  // ATTEMPT_BUDGETS is consulted by the dispatcher's initial state via
+  // toolCategory; reference it here so the import stays pinned for future
+  // budget-derived logic in handlers.
+  void ATTEMPT_BUDGETS[toolCategory];
+
+  const out = await dispatcher.dispatch({
+    route,
+    toolCategory,
+    rawRequest: { tasks: [input.task] },
+    context: { task: input.task, executionContext },
+  });
+
+  // compose_response writes responseEnvelope; for the dispatcher path it's
+  // a RunResult shaped from state.lastRunResult. Fall back to a synthetic
+  // error RunResult if the pipeline didn't produce one.
+  const body = out.body;
+  if (body && typeof body === 'object' && 'output' in body) {
+    return body as RunResult;
+  }
+  return {
+    output: '',
+    status: 'error',
+    usage: { inputTokens: 0, outputTokens: 0 },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: true,
+    escalationLog: [],
+    parsedFindings: null,
+    error: 'dispatcher produced no RunResult',
+    errorCode: 'executor_error',
+    workerStatus: 'failed',
+  } as unknown as RunResult;
+}

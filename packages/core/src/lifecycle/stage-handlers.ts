@@ -1,5 +1,9 @@
 import type { StageHandler } from './lifecycle-driver.js';
 import type { LifecycleState } from './stage-plan-types.js';
+import type { ExecutionContext } from './lifecycle-context.js';
+import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
+import { pickEscalation } from '../escalation/policy.js';
 import { runVerifyCommandHandler } from './handlers/run-verify-command-handler.js';
 import { gitCommitHandler } from './handlers/git-commit-handler.js';
 import {
@@ -64,19 +68,109 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     if (typeof route !== 'string') {
       throw new Error('run_initial_impl: state.route must be a string');
     }
-    // Prefer the per-call executor injected via DispatchInput; fall back to
-    // a route-keyed registry for callers (tests) that pre-register executors.
+
+    // Direct path (#45 Step 7a): when state.task + state.executionContext are
+    // populated and no executor closure is supplied, run delegateWithEscalation
+    // directly. The result lands in state.lastRunResult so downstream handlers
+    // (spec/quality/diff chains, verify, commit, terminal) can cascade.
     const executor =
       (state.executor as RouteExecutor | undefined) ?? deps.executors[route];
     if (!executor) {
-      throw new Error(`run_initial_impl: no executor registered for route '${route}'`);
+      const task = state.task as TaskSpec | undefined;
+      const ctx = state.executionContext as ExecutionContext | undefined;
+      if (!task || !ctx) {
+        throw new Error(
+          `run_initial_impl: no executor registered for route '${route}' and ` +
+          `no direct-path inputs (state.task / state.executionContext)`,
+        );
+      }
+      const baseTier: AgentType = ctx.assignedTier;
+      const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
+      const provider = ctx.providers[decision.impl] as Provider | undefined;
+      if (!provider) {
+        state.lastRunResult = {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          parsedFindings: null,
+          error: `no provider configured for tier '${decision.impl}'`,
+          errorCode: 'all_tiers_unavailable',
+          workerStatus: 'failed',
+        } as unknown as RunResult;
+        state.terminal = true;
+        return;
+      }
+      try {
+        const result = await delegateWithEscalation(
+          {
+            prompt: task.prompt,
+            cwd: ctx.cwd,
+            agentType: decision.impl,
+            briefQualityPolicy: 'off',
+            timeoutMs: ctx.timing.timeoutMs,
+            ...(task.tools !== undefined && { tools: task.tools }),
+          },
+          [provider],
+          {
+            explicitlyPinned: false,
+            taskDeadlineMs: ctx.timing.deadlineMs,
+            abortSignal: ctx.stall.controller.signal,
+            assignedTier: decision.impl,
+          },
+        );
+        state.lastRunResult = result as unknown as RunResult;
+        if (result.status !== 'ok') {
+          state.terminal = true;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastRunResult = {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          parsedFindings: null,
+          error: message,
+          errorCode: 'executor_error',
+          workerStatus: 'failed',
+        } as unknown as RunResult;
+        state.terminal = true;
+      }
+      return;
     }
+
+    // Legacy path: per-call executor closure does the full reviewed-lifecycle.
     const result = await executor(state.request, state);
     state.executorResult = result;
   };
 
   const composeResponse: StageHandler = (state) => {
-    state.responseEnvelope = state.executorResult;
+    // Legacy path: executor returned the full envelope.
+    if (state.executorResult !== undefined) {
+      state.responseEnvelope = state.executorResult;
+      return;
+    }
+    // Direct path (#45 Step 7a): assemble envelope from per-handler state.
+    // Today the envelope IS the RunResult — the per-route executors
+    // (executeDelegate, etc.) wrap N RunResults into route-specific shapes
+    // (DelegateOutput, etc.). At the per-task dispatch boundary we emit
+    // the raw RunResult; the runTasks layer aggregates.
+    if (state.lastRunResult !== undefined) {
+      state.responseEnvelope = state.lastRunResult;
+      return;
+    }
+    state.responseEnvelope = undefined;
   };
 
   return {
