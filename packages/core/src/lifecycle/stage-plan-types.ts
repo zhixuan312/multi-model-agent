@@ -82,6 +82,14 @@ export interface LifecycleState {
   specChainAttemptIndex?: number;
   qualityChainAttemptIndex?: number;
 
+  // Per-loop sticky unavailable maps (UnavailableMap) — shared by all
+  // runWithFallback calls within a chain so a tier marked unavailable in
+  // round 1 stays unavailable for round 2/3. Populated by review-round
+  // handlers; matches reviewed-lifecycle.ts's specUnavailable / qualityUnavailable.
+  specUnavailable?: import('../escalation/fallback.js').UnavailableMap;
+  qualityUnavailable?: import('../escalation/fallback.js').UnavailableMap;
+  diffUnavailable?: import('../escalation/fallback.js').UnavailableMap;
+
   // Dispatcher / executor wiring (populated by prepare_execution_context and
   // run_initial_impl; consumed by compose_response):
   executor?: (rawRequest: unknown, state: LifecycleState) => Promise<unknown>;

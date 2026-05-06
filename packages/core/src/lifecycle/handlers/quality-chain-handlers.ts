@@ -4,6 +4,15 @@ import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
 import { runQualityReview, type QualityReviewResult } from '../../review/quality-reviewer.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
+import {
+  runWithFallback,
+  TRANSPORT_FAILURES,
+  isReviewTransportFailure,
+  makeSyntheticRunResult,
+  type UnavailableMap,
+} from '../../escalation/fallback.js';
+import { makeSkippedReviewResult } from '../../review/skipped-result.js';
+import type { SkippedReviewResult } from '../../review/skipped-result.js';
 
 /**
  * Quality-chain handlers (#45 Step 4b).
@@ -44,8 +53,6 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<QualityRe
 
   const baseTier: AgentType = ctx.assignedTier;
   const reviewerTier = pickReviewer({ loop: 'quality', attemptIndex: round - 1, baseTier });
-  const reviewerProvider = ctx.providers[reviewerTier] as Provider | undefined;
-  if (!reviewerProvider) return null;
 
   const task = state.task as TaskSpec | undefined;
   if (!task) return null;
@@ -59,21 +66,39 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<QualityRe
   const toolCallLog: string[] = last.toolCalls ?? [];
   const filesWritten: string[] = last.filesWritten ?? [];
 
-  return runQualityReview(
-    reviewerProvider,
-    packet,
-    implReport,
-    fileContents,
-    toolCallLog,
-    filesWritten,
-    undefined,
-    ctx.qualityReviewPromptBuilder,
-    last.output,
-    ctx.timing.deadlineMs,
-    ctx.stall.controller.signal,
-    undefined,
-    ctx.cwd,
-  );
+  state.qualityUnavailable ??= new Map() as UnavailableMap;
+  const qualityUnavailable: UnavailableMap = state.qualityUnavailable;
+
+  const reviewerCall = await runWithFallback<QualityReviewResult | SkippedReviewResult>({
+    assigned: reviewerTier,
+    providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
+    unavailableTiers: qualityUnavailable,
+    isTransportFailure: (r) => isReviewTransportFailure(r),
+    getStatus: (r) => (r as { status?: RunResult['status'] }).status,
+    makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
+    forbiddenTiers: [baseTier],
+    call: async (provider) =>
+      runQualityReview(
+        provider,
+        packet,
+        implReport,
+        fileContents,
+        toolCallLog,
+        filesWritten,
+        undefined,
+        ctx.qualityReviewPromptBuilder,
+        last.output,
+        ctx.timing.deadlineMs,
+        ctx.stall.controller.signal,
+        undefined,
+        ctx.cwd,
+      ),
+  });
+
+  if (reviewerCall.bothUnavailable) return null;
+  const out = reviewerCall.result;
+  if (!('findings' in out)) return null;
+  return out as QualityReviewResult;
 }
 
 async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, attemptIndex: number): Promise<RunResult | null> {
@@ -82,29 +107,43 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
 
   const baseTier: AgentType = ctx.assignedTier;
   const decision = pickEscalation({ loop: 'quality', attemptIndex, baseTier });
-  const provider = ctx.providers[decision.impl] as Provider | undefined;
-  if (!provider) return null;
 
   state.qualityChainAttemptIndex = attemptIndex;
+  state.qualityUnavailable ??= new Map() as UnavailableMap;
+  const qualityUnavailable: UnavailableMap = state.qualityUnavailable;
 
   const reworkPrompt = (task.prompt ?? '') + '\n\n[quality rework — address the prior reviewer feedback]';
-  const result = await delegateWithEscalation(
-    {
-      prompt: reworkPrompt,
-      cwd: ctx.cwd,
-      agentType: decision.impl,
-      briefQualityPolicy: 'off',
-      timeoutMs: ctx.timing.timeoutMs,
-    },
-    [provider],
-    {
-      explicitlyPinned: true,
-      taskDeadlineMs: ctx.timing.deadlineMs,
-      abortSignal: ctx.stall.controller.signal,
-    },
-  );
+
+  const reworkCall = await runWithFallback<RunResult>({
+    assigned: decision.impl,
+    providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
+    unavailableTiers: qualityUnavailable,
+    isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined,
+    getStatus: (r) => r.status,
+    makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
+    call: (provider) =>
+      delegateWithEscalation(
+        {
+          prompt: reworkPrompt,
+          cwd: ctx.cwd,
+          agentType: decision.impl,
+          briefQualityPolicy: 'off',
+          timeoutMs: ctx.timing.timeoutMs,
+        },
+        [provider],
+        {
+          explicitlyPinned: true,
+          taskDeadlineMs: ctx.timing.deadlineMs,
+          abortSignal: ctx.stall.controller.signal,
+          assignedTier: decision.impl,
+        },
+      ),
+  });
+
+  if (reworkCall.bothUnavailable) return null;
+  const result = reworkCall.result;
   if (result.status !== 'ok') return null;
-  return result as unknown as RunResult;
+  return result;
 }
 
 function mapQualityVerdict(status: QualityReviewResult['status']): LifecycleState['qualityReviewRound1Verdict'] {

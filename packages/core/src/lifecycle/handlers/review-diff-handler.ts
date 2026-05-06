@@ -2,9 +2,15 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { Provider, AgentType } from '../../types.js';
-import { runDiffReview, type DiffReviewVerdict } from '../../review/diff-review.js';
+import type { Provider, AgentType, RunResult } from '../../types.js';
+import { runDiffReview, type DiffReviewVerdict, type DiffReviewOrSkipped } from '../../review/diff-review.js';
 import { pickReviewer } from '../../escalation/policy.js';
+import {
+  runWithFallback,
+  isReviewTransportFailure,
+  type UnavailableMap,
+} from '../../escalation/fallback.js';
+import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 import type { VerifyStageResult } from './verify-stage.js';
 
 const exec = promisify(execFile);
@@ -49,8 +55,6 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
 
   const baseTier: AgentType = ctx.assignedTier;
   const reviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier });
-  const reviewerProvider = ctx.providers[reviewerTier] as Provider | undefined;
-  if (!reviewerProvider) return;
 
   let diff = '';
   let diffTruncated = false;
@@ -68,29 +72,46 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     return;
   }
 
-  let verdict: DiffReviewVerdict;
-  try {
-    verdict = await runDiffReview({
-      cwd: ctx.cwd,
-      diff,
-      diffTruncated,
-      verification: verifyResult,
-      worker: {
-        call: (prompt, opts) =>
-          reviewerProvider.run(prompt, {
-            cwd: opts?.cwd ?? ctx.cwd,
-            abortSignal: opts?.abortSignal,
-            timeoutMs: opts?.timeoutMs,
-          }),
-      },
-      taskDeadlineMs: ctx.timing.deadlineMs,
-      abortSignal: ctx.stall.controller.signal,
-    });
-  } catch {
-    state.diffReviewVerdict = 'error';
-    state.terminal = true;
+  state.diffUnavailable ??= new Map() as UnavailableMap;
+  const diffUnavailable: UnavailableMap = state.diffUnavailable;
+
+  const diffCall = await runWithFallback<DiffReviewOrSkipped>({
+    assigned: reviewerTier,
+    providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
+    unavailableTiers: diffUnavailable,
+    isTransportFailure: (r) => isReviewTransportFailure(r),
+    getStatus: (r) => (r as { status?: RunResult['status'] }).status,
+    makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
+    forbiddenTiers: [baseTier],
+    call: (provider) =>
+      runDiffReview({
+        cwd: ctx.cwd,
+        diff,
+        diffTruncated,
+        verification: verifyResult,
+        worker: {
+          call: (prompt, opts) =>
+            provider.run(prompt, {
+              cwd: opts?.cwd ?? ctx.cwd,
+              abortSignal: opts?.abortSignal,
+              timeoutMs: opts?.timeoutMs,
+            }),
+        },
+        taskDeadlineMs: ctx.timing.deadlineMs,
+        abortSignal: ctx.stall.controller.signal,
+      }),
+  });
+
+  if (diffCall.bothUnavailable) {
+    state.diffReviewVerdict = 'skipped';
     return;
   }
+  const verdictOrSkipped = diffCall.result;
+  if (!('kind' in verdictOrSkipped)) {
+    state.diffReviewVerdict = 'skipped';
+    return;
+  }
+  const verdict: DiffReviewVerdict = verdictOrSkipped;
 
   state.diffReviewKind = verdict.kind;
   if (verdict.kind === 'approve' || verdict.kind === 'concerns') {

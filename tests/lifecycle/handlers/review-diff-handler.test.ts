@@ -111,13 +111,16 @@ describe('reviewDiffHandler', () => {
     expect(state.diffReviewVerdict).toBeUndefined();
   });
 
-  it('no-ops when reviewer provider is missing', async () => {
+  it("marks 'skipped' when reviewer provider is missing (runWithFallback bothUnavailable path)", async () => {
     const state = makeState({
       executionContext: makeCtx(repoDir, {}),
       verifyResult: passingVerify,
     });
     await reviewDiffHandler(state);
-    expect(state.diffReviewVerdict).toBeUndefined();
+    // Step 7c: runWithFallback wraps the diff reviewer call; when neither
+    // tier is configured, both are unavailable → handler records 'skipped'
+    // (explicit) rather than leaving the slot undefined.
+    expect(state.diffReviewVerdict).toBe('skipped');
   });
 
   it("kind='approve' → envelope 'approved' (terminal stays false)", async () => {

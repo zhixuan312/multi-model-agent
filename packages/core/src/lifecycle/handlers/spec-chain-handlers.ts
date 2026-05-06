@@ -2,8 +2,16 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
-import { runSpecReview, type SpecReviewResult } from '../../review/spec-reviewer.js';
+import { runSpecReview, type SpecReviewResult, type SpecReviewOrSkipped } from '../../review/spec-reviewer.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
+import {
+  runWithFallback,
+  TRANSPORT_FAILURES,
+  isReviewTransportFailure,
+  makeSyntheticRunResult,
+  type UnavailableMap,
+} from '../../escalation/fallback.js';
+import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 
 /**
  * Spec-chain handlers (#45 Step 4a).
@@ -55,8 +63,6 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<SpecReviewRe
 
   const baseTier: AgentType = ctx.assignedTier;
   const reviewerTier = pickReviewer({ loop: 'spec', attemptIndex: round - 1, baseTier });
-  const reviewerProvider = ctx.providers[reviewerTier] as Provider | undefined;
-  if (!reviewerProvider) return null;
 
   const task = state.task as TaskSpec | undefined;
   if (!task) return null;
@@ -69,19 +75,46 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<SpecReviewRe
   const fileContents: Record<string, string> = {};
   const toolCallLog: string[] = last.toolCalls ?? [];
 
-  return runSpecReview(
-    reviewerProvider,
-    packet,
-    implReport,
-    fileContents,
-    toolCallLog,
-    task.planContext,
-    undefined,
-    ctx.timing.deadlineMs,
-    ctx.stall.controller.signal,
-    undefined,
-    ctx.cwd,
-  );
+  state.specUnavailable ??= new Map() as UnavailableMap;
+  const specUnavailable: UnavailableMap = state.specUnavailable;
+
+  // Run the review against the assigned reviewer tier; fall back to the other
+  // tier on transport failure (matches reviewed-lifecycle.ts:1340–1349).
+  // forbiddenTiers excludes the implementer's tier so reviewer separation
+  // is enforced by the fallback wrapper.
+  const reviewerCall = await runWithFallback<SpecReviewOrSkipped>({
+    assigned: reviewerTier,
+    providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
+    unavailableTiers: specUnavailable,
+    isTransportFailure: (r) => isReviewTransportFailure(r),
+    getStatus: (r) => (r as { status?: RunResult['status'] }).status,
+    makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
+    forbiddenTiers: [baseTier],
+    call: async (provider) =>
+      runSpecReview(
+        provider,
+        packet,
+        implReport,
+        fileContents,
+        toolCallLog,
+        task.planContext,
+        undefined,
+        ctx.timing.deadlineMs,
+        ctx.stall.controller.signal,
+        undefined,
+        ctx.cwd,
+      ),
+  });
+
+  if (reviewerCall.bothUnavailable) {
+    // Skipped result — handler treats this as 'skipped' verdict downstream.
+    return null;
+  }
+  const out = reviewerCall.result;
+  // SpecReviewOrSkipped includes SkippedReviewResult; if a 'skipped' fell
+  // through, surface as null so caller maps to skipped verdict.
+  if (!('findings' in out)) return null;
+  return out as SpecReviewResult;
 }
 
 async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null> {
@@ -92,30 +125,44 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
   const attemptIndex = round; // rework_1 → attemptIndex 1, rework_2 → attemptIndex 2
   const baseTier: AgentType = ctx.assignedTier;
   const decision = pickEscalation({ loop: 'spec', attemptIndex, baseTier });
-  const provider = ctx.providers[decision.impl] as Provider | undefined;
-  if (!provider) return null;
 
   state.specChainAttemptIndex = attemptIndex;
+  state.specUnavailable ??= new Map() as UnavailableMap;
+  const specUnavailable: UnavailableMap = state.specUnavailable;
 
   const reworkPrompt = (task.prompt ?? '') + '\n\n[spec rework — address the prior reviewer feedback]';
   const reworkTask: TaskSpec = { ...task, prompt: reworkPrompt };
-  const result = await delegateWithEscalation(
-    {
-      prompt: reworkTask.prompt,
-      cwd: ctx.cwd,
-      agentType: decision.impl,
-      briefQualityPolicy: 'off',
-      timeoutMs: ctx.timing.timeoutMs,
-    },
-    [provider],
-    {
-      explicitlyPinned: true,
-      taskDeadlineMs: ctx.timing.deadlineMs,
-      abortSignal: ctx.stall.controller.signal,
-    },
-  );
+
+  const reworkCall = await runWithFallback<RunResult>({
+    assigned: decision.impl,
+    providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
+    unavailableTiers: specUnavailable,
+    isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.capExhausted === undefined,
+    getStatus: (r) => r.status,
+    makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
+    call: (provider) =>
+      delegateWithEscalation(
+        {
+          prompt: reworkTask.prompt,
+          cwd: ctx.cwd,
+          agentType: decision.impl,
+          briefQualityPolicy: 'off',
+          timeoutMs: ctx.timing.timeoutMs,
+        },
+        [provider],
+        {
+          explicitlyPinned: true,
+          taskDeadlineMs: ctx.timing.deadlineMs,
+          abortSignal: ctx.stall.controller.signal,
+          assignedTier: decision.impl,
+        },
+      ),
+  });
+
+  if (reworkCall.bothUnavailable) return null;
+  const result = reworkCall.result;
   if (result.status !== 'ok') return null;
-  return result as unknown as RunResult;
+  return result;
 }
 
 function makeSpecReviewHandler(round: 1 | 2 | 3) {
