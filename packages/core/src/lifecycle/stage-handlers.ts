@@ -1,9 +1,6 @@
 import type { StageHandler } from './lifecycle-driver.js';
 import type { LifecycleState } from './stage-plan-types.js';
-import type { ExecutionContext } from './lifecycle-context.js';
-import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
-import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
-import { pickEscalation } from '../escalation/policy.js';
+import type { RunResult } from '../types.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { runVerifyCommandHandler } from './handlers/run-verify-command-handler.js';
 import { gitCommitHandler } from './handlers/git-commit-handler.js';
@@ -58,7 +55,6 @@ export type RouteExecutor = (
 ) => Promise<unknown>;
 
 export interface DispatcherDeps {
-  executors: Record<string, RouteExecutor>;
 }
 
 const noop: StageHandler = () => { /* placeholder for future decomposition */ };
@@ -70,96 +66,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       throw new Error('run_initial_impl: state.route must be a string');
     }
 
-    // Direct path (#45 Step 7a): when state.task + state.executionContext are
-    // populated and no executor closure is supplied, run delegateWithEscalation
-    // directly. The result lands in state.lastRunResult so downstream handlers
-    // (spec/quality/diff chains, verify, commit, terminal) can cascade.
-    const executor =
-      (state.executor as RouteExecutor | undefined) ?? deps.executors[route];
+    const executor = state.executor as RouteExecutor | undefined;
     if (!executor) {
-      const task = state.task as TaskSpec | undefined;
-      const ctx = state.executionContext as ExecutionContext | undefined;
-      if (!task || !ctx) {
-        throw new Error(
-          `run_initial_impl: no executor registered for route '${route}' and ` +
-          `no direct-path inputs (state.task / state.executionContext)`,
-        );
-      }
-      const baseTier: AgentType = ctx.assignedTier;
-      const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
-      const provider = ctx.providers[decision.impl] as Provider | undefined;
-      if (!provider) {
-        state.lastRunResult = {
-          output: '',
-          status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [],
-          parsedFindings: null,
-          error: `no provider configured for tier '${decision.impl}'`,
-          errorCode: 'all_tiers_unavailable',
-          workerStatus: 'failed',
-        } as unknown as RunResult;
-        state.terminal = true;
-        return;
-      }
-      try {
-        const result = await delegateWithEscalation(
-          {
-            prompt: task.prompt,
-            cwd: ctx.cwd,
-            agentType: decision.impl,
-            briefQualityPolicy: 'off',
-            timeoutMs: ctx.timing.timeoutMs,
-            ...(task.tools !== undefined && { tools: task.tools }),
-          },
-          [provider],
-          {
-            explicitlyPinned: false,
-            taskDeadlineMs: ctx.timing.deadlineMs,
-            abortSignal: ctx.stall.controller.signal,
-            assignedTier: decision.impl,
-          },
-        );
-        // Parse the implementation report so downstream review handlers
-        // (spec/quality) can read state.lastRunResult.implementationReport
-        // without each parsing redundantly. Matches legacy behavior where
-        // reviewed-lifecycle parsed once after the impl call.
-        const enrichedResult: RunResult = {
-          ...result,
-          ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
-        } as unknown as RunResult;
-        state.lastRunResult = enrichedResult;
-        if (result.status !== 'ok') {
-          state.terminal = true;
-        }
-      } catch (err) {
-        const message = err instanceof Error ? err.message : String(err);
-        state.lastRunResult = {
-          output: '',
-          status: 'error',
-          usage: { inputTokens: 0, outputTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [],
-          parsedFindings: null,
-          error: message,
-          errorCode: 'runner_crash',
-          workerStatus: 'failed',
-        } as unknown as RunResult;
-        state.terminal = true;
-      }
-      return;
+      throw new Error(`run_initial_impl: state.executor is not set for route ${route}`);
     }
 
-    // Legacy path: per-call executor closure does the full reviewed-lifecycle.
     const result = await executor(state.request, state);
     state.executorResult = result;
   };

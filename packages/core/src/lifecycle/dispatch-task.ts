@@ -10,11 +10,15 @@ import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 import type { ExecutionContext } from './lifecycle-context.js';
+import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
+import { pickEscalation } from '../escalation/policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
+import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
+import { parseStructuredReport } from '../reporting/structured-report.js';
 export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -252,6 +256,81 @@ export async function runTaskViaDispatcher(
     toolCategory,
     rawRequest: { tasks: [input.task] },
     context: { task: input.task, executionContext },
+    executor: async (_rawRequest: unknown, state: LifecycleState): Promise<undefined> => {
+      const task = state.task as TaskSpec | undefined;
+      const ctx = state.executionContext as ExecutionContext | undefined;
+      if (!task || !ctx) {
+        throw new Error(`runTaskViaDispatcher: state.task / state.executionContext not set for route '${route}'`);
+      }
+      const baseTier: AgentType = ctx.assignedTier;
+      const decision = pickEscalation({ loop: 'spec', attemptIndex: 0, baseTier });
+      const provider = ctx.providers[decision.impl] as Provider | undefined;
+      if (!provider) {
+        state.lastRunResult = {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          parsedFindings: null,
+          error: `no provider configured for tier '${decision.impl}'`,
+          errorCode: 'all_tiers_unavailable',
+          workerStatus: 'failed',
+        } as unknown as RunResult;
+        state.terminal = true;
+        return undefined;
+      }
+      try {
+        const result = await delegateWithEscalation(
+          {
+            prompt: task.prompt,
+            cwd: ctx.cwd,
+            agentType: decision.impl,
+            briefQualityPolicy: 'off',
+            timeoutMs: ctx.timing.timeoutMs,
+            ...(task.tools !== undefined && { tools: task.tools }),
+          },
+          [provider],
+          {
+            explicitlyPinned: false,
+            taskDeadlineMs: ctx.timing.deadlineMs,
+            abortSignal: ctx.stall.controller.signal,
+            assignedTier: decision.impl,
+          },
+        );
+        const enrichedResult: RunResult = {
+          ...result,
+          ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
+        } as unknown as RunResult;
+        state.lastRunResult = enrichedResult;
+        if (result.status !== 'ok') {
+          state.terminal = true;
+        }
+      } catch (err) {
+        const message = err instanceof Error ? err.message : String(err);
+        state.lastRunResult = {
+          output: '',
+          status: 'error',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: true,
+          escalationLog: [],
+          parsedFindings: null,
+          error: message,
+          errorCode: 'runner_crash',
+          workerStatus: 'failed',
+        } as unknown as RunResult;
+        state.terminal = true;
+      }
+      return undefined;
+    },
   });
 
   // compose_response writes responseEnvelope; for the dispatcher path it's

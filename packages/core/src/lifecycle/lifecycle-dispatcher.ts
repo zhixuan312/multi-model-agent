@@ -36,15 +36,6 @@ export type DriverFactory = (plan: StagePlan, handlers: Record<string, StageHand
 export type ContextBlockHandler = (rawRequest: unknown) => Promise<DispatchOutput>;
 
 export class LifecycleDispatcher {
-  /**
-   * Two construction modes are supported during the cutover:
-   *
-   *  1. Legacy: pass `handlers` directly. Test fixtures use this to inject
-   *     synthetic stage handlers without going through the executor adapter.
-   *  2. Production: omit `handlers` (or pass `{}`). The dispatcher wires
-   *     buildStageHandlers internally so run_initial_impl invokes the
-   *     per-call executor passed via DispatchInput.executor.
-   */
   constructor(
     handlers: Record<string, StageHandler> = {},
     private buildDriver: DriverFactory = (plan, handlers) => new LifecycleDriver(plan, handlers),
@@ -53,9 +44,7 @@ export class LifecycleDispatcher {
     // Fill in baseline noops for any missing keys, but keep the SAME reference
     // the caller passed in. Test fixtures (bootstrap.ts) capture this reference
     // and mutate it via overrideHandler() — cloning would break that contract.
-    const baseline = buildStageHandlers({
-      executors: {}, // unused; handlers route through state.executor when set
-    });
+    const baseline = buildStageHandlers({});
     for (const key of Object.keys(baseline)) {
       if (!(key in handlers)) handlers[key] = baseline[key];
     }
