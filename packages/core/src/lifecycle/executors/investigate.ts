@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/investigate/schema.js';
 import type { RunResult } from '../../types.js';
-import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';

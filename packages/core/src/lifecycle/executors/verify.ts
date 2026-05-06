@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/verify/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../../stores/expand-context-blocks.js';
 import { buildVerifyQualityPrompt } from '../../review/quality-only-prompts.js';

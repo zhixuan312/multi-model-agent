@@ -10,7 +10,6 @@ import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
-import { executeReviewedLifecycle } from './reviewed-lifecycle.js';
 import { runTaskViaDispatcher } from './dispatcher-bridge.js';
 import { errorResult } from './execute-task.js';
 import type { ResolvedTask } from './execute-task.js';
@@ -130,34 +129,29 @@ export async function runTasks(
       if ('error' in r) {
         return Promise.resolve({ ...errorResult(r.error), errorCode: r.errorCode });
       }
-      if (options.useLifecycleDispatcher) {
-        return runTaskViaDispatcher({
-          task: r.task,
-          resolved: r.resolved,
-          config,
-          taskIndex: index,
-          ...(options.onProgress && { onProgress: options.onProgress }),
-          ...(options.batchId !== undefined && { batchId: options.batchId }),
-          ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
-          ...(options.logger && { logger: options.logger }),
-          verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
-          ...(options.verboseStream && { verboseStream: options.verboseStream }),
-          ...(options.recorder && { recorder: options.recorder }),
-          ...(options.route !== undefined && { route: options.route }),
-          ...(options.client !== undefined && { client: options.client }),
-          ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
-          ...(options.bus && { bus: options.bus }),
-          ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
-        });
-      }
-      return executeReviewedLifecycle(r.task, r.resolved, config, index, options.onProgress, {
-        batchId: options.batchId,
-        recordHeartbeat: options.recordHeartbeat,
-      }, {
-        logger: options.logger,
+      // #45 Step 7e: routing through runTaskViaDispatcher unconditionally.
+      // The legacy executeReviewedLifecycle path is gone; the only remaining
+      // entry is the dispatcher's per-task StagePlan run. The
+      // useLifecycleDispatcher option is preserved on the type for caller
+      // back-compat (it's always-on) — drop after consumers stop passing it.
+      return runTaskViaDispatcher({
+        task: r.task,
+        resolved: r.resolved,
+        config,
+        taskIndex: index,
+        ...(options.onProgress && { onProgress: options.onProgress }),
+        ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.recordHeartbeat && { recordHeartbeat: options.recordHeartbeat }),
+        ...(options.logger && { logger: options.logger }),
         verbose: options.verbose ?? config.diagnostics?.verbose ?? false,
-        verboseStream: options.verboseStream,
-      }, options.recorder, options.route, options.client, options.triggeringSkill, options.bus, options.qualityReviewPromptBuilder);
+        ...(options.verboseStream && { verboseStream: options.verboseStream }),
+        ...(options.recorder && { recorder: options.recorder }),
+        ...(options.route !== undefined && { route: options.route }),
+        ...(options.client !== undefined && { client: options.client }),
+        ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
+        ...(options.bus && { bus: options.bus }),
+        ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
+      });
     }),
   );
 }

@@ -4,7 +4,7 @@ import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/audit/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../run-tasks.js';
-import { executeReviewedLifecycle } from '../reviewed-lifecycle.js';
+import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { buildAuditQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
