@@ -1,4 +1,16 @@
 // packages/server/src/http/handlers/control/context-blocks.ts
+//
+// Hosts POST /context-blocks (register) and DELETE /context-blocks/:id
+// (unregister). Lives under handlers/control/ rather than handlers/tools/
+// because register_context_block is an assist-tier sync state op:
+//
+//   - synchronous request/response (no batchId, no async dispatch)
+//   - no LifecycleDispatcher path (no review chain, no commit stage)
+//   - paired skill is mma-context-blocks/ (covers register + lookup)
+//
+// See vertical_design.md §9 "register_context_block / Assist-tier slot
+// conventions" for the canonical rationale.
+
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
