@@ -28,7 +28,7 @@ export {
   TierEnum,
   RouteEnum,
   ProviderTypeEnum,
-  RunStatusEnum,
+  InternalRunStatusEnum,
   ReviewVerdictEnum,
   VerifyOutcomeEnum,
   VerifySkipReasonEnum,

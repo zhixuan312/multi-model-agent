@@ -2,13 +2,13 @@ import { z } from 'zod';
 import {
   TaskBase, BatchBase,
   RouteEnum, TierEnum, DiagLoopEnum, DiagRoleEnum, DiagReasonEnum,
-  ProviderTypeEnum, RunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
+  ProviderTypeEnum, InternalRunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
   VerifySkipReasonEnum, WorkerStatusEnum,
 } from './event-base.js';
 
 export {
   RouteEnum, TierEnum, DiagLoopEnum, DiagRoleEnum, DiagReasonEnum,
-  ProviderTypeEnum, RunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
+  ProviderTypeEnum, InternalRunStatusEnum, ReviewVerdictEnum, VerifyOutcomeEnum,
   VerifySkipReasonEnum, WorkerStatusEnum,
 } from './event-base.js';
 
@@ -54,7 +54,7 @@ export const FallbackEvent = TaskBase.extend({
   assignedTier: TierEnum,
   usedTier: TierEnum,
   reason: DiagReasonEnum,
-  triggeringStatus: RunStatusEnum.optional(),
+  triggeringStatus: InternalRunStatusEnum.optional(),
   violatesSeparation: z.boolean(),
   fallbackSeparationRespected: z.boolean().optional(),
   assignedIdentity: z.object({

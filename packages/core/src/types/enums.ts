@@ -11,7 +11,7 @@
 //   §1 Identity & routing       — TierEnum, RouteEnum, ProviderTypeEnum
 //   §2 Tool surface             — (toolMode + reviewPolicy are TS string
 //                                   literal types in types/task-spec.ts)
-//   §3 Verdicts & status        — RunStatusEnum, ReviewVerdictEnum,
+//   §3 Verdicts & status        — InternalRunStatusEnum, ReviewVerdictEnum,
 //                                  WorkerStatusEnum, VerifyOutcomeEnum,
 //                                  VerifySkipReasonEnum
 //   §4 Errors                   — ErrorCodeSchema (lives in error-codes.ts
@@ -45,7 +45,7 @@ export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai',
 
 // ── §3 Verdicts & status ──────────────────────────────────────────────────
 
-export const RunStatusEnum = z.enum([
+export const InternalRunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
   'provider_transport_failure', 'error', 'brief_too_vague', 'cost_exceeded', 'unavailable',
 ]);
