@@ -399,6 +399,10 @@
     "./tool-surface/skill-installer": {
       "types": "./dist/tool-surface/skill-installer.d.ts",
       "import": "./dist/tool-surface/skill-installer.js"
+    },
+    "./tool-surface/openapi-generator": {
+      "types": "./dist/tool-surface/openapi-generator.d.ts",
+      "import": "./dist/tool-surface/openapi-generator.js"
     }
   },
   "scripts": {

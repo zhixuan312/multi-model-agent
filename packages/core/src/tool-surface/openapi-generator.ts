@@ -11,15 +11,15 @@ import {
   OpenAPIRegistry,
   OpenApiGeneratorV3,
 } from '@asteasolutions/zod-to-openapi';
-import * as delegate from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
-import * as audit from '@zhixuan92/multi-model-agent-core/tools/audit/schema';
-import * as review from '@zhixuan92/multi-model-agent-core/tools/review/schema';
-import * as verify from '@zhixuan92/multi-model-agent-core/tools/verify/schema';
-import * as debug from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
-import * as executePlan from '@zhixuan92/multi-model-agent-core/tools/execute-plan/schema';
-import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
-import * as investigate from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
-import * as explore from '@zhixuan92/multi-model-agent-core/tools/explore/schema';
+import * as delegate from '../tools/delegate/schema.js';
+import * as audit from '../tools/audit/schema.js';
+import * as review from '../tools/review/schema.js';
+import * as verify from '../tools/verify/schema.js';
+import * as debug from '../tools/debug/schema.js';
+import * as executePlan from '../tools/execute-plan/schema.js';
+import * as retry from '../tools/retry/schema.js';
+import * as investigate from '../tools/investigate/schema.js';
+import * as explore from '../tools/explore/schema.js';
 
 // Extend Zod once with openapi support.
 extendZodWithOpenApi(z);

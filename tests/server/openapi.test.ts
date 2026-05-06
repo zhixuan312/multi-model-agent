@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startTestServer } from '../helpers/test-server.js';
-import { buildOpenApiDoc, serializeOpenApiDoc } from '../../packages/server/src/openapi.js';
+import { buildOpenApiDoc, serializeOpenApiDoc } from '../../packages/core/src/tool-surface/openapi-generator.js';
 
 const thisDir = dirname(fileURLToPath(import.meta.url));
 const GOLDEN_PATH = join(

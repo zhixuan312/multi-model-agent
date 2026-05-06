@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import type { RawHandler } from '../../types.js';
-import { buildOpenApiDoc, serializeOpenApiDoc } from '../../../openapi.js';
+import { buildOpenApiDoc, serializeOpenApiDoc } from '@zhixuan92/multi-model-agent-core/tool-surface/openapi-generator';
 
 // Build the OpenAPI document once at handler-creation time (module-level lazy
 // singleton pattern — no need to rebuild on every request).
