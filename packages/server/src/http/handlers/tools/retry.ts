@@ -1,9 +1,10 @@
 // packages/server/src/http/handlers/tools/retry.ts
 //
 // PUBLIC retry route — POST /retry. Goes through the LifecycleDispatcher
-// when the original batch's toolCategory is recoverable, otherwise falls
-// back to the legacy executor path. This is the route called by the
-// `mma-retry` skill and end-user clients.
+// when the original batch's toolCategory is recoverable; missing-batch
+// and invalid-category cases return 202 and surface the error
+// asynchronously inside the batch result. This is the route called by
+// the `mma-retry` skill and end-user clients.
 //
 // SEE ALSO: handlers/control/retry.ts is the protocol-level twin
 // registered at /control/retry — same executor, but synchronous batch
@@ -48,10 +49,9 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
     const cwd = ctx.cwd!;
 
     // Resolve original batch's toolCategory for dispatcher budget selection.
-    // Missing-batch and invalid-category cases fall through to the legacy
-    // executor path (which surfaces the error asynchronously inside the
-    // batch result) — matching pre-cutover behavior where retry's 202 was
-    // unconditional and validation happened lazily.
+    // Missing-batch and invalid-category cases leave originalToolCategory
+    // unset; the dispatcher surfaces the error asynchronously inside the
+    // batch result so retry's 202 stays unconditional.
     let originalToolCategory: 'artifact_producing' | 'read_only' | 'research' | undefined;
     if (deps.routeDispatcher) {
       const original = deps.batchRegistry.get(input.batchId);
