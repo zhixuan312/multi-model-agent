@@ -36,7 +36,7 @@ export interface ExecutionContext {
    * Diagnostic logger for the request scope.
    *
    * NOTE: interface-populated but not currently consumed by any executor. Diagnostic events
-   * today emit from the HTTP pipeline and `run-tasks.ts` runner layer. Retained so future
+   * today emit from the HTTP pipeline and the lifecycle dispatcher. Retained so future
    * executor-internal events (e.g. mid-flight aborts, partial-progress signals) can flow
    * through the same scoped logger.
    */
