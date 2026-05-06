@@ -1,0 +1,21 @@
+{
+  "folders": [
+    "bounded-execution",
+    "cleanup",
+    "config",
+    "escalation",
+    "events",
+    "identity",
+    "intake",
+    "lifecycle",
+    "providers",
+    "reporting",
+    "research",
+    "review",
+    "stores",
+    "tool-surface",
+    "tools",
+    "transport",
+    "types"
+  ]
+}
