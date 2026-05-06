@@ -46,7 +46,7 @@ export interface ExecutionContext {
   contextBlockStore: ContextBlockStore;
   /** The parent model name, resolved from env at context-build time. */
   mainModel?: string;
-  /** BatchId owning this execution — threaded to runTasks so HeartbeatTimer can tag ticks. */
+  /** BatchId owning this execution — threaded to runTasks so ActivityTracker can tag ticks. */
   batchId?: string;
   /** Callback invoked on every heartbeat tick; pushes a running headline to the caller's store. */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;

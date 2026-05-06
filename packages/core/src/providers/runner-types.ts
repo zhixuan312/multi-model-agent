@@ -158,7 +158,7 @@ export type InternalRunnerEvent =
   | { kind: 'retry'; attempt: number; previousStatus: RunStatus; delayMs: number }
   | { kind: 'done'; status: RunStatus }
 
-/** Single progress event shape emitted by HeartbeatTimer during task execution. */
+/** Single progress event shape emitted by ActivityTracker during task execution. */
 export type ProgressEvent = {
   kind: 'heartbeat'
   elapsed: string

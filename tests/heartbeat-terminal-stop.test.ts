@@ -1,12 +1,12 @@
-import { HeartbeatTimer } from '../packages/core/src/bounded-execution/activity-tracker.js';
+import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
 import type { ProgressEvent } from '../packages/core/src/providers/runner-types.js';
 
 const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
 
-describe('HeartbeatTimer terminal-stage auto-stop (P4)', () => {
+describe('ActivityTracker terminal-stage auto-stop (P4)', () => {
   it('does not emit interval ticks after setStage("terminal")', async () => {
     const events: ProgressEvent[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), {
+    const hb = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
       intervalMs: 50,
     });
@@ -24,7 +24,7 @@ describe('HeartbeatTimer terminal-stage auto-stop (P4)', () => {
 
   it('further heartbeat methods after terminal are no-ops', async () => {
     const events: ProgressEvent[] = [];
-    const hb = new HeartbeatTimer((e) => events.push(e), {
+    const hb = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
       intervalMs: 50,
     });

@@ -22,7 +22,7 @@ export type RunTasksProgressCallback = (
 export interface RunTasksOptions {
   onProgress?: RunTasksProgressCallback;
   runtime?: RunTasksRuntime;
-  /** Batch ID this run belongs to; threaded to HeartbeatTimer when set. */
+  /** Batch ID this run belongs to; threaded to ActivityTracker when set. */
   batchId?: string;
   /** Callback fired on every heartbeat tick with a state snapshot. */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;

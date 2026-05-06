@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   BatchRegistry,
-  HeartbeatTimer,
+  ActivityTracker,
   type HeartbeatTickInfo,
 } from '@zhixuan92/multi-model-agent-core';
 
@@ -27,7 +27,7 @@ describe('heartbeat tick updates runningHeadlineSnapshot', () => {
     };
 
     const progressEvents: unknown[] = [];
-    const timer = new HeartbeatTimer(
+    const timer = new ActivityTracker(
       (evt) => progressEvents.push(evt),
       { provider: 'MiniMax-M2.7', intervalMs: 50_000, recordHeartbeat, batchId: 'hb1' },
     );
@@ -41,7 +41,7 @@ describe('heartbeat tick updates runningHeadlineSnapshot', () => {
   });
 
   it('recordHeartbeat no-op when omitted', () => {
-    const timer = new HeartbeatTimer(
+    const timer = new ActivityTracker(
       () => {},
       { provider: 'x', intervalMs: 50_000 },
     );

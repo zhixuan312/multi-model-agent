@@ -98,9 +98,9 @@ export {
 export { RunnerShell } from './providers/runner-shell.js';
 
 // Heartbeat
-export { HeartbeatTimer, formatElapsed } from './bounded-execution/activity-tracker.js';
+export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
 export type {
-  HeartbeatTimerOptions,
+  ActivityTrackerOptions,
   HeartbeatStage,
   TransitionFields,
   HeartbeatTickInfo,

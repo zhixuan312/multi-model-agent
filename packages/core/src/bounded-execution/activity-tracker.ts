@@ -5,7 +5,7 @@ import {
   REVIEW_STAGES,
   type HeartbeatStage,
   type HeartbeatTickInfo,
-  type HeartbeatTimerOptions,
+  type ActivityTrackerOptions,
   type TransitionFields,
 } from './activity-tracker-types.js';
 
@@ -13,11 +13,11 @@ export {
   formatElapsed,
   type HeartbeatStage,
   type HeartbeatTickInfo,
-  type HeartbeatTimerOptions,
+  type ActivityTrackerOptions,
   type TransitionFields,
 } from './activity-tracker-types.js';
 
-export class HeartbeatTimer {
+export class ActivityTracker {
   private readonly onProgress: (event: ProgressEvent) => void;
   private readonly intervalMs: number;
   private readonly mainModel: string | undefined;
@@ -60,7 +60,7 @@ export class HeartbeatTimer {
 
   constructor(
     onProgress: (event: ProgressEvent) => void,
-    options: HeartbeatTimerOptions,
+    options: ActivityTrackerOptions,
   ) {
     this.onProgress = onProgress;
     this.provider = options.provider;

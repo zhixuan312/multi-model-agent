@@ -5,7 +5,7 @@ import type {
   AgentType,
 } from '../types.js';
 import type { EventEmitter } from '../events/event-emitter.js';
-import type { HeartbeatTimer, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
+import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 
@@ -70,7 +70,7 @@ export interface ExecutionContext {
 
   // ── Group B: Bus + heartbeat ──
   bus: EventEmitter | undefined;
-  heartbeat: HeartbeatTimer | undefined;
+  heartbeat: ActivityTracker | undefined;
   /** Logger sink — Step 6 (terminal handlers) will use this for final flush. */
   logger: HttpServerLog | undefined;
   /** Verbose stream sink (process.stderr by default). */

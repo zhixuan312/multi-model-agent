@@ -35,7 +35,7 @@ export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
  * it already holds — to compose the running headline and push it via
  * `BatchRegistry.updateRunningHeadlineSnapshot`.
  *
- * HeartbeatTimer has no knowledge of BatchRegistry; it only emits this payload.
+ * ActivityTracker has no knowledge of BatchRegistry; it only emits this payload.
  */
 export interface HeartbeatTickInfo {
   batchId: string;
@@ -59,7 +59,7 @@ export interface HeartbeatTickInfo {
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number;
   /**
-   * Rich per-stage headline composed by HeartbeatTimer, e.g.
+   * Rich per-stage headline composed by ActivityTracker, e.g.
    *   "[1/5] Implementing (openai) — 45s, $0.12 saved (3.2x), 2 read, 3 written, 7 tool calls"
    * Callers (like the server's BatchRegistry) use this for single-task batches
    * so the 202 polling body carries the stage-detail view instead of a bare
@@ -72,16 +72,16 @@ export interface HeartbeatTickInfo {
   phaseChange?: { from: HeartbeatStage; to: HeartbeatStage };
 }
 
-export interface HeartbeatTimerOptions {
+export interface ActivityTrackerOptions {
   provider: string;
   mainModel?: string;
   intervalMs?: number;
   /**
-   * Optional callback invoked on every HeartbeatTimer tick (including the
+   * Optional callback invoked on every ActivityTracker tick (including the
    * final one). Receives a snapshot of the timer's current state so the
    * caller can compose the running headline from the BatchRegistry entry.
    *
-   * Core HeartbeatTimer has no knowledge of BatchRegistry — it only invokes
+   * Core ActivityTracker has no knowledge of BatchRegistry — it only invokes
    * this callback if provided.
    */
   recordHeartbeat?: (tick: HeartbeatTickInfo) => void;
