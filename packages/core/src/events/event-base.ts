@@ -73,3 +73,16 @@ export const FindingConfidenceSchema = z.number().int().min(0).max(100);
 // Spec enums.md §10 lists 6 adapters; current code wires 4. The other 2
 // land with their adapter implementations.
 export const ResearchAdapterEnum = z.enum(['arxiv', 'semantic_scholar', 'github_search', 'rss']);
+
+// Wire-event discriminator. Inventory derived from observability-events.ts.
+// Spec enums.md §7 describes a coarser 15-event rollup; the closed-enum
+// ratchet validates against the finer 31-event set the wire actually emits.
+export const EventTypeEnum = z.enum([
+  'batch_completed','batch_failed','cost_check','escalation','escalation_unavailable',
+  'explore_external_unavailable','explore_internal_unavailable','explore_parallel_end',
+  'explore_parallel_start','explore_synthesize_end','explore_synthesize_start',
+  'explore_thread_completed','explore_thread_started','fallback','fallback_unavailable',
+  'heartbeat','read_only_review.quality','read_only_review.terminal','review_decision',
+  'stage_change','stall_abort','task_completed','task_started','text_emission',
+  'time_check','tool_call','turn_complete','turn_start','verify_skipped','verify_step','worker_start',
+]);
