@@ -105,8 +105,8 @@ export interface ExecutionContextInput {
  * All 7 top-level envelope fields are required. Fields that are not
  * applicable for a given executor or code path are set to NotApplicable
  * via `notApplicable(reason)` rather than being omitted. Additional
- * passthrough fields (batchId, contextBlockId, clarificationId, etc.)
- * are preserved alongside the envelope.
+ * passthrough fields (batchId, contextBlockId, etc.) are preserved
+ * alongside the envelope.
  */
 export interface ExecutorOutput {
   headline: string;

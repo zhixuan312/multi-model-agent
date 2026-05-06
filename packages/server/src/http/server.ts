@@ -103,9 +103,15 @@ async function registerToolHandlers(
     writer,
   });
 
+  // Wire TelemetrySink to the server Recorder when telemetry is initialized
+  // (the serve.ts entrypoint calls createRecorder before this code path).
+  // Tests that exercise http/server.ts without initializing telemetry get
+  // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
+  let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
+  try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
   const bus = new EventEmitter([
     new LocalLogSink(writer),
-    new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+    new TelemetrySink(recorderForBus),
   ]);
 
   const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
@@ -163,9 +169,11 @@ async function registerControlHandlers(
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
     const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
+    let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
+    try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
     const bus = new EventEmitter([
       new LocalLogSink(writer),
-      new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+      new TelemetrySink(recorderForBus),
     ]);
     const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();

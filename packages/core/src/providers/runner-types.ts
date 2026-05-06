@@ -31,8 +31,8 @@ export interface TokenUsage {
   cachedNonReadTokens: number
 }
 
-/** Cost fields formerly co-located in TokenUsage (3.12). These are NOT token
- *  counts; they live on RunResult alongside usage. */
+/** Cost fields kept separate from TokenUsage. These are NOT token counts;
+ *  they live on RunResult alongside usage. */
 export interface CostBreakdown {
   costUSD: number | null
   /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */

@@ -37,10 +37,10 @@ import {
  * registers a handler for every key buildStagePlan produces.
  *
  * Most stages are no-ops at the dispatcher level today: their work happens
- * either upstream (HTTP middleware does loopback/cwd/auth as 1.x and 2.x
- * reads parsed body) or inside the per-route executor (reviewed-lifecycle.ts
- * runs impl + reviews + verify + commit as one unit, covering rows 3.x,
- * 4.x, and 5.1–5.2).
+ * either upstream (HTTP middleware handles ingress rows 1.x and parsed-body
+ * intake row 2.x) or inside the per-route executor (rows 3.x, 4.x, and
+ * 5.1–5.2 — impl + reviews + verify + commit run via the StagePlan + driver
+ * decomposed into lifecycle/handlers/).
  *
  * The substantive handlers in this file are:
  *   - run_initial_impl: invokes the executor registered for state.route,

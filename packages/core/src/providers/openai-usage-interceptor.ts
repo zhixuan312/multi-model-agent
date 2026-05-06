@@ -13,9 +13,9 @@
 // chunks can have `usage:undefined` AFTER an earlier chunk reported real
 // numbers, wiping the captured usage. The SDK then ends with
 // `state.usage.inputTokens=0`, costUSD=0, despite real tokens having
-// flowed. mma 3.12.2 telemetry showed every DeepSeek-as-reviewer call
-// logging 21+ turns and zero tokens, untraceable until the SDK source was
-// inspected.
+// flowed. Telemetry first surfaced this on DeepSeek-as-reviewer calls —
+// every call logged 21+ turns and zero tokens, untraceable until the SDK
+// source was inspected.
 //
 // Fix: wrap the OpenAI client's `chat.completions.create` so we see the
 // raw HTTP response (or the raw SSE stream) BEFORE the SDK consumes it, and

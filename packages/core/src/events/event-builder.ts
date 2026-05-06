@@ -345,7 +345,11 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
     name: 'committing',
     ...base,
     filesCommittedCount,
-    branchCreated: false, // TODO(3.10.3): wire branch-creation tracking — name-diff is unreliable
+    // CommitStageRunner does not track branch-creation directly today;
+    // name-diff against pre-commit refs is unreliable, so we report
+    // false. A future change can wire this when CommitStageRunner emits
+    // an explicit signal alongside filesCommittedCount.
+    branchCreated: false,
   } as StageEntryType;
 }
 
