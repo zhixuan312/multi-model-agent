@@ -34,7 +34,7 @@ export const DiagRoleEnum = z.enum([
 
 export const DiagReasonEnum = z.enum(['transport_failure', 'not_configured', 'reviewer_separation_unsatisfiable']);
 
-export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai-compatible', 'codex']);
+export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai', 'openai-compatible', 'codex']);
 
 export const RunStatusEnum = z.enum([
   'ok', 'incomplete', 'timeout', 'api_aborted', 'api_error',
