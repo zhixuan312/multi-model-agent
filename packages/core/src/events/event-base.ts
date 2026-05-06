@@ -57,3 +57,10 @@ export const WorkerStatusEnum = z.enum([
 ]);
 
 export const ReviewEngineTypeEnum = z.enum(['reviewer', 'annotator']);
+
+/**
+ * Forward-declared per spec enums.md §5. Consumed when the debug-report
+ * shape is widened to include an evidenceTrail (separate v4.x feature).
+ * Defined here so the closed-enum ratchet covers it before adoption.
+ */
+export const EvidenceKindEnum = z.enum(['reproducer', 'code_path', 'fix']);
