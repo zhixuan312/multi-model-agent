@@ -110,6 +110,14 @@ export interface LifecycleState {
   currentStage?: string;
   errorCode?: string | null;
 
+  // Terminal-handler idempotency slots (#45 Step 6). Each terminal handler
+  // skips when its slot is set, so the legacy executor's terminal path can
+  // coexist with the per-row handlers during the cutover transition.
+  terminalBlockId?: string;
+  taskTerminalEmitted?: boolean;
+  batchRegistryPersisted?: boolean;
+  telemetryFlushed?: boolean;
+
   // Slots used by existing pre-#45 handlers (execution-context-builder,
   // task-executor, derive-terminal-status). Typed as `unknown` until the
   // owning step (Step 1 / Step 5 / Step 6) firms them up.

@@ -20,6 +20,12 @@ import {
 } from './handlers/quality-chain-handlers.js';
 import { reviewDiffHandler } from './handlers/review-diff-handler.js';
 import { prepareExecutionContextHandler } from './handlers/prepare-execution-context-handler.js';
+import {
+  registerTerminalBlockHandler,
+  emitTaskTerminalHandler,
+  persistToBatchRegistryHandler,
+  flushTelemetryHandler,
+} from './handlers/terminal-handlers.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -149,13 +155,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // data flow slots aren't ready. Full activation lands with Step 5.
     git_commit: gitCommitHandler,
     compose_response: composeResponse,
-    register_terminal_block: noop,
-    emit_task_terminal: noop,
-    persist_to_batch_registry: noop,
+    // Terminal-stage rows wired to real handlers in terminal-handlers.ts.
+    // Each handler is idempotent on its state-slot guard and defensive-no-ops
+    // on missing data flow. The legacy executor still owns the terminal stage
+    // in production until Step 5's full cutover wires per-task data flow.
+    register_terminal_block: registerTerminalBlockHandler,
+    emit_task_terminal: emitTaskTerminalHandler,
+    persist_to_batch_registry: persistToBatchRegistryHandler,
 
     // Stage 6 — Emit + cleanup (timer-driven rows with runCondition=false
     // never fire from per-request iteration)
-    flush_telemetry: noop,
+    flush_telemetry: flushTelemetryHandler,
     project_idle_cleanup_tick: noop,
     batch_retention_sweep_tick: noop,
   };
