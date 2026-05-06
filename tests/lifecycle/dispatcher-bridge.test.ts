@@ -70,6 +70,53 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
     expect(result.status).toBe('ok');
   });
 
+  it('runs reviewPolicy=full through spec+quality chains when reviewers approve', async () => {
+    // Implementer returns a structured report, reviewer (same mock) approves.
+    // Both providers return the same approve-summary so spec round 1 +
+    // quality round 1 both pass.
+    const provider: Provider = {
+      name: 'standard',
+      config: { type: 'claude', model: 'mock' } as Provider['config'],
+      run: async (prompt: string) => {
+        // Reviewers see review prompts; implementers see task prompts.
+        const isReview = /reviewer|## Summary/i.test(prompt);
+        return {
+          output: '## Summary\napproved\n\nDone.',
+          status: 'ok',
+          usage: { inputTokens: 0, outputTokens: 0 },
+          turns: 0,
+          filesRead: [],
+          filesWritten: [],
+          toolCalls: [],
+          outputIsDiagnostic: false,
+          escalationLog: [],
+          parsedFindings: null,
+          structuredReport: { summary: 'approved', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [] } as unknown as RunResult['structuredReport'],
+          ...(isReview ? {} : { implementationReport: { summary: 'approved', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [] } as unknown as RunResult['implementationReport'] }),
+        } as RunResult;
+      },
+    };
+    const resolved: ResolvedAgent = { slot: 'standard', provider };
+    const task: TaskSpec = {
+      prompt: 'do the thing',
+      cwd: os.tmpdir(),
+      reviewPolicy: 'full',
+      timeoutMs: 60_000,
+      tools: 'none',
+    };
+
+    const result = await runTaskViaDispatcher({
+      task,
+      resolved,
+      config: makeConfig(),
+      taskIndex: 0,
+      route: 'delegate',
+    });
+
+    expect(result).toBeDefined();
+    expect(result.status).toBe('ok');
+  });
+
   it('captures provider error in RunResult on failure', async () => {
     const provider: Provider = {
       name: 'standard',

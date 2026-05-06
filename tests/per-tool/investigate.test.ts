@@ -239,6 +239,8 @@ describe('investigate via v4.0 lifecycle', () => {
     });
 
     expect(result.status).toBe(200);
-    expect(result.body).toBeUndefined();
+    // compose_response (runOnTerminal:true) fires even when parse_brief sets
+    // terminal — the envelope reflects the brief-rejection state.
+    expect(result.body).toBeDefined();
   });
 });

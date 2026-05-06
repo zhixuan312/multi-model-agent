@@ -205,9 +205,11 @@ describe('debug_task via v4.0 lifecycle', () => {
       rawRequest: { problemStatement: '' },
     });
 
-    // When terminal is set in parse_brief, compose_response never runs,
-    // so responseEnvelope remains undefined.
+    // When parse_brief sets terminal, compose_response (runOnTerminal:true)
+    // still fires per spec C10 and produces an envelope reflecting the
+    // brief-rejection terminal state. Driver semantics: non-runOnTerminal
+    // rows are skipped on terminal, but runOnTerminal rows continue to fire.
     expect(result.status).toBe(200);
-    expect(result.body).toBeUndefined();
+    expect(result.body).toBeDefined();
   });
 });

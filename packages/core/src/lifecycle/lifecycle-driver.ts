@@ -13,8 +13,9 @@ export class LifecycleDriver {
       // compose_response, register_terminal_block, emit_task_terminal,
       // persist_to_batch_registry, and flush_telemetry continue to fire on
       // hard-fail paths so chain-pass slots, response envelopes, and
-      // telemetry stay authoritative.
-      if (state.terminal && !row.runOnTerminal) break;
+      // telemetry stay authoritative. Non-runOnTerminal rows are skipped
+      // (continue, not break) so later runOnTerminal rows still fire.
+      if (state.terminal && !row.runOnTerminal) continue;
       if (!row.runCondition(state)) continue;
       const handler = this.handlers[row.handlerKey];
       if (!handler) throw new Error(`no handler registered for key '${row.handlerKey}'`);
