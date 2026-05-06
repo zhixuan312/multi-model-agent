@@ -167,7 +167,72 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // (DelegateOutput, etc.). At the per-task dispatch boundary we emit
     // the raw RunResult; the runTasks layer aggregates.
     if (state.lastRunResult !== undefined) {
-      state.responseEnvelope = state.lastRunResult;
+      // Step 7d: enrich the terminal RunResult with per-handler-state slots
+      // so consumers reading specReviewStatus / qualityReviewStatus /
+      // diffReviewStatus get the chain outcomes the legacy executor
+      // populated. Maps the per-round verdict slots into the legacy
+      // envelope fields.
+      const last = state.lastRunResult as RunResult;
+      const enriched: RunResult = { ...last };
+
+      // Spec chain → specReviewStatus. Pick the most-recent verdict that
+      // determined the chain outcome: any 'approved' wins (chain passed),
+      // else the last 'changes_required' (chain failed at round 3),
+      // else 'error', else 'skipped' / 'not_applicable'.
+      const specVerdicts = [state.specReviewRound1Verdict, state.specReviewRound2Verdict, state.specReviewRound3Verdict];
+      if (specVerdicts.some((v) => v === 'approved')) {
+        enriched.specReviewStatus = 'approved';
+      } else if (specVerdicts.some((v) => v === 'error')) {
+        enriched.specReviewStatus = 'error';
+      } else if (specVerdicts.some((v) => v === 'changes_required')) {
+        enriched.specReviewStatus = 'changes_required';
+      } else if (state.reviewPolicy === 'full') {
+        enriched.specReviewStatus = 'skipped';
+      } else {
+        enriched.specReviewStatus = 'not_applicable';
+      }
+
+      // Quality chain → qualityReviewStatus. Mirrors spec but includes
+      // the 'annotated' verdict (read-only routes).
+      const qualVerdicts = [state.qualityReviewRound1Verdict, state.qualityReviewRound2Verdict, state.qualityReviewRound3Verdict];
+      if (qualVerdicts.some((v) => v === 'annotated')) {
+        enriched.qualityReviewStatus = 'annotated';
+      } else if (qualVerdicts.some((v) => v === 'approved')) {
+        enriched.qualityReviewStatus = 'approved';
+      } else if (qualVerdicts.some((v) => v === 'error')) {
+        enriched.qualityReviewStatus = 'error';
+      } else if (qualVerdicts.some((v) => v === 'changes_required')) {
+        enriched.qualityReviewStatus = 'changes_required';
+      } else if (qualVerdicts.some((v) => v === 'skipped')) {
+        enriched.qualityReviewStatus = 'skipped';
+      } else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'quality_only') {
+        enriched.qualityReviewStatus = 'skipped';
+      } else {
+        enriched.qualityReviewStatus = 'not_applicable';
+      }
+
+      // Diff review → diffReviewStatus.
+      if (state.diffReviewVerdict !== undefined) {
+        enriched.diffReviewStatus = state.diffReviewVerdict;
+      } else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'diff_only') {
+        enriched.diffReviewStatus = 'skipped';
+      } else {
+        enriched.diffReviewStatus = 'not_applicable';
+      }
+
+      // Verify outcome already lives on state.lastRunResult.verification
+      // when run_verify_command fired; preserve as-is. Same for commits.
+      if (state.verifyResult !== undefined && enriched.verification === undefined) {
+        enriched.verification = state.verifyResult as RunResult['verification'];
+      }
+      if (Array.isArray(state.commits) && enriched.commits === undefined) {
+        enriched.commits = state.commits as RunResult['commits'];
+      }
+      if (typeof state.commitError === 'string' && enriched.commitError === undefined) {
+        enriched.commitError = state.commitError;
+      }
+
+      state.responseEnvelope = enriched;
       return;
     }
     state.responseEnvelope = undefined;
