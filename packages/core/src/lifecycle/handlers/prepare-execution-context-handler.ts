@@ -27,19 +27,24 @@ import type { TaskSpec } from '../../types.js';
  * DispatchInput.context = { task, executionContext }, the new path activates.
  */
 export function prepareExecutionContextHandler(state: LifecycleState): void {
-  // Idempotency: when DispatchInput.context already supplied these slots,
-  // honor them and don't overwrite. This is the lever for the eventual
-  // cutover — callers populate context, this handler accepts it as canonical.
-  if (state.executionContext && state.task) return;
-
   // Fallback: if rawRequest carries a TaskSpec[] and state.task is empty,
-  // surface the first task so per-task handlers have something to read. This
-  // is best-effort — full multi-task fan-out happens upstream of dispatch
-  // (in runTasks) once the cutover lands.
+  // surface the first task so per-task handlers have something to read.
   if (!state.task) {
     const req = state.request as { tasks?: TaskSpec[] } | undefined;
     const first = req?.tasks?.[0];
     if (first) state.task = first;
+  }
+
+  // #45 Step 7e: per-task reviewPolicy lives on TaskSpec, not on rawRequest's
+  // top-level. Override state.reviewPolicy from state.task when present so
+  // the per-row runConditions (gating spec/quality/diff chains) see the
+  // right value. This must run unconditionally — callers via
+  // runTaskViaDispatcher pre-populate state.task + state.executionContext but
+  // the dispatcher's initialState defaults state.reviewPolicy to 'full' since
+  // the per-task reviewPolicy isn't visible at top-level rawRequest.
+  const task = state.task as TaskSpec | undefined;
+  if (task && task.reviewPolicy) {
+    state.reviewPolicy = task.reviewPolicy;
   }
 
   // state.executionContext is intentionally NOT defaulted here. It carries
