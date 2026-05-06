@@ -1,0 +1,817 @@
+{
+  "tools": [
+    {
+      "routeName": "audit",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "debug",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "delegate",
+      "toolCategory": "artifact_producing",
+      "agentTypeDefault": "standard",
+      "agentTypeOverridable": true,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "execute_plan",
+      "toolCategory": "artifact_producing",
+      "agentTypeDefault": "standard",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "explore",
+      "toolCategory": "research",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "investigate",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "register_context_block",
+      "toolCategory": "assist",
+      "agentTypeDefault": "standard",
+      "agentTypeOverridable": false,
+      "responseShapeName": "ContextBlockResponse"
+    },
+    {
+      "routeName": "retry_tasks",
+      "toolCategory": "assist",
+      "agentTypeDefault": "standard",
+      "agentTypeOverridable": true,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "review",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
+      "routeName": "verify",
+      "toolCategory": "read_only",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    }
+  ],
+  "stagePlans": {
+    "artifact_producing": [
+      {
+        "rowId": "1.1",
+        "stageName": "accept_http_request",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "accept_http_request"
+      },
+      {
+        "rowId": "1.2",
+        "stageName": "verify_loopback",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_loopback"
+      },
+      {
+        "rowId": "1.3",
+        "stageName": "validate_workspace",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "validate_workspace"
+      },
+      {
+        "rowId": "1.4",
+        "stageName": "load_project_state",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "load_project_state"
+      },
+      {
+        "rowId": "2.1",
+        "stageName": "parse_brief",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "parse_brief"
+      },
+      {
+        "rowId": "2.2",
+        "stageName": "verify_referenced_blocks",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_referenced_blocks"
+      },
+      {
+        "rowId": "2.3",
+        "stageName": "apply_defaults",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "apply_defaults"
+      },
+      {
+        "rowId": "2.4",
+        "stageName": "mark_intake_complete",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "mark_intake_complete"
+      },
+      {
+        "rowId": "2.5",
+        "stageName": "prepare_execution_context",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "prepare_execution_context"
+      },
+      {
+        "rowId": "3.1",
+        "stageName": "run_initial_impl",
+        "schemaStage": "implementing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_initial_impl"
+      },
+      {
+        "rowId": "3.5",
+        "stageName": "check_files_written",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "check_files_written"
+      },
+      {
+        "rowId": "4.1",
+        "stageName": "spec_review_round_1",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_1"
+      },
+      {
+        "rowId": "4.2",
+        "stageName": "rework_for_spec_round_1",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_1"
+      },
+      {
+        "rowId": "4.3",
+        "stageName": "spec_review_round_2",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_2"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "rework_for_spec_round_2",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_2"
+      },
+      {
+        "rowId": "4.5",
+        "stageName": "spec_review_round_3",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_3"
+      },
+      {
+        "rowId": "4.5.x",
+        "stageName": "settle_spec_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_spec_chain"
+      },
+      {
+        "rowId": "4.6",
+        "stageName": "quality_review_round_1",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_1"
+      },
+      {
+        "rowId": "4.7",
+        "stageName": "rework_for_quality_round_1",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_1"
+      },
+      {
+        "rowId": "4.8",
+        "stageName": "quality_review_round_2",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_2"
+      },
+      {
+        "rowId": "4.9",
+        "stageName": "rework_for_quality_round_2",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_2"
+      },
+      {
+        "rowId": "4.10",
+        "stageName": "quality_review_round_3",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_3"
+      },
+      {
+        "rowId": "4.10.x",
+        "stageName": "settle_quality_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_quality_chain"
+      },
+      {
+        "rowId": "4.11",
+        "stageName": "review_diff",
+        "schemaStage": "diff_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "review_diff"
+      },
+      {
+        "rowId": "5.1",
+        "stageName": "run_verify_command",
+        "schemaStage": "verifying",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_verify_command"
+      },
+      {
+        "rowId": "5.2",
+        "stageName": "git_commit",
+        "schemaStage": "committing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "5.3",
+        "stageName": "compose_response",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "compose_response"
+      },
+      {
+        "rowId": "5.3.5",
+        "stageName": "register_terminal_block",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "register_terminal_block"
+      },
+      {
+        "rowId": "5.4",
+        "stageName": "emit_task_terminal",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "emit_task_terminal"
+      },
+      {
+        "rowId": "5.5",
+        "stageName": "persist_to_batch_registry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "persist_to_batch_registry"
+      },
+      {
+        "rowId": "6.1",
+        "stageName": "flush_telemetry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "flush_telemetry"
+      },
+      {
+        "rowId": "6.2",
+        "stageName": "project_idle_cleanup_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "project_idle_cleanup_tick"
+      },
+      {
+        "rowId": "6.3",
+        "stageName": "batch_retention_sweep_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "batch_retention_sweep_tick"
+      }
+    ],
+    "read_only": [
+      {
+        "rowId": "1.1",
+        "stageName": "accept_http_request",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "accept_http_request"
+      },
+      {
+        "rowId": "1.2",
+        "stageName": "verify_loopback",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_loopback"
+      },
+      {
+        "rowId": "1.3",
+        "stageName": "validate_workspace",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "validate_workspace"
+      },
+      {
+        "rowId": "1.4",
+        "stageName": "load_project_state",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "load_project_state"
+      },
+      {
+        "rowId": "2.1",
+        "stageName": "parse_brief",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "parse_brief"
+      },
+      {
+        "rowId": "2.2",
+        "stageName": "verify_referenced_blocks",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_referenced_blocks"
+      },
+      {
+        "rowId": "2.3",
+        "stageName": "apply_defaults",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "apply_defaults"
+      },
+      {
+        "rowId": "2.4",
+        "stageName": "mark_intake_complete",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "mark_intake_complete"
+      },
+      {
+        "rowId": "2.5",
+        "stageName": "prepare_execution_context",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "prepare_execution_context"
+      },
+      {
+        "rowId": "3.1",
+        "stageName": "run_initial_impl",
+        "schemaStage": "implementing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_initial_impl"
+      },
+      {
+        "rowId": "3.5",
+        "stageName": "check_files_written",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "check_files_written"
+      },
+      {
+        "rowId": "4.1",
+        "stageName": "spec_review_round_1",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_1"
+      },
+      {
+        "rowId": "4.2",
+        "stageName": "rework_for_spec_round_1",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_1"
+      },
+      {
+        "rowId": "4.3",
+        "stageName": "spec_review_round_2",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_2"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "rework_for_spec_round_2",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_2"
+      },
+      {
+        "rowId": "4.5",
+        "stageName": "spec_review_round_3",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_3"
+      },
+      {
+        "rowId": "4.5.x",
+        "stageName": "settle_spec_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_spec_chain"
+      },
+      {
+        "rowId": "4.6",
+        "stageName": "quality_review_round_1",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_1"
+      },
+      {
+        "rowId": "4.7",
+        "stageName": "rework_for_quality_round_1",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_1"
+      },
+      {
+        "rowId": "4.8",
+        "stageName": "quality_review_round_2",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_2"
+      },
+      {
+        "rowId": "4.9",
+        "stageName": "rework_for_quality_round_2",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_2"
+      },
+      {
+        "rowId": "4.10",
+        "stageName": "quality_review_round_3",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_3"
+      },
+      {
+        "rowId": "4.10.x",
+        "stageName": "settle_quality_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_quality_chain"
+      },
+      {
+        "rowId": "4.11",
+        "stageName": "review_diff",
+        "schemaStage": "diff_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "review_diff"
+      },
+      {
+        "rowId": "5.1",
+        "stageName": "run_verify_command",
+        "schemaStage": "verifying",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_verify_command"
+      },
+      {
+        "rowId": "5.2",
+        "stageName": "git_commit",
+        "schemaStage": "committing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "5.3",
+        "stageName": "compose_response",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "compose_response"
+      },
+      {
+        "rowId": "5.3.5",
+        "stageName": "register_terminal_block",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "register_terminal_block"
+      },
+      {
+        "rowId": "5.4",
+        "stageName": "emit_task_terminal",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "emit_task_terminal"
+      },
+      {
+        "rowId": "5.5",
+        "stageName": "persist_to_batch_registry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "persist_to_batch_registry"
+      },
+      {
+        "rowId": "6.1",
+        "stageName": "flush_telemetry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "flush_telemetry"
+      },
+      {
+        "rowId": "6.2",
+        "stageName": "project_idle_cleanup_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "project_idle_cleanup_tick"
+      },
+      {
+        "rowId": "6.3",
+        "stageName": "batch_retention_sweep_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "batch_retention_sweep_tick"
+      }
+    ],
+    "research": [
+      {
+        "rowId": "1.1",
+        "stageName": "accept_http_request",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "accept_http_request"
+      },
+      {
+        "rowId": "1.2",
+        "stageName": "verify_loopback",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_loopback"
+      },
+      {
+        "rowId": "1.3",
+        "stageName": "validate_workspace",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "validate_workspace"
+      },
+      {
+        "rowId": "1.4",
+        "stageName": "load_project_state",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "load_project_state"
+      },
+      {
+        "rowId": "2.1",
+        "stageName": "parse_brief",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "parse_brief"
+      },
+      {
+        "rowId": "2.2",
+        "stageName": "verify_referenced_blocks",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "verify_referenced_blocks"
+      },
+      {
+        "rowId": "2.3",
+        "stageName": "apply_defaults",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "apply_defaults"
+      },
+      {
+        "rowId": "2.4",
+        "stageName": "mark_intake_complete",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "mark_intake_complete"
+      },
+      {
+        "rowId": "2.5",
+        "stageName": "prepare_execution_context",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "prepare_execution_context"
+      },
+      {
+        "rowId": "3.1",
+        "stageName": "run_initial_impl",
+        "schemaStage": "implementing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_initial_impl"
+      },
+      {
+        "rowId": "3.5",
+        "stageName": "check_files_written",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "check_files_written"
+      },
+      {
+        "rowId": "4.1",
+        "stageName": "spec_review_round_1",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_1"
+      },
+      {
+        "rowId": "4.2",
+        "stageName": "rework_for_spec_round_1",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_1"
+      },
+      {
+        "rowId": "4.3",
+        "stageName": "spec_review_round_2",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_2"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "rework_for_spec_round_2",
+        "schemaStage": "spec_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_spec_round_2"
+      },
+      {
+        "rowId": "4.5",
+        "stageName": "spec_review_round_3",
+        "schemaStage": "spec_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "spec_review_round_3"
+      },
+      {
+        "rowId": "4.5.x",
+        "stageName": "settle_spec_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_spec_chain"
+      },
+      {
+        "rowId": "4.6",
+        "stageName": "quality_review_round_1",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_1"
+      },
+      {
+        "rowId": "4.7",
+        "stageName": "rework_for_quality_round_1",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_1"
+      },
+      {
+        "rowId": "4.8",
+        "stageName": "quality_review_round_2",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_2"
+      },
+      {
+        "rowId": "4.9",
+        "stageName": "rework_for_quality_round_2",
+        "schemaStage": "quality_rework",
+        "isRework": true,
+        "runOnTerminal": false,
+        "handlerKey": "rework_for_quality_round_2"
+      },
+      {
+        "rowId": "4.10",
+        "stageName": "quality_review_round_3",
+        "schemaStage": "quality_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "quality_review_round_3"
+      },
+      {
+        "rowId": "4.10.x",
+        "stageName": "settle_quality_chain",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "settle_quality_chain"
+      },
+      {
+        "rowId": "4.11",
+        "stageName": "review_diff",
+        "schemaStage": "diff_review",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "review_diff"
+      },
+      {
+        "rowId": "5.1",
+        "stageName": "run_verify_command",
+        "schemaStage": "verifying",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "run_verify_command"
+      },
+      {
+        "rowId": "5.2",
+        "stageName": "git_commit",
+        "schemaStage": "committing",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "5.3",
+        "stageName": "compose_response",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "compose_response"
+      },
+      {
+        "rowId": "5.3.5",
+        "stageName": "register_terminal_block",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "register_terminal_block"
+      },
+      {
+        "rowId": "5.4",
+        "stageName": "emit_task_terminal",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "emit_task_terminal"
+      },
+      {
+        "rowId": "5.5",
+        "stageName": "persist_to_batch_registry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "persist_to_batch_registry"
+      },
+      {
+        "rowId": "6.1",
+        "stageName": "flush_telemetry",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "flush_telemetry"
+      },
+      {
+        "rowId": "6.2",
+        "stageName": "project_idle_cleanup_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "project_idle_cleanup_tick"
+      },
+      {
+        "rowId": "6.3",
+        "stageName": "batch_retention_sweep_tick",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "batch_retention_sweep_tick"
+      }
+    ]
+  }
+}
