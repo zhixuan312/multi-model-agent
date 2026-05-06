@@ -69,3 +69,7 @@ export const IncompleteReasonEnum = z.enum(['turn_cap', 'cost_cap', 'timeout', '
 
 export const InvestigationConfidenceEnum = z.enum(['low', 'medium', 'high']);
 export const FindingConfidenceSchema = z.number().int().min(0).max(100);
+
+// Spec enums.md §10 lists 6 adapters; current code wires 4. The other 2
+// land with their adapter implementations.
+export const ResearchAdapterEnum = z.enum(['arxiv', 'semantic_scholar', 'github_search', 'rss']);
