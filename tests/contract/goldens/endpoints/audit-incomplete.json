@@ -40,19 +40,6 @@
       },
       "errorCode": "incomplete",
       "retryable": false,
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "skipped",
-      "diffReviewStatus": "not_applicable",
-      "commits": [],
-      "agents": {
-        "implementer": "complex",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "skipped"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "quality review skipped (no files written or all reviewer tiers unavailable)",
       "implementationReport": {
         "summary": "mock incomplete",
         "filesChanged": [],
@@ -61,6 +48,19 @@
         "unresolved": [],
         "extraSections": {}
       },
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "full",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "structuredReport": {
         "summary": "mock incomplete",
         "filesChanged": [],
@@ -69,6 +69,7 @@
         "unresolved": [],
         "extraSections": {}
       },
+      "workerStatus": "done",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -100,6 +101,6 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "skipped",
+  "qualityReviewVerdict": "not_applicable",
   "roundsUsed": 1
 }

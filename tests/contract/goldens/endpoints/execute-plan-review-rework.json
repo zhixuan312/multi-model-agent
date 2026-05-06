@@ -30,8 +30,8 @@
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
       "workerStatus": "done",
-      "specReviewStatus": "skipped",
-      "qualityReviewStatus": "skipped",
+      "specReviewStatus": "approved",
+      "qualityReviewStatus": "not_applicable",
       "terminationReason": {
         "cause": "finished",
         "turnsUsed": 1,
@@ -39,6 +39,14 @@
         "usedShell": false,
         "workerSelfAssessment": "done",
         "wasPromoted": false
+      },
+      "implementationReport": {
+        "summary": "needs rework per review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "diffReviewStatus": "skipped",
       "verification": {
@@ -51,20 +59,12 @@
       "agents": {
         "implementer": "standard",
         "implementerToolMode": "full",
-        "specReviewer": "skipped",
-        "qualityReviewer": "skipped"
+        "specReviewer": "complex",
+        "qualityReviewer": "not_applicable"
       },
       "fileArtifactsMissing": false,
-      "specReviewReason": "spec review skipped (reviewPolicy or all reviewer tiers unavailable)",
-      "qualityReviewReason": "quality review skipped (no files written or all reviewer tiers unavailable)",
-      "implementationReport": {
-        "summary": "needs rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "specReviewReason": "",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "structuredReport": {
         "summary": "needs rework per review",
         "filesChanged": [],
@@ -75,7 +75,7 @@
       },
       "models": {
         "implementer": "mock-model",
-        "specReviewer": null,
+        "specReviewer": "mock-model",
         "qualityReviewer": null
       }
     }

@@ -125,7 +125,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
             assignedTier: decision.impl,
           },
         );
-        state.lastRunResult = result as unknown as RunResult;
+        // Parse the implementation report so downstream review handlers
+        // (spec/quality) can read state.lastRunResult.implementationReport
+        // without each parsing redundantly. Matches legacy behavior where
+        // reviewed-lifecycle parsed once after the impl call.
+        const enrichedResult: RunResult = {
+          ...result,
+          ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
+        } as unknown as RunResult;
+        state.lastRunResult = enrichedResult;
         if (result.status !== 'ok') {
           state.terminal = true;
         }
@@ -176,10 +184,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const last = state.lastRunResult as RunResult;
       const enriched: RunResult = { ...last };
 
-      // Spec chain → specReviewStatus. Pick the most-recent verdict that
-      // determined the chain outcome: any 'approved' wins (chain passed),
-      // else the last 'changes_required' (chain failed at round 3),
-      // else 'error', else 'skipped' / 'not_applicable'.
+      // Spec chain → specReviewStatus. Cascade:
+      //   - 'approved' wins (chain passed)
+      //   - 'error' for hard fail
+      //   - 'changes_required' for soft fail
+      //   - 'not_applicable' when chain didn't apply (no files, wrong policy)
       const specVerdicts = [state.specReviewRound1Verdict, state.specReviewRound2Verdict, state.specReviewRound3Verdict];
       if (specVerdicts.some((v) => v === 'approved')) {
         enriched.specReviewStatus = 'approved';
@@ -187,9 +196,10 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         enriched.specReviewStatus = 'error';
       } else if (specVerdicts.some((v) => v === 'changes_required')) {
         enriched.specReviewStatus = 'changes_required';
-      } else if (state.reviewPolicy === 'full') {
-        enriched.specReviewStatus = 'skipped';
       } else {
+        // No spec verdict fired. Match legacy invariant: if no files were
+        // written, the chain wasn't applicable; if reviewPolicy excludes
+        // spec, also not_applicable.
         enriched.specReviewStatus = 'not_applicable';
       }
 
@@ -204,11 +214,9 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         enriched.qualityReviewStatus = 'error';
       } else if (qualVerdicts.some((v) => v === 'changes_required')) {
         enriched.qualityReviewStatus = 'changes_required';
-      } else if (qualVerdicts.some((v) => v === 'skipped')) {
-        enriched.qualityReviewStatus = 'skipped';
-      } else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'quality_only') {
-        enriched.qualityReviewStatus = 'skipped';
       } else {
+        // No quality verdict fired (skipped or didn't apply). Use
+        // 'not_applicable' to match legacy contract for terminal envelope.
         enriched.qualityReviewStatus = 'not_applicable';
       }
 
@@ -287,12 +295,28 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       // Legacy executor parsed these and attached them to the terminal
       // RunResult. Mirror that behavior so consumers that read these fields
       // (orchestrator contract tests, fallback-report extraction, etc) get
-      // the parsed report.
-      if (last.output && enriched.implementationReport === undefined) {
-        const parsed = parseStructuredReport(last.output);
-        enriched.implementationReport = parsed;
-        if (enriched.structuredReport === undefined) {
-          enriched.structuredReport = parsed;
+      // the parsed report. Always populate both slots — they may carry
+      // independent values when the runner pre-populates one of them.
+      const fallbackReport = (last.output
+        ? parseStructuredReport(last.output)
+        : { summary: '', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
+      ) as RunResult['implementationReport'];
+      if (enriched.implementationReport === undefined) {
+        enriched.implementationReport = fallbackReport;
+      }
+      if (enriched.structuredReport === undefined) {
+        enriched.structuredReport = fallbackReport;
+      }
+      if (enriched.workerStatus === undefined) {
+        const summary = (fallbackReport?.summary ?? '').toLowerCase();
+        if (last.status === 'error') {
+          enriched.workerStatus = 'failed';
+        } else if (summary.includes('changes_required') || summary.includes('blocked')) {
+          enriched.workerStatus = 'blocked';
+        } else if (summary.length > 0 || last.status === 'ok') {
+          enriched.workerStatus = 'done';
+        } else {
+          enriched.workerStatus = 'failed';
         }
       }
 

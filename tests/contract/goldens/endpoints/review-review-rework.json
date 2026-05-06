@@ -31,7 +31,7 @@
       "directoriesListed": [],
       "workerStatus": "done",
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "skipped",
+      "qualityReviewStatus": "annotated",
       "terminationReason": {
         "cause": "finished",
         "turnsUsed": 1,
@@ -40,17 +40,6 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "diffReviewStatus": "not_applicable",
-      "commits": [],
-      "agents": {
-        "implementer": "complex",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "skipped"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "quality review skipped (no files written or all reviewer tiers unavailable)",
       "implementationReport": {
         "summary": "needs rework per review",
         "filesChanged": [],
@@ -59,6 +48,17 @@
         "unresolved": [],
         "extraSections": {}
       },
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "full",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "standard"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "",
       "structuredReport": {
         "summary": "needs rework per review",
         "filesChanged": [],
@@ -70,7 +70,7 @@
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": null
+        "qualityReviewer": "mock-model"
       }
     }
   ],
@@ -98,6 +98,6 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "skipped",
+  "qualityReviewVerdict": "annotated",
   "roundsUsed": 1
 }

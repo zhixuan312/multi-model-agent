@@ -85,7 +85,7 @@ describe('executeDebug — quality_only review', () => {
     const result = await executeDebug(ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
-    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable']).toContain(result.qualityReviewVerdict);
+    expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable', 'annotated']).toContain(result.qualityReviewVerdict);
     expect(typeof result.roundsUsed).toBe('number');
     expect(result.roundsUsed).toBeGreaterThanOrEqual(0);
   });

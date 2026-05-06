@@ -38,8 +38,16 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "specReviewStatus": "skipped",
-      "qualityReviewStatus": "skipped",
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "specReviewStatus": "approved",
+      "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "skipped",
       "verification": {
         "status": "skipped",
@@ -51,20 +59,12 @@
       "agents": {
         "implementer": "standard",
         "implementerToolMode": "full",
-        "specReviewer": "skipped",
-        "qualityReviewer": "skipped"
+        "specReviewer": "complex",
+        "qualityReviewer": "not_applicable"
       },
       "fileArtifactsMissing": false,
-      "specReviewReason": "spec review skipped (reviewPolicy or all reviewer tiers unavailable)",
-      "qualityReviewReason": "quality review skipped (no files written or all reviewer tiers unavailable)",
-      "implementationReport": {
-        "summary": "mocked ok",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "specReviewReason": "",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "structuredReport": {
         "summary": "mocked ok",
         "filesChanged": [],
@@ -75,7 +75,7 @@
       },
       "models": {
         "implementer": "mock-model",
-        "specReviewer": null,
+        "specReviewer": "mock-model",
         "qualityReviewer": null
       }
     }
