@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { InvestigationConfidenceEnum, FindingConfidenceSchema } from '../../packages/core/src/events/event-base.js';
+import { InvestigationConfidenceEnum, FindingConfidenceSchema } from '../../packages/core/src/types/enums.js';
 
 describe('confidence enums', () => {
   it('investigation accepts low/medium/high', () => {

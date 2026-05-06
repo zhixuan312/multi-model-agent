@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EvidenceKindEnum } from '../../packages/core/src/events/event-base.js';
+import { EvidenceKindEnum } from '../../packages/core/src/types/enums.js';
 
 describe('EvidenceKindEnum', () => {
   it('accepts the three spec values', () => {

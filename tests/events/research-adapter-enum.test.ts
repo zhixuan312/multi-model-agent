@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ResearchAdapterEnum } from '../../packages/core/src/events/event-base.js';
+import { ResearchAdapterEnum } from '../../packages/core/src/types/enums.js';
 
 describe('ResearchAdapterEnum', () => {
   it('matches the 6 canonical adapter ids defined in enums.md §11', () => {

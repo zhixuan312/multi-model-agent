@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { IncompleteReasonEnum } from '../../packages/core/src/events/event-base.js';
+import { IncompleteReasonEnum } from '../../packages/core/src/types/enums.js';
 
 describe('IncompleteReasonEnum', () => {
   it('accepts the four spec values', () => {

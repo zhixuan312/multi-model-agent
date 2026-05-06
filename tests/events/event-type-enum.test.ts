@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { EventTypeEnum } from '../../packages/core/src/events/event-base.js';
+import { EventTypeEnum } from '../../packages/core/src/types/enums.js';
 
 const ALL = [
   'batch_completed','batch_failed','cost_check','escalation','escalation_unavailable',

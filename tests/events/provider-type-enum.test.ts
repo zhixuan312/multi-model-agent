@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { ProviderTypeEnum } from '../../packages/core/src/events/event-base.js';
+import { ProviderTypeEnum } from '../../packages/core/src/types/enums.js';
 
 describe('ProviderTypeEnum', () => {
   it('matches the 5 canonical values defined in enums.md §1', () => {

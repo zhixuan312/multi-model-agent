@@ -25,23 +25,15 @@ export const BatchWrapperSchema = z.object({
 }).strict();
 
 // ── Enums shared across stages and top-level ─────────────────────────────
+//
+// ConcernCategory lives at `types/enums.ts` per architecture.md:209;
+// re-exported here so existing `import { ConcernCategory } from
+// '..events/telemetry-types'` paths keep working.
 
-export const ConcernCategory = z.enum([
-  'missing_test',
-  'scope_creep',
-  'incomplete_impl',
-  'style_lint',
-  'security',
-  'performance',
-  'maintainability',
-  'doc_gap',
-  'doc_drift',
-  'contract_violation',
-  'coverage_gap',
-  'dead_code',
-  'queue_hygiene',
-  'other',
-]);
+export { ConcernCategory } from '../types/enums.js';
+// We need a direct local binding for `z.array(_ConcernCategory)` below; the
+// re-export above is the public path, the local import is the internal one.
+import { ConcernCategory as _ConcernCategory } from '../types/enums.js';
 
 import { ErrorCodeSchema } from '../error-codes.js';
 export const ErrorCode = ErrorCodeSchema;
@@ -108,13 +100,13 @@ export const ReviewStageEntrySchema = StageEntryBase.extend({
   name: z.enum(['spec_review', 'quality_review', 'diff_review']),
   verdict: z.enum(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated', 'not_applicable']),
   roundsUsed: z.number().int().min(1).max(10),
-  concernCategories: z.array(ConcernCategory).max(9),
+  concernCategories: z.array(_ConcernCategory).max(9),
   findingsBySeverity: FindingsBySeveritySchema,
 }).strict();
 
 export const ReworkStageEntrySchema = StageEntryBase.extend({
   name: z.enum(['spec_rework', 'quality_rework']),
-  triggeringConcernCategories: z.array(ConcernCategory).max(9),
+  triggeringConcernCategories: z.array(_ConcernCategory).max(9),
 }).strict();
 
 export const VerifyStageEntrySchema = StageEntryBase.extend({
@@ -364,6 +356,6 @@ export type StageEntryType = z.infer<typeof StageEntrySchema>;
 export type TaskCompletedEventType = z.infer<typeof TaskCompletedEventSchema>;
 export type UploadBatchType = z.infer<typeof UploadBatchSchema>;
 export type WireTelemetryRecord = z.infer<typeof WireTelemetryRecordSchema>;
-export type ConcernCategoryType = z.infer<typeof ConcernCategory>;
+export type { ConcernCategoryType } from '../types/enums.js';
 export type ErrorCodeType = z.infer<typeof ErrorCode>;
 export type FindingsBySeverity = z.infer<typeof FindingsBySeveritySchema>;
