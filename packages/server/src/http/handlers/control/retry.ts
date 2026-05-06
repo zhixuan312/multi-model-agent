@@ -1,4 +1,13 @@
 // packages/server/src/http/handlers/control/retry.ts
+//
+// CONTROL retry route — POST /control/retry. Validates the batch
+// synchronously against the per-project cache; returns 404 unknown_batch
+// if the id has expired. Always uses the direct executor (never the
+// LifecycleDispatcher).
+//
+// SEE ALSO: handlers/tools/retry.ts (the public /retry route used by
+// the mma-retry skill). Both endpoints share the same executeRetry
+// import; they differ in dispatch policy and pre-validation.
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';

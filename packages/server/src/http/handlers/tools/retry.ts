@@ -1,4 +1,15 @@
 // packages/server/src/http/handlers/tools/retry.ts
+//
+// PUBLIC retry route — POST /retry. Goes through the LifecycleDispatcher
+// when the original batch's toolCategory is recoverable, otherwise falls
+// back to the legacy executor path. This is the route called by the
+// `mma-retry` skill and end-user clients.
+//
+// SEE ALSO: handlers/control/retry.ts is the protocol-level twin
+// registered at /control/retry — same executor, but synchronous batch
+// validation (404s when the batchId is unknown) and no dispatcher path.
+// The two endpoints exist because the public skill expects async-202
+// semantics while the control surface expects sync validation feedback.
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
