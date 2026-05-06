@@ -1,23 +1,20 @@
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
-import { multiModelConfigSchema, pricingSchema } from './schema.js';
+import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
+// Re-export resolution helpers + types so existing callers that import them
+// from './load.js' keep working. The canonical home is './config-resolver.js'
+// per architecture.md:58.
+export {
+  collectInlineApiKeyOffenders,
+  resolveMainAgentModel,
+  validateUserPricing,
+} from './config-resolver.js';
+export type { Pricing, MainAgentModelResolution } from './config-resolver.js';
+
 const TOKEN_REGEX = /^[A-Za-z0-9_\-+=/.]+$/;
-
-export type Pricing = {
-  inputUSDPerMillion: number;
-  outputUSDPerMillion: number;
-  cachedReadUSDPerMillion: number;
-  cachedNonReadUSDPerMillion: number;
-};
-
-export type MainAgentModelResolution =
-  | { kind: 'shipped'; model: string; pricing: Pricing }
-  | { kind: 'shipped_overrides_user'; model: string; pricing: Pricing; warning: string }
-  | { kind: 'user_for_unknown'; model: string; pricing: Pricing }
-  | { kind: 'fail'; reason: string };
 
 function expandTilde(p: string): string {
   if (p.startsWith('~/')) return path.join(os.homedir(), p.slice(2));
@@ -55,64 +52,6 @@ export function loadAuthToken(opts: { tokenFile: string }): string {
     throw new Error(`config error: auth token file has non-canonical bytes (must match [A-Za-z0-9_\\-+=/.]) (${resolvedPath})`);
   }
   return token;
-}
-
-/**
- * Return the names of openai-compatible agents carrying an inline `apiKey`
- * instead of using `apiKeyEnv`. The schema permits both, but plaintext API
- * keys in a config file are a backup/dotfile/git footgun — serve surfaces
- * this once at startup so the operator can react.
- */
-export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[] {
-  const offenders: string[] = [];
-  for (const [name, agent] of Object.entries(config.agents)) {
-    if (
-      (agent.type === 'openai-compatible' || agent.type === 'claude-compatible') &&
-      typeof (agent as { apiKey?: unknown }).apiKey === 'string'
-    ) {
-      offenders.push(name);
-    }
-  }
-  return offenders;
-}
-
-/**
- * Resolve pricing for the main agent model.
- *
- * Four cases per spec contract:
- * 1. Known model + no user pricing → shipped pricing.
- * 2. Known model + user pricing → shipped pricing WINS; caller should emit a one-time boot warning.
- * 3. Unknown model + user pricing → user pricing as the delta-calculation baseline.
- * 4. Unknown model + no user pricing → fail-loud at boot.
- */
-export function resolveMainAgentModel(
-  modelId: string,
-  userPricing: Pricing | undefined,
-  shippedPricing: Map<string, Pricing>,
-): MainAgentModelResolution {
-  const known = shippedPricing.get(modelId);
-  if (known && !userPricing) return { kind: 'shipped', model: modelId, pricing: known };
-  if (known && userPricing) {
-    return {
-      kind: 'shipped_overrides_user',
-      model: modelId,
-      pricing: known,
-      warning: `user supplied pricing for known model '${modelId}'; ignoring user value in favor of shipped pricing`,
-    };
-  }
-  if (!known && userPricing) return { kind: 'user_for_unknown', model: modelId, pricing: userPricing };
-  return {
-    kind: 'fail',
-    reason: `mainAgentModel '${modelId}' is unknown to shipped pricing; supply 'mainAgentPricing' in config or use a shipped model id.`,
-  };
-}
-
-/**
- * Parse a user-supplied pricing object through the pricing schema.
- * Returns the validated Pricing or a ZodError.
- */
-export function validateUserPricing(raw: unknown): Pricing {
-  return pricingSchema.parse(raw) as Pricing;
 }
 
 /**
