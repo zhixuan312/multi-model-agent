@@ -4,8 +4,12 @@ import type { ToolCategory } from '../escalation/escalation-policy.js';
 export function buildStagePlan(category: ToolCategory): StagePlan {
   const isAP = category === 'artifact_producing';
   const isRO = category === 'read_only';
-  // research category is referenced for symmetry with isAP/isRO; rows that
-  // need to gate on it (none today) would do so explicitly via toolCategory.
+  // Research category has no per-row gate constant (unlike isAP/isRO). Instead,
+  // explore tasks inject reviewPolicy: 'none' (explore.ts:445), which causes
+  // all review-linked rows (4.1, 4.6, 4.10.x, 4.11, 5.1, 5.2) to skip —
+  // reviewPolicy is the general-purpose review-skip mechanism, not per-category
+  // booleans. See workflow-matrix.md appendix #4. The void expression exists
+  // solely to satisfy the ESLint no-unused-vars rule for the 'category' param.
   void (category === 'research');
 
   const rows: StageRow[] = [
