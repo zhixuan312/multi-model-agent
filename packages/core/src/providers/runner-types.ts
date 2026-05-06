@@ -123,7 +123,7 @@ export type InternalRunnerEvent =
   | {
       kind: 'worker_start'
       model: string
-      providerType: 'claude' | 'openai-compatible' | 'codex'
+      providerType: 'claude' | 'claude-compatible' | 'openai' | 'openai-compatible' | 'codex'
       tier: AgentType
     }
   | { kind: 'turn_start'; turn: number; provider: string; model: string }
