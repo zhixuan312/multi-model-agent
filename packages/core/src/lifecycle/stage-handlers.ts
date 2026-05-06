@@ -151,7 +151,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           escalationLog: [],
           parsedFindings: null,
           error: message,
-          errorCode: 'executor_error',
+          errorCode: 'runner_crash',
           workerStatus: 'failed',
         } as unknown as RunResult;
         state.terminal = true;

@@ -234,14 +234,14 @@ describe('GET /batch/:batchId', () => {
         state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
         blockIds: [], blocksReleased: false,
       });
-      s.batchRegistry.fail(batchId, { code: 'executor_error', message: 'boom' });
+      s.batchRegistry.fail(batchId, { code: 'runner_crash', message: 'boom' });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json() as { error: { code: string }; results: { kind: string } };
-      expect(body.error.code).toBe('executor_error');
+      expect(body.error.code).toBe('runner_crash');
       expect(body.results.kind).toBe('not_applicable');
     } finally {
       await s.stop();

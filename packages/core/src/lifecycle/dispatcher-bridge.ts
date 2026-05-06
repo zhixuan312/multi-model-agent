@@ -143,7 +143,7 @@ export async function runTaskViaDispatcher(
     escalationLog: [],
     parsedFindings: null,
     error: 'dispatcher produced no RunResult',
-    errorCode: 'executor_error',
+    errorCode: 'runner_crash',
     workerStatus: 'failed',
   } as unknown as RunResult;
 }

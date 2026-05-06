@@ -95,10 +95,10 @@ export async function executeDelegate(
       escalationLog: [],
       parsedFindings: null,
       error: message,
-      errorCode: 'executor_error',
+      errorCode: 'runner_crash',
       retryable: false,
       durationMs: 0,
-      structuredError: { code: 'executor_error' as const, message, where: 'executor:delegate' },
+      structuredError: { code: 'runner_crash' as const, message, where: 'executor:delegate' },
       workerStatus: 'failed' as const,
     };
     results = readySpecs.length > 0 ? readySpecs.map(() => ({ ...fallback })) : [fallback];

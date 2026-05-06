@@ -49,7 +49,6 @@ export const ErrorCodeSchema = z.enum([
   'lifecycle_idle_exceeded',
   // legacy block — codes still emitted by runtime; kept for telemetry
   // validation. Migrate to prefixed names when downstream consumers update.
-  'executor_error',
   'incomplete_no_summary',
   'reviewer_separation_unsatisfiable',
   'diff_review_rejected',

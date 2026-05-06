@@ -88,7 +88,7 @@ export async function executeInvestigate(
       outputIsDiagnostic: false,
       escalationLog: [],
       error: msg,
-      errorCode: 'executor_error',
+      errorCode: 'runner_crash',
       retryable: false,
       durationMs: 0,
       structuredReport: {
@@ -101,7 +101,7 @@ export async function executeInvestigate(
       },
       workerError: runtimeError,
       structuredError: {
-        code: 'executor_error' as const,
+        code: 'runner_crash' as const,
         message: msg,
         where: 'executor:investigate',
       },

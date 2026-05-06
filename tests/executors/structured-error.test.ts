@@ -38,8 +38,8 @@ function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
   });
 }
 
-describe('Executor surfaces structured executor_error code', () => {
-  it('sets structuredError.code = "executor_error" on RunResult when runTasks throws', async () => {
+describe('Executor surfaces structured runner_crash code', () => {
+  it('sets structuredError.code = "runner_crash" on RunResult when runTasks throws', async () => {
     const throwingRunTasks = async () => {
       throw new Error('simulated executor bug');
     };
@@ -59,16 +59,16 @@ describe('Executor surfaces structured executor_error code', () => {
     if (Array.isArray(runResults)) {
       expect(runResults.length).toBeGreaterThan(0);
       for (const r of runResults) {
-        expect(r.structuredError?.code).toBe('executor_error');
+        expect(r.structuredError?.code).toBe('runner_crash');
         expect(r.structuredError?.where).toBe('executor:delegate');
         expect(r.structuredError?.message).toContain('simulated executor bug');
-        expect(r.errorCode).toBe('executor_error');
+        expect(r.errorCode).toBe('runner_crash');
         expect(r.workerStatus).toBe('failed');
       }
     }
   });
 
-  it('accepts executor_error as a valid structuredError code at the type level', () => {
+  it('accepts runner_crash as a valid structuredError code at the type level', () => {
     const r: RunResult = {
       output: '',
       status: 'error',
@@ -80,12 +80,12 @@ describe('Executor surfaces structured executor_error code', () => {
       outputIsDiagnostic: false,
       escalationLog: [],
       structuredError: {
-        code: 'executor_error',
+        code: 'runner_crash',
         message: 'test error',
         where: 'executor:test',
       },
     };
-    expect(r.structuredError?.code).toBe('executor_error');
+    expect(r.structuredError?.code).toBe('runner_crash');
     expect(r.structuredError?.where).toBe('executor:test');
   });
 });

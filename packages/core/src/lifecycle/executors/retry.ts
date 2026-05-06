@@ -89,10 +89,10 @@ export async function executeRetry(
       escalationLog: [],
       parsedFindings: null,
       error: message,
-      errorCode: 'executor_error',
+      errorCode: 'runner_crash',
       retryable: false,
       durationMs: 0,
-      structuredError: { code: 'executor_error' as const, message, where: 'executor:retry' },
+      structuredError: { code: 'runner_crash' as const, message, where: 'executor:retry' },
       workerStatus: 'failed' as const,
     };
     results = subset.map(() => ({ ...fallback }));

@@ -6,7 +6,6 @@ const STRUCTURED_CODE_TO_ERRORCODE: Record<string, ErrorCode> = {
   'silent_incomplete': 'validator_silent_incomplete',
   'incomplete_no_summary': 'validator_silent_incomplete',
   'network_error': 'provider_transport_failure',
-  'executor_error': 'runner_crash',
   'diff_review_rejected': 'review_diff_rejected',
   'degenerate_exhausted': 'runner_supervisor_interrupt',
   'time_ceiling': 'guard_time_ceiling',

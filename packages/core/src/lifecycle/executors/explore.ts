@@ -57,7 +57,7 @@ function buildFallbackResult(msg: string): RunResult {
     outputIsDiagnostic: false,
     escalationLog: [],
     error: msg,
-    errorCode: 'executor_error',
+    errorCode: 'runner_crash',
     retryable: false,
     durationMs: 0,
     directoriesListed: [],
@@ -72,7 +72,7 @@ function buildFallbackResult(msg: string): RunResult {
     parsedFindings: [],
     workerStatus: 'failed',
     structuredError: {
-      code: 'executor_error' as const,
+      code: 'runner_crash' as const,
       message: msg,
       where: 'executor:explore' as const,
     },

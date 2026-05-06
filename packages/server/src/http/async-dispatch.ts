@@ -83,11 +83,11 @@ export function asyncDispatch<TResult>(
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
         batchRegistry.fail(batchId, {
-          code: 'executor_error',
+          code: 'runner_crash',
           message,
           ...(stack !== undefined && { stack }),
         });
-        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, errorCode: 'executor_error', errorMessage: message } as any);
+        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, errorCode: 'runner_crash', errorMessage: message } as any);
       }
     })();
   });
