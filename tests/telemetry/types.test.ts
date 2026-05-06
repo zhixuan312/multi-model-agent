@@ -169,7 +169,7 @@ describe('V4 telemetry types', () => {
   // ── R1: terminalStatus=ok requires errorCode=null and workerStatus done|done_with_concerns ──
   it('R1 — rejects ok with errorCode non-null', () => {
     const result = Schema.safeParse(
-      makeValidEvent({ terminalStatus: 'ok', errorCode: 'api_error' }),
+      makeValidEvent({ terminalStatus: 'ok', errorCode: 'provider_api_error' }),
     );
     expect(result.success).toBe(false);
   });

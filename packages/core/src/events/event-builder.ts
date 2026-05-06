@@ -376,12 +376,9 @@ const VALID_ERROR_CODES: ReadonlySet<string> = new Set(ErrorCode.options);
 
 function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
   // structuredError.code is the most authoritative signal — the lifecycle
-  // sets it for specific failure modes. Map values not in the telemetry
-  // ErrorCode enum: api_aborted → api_error, timeout → dropped (no enum
-  // member; timeout is surfaced via terminalStatus).
+  // sets it for specific failure modes.
   if (rr.structuredError?.code) {
     const code = rr.structuredError.code;
-    if (code === 'api_aborted') return 'api_error';
     if (VALID_ERROR_CODES.has(code)) return code as TaskCompletedEventType['errorCode'];
     return null;
   }
@@ -396,7 +393,7 @@ function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
   if (tr && typeof tr === 'object') {
     switch (tr.cause) {
       case 'api_error':
-      case 'api_aborted': return 'api_error';
+      case 'api_aborted': return 'provider_api_error';
       case 'provider_transport_failure': return 'provider_transport_failure';
     }
   }

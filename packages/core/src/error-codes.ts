@@ -49,16 +49,12 @@ export const ErrorCodeSchema = z.enum([
   'lifecycle_idle_exceeded',
   // legacy block — codes still emitted by runtime; kept for telemetry
   // validation. Migrate to prefixed names when downstream consumers update.
-  'api_error',
-  'api_aborted',
-  'rate_limit_exceeded',
   'executor_error',
   'incomplete_no_summary',
   'reviewer_separation_unsatisfiable',
   'diff_review_rejected',
   'commit_metadata_invalid',
   'commit_metadata_repair_modified_files',
-  'timeout',
   // sentinel
   'other',
 ]);
@@ -66,7 +62,7 @@ export const ErrorCodeSchema = z.enum([
 export type ErrorCode = z.infer<typeof ErrorCodeSchema>;
 
 export function retryableFor(status: string): boolean {
-  return ['timeout', 'provider_transport_failure', 'api_error'].includes(status);
+  return ['provider_timeout', 'provider_transport_failure', 'provider_api_error'].includes(status);
 }
 
 export function classifyContextBlockError(err: Error): 'context_block_not_found' | 'retryable' | 'non_retryable' {
