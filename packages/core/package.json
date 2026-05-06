@@ -180,10 +180,6 @@
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
     },
-    "./events/bus": {
-      "types": "./dist/events/bus.d.ts",
-      "import": "./dist/events/bus.js"
-    },
     "./events/observability-events": {
       "types": "./dist/events/observability-events.d.ts",
       "import": "./dist/events/observability-events.js"

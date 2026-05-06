@@ -15,7 +15,7 @@ export interface ClaudeAuth {
   useOAuth: boolean;
 }
 
-function getClaudeAuth(): ClaudeAuth {
+export function getClaudeAuth(): ClaudeAuth {
   const apiKey = process.env.ANTHROPIC_API_KEY;
   return {
     apiKey: apiKey || undefined,
@@ -68,7 +68,7 @@ function warnIfWorldReadable(authPath: string): void {
   }
 }
 
-function getCodexAuth(): CodexAuth | null {
+export function getCodexAuth(): CodexAuth | null {
   const authPath = CODEX_AUTH_PATH();
   if (!fs.existsSync(authPath)) return null;
 
@@ -87,7 +87,3 @@ function getCodexAuth(): CodexAuth | null {
 }
 
 export const codexOAuth = { getCodexAuth };
-
-// Top-level re-exports for back-compat with callers that imported from the
-// previous per-provider files.
-export { getClaudeAuth, getCodexAuth };

@@ -112,37 +112,6 @@ export function buildIncompleteResult(args: {
   };
 }
 
-export function buildForceSalvageResult(args: {
-  providerLabel: string;
-  usage: SharedResultUsage;
-  turns: number;
-  tracker: FileTracker;
-  scratchpad: TextScratchpad;
-  softLimit: number;
-  durationMs: number;
-}): RunResult {
-  const { providerLabel, usage, turns, tracker, scratchpad, softLimit, durationMs } = args;
-  const hasSalvage = !scratchpad.isEmpty();
-  return {
-    output: hasSalvage
-      ? scratchpad.latest()
-      : `[${providerLabel} sub-agent forcibly terminated at ${usage.inputTokens} input tokens (soft limit ${softLimit}). No usable text was buffered.]`,
-    status: 'incomplete',
-    usage: usageShape(usage),
-    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
-    turns,
-    filesRead: tracker.getReads(),
-    directoriesListed: tracker.getDirectoriesListed(),
-    filesWritten: tracker.getWrites(),
-    toolCalls: tracker.getToolCalls(),
-    outputIsDiagnostic: !hasSalvage,
-    escalationLog: [],
-    verification: DEFAULT_VERIFICATION,
-    durationMs,
-    parsedFindings: null,
-  };
-}
-
 export function buildMaxTurnsExitResult(args: {
   usage: SharedResultUsage;
   turns: number;

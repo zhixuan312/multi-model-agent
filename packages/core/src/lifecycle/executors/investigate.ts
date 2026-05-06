@@ -108,7 +108,7 @@ export async function executeInvestigate(
   }
   const wallClockMs = Date.now() - startMs;
 
-  // Pull lifecycle signals (set by executeReviewedLifecycle).
+  // Pull lifecycle signals (set by the lifecycle dispatcher).
   const incompleteReason = (result as any)?.incompleteReason as 'turn_cap' | 'cost_cap' | 'timeout' | undefined;
   const workerError = runtimeError ?? ((result as any)?.workerError as Error | undefined);
 

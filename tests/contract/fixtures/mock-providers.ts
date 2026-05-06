@@ -23,7 +23,6 @@ import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-
 export type Stage =
   | 'ok'
   | 'incomplete'
-  | 'force-salvage'
   | 'max-turns'
   | 'review-rework'
   | 'slow';
@@ -111,30 +110,6 @@ function buildIncomplete(opts: MockProviderOptions): RunResult {
     directoriesListed: [],
     terminationReason: {
       cause: 'incomplete',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
-  };
-}
-
-function buildForceSalvage(opts: MockProviderOptions): RunResult {
-  return {
-    output: opts.output ?? 'mock salvage',
-    status: 'degenerate_exhausted',
-    usage: usage(0.001),
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [attempt('degenerate_exhausted', 1, 0.001)],
-    durationMs: 0,
-    directoriesListed: [],
-    terminationReason: {
-      cause: 'degenerate_exhausted',
       turnsUsed: 1,
       hasFileArtifacts: false,
       usedShell: false,
@@ -256,7 +231,6 @@ export function mockProvider(opts: MockProviderOptions): Provider {
     switch (stage) {
       case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
       case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
-      case 'force-salvage': return buildForceSalvage(opts as MockProviderOptions & { stage: Stage });
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
       case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });

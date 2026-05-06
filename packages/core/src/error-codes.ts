@@ -4,10 +4,8 @@ import { z } from 'zod';
 // emission and telemetry validation.
 //
 // Layout: every code starts with one of 9 closed prefixes (provider_, runner_,
-// tool_, guard_, review_, validator_, config_, intake_, lifecycle_) plus a
-// short legacy block kept for codes still emitted by the live executor and
-// runner-shell. The `other` sentinel is for unexpected errors not yet
-// categorized.
+// tool_, guard_, review_, validator_, config_, intake_, lifecycle_). The
+// `other` sentinel is for unexpected errors not yet categorized.
 export const ErrorCodeSchema = z.enum([
   // provider_* — provider HTTP/SDK errors
   'provider_rate_limited',

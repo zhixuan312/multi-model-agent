@@ -1,7 +1,7 @@
 import type { RunResult, ReviewVerdict } from '../types.js';
 
 /**
- * Map RunResult review fields (from executeReviewedLifecycle) into the
+ * Map RunResult review fields (set by the lifecycle dispatcher) into the
  * ExecutorOutput envelope shape. Centralizes the rename + type-narrowing
  * + roundsUsed computation across all 5 read-only executors.
  *
