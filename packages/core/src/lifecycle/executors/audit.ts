@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/audit/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { runTasks } from '../run-tasks.js';
+import { runTasks } from '../dispatcher-bridge.js';
 import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { buildAuditQualityPrompt } from '../../review/quality-only-prompts.js';
