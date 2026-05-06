@@ -39,6 +39,8 @@ export const ErrorCodeSchema = z.enum([
   'validator_silent_incomplete',
   'validator_dirty_worktree',
   'validator_verify_command_failed',
+  'validator_commit_metadata_invalid',
+  'validator_commit_metadata_repair_modified_files',
   // config_* — boot-time config errors
   'config_invalid_profile',
   'config_main_agent_pricing_unresolvable',
@@ -47,13 +49,6 @@ export const ErrorCodeSchema = z.enum([
   // lifecycle_* — lifecycle orchestration
   'lifecycle_review_loop_capped',
   'lifecycle_idle_exceeded',
-  // legacy block — codes still emitted by runtime; kept for telemetry
-  // validation. Migrate to prefixed names when downstream consumers update.
-  'incomplete_no_summary',
-  'reviewer_separation_unsatisfiable',
-  'diff_review_rejected',
-  'commit_metadata_invalid',
-  'commit_metadata_repair_modified_files',
   // sentinel
   'other',
 ]);

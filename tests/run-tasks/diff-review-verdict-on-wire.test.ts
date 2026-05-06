@@ -95,8 +95,8 @@ describe('diff_review verdict on the wire', () => {
       diffReviewStatus: 'changes_required',
       status: 'error',
       workerStatus: 'failed',
-      errorCode: 'diff_review_rejected',
-      structuredError: { code: 'diff_review_rejected', message: 'diff review rejected implementation' },
+      errorCode: 'review_diff_rejected',
+      structuredError: { code: 'review_diff_rejected', message: 'diff review rejected implementation' },
       terminationReason: { cause: 'error', turnsUsed: 3, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
     });
     const event = buildTaskCompletedEvent({

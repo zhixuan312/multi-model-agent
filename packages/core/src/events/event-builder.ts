@@ -383,7 +383,7 @@ function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
     return null;
   }
   // rr.errorCode carries intentional error codes set by the lifecycle
-  // (e.g., 'incomplete_no_summary'). Status-level fallbacks from the
+  // (e.g., 'validator_silent_incomplete'). Status-level fallbacks from the
   // delegation layer (e.g., 'incomplete', 'error', 'timeout') are NOT
   // valid telemetry error codes and are dropped here.
   if (rr.errorCode && VALID_ERROR_CODES.has(rr.errorCode)) {

@@ -27,7 +27,7 @@ export interface ReviewedRunResultFields {
   terminationReason?: 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable';
   reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
   concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>;
-  error?: { code: 'validator_verify_command_failed' | 'commit_metadata_invalid' | 'commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'diff_review_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
+  error?: { code: 'validator_verify_command_failed' | 'validator_commit_metadata_invalid' | 'validator_commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'review_diff_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
 }
 
 function usageShape(u: SharedResultUsage): TokenUsage {

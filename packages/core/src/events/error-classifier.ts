@@ -4,13 +4,10 @@ const STRUCTURED_CODE_TO_ERRORCODE: Record<string, ErrorCode> = {
   'dirty_worktree': 'validator_dirty_worktree',
   'verify_command_error': 'validator_verify_command_failed',
   'silent_incomplete': 'validator_silent_incomplete',
-  'incomplete_no_summary': 'validator_silent_incomplete',
   'network_error': 'provider_transport_failure',
-  'diff_review_rejected': 'review_diff_rejected',
   'degenerate_exhausted': 'runner_supervisor_interrupt',
   'time_ceiling': 'guard_time_ceiling',
   'max_turns': 'lifecycle_review_loop_capped',
-  'reviewer_separation_unsatisfiable': 'config_main_agent_pricing_unresolvable',
 };
 
 export interface ClassifiedError {

@@ -3,7 +3,7 @@ import type { ParsedStructuredReport } from '../reporting/structured-report.js';
 /**
  * Returns the worker's self-assessment from a parsed structured report.
  * For non-ok runner results without a parseable report, this defaults to
- * 'done' — callers should rely on errorCode (e.g., 'incomplete_no_summary')
+ * 'done' — callers should rely on errorCode (e.g., 'validator_silent_incomplete')
  * to surface the missing-summary case rather than overloading workerStatus.
  */
 export function extractWorkerStatus(
