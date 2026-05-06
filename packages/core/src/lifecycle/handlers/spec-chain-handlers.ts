@@ -39,13 +39,11 @@ import { makeSkippedReviewResult } from '../../review/skipped-result.js';
  * per the cascade rule: any 'approved' wins; 'changes_required' through round
  * 3 ⇒ false; 'error' is hard-fail (terminal).
  *
- * Idempotency: each handler skips when its verdict slot is already populated
- * (legacy executor path during the cutover transition).
+ * Idempotency: each handler skips when its verdict slot is already
+ * populated. Prevents re-firing reviewer turns on retry paths.
  *
  * Defensive no-ops: when state.task, state.executionContext, or
- * state.lastRunResult is missing, the handler short-circuits. The legacy
- * executor still owns the spec chain in production until Step 5 lands the
- * per-task data flow.
+ * state.lastRunResult is missing, the handler short-circuits.
  */
 
 interface ReviewRoundInput {
@@ -209,8 +207,8 @@ export const specReworkRound2Handler = makeSpecReworkHandler(2);
  *   - 'error' in any round ⇒ chain failed (false), state.terminal = true
  *
  * Runs runOnTerminal so the chain-pass slot is authoritative even on
- * hard-fail paths. Idempotent: skips when state.specChainPassed is already
- * populated by an upstream handler (legacy executor).
+ * hard-fail paths. Idempotent: skips when state.specChainPassed is
+ * already populated.
  */
 export function settleSpecChainHandler(state: LifecycleState): void {
   if (typeof state.specChainPassed === 'boolean') return; // idempotency

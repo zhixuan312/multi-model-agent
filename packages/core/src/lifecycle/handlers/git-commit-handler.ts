@@ -17,15 +17,12 @@ import type { CommitFields } from '../../reporting/structured-report.js';
  *   - state.commits: array of CommitStageResult
  *   - state.commitError: string when commit failed
  *
- * Today the legacy executor (executeReviewedLifecycle) owns commit. This
- * handler is wired into the stage registry but defensively no-ops on
- * missing state slots; full activation lands with Step 5 when run_initial_impl
- * decomposition makes per-task data flow available.
+ * Defensive-no-ops on missing state slots so re-runs (retry path) don't
+ * double-commit.
  */
 export async function gitCommitHandler(state: LifecycleState): Promise<void> {
-  // Idempotency: legacy executor populates state.commits during the cutover
-  // transition. Skip if already done — prevents double-commit when both the
-  // executor and the handler run.
+  // Idempotency: skip if state.commits is already populated. Prevents
+  // double-commit on retry paths or when the runner pre-populated commits.
   if (Array.isArray(state.commits) && state.commits.length > 0) return;
   if (typeof state.commitError === 'string') return;
 

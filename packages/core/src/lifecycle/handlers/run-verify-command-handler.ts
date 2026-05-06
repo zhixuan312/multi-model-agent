@@ -10,8 +10,8 @@ import type { ExecutionContext } from '../lifecycle-context.js';
  * Reads from state:
  *   - state.task: TaskSpec with verifyCommand + cwd + timeoutMs
  *   - state.executionContext: timing budgets, bus, stageStats
- *   - state.verifyResult: idempotency guard — if already populated by an
- *     upstream stage (e.g., the legacy executor during the Step 5 transition),
+ *   - state.verifyResult: idempotency guard — if an upstream stage already
+ *     populated it (e.g., a verify-tool route running its own verification),
  *     this handler skips so verify doesn't run twice.
  *
  * Writes to state:
@@ -22,25 +22,19 @@ import type { ExecutionContext } from '../lifecycle-context.js';
  *   - 'verify_step' per step
  *   - 'verify_skipped' when no command or skipped
  *
- * This handler is registered in stage-handlers.ts but stays inert until
- * state.task and state.executionContext are populated (Steps 1 + 5). The
- * runCondition on row 5.1 (toolCategory==='artifact_producing' &&
+ * The runCondition on row 5.1 (toolCategory==='artifact_producing' &&
  * route!=='verify' && reviewPolicy!=='none' && !terminal) gates entry; once
- * inside, the handler defensively no-ops on missing state slots so a partial
- * decomposition state doesn't crash the lifecycle.
+ * inside, the handler defensively no-ops on missing state slots.
  */
 export async function runVerifyCommandHandler(state: LifecycleState): Promise<void> {
-  // Idempotency: if a prior stage (or the legacy executor) already populated
-  // verifyResult, treat this row as a structural acknowledgment and don't
-  // re-run the verify command. Step 5 wiring removes the need for this guard.
+  // Idempotency: if a prior stage already populated verifyResult, skip so
+  // verify doesn't run twice.
   if (state.verifyResult) return;
 
   const task = state.task as TaskSpec | undefined;
   const ctx = state.executionContext as ExecutionContext | undefined;
 
-  // Defensive no-op when the data flow isn't set up yet. Step 1 +
-  // Step 5 populate state.task and state.executionContext; until then this
-  // handler can't do real work, and the legacy executor still owns verify.
+  // Defensive no-op when state.task / state.executionContext aren't set.
   if (!task || !ctx) return;
 
   const verifyCommand = task.verifyCommand;

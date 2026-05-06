@@ -14,17 +14,9 @@ import type { TaskSpec } from '../../types.js';
  *
  * Writes to state (only when slots are empty AND request is shaped for it):
  *   - state.task: the first TaskSpec from a delegate-style request payload.
- *     Multi-task fan-out lives in the executeDelegate per-task loop today;
- *     once Step 5's full cutover lands, runTasks dispatches one StagePlan per
- *     TaskSpec and state.task is the per-dispatch task. This minimal handler
- *     surfaces task[0] so handlers downstream of it (run_verify_command,
- *     git_commit, etc.) can defensive-no-op or activate uniformly.
- *
- * Until full cutover, the legacy executor closure populated by HTTP handlers
- * still owns the live path. This handler exists so the per-row handler
- * registry has no stage-key gaps and so the cutover surface is well-defined:
- * once HTTP handlers stop wiring DispatchInput.executor and instead supply
- * DispatchInput.context = { task, executionContext }, the new path activates.
+ *     runTasks (in dispatch-task.ts) dispatches one StagePlan per TaskSpec,
+ *     so state.task is the per-dispatch task. This handler surfaces task[0]
+ *     as a fallback for downstream handlers that need a TaskSpec.
  */
 export function prepareExecutionContextHandler(state: LifecycleState): void {
   // Fallback: if rawRequest carries a TaskSpec[] and state.task is empty,

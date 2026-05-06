@@ -156,10 +156,8 @@ export { extractPlanSection } from './plan-extraction.js';
  * a fresh StagePlan via LifecycleDispatcher. Returns the RunResult composed
  * by compose_response from state.lastRunResult.
  *
- * This is the alternative entry point that activates the per-row handlers
- * (verify, commit, spec/quality/diff chains, terminal). Today it's
- * opt-in via runTasks's useLifecycleDispatcher flag — once contract
- * goldens match the legacy executor's output, the flag flips to default.
+ * This is the per-task entry point that drives the StagePlan handlers
+ * (verify, commit, spec/quality/diff chains, terminal).
  */
 export interface DispatchTaskInput {
   task: TaskSpec;

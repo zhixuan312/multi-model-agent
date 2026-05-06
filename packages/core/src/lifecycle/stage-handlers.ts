@@ -87,11 +87,10 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // (DelegateOutput, etc.). At the per-task dispatch boundary we emit
     // the raw RunResult; the runTasks layer aggregates.
     if (state.lastRunResult !== undefined) {
-      // Step 7d: enrich the terminal RunResult with per-handler-state slots
-      // so consumers reading specReviewStatus / qualityReviewStatus /
-      // diffReviewStatus get the chain outcomes the legacy executor
-      // populated. Maps the per-round verdict slots into the legacy
-      // envelope fields.
+      // Enrich the terminal RunResult with per-handler-state slots so
+      // consumers reading specReviewStatus / qualityReviewStatus /
+      // diffReviewStatus get the chain outcomes from the per-round
+      // verdict slots, mapped onto the canonical envelope fields.
       const last = state.lastRunResult as RunResult;
       const enriched: RunResult = { ...last };
 
@@ -108,9 +107,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       } else if (specVerdicts.some((v) => v === 'changes_required')) {
         enriched.specReviewStatus = 'changes_required';
       } else {
-        // No spec verdict fired. Match legacy invariant: if no files were
-        // written, the chain wasn't applicable; if reviewPolicy excludes
-        // spec, also not_applicable.
+        // No spec verdict fired: chain didn't apply (no files written or
+        // reviewPolicy excludes spec).
         enriched.specReviewStatus = 'not_applicable';
       }
 
@@ -126,8 +124,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       } else if (qualVerdicts.some((v) => v === 'changes_required')) {
         enriched.qualityReviewStatus = 'changes_required';
       } else {
-        // No quality verdict fired (skipped or didn't apply). Use
-        // 'not_applicable' to match legacy contract for terminal envelope.
+        // No quality verdict fired (skipped or didn't apply).
         enriched.qualityReviewStatus = 'not_applicable';
       }
 
@@ -148,16 +145,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (Array.isArray(state.commits) && enriched.commits === undefined) {
         enriched.commits = state.commits as RunResult['commits'];
       } else if (enriched.commits === undefined) {
-        // Match legacy executor's terminal-RunResult invariant: commits is
-        // always an array (possibly empty) on the final envelope.
+        // Terminal-RunResult invariant: commits is always an array
+        // (possibly empty) on the final envelope.
         enriched.commits = [];
       }
       if (typeof state.commitError === 'string' && enriched.commitError === undefined) {
         enriched.commitError = state.commitError;
       }
 
-      // Step 7f: agents block. Legacy executor populated this from per-tier
-      // bookkeeping. Synthesize from ExecutionContext + chain verdicts.
+      // agents block: synthesize from ExecutionContext + chain verdicts.
       const ctx = state.executionContext;
       if (ctx && enriched.agents === undefined) {
         const specReviewerTier =
@@ -178,15 +174,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         };
       }
 
-      // Step 7f: fileArtifactsMissing — false unless verification flagged
-      // missing artifacts (matches legacy invariant for the terminal envelope).
+      // fileArtifactsMissing — false unless verification flagged missing
+      // artifacts (terminal-envelope invariant).
       if (enriched.fileArtifactsMissing === undefined) {
         enriched.fileArtifactsMissing = false;
       }
 
-      // Step 7i: specReviewReason / qualityReviewReason. Stub based on the
-      // review-status outcome — matches legacy executor's invariant that
-      // these strings explain why a review was skipped/not_applicable.
+      // specReviewReason / qualityReviewReason: stub based on the
+      // review-status outcome — these strings explain why a review was
+      // skipped/not_applicable.
       if (enriched.specReviewReason === undefined) {
         enriched.specReviewReason = enriched.specReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
@@ -198,12 +194,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           : '';
       }
 
-      // Step 7i: implementationReport / structuredReport from result.output.
-      // Legacy executor parsed these and attached them to the terminal
-      // RunResult. Mirror that behavior so consumers that read these fields
-      // (orchestrator contract tests, fallback-report extraction, etc) get
-      // the parsed report. Always populate both slots — they may carry
-      // independent values when the runner pre-populates one of them.
+      // implementationReport / structuredReport: parse result.output and
+      // attach to the terminal RunResult so consumers (orchestrator
+      // contract tests, fallback-report extraction) see the parsed
+      // report. Always populate both slots — they may carry independent
+      // values when the runner pre-populates one of them.
       const fallbackReport = (last.output
         ? parseStructuredReport(last.output)
         : { summary: '', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
@@ -283,9 +278,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     //
     // Spec chain (rows 4.1–4.6) wired to real handlers in spec-chain-handlers.ts.
     // Each handler is idempotent on its verdict slot and defensive-no-ops on
-    // missing state.task / state.executionContext / state.lastRunResult so the
-    // legacy executor still owns the chain in production until Step 5 lands
-    // the per-task data flow.
+    // missing state.task / state.executionContext / state.lastRunResult so
+    // re-runs and retry paths don't re-fire reviewer turns.
     spec_review_round_1: specReviewRound1Handler,
     rework_for_spec_round_1: specReworkRound1Handler,
     spec_review_round_2: specReviewRound2Handler,
@@ -309,25 +303,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     // path from reviewed-lifecycle.ts:1361.
     review_diff: reviewDiffHandler,
 
-    // Stage 5 — Finalize (verify + commit happen in executor; response
-    // composed here, terminal block + telemetry will move out of executor
-    // when persistence cutover lands)
+    // Stage 5 — Finalize.
     //
-    // run_verify_command is wired to the real handler implementation. The
-    // handler is idempotent: it skips when state.verifyResult is already set
-    // (which is what the legacy executor does today via DelegateOutput.results
-    // — until Step 5 plumbs verifyResult through state, the handler defensively
-    // no-ops on missing state.task/state.executionContext).
+    // run_verify_command is idempotent: skips when state.verifyResult is
+    // already set, defensive-no-ops on missing state.task /
+    // state.executionContext.
     run_verify_command: runVerifyCommandHandler,
-    // git_commit: real handler implementation. Idempotent — skips when
-    // state.commits is already populated (legacy executor path) or the
-    // data flow slots aren't ready. Full activation lands with Step 5.
+    // git_commit: idempotent — skips when state.commits is already
+    // populated.
     git_commit: gitCommitHandler,
     compose_response: composeResponse,
-    // Terminal-stage rows wired to real handlers in terminal-handlers.ts.
-    // Each handler is idempotent on its state-slot guard and defensive-no-ops
-    // on missing data flow. The legacy executor still owns the terminal stage
-    // in production until Step 5's full cutover wires per-task data flow.
+    // Terminal-stage rows. Each handler is idempotent on its state-slot
+    // guard and defensive-no-ops on missing data flow.
     register_terminal_block: registerTerminalBlockHandler,
     emit_task_terminal: emitTaskTerminalHandler,
     persist_to_batch_registry: persistToBatchRegistryHandler,

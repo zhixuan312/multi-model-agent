@@ -10,18 +10,19 @@ export interface EventSink {
 export type EventListener = (event: Record<string, unknown>) => void;
 
 /**
- * Unified event emitter per spec C7. Two output modes coexist during cutover:
- *  - listeners (functions registered via on()) — used by v4 lifecycle handlers
+ * Unified event emitter per spec C7. Two output modes:
+ *  - listeners (functions registered via on()) — used by lifecycle handlers
+ *    and tests for inline observation of emitted events.
  *  - sinks (named handlers registered via constructor or addSink) — used by
- *    production fan-out to caller-response, verbose-log, telemetry channels
+ *    production fan-out to caller-response, verbose-log, telemetry channels.
  *
- * Secret redaction runs universally at emit. Per-channel privacy filtering
- * (telemetry-only) is handled inside the telemetry channel/sink, not here —
- * this preserves the spec C7 two-layer scrubbing rule.
+ * Both fire on every emit. Secret redaction runs universally at emit;
+ * per-channel privacy filtering (telemetry-only) lives inside the telemetry
+ * sink — this preserves the spec C7 two-layer scrubbing rule.
  *
  * Schema validation fires in dev/test for events with registered schemas;
  * unknown event names (e.g. diagnostic cost_check, time_check, heartbeat_timer)
- * pass through without validation per the v3 carve-out.
+ * pass through without validation.
  */
 export class EventEmitter {
   private listeners: EventListener[] = [];

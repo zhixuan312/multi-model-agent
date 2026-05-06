@@ -118,9 +118,9 @@ export interface LifecycleState {
   currentStage?: string;
   errorCode?: string | null;
 
-  // Terminal-handler idempotency slots (#45 Step 6). Each terminal handler
-  // skips when its slot is set, so the legacy executor's terminal path can
-  // coexist with the per-row handlers during the cutover transition.
+  // Terminal-handler idempotency slots. Each terminal handler skips when
+  // its slot is set, so re-runs (e.g. retry) and inter-handler ordering
+  // remain idempotent without duplicate work.
   terminalBlockId?: string;
   taskTerminalEmitted?: boolean;
   batchRegistryPersisted?: boolean;

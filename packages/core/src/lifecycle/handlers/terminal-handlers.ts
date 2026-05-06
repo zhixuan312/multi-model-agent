@@ -24,10 +24,8 @@ import type { RunResult } from '../../types.js';
  *   - state.telemetryFlushed
  *
  * Defensive no-ops on missing state.executionContext or
- * state.lastRunResult — the legacy executor still owns the terminal
- * stage in production until Step 5's full cutover wires the per-task
- * data flow. All four rows are marked runOnTerminal in the StagePlan,
- * so they fire even on hard-fail paths once data flow is present.
+ * state.lastRunResult. All four rows are marked runOnTerminal in the
+ * StagePlan, so they fire even on hard-fail paths.
  */
 
 interface TerminalContextBlockStore {
