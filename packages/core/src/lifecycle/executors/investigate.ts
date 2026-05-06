@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/investigate/schema.js';
 import type { RunResult } from '../../types.js';
-import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
+import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
@@ -56,24 +56,21 @@ export async function executeInvestigate(
   let result: RunResult;
   let runtimeError: Error | undefined;
   try {
-    result = await executeReviewedLifecycle(
-      taskSpec as any,
+    result = await runTaskViaDispatcher({
+      task: taskSpec as any,
       resolved,
       config,
-      0,
-      undefined,
-      {
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
-      },
-      { logger: ctx.logger },
-      ctx.recorder,
-      ctx.route ?? 'investigate',
-      ctx.client,
-      ctx.triggeringSkill,
-      ctx.bus,
-      buildInvestigateQualityPrompt,
-    );
+      taskIndex: 0,
+      batchId: ctx.batchId,
+      recordHeartbeat: ctx.recordHeartbeat,
+      logger: ctx.logger,
+      recorder: ctx.recorder,
+      route: ctx.route ?? 'investigate',
+      client: ctx.client,
+      triggeringSkill: ctx.triggeringSkill,
+      bus: ctx.bus,
+      qualityReviewPromptBuilder: buildInvestigateQualityPrompt,
+    });
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));
     const msg = runtimeError.message;

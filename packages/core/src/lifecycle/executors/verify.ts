@@ -3,7 +3,7 @@ import { randomUUID } from 'node:crypto';
 import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/verify/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
-import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
+import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../../stores/expand-context-blocks.js';
 import { buildVerifyQualityPrompt } from '../../review/quality-only-prompts.js';
@@ -139,21 +139,21 @@ export async function executeVerify(
     let results: RunResult[];
     try {
       results = await Promise.all(tasks.map((task, idx) =>
-        executeReviewedLifecycle(
-          expand(task),
-          resolved(),
+        runTaskViaDispatcher({
+          task: expand(task),
+          resolved: resolved(),
           config,
-          idx,
-          undefined,
-          lifecycleOptions,
-          diagnostics,
-          ctx.recorder,
-          ctx.route ?? 'verify',
-          ctx.client,
-          ctx.triggeringSkill,
-          ctx.bus,
-          buildVerifyQualityPrompt,
-        ),
+          taskIndex: idx,
+          batchId: ctx.batchId,
+          recordHeartbeat: ctx.recordHeartbeat,
+          logger: ctx.logger,
+          recorder: ctx.recorder,
+          route: ctx.route ?? 'verify',
+          client: ctx.client,
+          triggeringSkill: ctx.triggeringSkill,
+          bus: ctx.bus,
+          qualityReviewPromptBuilder: buildVerifyQualityPrompt,
+        }),
       ));
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
@@ -191,21 +191,21 @@ export async function executeVerify(
   let results: RunResult[];
   const startMs = Date.now();
   try {
-    const result = await executeReviewedLifecycle(
-      expand(taskSpec),
-      resolved(),
+    const result = await runTaskViaDispatcher({
+      task: expand(taskSpec),
+      resolved: resolved(),
       config,
-      0,
-      undefined,
-      lifecycleOptions,
-      diagnostics,
-      ctx.recorder,
-      ctx.route ?? 'verify',
-      ctx.client,
-      ctx.triggeringSkill,
-      ctx.bus,
-      buildVerifyQualityPrompt,
-    );
+      taskIndex: 0,
+      batchId: ctx.batchId,
+      recordHeartbeat: ctx.recordHeartbeat,
+      logger: ctx.logger,
+      recorder: ctx.recorder,
+      route: ctx.route ?? 'verify',
+      client: ctx.client,
+      triggeringSkill: ctx.triggeringSkill,
+      bus: ctx.bus,
+      qualityReviewPromptBuilder: buildVerifyQualityPrompt,
+    });
     results = [result];
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

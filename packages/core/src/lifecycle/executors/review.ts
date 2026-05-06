@@ -4,7 +4,7 @@ import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/review/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
-import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
+import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { buildReviewQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
@@ -113,21 +113,21 @@ async function runSingleReview(
   taskIndex: number,
 ): Promise<RunResult> {
   const resolved = resolveAgent(agentType, config);
-  return executeReviewedLifecycle(
+  return runTaskViaDispatcher({
     task,
     resolved,
     config,
     taskIndex,
-    undefined,
-    { batchId: ctx.batchId, recordHeartbeat: ctx.recordHeartbeat },
-    { logger: ctx.logger },
-    ctx.recorder,
-    ctx.route ?? 'review',
-    ctx.client,
-    ctx.triggeringSkill,
-    ctx.bus,
-    buildReviewQualityPrompt,
-  );
+    batchId: ctx.batchId,
+    recordHeartbeat: ctx.recordHeartbeat,
+    logger: ctx.logger,
+    recorder: ctx.recorder,
+    route: ctx.route ?? 'review',
+    client: ctx.client,
+    triggeringSkill: ctx.triggeringSkill,
+    bus: ctx.bus,
+    qualityReviewPromptBuilder: buildReviewQualityPrompt,
+  });
 }
 
 export async function executeReview(

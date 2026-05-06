@@ -4,7 +4,7 @@ import type { ExecutionContext, ExecutorOutput } from './types.js';
 import type { Input } from '../../tools/audit/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../run-tasks.js';
-import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
+import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { buildAuditQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
@@ -201,21 +201,22 @@ export async function executeAudit(
   let result: RunResult;
   try {
     const resolved = resolveAgent('complex', config);
-    result = await executeReviewedLifecycle(
+    result = await runTaskViaDispatcher({
       task,
       resolved,
       config,
-      0,
-      undefined,
-      { batchId: ctx.batchId, recordHeartbeat: ctx.recordHeartbeat },
-      { logger: ctx.logger, verbose: config.diagnostics?.verbose ?? false },
-      ctx.recorder,
-      ctx.route ?? 'audit',
-      ctx.client,
-      ctx.triggeringSkill,
-      ctx.bus,
-      buildAuditQualityPrompt,
-    );
+      taskIndex: 0,
+      batchId: ctx.batchId,
+      recordHeartbeat: ctx.recordHeartbeat,
+      logger: ctx.logger,
+      verbose: config.diagnostics?.verbose ?? false,
+      recorder: ctx.recorder,
+      route: ctx.route ?? 'audit',
+      client: ctx.client,
+      triggeringSkill: ctx.triggeringSkill,
+      bus: ctx.bus,
+      qualityReviewPromptBuilder: buildAuditQualityPrompt,
+    });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     result = { output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], parsedFindings: null, error: msg, errorCode: 'runner_crash', retryable: false, durationMs: 0, structuredError: { code: 'runner_crash' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const };

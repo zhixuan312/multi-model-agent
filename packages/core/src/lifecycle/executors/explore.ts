@@ -4,7 +4,7 @@ import type { Input } from '../../tools/explore/schema.js';
 import type { RunResult, MultiModelConfig } from '../../types.js';
 import type { ResearchToolDefinition } from '../../research/types.js';
 import type { EventEmitter } from '../../events/event-emitter.js';
-import { runReviewedTask as executeReviewedLifecycle } from '../run-reviewed-task.js';
+import { runTaskViaDispatcher } from '../dispatcher-bridge.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
 import { createProvider } from '../../providers/provider-factory.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
@@ -90,24 +90,20 @@ interface LifecycleCallArgs {
 
 async function runLifecycleTask(args: LifecycleCallArgs): Promise<RunResult> {
   const { task, resolved, config, ctx, bus, route } = args;
-  return executeReviewedLifecycle(
-    task as any,
+  return runTaskViaDispatcher({
+    task: task as any,
     resolved,
     config,
-    0,
-    undefined,
-    {
-      ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-      ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }),
-    },
-    { logger: ctx.logger },
-    ctx.recorder,
+    taskIndex: 0,
+    batchId: ctx.batchId,
+    recordHeartbeat: ctx.recordHeartbeat,
+    logger: ctx.logger,
+    recorder: ctx.recorder,
     route,
-    ctx.client,
-    ctx.triggeringSkill,
+    client: ctx.client,
+    triggeringSkill: ctx.triggeringSkill,
     bus,
-    undefined,
-  );
+  });
 }
 
 // ---------------------------------------------------------------------------
