@@ -1,7 +1,31 @@
+// packages/core/src/identity/auth-token-store.ts
+// Unified OAuth + API-key store per architecture.md:65.
+// Replaces the previous claude-oauth.ts + codex-oauth.ts split.
+//
+// Each provider's auth flow is namespaced under a const:
+//   - claudeOAuth.getClaudeAuth() — env-var-only check (ANTHROPIC_API_KEY)
+//   - codexOAuth.getCodexAuth() — reads ~/.codex/auth.json with chmod warning
 import fs from 'fs';
 import path from 'path';
 import os from 'os';
 
+// ── Claude ───────────────────────────────────────────────────────────────
+export interface ClaudeAuth {
+  apiKey?: string;
+  useOAuth: boolean;
+}
+
+function getClaudeAuth(): ClaudeAuth {
+  const apiKey = process.env.ANTHROPIC_API_KEY;
+  return {
+    apiKey: apiKey || undefined,
+    useOAuth: !apiKey,
+  };
+}
+
+export const claudeOAuth = { getClaudeAuth };
+
+// ── Codex ────────────────────────────────────────────────────────────────
 const CODEX_AUTH_PATH = () => path.join(os.homedir(), '.codex', 'auth.json');
 
 interface CodexAuthFile {
@@ -44,7 +68,7 @@ function warnIfWorldReadable(authPath: string): void {
   }
 }
 
-export function getCodexAuth(): CodexAuth | null {
+function getCodexAuth(): CodexAuth | null {
   const authPath = CODEX_AUTH_PATH();
   if (!fs.existsSync(authPath)) return null;
 
@@ -61,3 +85,9 @@ export function getCodexAuth(): CodexAuth | null {
     return null;
   }
 }
+
+export const codexOAuth = { getCodexAuth };
+
+// Top-level re-exports for back-compat with callers that imported from the
+// previous per-provider files.
+export { getClaudeAuth, getCodexAuth };
