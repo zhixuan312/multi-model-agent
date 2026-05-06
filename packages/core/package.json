@@ -363,6 +363,38 @@
     "./events/telemetry-types": {
       "types": "./dist/events/telemetry-types.d.ts",
       "import": "./dist/events/telemetry-types.js"
+    },
+    "./tool-surface/manifest": {
+      "types": "./dist/tool-surface/manifest.d.ts",
+      "import": "./dist/tool-surface/manifest.js"
+    },
+    "./tool-surface/discover": {
+      "types": "./dist/tool-surface/discover.d.ts",
+      "import": "./dist/tool-surface/discover.js"
+    },
+    "./tool-surface/include-utils": {
+      "types": "./dist/tool-surface/include-utils.d.ts",
+      "import": "./dist/tool-surface/include-utils.js"
+    },
+    "./tool-surface/skill-manifest-sync": {
+      "types": "./dist/tool-surface/skill-manifest-sync.d.ts",
+      "import": "./dist/tool-surface/skill-manifest-sync.js"
+    },
+    "./tool-surface/skill-installers/claude-code": {
+      "types": "./dist/tool-surface/skill-installers/claude-code.d.ts",
+      "import": "./dist/tool-surface/skill-installers/claude-code.js"
+    },
+    "./tool-surface/skill-installers/codex-cli": {
+      "types": "./dist/tool-surface/skill-installers/codex-cli.d.ts",
+      "import": "./dist/tool-surface/skill-installers/codex-cli.js"
+    },
+    "./tool-surface/skill-installers/cursor": {
+      "types": "./dist/tool-surface/skill-installers/cursor.d.ts",
+      "import": "./dist/tool-surface/skill-installers/cursor.js"
+    },
+    "./tool-surface/skill-installers/gemini-cli": {
+      "types": "./dist/tool-surface/skill-installers/gemini-cli.d.ts",
+      "import": "./dist/tool-surface/skill-installers/gemini-cli.js"
     }
   },
   "scripts": {

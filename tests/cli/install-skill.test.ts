@@ -21,7 +21,7 @@ import {
   appendEntry,
   removeEntry,
   isInstalled,
-} from '../../packages/server/src/install/manifest.js';
+} from '../../packages/core/src/tool-surface/manifest.js';
 
 import {
   parseArgs,

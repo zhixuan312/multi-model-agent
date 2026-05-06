@@ -2,9 +2,9 @@ import { describe, it, expect, beforeAll, afterAll } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
-import { makeSkillManifestSync } from '../../packages/server/src/install/skill-manifest-sync.js';
-import type { DriftEntry, SkillManifestSync } from '../../packages/server/src/install/skill-manifest-sync.js';
-import type { Client } from '../../packages/server/src/install/manifest.js';
+import { makeSkillManifestSync } from '../../packages/core/src/tool-surface/skill-manifest-sync.js';
+import type { DriftEntry, SkillManifestSync } from '../../packages/core/src/tool-surface/skill-manifest-sync.js';
+import type { Client } from '../../packages/core/src/tool-surface/manifest.js';
 
 describe('SkillManifestSync.driftReport', () => {
   let tmpDir: string;

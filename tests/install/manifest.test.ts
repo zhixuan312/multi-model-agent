@@ -7,7 +7,7 @@ import {
   listEntries,
   manifestPath,
   FutureManifestError,
-} from '../../packages/server/src/install/manifest.js';
+} from '../../packages/core/src/tool-surface/manifest.js';
 
 function mkHome(content?: unknown): string {
   const home = mkdtempSync(join(tmpdir(), 'mfm-'));

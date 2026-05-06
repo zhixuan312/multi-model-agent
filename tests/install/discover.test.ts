@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { discoverPerClientInstallDirs } from '../../packages/server/src/install/discover.js';
-import type { Client } from '../../packages/server/src/install/manifest.js';
+import { discoverPerClientInstallDirs } from '../../packages/core/src/tool-surface/discover.js';
+import type { Client } from '../../packages/core/src/tool-surface/manifest.js';
 
 describe('discoverPerClientInstallDirs', () => {
   it('returns paths for claude-code and codex only', () => {

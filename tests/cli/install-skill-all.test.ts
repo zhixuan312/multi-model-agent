@@ -9,7 +9,7 @@ import { mkdtempSync, mkdirSync, rmSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { main, parseArgs, SUPPORTED_SKILLS } from '../../packages/server/src/cli/install-skill.js';
-import { listEntries } from '../../packages/server/src/install/manifest.js';
+import { listEntries } from '../../packages/core/src/tool-surface/manifest.js';
 
 function cap() {
   const out: string[] = [];

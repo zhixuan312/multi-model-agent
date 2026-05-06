@@ -197,7 +197,7 @@ async function registerControlHandlers(
 
 export async function startServer(
   config: ServerConfig,
-  injectedManifestSync?: import('../install/skill-manifest-sync.js').SkillManifestSync,
+  injectedManifestSync?: import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync').SkillManifestSync,
 ): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
@@ -222,13 +222,13 @@ export async function startServer(
 
   // GET /health — unauthenticated liveness + skill manifest drift check
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  let skillManifestSync: import('../install/skill-manifest-sync.js').SkillManifestSync;
+  let skillManifestSync: import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync').SkillManifestSync;
   if (injectedManifestSync) {
     skillManifestSync = injectedManifestSync;
   } else {
     try {
-      const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
-      const { discoverPerClientInstallDirs } = await import('../install/discover.js');
+      const { makeSkillManifestSync } = await import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync');
+      const { discoverPerClientInstallDirs } = await import('@zhixuan92/multi-model-agent-core/tool-surface/discover');
       skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
     } catch {
       skillManifestSync = { driftReport: () => [] };

@@ -2,8 +2,8 @@
 // Extracted from cli/install-skill.ts as part of Ch 7 Task 39.
 import fs from 'node:fs';
 import path from 'node:path';
-import type { Client } from './manifest.js';
-import { SkillNotFoundError, getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from './discover.js';
+import type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
+import { SkillNotFoundError, getSkillsRoot, readSkillContent, SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import {
   writeSkillToClient,
   removeSkillFromClient,

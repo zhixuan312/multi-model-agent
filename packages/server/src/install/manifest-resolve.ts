@@ -2,12 +2,12 @@
 // concrete writer/remover pair. Extracted from cli/install-skill.ts as
 // part of Ch 7 Task 39.
 import path from 'node:path';
-import type { Client } from './manifest.js';
+import type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import { notifySkillInstalled } from './notify.js';
-import { installClaudeCode, uninstallClaudeCode } from './claude-code.js';
-import { installGeminiCli, uninstallGeminiCli } from './gemini-cli.js';
-import { installCodexCli, uninstallCodexCli } from './codex-cli.js';
-import { installCursor, uninstallCursor } from './cursor.js';
+import { installClaudeCode, uninstallClaudeCode } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installers/claude-code';
+import { installGeminiCli, uninstallGeminiCli } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installers/gemini-cli';
+import { installCodexCli, uninstallCodexCli } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installers/codex-cli';
+import { installCursor, uninstallCursor } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installers/cursor';
 
 /**
  * Return the per-client install directory where skills are written as

@@ -3,9 +3,9 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendJson } from '../../errors.js';
 import type { RawHandler } from '../../types.js';
-import type { DriftEntry, SkillManifestSync } from '../../../install/skill-manifest-sync.js';
+import type { DriftEntry, SkillManifestSync } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync';
 
-export type { DriftEntry } from '../../../install/skill-manifest-sync.js';
+export type { DriftEntry } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync';
 
 export type HealthResponse =
   | { status: 'ok' }

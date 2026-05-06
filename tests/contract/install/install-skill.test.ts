@@ -10,7 +10,7 @@ import { mkdtempSync, rmSync, writeFileSync, readdirSync, statSync, existsSync, 
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
 import { doInstall, type InstallResult } from '../../../packages/server/src/install/orchestrate.js';
-import type { Client } from '../../../packages/server/src/install/manifest.js';
+import type { Client } from '../../../packages/core/src/tool-surface/manifest.js';
 
 function listAll(root: string): string[] {
   if (!existsSync(root)) return [];

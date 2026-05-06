@@ -14,7 +14,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { inlineIncludes } from './include-utils.js';
+import { inlineIncludes } from '../include-utils.js';
 
 const LEGACY_MANAGED_BEGIN = '<!-- multi-model-agent:BEGIN -->';
 const LEGACY_MANAGED_END = '<!-- multi-model-agent:END -->';

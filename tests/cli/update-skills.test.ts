@@ -16,7 +16,7 @@ import {
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { runUpdateSkills } from '../../packages/server/src/cli/update-skills.js';
-import { appendEntry, listEntries } from '../../packages/server/src/install/manifest.js';
+import { appendEntry, listEntries } from '../../packages/core/src/tool-surface/manifest.js';
 
 function mkSandbox(): { home: string; skillsRoot: string } {
   const root = mkdtempSync(join(tmpdir(), 'mmagent-update-skills-'));

@@ -26,7 +26,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-import { inlineIncludes } from './include-utils.js';
+import { inlineIncludes } from '../include-utils.js';
 
 /**
  * Options for installing a Cursor skill.

@@ -20,15 +20,15 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import minimist from 'minimist';
-import * as manifest from '../install/manifest.js';
-import type { Client } from '../install/manifest.js';
-import { ALL_CLIENTS, detectClients } from '../install/manifest.js';
+import * as manifest from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
+import type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
+import { ALL_CLIENTS, detectClients } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import {
   SUPPORTED_SKILLS,
   SkillNotFoundError,
   getSkillsRoot,
   readSkillContent,
-} from '../install/discover.js';
+} from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import {
   UnknownTargetError,
   writeSkillToClient,
@@ -36,14 +36,14 @@ import {
 } from '../install/manifest-resolve.js';
 
 // Re-export everything callers (cli/index.ts + tests) imported from here.
-export type { Client } from '../install/manifest.js';
-export { ALL_CLIENTS, detectClients } from '../install/manifest.js';
+export type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
+export { ALL_CLIENTS, detectClients } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 export {
   SUPPORTED_SKILLS,
   SkillNotFoundError,
   getSkillsRoot,
   readSkillContent,
-} from '../install/discover.js';
+} from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 export {
   UnknownTargetError,
   writeSkillToClient,

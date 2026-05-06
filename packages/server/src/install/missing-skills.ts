@@ -1,4 +1,4 @@
-import type { ManifestEntry, Client } from './manifest.js';
+import type { ManifestEntry, Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 
 export interface MissingSkill {
   name: string;

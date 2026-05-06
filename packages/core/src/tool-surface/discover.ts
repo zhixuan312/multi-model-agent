@@ -32,11 +32,27 @@ export class SkillNotFoundError extends Error {
   }
 }
 
-const DEFAULT_SKILLS_ROOT = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  '..',
-  'skills',
-);
+// Discover.ts lives in `packages/core/src/tool-surface/` (or its dist mirror).
+// Skills are bundled by the server package at `packages/server/src/skills/`
+// (and copied to `packages/server/dist/skills/` at build time). Probe both
+// candidates so dev (running .ts) and prod (running .js) resolve to a real
+// skills directory without environment-specific configuration.
+function locateSkillsRoot(): string {
+  const here = path.dirname(fileURLToPath(import.meta.url));
+  const candidates = [
+    path.resolve(here, '..', '..', '..', 'server', 'src', 'skills'),
+    path.resolve(here, '..', '..', '..', 'server', 'dist', 'skills'),
+    // Fallback to old location semantics for any caller that doesn't go
+    // through the server package.
+    path.resolve(here, '..', 'skills'),
+  ];
+  for (const c of candidates) {
+    if (fs.existsSync(c)) return c;
+  }
+  return candidates[0]!;
+}
+
+const DEFAULT_SKILLS_ROOT = locateSkillsRoot();
 
 /**
  * Return the absolute path to the skills root directory. Production: the

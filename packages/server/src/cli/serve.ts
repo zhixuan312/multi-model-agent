@@ -27,10 +27,10 @@ import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
 import { runUpdateSkills } from './update-skills.js';
-import { listEntries, FutureManifestError } from '../install/manifest.js';
+import { listEntries, FutureManifestError } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import { readSkillContent } from './install-skill.js';
 import { findMissingSkills } from '../install/missing-skills.js';
-import { SUPPORTED_SKILLS } from '../install/discover.js';
+import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import matter from 'gray-matter';
 
 function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
@@ -170,8 +170,8 @@ export async function startServe(
 
   // Drift check — warn if installed skills don't match the canonical manifest.
   try {
-    const { makeSkillManifestSync } = await import('../install/skill-manifest-sync.js');
-    const { discoverPerClientInstallDirs } = await import('../install/discover.js');
+    const { makeSkillManifestSync } = await import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync');
+    const { discoverPerClientInstallDirs } = await import('@zhixuan92/multi-model-agent-core/tool-surface/discover');
     const sync = makeSkillManifestSync(discoverPerClientInstallDirs());
     const drift = sync.driftReport();
     if (drift.length > 0) {

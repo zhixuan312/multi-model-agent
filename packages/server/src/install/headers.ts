@@ -8,7 +8,7 @@
  * @module
  */
 
-import type { Client } from './manifest.js';
+import type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 
 export type HeaderClientName = 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli';
 
