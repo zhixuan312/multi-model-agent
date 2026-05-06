@@ -19,6 +19,7 @@ import {
   settleQualityChainHandler,
 } from './handlers/quality-chain-handlers.js';
 import { reviewDiffHandler } from './handlers/review-diff-handler.js';
+import { prepareExecutionContextHandler } from './handlers/prepare-execution-context-handler.js';
 
 /**
  * Spec C10 stage handlers. The StagePlan declares 32 rows; this module
@@ -85,7 +86,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     verify_referenced_blocks: noop,
     apply_defaults: noop,
     mark_intake_complete: noop,
-    prepare_execution_context: noop,
+    // prepare_execution_context (row 2.5) wired as structural — surfaces
+    // first TaskSpec from rawRequest if state.task is empty, otherwise
+    // honors state.task / state.executionContext supplied via
+    // DispatchInput.context. Callers wanting the new dispatcher path
+    // active end-to-end populate context with { executionContext, task }.
+    prepare_execution_context: prepareExecutionContextHandler,
 
     // Stage 3 — Initial run (substantive)
     run_initial_impl: runInitialImpl,
