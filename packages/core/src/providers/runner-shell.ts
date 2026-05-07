@@ -37,6 +37,21 @@ export class RunnerShell {
         };
       }
 
+      // Three-event-per-turn lifecycle so verbose stderr surfaces every
+      // state change. `runner_turn_started` fires before the LLM call so
+      // operators see "now waiting on the model" in real time. After the
+      // adapter returns, `runner_response_received` carries the raw
+      // provider response shape (stop_reason + content-block tally). After
+      // local tool execution, `runner_turn_completed` carries per-tool
+      // counts (read vs write etc.) so operators can see what work the
+      // model is doing without grepping the JSONL log.
+      input.bus?.emit({
+        event: 'runner_turn_started',
+        ts: new Date().toISOString(),
+        ...baseEventFields,
+        turnIndex: turn,
+      });
+
       const turnResult: AdapterTurnResult = await this.adapter.turn({
         systemPrompt: input.systemPrompt,
         userMessage: input.userMessage,
@@ -53,6 +68,19 @@ export class RunnerShell {
       usage.cachedNonReadTokens += turnResult.usage.cachedNonReadTokens;
 
       finalText = turnResult.assistantText;
+
+      input.bus?.emit({
+        event: 'runner_response_received',
+        ts: new Date().toISOString(),
+        ...baseEventFields,
+        turnIndex: turn,
+        finishReason: turnResult.finishReason,
+        assistantTextLen: turnResult.assistantText.length,
+        toolCallCount: turnResult.toolCalls.length,
+        ...(turnResult.responseShape?.stopReason !== undefined && { stopReason: turnResult.responseShape.stopReason }),
+        ...(turnResult.responseShape?.contentBlocks !== undefined && { contentBlocks: turnResult.responseShape.contentBlocks }),
+        usage: turnResult.usage,
+      });
 
       const turnRecord: AdapterTurnRecord = {
         assistantText: turnResult.assistantText,
@@ -83,24 +111,22 @@ export class RunnerShell {
         history.push(turnRecord);
       }
 
-      // One event per turn carrying everything an operator needs to see
-      // why a long task is taking so long: turn index, finish reason,
-      // assistant-text length (0 → empty content), tool-call count, and
-      // (from the adapter) raw stop_reason + content-block-type tally.
-      // The content-block tally is the diagnostic that surfaces e.g.
-      // `{ text: 0, thinking: 1 }` when deepseek emitted reasoning-only —
-      // the failure mode that 4.0.x silently treated as "ok".
+      // Per-tool counts for THIS turn so operators see "5 readFile, 1 grep"
+      // instead of the bare "tool_call_count=6". The user can immediately
+      // tell read vs write activity without inspecting the JSONL log.
+      const toolCallsByName: Record<string, number> = {};
+      for (const tc of turnResult.toolCalls) {
+        toolCallsByName[tc.name] = (toolCallsByName[tc.name] ?? 0) + 1;
+      }
+
       input.bus?.emit({
         event: 'runner_turn_completed',
         ts: new Date().toISOString(),
         ...baseEventFields,
         turnIndex: turn,
-        finishReason: turnResult.finishReason,
-        assistantTextLen: turnResult.assistantText.length,
-        toolCallCount: turnResult.toolCalls.length,
         terminated: willTerminate,
-        ...(turnResult.responseShape?.stopReason !== undefined && { stopReason: turnResult.responseShape.stopReason }),
-        ...(turnResult.responseShape?.contentBlocks !== undefined && { contentBlocks: turnResult.responseShape.contentBlocks }),
+        toolCallCount: turnResult.toolCalls.length,
+        ...(turnResult.toolCalls.length > 0 && { toolCalls: toolCallsByName }),
       });
 
       if (willTerminate) break;
