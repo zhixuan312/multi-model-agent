@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.2] - 2026-05-07
+
+### Fixed
+
+- **`/batch/:id` polling no longer reports "0/1 queued" forever once the executor has begun.** Root cause: `async-dispatch.ts` set `entry.tasksStarted = 1` when the executor body fired, but did not bump `entry.runningHeadlineSnapshot.prefix` — that field was only updated by heartbeats from the runner. Heartbeats come from inside `provider.run`, so when an LLM call was slow (e.g., a multi-second deepseek API call), the polling endpoint kept returning the initial `"0/1 queued"` fallback for the entire duration of that call. From the outside this was indistinguishable from a daemon-level deadlock — the symptom that prompted users to restart `mmagent serve` to "unstick" perfectly healthy in-flight batches. async-dispatch now updates the headline snapshot to `"1/1 running, Xs elapsed"` the instant the executor begins. Same code path also emits two new verbose-stderr breadcrumbs (`executor_started` and `batch_completed` / `batch_failed`) gated on `diagnostics.verbose=true`, so operators tailing the daemon see the full request lifecycle without grepping the JSONL log. Tests: regression in `tests/server/async-dispatch.test.ts` pins the snapshot transition to `"1/1 running"` while the executor is in flight; `tests/contract/goldens/endpoints/retry-tasks-error.json` updated for the new line numbers in async-dispatch.ts.
+
+### Changed
+
+- **`mmagent install-skill` and `mmagent update-skills` collapsed into a single `mmagent sync-skills` command.** The two commands disagreed on what was canonical: `update-skills` iterated the manifest, `install-skill` iterated user-supplied flags, and the daemon's drift detector (in `serve.ts`) iterated on-disk client dirs. A user with an empty manifest and existing client dirs would see all 22 (skill × client) entries reported as missing in the daemon warning, but `update-skills` would say "0 updated, 0 errors" and `install-skill` had no obvious "just sync everything" mode. `sync-skills` is a single idempotent upsert: detect installed clients, install any missing supported skill, overwrite skills whose installed version differs from canonical, drop skills that disappeared from the bundle (orphans), and rewrite the manifest to match. Replaces both old commands; postinstall now runs `sync-skills --if-exists --silent --best-effort`. Daemon drift warnings, the `mmagent status` "incompatible" hint, and both READMEs / `DIRECTION.md` updated to point at `sync-skills`. Tests: 9 in `tests/cli/sync-skills.test.ts` pinning bootstrap, up-to-date short-circuit, version upgrade, orphan removal, dry-run, target scoping, no-clients-detected, and `--if-exists` postinstall guard.
+
+### Removed
+
+- **`mmagent install-skill` subcommand** — superseded by `mmagent sync-skills`.
+- **`mmagent update-skills` subcommand** — superseded by `mmagent sync-skills`.
+
 ## [4.0.1] - 2026-05-07
 
 ### Fixed
@@ -1276,7 +1291,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...HEAD
+[4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.7...v4.0.0
 [3.12.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.6...v3.12.7

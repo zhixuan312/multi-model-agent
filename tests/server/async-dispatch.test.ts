@@ -113,6 +113,47 @@ describe('asyncDispatch', () => {
     expect(entry!.error?.message).toBe('something went wrong');
   });
 
+  it('bumps runningHeadlineSnapshot to "1/1 running" when the executor begins (4.0.2 fix)', async () => {
+    // Regression for the v4.0.1 "0/1 queued forever" UX: even though
+    // tasksStarted=1 was set when the executor body fired, the polling
+    // endpoint's `entry.runningHeadlineSnapshot.fallback` stayed at
+    // "0/1 queued" until the runner emitted its first heartbeat. When
+    // the LLM provider call hung, no heartbeat ever came and users saw
+    // no progress indication — making it look like the daemon itself
+    // was deadlocked. async-dispatch now updates the snapshot directly
+    // so the polling endpoint reports running state immediately.
+    const batchRegistry = new BatchRegistry();
+    const pc = createProjectContext(cwd);
+    const deps = makeStubDeps(batchRegistry);
+
+    let resolveExecutor: (v: unknown) => void = () => {};
+    const slowExecutor = new Promise((r) => { resolveExecutor = r; });
+
+    const result = asyncDispatch({
+      tool: 'audit',
+      projectCwd: cwd,
+      blockIds: [],
+      batchRegistry,
+      projectContext: pc,
+      deps,
+      executor: () => slowExecutor,
+    });
+
+    // Drain setImmediate so the executor body runs (sets tasksStarted=1
+    // and bumps the snapshot) but does NOT yet resolve.
+    await new Promise<void>((r) => setImmediate(r));
+
+    const entry = batchRegistry.get(result.batchId);
+    expect(entry!.state).toBe('pending'); // executor still in flight
+    expect(entry!.tasksStarted).toBe(1);
+    expect(entry!.runningHeadlineSnapshot.prefix).toBe('1/1 running, ');
+    expect(entry!.runningHeadlineSnapshot.fallback).toBe('1/1 running');
+
+    // Cleanup so vitest doesn't hang on the unresolved promise.
+    resolveExecutor({});
+    await new Promise<void>((r) => setImmediate(r));
+  });
+
   it('registers blockIds on the batch entry', () => {
     const batchRegistry = new BatchRegistry();
     const pc = createProjectContext(cwd);

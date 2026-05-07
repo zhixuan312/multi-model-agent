@@ -26,16 +26,16 @@ import { startServer } from '../http/server.js';
 import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
-import { runUpdateSkills } from './update-skills.js';
+import { runSyncSkills } from './sync-skills.js';
 import { listEntries, FutureManifestError } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
-import { readSkillContent } from './install-skill.js';
+import { readSkillContent } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import matter from 'gray-matter';
 
 function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
   const src = readSkillContent(entryName);
-  if (src === null) return false; // missing; update-skills handles removal separately
+  if (src === null) return false; // skill removed from bundle — sync-skills will drop it
   try {
     const parsed = matter(src);
     const v = parsed.data['version'];
@@ -54,7 +54,7 @@ export async function maybeAutoUpdateSkills(
     entries = listEntries();
   } catch (err) {
     if (err instanceof FutureManifestError) {
-      stderr(`[mmagent] warning: ${err.message}; skipping skill auto-update\n`);
+      stderr(`[mmagent] warning: ${err.message}; skipping skill auto-sync\n`);
       return;
     }
     return; // best-effort — never let manifest IO issues block serve
@@ -65,29 +65,24 @@ export async function maybeAutoUpdateSkills(
   if (behind.length === 0 && missing.length === 0) return;
 
   if (!config.server.autoUpdateSkills) {
-    if (behind.length > 0) {
-      stderr(
-        `[mmagent] ${behind.length} skill(s) out of date: ${behind.map((e) => e.name).join(', ')}. ` +
-        `Run 'mmagent update-skills' to refresh (or set server.autoUpdateSkills=true in config).\n`,
-      );
-    }
-    if (missing.length > 0) {
-      stderr(
-        `[mmagent] ${missing.length} new skill(s) available: ${missing.map((m) => m.name).join(', ')}. ` +
-        `Run 'mmagent install-skill --all' to install.\n`,
-      );
-    }
+    const drift: string[] = [];
+    if (behind.length > 0) drift.push(`${behind.length} out of date (${behind.map((e) => e.name).join(', ')})`);
+    if (missing.length > 0) drift.push(`${missing.length} new (${missing.map((m) => m.name).join(', ')})`);
+    stderr(
+      `[mmagent] skill drift: ${drift.join('; ')}. ` +
+      `Run 'mmagent sync-skills' to reconcile (or set server.autoUpdateSkills=true in config).\n`,
+    );
     return;
   }
 
   const deadlineMs = 5000;
   try {
     await Promise.race([
-      runUpdateSkills({ silent: true, bestEffort: true }),
+      runSyncSkills({ silent: true, bestEffort: true, ifExists: true }),
       new Promise<void>((resolve) => setTimeout(() => resolve(), deadlineMs)),
     ]);
-    if (behind.length > 0) process.stdout.write(`[mmagent] auto-updated ${behind.length} skill(s)\n`);
-    if (missing.length > 0) process.stdout.write(`[mmagent] auto-installed ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
+    if (behind.length > 0) process.stdout.write(`[mmagent] auto-synced ${behind.length} updated skill(s)\n`);
+    if (missing.length > 0) process.stdout.write(`[mmagent] auto-synced ${missing.length} new skill(s): ${missing.map((m) => m.name).join(', ')}\n`);
   } catch {
     // bestEffort swallows inside; extra safety here.
   }
@@ -176,7 +171,7 @@ export async function startServe(
     const drift = sync.driftReport();
     if (drift.length > 0) {
       const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
-      stderr(`[mmagent] WARN: skill manifest drift detected: ${summary}. Re-run 'mmagent install-skill' to reconcile.\n`);
+      stderr(`[mmagent] WARN: skill manifest drift detected: ${summary}. Re-run 'mmagent sync-skills' to reconcile.\n`);
     }
   } catch {
     // best-effort — never let drift check block serve

@@ -66,13 +66,13 @@ The engineer does judgment. We do labor. We don't make architectural decisions, 
 
 ## What We Are
 
-multi-model-agent is a horizontal connection layer delivered as a local HTTP service. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent install-skill`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
+multi-model-agent is a horizontal connection layer delivered as a local HTTP service. The engineer runs `mmagent serve` once; it binds to loopback on a fixed port and stays running across client sessions. Skills are installed per client (`mmagent sync-skills`), so any supported agent — Claude Code, Gemini CLI, Codex CLI, Cursor — picks up the full tool set without additional configuration. The integration should feel as natural as if the labor agents were built into the client itself.
 
 ### Delivery model
 
 ```
 mmagent serve               # daemon, stays running
-mmagent install-skill       # writes skill files into the detected client
+mmagent sync-skills         # writes (and reconciles) skill files in detected clients
 ```
 
 The daemon owns the long-running process. Skills are thin client-side adapters that point HTTP requests at the daemon. Client sessions come and go; the daemon and its in-memory state (context blocks, batch cache) survive.

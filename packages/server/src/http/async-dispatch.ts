@@ -61,15 +61,33 @@ export function asyncDispatch<TResult>(
     void (async () => {
       try {
         deps.bus.emit({ event: 'task_started', ts: new Date().toISOString(), batchId, taskIndex: 0, route: tool, cwd: projectCwd } as any);
-        // Mark the batch as running so composeRunningHeadline shows
-        // "1/1 running, Xs elapsed" instead of "1/1 queued" forever.
-        // tasksTotal is a coarse proxy for "some work is underway"; the
-        // per-sub-task counters inside the lifecycle dispatcher track finer progress.
+        // Mark the batch as running so /batch/:id polling reports
+        // "1/1 running, Xs elapsed" the instant the executor begins.
+        // Without bumping the headline snapshot here, the polling endpoint
+        // returns the initial "0/N queued" fallback until the runner's first
+        // heartbeat arrives — which can be many seconds (or minutes) later
+        // because heartbeats fire from inside provider.run. That gap is what
+        // made 4.0.1 audits look like the daemon was deadlocked when the
+        // only thing actually slow was the LLM call.
         const entry = batchRegistry.get(batchId);
         if (entry) {
           entry.tasksTotal = 1;
           entry.tasksStarted = 1;
           entry.tasksCompleted = 0;
+          batchRegistry.updateRunningHeadlineSnapshot(batchId, {
+            prefix: `1/1 running, `,
+            statsClause: ``,
+            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
+            fallback: `1/1 running`,
+          });
+        }
+        // Verbose-stderr breadcrumb so operators tailing the daemon see the
+        // executor lifecycle past request_received without grepping the
+        // JSONL log. Cheap; gated on diagnostics.verbose.
+        if (deps.config.diagnostics?.verbose) {
+          process.stdout.write(
+            `[mmagent verbose] event=executor_started ts=${new Date().toISOString()} batch=${batchId} route=${tool}\n`,
+          );
         }
         const result = await opts.executor(ctx, batchId);
         const resultObj = result as Record<string, unknown> | undefined;
@@ -78,7 +96,13 @@ export function asyncDispatch<TResult>(
         if (entryAfter) entryAfter.tasksCompleted = 1;
         batchRegistry.complete(batchId, result);
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
-        deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, taskCount } as any);
+        const durationMs = Date.now() - startedAtMs;
+        deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
+        if (deps.config.diagnostics?.verbose) {
+          process.stdout.write(
+            `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
+          );
+        }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
         const stack = err instanceof Error ? err.stack : undefined;
@@ -87,7 +111,13 @@ export function asyncDispatch<TResult>(
           message,
           ...(stack !== undefined && { stack }),
         });
-        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs: Date.now() - startedAtMs, errorCode: 'runner_crash', errorMessage: message } as any);
+        const durationMs = Date.now() - startedAtMs;
+        deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: 'runner_crash', errorMessage: message } as any);
+        if (deps.config.diagnostics?.verbose) {
+          process.stdout.write(
+            `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error="${message.replace(/"/g, '\\"')}"\n`,
+          );
+        }
       }
     })();
   });

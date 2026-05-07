@@ -10,7 +10,7 @@ import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from '../../project-registry.js';
 
 /**
- * The skill manifest is installed by the `install-skill` CLI (Phase 9).
+ * The skill manifest is installed by the `sync-skills` CLI.
  * We read it at /status request time — if absent, skillVersion and
  * skillCompatible are both null.
  */

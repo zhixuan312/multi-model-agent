@@ -32,9 +32,8 @@ import {
 import { startServe } from './serve.js';
 import { printToken } from './print-token.js';
 import { runStatus, buildServerUrl } from './status.js';
-import { main as installSkillMain } from './install-skill.js';
 import { runInfo } from './info.js';
-import { runUpdateSkills } from './update-skills.js';
+import { runSyncSkills } from './sync-skills.js';
 import { runLogs } from './logs.js';
 import { runTelemetry } from './telemetry.js';
 
@@ -178,8 +177,7 @@ Commands:
   print-token      Print the bearer auth token to stdout
   info             Print config + daemon identity (works offline)
   status           Show server status (requires a running server)
-  install-skill    Install or uninstall a skill for an AI client
-  update-skills    Re-copy installed skills from the shipped bundle
+  sync-skills      Install + update + reconcile all shipped skills (single upsert command, replaces 4.0.x install-skill / update-skills)
   logs             Tail the diagnostic log (use --follow / --batch=<id>)
   telemetry        Manage telemetry consent (status|enable|disable|reset-id|dump-queue)
 
@@ -320,30 +318,17 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       exit(code);
       break;
     }
-    case 'update-skills': {
-      const code = await runUpdateSkills({
+    case 'sync-skills': {
+      // Forward argv tokens that come after the subcommand name so
+      // sync-skills' own minimist sees `--target=`, `--all-targets`, etc.
+      const subCmdIdx = argv.indexOf('sync-skills');
+      const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
+      const code = await runSyncSkills({
+        argv: subArgv,
         homeDir: deps.homeDir?.() ?? os.homedir(),
-        dryRun: opts['dry-run'] === true,
-        json: opts['json'] === true,
         ifExists: opts['if-exists'] === true,
         silent: opts['silent'] === true,
         bestEffort: opts['best-effort'] === true,
-        stdout: deps.stdout,
-        stderr: deps.stderr,
-      });
-      exit(code);
-      break;
-    }
-    case 'install-skill': {
-      // Forward all argv tokens that come after the subcommand name.
-      // minimist with stopEarly:true would have captured them in opts._, but
-      // since we don't use stopEarly we need to find the subcommand boundary
-      // in the raw argv array and pass everything after it.
-      const subCmdIdx = argv.indexOf('install-skill');
-      const subArgv = subCmdIdx >= 0 ? argv.slice(subCmdIdx + 1) : positional.slice(1);
-      const code = await installSkillMain({
-        argv: subArgv,
-        homeDir: deps.homeDir?.() ?? os.homedir(),
         stdout: deps.stdout,
         stderr: deps.stderr,
       });
