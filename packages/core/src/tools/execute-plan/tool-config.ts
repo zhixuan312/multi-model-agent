@@ -40,7 +40,19 @@ export function makeExecutePlanReviewer(): ReviewerEngine {
 export const toolConfig: ToolConfig<ExecutePlanWireInput> = {
   name: 'execute_plan',
   category: 'artifact_producing',
+  agentType: 'standard',
   briefSlot: (input) => input.taskDescriptors.map((task) => ({ task, filePath: input.filePaths[0] })),
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: `Execute this task from the plan: "${(brief as any).task ?? ''}"`,
+    agentType: 'standard',
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    filePaths: [(brief as any).filePath].filter(Boolean),
+    tools: ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+    autoCommit: true,
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
   reviewTemplates: {

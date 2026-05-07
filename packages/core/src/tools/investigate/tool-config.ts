@@ -21,7 +21,20 @@ export function registerInvestigate(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input> = {
   name: 'investigate',
   category: 'read_only',
+  agentType: 'complex',
   briefSlot: (input) => [{ question: input.question, filePaths: input.filePaths, contextBlockIds: input.contextBlockIds, tools: input.tools }],
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: `Investigate: ${(brief as any).question ?? ''}`,
+    agentType: 'complex',
+    reviewPolicy: 'quality_only' as const,
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    contextBlockIds: (brief as any).contextBlockIds,
+    filePaths: (brief as any).filePaths,
+    tools: (brief as any).tools ?? ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
   reviewTemplates: {

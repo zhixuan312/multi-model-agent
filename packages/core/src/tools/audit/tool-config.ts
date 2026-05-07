@@ -21,7 +21,20 @@ export function registerAudit(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input> = {
   name: 'audit',
   category: 'read_only',
+  agentType: 'complex',
   briefSlot: (input) => [{ document: input.document, auditType: input.auditType, filePaths: input.filePaths, contextBlockIds: input.contextBlockIds }],
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: `Audit for ${(brief as any).auditType ?? 'issues'}:\n${(brief as any).document ?? ''}`,
+    agentType: 'complex',
+    reviewPolicy: 'quality_only' as const,
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    contextBlockIds: (brief as any).contextBlockIds,
+    filePaths: (brief as any).filePaths,
+    tools: ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
   reviewTemplates: {

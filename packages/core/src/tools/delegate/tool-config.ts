@@ -32,7 +32,20 @@ export function makeDelegateReviewer(): ReviewerEngine {
 export const toolConfig: ToolConfig<Input> = {
   name: 'delegate',
   category: 'artifact_producing',
+  agentType: 'standard',
   briefSlot: (input) => input.tasks.map((t) => ({ prompt: t.prompt, done: t.done, filePaths: t.filePaths, reviewPolicy: t.reviewPolicy })),
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: (brief as any).prompt ?? '',
+    agentType: 'standard',
+    reviewPolicy: (brief as any).reviewPolicy ?? 'full' as const,
+    done: (brief as any).done,
+    filePaths: (brief as any).filePaths,
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    tools: ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
   reviewTemplates: {

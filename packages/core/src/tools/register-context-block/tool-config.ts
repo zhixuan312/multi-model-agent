@@ -20,7 +20,18 @@ export function registerContextBlock(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<RegisterContextBlockInput> = {
   name: 'register_context_block',
   category: 'assist',
+  agentType: 'standard',
   briefSlot: (input) => [{ type: input.type, description: input.description, body: input.body }],
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: `Register context block: ${(brief as any).description ?? ''}\n\n${(brief as any).body ?? ''}`,
+    agentType: 'standard',
+    reviewPolicy: 'none' as const,
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    tools: ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
 };

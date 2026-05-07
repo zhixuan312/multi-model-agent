@@ -21,7 +21,20 @@ export function registerVerify(registry: ToolSurfaceRegistry): void {
 export const toolConfig: ToolConfig<Input> = {
   name: 'verify',
   category: 'read_only',
+  agentType: 'complex',
   briefSlot: (input) => [{ checklist: input.checklist, work: input.work, filePaths: input.filePaths, contextBlockIds: input.contextBlockIds }],
+  buildTaskSpec: (brief, ctx) => ({
+    prompt: `Verify this work:\n${(brief as any).work ?? ''}\n\nChecklist:\n${((brief as any).checklist ?? []).map((item: string, i: number) => `${i + 1}. ${item}`).join('\n')}`,
+    agentType: 'complex',
+    reviewPolicy: 'quality_only' as const,
+    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+    contextBlockIds: (brief as any).contextBlockIds,
+    filePaths: (brief as any).filePaths,
+    tools: ctx.config.defaults?.tools ?? 'full',
+    timeoutMs: ctx.config.defaults?.timeoutMs,
+    maxCostUSD: ctx.config.defaults?.maxCostUSD,
+    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+  }),
   reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
   headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
   reviewTemplates: {
