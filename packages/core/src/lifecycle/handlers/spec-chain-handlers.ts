@@ -146,6 +146,16 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
           assignedTier: usedTier,
+          // Without bus the rework's runner-shell.emit calls go nowhere — the
+          // implementer turns then run silently, the reviewer keeps seeing
+          // (slightly) updated code, and the chain marches through 3 rounds
+          // with no visible Implementing events. Pass the same bus + ids the
+          // initial-impl call uses so verbose stderr + the running headline
+          // surface the rework's progress.
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+          ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+          stageLabel: `Spec rework round ${round - 1}`,
         },
       ),
   });

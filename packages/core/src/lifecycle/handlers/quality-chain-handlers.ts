@@ -166,6 +166,11 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
           assignedTier: usedTier,
+          // Same fix as spec-chain rework — pass bus so runner events fire.
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+          ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+          stageLabel: `Quality rework round ${attemptIndex}`,
         },
       ),
   });
