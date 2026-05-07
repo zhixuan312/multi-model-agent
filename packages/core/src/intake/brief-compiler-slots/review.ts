@@ -1,5 +1,8 @@
 import type { DraftTask, ReviewSource } from '../types.js';
 import { createDraftId, escapeFanoutKey, canonicalizePath } from '../draft-id.js';
+import type { Input } from '../../tools/review/schema.js';
+
+// ── Legacy intake compiler ──
 
 const SCOPE_CONTRACT = `Review the specified files in scope. Cross-reference call sites and types only when needed to validate a finding. Do NOT review code outside the requested scope.`;
 
@@ -62,14 +65,16 @@ export function compileReviewCode(
     };
   });
 }
-// v4.0 spec C8 slot-style API
+
+// ── v4.0 spec C8 slot-style API (used by per-tool lifecycle tests) ──
+
 export interface ReviewInput {
   filePaths: string[];
   checklist?: string;
   cwd?: string;
 }
 
-export interface ReviewBrief {
+export interface ReviewBriefV0 {
   taskIndex: number;
   brief: string;
   cwd: string;
@@ -79,7 +84,7 @@ export interface ReviewBrief {
   filePath: string;
 }
 
-export function reviewSlot(input: ReviewInput): ReviewBrief[] {
+export function reviewSlot(input: ReviewInput): ReviewBriefV0[] {
   return input.filePaths.map((p, i) => ({
     taskIndex: i,
     brief: `Review ${p} against the project's review checklist:\n${input.checklist ?? '(default)'}`,
@@ -88,5 +93,42 @@ export function reviewSlot(input: ReviewInput): ReviewBrief[] {
     reviewPolicy: 'quality_only' as const,
     contextBlockIds: [],
     filePath: p,
+  }));
+}
+
+// ── Generic executor brief slot ──
+
+export interface ReviewBrief {
+  filePath?: string;
+  code?: string;
+  filePaths?: string[];
+  focus?: string[];
+  hasContextBlocks: boolean;
+  contextBlockIds: string[];
+}
+
+function hasContent(value: string | undefined): boolean {
+  return value !== undefined && value.trim().length > 0;
+}
+
+export function reviewBriefSlot(input: Input): ReviewBrief[] {
+  const hasContextBlocks = Array.isArray(input.contextBlockIds) && input.contextBlockIds.length > 0;
+  const validPaths = (input.filePaths ?? []).filter(p => p.trim().length > 0);
+
+  if (hasContent(input.code) || validPaths.length <= 1) {
+    return [{
+      code: input.code,
+      filePaths: input.filePaths,
+      focus: input.focus,
+      hasContextBlocks,
+      contextBlockIds: input.contextBlockIds ?? [],
+    }];
+  }
+
+  return validPaths.map(fp => ({
+    filePath: fp,
+    focus: input.focus,
+    hasContextBlocks,
+    contextBlockIds: input.contextBlockIds ?? [],
   }));
 }

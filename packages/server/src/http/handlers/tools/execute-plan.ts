@@ -3,7 +3,8 @@ import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import type { ExecutePlanWireInput } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
-import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/execute-plan';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
@@ -32,18 +33,16 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
+    const blockIds = input.contextBlockIds ?? [];
     const { batchId, statusUrl } = asyncDispatch({
       tool: 'execute-plan',
       projectCwd: cwd,
-      blockIds: [],
+      blockIds,
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        const callExecutor = () => executeExecutePlan(executionCtx, {
-          tasks: input.taskDescriptors,
-          filePaths: input.filePaths,
-        });
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
         if (deps.routeDispatcher) {
           const result = await deps.routeDispatcher.dispatch({
             route: 'execute_plan',

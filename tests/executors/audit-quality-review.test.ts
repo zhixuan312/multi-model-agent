@@ -8,7 +8,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
 }));
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeAudit } from '../../packages/core/src/lifecycle/executors/audit.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { toolConfig } from '../../packages/core/src/tools/audit/tool-config.js';
 
 const workerOutput = JSON.stringify({
   findings: [
@@ -76,7 +77,7 @@ describe('executeAudit — quality_only review', () => {
 
     const input = { auditType: 'correctness' as const, filePaths: ['/tmp/spec.md'] };
 
-    const result = await executeAudit(ctx, input);
+    const result = await executeTask(toolConfig, ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
     expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated']).toContain(result.qualityReviewVerdict);
@@ -171,7 +172,7 @@ describe('executeAudit — quality_only review', () => {
 
     const input = { auditType: 'security' as const, filePaths: ['/tmp/spec.md'] };
 
-    const result = await executeAudit(ctx, input);
+    const result = await executeTask(toolConfig, ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
     expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated']).toContain(result.qualityReviewVerdict);

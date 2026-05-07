@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
-import { executeReview } from '../../packages/core/src/lifecycle/executors/review.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { toolConfig } from '../../packages/core/src/tools/review/tool-config.js';
 import type { MultiModelConfig } from '../../packages/core/src/types.js';
 
 const workerResult = {
@@ -55,7 +56,6 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
     name: slot,
     config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: async (prompt: string) => {
-      // Quality reviewer gets the custom prompt built by buildReviewQualityPrompt
       if (typeof prompt === 'string' && prompt.includes('findings[]')) {
         return reviewResult;
       }
@@ -93,7 +93,7 @@ describe('executeReview — quality_only review', () => {
     } as any;
 
     const input = { code: 'const x = 1;' };
-    const result = await executeReview(ctx, input);
+    const result = await executeTask(toolConfig, ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
     expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated']).toContain(result.qualityReviewVerdict);

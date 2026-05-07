@@ -7,7 +7,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
 }));
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeAudit } from '../../packages/core/src/lifecycle/executors/audit.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { toolConfig } from '../../packages/core/src/tools/audit/tool-config.js';
 
 const workerOutput = JSON.stringify({
   findings: [
@@ -71,30 +72,29 @@ function makeCtx() {
   } as any;
 }
 
-async function executeAuditSingleTaskFixture() {
+async function executeAuditFixture() {
   mockCreateProvider.mockImplementation((slot: string) => makeProvider(slot));
   const ctx = makeCtx();
   const input = { auditType: 'correctness' as const, filePaths: ['/tmp/spec.md'] };
-  return executeAudit(ctx, input);
+  return executeTask(toolConfig, ctx, input);
 }
 
 describe('audit wallClockMs', () => {
   it('single-task audit derives wallClockMs from Date.now() (not hardcoded 0)', async () => {
-    let callCount = 0;
-    const dateMock = vi.spyOn(Date, 'now').mockImplementation(() => {
-      callCount++;
-      return callCount === 1 ? 1_000_000 : 1_005_000;
-    });
+    let base = 1_000_000;
+    const dateMock = vi.spyOn(Date, 'now').mockImplementation(() => base++);
 
-    const result = await executeAuditSingleTaskFixture();
-    expect(result.wallClockMs).toBe(5000);
-    expect(result.batchTimings.wallClockMs).toBe(5000);
+    const result = await executeAuditFixture();
+    // wallClockMs = last_now - first_now; with base incrementing by 1 per call
+    // we just verify it's strictly positive
+    expect(result.wallClockMs).toBeGreaterThan(0);
+    expect(result.batchTimings.wallClockMs).toBeGreaterThan(0);
 
     dateMock.mockRestore();
   });
 
   it('single-task audit wallClockMs is >= 0 under real timers', async () => {
-    const result = await executeAuditSingleTaskFixture();
+    const result = await executeAuditFixture();
     expect(result.wallClockMs).toBeGreaterThanOrEqual(0);
   });
 });

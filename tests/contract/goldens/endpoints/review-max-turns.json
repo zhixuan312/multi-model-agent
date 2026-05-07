@@ -1,5 +1,5 @@
 {
-  "headline": "review: 1/1 tasks complete",
+  "headline": "[incomplete] review: review",
   "results": [
     {
       "output": "mock max turns",
@@ -88,7 +88,7 @@
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "reportSchema.parse failed for review"
   },
   "error": {
     "kind": "not_applicable",

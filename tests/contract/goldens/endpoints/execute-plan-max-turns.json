@@ -1,5 +1,5 @@
 {
-  "headline": "executePlan: 1/1 tasks complete",
+  "headline": "[incomplete] execute_plan",
   "results": [
     {
       "output": "mock max turns",
@@ -88,12 +88,15 @@
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "reportSchema.parse failed for execute_plan"
   },
   "error": {
     "kind": "not_applicable",
     "reason": "batch succeeded"
   },
   "batchId": "<DETERMINISTIC>",
-  "wallClockMs": "<DETERMINISTIC>"
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1
 }

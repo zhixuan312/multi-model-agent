@@ -2,7 +2,8 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as review from '@zhixuan92/multi-model-agent-core/tools/review/schema';
-import { executeReview } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/review';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/review/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
@@ -39,7 +40,7 @@ export function buildReviewHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        const callExecutor = () => executeReview(executionCtx, input);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
         if (deps.routeDispatcher) {
           const result = await deps.routeDispatcher.dispatch({
             route: 'review',

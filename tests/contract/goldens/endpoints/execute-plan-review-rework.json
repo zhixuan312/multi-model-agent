@@ -1,5 +1,5 @@
 {
-  "headline": "executePlan: 1/1 tasks complete",
+  "headline": "[error] execute_plan",
   "results": [
     {
       "output": "",
@@ -24,7 +24,7 @@
       "structuredError": {
         "code": "runner_crash",
         "message": "reviewer output missing ## Summary section",
-        "where": "executor:executePlan"
+        "where": "executor:execute_plan"
       },
       "workerStatus": "failed"
     }
@@ -40,12 +40,15 @@
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "no task output to parse"
   },
   "error": {
     "kind": "not_applicable",
     "reason": "batch succeeded"
   },
   "batchId": "<DETERMINISTIC>",
-  "wallClockMs": "<DETERMINISTIC>"
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1
 }

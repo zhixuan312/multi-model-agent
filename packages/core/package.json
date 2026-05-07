@@ -208,10 +208,6 @@
       "types": "./dist/lifecycle/executors/index.d.ts",
       "import": "./dist/lifecycle/executors/index.js"
     },
-    "./lifecycle/executors/audit": {
-      "types": "./dist/lifecycle/executors/audit.d.ts",
-      "import": "./dist/lifecycle/executors/audit.js"
-    },
     "./lifecycle/executors/investigate": {
       "types": "./dist/lifecycle/executors/investigate.d.ts",
       "import": "./dist/lifecycle/executors/investigate.js"
@@ -220,17 +216,9 @@
       "types": "./dist/lifecycle/executors/explore.d.ts",
       "import": "./dist/lifecycle/executors/explore.js"
     },
-    "./lifecycle/executors/review": {
-      "types": "./dist/lifecycle/executors/review.d.ts",
-      "import": "./dist/lifecycle/executors/review.js"
-    },
     "./lifecycle/task-executor": {
       "types": "./dist/lifecycle/task-executor.d.ts",
       "import": "./dist/lifecycle/task-executor.js"
-    },
-    "./lifecycle/executors/execute-plan": {
-      "types": "./dist/lifecycle/executors/execute-plan.d.ts",
-      "import": "./dist/lifecycle/executors/execute-plan.js"
     },
     "./lifecycle/executors/retry": {
       "types": "./dist/lifecycle/executors/retry.d.ts",

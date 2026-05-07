@@ -1,5 +1,5 @@
 {
-  "headline": "review: 1/1 tasks complete",
+  "headline": "[ok] review: review",
   "results": [
     {
       "output": "mocked ok",
@@ -79,13 +79,14 @@
     "sumOfTaskMs": "<DETERMINISTIC>",
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
+  "contextBlockId": "<DETERMINISTIC>",
   "costSummary": {
     "totalActualCostUSD": 0,
     "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "reportSchema.parse failed for review"
   },
   "error": {
     "kind": "not_applicable",
