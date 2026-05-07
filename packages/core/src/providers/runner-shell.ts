@@ -21,6 +21,7 @@ export class RunnerShell {
     // to without grepping back to the originating request.
     const baseEventFields = {
       ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
       ...(input.tier !== undefined && { tier: input.tier }),
       ...(input.model !== undefined && { model: input.model }),
       ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),

@@ -59,6 +59,12 @@ export interface DelegateOptions {
    */
   batchId?: string;
   /**
+   * Identifies which task within the batch is running. Threaded through to
+   * runner events so per-task progress can be tracked separately when a
+   * batch has multiple parallel tasks.
+   */
+  taskIndex?: number;
+  /**
    * Lifecycle stage label forwarded to RunInput.stageLabel so the running-
    * headline polling response shows the current stage (e.g. 'Implementing').
    */
@@ -172,6 +178,7 @@ export async function delegateWithEscalation(
         },
         ...(options.bus && { bus: options.bus }),
         ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
         ...(options.assignedTier !== undefined && { tier: options.assignedTier }),
         ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
       });

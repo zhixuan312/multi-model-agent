@@ -121,6 +121,10 @@ export interface RunOptions {
    *  through delegateWithEscalation so consumers can correlate runner-shell
    *  output back to the originating /audit, /delegate, etc. request. */
   batchId?: string
+  /** Identifies which task within a batch is running. Threaded through every
+   *  emitted event so per-task running-headline progress can be tracked when
+   *  a batch has multiple parallel tasks. */
+  taskIndex?: number
   /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string
   /** Lifecycle stage label (e.g. `'Implementing'`, `'Spec review'`). Forwarded

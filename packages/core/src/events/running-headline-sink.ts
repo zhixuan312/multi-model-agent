@@ -43,10 +43,13 @@ const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = {
   'register-context-block': ['Registering', 'Finalizing'],
 };
 
-interface PerBatchProgress {
+interface PerTaskProgress {
   toolCounts: Record<string, number>;
   stageLabel?: string;
   tier?: string;
+  /** ms since epoch when the first event for this (batch, task) arrived;
+   *  used to compute per-task elapsed in the polling response. */
+  startedAt: number;
 }
 
 function capitalizeTier(tier: string | undefined): string | undefined {
@@ -67,7 +70,7 @@ function stageBracket(route: string, stageLabel: string | undefined): string {
 
 export class RunningHeadlineSink {
   readonly name = 'running-headline';
-  private progress = new Map<string, PerBatchProgress>();
+  private progress = new Map<string, Map<number, PerTaskProgress>>();
 
   constructor(private readonly batchRegistry: BatchRegistry) {}
 
@@ -76,21 +79,32 @@ export class RunningHeadlineSink {
     const batchId = typeof event['batchId'] === 'string' ? event['batchId'] : undefined;
     if (!batchId) return;
 
+    // taskIndex defaults to 0 so older code paths that don't yet plumb it
+    // still produce a single-task headline. New parallel-fan-out tasks pass
+    // a real taskIndex and get separate snapshots.
+    const taskIndex = typeof event['taskIndex'] === 'number' ? (event['taskIndex'] as number) : 0;
+
     const toolCalls = (event['toolCalls'] as Record<string, number> | undefined) ?? {};
     const stageLabel = typeof event['stageLabel'] === 'string' ? event['stageLabel'] : undefined;
     const tier = typeof event['tier'] === 'string' ? event['tier'] : undefined;
 
-    const prior = this.progress.get(batchId) ?? { toolCounts: {} };
-    const nextCounts = { ...prior.toolCounts };
+    let perBatch = this.progress.get(batchId);
+    if (!perBatch) {
+      perBatch = new Map();
+      this.progress.set(batchId, perBatch);
+    }
+    const prior = perBatch.get(taskIndex);
+    const nextCounts = { ...(prior?.toolCounts ?? {}) };
     for (const [name, count] of Object.entries(toolCalls)) {
       nextCounts[name] = (nextCounts[name] ?? 0) + count;
     }
-    const next: PerBatchProgress = {
+    const next: PerTaskProgress = {
       toolCounts: nextCounts,
-      stageLabel: stageLabel ?? prior.stageLabel,
-      tier: tier ?? prior.tier,
+      stageLabel: stageLabel ?? prior?.stageLabel,
+      tier: tier ?? prior?.tier,
+      startedAt: prior?.startedAt ?? Date.now(),
     };
-    this.progress.set(batchId, next);
+    perBatch.set(taskIndex, next);
 
     const entry = this.batchRegistry.get(batchId);
     if (!entry) return;
@@ -109,9 +123,18 @@ export class RunningHeadlineSink {
     const tierClause = tierStr ? ` (${tierStr})` : '';
     const bracket = stageBracket(entry.tool, next.stageLabel);
 
-    // Final shape: `[3/7] Quality review (Complex) - 3m 41s, 12 read, 0 write, 18 tool calls`
-    // The batch handler concatenates `prefix` + `formatElapsed(elapsedMs)` +
-    // `statsClause`; `prefix` ends with ` - ` so the elapsed lands cleanly.
+    // Per-task snapshot. The batch handler renders one line per task and
+    // joins them with newlines on the polling response. Each task carries
+    // its own dispatchedAt so elapsed is independent per task.
+    this.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, taskIndex, {
+      prefix: `${bracket} ${stage}${tierClause} - `,
+      statsClause: `, ${read} read, ${write} write, ${total} tool calls`,
+      dispatchedAt: next.startedAt,
+      fallback: `${bracket} ${stage}${tierClause}`,
+    });
+
+    // Also update the legacy single-snapshot field so any consumer that
+    // hasn't migrated to per-task still sees something current.
     this.batchRegistry.updateRunningHeadlineSnapshot(batchId, {
       prefix: `${bracket} ${stage}${tierClause} - `,
       statsClause: `, ${read} read, ${write} write, ${total} tool calls`,

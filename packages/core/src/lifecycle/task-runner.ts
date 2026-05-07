@@ -289,6 +289,7 @@ export async function runTaskViaDispatcher(
             stageLabel: 'Implementing',
             ...(ctx.bus && { bus: ctx.bus }),
             ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            taskIndex: ctx.taskIndex,
           },
         );
         const enrichedResult: RunResult = {

@@ -135,6 +135,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         ...(options.abortSignal && { abortSignal: options.abortSignal }),
         ...(options.bus && { bus: options.bus }),
         ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
         ...(options.tier !== undefined && { tier: options.tier }),
         ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
         model: providerConfig.model,

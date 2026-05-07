@@ -56,6 +56,11 @@ export interface BatchEntryInput<Result = unknown> {
 // Stored entry — runningHeadlineSnapshot REQUIRED.
 export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
   runningHeadlineSnapshot: HeadlineSnapshot;
+  /** Per-task headline snapshots, keyed by taskIndex. When a batch fans out
+   *  to multiple parallel tasks, each task tracks its own stage/elapsed/stats
+   *  so the polling endpoint can render one line per task instead of letting
+   *  the latest event overwrite the previous task's progress. */
+  perTaskHeadlineSnapshots?: Map<number, HeadlineSnapshot>;
   /** taskIndex -> terminal context blockId; lazily created on first record */
   terminalBlockIds?: Map<number, string>;
 }
@@ -120,6 +125,14 @@ export class BatchRegistry {
     if (!entry) return;
     if (isTerminal(entry.state)) return;
     entry.runningHeadlineSnapshot = snapshot;
+  }
+
+  updatePerTaskHeadlineSnapshot(batchId: string, taskIndex: number, snapshot: HeadlineSnapshot): void {
+    const entry = this.map.get(batchId);
+    if (!entry) return;
+    if (isTerminal(entry.state)) return;
+    if (!entry.perTaskHeadlineSnapshots) entry.perTaskHeadlineSnapshots = new Map();
+    entry.perTaskHeadlineSnapshots.set(taskIndex, snapshot);
   }
 
   delete(batchId: string): boolean {

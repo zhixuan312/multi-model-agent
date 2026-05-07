@@ -89,6 +89,7 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           deadlineMs: ctx.timing.deadlineMs,
           ...(ctx.bus && { bus: ctx.bus }),
           ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
           tier: usedTier,
           stageLabel: 'Spec review',
         });

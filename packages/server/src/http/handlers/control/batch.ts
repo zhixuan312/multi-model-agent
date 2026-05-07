@@ -56,13 +56,35 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
       taskIndex = parseInt(rawTaskIndex, 10);
     }
 
-    // Pending → 202 text/plain progress line
+    // Pending → 202 text/plain progress line.
+    // When per-task snapshots have been written (multi-task batches with
+    // taskIndex on runner events), render one line per task so the main
+    // agent can see each task's stage/elapsed/stats independently.
     if (entry.state === 'pending') {
-      const snap = entry.runningHeadlineSnapshot;
-      const elapsedMs = Date.now() - snap.dispatchedAt;
-      const headline = snap.prefix
-        ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
-        : snap.fallback;
+      const perTask = entry.perTaskHeadlineSnapshots;
+      // tasksTotal is set by async-dispatch to a placeholder (1) before the
+      // executor knows the real fan-out size; perTask.size reflects actual
+      // tasks that have started, so prefer the larger of the two.
+      const totalTasks = Math.max(entry.tasksTotal ?? 1, perTask?.size ?? 0);
+      let headline: string;
+      if (perTask && perTask.size > 0) {
+        const sortedIndices = [...perTask.keys()].sort((a, b) => a - b);
+        const lines = sortedIndices.map((idx) => {
+          const snap = perTask.get(idx)!;
+          const elapsedMs = Date.now() - snap.dispatchedAt;
+          const taskBracket = `[${idx + 1}/${totalTasks}]`;
+          return snap.prefix
+            ? `${taskBracket} ${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+            : `${taskBracket} ${snap.fallback}`;
+        });
+        headline = lines.join('\n');
+      } else {
+        const snap = entry.runningHeadlineSnapshot;
+        const elapsedMs = Date.now() - snap.dispatchedAt;
+        headline = snap.prefix
+          ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+          : snap.fallback;
+      }
       res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
       res.end(headline);
       return;

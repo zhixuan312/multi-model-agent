@@ -26,6 +26,7 @@ export interface AnnotatorInput {
    *  show stage="Annotating" while the read-only review pass runs. */
   bus?: import('../events/event-emitter.js').EventEmitter;
   batchId?: string;
+  taskIndex?: number;
   tier?: string;
   stageLabel?: string;
 }
@@ -52,6 +53,7 @@ export class AnnotatorEngine {
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
       ...(input.tier !== undefined && { tier: input.tier }),
       ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });

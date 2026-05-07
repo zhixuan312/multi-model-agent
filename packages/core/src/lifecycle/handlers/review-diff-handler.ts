@@ -92,6 +92,7 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
         deadlineMs: ctx.timing.deadlineMs,
         ...(ctx.bus && { bus: ctx.bus }),
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
         tier: usedTier,
         stageLabel: 'Diff review',
       });

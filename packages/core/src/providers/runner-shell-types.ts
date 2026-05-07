@@ -19,6 +19,10 @@ export interface RunInput {
   bus?: EventEmitter;
   /** Identifies the in-flight batch in emitted events. */
   batchId?: string;
+  /** Identifies which task within a batch is running. Carried through to
+   *  every emitted event so polling can show per-task progress when a
+   *  batch has multiple parallel tasks. */
+  taskIndex?: number;
   /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string;
   /** Provider model id included in emitted events. */
