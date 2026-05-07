@@ -33,7 +33,7 @@ Major release: structural rebuild of the labor substrate. Same product surface a
 - **Lifecycle:** `StagePlan` declarative + `LifecycleDriver` iterates predicates — no inline branching. `ReworkLoopDriver`, `RequestPipeline`, `AttemptRecorder`, `TelemetryFlushWorker`, `ReadinessClassifier`, `EffortInferer`, `CrossTierGuard` removed (subsumed or unneeded).
 - **Reviews:** `ReviewerEngine` (gating reviews) and `AnnotatorEngine` (annotation passes) split.
 - **Telemetry:** unified `EventEmitter` → three channels (`CallerResponseChannel`, `VerboseLogChannel`, `TelemetryChannel`). Deprecated-fields constants emitted on the wire for backend back-compat.
-- **Tests:** 2969 passing (356 files).
+- **Tests:** 2506 passing (298 files).
 
 ### Backend compatibility
 
