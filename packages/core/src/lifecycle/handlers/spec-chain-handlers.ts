@@ -14,6 +14,7 @@ import {
 } from '../../escalation/fallback.js';
 import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 /**
  * Spec-chain handlers (#45 Step 4a).
@@ -175,6 +176,26 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
     const result = await runSpecReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = result.verdict;
+    // Record per-round cost so wire task.completed sums reviewer tokens
+    // and the spec_review stage entry has cumulative roundsUsed across
+    // 1..3 rounds. Reviewer tier is derived from policy (round-based).
+    const baseTier: AgentType = ctx.assignedTier;
+    const reviewerTier = (round - 1 < 2)
+      ? (baseTier === 'standard' ? 'complex' : 'standard')
+      : baseTier; // round 3 swaps back to base tier per SPEC_LOOP policy
+    const reviewerProvider = ctx.providers[reviewerTier];
+    mergeStageStats(state, 'spec_review', {
+      inputTokens: result.cost?.inputTokens ?? 0,
+      outputTokens: result.cost?.outputTokens ?? 0,
+      turnCount: result.cost?.turnCount ?? 0,
+      toolCallCount: result.cost?.toolCallCount ?? 0,
+      costUSD: result.cost?.costUSD ?? null,
+      durationMs: null,
+    }, {
+      tier: reviewerTier,
+      model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+      verdict: result.verdict,
+    });
   };
 }
 
@@ -200,6 +221,28 @@ function makeSpecReworkHandler(round: 1 | 2) {
       return;
     }
     state.lastRunResult = newResult;
+    // Record rework cost in spec_rework stage stats so wire telemetry sees
+    // it. round=1 → attemptIndex 1, round=2 → attemptIndex 2; rework tier
+    // mirrors pickEscalation (impl=standard for attemptIndex 1; impl=complex
+    // for attemptIndex 2 when baseTier=standard).
+    const baseTier: AgentType = ctx.assignedTier;
+    const reworkTier: AgentType = (round === 2 && baseTier === 'standard') ? 'complex' : baseTier;
+    const reworkProvider = ctx.providers[reworkTier];
+    mergeStageStats(state, 'spec_rework', {
+      inputTokens: newResult.usage?.inputTokens ?? 0,
+      outputTokens: newResult.usage?.outputTokens ?? 0,
+      cachedReadTokens: newResult.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
+      turnCount: newResult.turns ?? 0,
+      toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
+      costUSD: newResult.cost?.totalCostUSD ?? null,
+      durationMs: newResult.durationMs ?? null,
+      filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
+      filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,
+    }, {
+      tier: reworkTier,
+      model: (reworkProvider?.config as { model?: string } | undefined)?.model ?? null,
+    });
   };
 }
 

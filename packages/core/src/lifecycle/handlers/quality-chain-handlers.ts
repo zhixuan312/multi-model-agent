@@ -17,6 +17,7 @@ import {
 import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 import type { SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 /**
  * Quality-chain handlers (#45 Step 4b).
@@ -195,6 +196,27 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
     const result = await runQualityReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = mapQualityVerdict(result);
+    // Record per-round cost in quality_review stageStats. Annotator path
+    // (read-only routes) and reviewer path both share the same stage slot;
+    // the verdict differentiates ('annotated' vs 'approved'/'changes_required').
+    const baseTier: AgentType = ctx.assignedTier;
+    const reviewerTier: AgentType = (round - 1 < 2)
+      ? (baseTier === 'standard' ? 'complex' : 'standard')
+      : baseTier;
+    const reviewerProvider = ctx.providers[reviewerTier];
+    const cost = (result as ReviewerCallResult | AnnotatorCallResult).cost;
+    mergeStageStats(state, 'quality_review', {
+      inputTokens: cost?.inputTokens ?? 0,
+      outputTokens: cost?.outputTokens ?? 0,
+      turnCount: cost?.turnCount ?? 0,
+      toolCallCount: cost?.toolCallCount ?? 0,
+      costUSD: cost?.costUSD ?? null,
+      durationMs: null,
+    }, {
+      tier: reviewerTier,
+      model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+      verdict: (result as ReviewerCallResult | AnnotatorCallResult).verdict,
+    });
   };
 }
 
@@ -221,6 +243,26 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
       return;
     }
     state.lastRunResult = newResult;
+    // Record rework cost. Quality rework_2 (attemptIndex 2) escalates impl
+    // from base tier to the other tier; rework_1 stays on base.
+    const baseTier: AgentType = ctx.assignedTier;
+    const reworkTier: AgentType = (attemptIndex === 2 && baseTier === 'standard') ? 'complex' : baseTier;
+    const reworkProvider = ctx.providers[reworkTier];
+    mergeStageStats(state, 'quality_rework', {
+      inputTokens: newResult.usage?.inputTokens ?? 0,
+      outputTokens: newResult.usage?.outputTokens ?? 0,
+      cachedReadTokens: newResult.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
+      turnCount: newResult.turns ?? 0,
+      toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
+      costUSD: newResult.cost?.totalCostUSD ?? null,
+      durationMs: newResult.durationMs ?? null,
+      filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
+      filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,
+    }, {
+      tier: reworkTier,
+      model: (reworkProvider?.config as { model?: string } | undefined)?.model ?? null,
+    });
   };
 }
 

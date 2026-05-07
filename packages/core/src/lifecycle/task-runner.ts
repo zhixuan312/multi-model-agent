@@ -20,6 +20,7 @@ import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import { mergeStageStats } from './merge-stage-stats.js';
 export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -297,6 +298,23 @@ export async function runTaskViaDispatcher(
           ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
         } as unknown as RunResult;
         state.lastRunResult = enrichedResult;
+        // Record the implementer's per-stage cost so emit_task_terminal +
+        // wire task.completed include it in the totals + per-stage breakdown.
+        mergeStageStats(state, 'implementing', {
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
+          cachedReadTokens: result.usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
+          turnCount: result.turns ?? 0,
+          toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+          costUSD: result.cost?.totalCostUSD ?? null,
+          durationMs: result.durationMs ?? null,
+          filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
+          filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
+        }, {
+          tier: ctx.assignedTier,
+          model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+        });
         if (result.status !== 'ok') {
           state.terminal = true;
         }

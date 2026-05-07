@@ -13,6 +13,7 @@ import {
 import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 import type { VerifyStageResult } from './verify-stage.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 const exec = promisify(execFile);
 
@@ -120,4 +121,18 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     state.diffReviewVerdict = 'error';
     state.terminal = true;
   }
+  // Record diff_review cost so wire telemetry sees it.
+  const reviewerProvider = ctx.providers[reviewerTier];
+  mergeStageStats(state, 'diff_review', {
+    inputTokens: result.cost?.inputTokens ?? 0,
+    outputTokens: result.cost?.outputTokens ?? 0,
+    turnCount: result.cost?.turnCount ?? 0,
+    toolCallCount: result.cost?.toolCallCount ?? 0,
+    costUSD: result.cost?.costUSD ?? null,
+    durationMs: null,
+  }, {
+    tier: reviewerTier,
+    model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+    verdict: state.diffReviewVerdict,
+  });
 }

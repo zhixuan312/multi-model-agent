@@ -65,8 +65,75 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     return;
   }
   const last = state.lastRunResult as RunResult | undefined;
-  const usage = last?.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
-  const stages = JSON.stringify({});
+
+  // Sum tokens / counts across every recorded stage so the local task_completed
+  // event carries the FULL cost (implementer + reviewer + annotator + rework
+  // + diff). Previously this read last.usage directly which only carried the
+  // implementer tokens — reviewer / annotator costs were dropped.
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedReadTokens = 0;
+  let cachedNonReadTokens = 0;
+  let totalCostUSD: number | null = null;
+  let toolCallsTotal = 0;
+  let turnsTotal = 0;
+  let filesReadTotal = 0;
+  let filesWrittenTotal = 0;
+  const ss = (last as { stageStats?: Record<string, Record<string, unknown>> } | undefined)?.stageStats;
+  if (ss) {
+    for (const stage of Object.values(ss)) {
+      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
+      inputTokens += (stage['inputTokens'] as number | null | undefined) ?? 0;
+      outputTokens += (stage['outputTokens'] as number | null | undefined) ?? 0;
+      cachedReadTokens += (stage['cachedReadTokens'] as number | null | undefined) ?? 0;
+      cachedNonReadTokens += (stage['cachedNonReadTokens'] as number | null | undefined) ?? 0;
+      toolCallsTotal += (stage['toolCallCount'] as number | null | undefined) ?? 0;
+      turnsTotal += (stage['turnCount'] as number | null | undefined) ?? 0;
+      filesReadTotal += (stage['filesReadCount'] as number | null | undefined) ?? 0;
+      filesWrittenTotal += (stage['filesWrittenCount'] as number | null | undefined) ?? 0;
+      const stageCost = stage['costUSD'] as number | null | undefined;
+      if (stageCost !== null && stageCost !== undefined) {
+        totalCostUSD = (totalCostUSD ?? 0) + stageCost;
+      }
+    }
+  }
+  // Fallback to last.usage when stageStats wasn't populated (legacy paths).
+  if (inputTokens === 0 && outputTokens === 0 && last?.usage) {
+    inputTokens = last.usage.inputTokens ?? 0;
+    outputTokens = last.usage.outputTokens ?? 0;
+    cachedReadTokens = last.usage.cachedReadTokens ?? 0;
+    cachedNonReadTokens = last.usage.cachedNonReadTokens ?? 0;
+  }
+  if (turnsTotal === 0) turnsTotal = last?.turns ?? 0;
+  if (toolCallsTotal === 0) toolCallsTotal = Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0;
+  if (filesReadTotal === 0) filesReadTotal = Array.isArray(last?.filesRead) ? last!.filesRead.length : 0;
+  if (filesWrittenTotal === 0) filesWrittenTotal = Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0;
+
+  // Emit a per-stage map so consumers see the breakdown without unpacking
+  // RunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
+  // turnCount, toolCallCount, durationMs, tier, model, verdict? }.
+  const stagesMap: Record<string, Record<string, unknown>> = {};
+  if (ss) {
+    for (const [name, stage] of Object.entries(ss)) {
+      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
+      stagesMap[name] = {
+        inputTokens: stage['inputTokens'] ?? 0,
+        outputTokens: stage['outputTokens'] ?? 0,
+        cachedReadTokens: stage['cachedReadTokens'] ?? 0,
+        cachedNonReadTokens: stage['cachedNonReadTokens'] ?? 0,
+        costUSD: stage['costUSD'] ?? null,
+        turnCount: stage['turnCount'] ?? 0,
+        toolCallCount: stage['toolCallCount'] ?? 0,
+        durationMs: stage['durationMs'] ?? null,
+        agentTier: stage['agentTier'] ?? null,
+        model: stage['model'] ?? null,
+        ...(stage['verdict'] !== undefined && { verdict: stage['verdict'] }),
+        ...(stage['roundsUsed'] !== undefined && { roundsUsed: stage['roundsUsed'] }),
+      };
+    }
+  }
+  const stages = JSON.stringify(stagesMap);
+
   bus.emit({
     event: 'task_completed',
     ts: new Date().toISOString(),
@@ -75,16 +142,16 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     route: state.route,
     status: last?.status ?? 'error',
     workerStatus: last?.workerStatus ?? null,
-    turns: last?.turns ?? 0,
+    turns: turnsTotal,
     durationMs: last?.durationMs ?? null,
-    filesRead: Array.isArray(last?.filesRead) ? last!.filesRead.length : 0,
-    filesWritten: Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0,
-    toolCalls: Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0,
-    inputTokens: usage.inputTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    cachedReadTokens: usage.cachedReadTokens ?? 0,
-    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
-    costUSD: null,
+    filesRead: filesReadTotal,
+    filesWritten: filesWrittenTotal,
+    toolCalls: toolCallsTotal,
+    inputTokens,
+    outputTokens,
+    cachedReadTokens,
+    cachedNonReadTokens,
+    costUSD: totalCostUSD,
     taskMaxIdleMs: null,
     stallTriggered: false,
     stages,
