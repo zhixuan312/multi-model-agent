@@ -85,7 +85,7 @@
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "reportSchema.parse failed for debug"
   },
   "error": {
     "kind": "not_applicable",
