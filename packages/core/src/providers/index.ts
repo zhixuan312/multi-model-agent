@@ -8,6 +8,7 @@ export * from './openai-chat-adapter.js';
 export * from './openai-responses-adapter.js';
 export * from './supervisor.js';
 export * from './supervision.js';
+export * from './stall-detector.js';
 export * from './scratchpad-salvager.js';
 export * from './text-scratchpad.js';
 export * from './tool-definitions.js';

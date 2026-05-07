@@ -12,7 +12,7 @@ import type {
   TerminationReason,
 } from '../providers/runner-types.js';
 import { retryableFor } from '../error-codes.js';
-import { hasCompletedWork, extractToolName } from '../providers/supervision.js';
+import { hasCompletedWork, extractToolName } from '../providers/stall-detector.js';
 
 function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';
