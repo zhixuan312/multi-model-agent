@@ -23,6 +23,7 @@ export class RunnerShell {
       ...(input.batchId !== undefined && { batchId: input.batchId }),
       ...(input.tier !== undefined && { tier: input.tier }),
       ...(input.model !== undefined && { model: input.model }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
       providerType: this.adapter.providerType,
     };
 

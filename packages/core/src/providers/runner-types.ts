@@ -123,6 +123,9 @@ export interface RunOptions {
   batchId?: string
   /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
   tier?: string
+  /** Lifecycle stage label (e.g. `'Implementing'`, `'Spec review'`). Forwarded
+   *  to the runner-shell so its emitted events carry the current stage. */
+  stageLabel?: string
 }
 
 /** Runtime dependencies for `runTasks`. */

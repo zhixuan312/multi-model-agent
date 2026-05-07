@@ -110,6 +110,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         ...(options.bus && { bus: options.bus }),
         ...(options.batchId !== undefined && { batchId: options.batchId }),
         ...(options.tier !== undefined && { tier: options.tier }),
+        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
         model: providerConfig.model,
       });
 

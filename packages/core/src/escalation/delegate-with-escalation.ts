@@ -58,6 +58,11 @@ export interface DelegateOptions {
    * carry the same `batch=...` field as the HTTP-handler breadcrumbs.
    */
   batchId?: string;
+  /**
+   * Lifecycle stage label forwarded to RunInput.stageLabel so the running-
+   * headline polling response shows the current stage (e.g. 'Implementing').
+   */
+  stageLabel?: string;
 }
 
 const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'provider_transport_failure']);
@@ -168,6 +173,7 @@ export async function delegateWithEscalation(
         ...(options.bus && { bus: options.bus }),
         ...(options.batchId !== undefined && { batchId: options.batchId }),
         ...(options.assignedTier !== undefined && { tier: options.assignedTier }),
+        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
       });
 
       const maxRetries = maxRetriesForStatus(result.status);

@@ -23,6 +23,10 @@ export interface RunInput {
   tier?: string;
   /** Provider model id included in emitted events. */
   model?: string;
+  /** Lifecycle stage label (e.g. 'Implementing', 'Spec review'). Surfaced
+   *  on the running-headline polling response so the main agent's poll
+   *  loop shows which lifecycle stage is currently active. */
+  stageLabel?: string;
 }
 
 export interface RunResult {
