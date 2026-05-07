@@ -6,6 +6,18 @@ import type { ToolCategory } from '../escalation/escalation-policy.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 import { ATTEMPT_BUDGETS } from '../escalation/escalation-policy.js';
 
+// Note on register-context-block (assist-tier sync state op):
+// The dispatcher exposes a `contextBlockHandler` constructor parameter so
+// the route can short-circuit the StagePlan with a closure that performs
+// synchronous block registration. The production HTTP server today wires
+// /register-context-block directly to `buildCreateContextBlockHandler` (in
+// server/src/http/handlers/control/context-blocks.ts) so that bypass branch
+// is dead in production but alive in `tests/per-tool/register-context-block.test.ts`,
+// which exercises the dispatcher contract directly. v4.0 spec
+// (vertical_design.md §9) describes a minimal StagePlan for this route
+// (ingress + parse_brief + register_to_block_store + emit_task_terminal +
+// cleanup); full unification is a deliberate follow-up.
+
 export interface DispatchInput {
   route: string;
   toolCategory: ToolCategory;
@@ -54,10 +66,7 @@ export class LifecycleDispatcher {
   private handlers: Record<string, StageHandler>;
 
   async dispatch(input: DispatchInput): Promise<DispatchOutput> {
-    if (input.route === 'register-context-block') {
-      if (!this.contextBlockHandler) {
-        throw new Error('LifecycleDispatcher: no contextBlockHandler registered for register-context-block');
-      }
+    if (input.route === 'register-context-block' && this.contextBlockHandler) {
       return this.contextBlockHandler(input.rawRequest);
     }
     try {
