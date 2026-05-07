@@ -2,7 +2,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
-import { runSpecReview, type SpecReviewResult, type SpecReviewOrSkipped } from '../../review/spec-reviewer.js';
+import type { ReviewerCallResult, ReviewRoute } from '../../review/reviewer-engine.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import {
   runWithFallback,
@@ -11,7 +11,8 @@ import {
   makeSyntheticRunResult,
   type UnavailableMap,
 } from '../../escalation/fallback.js';
-import { makeSkippedReviewResult } from '../../review/skipped-result.js';
+import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
+import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 
 /**
  * Spec-chain handlers (#45 Step 4a).
@@ -52,12 +53,10 @@ interface ReviewRoundInput {
   round: 1 | 2 | 3;
 }
 
-async function runSpecReviewRound(input: ReviewRoundInput): Promise<SpecReviewResult | null> {
+async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCallResult | null> {
   const { state, ctx, round } = input;
   const last = state.lastRunResult as RunResult | undefined;
   if (!last) return null;
-  const implReport = last.implementationReport ?? last.structuredReport;
-  if (!implReport) return null;
 
   const baseTier: AgentType = ctx.assignedTier;
   const reviewerTier = pickReviewer({ loop: 'spec', attemptIndex: round - 1, baseTier });
@@ -65,54 +64,36 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<SpecReviewRe
   const task = state.task as TaskSpec | undefined;
   if (!task) return null;
 
-  const packet = {
-    prompt: task.prompt ?? '',
-    scope: task.filePaths ?? [],
-    doneCondition: task.done ?? '',
-  };
-  const fileContents: Record<string, string> = {};
-  const toolCallLog: string[] = last.toolCalls ?? [];
-
   state.specUnavailable ??= new Map() as UnavailableMap;
   const specUnavailable: UnavailableMap = state.specUnavailable;
 
-  // Run the review against the assigned reviewer tier; fall back to the
-  // other tier on transport failure. forbiddenTiers excludes the
-  // implementer's tier so reviewer separation is enforced by the
-  // fallback wrapper.
-  const reviewerCall = await runWithFallback<SpecReviewOrSkipped>({
+  const reviewerCall = await runWithFallback<ReviewerCallResult | SkippedReviewResult>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
     unavailableTiers: specUnavailable,
-    isTransportFailure: (r) => isReviewTransportFailure(r),
+    isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
     forbiddenTiers: [baseTier],
-    call: async (provider) =>
-      runSpecReview(
-        provider,
-        packet,
-        implReport,
-        fileContents,
-        toolCallLog,
-        task.planContext,
-        undefined,
-        ctx.timing.deadlineMs,
-        ctx.stall.controller.signal,
-        undefined,
-        ctx.cwd,
-      ),
+    call: async (provider) => {
+      const shell = makeRunnerShell(provider);
+      const engine = ctx.reviewerEngine;
+      if (!engine) throw new Error('reviewerEngine not configured');
+      return engine.runSpec(shell, {
+        workerOutput: last.output,
+        brief: task.prompt ?? '',
+        cwd: ctx.cwd,
+        route: (state.route ?? ctx.route) as ReviewRoute,
+        abortSignal: ctx.stall.controller.signal,
+        deadlineMs: ctx.timing.deadlineMs,
+      });
+    },
   });
 
-  if (reviewerCall.bothUnavailable) {
-    // Skipped result — handler treats this as 'skipped' verdict downstream.
-    return null;
-  }
+  if (reviewerCall.bothUnavailable) return null;
   const out = reviewerCall.result;
-  // SpecReviewOrSkipped includes SkippedReviewResult; if a 'skipped' fell
-  // through, surface as null so caller maps to skipped verdict.
-  if (!('findings' in out)) return null;
-  return out as SpecReviewResult;
+  if ('status' in out && out.status === 'skipped') return null;
+  return out as ReviewerCallResult;
 }
 
 async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null> {
@@ -171,13 +152,7 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
     if (!ctx) return; // defensive no-op
     const result = await runSpecReviewRound({ state, ctx, round });
     if (!result) return;
-    if (result.status === 'approved') {
-      state[slot] = 'approved';
-    } else if (result.status === 'changes_required') {
-      state[slot] = 'changes_required';
-    } else {
-      state[slot] = 'error';
-    }
+    state[slot] = result.verdict;
   };
 }
 
