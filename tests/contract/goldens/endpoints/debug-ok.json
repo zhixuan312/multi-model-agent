@@ -31,11 +31,11 @@
       "directoriesListed": [],
       "workerStatus": "review_loop_capped",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "incomplete",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "review_loop_capped",
         "wasPromoted": false
       },
       "implementationReport": {

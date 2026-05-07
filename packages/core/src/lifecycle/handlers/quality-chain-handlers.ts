@@ -242,7 +242,11 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
       }
       return;
     }
-    state.lastRunResult = newResult;
+    // Preserve stageStats when replacing lastRunResult — see spec-chain-handlers.
+    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
+    state.lastRunResult = priorStageStats
+      ? { ...newResult, stageStats: priorStageStats }
+      : newResult;
     // Record rework cost. Quality rework_2 (attemptIndex 2) escalates impl
     // from base tier to the other tier; rework_1 stays on base.
     const baseTier: AgentType = ctx.assignedTier;

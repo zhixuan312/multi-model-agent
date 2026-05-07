@@ -191,18 +191,39 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       // spec_chain_passed=false. Mutate state.lastRunResult so emit_task_terminal
       // (which reads lastRunResult.status directly) picks up the corrected
       // shape.
-      if (state.specReworkFailed === true || state.qualityReworkFailed === true) {
+      const chainFailed =
+        state.specReworkFailed === true ||
+        state.qualityReworkFailed === true ||
+        state.specChainPassed === false ||
+        state.qualityChainPassed === false;
+      if (chainFailed) {
         enriched.status = 'incomplete';
         enriched.workerStatus = 'review_loop_capped';
-        enriched.errorCode = 'lifecycle_review_loop_capped';
-      } else if (state.specChainPassed === false) {
-        enriched.status = 'incomplete';
-        enriched.workerStatus = 'review_loop_capped';
-        enriched.errorCode = 'review_spec_rejected_terminal';
-      } else if (state.qualityChainPassed === false) {
-        enriched.status = 'incomplete';
-        enriched.workerStatus = 'review_loop_capped';
-        enriched.errorCode = 'review_quality_findings_unresolved';
+        if (state.specReworkFailed === true || state.qualityReworkFailed === true) {
+          enriched.errorCode = 'lifecycle_review_loop_capped';
+        } else if (state.specChainPassed === false) {
+          enriched.errorCode = 'review_spec_rejected_terminal';
+        } else {
+          enriched.errorCode = 'review_quality_findings_unresolved';
+        }
+        // The wire event derives terminalStatus + workerStatus from
+        // RunResult.terminationReason. The implementer's RunResult has
+        // cause='finished' + workerSelfAssessment='done', which produces
+        // terminalStatus='ok' regardless of our status/errorCode overrides
+        // — yielding the R1 invariant violation (terminalStatus=ok with
+        // non-null errorCode). Override terminationReason so the chain-fail
+        // path produces a clean terminalStatus='incomplete' on the wire.
+        const priorTr = (typeof enriched.terminationReason === 'object' && enriched.terminationReason !== null)
+          ? enriched.terminationReason
+          : undefined;
+        enriched.terminationReason = {
+          cause: 'incomplete',
+          turnsUsed: priorTr?.turnsUsed ?? last.turns ?? 0,
+          hasFileArtifacts: priorTr?.hasFileArtifacts ?? (Array.isArray(last.filesWritten) && last.filesWritten.length > 0),
+          usedShell: priorTr?.usedShell ?? false,
+          workerSelfAssessment: 'review_loop_capped',
+          wasPromoted: false,
+        };
       }
 
       state.responseEnvelope = enriched;

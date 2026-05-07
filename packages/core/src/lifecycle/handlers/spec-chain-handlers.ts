@@ -220,7 +220,15 @@ function makeSpecReworkHandler(round: 1 | 2) {
       }
       return;
     }
-    state.lastRunResult = newResult;
+    // Preserve accumulated stageStats when replacing lastRunResult — the
+    // fresh RunResult from the rework's call has no stageStats of its own,
+    // and overwriting wholesale would drop every prior stage entry
+    // (implementing, spec_review, etc.) so the wire event would only show
+    // the rework's own slice.
+    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
+    state.lastRunResult = priorStageStats
+      ? { ...newResult, stageStats: priorStageStats }
+      : newResult;
     // Record rework cost in spec_rework stage stats so wire telemetry sees
     // it. round=1 → attemptIndex 1, round=2 → attemptIndex 2; rework tier
     // mirrors pickEscalation (impl=standard for attemptIndex 1; impl=complex
