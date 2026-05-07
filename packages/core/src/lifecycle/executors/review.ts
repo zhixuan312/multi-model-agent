@@ -13,6 +13,7 @@ import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 import { expandContextBlocks } from '../../stores/expand-context-blocks.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../../review/default-engines.js';
 
 // --- Ported from packages/mcp/src/tools/review-code.ts ---
 
@@ -127,6 +128,8 @@ async function runSingleReview(
     triggeringSkill: ctx.triggeringSkill,
     bus: ctx.bus,
     qualityReviewPromptBuilder: buildReviewQualityPrompt,
+    reviewerEngine: createDefaultReviewerEngine(),
+    annotatorEngine: createDefaultAnnotatorEngine(),
   });
 }
 

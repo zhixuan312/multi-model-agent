@@ -26,7 +26,7 @@ export function __setCoreTestProviderOverrideMap(map: Map<string, Provider> | nu
   coreTestProviderOverrideMap = map;
 }
 
-function buildAdapter(agentConfig: {
+export function buildAdapter(agentConfig: {
   type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex';
   model: string;
   baseUrl?: string;

@@ -2,7 +2,9 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
-import { runQualityReview, type QualityReviewResult } from '../../review/quality-reviewer.js';
+import { ReviewerEngine, type ReviewerCallResult, type ReviewRoute } from '../../review/reviewer-engine.js';
+import { AnnotatorEngine, type AnnotatorCallResult } from '../../review/annotator-engine.js';
+import type { AnnotatorRoute } from '../../review/annotator-prompt-builder.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import {
   runWithFallback,
@@ -13,6 +15,7 @@ import {
 } from '../../escalation/fallback.js';
 import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 import type { SkippedReviewResult } from '../../review/skipped-result.js';
+import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 
 /**
  * Quality-chain handlers (#45 Step 4b).
@@ -44,7 +47,7 @@ interface ReviewRoundInput {
   round: 1 | 2 | 3;
 }
 
-async function runQualityReviewRound(input: ReviewRoundInput): Promise<QualityReviewResult | null> {
+async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerCallResult | AnnotatorCallResult | null> {
   const { state, ctx, round } = input;
   const last = state.lastRunResult as RunResult | undefined;
   if (!last) return null;
@@ -57,11 +60,9 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<QualityRe
   const task = state.task as TaskSpec | undefined;
   if (!task) return null;
 
-  const packet = {
-    prompt: task.prompt ?? '',
-    scope: task.filePaths ?? [],
-    doneCondition: task.done ?? '',
-  };
+  const route = (state.route ?? ctx.route) as ReviewRoute;
+  const isArtifactProducing = state.toolCategory === 'artifact_producing';
+
   const fileContents: Record<string, string> = {};
   const toolCallLog: string[] = last.toolCalls ?? [];
   const filesWritten: string[] = last.filesWritten ?? [];
@@ -69,36 +70,48 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<QualityRe
   state.qualityUnavailable ??= new Map() as UnavailableMap;
   const qualityUnavailable: UnavailableMap = state.qualityUnavailable;
 
-  const reviewerCall = await runWithFallback<QualityReviewResult | SkippedReviewResult>({
+  const reviewerCall = await runWithFallback<ReviewerCallResult | AnnotatorCallResult | SkippedReviewResult>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
     unavailableTiers: qualityUnavailable,
-    isTransportFailure: (r) => isReviewTransportFailure(r),
+    isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
     forbiddenTiers: [baseTier],
-    call: async (provider) =>
-      runQualityReview(
-        provider,
-        packet,
-        implReport,
-        fileContents,
-        toolCallLog,
-        filesWritten,
-        undefined,
-        ctx.qualityReviewPromptBuilder,
-        last.output,
-        ctx.timing.deadlineMs,
-        ctx.stall.controller.signal,
-        undefined,
-        ctx.cwd,
-      ),
+    call: async (provider) => {
+      const shell = makeRunnerShell(provider);
+      if (isArtifactProducing) {
+        const engine = ctx.reviewerEngine;
+        if (!engine) throw new Error('reviewerEngine not configured');
+        return engine.runQualityAP(shell, {
+          workerOutput: last.output,
+          brief: task.prompt ?? '',
+          cwd: ctx.cwd,
+          route,
+          fileContents,
+          toolCallLog,
+          filesWritten,
+          abortSignal: ctx.stall.controller.signal,
+          deadlineMs: ctx.timing.deadlineMs,
+        });
+      }
+      const annotator = ctx.annotatorEngine;
+      if (!annotator) throw new Error('annotatorEngine not configured');
+      return annotator.annotate(shell, {
+        workerOutput: last.output,
+        brief: task.prompt ?? '',
+        cwd: ctx.cwd,
+        route: route as AnnotatorRoute,
+        abortSignal: ctx.stall.controller.signal,
+        deadlineMs: ctx.timing.deadlineMs,
+      });
+    },
   });
 
   if (reviewerCall.bothUnavailable) return null;
   const out = reviewerCall.result;
-  if (!('findings' in out)) return null;
-  return out as QualityReviewResult;
+  if ('status' in out && out.status === 'skipped') return null;
+  return out as ReviewerCallResult | AnnotatorCallResult;
 }
 
 async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, attemptIndex: number): Promise<RunResult | null> {
@@ -146,12 +159,9 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
   return result;
 }
 
-function mapQualityVerdict(status: QualityReviewResult['status']): LifecycleState['qualityReviewRound1Verdict'] {
-  if (status === 'approved') return 'approved';
-  if (status === 'changes_required') return 'changes_required';
-  if (status === 'annotated') return 'annotated';
-  if (status === 'skipped') return 'skipped';
-  return 'error';
+function mapQualityVerdict(result: ReviewerCallResult | AnnotatorCallResult | SkippedReviewResult): LifecycleState['qualityReviewRound1Verdict'] {
+  if ('status' in result && result.status === 'skipped') return 'skipped';
+  return (result as ReviewerCallResult | AnnotatorCallResult).verdict;
 }
 
 function makeQualityReviewHandler(round: 1 | 2 | 3) {
@@ -162,7 +172,7 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
     if (!ctx) return;
     const result = await runQualityReviewRound({ state, ctx, round });
     if (!result) return;
-    state[slot] = mapQualityVerdict(result.status);
+    state[slot] = mapQualityVerdict(result);
   };
 }
 

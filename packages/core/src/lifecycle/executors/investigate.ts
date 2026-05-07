@@ -18,6 +18,7 @@ import { composeInvestigateTerminalHeadline } from '../../reporting/compose-inve
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { buildInvestigateQualityPrompt } from '../../review/quality-only-prompts.js';
+import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../../review/default-engines.js';
 
 export interface InvestigateExecutorInput {
   input: Input;
@@ -70,6 +71,8 @@ export async function executeInvestigate(
       triggeringSkill: ctx.triggeringSkill,
       bus: ctx.bus,
       qualityReviewPromptBuilder: buildInvestigateQualityPrompt,
+      reviewerEngine: createDefaultReviewerEngine(),
+      annotatorEngine: createDefaultAnnotatorEngine(),
     });
   } catch (e) {
     runtimeError = e instanceof Error ? e : new Error(String(e));

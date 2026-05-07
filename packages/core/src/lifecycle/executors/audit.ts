@@ -13,6 +13,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../../review/default-engines.js';
 
 // --- Ported from packages/mcp/src/tools/audit-document.ts ---
 
@@ -165,7 +166,7 @@ export async function executeAudit(
     const startMs = Date.now();
     let results: RunResult[];
     try {
-      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }), qualityReviewPromptBuilder: buildAuditQualityPrompt });
+      results = await runTasks(tasks, config, { runtime, ...(ctx.batchId !== undefined && { batchId: ctx.batchId }), ...(ctx.recordHeartbeat !== undefined && { recordHeartbeat: ctx.recordHeartbeat }), logger: ctx.logger, ...(ctx.recorder !== undefined && { recorder: ctx.recorder }), ...(ctx.route !== undefined && { route: ctx.route }), ...(ctx.client !== undefined && { client: ctx.client }), ...(ctx.triggeringSkill !== undefined && { triggeringSkill: ctx.triggeringSkill }), qualityReviewPromptBuilder: buildAuditQualityPrompt, reviewerEngine: createDefaultReviewerEngine(), annotatorEngine: createDefaultAnnotatorEngine() });
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       results = [{ output: '', status: 'error' as const, usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 }, turns: 0, filesRead: [], filesWritten: [], toolCalls: [], outputIsDiagnostic: false, escalationLog: [], parsedFindings: null, error: msg, errorCode: 'runner_crash', retryable: false, durationMs: 0, structuredError: { code: 'runner_crash' as const, message: msg, where: 'executor:audit' }, workerStatus: 'failed' as const }];
@@ -214,6 +215,8 @@ export async function executeAudit(
       triggeringSkill: ctx.triggeringSkill,
       bus: ctx.bus,
       qualityReviewPromptBuilder: buildAuditQualityPrompt,
+      reviewerEngine: createDefaultReviewerEngine(),
+      annotatorEngine: createDefaultAnnotatorEngine(),
     });
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);

@@ -13,6 +13,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../../review/default-engines.js';
 
 // --- Ported from packages/mcp/src/tools/verify-work.ts ---
 
@@ -153,6 +154,8 @@ export async function executeVerify(
           triggeringSkill: ctx.triggeringSkill,
           bus: ctx.bus,
           qualityReviewPromptBuilder: buildVerifyQualityPrompt,
+          reviewerEngine: createDefaultReviewerEngine(),
+          annotatorEngine: createDefaultAnnotatorEngine(),
         }),
       ));
     } catch (e) {
@@ -203,6 +206,8 @@ export async function executeVerify(
       triggeringSkill: ctx.triggeringSkill,
       bus: ctx.bus,
       qualityReviewPromptBuilder: buildVerifyQualityPrompt,
+      reviewerEngine: createDefaultReviewerEngine(),
+      annotatorEngine: createDefaultAnnotatorEngine(),
     });
     results = [result];
   } catch (e) {
