@@ -54,9 +54,6 @@ export async function executeTask<Input, Brief, Report>(
   // reconstruct original tasks without re-invoking the brief slot.
   if (ctx.batchId && ctx.projectContext?.batchCache) {
     ctx.projectContext.batchCache.remember(ctx.batchId, tasks);
-    console.error(`[executeTask DEBUG] stored ${tasks.length} tasks at batchId=${ctx.batchId}, cache size=${ctx.projectContext.batchCache.size}`);
-  } else {
-    console.error(`[executeTask DEBUG] NOT storing: batchId=${ctx.batchId}, hasPC=${!!ctx.projectContext}, hasBC=${!!ctx.projectContext?.batchCache}`);
   }
 
   // ── Step 4: Dispatch ──

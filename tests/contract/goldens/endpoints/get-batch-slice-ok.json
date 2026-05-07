@@ -1,24 +1,54 @@
 {
-  "headline": "batch failed",
-  "results": {
-    "kind": "not_applicable",
-    "reason": "batch failed"
-  },
+  "headline": "[error] no structured report available",
+  "results": [
+    {
+      "output": "",
+      "status": "error",
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
+      },
+      "turns": 0,
+      "filesRead": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [],
+      "parsedFindings": null,
+      "error": "reviewer output missing ## Summary section",
+      "errorCode": "runner_crash",
+      "retryable": false,
+      "durationMs": "<DETERMINISTIC>",
+      "structuredError": {
+        "code": "runner_crash",
+        "message": "reviewer output missing ## Summary section",
+        "where": "executor:delegate"
+      },
+      "workerStatus": "failed"
+    }
+  ],
   "batchTimings": {
-    "kind": "not_applicable",
-    "reason": "batch failed"
+    "wallClockMs": "<DETERMINISTIC>",
+    "sumOfTaskMs": "<DETERMINISTIC>",
+    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "kind": "not_applicable",
-    "reason": "batch failed"
+    "totalActualCostUSD": 0,
+    "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "batch failed"
+    "reason": "no task output to parse"
   },
   "error": {
-    "code": "runner_crash",
-    "message": "Cannot read properties of undefined (reading 'length')",
-    "stack": "TypeError: Cannot read properties of undefined (reading 'length')\n    at Object.compose (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/reporting/headline-templates/delegate.ts:8:56)\n    at executeTask (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/task-executor.ts:180:44)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runInitialImpl (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/handlers/baseline-handlers.ts:55:20)\n    at LifecycleDriver.run (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-driver.ts:22:7)\n    at LifecycleDispatcher.dispatch (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-dispatcher.ts:57:26)\n    at Object.executor (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/handlers/tools/delegate.ts:49:22)\n    at /Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/async-dispatch.ts:74:24"
-  }
+    "kind": "not_applicable",
+    "reason": "batch succeeded"
+  },
+  "batchId": "<DETERMINISTIC>",
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1
 }

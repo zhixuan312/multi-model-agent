@@ -25,6 +25,7 @@ function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
   return {
     task: { prompt: 'x' } as TaskSpec,
     taskIndex: 0,
+    batchId: 'batch-test-1',
     config: {} as ExecutionContext['config'],
     cwd: os.tmpdir(),
     route: 'delegate',
@@ -124,7 +125,7 @@ describe('emitTaskTerminalHandler', () => {
     expect(state.taskTerminalEmitted).toBe(true);
   });
 
-  it('emits task_done_summary with chain pass slots', () => {
+  it('emits task_completed with chain pass slots', () => {
     const events: Array<Record<string, unknown>> = [];
     const bus = { emit: (e: Record<string, unknown>) => { events.push(e); } } as unknown as ExecutionContext['bus'];
     const state = makeState({
@@ -138,7 +139,7 @@ describe('emitTaskTerminalHandler', () => {
     });
     emitTaskTerminalHandler(state);
     expect(events).toHaveLength(1);
-    expect(events[0].event).toBe('task_done_summary');
+    expect(events[0].event).toBe('task_completed');
     expect(events[0].route).toBe('delegate');
     expect(events[0].workerStatus).toBe('done');
     expect(events[0].specChainPassed).toBe(true);

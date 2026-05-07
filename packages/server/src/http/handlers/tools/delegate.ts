@@ -41,28 +41,17 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        console.error(`[delegate DEBUG] has routeDispatcher: ${!!deps.routeDispatcher}`);
         const callExecutor = () => executeTask(toolConfig, executionCtx, input);
         if (deps.routeDispatcher) {
-          let result;
-          try {
-            result = await deps.routeDispatcher.dispatch({
-              route: 'delegate',
-              toolCategory: 'artifact_producing',
-              rawRequest: input,
-              executor: () => callExecutor(),
-            });
-            console.error(`[delegate DEBUG] dispatch OK, body keys:`, Object.keys(result.body as object || {}));
-          } catch (err) {
-            console.error(`[delegate DEBUG] dispatch ERROR:`, (err as Error).message);
-            throw err;
-          }
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'delegate',
+            toolCategory: 'artifact_producing',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
           return result.body;
         }
-        const direct = await callExecutor();
-        console.error(`[delegate DEBUG] direct body keys:`, Object.keys(direct as object));
-        console.error(`[delegate DEBUG] direct body.batchId:`, (direct as any)?.batchId);
-        return direct;
+        return callExecutor();
       },
     });
 

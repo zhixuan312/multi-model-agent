@@ -4,9 +4,10 @@ import { isNotApplicable } from '../not-applicable.js';
 
 export const auditHeadlineTemplate: HeadlineTemplate = {
   compose({ report, status }) {
-    if (isNotApplicable(report)) return `[${status}] audit completed`;
+    if (!report || isNotApplicable(report)) return `[${status}] audit completed`;
     const r = report as AuditReport;
-    const high = r.findings.filter(f => f.severity === 'high').length;
-    return `[${status}] audit ${r.documentPath}: ${r.findings.length} findings (${high} high)`;
+    const findings = Array.isArray(r.findings) ? r.findings : [];
+    const high = findings.filter(f => f?.severity === 'high').length;
+    return `[${status}] audit ${r.documentPath ?? ''}: ${findings.length} findings (${high} high)`;
   },
 };

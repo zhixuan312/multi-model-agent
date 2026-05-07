@@ -204,6 +204,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     taskIndex: input.taskIndex,
     config,
     cwd,
+    ...(input.batchId !== undefined && { batchId: input.batchId }),
     route: input.route ?? '',
     client: input.client ?? '',
     triggeringSkill: input.triggeringSkill ?? '',

@@ -2,9 +2,10 @@ import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
-import type { TaskSpec } from '../../types.js';
+import type { TaskSpec, RunResult } from '../../types.js';
 import { retryReportSchema } from '../../reporting/report-parser-slots/retry-report.js';
 import { retryHeadlineTemplate } from '../../reporting/headline-templates/retry.js';
+import { notApplicable } from '../../reporting/not-applicable.js';
 
 export function registerRetry(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -54,4 +55,17 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   },
   reportSchema: retryReportSchema,
   headlineTemplate: retryHeadlineTemplate,
+  postProcessEnvelope: (envelope, ctx) => {
+    const results = (Array.isArray(envelope.results) ? envelope.results : []) as RunResult[];
+    const total = results.length;
+    envelope.headline = `retry: ${total}/${total} tasks complete`;
+    envelope.structuredReport = notApplicable('no structured report emitted by this executor');
+    delete envelope.specReviewVerdict;
+    delete envelope.qualityReviewVerdict;
+    delete envelope.roundsUsed;
+    if (ctx?.batchId) {
+      envelope.retryBatchId = ctx.batchId;
+    }
+    return envelope;
+  },
 };

@@ -95,6 +95,6 @@
     "reason": "batch succeeded"
   },
   "batchId": "<DETERMINISTIC>",
-  "retryBatchId": "<DETERMINISTIC>",
-  "wallClockMs": "<DETERMINISTIC>"
+  "wallClockMs": "<DETERMINISTIC>",
+  "retryBatchId": "<DETERMINISTIC>"
 }

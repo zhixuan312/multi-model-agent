@@ -65,11 +65,29 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     return;
   }
   const last = state.lastRunResult as RunResult | undefined;
+  const usage = last?.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
+  const stages = JSON.stringify({});
   bus.emit({
-    event: 'task_done_summary',
+    event: 'task_completed',
     ts: new Date().toISOString(),
+    batchId: ctx.batchId,
+    taskIndex: ctx.taskIndex,
     route: state.route,
-    workerStatus: last?.workerStatus,
+    status: last?.status ?? 'error',
+    workerStatus: last?.workerStatus ?? null,
+    turns: last?.turns ?? 0,
+    durationMs: last?.durationMs ?? null,
+    filesRead: Array.isArray(last?.filesRead) ? last!.filesRead.length : 0,
+    filesWritten: Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0,
+    toolCalls: Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
+    costUSD: null,
+    taskMaxIdleMs: null,
+    stallTriggered: false,
+    stages,
     terminalBlockId: state.terminalBlockId,
     specChainPassed: state.specChainPassed,
     qualityChainPassed: state.qualityChainPassed,

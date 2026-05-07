@@ -23,8 +23,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = retry.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      console.error('[retry debug] body:', JSON.stringify(ctx.body));
-      console.error('[retry debug] parse error:', JSON.stringify(parsed.error.flatten()));
       sendError(res, 400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
