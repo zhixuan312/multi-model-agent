@@ -71,3 +71,27 @@ export function debugSlot(input: DebugInput): DebugBrief[] {
     contextBlockIds: [],
   }];
 }
+
+// ── Generic executor brief slot ──
+
+export interface ToolDebugBrief {
+  problem: string;
+  context?: string;
+  hypothesis?: string;
+  filePaths?: string[];
+  contextBlockIds?: string[];
+}
+
+/**
+ * Compiles the tool input into a single brief for the generic task executor.
+ * Debug always produces exactly 1 task.
+ */
+export function debugBriefSlot(input: {
+  problem: string;
+  context?: string;
+  hypothesis?: string;
+  filePaths?: string[];
+  contextBlockIds?: string[];
+}): ToolDebugBrief[] {
+  return [{ problem: input.problem, context: input.context, hypothesis: input.hypothesis, filePaths: input.filePaths, contextBlockIds: input.contextBlockIds }];
+}

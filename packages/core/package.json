@@ -232,9 +232,9 @@
       "types": "./dist/lifecycle/executors/verify.d.ts",
       "import": "./dist/lifecycle/executors/verify.js"
     },
-    "./lifecycle/executors/debug": {
-      "types": "./dist/lifecycle/executors/debug.d.ts",
-      "import": "./dist/lifecycle/executors/debug.js"
+    "./lifecycle/task-executor": {
+      "types": "./dist/lifecycle/task-executor.d.ts",
+      "import": "./dist/lifecycle/task-executor.js"
     },
     "./lifecycle/executors/execute-plan": {
       "types": "./dist/lifecycle/executors/execute-plan.d.ts",

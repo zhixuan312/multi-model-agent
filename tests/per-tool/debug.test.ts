@@ -188,7 +188,7 @@ describe('debug_task via v4.0 lifecycle', () => {
       status: 'ok',
       taskBrief: 'debug crash',
     });
-    expect(headline).toBe('[ok] debug: off-by-one error in loop');
+    expect(headline).toBe('debug: root cause — off-by-one error in loop');
   });
 
   it('rejects empty problemStatement', async () => {

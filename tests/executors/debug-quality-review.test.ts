@@ -7,11 +7,12 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
   createProvider: (slot: string) => mockCreateProvider(slot),
 }));
 
-// The executor imports runTasks internally, which calls createProvider.
+// The executor imports runTaskViaDispatcher internally, which calls createProvider.
 // We register mock implementations per test.
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeDebug } from '../../packages/core/src/lifecycle/executors/debug.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { toolConfig } from '../../packages/core/src/tools/debug/tool-config.js';
 
 const workerOutput = JSON.stringify({
   findings: [
@@ -82,7 +83,7 @@ describe('executeDebug — quality_only review', () => {
       filePaths: ['src/bug.ts'],
     };
 
-    const result = await executeDebug(ctx, input);
+    const result = await executeTask(toolConfig, ctx, input);
 
     expect(result.specReviewVerdict).toBe('not_applicable');
     expect(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'not_applicable', 'annotated']).toContain(result.qualityReviewVerdict);

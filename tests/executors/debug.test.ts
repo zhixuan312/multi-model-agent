@@ -7,7 +7,8 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
 }));
 
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
-import { executeDebug } from '../../packages/core/src/lifecycle/executors/debug.js';
+import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
+import { toolConfig } from '../../packages/core/src/tools/debug/tool-config.js';
 
 const workerOutput = JSON.stringify({
   findings: [
@@ -75,7 +76,7 @@ async function executeDebugFixture() {
   mockCreateProvider.mockImplementation((slot: string) => makeProvider(slot));
   const ctx = makeCtx();
   const input = { problem: 'null dereference in src/bug.ts' };
-  return executeDebug(ctx, input);
+  return executeTask(toolConfig, ctx, input);
 }
 
 describe('debug wallClockMs', () => {
