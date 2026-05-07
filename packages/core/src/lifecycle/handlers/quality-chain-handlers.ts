@@ -201,7 +201,20 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
     const ctx = state.executionContext;
     if (!ctx) return;
     const newResult = await runQualityRework(state, ctx, attemptIndex);
-    if (!newResult) return;
+    if (!newResult) {
+      // The rework's implementer call did not return an ok RunResult.
+      // Mark the chain failed so the next round's `!s.terminal` gate stops
+      // the cascade and settle_quality_chain records the failure on the
+      // wire envelope. See spec-chain-handlers for the same fix shape.
+      state.qualityReworkFailed = true;
+      state.terminal = true;
+      if (ctx.verbose && typeof ctx.verboseStream === 'function') {
+        ctx.verboseStream(
+          `[mmagent verbose] event=quality_rework_failed ts=${new Date().toISOString()} batch_id=${ctx.batchId ?? ''} task_index=${ctx.taskIndex ?? 0} rework_index=${reworkIndex}\n`,
+        );
+      }
+      return;
+    }
     state.lastRunResult = newResult;
   };
 }

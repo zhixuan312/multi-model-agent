@@ -173,7 +173,22 @@ function makeSpecReworkHandler(round: 1 | 2) {
     const ctx = state.executionContext;
     if (!ctx) return;
     const newResult = await runSpecRework({ state, ctx, round: (round + 1) as 2 | 3 });
-    if (!newResult) return;
+    if (!newResult) {
+      // The rework's implementer call did not return an ok RunResult.
+      // Don't silently fall through to the next review round — that would
+      // re-review the unchanged code and produce the "3 reviews, 0 reworks"
+      // pattern. Mark the chain failed so the next round's `!s.terminal`
+      // gate stops the cascade and settle_spec_chain can record the
+      // failure on the wire envelope.
+      state.specReworkFailed = true;
+      state.terminal = true;
+      if (ctx.verbose && typeof ctx.verboseStream === 'function') {
+        ctx.verboseStream(
+          `[mmagent verbose] event=spec_rework_failed ts=${new Date().toISOString()} batch_id=${ctx.batchId ?? ''} task_index=${ctx.taskIndex ?? 0} round=${round}\n`,
+        );
+      }
+      return;
+    }
     state.lastRunResult = newResult;
   };
 }

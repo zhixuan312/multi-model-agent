@@ -1,9 +1,9 @@
 {
-  "headline": "[ok] audit completed",
+  "headline": "[incomplete] audit completed",
   "results": [
     {
       "output": "needs rework per review",
-      "status": "ok",
+      "status": "incomplete",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
@@ -29,7 +29,7 @@
       ],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
-      "workerStatus": "done",
+      "workerStatus": "review_loop_capped",
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "error",
       "terminationReason": {
@@ -71,7 +71,8 @@
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "errorCode": "review_quality_findings_unresolved"
     }
   ],
   "batchTimings": {
