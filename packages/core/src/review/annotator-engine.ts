@@ -1,6 +1,6 @@
 import type { RunnerShell } from '../providers/runner-shell.js';
 import { AnnotatorPromptBuilder, type AnnotatorRoute } from './annotator-prompt-builder.js';
-import { AnnotatorOutputParser } from './annotator-output-parser.js';
+import { AnnotatorOutputParser, type AnnotatorParseResult } from './annotator-output-parser.js';
 import { annotatorAuditTemplate } from './templates/annotator-audit.js';
 import { annotatorReviewTemplate } from './templates/annotator-review.js';
 import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
@@ -12,11 +12,6 @@ export interface AnnotatorInput {
   brief: string;
   cwd: string;
   route?: AnnotatorRoute;
-}
-
-export interface AnnotatorOutput {
-  verdict: 'annotated' | 'error';
-  annotatedText: string;
 }
 
 const DEFAULT_ANNOTATOR_TEMPLATES = {
@@ -33,7 +28,7 @@ export class AnnotatorEngine {
 
   constructor(private shell: RunnerShell) {}
 
-  async annotate(input: AnnotatorInput): Promise<AnnotatorOutput> {
+  async annotate(input: AnnotatorInput): Promise<AnnotatorParseResult> {
     const route: AnnotatorRoute = input.route ?? 'audit';
     const prompt = this.builder.build(route, {
       workerOutput: input.workerOutput,

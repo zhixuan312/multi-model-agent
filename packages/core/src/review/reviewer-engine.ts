@@ -1,6 +1,6 @@
 import type { RunnerShell } from '../providers/runner-shell.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
-import { ReviewerOutputParser } from './reviewer-output-parser.js';
+import { ReviewerOutputParser, type ReviewerParseResult, type ReviewerDiffParseResult } from './reviewer-output-parser.js';
 
 // Re-exports for callers that previously imported templates and the builder
 // from this module. Spec C11 puts templates in review/templates/ and the
@@ -11,6 +11,7 @@ export { specTemplate } from './templates/spec-review.js';
 export { qualityAPTemplate } from './templates/quality-review-artifact.js';
 export { diffTemplate } from './templates/diff-review.js';
 export { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
+export type { QualityReviewRoute } from './reviewer-prompt-builder.js';
 
 export class ReviewerEngine {
   private parser = new ReviewerOutputParser();
@@ -24,7 +25,7 @@ export class ReviewerEngine {
     workerOutput: string;
     brief: string;
     cwd: string;
-  }): Promise<{ verdict: string; concerns: string[] }> {
+  }): Promise<ReviewerParseResult> {
     const { systemPrompt, userPrompt } = this.builder.buildSpec({
       workerOutput: state.workerOutput,
       brief: state.brief,
@@ -43,7 +44,7 @@ export class ReviewerEngine {
     workerOutput: string;
     brief: string;
     cwd: string;
-  }): Promise<{ verdict: string; concerns: string[] }> {
+  }): Promise<ReviewerParseResult> {
     const { systemPrompt, userPrompt } = this.builder.buildQualityAP({
       workerOutput: state.workerOutput,
       brief: state.brief,
@@ -62,7 +63,7 @@ export class ReviewerEngine {
     workerOutput: string;
     brief: string;
     cwd: string;
-  }): Promise<{ verdict: string }> {
+  }): Promise<ReviewerDiffParseResult> {
     const { systemPrompt, userPrompt } = this.builder.buildDiff({
       workerOutput: state.workerOutput,
       brief: state.brief,

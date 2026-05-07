@@ -1,30 +1,76 @@
-export interface ParsedReviewerVerdict {
-  verdict: string;
+import type { ReviewerVerdict, DiffReviewerVerdict } from './review-types.js';
+
+export interface ReviewerParseResult {
+  verdict: ReviewerVerdict;
   concerns: string[];
 }
 
-export class ReviewerOutputParser {
-  parse(text: string): ParsedReviewerVerdict {
-    const m = text.match(/```json\n([\s\S]+?)\n```/);
-    if (m) {
-      try {
-        const p = JSON.parse(m[1]);
-        return { verdict: p.verdict ?? 'approved', concerns: p.concerns ?? [] };
-      } catch {
-        // fall through to structured fallback
+export interface ReviewerDiffParseResult {
+  verdict: DiffReviewerVerdict;
+  concerns: string[];
+}
+
+function extractSummarySection(text: string): string | null {
+  const match = text.match(/##\s*Summary\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  return match ? match[1].trim() : null;
+}
+
+function extractDeviationsAndUnresolved(text: string): string[] {
+  const concerns: string[] = [];
+
+  const jsonMatch = text.match(/```json\s*\n([\s\S]*?)\n```/i);
+  if (jsonMatch) {
+    try {
+      const parsed = JSON.parse(jsonMatch[1]);
+      if (Array.isArray(parsed.concerns)) {
+        concerns.push(...parsed.concerns);
       }
+    } catch {
+      // fall through to markdown sections
     }
-    const lower = text.toLowerCase();
-    if (/\bchanges_required\b/.test(lower)) return { verdict: 'changes_required', concerns: [] };
-    if (/\bconcerns\b/.test(lower)) return { verdict: 'concerns', concerns: [] };
-    return { verdict: 'approved', concerns: [] };
   }
 
-  parseDiff(text: string): { verdict: 'approved' | 'concerns' | 'changes_required' } {
-    const trimmed = text.trim();
-    if (trimmed === 'APPROVE') return { verdict: 'approved' };
-    if (trimmed.startsWith('CONCERNS:')) return { verdict: 'concerns' };
-    if (trimmed.startsWith('REJECT:')) return { verdict: 'changes_required' };
-    return { verdict: 'concerns' };
+  const devMatch = text.match(/##\s*Deviations from brief\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  if (devMatch) {
+    const lines = devMatch[1].trim().split('\n').filter(l => l.trim().startsWith('-'));
+    concerns.push(...lines.map(l => l.replace(/^-\s*/, '').trim()));
   }
+
+  const unresMatch = text.match(/##\s*Unresolved\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  if (unresMatch) {
+    const lines = unresMatch[1].trim().split('\n').filter(l => l.trim().startsWith('-'));
+    concerns.push(...lines.map(l => l.replace(/^-\s*/, '').trim()));
+  }
+
+  return concerns;
+}
+
+function extractDiffVerdict(text: string): DiffReviewerVerdict | null {
+  const trimmed = text.trim();
+  if (/^APPROVE\b/i.test(trimmed)) return 'approve';
+  if (/^CONCERNS:/i.test(trimmed)) return 'concerns';
+  if (/^REJECT:/i.test(trimmed)) return 'reject';
+  return null;
+}
+
+export class ReviewerOutputParser {
+  parse(text: string): ReviewerParseResult {
+    const summary = extractSummarySection(text);
+    if (!summary) throw new ReviewerParseError('reviewer output missing ## Summary section');
+    const lower = summary.toLowerCase();
+    const verdict: ReviewerVerdict = lower.includes('changes_required') ? 'changes_required' : 'approved';
+    const concerns = extractDeviationsAndUnresolved(text);
+    return { verdict, concerns };
+  }
+
+  parseDiff(text: string): ReviewerDiffParseResult {
+    const verdict = extractDiffVerdict(text);
+    if (!verdict) throw new ReviewerParseError('diff reviewer output missing verdict');
+    const concerns = extractDeviationsAndUnresolved(text);
+    return { verdict, concerns };
+  }
+}
+
+export class ReviewerParseError extends Error {
+  constructor(message: string) { super(message); this.name = 'ReviewerParseError'; }
 }
