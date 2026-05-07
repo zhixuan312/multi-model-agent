@@ -130,7 +130,6 @@ Skills are the surface your AI client sees. Installing them with `mmagent instal
 | Skill | Use when |
 |---|---|
 | `mma-context-blocks` | The same large doc (>~2 KB) will be referenced by 2+ subsequent mma-* calls — register once, pass the ID instead of re-uploading. |
-| `mma-clarifications` | A previous batch's terminal envelope returned a `proposedInterpretation` string — the service is paused waiting for you to confirm or correct its read. |
 | `mma-retry` | A previous batch came back partial — re-run only the failed indices without re-dispatching the whole batch. |
 
 ### Two generic usage samples
