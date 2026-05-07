@@ -6,6 +6,7 @@ import { OpenAIChatAdapter } from './openai-chat-adapter.js';
 import { OpenAIResponsesAdapter } from './openai-responses-adapter.js';
 import { makeToolDefinitions } from './tool-definitions.js';
 import type { RunnerAdapter } from './runner-adapter.js';
+import { getCodexAuth } from '../identity/auth-token-store.js';
 
 let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
@@ -65,12 +66,28 @@ export function buildAdapter(agentConfig: {
         model: agentConfig.model,
         providerType: 'openai-compatible',
       });
-    case 'codex':
+    case 'codex': {
+      // Prefer ChatGPT/Codex OAuth (~/.codex/auth.json) — this is how
+      // users who logged in via `codex` CLI authenticate. Without it, the
+      // request hits api.openai.com with a placeholder key and 401s. If
+      // OAuth is missing, fall back to whatever apiKey the user supplied
+      // (so the codex type can also be pointed at api.openai.com with a
+      // real key, or any other OpenAI-Responses-compatible endpoint).
+      const oauth = getCodexAuth();
+      if (oauth && !apiKey && !agentConfig.baseUrl) {
+        return new OpenAIResponsesAdapter({
+          apiKey: oauth.accessToken,
+          baseURL: 'https://chatgpt.com/backend-api/codex',
+          model: agentConfig.model,
+          defaultHeaders: { 'chatgpt-account-id': oauth.accountId },
+        });
+      }
       return new OpenAIResponsesAdapter({
         apiKey: apiKey || 'not-needed',
         baseURL: agentConfig.baseUrl,
         model: agentConfig.model,
       });
+    }
   }
 }
 

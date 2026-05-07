@@ -6,8 +6,12 @@ export class OpenAIResponsesAdapter implements RunnerAdapter {
   private client: OpenAI;
   private model: string;
 
-  constructor(opts: { apiKey: string; baseURL?: string; model: string }) {
-    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+  constructor(opts: { apiKey: string; baseURL?: string; model: string; defaultHeaders?: Record<string, string> }) {
+    this.client = new OpenAI({
+      apiKey: opts.apiKey,
+      baseURL: opts.baseURL,
+      ...(opts.defaultHeaders && { defaultHeaders: opts.defaultHeaders }),
+    });
     this.model = opts.model;
   }
 
