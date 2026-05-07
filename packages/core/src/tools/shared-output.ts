@@ -1,3 +1,8 @@
+// Schema infrastructure shared by all 8 per-tool schemas under tools/<tool>/schema.ts.
+// `buildOutputEnvelopeSchema` is the single source of truth for the terminal-envelope
+// shape every tool returns. Lives in tools/ (not reporting/) because it is part of the
+// per-tool input/output contract surface — any change here changes every tool's wire
+// schema in lockstep.
 import { z } from 'zod';
 import { notApplicableSchema } from '../reporting/not-applicable.js';
 

@@ -75,7 +75,6 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    forbiddenTiers: [baseTier],
     call: async (provider) => {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;

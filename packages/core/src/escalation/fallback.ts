@@ -13,7 +13,6 @@ export async function runWithFallback<T>(
   const { assigned, providerFor, unavailableTiers, isTransportFailure, makeSyntheticFailure, call } = input;
   const getStatus = input.getStatus ?? (() => undefined);
   const forbidden = input.forbiddenIdentities ?? [];
-  const forbiddenTiers = input.forbiddenTiers ?? [];
 
   // Returns { skip: true } when the tier should be skipped due to identity separation.
   // providerFor throws/returns undefined → { skip: false }; canonicalIdentity throws → { skip: true } (fail-closed).
@@ -38,13 +37,6 @@ export async function runWithFallback<T>(
     try { return canonicalIdentity(p.config); } catch { return null; }
   };
 
-  // Returns { skip: true } when the tier itself is forbidden via forbiddenTiers.
-  const checkTierSeparation = (tier: AgentType): { skip: boolean } => {
-    if (forbiddenTiers.length === 0) return { skip: false };
-    if (forbiddenTiers.includes(tier)) return { skip: true };
-    return { skip: false };
-  };
-
   const assignedIdentity = resolveProviderIdentity(assigned) ?? undefined;
 
   // Resolve assigned tier (sticky check first, then not-configured)
@@ -53,7 +45,6 @@ export async function runWithFallback<T>(
   let fallbackReason: FallbackReason | undefined;
   let assignedUnavailableReason: FallbackReason | undefined;
   let skippedDueToSeparation = false;
-  let skippedDueToTierSeparation = false;
   let usedIdentity: CanonicalIdentity | undefined = assignedIdentity;
 
   if (unavailableTiers.has(assigned)) {
@@ -73,13 +64,6 @@ export async function runWithFallback<T>(
         fallbackReason = 'not_configured';
       } else if (sep.identity) {
         usedIdentity = sep.identity;
-      }
-      if (!sep.skip && fallbackReason === undefined) {
-        const tierSep = checkTierSeparation(assigned);
-        if (tierSep.skip) {
-          skippedDueToTierSeparation = true;
-          fallbackReason = 'reviewer_separation_unsatisfiable';
-        }
       }
     }
   }
@@ -104,20 +88,13 @@ export async function runWithFallback<T>(
         } else if (altSep.identity) {
           usedIdentity = altSep.identity;
         }
-        if (!altSep.skip && altUnavailableReason === undefined) {
-          const altTierSep = checkTierSeparation(alt);
-          if (altTierSep.skip) {
-            skippedDueToTierSeparation = true;
-            altUnavailableReason = 'reviewer_separation_unsatisfiable';
-          }
-        }
       }
     }
     if (altUnavailableReason !== undefined) {
-      // Both unavailable up-front. If separation was the blocking reason for
-      // either tier, surface it as the unavailableReason so callers like
+      // Both unavailable up-front. If separation was the blocking reason,
+      // surface it as the unavailableReason so callers like
       // adaptForAllTiersUnavailable can map to the correct errorCode.
-      if (skippedDueToSeparation || skippedDueToTierSeparation) {
+      if (skippedDueToSeparation) {
         return {
           result: makeSyntheticFailure(assigned),
           usedTier: 'none',
@@ -125,8 +102,8 @@ export async function runWithFallback<T>(
           bothUnavailable: true,
           fallbackReason,
           assignedUnavailableReason,
-          unavailableReason: skippedDueToTierSeparation ? 'reviewer_separation_unsatisfiable' : altUnavailableReason,
-          fallbackSeparationRespected: skippedDueToSeparation || undefined,
+          unavailableReason: altUnavailableReason,
+          fallbackSeparationRespected: true,
           assignedIdentity,
           usedIdentity: undefined,
           salvageResult: null,
@@ -286,13 +263,6 @@ export async function runWithFallback<T>(
         altUnavailableReason = 'not_configured';
       } else if (altSep.identity) {
         usedIdentity = altSep.identity;
-      }
-      if (!altSep.skip && altUnavailableReason === undefined) {
-        const altTierSep = checkTierSeparation(altOfUsed);
-        if (altTierSep.skip) {
-          skippedDueToTierSeparation = true;
-          altUnavailableReason = 'reviewer_separation_unsatisfiable';
-        }
       }
     }
   }

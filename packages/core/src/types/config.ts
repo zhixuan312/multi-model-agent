@@ -24,7 +24,7 @@ export interface FallbackOverride {
   attempt: number;
   assigned: AgentType;
   used: AgentType | 'none';
-  reason: 'transport_failure' | 'not_configured' | 'reviewer_separation_unsatisfiable';
+  reason: 'transport_failure' | 'not_configured';
   triggeringStatus?: RunStatus;
   bothUnavailable: boolean;
 }

@@ -8,7 +8,7 @@ export const TRANSPORT_FAILURES: ReadonlySet<RunStatus> = new Set([
   'timeout',
 ]);
 
-export type FallbackReason = 'transport_failure' | 'not_configured' | 'reviewer_separation_unsatisfiable';
+export type FallbackReason = 'transport_failure' | 'not_configured';
 export type UnavailableMap = Map<AgentType, FallbackReason>;
 
 /** First-write-wins. Preserves root cause across the loop. */
@@ -36,13 +36,6 @@ export interface RunWithFallbackInput<T> {
    *  provider, the candidate is also skipped (fail-closed). Provider construction
    *  failures (providerFor throws/returns undefined) follow the existing unavailable path. */
   forbiddenIdentities?: CanonicalIdentity[];
-
-  /** Tier(s) to exclude from candidate selection. When a candidate's tier
-   *  matches an entry in this set, the candidate is skipped with
-   *  `unavailableReason: 'reviewer_separation_unsatisfiable'`. This check
-   *  runs after `forbiddenIdentities` and gates separation by tier rather
-   *  than by model family — same-model/different-tier is allowed. */
-  forbiddenTiers?: AgentType[];
 }
 
 export interface RunWithFallbackResult<T> {

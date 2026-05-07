@@ -5,9 +5,9 @@ import type { AgentType } from '../types.js';
  *
  * In v4.0, the tier system is binary — the "other tier" is always exactly
  * one deterministic value. This is the single source of truth for tier
- * rotation logic, used by escalation/fallback and eventually by
- * EscalationPolicy.rotateImpl (Phase 3.24) to structurally guarantee
- * reviewer-tier separation without runtime forbiddenTiers checks.
+ * rotation logic. Reviewer-implementer separation is guaranteed
+ * structurally by the policy tables in `escalation/policy.ts` (each row
+ * pins impl ≠ reviewer); there are no runtime tier-exclusion checks.
  */
 export function otherTier(t: AgentType): AgentType {
   return t === 'standard' ? 'complex' : 'standard';

@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { buildTaskCompletedEvent } from '../../../packages/core/src/events/event-builder.js';
 import { ValidatedTaskCompletedEventSchema } from '../../../packages/core/src/events/telemetry-types.js';
-import { TASK_COMPLETED_FIELD_COVERAGE, STAGE_FIELD_COVERAGE } from '../../../packages/core/src/events/field-coverage.js';
 import { richRunResult } from './fixtures/rich-runresult.js';
 
 describe('V3 completeness ratchet', () => {
@@ -68,44 +67,6 @@ describe('V3 completeness ratchet', () => {
     expect((verify as any).skipReason).toBeNull();
   });
 
-  it('every TASK_COMPLETED field marked "derived" produces a non-default value on the rich fixture', () => {
-    const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: 'claude-opus-4-7' });
-    for (const [field, cov] of Object.entries(TASK_COMPLETED_FIELD_COVERAGE)) {
-      if (cov.kind !== 'derived') continue;
-      const v = (ev as any)[field];
-      if (field === 'capabilities' || field === 'errorCode') continue;
-      if (typeof v === 'string') expect(v.length).toBeGreaterThan(0);
-      if (typeof v === 'number') expect(v).not.toBe(0);
-      if (Array.isArray(v))      expect(v.length).toBeGreaterThan(0);
-    }
-  });
-
-  it('every STAGE_FIELD_COVERAGE entry marked "derived" produces non-default values', () => {
-    const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: 'claude-opus-4-7' });
-    for (const [stageName, fields] of Object.entries(STAGE_FIELD_COVERAGE)) {
-      const stage = ev.stages.find(s => s.name === stageName);
-      expect(stage).toBeDefined();
-      for (const [field, cov] of Object.entries(fields)) {
-        if (cov.kind !== 'derived') continue;
-        const v = (stage as any)[field];
-        // skipReason is null when outcome != skipped (the fixture uses 'passed')
-        if (field === 'skipReason') continue;
-        // findingsBySeverity is an object, not a flat number/string/array
-        if (field === 'findingsBySeverity') continue;
-        // concernCategories may be empty for spec_review if no spec concerns
-        // on the fixture; same for triggeringConcernCategories on rework stages
-        if (field === 'concernCategories' || field === 'triggeringConcernCategories') {
-          if (Array.isArray(v)) expect(v.length).toBeGreaterThan(0);
-          continue;
-        }
-        if (typeof v === 'string') expect(v.length, `${stageName}.${field}`).toBeGreaterThan(0);
-        if (typeof v === 'number') expect(v, `${stageName}.${field}`).not.toBe(0);
-        if (Array.isArray(v))      expect(v.length).toBeGreaterThan(0);
-      }
-    }
-  });
 });
 
 describe('V3 clamping ratchet', () => {

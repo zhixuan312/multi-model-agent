@@ -22,7 +22,7 @@ export interface TaskEvent { event: string; batchId: string; taskIndex: number; 
 
 export type DiagLoop = 'spec' | 'quality' | 'diff';
 export type DiagRole = 'implementer' | 'specReviewer' | 'qualityReviewer' | 'diffReviewer';
-export type DiagReason = 'transport_failure' | 'not_configured' | 'reviewer_separation_unsatisfiable';
+export type DiagReason = 'transport_failure' | 'not_configured';
 
 export interface EscalationEventParams {
   batchId: string;

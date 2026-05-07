@@ -8,9 +8,9 @@ import { ROUTE_DEFAULTS } from './field-inferer.js';
  * Worker output contract per route.
  *
  * The 5 read-only routes (audit / review / verify / debug / investigate) no
- * longer carry a structured-output contract — the quality reviewer extracts
+ * longer carry a structured-output contract — the AnnotatorEngine extracts
  * findings from the worker's free-form narrative in one pass. See
- * packages/core/src/review/quality-only-prompts.ts.
+ * packages/core/src/review/templates/annotator-{audit,review,verify,debug,investigate}.ts.
  *
  * The artifact route `execute_plan` keeps its narrative contract.
  */

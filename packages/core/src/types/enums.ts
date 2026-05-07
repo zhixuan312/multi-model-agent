@@ -139,4 +139,4 @@ export const DiagRoleEnum = z.enum([
   'implementer', 'specReviewer', 'qualityReviewer', 'diffReviewer',
 ]);
 
-export const DiagReasonEnum = z.enum(['transport_failure', 'not_configured', 'reviewer_separation_unsatisfiable']);
+export const DiagReasonEnum = z.enum(['transport_failure', 'not_configured']);
