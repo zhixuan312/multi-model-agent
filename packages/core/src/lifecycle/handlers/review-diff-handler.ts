@@ -121,6 +121,21 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     state.diffReviewVerdict = 'error';
     state.terminal = true;
   }
+  // Persist diff-reviewer concerns into lastRunResult.concerns so the
+  // wire's findings_* DB columns reflect them on diff_review verdicts
+  // other than 'approve'. Without this, findings counts stay 0 even when
+  // the diff reviewer rejected with explicit concerns.
+  if (Array.isArray(result.concerns) && result.concerns.length > 0) {
+    const last = state.lastRunResult as RunResult | undefined;
+    if (last) {
+      const newConcerns = result.concerns.map(text => ({
+        source: 'diff_review' as const,
+        severity: 'medium' as const,
+        message: text,
+      }));
+      last.concerns = [...(last.concerns ?? []), ...newConcerns];
+    }
+  }
   // Record diff_review cost so wire telemetry sees it.
   const reviewerProvider = ctx.providers[reviewerTier];
   mergeStageStats(state, 'diff_review', {

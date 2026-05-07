@@ -176,6 +176,11 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
     const result = await runSpecReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = result.verdict;
+    // Persist concerns into lastRunResult so the wire's per-stage
+    // findingsBySeverity (driven by rr.concerns) reflects what the
+    // reviewer raised — without this, findings_critical/high/medium/low
+    // for spec_review stays 0 even on changes_required outcomes.
+    persistSpecReviewConcerns(state, result);
     // Record per-round cost so wire task.completed sums reviewer tokens
     // and the spec_review stage entry has cumulative roundsUsed across
     // 1..3 rounds. Reviewer tier is derived from policy (round-based).
@@ -197,6 +202,23 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
       verdict: result.verdict,
     });
   };
+}
+
+/** Push reviewer concerns into state.lastRunResult.concerns so the wire
+ *  findingsBySeverity bucket for spec_review counts them. Spec reviewer
+ *  emits free-text concerns (no per-item severity), so we default to
+ *  'medium' — this matches the v3.x defaulting in event-builder. */
+function persistSpecReviewConcerns(state: LifecycleState, result: ReviewerCallResult): void {
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!last) return;
+  const reviewerConcerns = result.concerns;
+  if (!Array.isArray(reviewerConcerns) || reviewerConcerns.length === 0) return;
+  const newConcerns = reviewerConcerns.map(text => ({
+    source: 'spec_review' as const,
+    severity: 'medium' as const,
+    message: text,
+  }));
+  last.concerns = [...(last.concerns ?? []), ...newConcerns];
 }
 
 function makeSpecReworkHandler(round: 1 | 2) {

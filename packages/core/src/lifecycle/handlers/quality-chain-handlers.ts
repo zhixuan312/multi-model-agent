@@ -196,6 +196,14 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
     const result = await runQualityReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = mapQualityVerdict(result);
+    // Persist findings + concerns onto lastRunResult so:
+    //   - the wire event-builder's findingsBySeverity (reads rr.concerns)
+    //     populates findings_critical/high/medium/low DB columns instead
+    //     of zeros even on annotated audit/review/verify/debug/investigate runs;
+    //   - the terminal envelope's annotatedFindings field carries the
+    //     parsed findings the user can read (was empty before — the
+    //     consumer had to fall back to extraSections).
+    persistReviewFindings(state, result);
     // Record per-round cost in quality_review stageStats. Annotator path
     // (read-only routes) and reviewer path both share the same stage slot;
     // the verdict differentiates ('annotated' vs 'approved'/'changes_required').
@@ -218,6 +226,51 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
       verdict: (result as ReviewerCallResult | AnnotatorCallResult).verdict,
     });
   };
+}
+
+/** Push the reviewer/annotator's findings into state.lastRunResult so the
+ *  wire telemetry's per-stage `findingsBySeverity` + the terminal envelope's
+ *  `annotatedFindings` see them. Without this:
+ *    - wire findings_critical/high/medium/low all stay 0 even when the
+ *      annotator returned a populated array;
+ *    - envelope.results[N].annotatedFindings is empty and consumers have
+ *      to mine extraSections to find the data.
+ *  Idempotent across rounds (each round appends; the wire dedupes by
+ *  per-stage filter so no double-counting). */
+function persistReviewFindings(
+  state: LifecycleState,
+  result: ReviewerCallResult | AnnotatorCallResult | SkippedReviewResult,
+): void {
+  if ('status' in result && result.status === 'skipped') return;
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!last) return;
+
+  // Annotator result: structured findings array.
+  const annotatorFindings = (result as AnnotatorCallResult).annotatedFindings;
+  if (Array.isArray(annotatorFindings) && annotatorFindings.length > 0) {
+    const merged = [...(last.annotatedFindings ?? []), ...annotatorFindings];
+    last.annotatedFindings = merged;
+    const newConcerns = annotatorFindings.map(f => ({
+      source: 'quality_review' as const,
+      severity: ((f as { severity?: string }).severity ?? 'medium') as 'critical' | 'high' | 'medium' | 'low',
+      message: f.claim,
+    }));
+    last.concerns = [...(last.concerns ?? []), ...newConcerns];
+    return;
+  }
+
+  // Reviewer result: free-text concerns array (no severity per item).
+  // Default to 'medium' so the wire's findingsBySeverity bucketing isn't
+  // skewed toward 'critical' by accident.
+  const reviewerConcerns = (result as ReviewerCallResult).concerns;
+  if (Array.isArray(reviewerConcerns) && reviewerConcerns.length > 0) {
+    const newConcerns = reviewerConcerns.map(text => ({
+      source: 'quality_review' as const,
+      severity: 'medium' as const,
+      message: text,
+    }));
+    last.concerns = [...(last.concerns ?? []), ...newConcerns];
+  }
 }
 
 function makeQualityReworkHandler(reworkIndex: 1 | 2) {

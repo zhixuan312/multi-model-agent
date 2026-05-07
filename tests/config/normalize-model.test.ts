@@ -1,32 +1,42 @@
 import { describe, it, expect } from 'vitest';
 import { extractCanonicalModelName, findModelProfile } from '../../packages/core/src/config/model-profile-registry.js';
 
+// 4.0.3+: extractCanonicalModelName preserves model + version (e.g.
+// `claude-opus-4-7`, not the prefix `claude-opus`). Date-only suffixes
+// (`@YYYY-MM-DD`, `-YYYY-MM-DD`, `-YYYYMMDD`, `-latest`) are stripped.
+// Vendor namespaces (`bedrock.`, `vertex_ai/`, `aws.`, `azure/`, etc.)
+// are stripped. The matched-prefix collapse only happens as a fallback
+// when no profile matches the date-stripped form, in which case we fall
+// through to TRAILING_MARKERS-based stripping (and ultimately 'custom').
 describe('extractCanonicalModelName', () => {
-  // ── Locked V3 spec examples (§4.3) ────────────────────────────────────
-  // Canonical name = matched profile prefix per plan Task 1 step 4.
   it.each([
-    ['us.anthropic.claude-sonnet-4-6-v1:0', 'claude-sonnet'],
-    ['vertex-ai/claude-sonnet-4-6@2024-10-22', 'claude-sonnet'],
+    // wrapper-boundary truncation: ':0' is a deployment-version separator,
+    // '-v1' is a provisioning-version marker. Both stripped.
+    ['us.anthropic.claude-sonnet-4-6-v1:0', 'claude-sonnet-4-6'],
+    ['vertex-ai/claude-sonnet-4-6@2024-10-22', 'claude-sonnet-4-6'],
     ['azure/openai/gpt-5-2025-09-15', 'gpt-5'],
-    ['openrouter/meta-llama/llama-4-instruct', 'llama-4'],
+    ['openrouter/meta-llama/llama-4-instruct', 'llama-4-instruct'],
     ['groq/mixtral-8x7b-instruct-32768', 'custom'],
-    ['bedrock-meta-llama-3-70b-instruct', 'custom'],
-    ['gemini-2.5-pro-preview-05-06', 'gemini-2.5-pro'],
-    ['ollama/dolphin-mixtral', 'dolphin'],
-    ['acme-corp-finetuned-claude', 'custom'],
+    // 4.0.3+ best-effort substring match: bedrock- prefix is stripped,
+    // then llama-3 prefix recognized in the remainder. Telemetry now
+    // attributes this as an llama family run instead of 'custom'.
+    ['bedrock-meta-llama-3-70b-instruct', 'llama-3-70b-instruct'],
+    ['gemini-2.5-pro-preview-05-06', 'gemini-2.5-pro-preview-05-06'],
+    ['ollama/dolphin-mixtral', 'dolphin-mixtral'],
+    // Substring extraction recognizes the trailing 'claude' as a known
+    // profile prefix. Without version info we surface the bare family.
+    ['acme-corp-finetuned-claude', 'claude'],
     ['my-internal-model-v3', 'custom'],
-  ])('normalizes locked V3 example %s to %s', (input, output) => {
+  ])('preserves model+version for %s → %s', (input, output) => {
     expect(extractCanonicalModelName(input)).toBe(output);
   });
 
-  it('preserves registry-backed base variants via Step 2.5 first pass', () => {
-    // deepseek-v4-base has no dedicated profile; Step 2.5 fails,
-    // Step 2 strips -base, Step 3 matches deepseek profile
-    expect(extractCanonicalModelName('deepseek-v4-base')).toBe('deepseek');
+  it('keeps registry-backed base variants in the canonical form (no prefix collapse)', () => {
+    expect(extractCanonicalModelName('deepseek-v4-base')).toBe('deepseek-v4-base');
   });
 
-  it('strips base variant, falls back to parent profile via Step 2→3', () => {
-    expect(extractCanonicalModelName('claude-sonnet-4-6-base')).toBe('claude-sonnet');
+  it('keeps base variant in canonical (no prefix collapse to claude-sonnet)', () => {
+    expect(extractCanonicalModelName('claude-sonnet-4-6-base')).toBe('claude-sonnet-4-6-base');
   });
 
   it.each(['', '   ', 'model with spaces', 'モデル', 'a'.repeat(121)])('maps invalid or non-registry input %j to custom', input => {
@@ -34,33 +44,33 @@ describe('extractCanonicalModelName', () => {
   });
 
   // ── Bedrock prefix variants ──────────────────────────────────────────
-  it('strips bedrock. prefix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('bedrock.claude-haiku-4-5')).toBe('claude-haiku');
+  it('strips bedrock. prefix, preserves model+version', () => {
+    expect(extractCanonicalModelName('bedrock.claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
-  it('strips bedrock/ prefix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('bedrock/claude-sonnet-4-5')).toBe('claude-sonnet');
+  it('strips bedrock/ prefix, preserves model+version', () => {
+    expect(extractCanonicalModelName('bedrock/claude-sonnet-4-5')).toBe('claude-sonnet-4-5');
   });
 
-  it('strips aws. prefix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('aws.claude-opus-4-7')).toBe('claude-opus');
+  it('strips aws. prefix, preserves model+version', () => {
+    expect(extractCanonicalModelName('aws.claude-opus-4-7')).toBe('claude-opus-4-7');
   });
 
-  it('strips anthropic. prefix + version suffix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('anthropic.claude-haiku-4-5-v1:0')).toBe('claude-haiku');
+  it('strips anthropic. prefix + provisioning -v1 + :N boundary', () => {
+    expect(extractCanonicalModelName('anthropic.claude-haiku-4-5-v1:0')).toBe('claude-haiku-4-5');
   });
 
-  it('collapses compound prefix bedrock.anthropic.', () => {
-    expect(extractCanonicalModelName('bedrock.anthropic.claude-haiku-4-5')).toBe('claude-haiku');
+  it('collapses compound prefix bedrock.anthropic., preserves model+version', () => {
+    expect(extractCanonicalModelName('bedrock.anthropic.claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
   // ── Vertex prefix variants ───────────────────────────────────────────
-  it('strips vertex/ prefix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('vertex/claude-haiku-4-5')).toBe('claude-haiku');
+  it('strips vertex/ prefix, preserves model+version', () => {
+    expect(extractCanonicalModelName('vertex/claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
-  it('strips vertex_ai/ prefix, normalizes to canonical', () => {
-    expect(extractCanonicalModelName('vertex_ai/claude-sonnet-4-5')).toBe('claude-sonnet');
+  it('strips vertex_ai/ prefix, preserves model+version', () => {
+    expect(extractCanonicalModelName('vertex_ai/claude-sonnet-4-5')).toBe('claude-sonnet-4-5');
   });
 
   // ── Azure prefix variants ────────────────────────────────────────────
@@ -72,21 +82,34 @@ describe('extractCanonicalModelName', () => {
     expect(extractCanonicalModelName('azure_openai/gpt-5.5')).toBe('gpt-5.5');
   });
 
-  // ── Bare names normalize to matched profile prefix ────────────────────
-  it('normalizes bare claude name to its profile prefix', () => {
-    expect(extractCanonicalModelName('claude-haiku-4-5')).toBe('claude-haiku');
+  // ── Bare names preserve model+version ────────────────────────────────
+  it('preserves bare claude name with full version', () => {
+    expect(extractCanonicalModelName('claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
   it('passes bare gpt name through unchanged', () => {
     expect(extractCanonicalModelName('gpt-5.5')).toBe('gpt-5.5');
   });
 
-  it('normalizes MiniMax-M2.7 to MiniMax-M2 profile prefix', () => {
-    expect(extractCanonicalModelName('MiniMax-M2.7')).toBe('MiniMax-M2');
+  it('preserves MiniMax-M2.7 with full version', () => {
+    expect(extractCanonicalModelName('MiniMax-M2.7')).toBe('MiniMax-M2.7');
   });
 
-  it('passes deepseek-v4-pro through unchanged (its own profile prefix)', () => {
+  it('passes deepseek-v4-pro through unchanged', () => {
     expect(extractCanonicalModelName('deepseek-v4-pro')).toBe('deepseek-v4-pro');
+  });
+
+  // ── Date-suffix stripping ────────────────────────────────────────────
+  it('strips @YYYY-MM-DD release stamp', () => {
+    expect(extractCanonicalModelName('claude-opus-4-1@2025-07-15')).toBe('claude-opus-4-1');
+  });
+
+  it('strips -YYYYMMDD compact date suffix', () => {
+    expect(extractCanonicalModelName('claude-3-opus-20240229')).toBe('claude-3-opus');
+  });
+
+  it('strips -latest sentinel', () => {
+    expect(extractCanonicalModelName('claude-opus-latest')).toBe('claude-opus');
   });
 
   // ── Idempotence ──────────────────────────────────────────────────────
@@ -98,8 +121,24 @@ describe('extractCanonicalModelName', () => {
 
   it('is idempotent for vertex_ai/anthropic.claude-sonnet-4-5-v1:0', () => {
     const once = extractCanonicalModelName('vertex_ai/anthropic.claude-sonnet-4-5-v1:0');
+    expect(once).toBe('claude-sonnet-4-5');
     const twice = extractCanonicalModelName(once);
     expect(twice).toBe(once);
+  });
+
+  // ── Best-effort substring extraction (4.0.3+) ───────────────────────
+  // Some routers/proxies sandwich the canonical id between random tokens.
+  // We do our best to extract the model name when a known prefix appears.
+  it('extracts canonical id from arbitrary wrapper (id sandwiched in random tokens)', () => {
+    expect(extractCanonicalModelName('my_router_42_claude-opus-4-7_xyz')).toBe('claude-opus-4-7');
+  });
+
+  it('extracts canonical id when wrapped with @-version tag', () => {
+    expect(extractCanonicalModelName('proxy:claude-opus-4-7@v3')).toBe('claude-opus-4-7');
+  });
+
+  it('strips trailing-noise word "suffix"', () => {
+    expect(extractCanonicalModelName('claude-sonnet-4-6-suffix')).toBe('claude-sonnet-4-6');
   });
 
   it('is idempotent for bare gpt-5.5', () => {
@@ -110,18 +149,21 @@ describe('extractCanonicalModelName', () => {
 
   // ── Case-insensitivity of prefix ─────────────────────────────────────
   it('matches prefix case-insensitively (BEDROCK.)', () => {
-    expect(extractCanonicalModelName('BEDROCK.claude-haiku-4-5')).toBe('claude-haiku');
+    expect(extractCanonicalModelName('BEDROCK.claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
   it('matches prefix case-insensitively (Vertex/)', () => {
-    expect(extractCanonicalModelName('Vertex/claude-haiku-4-5')).toBe('claude-haiku');
+    expect(extractCanonicalModelName('Vertex/claude-haiku-4-5')).toBe('claude-haiku-4-5');
   });
 
   it('preserves model name case after prefix strip', () => {
-    expect(extractCanonicalModelName('bedrock.MiniMax-M2.7')).toBe('MiniMax-M2');
+    expect(extractCanonicalModelName('bedrock.MiniMax-M2.7')).toBe('MiniMax-M2.7');
   });
 });
 
+// findModelProfile still uses prefix collapse for cost lookup — the
+// canonical name is for wire display, the profile prefix is for rate
+// resolution. Both functions are intentionally distinct concerns.
 describe('findModelProfile with vendor-prefixed names', () => {
   it('matches bedrock.claude-haiku-4-5 to claude-haiku profile', () => {
     const profile = findModelProfile('bedrock.claude-haiku-4-5');

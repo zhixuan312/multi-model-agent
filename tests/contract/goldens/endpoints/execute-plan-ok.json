@@ -110,6 +110,13 @@
           "triggeringConcernCategories": []
         }
       },
+      "concerns": [
+        {
+          "source": "spec_review",
+          "severity": "medium",
+          "message": "reviewer output missing `## Summary` section — defaulting verdict to changes_required"
+        }
+      ],
       "specReviewStatus": "changes_required",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "skipped",
