@@ -22,13 +22,23 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
 
   async turn(input: AdapterTurnInput): Promise<AdapterTurnResult> {
     const messages = this.buildMessages(input);
-    const response = await this.client.messages.create({
+    // Use the streaming endpoint and reduce to a final Message. The
+    // Anthropic SDK rejects non-streaming requests when max_tokens is
+    // high enough that the call could exceed 10 minutes
+    // ("Streaming is required for operations that may take longer than
+    // 10 minutes"). Streaming sidesteps that preflight rejection and
+    // also keeps the connection alive for the actual long calls
+    // reasoning-heavy models like deepseek-v4-pro do. `finalMessage()`
+    // resolves to the same `Message` shape `messages.create()` returned,
+    // so the rest of the adapter is unchanged.
+    const stream = this.client.messages.stream({
       model: this.model,
       system: input.systemPrompt,
       messages,
       tools: this.mapTools(input.toolDefinitions),
       max_tokens: this.maxOutputTokens,
     });
+    const response = await stream.finalMessage();
 
     const usage = {
       inputTokens: response.usage.input_tokens,
