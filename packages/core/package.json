@@ -52,9 +52,9 @@
       "types": "./dist/providers/provider-factory.d.ts",
       "import": "./dist/providers/provider-factory.js"
     },
-    "./lifecycle/dispatch-task": {
-      "types": "./dist/lifecycle/dispatch-task.d.ts",
-      "import": "./dist/lifecycle/dispatch-task.js"
+    "./lifecycle/task-runner": {
+      "types": "./dist/lifecycle/task-runner.d.ts",
+      "import": "./dist/lifecycle/task-runner.js"
     },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",

@@ -71,8 +71,8 @@ export { createProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
 
 // Run tasks
-export { runTasks } from './lifecycle/dispatch-task.js';
-export type { RunTasksOptions } from './lifecycle/dispatch-task.js';
+export { runTasks } from './lifecycle/task-runner.js';
+export type { RunTasksOptions } from './lifecycle/task-runner.js';
 
 // Lifecycle
 export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';

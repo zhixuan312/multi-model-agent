@@ -37,3 +37,21 @@ export { installClaudeCode, uninstallClaudeCode } from './skill-installers/claud
 export { installCodexCli, uninstallCodexCli } from './skill-installers/codex-cli.js';
 export { installCursor, uninstallCursor } from './skill-installers/cursor.js';
 export { installGeminiCli, uninstallGeminiCli } from './skill-installers/gemini-cli.js';
+
+export {
+  type HeaderClientName,
+  clientHeaders,
+  toHeaderClientName,
+  notifySkillInstalled,
+  type MissingSkill,
+  findMissingSkills,
+  findOrphanedSkills,
+  resolveClientInstallDir,
+  UnknownTargetError,
+  writeSkillToClient,
+  removeSkillFromClient,
+  type InstallResult,
+  activeCleanup,
+  doInstall,
+  doUninstall,
+} from './skill-installer-common.js';

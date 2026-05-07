@@ -4,7 +4,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { ExecutorOutput } from './executor-output-types.js';
 import type { TaskSpec, RunResult } from '../types.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
-import { runTaskViaDispatcher } from './dispatch-task.js';
+import { runTaskViaDispatcher } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';

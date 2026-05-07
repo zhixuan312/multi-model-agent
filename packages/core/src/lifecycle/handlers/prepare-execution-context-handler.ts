@@ -13,7 +13,7 @@ import type { TaskSpec } from '../../types.js';
  *
  * Writes to state (only when slots are empty AND request is shaped for it):
  *   - state.task: the first TaskSpec from a delegate-style request payload.
- *     runTasks (in dispatch-task.ts) dispatches one StagePlan per TaskSpec,
+ *     runTasks (in task-runner.ts) dispatches one StagePlan per TaskSpec,
  *     so state.task is the per-dispatch task. This handler surfaces task[0]
  *     as a fallback for downstream handlers that need a TaskSpec.
  */

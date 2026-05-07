@@ -1,7 +1,7 @@
 import { LifecycleDriver, type StageHandler } from './lifecycle-driver.js';
 import type { StagePlan, LifecycleState } from './stage-plan-types.js';
 import { buildStagePlan } from './stage-plan-builder.js';
-import { buildStageHandlers, type RouteExecutor } from './stage-handlers.js';
+import { buildStageHandlers, type RouteExecutor } from './handlers/baseline-handlers.js';
 import type { ToolCategory } from '../escalation/escalation-policy.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 import { ATTEMPT_BUDGETS } from '../escalation/escalation-policy.js';

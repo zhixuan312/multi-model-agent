@@ -154,16 +154,6 @@ export async function runTasks(
 
 export { extractPlanSection } from './plan-extraction.js';
 
-/**
- * #45 Step 7a: per-task dispatcher bridge.
- *
- * Builds an ExecutionContext from runTasks's per-task parameters and runs
- * a fresh StagePlan via LifecycleDispatcher. Returns the RunResult composed
- * by compose_response from state.lastRunResult.
- *
- * This is the per-task entry point that drives the StagePlan handlers
- * (verify, commit, spec/quality/diff chains, terminal).
- */
 export interface DispatchTaskInput {
   task: TaskSpec;
   resolved: ResolvedAgent;
@@ -186,8 +176,6 @@ export interface DispatchTaskInput {
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
-  // Mirrors stage-plan-builder's ToolCategory mapping. Keep this in sync with
-  // server/src/http/handlers/tools/* — they pass the canonical category.
   if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'verify') return 'read_only';
   if (route === 'explore') return 'research';
   if (route === 'register-context-block') return 'assist';
@@ -203,8 +191,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
 
   const providers: Partial<Record<AgentType, Provider>> = {};
   providers[resolved.slot] = resolved.provider;
-  // Best-effort: populate the other tier when configured. Not fatal if missing —
-  // pickEscalation throws at use-site if the unavailable tier is requested.
   try {
     const otherTier: AgentType = resolved.slot === 'standard' ? 'complex' : 'standard';
     const other = resolveAgent(otherTier, config);
@@ -253,9 +239,6 @@ export async function runTaskViaDispatcher(
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
 
-  // ATTEMPT_BUDGETS is consulted by the dispatcher's initial state via
-  // toolCategory; reference it here so the import stays pinned for future
-  // budget-derived logic in handlers.
   void ATTEMPT_BUDGETS[toolCategory];
 
   const out = await dispatcher.dispatch({
@@ -340,9 +323,6 @@ export async function runTaskViaDispatcher(
     },
   });
 
-  // compose_response writes responseEnvelope; for the dispatcher path it's
-  // a RunResult shaped from state.lastRunResult. Fall back to a synthetic
-  // error RunResult if the pipeline didn't produce one.
   const body = out.body;
   if (body && typeof body === 'object' && 'output' in body) {
     return body as RunResult;
