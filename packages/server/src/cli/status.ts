@@ -126,7 +126,7 @@ export async function fetchStatus(deps: StatusDeps): Promise<number> {
   if (body.skillVersion !== undefined) {
     const sv = body.skillVersion ?? 'none';
     const compat = body.skillCompatible === true ? ' (compatible)'
-      : body.skillCompatible === false ? ' (incompatible — run mmagent install-skill to update)'
+      : body.skillCompatible === false ? ' (incompatible — run mmagent sync-skills to reconcile)'
         : '';
     lines.push(`  skill version:  ${sv}${compat}`);
   }
