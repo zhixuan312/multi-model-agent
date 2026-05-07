@@ -1,7 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { executeDelegate } from '../../packages/core/src/lifecycle/executors/delegate.js';
-import { buildExecutionContext } from '../../packages/core/src/lifecycle/executors/execution-context.js';
-import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/lifecycle-context.js';
 import type { ProjectContext } from '../../packages/core/src/stores/project-context-registry.js';
 
 // ---------------------------------------------------------------------------
@@ -18,7 +17,7 @@ function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
     },
   } as unknown as ProjectContext;
 
-  return buildExecutionContext({
+  return {
     projectContext: pc,
     config: {
       agents: {
@@ -36,8 +35,29 @@ function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
     logger: { emit: () => {} } as any,
     contextBlockStore: { register: () => ({ id: 'test-ctx' }), get: () => ({ content: '' }) } as any,
     batchId: 'test-batch',
+    task: { prompt: '' },
+    taskIndex: 0,
+    cwd: '/tmp/test',
+    route: '',
+    client: '',
+    triggeringSkill: '',
+    mainModel: null,
+    assignedTier: 'standard',
+    implementerProvider: undefined,
+    escalationProvider: undefined,
+    providers: {},
+    implementerIdentity: undefined,
+    timing: { startMs: Date.now(), timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },
+    budgets: { maxCostUSD: undefined },
+    stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
+    implementerToolMode: undefined,
+    bus: undefined,
+    heartbeat: undefined,
+    verboseStream: () => {},
+    verbose: false,
+    outputTargets: [],
     ...overrides,
-  });
+  } as ExecutionContext;
 }
 
 const injectDefaults = (ts: any[]) => ts.map((t) => ({ ...t, tools: 'full' as const, timeoutMs: 600_000, cwd: '/tmp/test' }));

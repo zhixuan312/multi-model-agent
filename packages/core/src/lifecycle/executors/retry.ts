@@ -1,5 +1,6 @@
 // packages/core/src/executors/retry.ts
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/retry/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../dispatch-task.js';
@@ -30,8 +31,8 @@ export async function executeRetry(
   input: Input,
   options: RetryOptions,
 ): Promise<RetryOutput> {
-  const { config, projectContext, contextBlockStore } = ctx;
-  const { batchCache } = projectContext;
+  const { config, contextBlockStore } = ctx;
+  const { batchCache } = ctx.projectContext!;
   const { injectDefaults } = options;
   const runTasksImpl = options.runTasksOverride ?? runTasks;
 

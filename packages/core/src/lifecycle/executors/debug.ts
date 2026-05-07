@@ -1,6 +1,7 @@
 // packages/core/src/executors/debug.ts
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/debug/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../dispatch-task.js';
@@ -76,7 +77,7 @@ export async function executeDebug(
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: ctx.projectContext.cwd,
+    cwd: ctx.projectContext!.cwd,
     contextBlockIds: input.contextBlockIds,
     mainModel,
     autoCommit: false,

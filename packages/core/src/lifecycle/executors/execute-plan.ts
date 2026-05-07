@@ -1,6 +1,7 @@
 // packages/core/src/executors/execute-plan.ts
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/execute-plan/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks, extractPlanSection } from '../dispatch-task.js';
@@ -108,7 +109,7 @@ export async function executeExecutePlan(
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: ctx.projectContext.cwd,
+    cwd: ctx.projectContext!.cwd,
     contextBlockIds: input.contextBlockIds,
     mainModel,
     autoCommit: true,

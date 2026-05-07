@@ -1,6 +1,7 @@
 // packages/core/src/executors/review.ts
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/review/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { resolveAgent } from '../../escalation/agent-resolver.js';
@@ -147,7 +148,7 @@ export async function executeReview(
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: ctx.projectContext.cwd,
+    cwd: ctx.projectContext!.cwd,
     contextBlockIds: input.contextBlockIds,
     mainModel,
   };
@@ -173,7 +174,7 @@ export async function executeReview(
     try {
       return expandContextBlocks(task, contextBlockStore) as TaskSpec;
     } catch (e) {
-      ctx.logger.error('expandContextBlocks_failed_review', e);
+      ctx.logger!.error('expandContextBlocks_failed_review', e);
       return task;
     }
   });

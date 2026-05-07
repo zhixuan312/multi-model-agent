@@ -1,5 +1,5 @@
 // packages/core/src/executors/index.ts
-export * from './types.js';
+export type { BatchTimings, BatchProgress, BatchAggregateCost, ExecutorOutput } from '../executor-output-types.js';
 export { executeDelegate } from './delegate.js';
 export { executeAudit } from './audit.js';
 export { executeReview } from './review.js';

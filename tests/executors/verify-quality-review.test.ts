@@ -2,7 +2,7 @@ import { describe, it, expect, vi } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import type { ExecutionContext } from '../../packages/core/src/lifecycle/executors/types.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/lifecycle-context.js';
 import type { MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 
 // Track calls to differentiate implementer vs quality reviewer
@@ -90,13 +90,34 @@ function makeContext(): { ctx: ExecutionContext; cwd: string } {
     defaults: { tools: 'readonly' as const, timeoutMs: 60_000, maxCostUSD: 10, sandboxPolicy: 'cwd-only' as const },
   } as MultiModelConfig;
 
-  const ctx: ExecutionContext = {
+  const ctx = {
     projectContext: { cwd, contextBlockStore: { get: () => undefined, register: () => ({ id: 'cb-1' }) } as any, lastActivityAt: Date.now() } as any,
     config,
     logger: { event: () => {}, emit: () => {}, child: () => ({ event: () => {}, emit: () => {} } as any) } as any,
     contextBlockStore: { get: () => undefined, register: () => ({ id: 'cb-1' }) } as any,
     batchId: 'test-batch-verify',
-  };
+    task: { prompt: '' },
+    taskIndex: 0,
+    cwd,
+    route: 'verify',
+    client: 'test',
+    triggeringSkill: '',
+    mainModel: null,
+    assignedTier: 'complex',
+    implementerProvider: undefined,
+    escalationProvider: undefined,
+    providers: {},
+    implementerIdentity: undefined,
+    timing: { startMs: Date.now(), timeoutMs: 60_000, deadlineMs: Date.now() + 60_000, stallTimeoutMs: 300_000 },
+    budgets: { maxCostUSD: undefined },
+    stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
+    implementerToolMode: undefined,
+    bus: undefined,
+    heartbeat: undefined,
+    verboseStream: () => {},
+    verbose: false,
+    outputTargets: [],
+  } as ExecutionContext;
   return { ctx, cwd };
 }
 

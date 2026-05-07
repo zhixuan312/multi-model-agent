@@ -1,6 +1,7 @@
 // packages/core/src/executors/investigate.ts
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/investigate/schema.js';
 import type { RunResult } from '../../types.js';
 import { runTaskViaDispatcher } from '../dispatch-task.js';
@@ -30,7 +31,7 @@ export async function executeInvestigate(
   args: InvestigateExecutorInput,
 ): Promise<ExecutorOutput> {
   const { config } = ctx;
-  const cwd = ctx.projectContext.cwd;
+  const cwd = ctx.projectContext!.cwd;
 
   const spec = compileInvestigate(
     args.input,

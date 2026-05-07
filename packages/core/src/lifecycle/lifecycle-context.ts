@@ -8,6 +8,8 @@ import type { EventEmitter } from '../events/event-emitter.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
+import type { ProjectContext } from '../stores/project-context-registry.js';
+import type { ContextBlockStore } from '../stores/context-block-tool.js';
 
 /**
  * Spec C10 ExecutionContext — the typed shared state for a per-task run.
@@ -100,4 +102,12 @@ export interface ExecutionContext {
 
   // ── Output target tracking ──
   outputTargets: string[];
+
+  // ── Pre-v4 executor compatibility (Phase B/E will consume these) ──
+  /** Per-project runtime state — used by executor-layer consumers (delegate, etc.). */
+  projectContext?: ProjectContext;
+  /** Context block store — used by executor-layer consumers for intake expansion. */
+  contextBlockStore?: ContextBlockStore;
+  /** BatchId owning this execution — threaded so ActivityTracker can tag ticks. */
+  batchId?: string;
 }

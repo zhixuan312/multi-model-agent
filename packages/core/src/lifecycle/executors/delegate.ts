@@ -1,6 +1,7 @@
 // packages/core/src/executors/delegate.ts
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/delegate/schema.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runTasks } from '../dispatch-task.js';
@@ -38,10 +39,10 @@ export async function executeDelegate(
   input: Input,
   options: DelegateOptions,
 ): Promise<DelegateOutput> {
-  const { config, projectContext, contextBlockStore } = ctx;
+  const { config, contextBlockStore } = ctx;
   const { injectDefaults, onProgress } = options;
   const runTasksImpl = options.runTasksOverride ?? runTasks;
-  const { batchCache } = projectContext;
+  const { batchCache } = ctx.projectContext!;
 
   // Intake pipeline: compile → infer → classify → resolve
   const requestId = randomUUID();

@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext, ExecutorOutput } from './types.js';
+import type { ExecutionContext } from '../lifecycle-context.js';
+import type { ExecutorOutput } from '../executor-output-types.js';
 import type { Input } from '../../tools/explore/schema.js';
 import type { RunResult, MultiModelConfig } from '../../types.js';
 import type { ResearchToolDefinition } from '../../research/types.js';
@@ -115,7 +116,7 @@ export async function executeExplore(
   args: ExploreExecutorInput,
 ): Promise<ExecutorOutput> {
   const { config } = ctx;
-  const cwd = ctx.projectContext.cwd;
+  const cwd = ctx.projectContext!.cwd;
   const batchId = ctx.batchId ?? randomUUID();
 
   const research = config.research;

@@ -3,7 +3,7 @@
 // These mirror the functions in packages/mcp/src/tools/batch-response.ts
 // but live in core to avoid cross-package coupling in executors.
 import type { RunResult } from '../../types.js';
-import type { BatchTimings, BatchAggregateCost } from './types.js';
+import type { BatchTimings, BatchAggregateCost } from '../executor-output-types.js';
 
 export function computeTimings(wallClockMs: number, results: RunResult[]): BatchTimings {
   const sumOfTaskMs = results.reduce((sum, r) => sum + (r.durationMs ?? 0), 0);

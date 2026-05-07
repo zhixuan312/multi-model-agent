@@ -32,7 +32,7 @@ export type {
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,
-} from './lifecycle/executors/types.js';
+} from './lifecycle/executor-output-types.js';
 export type {
   EligibilityFailureCheck,
   EligibilityFailure,
