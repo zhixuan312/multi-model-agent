@@ -1,7 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { boot } from '../fixtures/harness.js';
-import { mockProvider } from '../fixtures/mock-providers.js';
+import { mockProvider, type Stage } from '../fixtures/mock-providers.js';
 import { normalize, type JsonValue } from '../serializer/index.js';
+
+const STAGES: Stage[] = ['ok', 'incomplete', 'max-turns'];
 
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<JsonValue> {
   for (let i = 0; i < 180; i++) {
@@ -16,34 +18,36 @@ async function pollToTerminal(baseUrl: string, token: string, batchId: string): 
 }
 
 describe('contract: POST /explore golden', () => {
-  it('produces the explore-ok envelope', async () => {
-    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
-    try {
-      const dispatch = await fetch(`${h.baseUrl}/explore?cwd=${encodeURIComponent(process.cwd())}`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
-        body: JSON.stringify({
-          currentContext: 'A TypeScript monorepo with core and server packages.',
-          explorationQuestion: 'What patterns appear in the codebase structure?',
-        }),
-      });
-      expect(dispatch.status).toBe(202);
-      const { batchId } = (await dispatch.json()) as { batchId: string };
-      const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
-      const normalized = normalize(terminal);
-      const goldenRel = '../goldens/endpoints/explore-ok.json';
-      if (process.env.CAPTURE_GOLDEN === '1') {
-        const { writeFileSync } = await import('node:fs');
-        const { resolve, dirname } = await import('node:path');
-        const { fileURLToPath } = await import('node:url');
-        const here = dirname(fileURLToPath(import.meta.url));
-        writeFileSync(resolve(here, goldenRel), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
-      } else {
-        const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
-        expect(normalized).toEqual(expected);
+  for (const stage of STAGES) {
+    it(`produces the ${stage} envelope`, async () => {
+      const h = await boot({ provider: mockProvider({ stage }), cwd: process.cwd() });
+      try {
+        const dispatch = await fetch(`${h.baseUrl}/explore?cwd=${encodeURIComponent(process.cwd())}`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+          body: JSON.stringify({
+            currentContext: 'A TypeScript monorepo with core and server packages.',
+            explorationQuestion: 'What patterns appear in the codebase structure?',
+          }),
+        });
+        expect(dispatch.status).toBe(202);
+        const { batchId } = (await dispatch.json()) as { batchId: string };
+        const terminal = await pollToTerminal(h.baseUrl, h.token, batchId);
+        const normalized = normalize(terminal);
+        const goldenRel = `../goldens/endpoints/explore-${stage}.json`;
+        if (process.env.CAPTURE_GOLDEN === '1') {
+          const { writeFileSync } = await import('node:fs');
+          const { resolve, dirname } = await import('node:path');
+          const { fileURLToPath } = await import('node:url');
+          const here = dirname(fileURLToPath(import.meta.url));
+          writeFileSync(resolve(here, goldenRel), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+        } else {
+          const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
+          expect(normalized).toEqual(expected);
+        }
+      } finally {
+        await h.close();
       }
-    } finally {
-      await h.close();
-    }
-  }, 60_000);
+    }, 60_000);
+  }
 });

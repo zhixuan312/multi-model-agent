@@ -22,7 +22,6 @@ describe('ProjectIdleCleanup', () => {
       cwd: '/active',
       contextBlocks: new InMemoryContextBlockStore(),
       batchCache: {} as any,
-      clarifications: {} as any,
       createdAt: now,
       lastActivityAt: now,
       activeSessions: new Set(),

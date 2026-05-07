@@ -78,7 +78,7 @@ const config: MultiModelConfig = {
     bind: '127.0.0.1',
     port: 0,
     auth: { tokenFile: '.token' },
-    limits: { maxBodyBytes: 1, batchTtlMs: 1, idleProjectTimeoutMs: 1, clarificationTimeoutMs: 1, projectCap: 1, maxBatchCacheSize: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 },
+    limits: { maxBodyBytes: 1, batchTtlMs: 1, idleProjectTimeoutMs: 1, projectCap: 1, maxBatchCacheSize: 1, maxContextBlockBytes: 1, maxContextBlocksPerProject: 1, shutdownDrainMs: 1 },
     autoUpdateSkills: false,
   },
 };

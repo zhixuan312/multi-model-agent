@@ -55,7 +55,10 @@ const CWD_REQUIRED_PATHS = new Set([
 
 /**
  * Registers tool handlers (POST /delegate, /audit, /review, /verify, /debug, /execute-plan, /retry).
- * Imported dynamically to avoid circular-dependency issues and to keep startServer lean.
+ * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
+ * iterates `registry.list()` filtered to `surface: 'tool'` entries to drive
+ * route registration. The registry is the canonical source for tool surface
+ * metadata (httpMethod, httpPath, schema, toolCategory).
  */
 async function registerToolHandlers(
   router: RouteDispatcher<RawHandler>,
@@ -63,32 +66,42 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
-  const { buildAuditHandler } = await import('./handlers/tools/audit.js');
-  const { buildReviewHandler } = await import('./handlers/tools/review.js');
-  const { buildVerifyHandler } = await import('./handlers/tools/verify.js');
-  const { buildDebugHandler } = await import('./handlers/tools/debug.js');
-  const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
-  const { buildRetryHandler } = await import('./handlers/tools/retry.js');
-  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
-  const { buildExploreHandler } = await import('./handlers/tools/explore.js');
-  const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
+  const core = await import('@zhixuan92/multi-model-agent-core');
+  const { ToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } = core;
+  const { registerDelegate } = await import('@zhixuan92/multi-model-agent-core/tools/delegate/tool-config');
+  const { registerAudit } = await import('@zhixuan92/multi-model-agent-core/tools/audit/tool-config');
+  const { registerReview } = await import('@zhixuan92/multi-model-agent-core/tools/review/tool-config');
+  const { registerVerify } = await import('@zhixuan92/multi-model-agent-core/tools/verify/tool-config');
+  const { registerDebug } = await import('@zhixuan92/multi-model-agent-core/tools/debug/tool-config');
+  const { registerExecutePlan } = await import('@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config');
+  const { registerRetry } = await import('@zhixuan92/multi-model-agent-core/tools/retry/tool-config');
+  const { registerInvestigate } = await import('@zhixuan92/multi-model-agent-core/tools/investigate/tool-config');
+  const { registerExplore } = await import('@zhixuan92/multi-model-agent-core/tools/explore/tool-config');
+
+  const surface = new ToolSurfaceRegistry();
+  registerDelegate(surface);
+  registerAudit(surface);
+  registerReview(surface);
+  registerVerify(surface);
+  registerDebug(surface);
+  registerExecutePlan(surface);
+  registerRetry(surface);
+  registerInvestigate(surface);
+  registerExplore(surface);
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
   // have `server:`, we create a stub config. Real CLI startup will load full config.
-  // Cast through unknown to avoid type gymnastics here; validation happens in schema.
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
     ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
     : undefined;
 
   if (!multiModelConfig) {
-    // Server started with server-only config (e.g. tests): register stubs that return 503
-    for (const [method, path] of [
-      ['POST', '/delegate'], ['POST', '/audit'], ['POST', '/review'],
-      ['POST', '/verify'], ['POST', '/debug'], ['POST', '/execute-plan'], ['POST', '/retry'], ['POST', '/investigate'], ['POST', '/explore'],
-    ] as [string, string][]) {
-      router.register(method, path, (_req, res, _params, _ctx) => {
+    // Server started with server-only config (e.g. tests): register stubs that return 503.
+    // Drive registration from the registry so adding a tool only requires a tool-config edit.
+    for (const entry of surface.list()) {
+      if (entry.surface !== 'tool') continue;
+      router.register(entry.httpMethod, entry.httpPath, (_req, res, _params, _ctx) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
       });
     }
@@ -114,7 +127,6 @@ async function registerToolHandlers(
     new TelemetrySink(recorderForBus),
   ]);
 
-  const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
   const routeDispatcher = new LifecycleDispatcher();
 
   const deps: import('./handler-deps.js').HandlerDeps = {
@@ -126,25 +138,39 @@ async function registerToolHandlers(
     routeDispatcher,
   };
 
-  const delegateHandler = buildDelegateHandler(deps);
-  const auditHandler = buildAuditHandler(deps);
-  const reviewHandler = buildReviewHandler(deps);
-  const verifyHandler = buildVerifyHandler(deps);
-  const debugHandler = buildDebugHandler(deps);
-  const executePlanHandler = buildExecutePlanHandler(deps);
-  const retryHandler = buildRetryHandler(deps);
-  const investigateHandler = buildInvestigateHandler(deps);
-  const exploreHandler = buildExploreHandler(deps);
+  // Per-tool handler builders, keyed by registry routeName. The registry tells
+  // us WHICH route to register and at WHICH path/method; this map answers HOW
+  // to build the per-tool handler.
+  const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
+  const { buildAuditHandler } = await import('./handlers/tools/audit.js');
+  const { buildReviewHandler } = await import('./handlers/tools/review.js');
+  const { buildVerifyHandler } = await import('./handlers/tools/verify.js');
+  const { buildDebugHandler } = await import('./handlers/tools/debug.js');
+  const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
+  const { buildRetryHandler } = await import('./handlers/tools/retry.js');
+  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
+  const { buildExploreHandler } = await import('./handlers/tools/explore.js');
 
-  router.register('POST', '/delegate', delegateHandler);
-  router.register('POST', '/audit', auditHandler);
-  router.register('POST', '/review', reviewHandler);
-  router.register('POST', '/verify', verifyHandler);
-  router.register('POST', '/debug', debugHandler);
-  router.register('POST', '/execute-plan', executePlanHandler);
-  router.register('POST', '/retry', retryHandler);
-  router.register('POST', '/investigate', investigateHandler);
-  router.register('POST', '/explore', exploreHandler);
+  const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
+    delegate: buildDelegateHandler,
+    audit: buildAuditHandler,
+    review: buildReviewHandler,
+    verify: buildVerifyHandler,
+    debug: buildDebugHandler,
+    execute_plan: buildExecutePlanHandler,
+    retry_tasks: buildRetryHandler,
+    investigate: buildInvestigateHandler,
+    explore: buildExploreHandler,
+  };
+
+  for (const entry of surface.list()) {
+    if (entry.surface !== 'tool') continue;
+    const builder = builders[entry.routeName];
+    if (!builder) {
+      throw new Error(`registerToolHandlers: no handler builder registered for route '${entry.routeName}'`);
+    }
+    router.register(entry.httpMethod, entry.httpPath, builder(deps));
+  }
 }
 
 /**

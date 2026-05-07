@@ -3,7 +3,7 @@ import { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
 describe('BatchRegistry runningHeadlineSnapshot', () => {
   it('new entry has fallback runningHeadlineSnapshot', () => {
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
+    const reg = new BatchRegistry({ batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b1', projectCwd: '/tmp', tool: 'delegate',
       state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
@@ -15,7 +15,7 @@ describe('BatchRegistry runningHeadlineSnapshot', () => {
   });
 
   it('updateRunningHeadlineSnapshot sets the field', () => {
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
+    const reg = new BatchRegistry({ batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b2', projectCwd: '/tmp', tool: 'delegate',
       state: 'pending', startedAt: 0, stateChangedAt: 0,
@@ -32,7 +32,7 @@ describe('BatchRegistry runningHeadlineSnapshot', () => {
   });
 
   it('updateRunningHeadlineSnapshot is no-op on terminal entries', () => {
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
+    const reg = new BatchRegistry({ batchTtlMs: 3_600_000 });
     reg.register({
       batchId: 'b3', projectCwd: '/tmp', tool: 'delegate',
       state: 'complete', startedAt: 0, stateChangedAt: 0,
@@ -49,7 +49,7 @@ describe('BatchRegistry runningHeadlineSnapshot', () => {
   });
 
   it('updateRunningHeadlineSnapshot is no-op on unknown batchId', () => {
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
+    const reg = new BatchRegistry({ batchTtlMs: 3_600_000 });
     expect(() => reg.updateRunningHeadlineSnapshot('unknown', {
       prefix: 'x', statsClause: '', dispatchedAt: 0, fallback: '',
     })).not.toThrow();

@@ -1,6 +1,6 @@
 // Stage-stats helpers: pure functions that build / mutate the per-task
-// StageStatsMap. Extracted from reviewed-lifecycle.ts so the orchestrator
-// stays focused on flow control. No closure state captured here.
+// StageStatsMap. No closure state captured here — the orchestrator stays
+// focused on flow control.
 import type { StageStatsMap, ReviewVerdict, VerifyOutcome, VerifySkipReason } from '../types.js';
 import { findModelProfile } from '../config/model-profile-registry.js';
 

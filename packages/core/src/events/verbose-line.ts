@@ -50,9 +50,9 @@ function assertPrimitiveValue(key: string, val: unknown): asserts val is Primiti
   }
 }
 
-// Keys already emitted on every verbose line as `batch` / `task` (see
-// reviewed-lifecycle.ts:114). Drop them when forwarding event params so we
-// don't produce both `batch=` and `batch_id=` on the same line.
+// Keys already emitted on every verbose line as `batch` / `task` by the
+// caller. Drop them when forwarding event params so we don't produce
+// both `batch=` and `batch_id=` on the same line.
 const VERBOSE_DROP_KEYS = new Set(['batchId', 'taskIndex']);
 
 // Convert event-param fields (typed in camelCase per the JSONL DiagnosticLogger

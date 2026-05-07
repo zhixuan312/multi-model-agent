@@ -1,4 +1,4 @@
-import type { EventSink } from './bus.js';
+import type { EventSink } from './event-emitter.js';
 import type { EventType } from './observability-events.js';
 import { CLOUD_EVENT_NAMES } from './observability-events.js';
 

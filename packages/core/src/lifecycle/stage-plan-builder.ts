@@ -34,8 +34,8 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
       isRework: false, handlerKey: 'run_initial_impl' },
 
     // 3.5: check_files_written — early-exit when artifact-producing impl wrote zero files.
-    // Mirrors current reviewed-lifecycle.ts:1211–1232 behavior. When fired, the handler
-    // sets state.terminal=true so review chains, verify, and commit short-circuit.
+    // When fired, the handler sets state.terminal=true so review chains, verify, and
+    // commit short-circuit.
     {
       rowId: '3.5', stageName: 'check_files_written',
       runCondition: (s) => isAP

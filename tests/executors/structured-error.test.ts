@@ -27,7 +27,7 @@ function makeCtx(overrides?: Partial<ExecutionContext>): ExecutionContext {
       server: {
         bind: '127.0.0.1', port: 7337,
         auth: { tokenFile: '/tmp/token' },
-        limits: { maxBodyBytes: 10_000_000, batchTtlMs: 600_000, idleProjectTimeoutMs: 600_000, clarificationTimeoutMs: 600_000, projectCap: 100, maxBatchCacheSize: 1000, maxContextBlockBytes: 10_000_000, maxContextBlocksPerProject: 100, shutdownDrainMs: 5_000 },
+        limits: { maxBodyBytes: 10_000_000, batchTtlMs: 600_000, idleProjectTimeoutMs: 600_000, projectCap: 100, maxBatchCacheSize: 1000, maxContextBlockBytes: 10_000_000, maxContextBlocksPerProject: 100, shutdownDrainMs: 5_000 },
         autoUpdateSkills: false,
       },
     },

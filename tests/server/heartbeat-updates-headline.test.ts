@@ -7,7 +7,7 @@ import {
 
 describe('heartbeat tick updates runningHeadlineSnapshot', () => {
   it('recordHeartbeat callback propagates snapshot to registry', () => {
-    const reg = new BatchRegistry({ clarificationTimeoutMs: 60_000, batchTtlMs: 3_600_000 });
+    const reg = new BatchRegistry({ batchTtlMs: 3_600_000 });
     const started = Date.now();
     reg.register({
       batchId: 'hb1', projectCwd: '/tmp', tool: 'delegate',

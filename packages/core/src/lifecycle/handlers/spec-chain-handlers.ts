@@ -76,10 +76,10 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<SpecReviewRe
   state.specUnavailable ??= new Map() as UnavailableMap;
   const specUnavailable: UnavailableMap = state.specUnavailable;
 
-  // Run the review against the assigned reviewer tier; fall back to the other
-  // tier on transport failure (matches reviewed-lifecycle.ts:1340–1349).
-  // forbiddenTiers excludes the implementer's tier so reviewer separation
-  // is enforced by the fallback wrapper.
+  // Run the review against the assigned reviewer tier; fall back to the
+  // other tier on transport failure. forbiddenTiers excludes the
+  // implementer's tier so reviewer separation is enforced by the
+  // fallback wrapper.
   const reviewerCall = await runWithFallback<SpecReviewOrSkipped>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,

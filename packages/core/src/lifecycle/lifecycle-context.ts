@@ -10,9 +10,9 @@ import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 
 /**
- * Spec C10 ExecutionContext — the typed shared state that replaces the ~94
- * closure variables in `reviewed-lifecycle.ts`. Populated by
- * `prepare_execution_context` (row 2.5) and read by every downstream handler.
+ * Spec C10 ExecutionContext — the typed shared state for a per-task run.
+ * Populated by `prepare_execution_context` (row 2.5) and read by every
+ * downstream handler.
  *
  * Inputs (Group A) are read-only after row 2.5 completes.
  * Bus + heartbeat (Group B) carry mutable runtime state for the watchdog.

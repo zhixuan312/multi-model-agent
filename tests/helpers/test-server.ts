@@ -17,7 +17,6 @@ function buildTestConfig(tokenFile: string, overrides?: DeepPartial<ServerConfig
           maxBodyBytes: 10_485_760,
           batchTtlMs: 3_600_000,
           idleProjectTimeoutMs: 1_800_000,
-          clarificationTimeoutMs: 86_400_000,
           projectCap: 200,
           maxBatchCacheSize: 500,
           maxContextBlockBytes: 524_288,

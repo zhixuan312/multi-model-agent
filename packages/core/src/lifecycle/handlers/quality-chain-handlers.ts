@@ -191,8 +191,8 @@ export const qualityReworkRound2Handler = makeQualityReworkHandler(2);
  *
  * Cascade rule:
  *   - 'approved' or 'annotated' in any round ⇒ chain passed (true)
- *   - 'skipped' (e.g., no files written) treated as passed (true) — matches
- *     reviewed-lifecycle's qualityReviewStatus='skipped' → no-block path
+ *   - 'skipped' (e.g., no files written) treated as passed (true) — the
+ *     no-block path when there's nothing to review
  *   - 'changes_required' through round 3 ⇒ chain failed (false)
  *   - 'error' in any round ⇒ chain failed (false), state.terminal = true
  *

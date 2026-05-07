@@ -1,8 +1,8 @@
-// NOTE: Despite the name "delegateWithEscalation", this function NO LONGER
-// performs status-level tier escalation as of 3.5.0. Escalation policy is
-// owned by reviewed-lifecycle.ts via runWithFallback (escalation/policy.ts).
-// This function only handles transient retries (api_error / network_error).
-// Rename to delegateWithRetries deferred to 3.6.0.
+// NOTE: Despite the name "delegateWithEscalation", this function does NOT
+// perform status-level tier escalation. Escalation policy lives in
+// escalation/policy.ts and is invoked via runWithFallback by the
+// lifecycle review-chain handlers. This function only handles transient
+// retries (api_error / network_error).
 
 import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
 import type {

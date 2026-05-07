@@ -42,11 +42,11 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs.
   //
   // Use runResult.durationMs as the canonical wall-clock total by default.
-  // Salvage-promotion paths in reviewed-lifecycle (adaptForAllTiersUnavailable
-  // at line ~835) can promote a prior runner's full durationMs into a single
-  // stage, overlapping with other stages and causing Σ stage.durationMs to
-  // exceed the task-level wall clock. When that happens, proportionally scale
-  // stage durations down so the sum fits within totalDurationMs rather than
+  // Salvage-promotion paths can promote a prior runner's full durationMs
+  // into a single stage, overlapping with other stages and causing Σ
+  // stage.durationMs to exceed the task-level wall clock. When that
+  // happens, proportionally scale stage durations down so the sum fits
+  // within totalDurationMs rather than
   // inflating the total to mask the double-counting.
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
   const rawTotal = runResult.durationMs ?? stageDurationsSum;

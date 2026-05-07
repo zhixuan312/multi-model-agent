@@ -35,7 +35,6 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
           projectCap: 10,
           idleProjectTimeoutMs: 600_000,
           batchTtlMs: 3_600_000,
-          clarificationTimeoutMs: 60_000,
           maxContextBlocksPerProject: 100,
           shutdownDrainMs: 1_000,
         },

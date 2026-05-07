@@ -21,6 +21,9 @@ export type ExecutePlanWireInput = z.infer<typeof executePlanInputSchema>;
 export function registerExecutePlan(registry: ToolSurfaceRegistry): void {
   registry.register({
     routeName: 'execute_plan',
+    httpMethod: 'POST',
+    httpPath: '/execute-plan',
+    surface: 'tool',
     schema: executePlanInputSchema,
     toolCategory: 'artifact_producing',
     agentTypeDefault: 'standard',

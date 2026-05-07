@@ -9,11 +9,11 @@ import type { RunResult } from '../../types.js';
  * Four StagePlan rows:
  *   - 5.3.5 register_terminal_block — registers a context block carrying
  *     the terminal RunResult so /retry can reference the prior task's
- *     output. Today owned by reviewed-lifecycle's __recordOnce path.
+ *     output.
  *   - 5.4   emit_task_terminal     — emits the per-task terminal event
  *     (task_done_summary) through ctx.bus.
  *   - 5.5   persist_to_batch_registry — marks the per-task state in the
- *     batch registry. Today owned by async-dispatch.
+ *     batch registry.
  *   - 6.1   flush_telemetry — drains the telemetry queue so failure
  *     events are persisted before the per-task terminal stage exits.
  *

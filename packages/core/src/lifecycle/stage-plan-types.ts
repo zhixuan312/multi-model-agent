@@ -75,17 +75,17 @@ export interface LifecycleState {
   specChainPassed?: boolean;
   qualityChainPassed?: boolean;
 
-  // Per-chain attempt counters for telemetry parity with reviewed-lifecycle.ts
-  // (specAttemptIndex / qualityAttemptIndex). Populated by review-round handlers
-  // when they call pickEscalation. Quality starts at 1 because attemptIndex 0
-  // has impl: null in the quality loop and pickEscalation would throw.
+  // Per-chain attempt counters for telemetry. Populated by review-round
+  // handlers when they call pickEscalation. Quality starts at 1 because
+  // attemptIndex 0 has impl: null in the quality loop and pickEscalation
+  // would throw.
   specChainAttemptIndex?: number;
   qualityChainAttemptIndex?: number;
 
   // Per-loop sticky unavailable maps (UnavailableMap) — shared by all
   // runWithFallback calls within a chain so a tier marked unavailable in
   // round 1 stays unavailable for round 2/3. Populated by review-round
-  // handlers; matches reviewed-lifecycle.ts's specUnavailable / qualityUnavailable.
+  // handlers.
   specUnavailable?: import('../escalation/fallback.js').UnavailableMap;
   qualityUnavailable?: import('../escalation/fallback.js').UnavailableMap;
   diffUnavailable?: import('../escalation/fallback.js').UnavailableMap;

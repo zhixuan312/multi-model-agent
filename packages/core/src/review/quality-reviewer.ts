@@ -79,9 +79,6 @@ function addMetrics(a: QualityReviewMetrics, b: QualityReviewMetrics): QualityRe
   };
 }
 
-/** Backward-compat alias kept until reviewed-lifecycle is migrated to the new shape (Task 6). */
-export type LegacyQualityReviewResult = QualityReviewResult;
-
 /**
  * Like fallbackExtractFindings but suppresses the synthetic single
  * "reviewer parse failed; deterministic fallback emitted single catch-all"

@@ -12,6 +12,9 @@ import type { RunnerShell } from '../../providers/runner-shell.js';
 export function registerDelegate(registry: ToolSurfaceRegistry): void {
   registry.register({
     routeName: 'delegate',
+    httpMethod: 'POST',
+    httpPath: '/delegate',
+    surface: 'tool',
     schema: inputSchema,
     toolCategory: 'artifact_producing',
     agentTypeDefault: 'standard',

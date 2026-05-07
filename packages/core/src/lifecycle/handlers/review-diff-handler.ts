@@ -28,11 +28,10 @@ const exec = promisify(execFile);
  *   - state.diffReviewVerdict: envelope-mapped status
  *   - state.terminal = true on 'changes_required' (reject) or 'error'
  *
- * Verdict mapping (preserved from reviewed-lifecycle.ts:1361):
+ * Verdict mapping:
  *   kind: 'approve'           → envelope 'approved'
- *   kind: 'concerns'          → envelope 'approved' (counter-intuitive but
- *                                matches existing behavior — concerns flagged
- *                                but not blocking)
+ *   kind: 'concerns'          → envelope 'approved' (concerns are flagged
+ *                                but non-blocking by design)
  *   kind: 'reject'            → envelope 'changes_required'
  *   kind: 'transport_failure' → envelope 'error'
  *
