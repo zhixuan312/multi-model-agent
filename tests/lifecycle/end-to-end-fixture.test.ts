@@ -65,6 +65,7 @@ describe('Phase-4 end-to-end LifecycleDriver fixture', () => {
       register_terminal_block: noop,
       emit_task_terminal: noop,
       persist_to_batch_registry: noop,
+      record_task_completed: noop,
 
       // Stage 6 (timer-driven rows return false from runCondition)
       flush_telemetry: noop,

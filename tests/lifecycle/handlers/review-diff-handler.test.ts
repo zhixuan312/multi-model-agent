@@ -32,7 +32,6 @@ function makeCtx(cwd: string, providers: ExecutionContext['providers'] = {}, ove
     cwd,
     route: 'delegate',
     client: 'test',
-    triggeringSkill: '',
     mainModel: null,
     assignedTier: 'standard' as const,
     implementerProvider: {} as ExecutionContext['implementerProvider'],

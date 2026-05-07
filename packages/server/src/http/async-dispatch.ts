@@ -13,6 +13,14 @@ export interface AsyncDispatchOptions<TResult> {
   projectContext: ProjectContext;
   deps: HandlerDeps;
   /**
+   * Caller identity from the x-mma-client request header. Threaded into
+   * ExecutionContext so the cloud `task.completed` event carries the client.
+   * Without this the wire event has an empty string and the backend rejects
+   * the upload (STRICT_ID_REGEX). triggeringSkill was dropped because it's
+   * implied by `route` for the 99% case (mma-<route> → /<route>).
+   */
+  caller?: { client: string };
+  /**
    * The async function that does the real work. Receives the ExecutionContext
    * and the pre-allocated batchId.
    */
@@ -53,7 +61,7 @@ export function asyncDispatch<TResult>(
   });
 
   // Build execution context for this batch
-  const ctx = buildExecutionContext(deps, projectContext, batchId, tool);
+  const ctx = buildExecutionContext(deps, projectContext, batchId, tool, opts.caller);
 
   // Schedule executor asynchronously — do not await here
   const startedAtMs = Date.now();

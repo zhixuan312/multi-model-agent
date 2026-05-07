@@ -99,18 +99,6 @@ function readServerVersion(): string {
   }
 }
 
-function compareSemver(a: string, b: string): number {
-  const [aMaj, aMin, aPat] = a.split('.').map(Number);
-  const [bMaj, bMin, bPat] = b.split('.').map(Number);
-  if (Number.isNaN(aMaj) || Number.isNaN(aMin) || Number.isNaN(aPat) ||
-      Number.isNaN(bMaj) || Number.isNaN(bMin) || Number.isNaN(bPat)) {
-    return -1; // unparseable version → treat as mismatched
-  }
-  if (aMaj !== bMaj) return aMaj - bMaj;
-  if (aMin !== bMin) return aMin - bMin;
-  return aPat - bPat;
-}
-
 function envVarHint(agentName: string): string {
   return `${agentName.toUpperCase().replace(/[^A-Z0-9]/g, '_')}_API_KEY`;
 }
@@ -229,32 +217,9 @@ export async function startServe(
   onUncaughtRef = onUncaught;
   onUnhandledRejectionRef = onUnhandledRejection;
 
-  // ── Telemetry: consent re-confirmation + recorder ─────────────────────
+  // ── Telemetry: recorder ────────────────────────────────────────────────
   const homeDir = path.join(os.homedir(), '.multi-model');
   const mmagentVersion = readServerVersion();
-
-  // V2→V3 consent re-confirmation (§7.6): V2 opt-ins do NOT auto-migrate.
-  // When telemetry is enabled but consent schemaVersion is < 3,
-  // clear the flag and prompt the user to re-confirm.
-  const configPath = path.join(homeDir, 'config.json');
-  try {
-    const raw = fs.readFileSync(configPath, 'utf8');
-    const cfg = JSON.parse(raw) as Record<string, unknown>;
-    const telemetry = (cfg.telemetry ?? {}) as Record<string, unknown>;
-    if (telemetry.enabled === true) {
-      const consentVersion = (telemetry as any).consentSchemaVersion as number | undefined;
-      if ((consentVersion ?? 0) < 3) {
-        telemetry.enabled = false;
-        (telemetry as any).consentSchemaVersion = 3;
-        cfg.telemetry = telemetry;
-        fs.writeFileSync(configPath, JSON.stringify(cfg, null, 2) + '\n', { mode: 0o600 });
-        stderr('mmagent: telemetry schema upgraded to v3; previous opt-in cleared.\n');
-        stderr('Run "mmagent telemetry enable" to opt in to schema v3.\n');
-      }
-    }
-  } catch {
-    // no config file, first run — nothing to migrate
-  }
 
   const recorder = createRecorder({ homeDir, mmagentVersion });
 
@@ -267,12 +232,6 @@ export async function startServe(
   }
 
   if (lastVersion !== mmagentVersion) {
-    const trigger: 'fresh_install' | 'upgrade' | 'downgrade' =
-      lastVersion === null
-        ? 'fresh_install'
-        : compareSemver(lastVersion, mmagentVersion) < 0
-          ? 'upgrade'
-          : 'downgrade';
     try {
       fs.mkdirSync(homeDir, { recursive: true });
       fs.writeFileSync(lastVersionPath, mmagentVersion + '\n', { mode: 0o600 });

@@ -305,6 +305,13 @@
         "handlerKey": "persist_to_batch_registry"
       },
       {
+        "rowId": "5.6",
+        "stageName": "record_task_completed",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "record_task_completed"
+      },
+      {
         "rowId": "6.1",
         "stageName": "flush_telemetry",
         "isRework": false,
@@ -559,6 +566,13 @@
         "handlerKey": "persist_to_batch_registry"
       },
       {
+        "rowId": "5.6",
+        "stageName": "record_task_completed",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "record_task_completed"
+      },
+      {
         "rowId": "6.1",
         "stageName": "flush_telemetry",
         "isRework": false,
@@ -811,6 +825,13 @@
         "isRework": false,
         "runOnTerminal": true,
         "handlerKey": "persist_to_batch_registry"
+      },
+      {
+        "rowId": "5.6",
+        "stageName": "record_task_completed",
+        "isRework": false,
+        "runOnTerminal": true,
+        "handlerKey": "record_task_completed"
       },
       {
         "rowId": "6.1",

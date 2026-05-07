@@ -102,7 +102,6 @@ async function runLifecycleTask(args: LifecycleCallArgs): Promise<RunResult> {
     recorder: ctx.recorder,
     route,
     client: ctx.client,
-    triggeringSkill: ctx.triggeringSkill,
     bus,
   });
 }

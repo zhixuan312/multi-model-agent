@@ -59,7 +59,6 @@ export interface RunTasksOptions {
       taskSpec: TaskSpec;
       runResult: RunResult;
       client: string;
-      triggeringSkill: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
@@ -67,7 +66,6 @@ export interface RunTasksOptions {
   };
   route?: string;
   client?: string;
-  triggeringSkill?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
@@ -142,7 +140,6 @@ export async function runTasks(
         ...(options.recorder && { recorder: options.recorder }),
         ...(options.route !== undefined && { route: options.route }),
         ...(options.client !== undefined && { client: options.client }),
-        ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
         ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
@@ -168,7 +165,6 @@ export interface DispatchTaskInput {
   recorder?: ExecutionContext['recorder'];
   route?: string;
   client?: string;
-  triggeringSkill?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
@@ -207,7 +203,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     route: input.route ?? '',
     client: input.client ?? '',
-    triggeringSkill: input.triggeringSkill ?? '',
     mainModel: input.recorder ? null : null,
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,

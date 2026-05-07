@@ -286,7 +286,6 @@
         "route",
         "agentType",
         "toolMode",
-        "triggeredFromSkill",
         "client",
         "fileCountBucket",
         "durationBucket",

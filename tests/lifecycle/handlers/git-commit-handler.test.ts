@@ -31,7 +31,6 @@ function makeCtx(cwd: string, overrides: Partial<ExecutionContext> = {}): Execut
     cwd,
     route: 'delegate',
     client: 'test',
-    triggeringSkill: '',
     mainModel: null,
     assignedTier: 'standard' as const,
     implementerProvider: {} as ExecutionContext['implementerProvider'],

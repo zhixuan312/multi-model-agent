@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { RunResult } from '../../types.js';
+import type { RunResult, TaskSpec } from '../../types.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -118,6 +118,83 @@ export function persistToBatchRegistryHandler(state: LifecycleState): void {
     // sweep (row 6.3) reconciles via timer.
   }
   state.batchRegistryPersisted = true;
+}
+
+/**
+ * Row 5.6 — record_task_completed.
+ *
+ * Builds the cloud `task.completed` wire event and hands it to the server
+ * recorder. Idempotent on state.taskCompletedRecorded. No-op when the
+ * server hasn't supplied a recorder (CLI/test paths).
+ */
+export function recordTaskCompletedHandler(state: LifecycleState): void {
+  if (state.taskCompletedRecorded) return;
+  const ctx = state.executionContext;
+  if (!ctx) return;
+  const recorder = ctx.recorder;
+  if (!recorder || typeof recorder.recordTaskCompleted !== 'function') {
+    state.taskCompletedRecorded = true;
+    return;
+  }
+  const task = state.task as TaskSpec | undefined;
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!task || !last) {
+    state.taskCompletedRecorded = true;
+    return;
+  }
+  ensureImplementingStage(last, ctx);
+  try {
+    recorder.recordTaskCompleted({
+      route: ctx.route as Parameters<typeof recorder.recordTaskCompleted>[0]['route'],
+      taskSpec: task,
+      runResult: last,
+      client: ctx.client ?? '',
+      mainModel: ctx.mainModel ?? null,
+    });
+  } catch {
+    // recorder is best-effort — never break terminal flow on telemetry.
+  }
+  state.taskCompletedRecorded = true;
+}
+
+/**
+ * Synthesize an `implementing` stage entry from top-level RunResult fields
+ * when the per-stage tracker hasn't populated it. Without this, the wire
+ * event ships with `stages: []` for every task, which violates the backend's
+ * R2.1 invariant ("empty stages only allowed for brief_too_vague|error")
+ * for any task that succeeded — every upload would 400.
+ *
+ * This is a fallback; it does not replace stats already populated by the
+ * runner-shell or lifecycle stage tracker.
+ */
+function ensureImplementingStage(rr: RunResult, ctx: { assignedTier?: 'standard' | 'complex' }): void {
+  const existing = (rr.stageStats?.implementing) as { entered?: boolean } | undefined;
+  if (existing?.entered) return;
+  const usage = rr.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
+  const synthesized = {
+    stage: 'implementing' as const,
+    entered: true,
+    durationMs: rr.durationMs ?? 0,
+    costUSD: rr.cost?.totalCostUSD ?? null,
+    agentTier: ctx.assignedTier ?? 'standard',
+    modelFamily: null,
+    model: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
+    activityEvents: 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
+    turnCount: rr.turns ?? 0,
+    toolCallCount: Array.isArray(rr.toolCalls) ? rr.toolCalls.length : 0,
+    filesReadCount: Array.isArray(rr.filesRead) ? rr.filesRead.length : 0,
+    filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
+  };
+  (rr as { stageStats?: Record<string, unknown> }).stageStats = {
+    ...((rr.stageStats as Record<string, unknown> | undefined) ?? {}),
+    implementing: synthesized,
+  };
 }
 
 interface RecorderLike {

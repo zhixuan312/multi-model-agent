@@ -15,7 +15,6 @@ describe('telemetry envelope (v2)', () => {
       agentType: 'standard',
       capabilities: [],
       toolMode: 'full',
-      triggeredFromSkill: 'mma-delegate',
       client: 'test',
       fileCountBucket: '1-5',
       durationBucket: '<10s',

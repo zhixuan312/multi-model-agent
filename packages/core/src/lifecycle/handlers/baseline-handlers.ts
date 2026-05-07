@@ -27,6 +27,7 @@ import {
   registerTerminalBlockHandler,
   emitTaskTerminalHandler,
   persistToBatchRegistryHandler,
+  recordTaskCompletedHandler,
   flushTelemetryHandler,
 } from './terminal-handlers.js';
 
@@ -226,6 +227,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     register_terminal_block: registerTerminalBlockHandler,
     emit_task_terminal: emitTaskTerminalHandler,
     persist_to_batch_registry: persistToBatchRegistryHandler,
+    record_task_completed: recordTaskCompletedHandler,
 
     flush_telemetry: flushTelemetryHandler,
     project_idle_cleanup_tick: noop,

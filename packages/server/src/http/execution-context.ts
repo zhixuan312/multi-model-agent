@@ -19,6 +19,7 @@ export function buildExecutionContext(
   pc: ProjectContext,
   batchId: string,
   route?: string,
+  caller?: { client: string },
 ): ExecutionContext {
   const recordHeartbeat = (tick: HeartbeatTickInfo) => {
     const effectiveBatchId = tick.batchId || batchId;
@@ -46,8 +47,7 @@ export function buildExecutionContext(
     bus: deps.bus,
     mainModel: process.env['PARENT_MODEL_NAME'] ?? null,
     route: route ?? '',
-    client: '',
-    triggeringSkill: '',
+    client: caller?.client ?? 'other',
     batchId,
     recordHeartbeat,
     recorder,

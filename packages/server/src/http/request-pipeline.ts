@@ -132,7 +132,6 @@ export async function handleRequest(
     body: parsedBody,
     authed: !pipelineCfg.authExemptPaths.has(pathname),
     callerClient: identity.callerClient,
-    callerSkill: identity.callerSkill,
   };
 
   await match.handler(req, res, match.params, ctx);

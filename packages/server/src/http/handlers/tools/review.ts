@@ -39,6 +39,7 @@ export function buildReviewHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
+      caller: { client: ctx.callerClient },
       executor: async (executionCtx) => {
         const callExecutor = () => executeTask(toolConfig, executionCtx, input);
         if (deps.routeDispatcher) {

@@ -125,6 +125,7 @@ export interface LifecycleState {
   terminalBlockId?: string;
   taskTerminalEmitted?: boolean;
   batchRegistryPersisted?: boolean;
+  taskCompletedRecorded?: boolean;
   telemetryFlushed?: boolean;
 
   // Per-project runtime state — plumbed from DispatchInput.context.projectContext

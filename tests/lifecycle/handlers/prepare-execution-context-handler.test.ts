@@ -24,7 +24,6 @@ function makeCtx(): ExecutionContext {
     cwd: os.tmpdir(),
     route: 'delegate',
     client: 'test',
-    triggeringSkill: '',
     mainModel: null,
     assignedTier: 'standard',
     implementerProvider: {} as ExecutionContext['implementerProvider'],

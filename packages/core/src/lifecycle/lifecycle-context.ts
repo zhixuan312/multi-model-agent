@@ -32,7 +32,6 @@ export interface ExecutionContext {
   cwd: string;
   route: string;
   client: string;
-  triggeringSkill: string;
   mainModel: string | null;
 
   /** Tier the dispatcher assigned to this task. Stays fixed; rotation lives in per-round handlers via pickReviewer/pickEscalation. */
@@ -93,7 +92,6 @@ export interface ExecutionContext {
       taskSpec: TaskSpec;
       runResult: import('../types.js').RunResult;
       client: string;
-      triggeringSkill: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
