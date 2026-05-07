@@ -22,6 +22,7 @@ import {
 } from './handlers/quality-chain-handlers.js';
 import { reviewDiffHandler } from './handlers/review-diff-handler.js';
 import { prepareExecutionContextHandler } from './handlers/prepare-execution-context-handler.js';
+import { registerToBlockStoreHandler } from './handlers/register-context-block-handlers.js';
 import {
   registerTerminalBlockHandler,
   emitTaskTerminalHandler,
@@ -76,6 +77,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
   };
 
   const composeResponse: StageHandler = (state) => {
+    // register-context-block path: emit blockRegistration.id as the envelope.
+    if (state.route === 'register-context-block' && state.blockRegistration) {
+      state.responseEnvelope = { id: state.blockRegistration.id };
+      return;
+    }
     // Legacy path: executor returned the full envelope.
     if (state.executorResult !== undefined) {
       state.responseEnvelope = state.executorResult;
@@ -305,6 +311,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     // Stage 5 — Finalize.
     //
+    // register_to_block_store: register-context-block route only.
+    register_to_block_store: registerToBlockStoreHandler,
     // run_verify_command is idempotent: skips when state.verifyResult is
     // already set, defensive-no-ops on missing state.task /
     // state.executionContext.

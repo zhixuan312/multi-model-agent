@@ -235,6 +235,19 @@ async function registerControlHandlers(
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
+    router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
+      projectRegistry,
+      routeDispatcher,
+      maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
+      maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
+    }));
+    router.register('POST', '/register-context-block', buildCreateContextBlockHandler({
+      projectRegistry,
+      routeDispatcher,
+      maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
+      maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
+    }));
+    router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
     router.register('POST', '/control/retry', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
@@ -242,10 +255,14 @@ async function registerControlHandlers(
     router.register('POST', '/control/batch-slice', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });
+    router.register('POST', '/context-blocks', (_req, res) => {
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+    });
+    router.register('POST', '/register-context-block', (_req, res) => {
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+    });
+    router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   }
-  router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
-  router.register('POST', '/register-context-block', buildCreateContextBlockHandler({ projectRegistry, config }));
-  router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
 }
 
 export async function startServer(

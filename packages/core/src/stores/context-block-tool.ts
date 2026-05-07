@@ -88,12 +88,12 @@ export interface InMemoryContextBlockStoreOptions {
  */
 export class InMemoryContextBlockStore implements ContextBlockStore {
   private entries = new Map<string, Entry>();
-  private ttlMs: number;
+  private _ttlMs: number;
   private maxEntries: number;
   private tick = 0;
 
   constructor(opts: InMemoryContextBlockStoreOptions = {}) {
-    this.ttlMs = opts.ttlMs ?? 24 * 60 * 60 * 1000;
+    this._ttlMs = opts.ttlMs ?? 24 * 60 * 60 * 1000;
     this.maxEntries = opts.maxEntries ?? 500;
   }
 
@@ -120,7 +120,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     const now = Date.now();
-    if (now - entry.addedAtMs > this.ttlMs) {
+    if (now - entry.addedAtMs > this._ttlMs) {
       // Expired — do not revive
       this.entries.delete(id);
       return undefined;
@@ -166,6 +166,11 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
   /** Return the current pin count for an entry, or 0 if unknown. */
   refcount(id: string): number {
     return this.entries.get(id)?.pinCount ?? 0;
+  }
+
+  /** Idle TTL (ms) this store was configured with. */
+  get ttlMs(): number {
+    return this._ttlMs;
   }
 
   get size(): number {

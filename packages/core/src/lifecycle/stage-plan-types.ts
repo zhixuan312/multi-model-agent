@@ -1,4 +1,5 @@
 import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { ProjectContext } from '../stores/project-context-registry.js';
 
 export interface StageRow {
   rowId: string;
@@ -125,6 +126,14 @@ export interface LifecycleState {
   taskTerminalEmitted?: boolean;
   batchRegistryPersisted?: boolean;
   telemetryFlushed?: boolean;
+
+  // Per-project runtime state — plumbed from DispatchInput.context.projectContext
+  // so register_to_block_store and other stage handlers can access the project
+  // context without reaching through ExecutionContext.
+  projectContext?: ProjectContext;
+
+  // Block registration result set by register_to_block_store stage handler.
+  blockRegistration?: { id: string; size: number; ttlMs: number };
 
   // Slots used by existing pre-#45 handlers (execution-context-builder,
   // task-executor, derive-terminal-status). Typed as `unknown` until the

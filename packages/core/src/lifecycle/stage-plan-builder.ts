@@ -140,6 +140,12 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
         && s.reviewPolicy !== 'none'
         && !s.terminal,
       isRework: false, handlerKey: 'git_commit' },
+    // 5.3.rcb: register_to_block_store — fires for register-context-block
+    // route only, before compose_response. Sets state.blockRegistration
+    // which compose_response reads to emit {id, size, ttlMs}.
+    { rowId: '5.3.rcb', stageName: 'register_to_block_store',
+      runCondition: (s) => s.route === 'register-context-block' && !s.terminal,
+      isRework: false, handlerKey: 'register_to_block_store' },
     // 5.3: compose_response — always fires (even after terminal=true) so the
     // response envelope reflects the failure shape correctly.
     { rowId: '5.3', stageName: 'compose_response',
