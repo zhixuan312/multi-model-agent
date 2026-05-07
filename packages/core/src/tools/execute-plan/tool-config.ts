@@ -7,7 +7,6 @@ import {
   qualityAPTemplate,
   diffTemplate,
 } from '../../review/reviewer-engine.js';
-import type { RunnerShell } from '../../providers/runner-shell.js';
 
 export const executePlanInputSchema = z.object({
   filePaths: z.array(z.string()).length(1, { message: "execute_plan requires exactly one plan filePath" }),
@@ -32,7 +31,7 @@ export function registerExecutePlan(registry: ToolSurfaceRegistry): void {
   });
 }
 
-export function makeExecutePlanReviewer(shell: RunnerShell): ReviewerEngine {
+export function makeExecutePlanReviewer(): ReviewerEngine {
   const builder = new ReviewerPromptBuilder({ spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate });
-  return new ReviewerEngine(shell, builder);
+  return new ReviewerEngine(builder);
 }

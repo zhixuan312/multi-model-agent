@@ -12,6 +12,8 @@ export interface AdapterTurnInput {
   priorTurns: AdapterTurnRecord[];
   toolDefinitions: ToolDefinition[];
   capabilities: AdapterCapabilities;
+  abortSignal?: AbortSignal;
+  deadlineMs?: number;
 }
 
 export interface AdapterTurnResult {

@@ -84,10 +84,10 @@ function makeExecutePlanComposeResponse(): StageHandler {
 
 // ---- review handlers (same 3 templates as 5.1) --------------------------
 
-function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler> {
+function makeReviewHandlers(engine: ReviewerEngine, shell: import('../../packages/core/src/providers/runner-shell.js').RunnerShell): Record<string, StageHandler> {
   return {
     spec_review_round_1: async (state: LifecycleState) => {
-      const result = await engine.runSpec({
+      const result = await engine.runSpec(shell, {
         workerOutput: (state.lastRunResult as any)?.finalAssistantText ?? '',
         brief: state.userMessage,
         cwd: (state as any).cwd ?? process.cwd(),
@@ -95,7 +95,7 @@ function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler
       state.specReviewRound1Verdict = result.verdict as any;
     },
     spec_review_round_2: async (state: LifecycleState) => {
-      const result = await engine.runSpec({
+      const result = await engine.runSpec(shell, {
         workerOutput: (state.lastRunResult as any)?.finalAssistantText ?? '',
         brief: state.userMessage,
         cwd: (state as any).cwd ?? process.cwd(),
@@ -103,7 +103,7 @@ function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler
       state.specReviewRound2Verdict = result.verdict as any;
     },
     quality_review_round_1: async (state: LifecycleState) => {
-      const result = await engine.runQualityAP({
+      const result = await engine.runQualityAP(shell, {
         workerOutput: (state.lastRunResult as any)?.finalAssistantText ?? '',
         brief: state.userMessage,
         cwd: (state as any).cwd ?? process.cwd(),
@@ -111,7 +111,7 @@ function makeReviewHandlers(engine: ReviewerEngine): Record<string, StageHandler
       state.qualityReviewRound1Verdict = result.verdict as any;
     },
     review_diff: async (state: LifecycleState) => {
-      const result = await engine.runDiff({
+      const result = await engine.runDiff(shell, {
         workerOutput: (state.lastRunResult as any)?.finalAssistantText ?? '',
         brief: state.userMessage,
         cwd: (state as any).cwd ?? process.cwd(),
@@ -162,8 +162,8 @@ describe('execute_plan via v4.0 lifecycle', () => {
     const adapter = mockAdapter({
       turns: [
         { assistantText: '```json\n{"summary":"impl","filesChanged":["a.ts"],"taskOutcomes":[{"taskIndex":0,"status":"done"}]}\n```', toolCalls: [] },
-        { assistantText: '```json\n{"verdict":"approved","concerns":[]}\n```', toolCalls: [] },
-        { assistantText: '```json\n{"verdict":"approved","concerns":[]}\n```', toolCalls: [] },
+        { assistantText: '## Summary\napproved', toolCalls: [] },
+        { assistantText: '## Summary\napproved', toolCalls: [] },
         { assistantText: 'APPROVE', toolCalls: [] },
       ],
     });
@@ -174,8 +174,8 @@ describe('execute_plan via v4.0 lifecycle', () => {
     });
 
     const builder = new ReviewerPromptBuilder({ spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate });
-    const engine = new ReviewerEngine(dispatcher.shell, builder);
-    const reviewHandlers = makeReviewHandlers(engine);
+    const engine = new ReviewerEngine(builder);
+    const reviewHandlers = makeReviewHandlers(engine, dispatcher.shell);
 
     for (const [key, handler] of Object.entries(reviewHandlers)) {
       dispatcher.overrideHandler(key, handler);
@@ -200,10 +200,10 @@ describe('execute_plan via v4.0 lifecycle', () => {
     const adapter = mockAdapter({
       turns: [
         { assistantText: '```json\n{"summary":"first attempt","filesChanged":["a.ts"],"taskOutcomes":[{"taskIndex":0,"status":"done"}]}\n```', toolCalls: [] },
-        { assistantText: '```json\n{"verdict":"changes_required","concerns":["missing edge case"]}\n```', toolCalls: [] },
+        { assistantText: '## Summary\nchanges_required', toolCalls: [] },
         { assistantText: '```json\n{"summary":"fixed","filesChanged":["a.ts"],"taskOutcomes":[{"taskIndex":0,"status":"done"}]}\n```', toolCalls: [] },
-        { assistantText: '```json\n{"verdict":"approved","concerns":[]}\n```', toolCalls: [] },
-        { assistantText: '```json\n{"verdict":"approved","concerns":[]}\n```', toolCalls: [] },
+        { assistantText: '## Summary\napproved', toolCalls: [] },
+        { assistantText: '## Summary\napproved', toolCalls: [] },
         { assistantText: 'APPROVE', toolCalls: [] },
       ],
     });
@@ -214,8 +214,8 @@ describe('execute_plan via v4.0 lifecycle', () => {
     });
 
     const builder = new ReviewerPromptBuilder({ spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate });
-    const engine = new ReviewerEngine(dispatcher.shell, builder);
-    const reviewHandlers = makeReviewHandlers(engine);
+    const engine = new ReviewerEngine(builder);
+    const reviewHandlers = makeReviewHandlers(engine, dispatcher.shell);
 
     for (const [key, handler] of Object.entries(reviewHandlers)) {
       dispatcher.overrideHandler(key, handler);

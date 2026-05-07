@@ -17,12 +17,23 @@ export class RunnerShell {
     let stoppedByAdapter = false;
 
     for (let turn = 0; turn < input.maxTurns; turn++) {
+      if (input.abortSignal?.aborted) {
+        return {
+          workerStatus: 'blocked',
+          finalAssistantText: '',
+          toolCalls: allToolCalls,
+          usage,
+          errorCode: 'aborted',
+        };
+      }
       const turnResult: AdapterTurnResult = await this.adapter.turn({
         systemPrompt: input.systemPrompt,
         userMessage: input.userMessage,
         priorTurns: history,
         toolDefinitions: input.toolDefinitions,
         capabilities: input.capabilities ?? DEFAULT_CAPABILITIES,
+        abortSignal: input.abortSignal,
+        deadlineMs: input.deadlineMs,
       });
 
       usage.inputTokens += turnResult.usage.inputTokens;

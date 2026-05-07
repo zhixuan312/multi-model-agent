@@ -9,6 +9,8 @@ export interface RunInput {
   maxTurns: number;
   cwd: string;
   capabilities?: import('./runner-adapter.js').AdapterCapabilities;
+  abortSignal?: AbortSignal;
+  deadlineMs?: number;
 }
 
 export interface RunResult {

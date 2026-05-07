@@ -1,6 +1,6 @@
 import type { ReviewTemplate } from './templates/shared.js';
 
-export type QualityReviewRoute = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
+export type QualityReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'verify' | 'investigate' | 'debug' | 'explore';
 
 export class ReviewerPromptBuilder {
   constructor(

@@ -7,7 +7,6 @@ import {
   qualityAPTemplate,
   diffTemplate,
 } from '../../review/reviewer-engine.js';
-import type { RunnerShell } from '../../providers/runner-shell.js';
 
 export function registerDelegate(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -23,7 +22,7 @@ export function registerDelegate(registry: ToolSurfaceRegistry): void {
   });
 }
 
-export function makeDelegateReviewer(shell: RunnerShell): ReviewerEngine {
+export function makeDelegateReviewer(): ReviewerEngine {
   const builder = new ReviewerPromptBuilder({ spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate });
-  return new ReviewerEngine(shell, builder);
+  return new ReviewerEngine(builder);
 }
