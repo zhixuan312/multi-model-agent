@@ -11,7 +11,7 @@ export interface ReviewerDiffParseResult {
 }
 
 function extractSummarySection(text: string): string | null {
-  const match = text.match(/##\s*Summary\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  const match = text.match(/##\s*Summary\s*\n([\s\S]*?)(?=\n##\s|$)/i);
   return match ? match[1].trim() : null;
 }
 
@@ -30,13 +30,13 @@ function extractDeviationsAndUnresolved(text: string): string[] {
     }
   }
 
-  const devMatch = text.match(/##\s*Deviations from brief\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  const devMatch = text.match(/##\s*Deviations from brief\s*\n([\s\S]*?)(?=\n##\s|$)/i);
   if (devMatch) {
     const lines = devMatch[1].trim().split('\n').filter(l => l.trim().startsWith('-'));
     concerns.push(...lines.map(l => l.replace(/^-\s*/, '').trim()));
   }
 
-  const unresMatch = text.match(/##\s*Unresolved\s*\n([\s\S]*?)(?=\n##\s|\n*$)/i);
+  const unresMatch = text.match(/##\s*Unresolved\s*\n([\s\S]*?)(?=\n##\s|$)/i);
   if (unresMatch) {
     const lines = unresMatch[1].trim().split('\n').filter(l => l.trim().startsWith('-'));
     concerns.push(...lines.map(l => l.replace(/^-\s*/, '').trim()));

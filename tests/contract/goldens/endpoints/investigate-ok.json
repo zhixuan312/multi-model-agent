@@ -47,14 +47,14 @@
         "extraSections": {}
       },
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "annotated",
+      "qualityReviewStatus": "error",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "readonly",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "standard"
+        "qualityReviewer": "skipped"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
@@ -70,7 +70,7 @@
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": "mock-model"
+        "qualityReviewer": null
       }
     }
   ],
@@ -94,6 +94,6 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "annotated",
+  "qualityReviewVerdict": "error",
   "roundsUsed": 1
 }

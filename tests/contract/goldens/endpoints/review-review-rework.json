@@ -31,7 +31,7 @@
       "directoriesListed": [],
       "workerStatus": "done",
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "annotated",
+      "qualityReviewStatus": "error",
       "terminationReason": {
         "cause": "finished",
         "turnsUsed": 1,
@@ -54,7 +54,7 @@
         "implementer": "complex",
         "implementerToolMode": "full",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "standard"
+        "qualityReviewer": "skipped"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
@@ -70,7 +70,7 @@
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": "mock-model"
+        "qualityReviewer": null
       }
     }
   ],
@@ -94,6 +94,6 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "annotated",
+  "qualityReviewVerdict": "error",
   "roundsUsed": 1
 }

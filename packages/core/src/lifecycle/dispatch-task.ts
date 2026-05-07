@@ -13,6 +13,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
+import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { pickEscalation } from '../escalation/policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
@@ -239,8 +240,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: [],
-    ...(input.reviewerEngine && { reviewerEngine: input.reviewerEngine }),
-    ...(input.annotatorEngine && { annotatorEngine: input.annotatorEngine }),
+    reviewerEngine: input.reviewerEngine ?? createDefaultReviewerEngine(),
+    annotatorEngine: input.annotatorEngine ?? createDefaultAnnotatorEngine(),
   };
 }
 
