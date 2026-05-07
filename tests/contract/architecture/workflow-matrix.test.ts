@@ -2,18 +2,8 @@ import { describe, it, expect } from 'vitest';
 import { readFileSync, writeFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { ToolSurfaceRegistry } from '../../../packages/core/src/tool-surface/tool-surface-registry.js';
+import { buildToolSurfaceRegistry } from '../../../packages/core/src/tool-surface/register-all-tools.js';
 import { buildStagePlan } from '../../../packages/core/src/lifecycle/stage-plan-builder.js';
-import { registerDelegate } from '../../../packages/core/src/tools/delegate/tool-config.js';
-import { registerAudit } from '../../../packages/core/src/tools/audit/tool-config.js';
-import { registerReview } from '../../../packages/core/src/tools/review/tool-config.js';
-import { registerVerify } from '../../../packages/core/src/tools/verify/tool-config.js';
-import { registerDebug } from '../../../packages/core/src/tools/debug/tool-config.js';
-import { registerExecutePlan } from '../../../packages/core/src/tools/execute-plan/tool-config.js';
-import { registerRetry } from '../../../packages/core/src/tools/retry/tool-config.js';
-import { registerInvestigate } from '../../../packages/core/src/tools/investigate/tool-config.js';
-import { registerExplore } from '../../../packages/core/src/tools/explore/tool-config.js';
-import { registerContextBlock } from '../../../packages/core/src/tools/register-context-block/tool-config.js';
 
 const here = dirname(fileURLToPath(import.meta.url));
 const goldenPath = resolve(here, '../goldens/architecture/workflow-matrix.json');
@@ -24,17 +14,7 @@ interface MatrixGolden {
 }
 
 function buildMatrix(): MatrixGolden {
-  const registry = new ToolSurfaceRegistry();
-  registerDelegate(registry);
-  registerAudit(registry);
-  registerReview(registry);
-  registerVerify(registry);
-  registerDebug(registry);
-  registerExecutePlan(registry);
-  registerRetry(registry);
-  registerInvestigate(registry);
-  registerExplore(registry);
-  registerContextBlock(registry);
+  const registry = buildToolSurfaceRegistry();
 
   const tools = registry
     .list()

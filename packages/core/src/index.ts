@@ -77,6 +77,7 @@ export type { RunTasksOptions } from './lifecycle/dispatch-task.js';
 // Lifecycle
 export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';
 export type { SurfaceEntry } from './tool-surface/tool-surface-registry.js';
+export { registerAllTools, buildToolSurfaceRegistry } from './tool-surface/register-all-tools.js';
 export { LifecycleDispatcher } from './lifecycle/lifecycle-dispatcher.js';
 export type { DispatchInput, DispatchOutput, ContextBlockHandler } from './lifecycle/lifecycle-dispatcher.js';
 export type { ExecutionContext } from './lifecycle/lifecycle-context.js';

@@ -66,28 +66,10 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const core = await import('@zhixuan92/multi-model-agent-core');
-  const { ToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } = core;
-  const { registerDelegate } = await import('@zhixuan92/multi-model-agent-core/tools/delegate/tool-config');
-  const { registerAudit } = await import('@zhixuan92/multi-model-agent-core/tools/audit/tool-config');
-  const { registerReview } = await import('@zhixuan92/multi-model-agent-core/tools/review/tool-config');
-  const { registerVerify } = await import('@zhixuan92/multi-model-agent-core/tools/verify/tool-config');
-  const { registerDebug } = await import('@zhixuan92/multi-model-agent-core/tools/debug/tool-config');
-  const { registerExecutePlan } = await import('@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config');
-  const { registerRetry } = await import('@zhixuan92/multi-model-agent-core/tools/retry/tool-config');
-  const { registerInvestigate } = await import('@zhixuan92/multi-model-agent-core/tools/investigate/tool-config');
-  const { registerExplore } = await import('@zhixuan92/multi-model-agent-core/tools/explore/tool-config');
+  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } =
+    await import('@zhixuan92/multi-model-agent-core');
 
-  const surface = new ToolSurfaceRegistry();
-  registerDelegate(surface);
-  registerAudit(surface);
-  registerReview(surface);
-  registerVerify(surface);
-  registerDebug(surface);
-  registerExecutePlan(surface);
-  registerRetry(surface);
-  registerInvestigate(surface);
-  registerExplore(surface);
+  const surface = buildToolSurfaceRegistry();
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
