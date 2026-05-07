@@ -18,7 +18,7 @@ describe('contract: orchestrator fallback report', () => {
       const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
-        body: JSON.stringify({ tasks: [{ prompt: 'fallback-report test' }] }),
+        body: JSON.stringify({ tasks: [{ prompt: 'fallback-report test', reviewPolicy: 'none' }] }),
       });
       const { batchId } = (await d.json()) as { batchId: string };
       let envelope: Record<string, unknown> | null = null;

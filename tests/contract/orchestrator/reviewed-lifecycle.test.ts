@@ -15,7 +15,7 @@ describe('contract: reviewed lifecycle', () => {
       const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
-        body: JSON.stringify({ tasks: [{ prompt: 'reviewed-lifecycle test' }] }),
+        body: JSON.stringify({ tasks: [{ prompt: 'reviewed-lifecycle test', reviewPolicy: 'none' }] }),
       });
       const { batchId } = (await d.json()) as { batchId: string };
       let envelope: Record<string, unknown> | null = null;

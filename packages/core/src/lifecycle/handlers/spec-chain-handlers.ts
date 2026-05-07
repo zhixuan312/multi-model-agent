@@ -3,6 +3,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
 import type { ReviewerCallResult, ReviewRoute } from '../../review/reviewer-engine.js';
+import { ReviewerParseError } from '../../review/reviewer-engine.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import {
   runWithFallback,
@@ -79,14 +80,21 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
-      return engine.runSpec(shell, {
-        workerOutput: last.output,
-        brief: task.prompt ?? '',
-        cwd: ctx.cwd,
-        route: (state.route ?? ctx.route) as ReviewRoute,
-        abortSignal: ctx.stall.controller.signal,
-        deadlineMs: ctx.timing.deadlineMs,
-      });
+      try {
+        return engine.runSpec(shell, {
+          workerOutput: last.output,
+          brief: task.prompt ?? '',
+          cwd: ctx.cwd,
+          route: (state.route ?? ctx.route) as ReviewRoute,
+          abortSignal: ctx.stall.controller.signal,
+          deadlineMs: ctx.timing.deadlineMs,
+        });
+      } catch (err) {
+        if (err instanceof ReviewerParseError) {
+          return { verdict: 'error' as const, concerns: [] } as unknown as ReviewerCallResult;
+        }
+        throw err;
+      }
     },
   });
 

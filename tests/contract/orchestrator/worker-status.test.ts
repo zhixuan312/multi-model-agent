@@ -8,8 +8,8 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider, type Stage } from '../fixtures/mock-providers.js';
 
 const STAGES: Stage[] = ['ok', 'incomplete', 'max-turns', 'review-rework'];
-const VALID_WORKER_STATUS = new Set(['done', 'partial', 'blocked', 'needs_input', 'reviewing']);
-const VALID_REVIEW_STATUS = new Set(['approved', 'changes_required', 'not_applicable']);
+const VALID_WORKER_STATUS = new Set(['done', 'partial', 'blocked', 'needs_input', 'reviewing', 'failed']);
+const VALID_REVIEW_STATUS = new Set(['approved', 'changes_required', 'not_applicable', 'error']);
 
 async function dispatchAndWait(stage: Stage): Promise<Record<string, unknown>> {
   const h = await boot({ provider: mockProvider({ stage }), cwd: process.cwd() });
@@ -17,7 +17,7 @@ async function dispatchAndWait(stage: Stage): Promise<Record<string, unknown>> {
     const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
-      body: JSON.stringify({ tasks: [{ prompt: `orchestrator worker-status ${stage}` }] }),
+      body: JSON.stringify({ tasks: [{ prompt: `orchestrator worker-status ${stage}`, reviewPolicy: 'none' }] }),
     });
     const { batchId } = (await d.json()) as { batchId: string };
     for (let i = 0; i < 180; i++) {

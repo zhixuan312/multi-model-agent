@@ -3,6 +3,7 @@ import * as os from 'node:os';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/dispatch-task.js';
 import type { TaskSpec, RunResult, MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 import type { ResolvedAgent } from '../../packages/core/src/escalation/agent-resolver.js';
+import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';
 
 function mockProvider(reply: string, name: 'standard' | 'complex' = 'standard'): Provider {
   return {
@@ -74,7 +75,8 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
     // Implementer returns a structured report, reviewer (same mock) approves.
     // Both providers return the same approve-summary so spec round 1 +
     // quality round 1 both pass.
-    const provider: Provider = {
+    process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+    const mock: Provider = {
       name: 'standard',
       config: { type: 'claude', model: 'mock' } as Provider['config'],
       run: async (prompt: string) => {
@@ -96,6 +98,8 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
         } as RunResult;
       },
     };
+    __setCoreTestProviderOverride(mock);
+    const provider: Provider = mock;
     const resolved: ResolvedAgent = { slot: 'standard', provider };
     const task: TaskSpec = {
       prompt: 'do the thing',
@@ -105,16 +109,21 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
       tools: 'none',
     };
 
-    const result = await runTaskViaDispatcher({
-      task,
-      resolved,
-      config: makeConfig(),
-      taskIndex: 0,
-      route: 'delegate',
-    });
+    try {
+      const result = await runTaskViaDispatcher({
+        task,
+        resolved,
+        config: makeConfig(),
+        taskIndex: 0,
+        route: 'delegate',
+      });
 
-    expect(result).toBeDefined();
-    expect(result.status).toBe('ok');
+      expect(result).toBeDefined();
+      expect(result.status).toBe('ok');
+    } finally {
+      __setCoreTestProviderOverride(null);
+      delete process.env.MMAGENT_TEST_PROVIDER_OVERRIDE;
+    }
   });
 
   it('captures provider error in RunResult on failure', async () => {

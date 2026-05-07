@@ -3,6 +3,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { pickReviewer, pickEscalation } from '../../escalation/policy.js';
 import { ReviewerEngine, type ReviewerCallResult, type ReviewRoute } from '../../review/reviewer-engine.js';
+import { ReviewerParseError } from '../../review/reviewer-engine.js';
 import { AnnotatorEngine, type AnnotatorCallResult } from '../../review/annotator-engine.js';
 import type { AnnotatorRoute } from '../../review/annotator-prompt-builder.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
@@ -83,17 +84,24 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
       if (isArtifactProducing) {
         const engine = ctx.reviewerEngine;
         if (!engine) throw new Error('reviewerEngine not configured');
-        return engine.runQualityAP(shell, {
-          workerOutput: last.output,
-          brief: task.prompt ?? '',
-          cwd: ctx.cwd,
-          route,
-          fileContents,
-          toolCallLog,
-          filesWritten,
-          abortSignal: ctx.stall.controller.signal,
-          deadlineMs: ctx.timing.deadlineMs,
-        });
+        try {
+          return engine.runQualityAP(shell, {
+            workerOutput: last.output,
+            brief: task.prompt ?? '',
+            cwd: ctx.cwd,
+            route,
+            fileContents,
+            toolCallLog,
+            filesWritten,
+            abortSignal: ctx.stall.controller.signal,
+            deadlineMs: ctx.timing.deadlineMs,
+          });
+        } catch (err) {
+          if (err instanceof ReviewerParseError) {
+            return { verdict: 'error' as const, concerns: [] } as unknown as ReviewerCallResult;
+          }
+          throw err;
+        }
       }
       const annotator = ctx.annotatorEngine;
       if (!annotator) throw new Error('annotatorEngine not configured');
