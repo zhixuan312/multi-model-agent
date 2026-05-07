@@ -83,10 +83,9 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/investigate');
     expect(paths).toContain('/explore');
 
-    // 4 control routes
+    // 3 control routes
     expect(paths).toContain('/batch/{batchId}');
     expect(paths).toContain('/context-blocks');
-    expect(paths).toContain('/register-context-block');
     expect(paths).toContain('/context-blocks/{blockId}');
 
     // 2 introspection routes

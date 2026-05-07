@@ -5,6 +5,7 @@
 // schema in lockstep.
 import { z } from 'zod';
 import { notApplicableSchema } from '../reporting/not-applicable.js';
+import { ReviewVerdictEnum } from '../types/enums.js';
 
 // Shared, reusable concrete schemas for terminal-envelope fields.
 export const errorSchema = z.object({
@@ -18,10 +19,6 @@ export const batchTimingsSchema = z.object({}).passthrough();
 export const costSummarySchema = z.object({}).passthrough();
 export const structuredReportSchema = z.object({}).passthrough();
 
-const REVIEW_VERDICT_SCHEMA = z.enum([
-  'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
-]);
-
 // Envelope builder — single source of truth.
 export function buildOutputEnvelopeSchema(resultItemSchema: z.ZodTypeAny = z.unknown()) {
   return z.object({
@@ -31,8 +28,8 @@ export function buildOutputEnvelopeSchema(resultItemSchema: z.ZodTypeAny = z.unk
     costSummary: z.union([costSummarySchema, notApplicableSchema]),
     structuredReport: z.union([structuredReportSchema, notApplicableSchema]),
     error: z.union([errorSchema, notApplicableSchema]),
-    specReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
-    qualityReviewVerdict: REVIEW_VERDICT_SCHEMA.optional(),
+    specReviewVerdict: ReviewVerdictEnum.optional(),
+    qualityReviewVerdict: ReviewVerdictEnum.optional(),
     roundsUsed: z.number().int().min(0).optional(),
   }).passthrough();
 }

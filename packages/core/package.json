@@ -76,14 +76,6 @@
       "types": "./dist/lifecycle/metadata-repair.d.ts",
       "import": "./dist/lifecycle/metadata-repair.js"
     },
-    "./review/diff-review": {
-      "types": "./dist/review/diff-review.d.ts",
-      "import": "./dist/review/diff-review.js"
-    },
-    "./review/evidence": {
-      "types": "./dist/review/evidence.d.ts",
-      "import": "./dist/review/evidence.js"
-    },
     "./bounded-execution/activity-tracker": {
       "types": "./dist/bounded-execution/activity-tracker.d.ts",
       "import": "./dist/bounded-execution/activity-tracker.js"
@@ -95,22 +87,6 @@
     "./reporting/structured-report": {
       "types": "./dist/reporting/structured-report.d.ts",
       "import": "./dist/reporting/structured-report.js"
-    },
-    "./review/reviewer-prompt": {
-      "types": "./dist/review/reviewer-prompt.d.ts",
-      "import": "./dist/review/reviewer-prompt.js"
-    },
-    "./review/spec-reviewer": {
-      "types": "./dist/review/spec-reviewer.d.ts",
-      "import": "./dist/review/spec-reviewer.js"
-    },
-    "./review/quality-reviewer": {
-      "types": "./dist/review/quality-reviewer.d.ts",
-      "import": "./dist/review/quality-reviewer.js"
-    },
-    "./review/aggregate-result": {
-      "types": "./dist/review/aggregate-result.d.ts",
-      "import": "./dist/review/aggregate-result.js"
     },
     "./error-codes": {
       "types": "./dist/error-codes.d.ts",
@@ -374,6 +350,7 @@
     }
   },
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "tsc"
   },
   "engines": {

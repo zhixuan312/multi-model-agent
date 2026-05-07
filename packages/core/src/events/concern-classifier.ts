@@ -1,8 +1,4 @@
-export type ConcernCategory =
-  | 'missing_test' | 'scope_creep' | 'incomplete_impl' | 'style_lint'
-  | 'security' | 'performance' | 'maintainability' | 'doc_gap'
-  | 'doc_drift' | 'contract_violation' | 'coverage_gap' | 'dead_code' | 'queue_hygiene'
-  | 'other';
+import type { ConcernCategoryType } from '../types/enums.js';
 
 interface RawConcern {
   source:   string; // 'spec_review' | 'quality_review' | 'diff_review' | …
@@ -14,7 +10,7 @@ interface RawConcern {
 // (e.g. `\bmissing|no\s+test` parses as `(\bmissing) | (no\s+test)` — the
 // word-boundary applies only to "missing", which silently matches "no known
 // issue"). Wrap the alternation explicitly so `\b` covers every branch.
-const PATTERNS: Array<[RegExp, ConcernCategory]> = [
+const PATTERNS: Array<[RegExp, ConcernCategoryType]> = [
   [/\b(?:(?:missing|no)\s+(?:unit\s+)?tests?|untested)\b/i,                       'missing_test'],
   [/\b(?:sqli?|sql\s*injection|xss|secret|api[\s_-]*key|token|cred(?:ential)?s?)\b/i, 'security'],
   [/\b(?:O\([^)]+\)|hot\s*path|n\^?2|quadratic|slow\s+loop)\b/i,                  'performance'],
@@ -30,7 +26,7 @@ const PATTERNS: Array<[RegExp, ConcernCategory]> = [
   [/\b(?:queue|tracker|prq|backlog)\b.*\b(?:hygiene|stale|cleanup|historical)\b/i,  'queue_hygiene'],
 ];
 
-export function classifyConcern(c: RawConcern): ConcernCategory {
+export function classifyConcern(c: RawConcern): ConcernCategoryType {
   for (const [re, cat] of PATTERNS) if (re.test(c.message)) return cat;
   return 'other';
 }

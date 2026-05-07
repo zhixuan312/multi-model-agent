@@ -85,9 +85,11 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
         && (isRO || s.reviewPolicy !== 'full' || s.specChainPassed === true)
         && !s.terminal,
       isRework: false, handlerKey: 'quality_review_round_1' },
-    // 4.7: rework_for_quality_round_1 — gated on changes_required (matches reviewer
-    // output; 'concerns' is removed from the verdict union — no reviewer emits it).
-    // Annotator output 'annotated' naturally fails this gate.
+    // 4.7: rework_for_quality_round_1 — gated on changes_required only.
+    // ReviewVerdictEnum still permits 'concerns' but the v4 reviewer prompts
+    // never emit it (the binary contract is approved | changes_required); both
+    // 'concerns' and 'approved' fall through. Annotator output 'annotated'
+    // naturally fails this gate as well.
     { rowId: '4.7', stageName: 'rework_for_quality_round_1', schemaStage: 'quality_rework',
       runCondition: (s) => isAP && s.qualityReviewRound1Verdict === 'changes_required' && !s.terminal,
       isRework: true, handlerKey: 'rework_for_quality_round_1' },

@@ -50,7 +50,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
-  '/control/retry', '/control/batch-slice', '/context-blocks', '/register-context-block',
+  '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
 /**
@@ -241,12 +241,6 @@ async function registerControlHandlers(
       maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
       maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
     }));
-    router.register('POST', '/register-context-block', buildCreateContextBlockHandler({
-      projectRegistry,
-      routeDispatcher,
-      maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
-      maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
-    }));
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
     router.register('POST', '/control/retry', (_req, res) => {
@@ -256,9 +250,6 @@ async function registerControlHandlers(
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });
     router.register('POST', '/context-blocks', (_req, res) => {
-      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
-    });
-    router.register('POST', '/register-context-block', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });
     router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
