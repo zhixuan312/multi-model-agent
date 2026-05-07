@@ -120,14 +120,14 @@ export class RunningHeadlineSink {
 
     const stage = next.stageLabel ?? 'Running';
     const tierStr = capitalizeTier(next.tier);
-    const tierClause = tierStr ? `${tierStr} ` : '';
+    const workerClause = tierStr ? ` by ${tierStr} worker` : '';
     const progress = stageProgress(entry.tool, next.stageLabel);
 
     // Per-task snapshot. The batch handler prepends `[taskIdx/total] ` and
     // appends elapsed + stats. Final shape per line:
-    //   [1/2] Standard Implementing (1/7) - 5m 40s, 2 read, 0 write, 15 tool calls
-    const prefix = `${tierClause}${stage} (${progress}) - `;
-    const fallback = `${tierClause}${stage} (${progress})`;
+    //   [1/2] Implementing by Standard worker (1/7) - 5m 40s, 2 read, 0 write, 15 tool calls
+    const prefix = `${stage}${workerClause} (${progress}) - `;
+    const fallback = `${stage}${workerClause} (${progress})`;
     const statsClause = `, ${read} read, ${write} write, ${total} tool calls`;
 
     this.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, taskIndex, {
