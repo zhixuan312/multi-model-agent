@@ -66,7 +66,10 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } =
+  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+    specTemplate, qualityAPTemplate, diffTemplate,
+    qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+  } =
     await import('@zhixuan92/multi-model-agent-core');
 
   const surface = buildToolSurfaceRegistry();
@@ -111,6 +114,20 @@ async function registerToolHandlers(
 
   const routeDispatcher = new LifecycleDispatcher();
 
+  const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
+    { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+    {
+      delegate: qualityAPTemplate,
+      'execute-plan': qualityAPTemplate,
+      audit: qualityAuditTemplate,
+      review: qualityReviewTemplate,
+      verify: qualityVerifyTemplate,
+      debug: qualityDebugTemplate,
+      investigate: qualityInvestigateTemplate,
+    },
+  ));
+  const annotatorEngine = new AnnotatorEngine();
+
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
@@ -118,6 +135,8 @@ async function registerToolHandlers(
     projectRegistry,
     batchRegistry,
     routeDispatcher,
+    reviewerEngine,
+    annotatorEngine,
   };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
@@ -183,8 +202,24 @@ async function registerControlHandlers(
       new LocalLogSink(writer),
       new TelemetrySink(recorderForBus),
     ]);
-    const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
+    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+      specTemplate, qualityAPTemplate, diffTemplate,
+      qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+    } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();
+    const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
+      { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+      {
+        delegate: qualityAPTemplate,
+        'execute-plan': qualityAPTemplate,
+        audit: qualityAuditTemplate,
+        review: qualityReviewTemplate,
+        verify: qualityVerifyTemplate,
+        debug: qualityDebugTemplate,
+        investigate: qualityInvestigateTemplate,
+      },
+    ));
+    const annotatorEngine = new AnnotatorEngine();
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -195,6 +230,8 @@ async function registerControlHandlers(
       projectRegistry,
       batchRegistry,
       routeDispatcher,
+      reviewerEngine,
+      annotatorEngine,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));

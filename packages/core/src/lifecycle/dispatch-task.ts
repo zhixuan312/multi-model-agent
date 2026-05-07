@@ -69,6 +69,8 @@ export interface RunTasksOptions {
   triggeringSkill?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
+  annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
 }
 
 export async function runTasks(
@@ -142,6 +144,8 @@ export async function runTasks(
         ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
+        ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
+        ...(options.annotatorEngine && { annotatorEngine: options.annotatorEngine }),
       });
     }),
   );
@@ -176,6 +180,8 @@ export interface DispatchTaskInput {
   triggeringSkill?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
+  annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -233,6 +239,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: [],
+    ...(input.reviewerEngine && { reviewerEngine: input.reviewerEngine }),
+    ...(input.annotatorEngine && { annotatorEngine: input.annotatorEngine }),
   };
 }
 

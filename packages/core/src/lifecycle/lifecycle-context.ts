@@ -103,6 +103,12 @@ export interface ExecutionContext {
   // ── Output target tracking ──
   outputTargets: string[];
 
+  // ── v4 review engines ──
+  /** Quality + spec + diff reviewer engine. Optional until B2-B4 wire it into chain handlers. */
+  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
+  /** Annotator engine for audit/review/verify/debug/investigate routes. */
+  annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
+
   // ── Pre-v4 executor compatibility (Phase B/E will consume these) ──
   /** Per-project runtime state — used by executor-layer consumers (delegate, etc.). */
   projectContext?: ProjectContext;

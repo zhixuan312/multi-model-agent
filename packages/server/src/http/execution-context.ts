@@ -69,5 +69,7 @@ export function buildExecutionContext(
     verboseStream: () => {},
     verbose: false,
     outputTargets: [],
+    reviewerEngine: deps.reviewerEngine,
+    annotatorEngine: deps.annotatorEngine,
   } as unknown as ExecutionContext;
 }

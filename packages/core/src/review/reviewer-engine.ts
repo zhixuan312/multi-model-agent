@@ -10,6 +10,11 @@ export type { ReviewTemplate } from './templates/shared.js';
 export { specTemplate } from './templates/spec-review.js';
 export { qualityAPTemplate } from './templates/quality-review-artifact.js';
 export { diffTemplate } from './templates/diff-review.js';
+export { qualityAuditTemplate } from './templates/quality-review-audit.js';
+export { qualityReviewTemplate } from './templates/quality-review-review.js';
+export { qualityVerifyTemplate } from './templates/quality-review-verify.js';
+export { qualityDebugTemplate } from './templates/quality-review-debug.js';
+export { qualityInvestigateTemplate } from './templates/quality-review-investigate.js';
 export { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 export type { QualityReviewRoute } from './reviewer-prompt-builder.js';
 

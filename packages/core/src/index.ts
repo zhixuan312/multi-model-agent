@@ -173,8 +173,15 @@ export {
   specTemplate,
   qualityAPTemplate,
   diffTemplate,
+  qualityAuditTemplate,
+  qualityReviewTemplate,
+  qualityVerifyTemplate,
+  qualityDebugTemplate,
+  qualityInvestigateTemplate,
 } from './review/reviewer-engine.js';
 export type { ReviewTemplate, QualityReviewRoute } from './review/reviewer-engine.js';
+export { AnnotatorEngine } from './review/annotator-engine.js';
+export type { AnnotatorRoute } from './review/annotator-prompt-builder.js';
 
 // Intake-pipeline slots
 export { delegateSlot } from './intake/brief-compiler-slots/delegate.js';
