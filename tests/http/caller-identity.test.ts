@@ -20,17 +20,17 @@ describe('resolveCallerIdentity', () => {
 
   it('reads X-MMA-Client from headers', () => {
     const req = fakeReq({ 'x-mma-client': 'claude-code' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
   });
 
   it('normalizes case of header values', () => {
     const req = fakeReq({ 'x-mma-client': 'Claude-Code' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
   });
 
   it('trims whitespace from header values', () => {
     const req = fakeReq({ 'x-mma-client': '  claude-code  ' });
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code' });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'claude-code', mainModel: null });
   });
 
   it('maps unknown client to "other"', () => {
@@ -40,7 +40,22 @@ describe('resolveCallerIdentity', () => {
 
   it('defaults client to "other" when header missing', () => {
     const req = fakeReq({});
-    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'other' });
+    expect(resolveCallerIdentity(req)).toEqual({ callerClient: 'other', mainModel: null });
+  });
+
+  it('reads X-MMA-Main-Model from headers', () => {
+    const req = fakeReq({ 'x-mma-main-model': 'claude-opus-4-7' });
+    expect(resolveCallerIdentity(req).mainModel).toBe('claude-opus-4-7');
+  });
+
+  it('defaults mainModel to null when header missing', () => {
+    const req = fakeReq({});
+    expect(resolveCallerIdentity(req).mainModel).toBeNull();
+  });
+
+  it('treats empty X-MMA-Main-Model as null', () => {
+    const req = fakeReq({ 'x-mma-main-model': '   ' });
+    expect(resolveCallerIdentity(req).mainModel).toBeNull();
   });
 
   it('accepts all known clients', () => {

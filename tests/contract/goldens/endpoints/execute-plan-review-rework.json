@@ -1,5 +1,5 @@
 {
-  "headline": "[incomplete] execute_plan",
+  "headline": "[incomplete] execute_plan: needs rework per review",
   "results": [
     {
       "output": "needs rework per review",
@@ -76,7 +76,7 @@
           "outputTokens": 60,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 0,
+          "turnCount": 3,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0,
@@ -160,11 +160,15 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "kind": "not_applicable",
-    "reason": "reportSchema.parse failed for execute_plan"
+    "summary": "needs rework per review",
+    "filesChanged": [],
+    "validationsRun": [],
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -172,6 +176,7 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
+  "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "changes_required",
   "qualityReviewVerdict": "not_applicable",
   "roundsUsed": 1,

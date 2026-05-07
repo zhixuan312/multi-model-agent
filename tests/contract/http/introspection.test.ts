@@ -11,7 +11,7 @@ import notFoundGolden from '../goldens/errors/not-found.json' with { type: 'json
 async function authedFetch(url: string, token: string, init?: RequestInit): Promise<Response> {
   return await fetch(url, {
     ...init,
-    headers: { ...(init?.headers ?? {}), Authorization: `Bearer ${token}` },
+    headers: { ...(init?.headers ?? {}), "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${token}` },
   });
 }
 

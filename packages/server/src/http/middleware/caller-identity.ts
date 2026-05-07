@@ -6,11 +6,17 @@ export type CallerClient = 'claude-code' | 'cursor' | 'codex-cli' | 'gemini-cli'
 
 export interface CallerIdentity {
   callerClient: CallerClient;
+  /** Calling agent's model id (e.g., claude-opus-4-7). Sourced from the
+   *  optional X-MMA-Main-Model header. Used as `mainModel` in wire
+   *  telemetry so cost-delta-vs-main and family attribution can be
+   *  computed. null when the caller didn't send the header. */
+  mainModel: string | null;
 }
 
 /** Default identity when no caller header is present. */
 export const DEFAULT_IDENTITY: CallerIdentity = {
   callerClient: 'other',
+  mainModel: null,
 };
 
 export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
@@ -20,5 +26,8 @@ export function resolveCallerIdentity(req: IncomingMessage): CallerIdentity {
     ? (rawClient as CallerClient)
     : 'other';
 
-  return { callerClient };
+  const rawMainModel = (req.headers['x-mma-main-model'] as string | undefined)?.trim();
+  const mainModel = rawMainModel && rawMainModel.length > 0 ? rawMainModel : null;
+
+  return { callerClient, mainModel };
 }

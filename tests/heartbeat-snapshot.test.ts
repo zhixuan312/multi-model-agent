@@ -14,18 +14,18 @@ describe('ActivityTracker.getHeadlineSnapshot', () => {
     expect(snap.statsClause).toBe(', 1 read, 1 tool call');
   });
 
-  it('omits saved-cost clause when costDeltaVsParentUSD is zero', () => {
+  it('omits saved-cost clause when costDeltaVsMainUSD is zero', () => {
     const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
-    ht.applyCost({ costUSD: 0.01, costDeltaVsParentUSD: 0 });
+    ht.applyCost({ costUSD: 0.01, costDeltaVsMainUSD: 0 });
     const snap = ht.getHeadlineSnapshot();
     expect(snap.statsClause).toBe(''); // counters all zero, savedCost zero
   });
 
-  it('emits saved-cost clause with multiplier when costUSD is positive and costDeltaVsParentUSD is negative (savings)', () => {
+  it('emits saved-cost clause with multiplier when costUSD is positive and costDeltaVsMainUSD is negative (savings)', () => {
     const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
-    ht.applyCost({ costUSD: 0.01, costDeltaVsParentUSD: -0.10 });
+    ht.applyCost({ costUSD: 0.01, costDeltaVsMainUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();
     expect(snap.statsClause).toContain('$0.10 saved');
     expect(snap.statsClause).toContain('11.0x');
@@ -34,7 +34,7 @@ describe('ActivityTracker.getHeadlineSnapshot', () => {
   it('omits multiplier when costUSD is zero', () => {
     const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
-    ht.applyCost({ costUSD: 0, costDeltaVsParentUSD: -0.10 });
+    ht.applyCost({ costUSD: 0, costDeltaVsMainUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();
     expect(snap.statsClause).toContain('$0.10 saved');
     expect(snap.statsClause).not.toContain('x');
@@ -43,7 +43,7 @@ describe('ActivityTracker.getHeadlineSnapshot', () => {
   it('omits multiplier when costUSD is non-finite', () => {
     const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
-    ht.applyCost({ costUSD: Infinity, costDeltaVsParentUSD: -0.10 });
+    ht.applyCost({ costUSD: Infinity, costDeltaVsMainUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();
     expect(snap.statsClause).toContain('$0.10 saved');
     expect(snap.statsClause).not.toContain('x');

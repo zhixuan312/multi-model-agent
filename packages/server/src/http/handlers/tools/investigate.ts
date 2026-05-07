@@ -80,7 +80,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      caller: { client: ctx.callerClient },
+      caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
         const callExecutor = () => executeTask(toolConfig, executionCtx, enrichedInput);
         if (deps.routeDispatcher) {

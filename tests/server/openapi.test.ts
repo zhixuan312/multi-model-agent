@@ -17,7 +17,7 @@ describe('OpenAPI document', () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/tools`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/json');

@@ -12,7 +12,7 @@ describe('contract: route manifest', () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const res = await fetch(`${h.baseUrl}/__routes`, {
-        headers: { Authorization: `Bearer ${h.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       });
       expect(res.ok).toBe(true);
       const actual = (await res.json()) as { method: string; path: string }[];

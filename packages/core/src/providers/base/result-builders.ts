@@ -19,7 +19,7 @@ export interface SharedResultUsage {
   cachedReadTokens: number;
   cachedNonReadTokens: number;
   costUSD: number | null;
-  costDeltaVsParentUSD: number | null;
+  costDeltaVsMainUSD: number | null;
 }
 
 export interface ReviewedRunResultFields {
@@ -51,7 +51,7 @@ export function buildOkResult(args: {
     output,
     status: 'ok',
     usage: usageShape(usage),
-    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
+    cost: { costUSD: usage.costUSD, costDeltaVsMainUSD: usage.costDeltaVsMainUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),
@@ -97,7 +97,7 @@ export function buildIncompleteResult(args: {
     status: 'incomplete',
     ...(stampExhausted && { errorCode: 'degenerate_exhausted' as const }),
     usage: usageShape(usage),
-    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
+    cost: { costUSD: usage.costUSD, costDeltaVsMainUSD: usage.costDeltaVsMainUSD },
     turns,
     filesRead,
     directoriesListed: tracker.getDirectoriesListed(),
@@ -132,7 +132,7 @@ export function buildMaxTurnsExitResult(args: {
     status: 'incomplete',
     errorCode: 'degenerate_exhausted',
     usage: usageShape(usage),
-    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
+    cost: { costUSD: usage.costUSD, costDeltaVsMainUSD: usage.costDeltaVsMainUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),
@@ -163,7 +163,7 @@ export function buildTimeCeilingResult(args: {
     output: hasSalvage ? scratchpad.latest() : diagnostic,
     status: 'incomplete',
     usage: usageShape(usage),
-    cost: { costUSD: usage.costUSD, costDeltaVsParentUSD: usage.costDeltaVsParentUSD },
+    cost: { costUSD: usage.costUSD, costDeltaVsMainUSD: usage.costDeltaVsMainUSD },
     turns,
     filesRead: tracker.getReads(),
     directoriesListed: tracker.getDirectoriesListed(),

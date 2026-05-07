@@ -215,7 +215,9 @@ const defaultsSchema = z.object({
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
-  mainModel: z.string().min(1).optional(),
+  // mainModel removed in 4.0.3: callers must send X-MMA-Main-Model on every
+  // request. Daemon-wide config can't disambiguate when one daemon serves
+  // multiple parents (Claude Code + Cursor sessions concurrently).
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,

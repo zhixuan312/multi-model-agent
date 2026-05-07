@@ -61,8 +61,8 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
-    parentModel: null,
-    parentModelFamily: 'openai',
+    mainModel: null,
+    mainModelFamily: 'openai',
     tierUsage: {},
     inputTokens: 600,
     outputTokens: 150,
@@ -70,8 +70,8 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     cachedNonReadTokens: 0,
     totalDurationMs: 50000,
     totalCostUSD: 0.031,
-    parentEquivalentCostUSD: null,
-    costDeltaVsParentUSD: null,
+    mainEquivalentCostUSD: null,
+    costDeltaVsMainUSD: null,
     concernCount: 0,
     escalationCount: 0,
     fallbackCount: 0,
@@ -166,7 +166,7 @@ function makeHealthyContext(): BuildContext {
       escalationLog: [],
     } as any,
     client: 'test',
-    parentModel: null,
+    mainModel: null,
   };
 }
 

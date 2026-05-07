@@ -33,7 +33,7 @@ describe('request processing order', () => {
       // /delegate is registered for POST only; DELETE should get 405
       const res = await fetch(`${s.url}/delegate`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(405);
       const body = await res.json();
@@ -67,6 +67,7 @@ describe('request processing order', () => {
       const res = await fetch(`${s.url}/delegate?cwd=/tmp`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },

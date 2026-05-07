@@ -150,8 +150,8 @@ export const TaskCompletedEventSchema = z.object({
   // Model
   implementerModel: z.string().regex(STRICT_ID_REGEX),
   implementerTier: z.enum(['standard', 'complex']),
-  parentModel: z.string().nullable(),
-  parentModelFamily: ModelFamilyEnum,
+  mainModel: z.string().nullable(),
+  mainModelFamily: ModelFamilyEnum,
 
   // Tier-level usage breakdown (§3.2, §3.3)
   tierUsage: z.object({
@@ -173,8 +173,8 @@ export const TaskCompletedEventSchema = z.object({
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
   totalCostUSD: z.number().min(0).max(800).nullable(),
-  parentEquivalentCostUSD: z.number().nullable(),
-  costDeltaVsParentUSD: z.number().nullable(),
+  mainEquivalentCostUSD: z.number().nullable(),
+  costDeltaVsMainUSD: z.number().nullable(),
 
   // Lifecycle counts
   concernCount: z.number().int().min(0).max(150),
@@ -341,12 +341,12 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
 });
 
 // ── Wire-telemetry record (§3.5) ─────────────────────────────────────────
-// Validates the wire shape emitted by buildWirePayload (internal→wire translation).
-// Internal records carry mainModel*; the wire carries parentModel*.
+// Validates the wire shape emitted by buildWirePayload. v4.0.3 unified
+// internal + wire to mainModel/mainModelFamily — no more rename shim.
 
 export const WireTelemetryRecordSchema = z.object({
-  parentModel: z.string().nullable(),
-  parentModelFamily: ModelFamilyEnum,
+  mainModel: z.string().nullable(),
+  mainModelFamily: ModelFamilyEnum,
 }).passthrough();
 
 // ── Inferred TS types ────────────────────────────────────────────────────

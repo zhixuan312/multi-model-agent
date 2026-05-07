@@ -53,7 +53,7 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      caller: { client: ctx.callerClient },
+      caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
         const batchCache = executionCtx.projectContext!.batchCache;
         const batch = batchCache.get(input.batchId)!;

@@ -37,7 +37,7 @@ describe('every tool output schema accepts NotApplicable on all five sentinel-be
         headline: 'real',
         results: [],
         batchTimings: { wallClockMs: 0 },
-        costSummary: { totalActualCostUSD: 0, costDeltaVsParentUSD: 0 },
+        costSummary: { totalActualCostUSD: 0, costDeltaVsMainUSD: 0 },
         structuredReport: { summary: 'x' },
         error: { code: 'worker_timeout', message: 'timed out' },
       };

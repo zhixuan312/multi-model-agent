@@ -98,11 +98,11 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
   const mainCard = resolveRateCard(mainModel);
-  const parentEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
+  const mainEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
 
-  const costDeltaVsParentUSD = (totalCostUSD === null || parentEquivalentCostUSD === null)
+  const costDeltaVsMainUSD = (totalCostUSD === null || mainEquivalentCostUSD === null)
     ? null
-    : totalCostUSD - parentEquivalentCostUSD;
+    : totalCostUSD - mainEquivalentCostUSD;
 
   // Canonicalize mainModel for emission (matches implementerModel emission path).
   const mainNormalized = mainModel ? normalizeModel(mainModel) : null;
@@ -143,8 +143,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     cachedNonReadTokens: totalCachedNonReadTokens,
     totalDurationMs,
     totalCostUSD,
-    parentEquivalentCostUSD,
-    costDeltaVsParentUSD,
+    mainEquivalentCostUSD,
+    costDeltaVsMainUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
@@ -158,18 +158,13 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 }
 
 /**
- * Translates an internal telemetry record (mainModel*) into the v4 wire shape
- * (parentModel*). Single point of wire translation.
+ * Wire payload builder. Internal record fields match the wire schema 1:1
+ * after the v4.0.3 rename (mainModel/mainModelFamily everywhere — DB column
+ * is `main_model`, header is `X-MMA-Main-Model`, no more `mainModel`
+ * translation shim).
  */
 export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
-  const wire: Record<string, unknown> = {
-    ...internalRecord,
-    parentModel: internalRecord.mainModel,
-    parentModelFamily: internalRecord.mainModelFamily,
-  };
-  delete wire.mainModel;
-  delete wire.mainModelFamily;
-  return wire as unknown as WireTelemetryRecord;
+  return internalRecord as unknown as WireTelemetryRecord;
 }
 
 function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {

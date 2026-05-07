@@ -56,6 +56,10 @@
       "types": "./dist/lifecycle/task-runner.d.ts",
       "import": "./dist/lifecycle/task-runner.js"
     },
+    "./lifecycle/stage-progression": {
+      "types": "./dist/lifecycle/stage-progression.d.ts",
+      "import": "./dist/lifecycle/stage-progression.js"
+    },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",
       "import": "./dist/events/verbose-line.js"

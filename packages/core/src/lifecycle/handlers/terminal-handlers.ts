@@ -242,7 +242,7 @@ function ensureImplementingStage(rr: RunResult, ctx: { assignedTier?: 'standard'
     stage: 'implementing' as const,
     entered: true,
     durationMs: rr.durationMs ?? 0,
-    costUSD: rr.cost?.totalCostUSD ?? null,
+    costUSD: rr.cost?.costUSD ?? null,
     agentTier: ctx.assignedTier ?? 'standard',
     modelFamily: null,
     model: null,

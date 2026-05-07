@@ -291,7 +291,7 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
@@ -303,6 +303,7 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
+  "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "skipped",
   "qualityReviewVerdict": "skipped",
   "roundsUsed": 0

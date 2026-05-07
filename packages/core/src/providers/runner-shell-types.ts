@@ -39,6 +39,19 @@ export interface RunResult {
   toolCalls: ToolCall[];
   usage: TokenUsage;
   errorCode?: ErrorCode;
+  /** Number of LLM turns executed (one per adapter.turn() call). Distinct
+   *  from toolCalls.length — a turn can return multiple tool calls or none. */
+  turns: number;
+  /** Wall-clock for the entire shell.run() invocation. */
+  durationMs: number;
+  /** Files read during this run (paths from successful read_file/readFile tool calls). */
+  filesRead: string[];
+  /** Files written during this run (paths from successful write_file/writeFile/edit_file tool calls). */
+  filesWritten: string[];
+  /** USD cost computed from usage tokens and the model's rate card.
+   *  null when the model isn't in the rate-card registry (treated as honest-null
+   *  by the wire, not zero). */
+  costUSD: number | null;
 }
 
 export interface ToolDefinition {

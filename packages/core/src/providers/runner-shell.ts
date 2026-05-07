@@ -1,17 +1,46 @@
 import type { RunInput, RunResult, ExecutionContext, ToolCall } from './runner-shell-types.js';
 import type { RunnerAdapter, AdapterTurnResult, AdapterTurnRecord, AdapterCapabilities } from './runner-adapter.js';
+import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
 
 const DEFAULT_CAPABILITIES: AdapterCapabilities = {
   cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [],
 };
 
+// Tool name lookup tables for filesRead/filesWritten attribution. Tools come
+// from different adapters under different snake/camel spellings; treat them
+// as one set so a worker that called `read_file` once shows
+// filesReadCount=1 regardless of which casing the adapter normalized to.
+const READ_TOOL_NAMES = new Set(['readFile', 'read_file']);
+const WRITE_TOOL_NAMES = new Set(['writeFile', 'write_file', 'editFile', 'edit_file']);
+
+function extractPathFromToolInput(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) return undefined;
+  const obj = input as Record<string, unknown>;
+  for (const key of ['path', 'file_path', 'filePath']) {
+    const v = obj[key];
+    if (typeof v === 'string') return v;
+  }
+  return undefined;
+}
+
 export class RunnerShell {
-  constructor(private adapter: RunnerAdapter) {}
+  constructor(
+    private adapter: RunnerAdapter,
+    /** Default model id used for cost computation when input.model is absent.
+     *  Reviewer/annotator engines call shell.run() without setting input.model,
+     *  so without this default every reviewer-side stage would record costUSD=null. */
+    private defaultModel?: string,
+  ) {}
 
   async run(input: RunInput): Promise<RunResult> {
+    const startMs = Date.now();
+    const modelForCost = input.model ?? this.defaultModel;
     const ctx: ExecutionContext = { cwd: input.cwd, callCache: new Map() };
     const usage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
     const allToolCalls: ToolCall[] = [];
+    const filesRead: string[] = [];
+    const filesWritten: string[] = [];
+    let turns = 0;
     const history: AdapterTurnRecord[] = [];
     let finalText = '';
     let stoppedByAdapter = false;
@@ -36,6 +65,11 @@ export class RunnerShell {
           toolCalls: allToolCalls,
           usage,
           errorCode: 'aborted',
+          turns,
+          durationMs: Date.now() - startMs,
+          filesRead,
+          filesWritten,
+          costUSD: computeCost(modelForCost, usage),
         };
       }
 
@@ -53,6 +87,7 @@ export class RunnerShell {
         ...baseEventFields,
         turnIndex: turn,
       });
+      turns++;
 
       const turnResult: AdapterTurnResult = await this.adapter.turn({
         systemPrompt: input.systemPrompt,
@@ -109,6 +144,15 @@ export class RunnerShell {
           const enriched = { name: call.name, input: call.input, result };
           allToolCalls.push(enriched);
           turnRecord.toolCalls.push(enriched);
+          // Track file ops so the wire telemetry's filesReadCount /
+          // filesWrittenCount aren't perpetually 0. Only count successful
+          // calls (a tool that threw produced { error: ... } as result).
+          const succeeded = !(typeof result === 'object' && result !== null && 'error' in (result as Record<string, unknown>));
+          if (succeeded) {
+            const path = extractPathFromToolInput(call.input);
+            if (READ_TOOL_NAMES.has(call.name) && path) filesRead.push(path);
+            else if (WRITE_TOOL_NAMES.has(call.name) && path) filesWritten.push(path);
+          }
         }
         history.push(turnRecord);
       }
@@ -157,6 +201,11 @@ export class RunnerShell {
         toolCalls: allToolCalls,
         usage,
         errorCode: 'empty_output',
+        turns,
+        durationMs: Date.now() - startMs,
+        filesRead,
+        filesWritten,
+        costUSD: computeCost(modelForCost, usage),
       };
     }
 
@@ -166,6 +215,17 @@ export class RunnerShell {
       toolCalls: allToolCalls,
       usage,
       ...(stoppedByAdapter ? {} : { errorCode: 'max_turns_exhausted' }),
+      turns,
+      durationMs: Date.now() - startMs,
+      filesRead,
+      filesWritten,
+      costUSD: computeCost(modelForCost, usage),
     };
   }
+}
+
+function computeCost(model: string | undefined, usage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number }): number | null {
+  const card = resolveRateCard(model ?? null);
+  if (!card) return null;
+  return priceTokens(usage, card);
 }

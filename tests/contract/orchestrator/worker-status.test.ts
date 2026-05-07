@@ -16,12 +16,12 @@ async function dispatchAndWait(stage: Stage): Promise<Record<string, unknown>> {
   try {
     const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+      headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       body: JSON.stringify({ tasks: [{ prompt: `orchestrator worker-status ${stage}`, reviewPolicy: 'none' }] }),
     });
     const { batchId } = (await d.json()) as { batchId: string };
     for (let i = 0; i < 180; i++) {
-      const p = await fetch(`${h.baseUrl}/batch/${batchId}`, { headers: { Authorization: `Bearer ${h.token}` } });
+      const p = await fetch(`${h.baseUrl}/batch/${batchId}`, { headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` } });
       if (p.status === 200) return (await p.json()) as Record<string, unknown>;
       await new Promise((r) => setTimeout(r, 50));
     }

@@ -3,16 +3,14 @@ import { buildWirePayload } from '../../packages/core/src/events/event-builder.j
 import { WireTelemetryRecordSchema } from '../../packages/core/src/events/telemetry-types.js';
 
 describe('TelemetryChannel wire-translation', () => {
-  it('translates mainModel* to parentModel* on the wire', () => {
+  it('passes mainModel* through to the wire (4.0.3+ unified naming)', () => {
     const internal = {
       mainModel: 'claude-sonnet-4-5',
       mainModelFamily: 'claude' as const,
     };
     const wire = buildWirePayload(internal);
-    expect(wire.parentModel).toBe('claude-sonnet-4-5');
-    expect(wire.parentModelFamily).toBe('claude');
-    expect((wire as any).mainModel).toBeUndefined();
-    expect((wire as any).mainModelFamily).toBeUndefined();
+    expect(wire.mainModel).toBe('claude-sonnet-4-5');
+    expect(wire.mainModelFamily).toBe('claude');
   });
 
   it('wire payload validates against WireTelemetryRecord schema', () => {
@@ -44,7 +42,7 @@ describe('TelemetryChannel wire-translation', () => {
       mainModel: null,
       mainModelFamily: 'other' as const,
     });
-    expect(wire.parentModel).toBeNull();
-    expect(wire.parentModelFamily).toBe('other');
+    expect(wire.mainModel).toBeNull();
+    expect(wire.mainModelFamily).toBe('other');
   });
 });

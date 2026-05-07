@@ -24,13 +24,13 @@ export async function captureDelegateLatency(): Promise<number> {
     const t0 = performance.now();
     const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+      headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       body: JSON.stringify({ tasks: [{ prompt: 'p' }] }),
     });
     const { batchId } = (await d.json()) as { batchId: string };
     while (true) {
       const p = await fetch(`${h.baseUrl}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${h.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       });
       if (p.status === 200) break;
       await new Promise((r) => setImmediate(r));
@@ -47,7 +47,7 @@ export async function capturePeakRssFor10Tasks(): Promise<number> {
     const tasks = Array.from({ length: 10 }, (_, i) => ({ prompt: `perf-${i}` }));
     const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+      headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       body: JSON.stringify({ tasks }),
     });
     const { batchId } = (await d.json()) as { batchId: string };
@@ -58,7 +58,7 @@ export async function capturePeakRssFor10Tasks(): Promise<number> {
     try {
       while (true) {
         const p = await fetch(`${h.baseUrl}/batch/${batchId}`, {
-          headers: { Authorization: `Bearer ${h.token}` },
+          headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         });
         if (p.status === 200) break;
         await new Promise((r) => setTimeout(r, 20));

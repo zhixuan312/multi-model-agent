@@ -19,7 +19,7 @@ export function buildExecutionContext(
   pc: ProjectContext,
   batchId: string,
   route?: string,
-  caller?: { client: string },
+  caller?: { client: string; mainModel?: string | null },
 ): ExecutionContext {
   const recordHeartbeat = (tick: HeartbeatTickInfo) => {
     const effectiveBatchId = tick.batchId || batchId;
@@ -45,7 +45,10 @@ export function buildExecutionContext(
     config: deps.config,
     logger: deps.logger,
     bus: deps.bus,
-    mainModel: process.env['PARENT_MODEL_NAME'] ?? null,
+    // Per-request X-MMA-Main-Model header is the only source. Enforced at
+    // the request-pipeline boundary (4.0.3+); by the time we reach this
+    // builder, caller.mainModel is guaranteed non-null for tool routes.
+    mainModel: caller?.mainModel ?? null,
     route: route ?? '',
     client: caller?.client ?? 'other',
     batchId,

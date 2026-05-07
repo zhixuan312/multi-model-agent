@@ -124,7 +124,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         : SYSTEM_PROMPT;
 
       const adapter = buildAdapter(agentConfig);
-      const shell = new RunnerShell(adapter);
+      const shell = new RunnerShell(adapter, providerConfig.model);
 
       const result = await shell.run({
         systemPrompt: effectiveSystemPrompt,
@@ -152,15 +152,19 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         output: result.finalAssistantText,
         status: result.workerStatus === 'done' ? 'ok' : 'incomplete',
         usage: result.usage,
-        turns: result.toolCalls.length,
-        filesRead: [],
-        filesWritten: [],
+        turns: result.turns,
+        durationMs: result.durationMs,
+        filesRead: result.filesRead,
+        filesWritten: result.filesWritten,
         toolCalls: toolCallSummaries,
         outputIsDiagnostic: false,
         escalationLog: [],
         parsedFindings: null,
         workerStatus: result.workerStatus,
         errorCode: result.errorCode,
+        ...(result.costUSD !== null && {
+          cost: { costUSD: result.costUSD, costDeltaVsMainUSD: null },
+        }),
       };
     } catch (err) {
       return {

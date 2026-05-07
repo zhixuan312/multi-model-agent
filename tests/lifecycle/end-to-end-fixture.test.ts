@@ -42,6 +42,7 @@ describe('Phase-4 end-to-end LifecycleDriver fixture', () => {
 
       // Stage 3
       run_initial_impl: executor.handler,
+      check_files_written: noop,
 
       // Stage 4 — review chains (all no-op for reviewPolicy='none'; predicates skip)
       spec_review_round_1: noop,

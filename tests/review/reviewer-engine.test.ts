@@ -24,6 +24,11 @@ function shellResult(overrides: Partial<RunResult> = {}): RunResult {
     finalAssistantText: '',
     toolCalls: [],
     usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    durationMs: 0,
+    filesRead: [],
+    filesWritten: [],
+    costUSD: null,
     ...overrides,
   };
 }
@@ -128,6 +133,7 @@ describe('ReviewerEngine.runSpec', () => {
       turnCount: 0,
       toolCallCount: 2,
       costUSD: null,
+      durationMs: 0,
     });
   });
 });
@@ -221,6 +227,7 @@ describe('ReviewerEngine.runDiff', () => {
       turnCount: 0,
       toolCallCount: 0,
       costUSD: null,
+      durationMs: 0,
     });
   });
 });

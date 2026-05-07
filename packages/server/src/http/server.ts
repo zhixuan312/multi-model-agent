@@ -53,6 +53,15 @@ const CWD_REQUIRED_PATHS = new Set([
   '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
+/** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
+ *  so wire telemetry's main_model column is never null for billed runs. The
+ *  9 tool routes + /control/retry (which dispatches a real run) need it; the
+ *  introspection / batch-polling / context-block utility routes do not. */
+const MAIN_MODEL_REQUIRED_PATHS = new Set([
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/control/retry',
+]);
+
 /**
  * Registers tool handlers (POST /delegate, /audit, /review, /verify, /debug, /execute-plan, /retry).
  * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
@@ -369,4 +378,5 @@ const PIPELINE_CFG = {
   loopbackOnlyPaths: LOOPBACK_ONLY_PATHS,
   authExemptPaths: AUTH_EXEMPT_PATHS,
   cwdRequiredPaths: CWD_REQUIRED_PATHS,
+  mainModelRequiredPaths: MAIN_MODEL_REQUIRED_PATHS,
 };

@@ -1,5 +1,5 @@
 {
-  "headline": "[incomplete] audit completed",
+  "headline": "[incomplete] audit : 0 findings (0 high)",
   "results": [
     {
       "output": "mocked ok",
@@ -82,7 +82,7 @@
           "outputTokens": 20,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 0,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0,
@@ -133,11 +133,15 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "kind": "not_applicable",
-    "reason": "reportSchema.parse failed for audit"
+    "summary": "mocked ok",
+    "filesChanged": [],
+    "validationsRun": [],
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -145,6 +149,7 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
+  "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "error",
   "roundsUsed": 1,

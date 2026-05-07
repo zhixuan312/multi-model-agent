@@ -211,7 +211,7 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
       turnCount: cost?.turnCount ?? 0,
       toolCallCount: cost?.toolCallCount ?? 0,
       costUSD: cost?.costUSD ?? null,
-      durationMs: null,
+      durationMs: cost?.durationMs ?? null,
     }, {
       tier: reviewerTier,
       model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
@@ -259,7 +259,7 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
       cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
       turnCount: newResult.turns ?? 0,
       toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
-      costUSD: newResult.cost?.totalCostUSD ?? null,
+      costUSD: newResult.cost?.costUSD ?? null,
       durationMs: newResult.durationMs ?? null,
       filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
       filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,

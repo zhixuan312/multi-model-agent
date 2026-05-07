@@ -42,11 +42,11 @@ export interface ReviewerInput {
 }
 
 export interface ReviewerCallResult extends ReviewerParseResult {
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null };
+  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
 export interface ReviewerDiffCallResult extends ReviewerDiffParseResult {
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null };
+  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
 export class ReviewerEngine {
@@ -102,13 +102,15 @@ export class ReviewerEngine {
   }
 }
 
-function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null } }): ReviewerCallResult['cost'] {
+function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null }; costUSD?: number | null; durationMs?: number | null }): ReviewerCallResult['cost'] {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
     toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    // shell.run now exposes top-level costUSD; legacy paths used cost.costUSD or usage.costUSD.
+    costUSD: r.costUSD ?? r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    durationMs: r.durationMs ?? null,
   };
 }
 

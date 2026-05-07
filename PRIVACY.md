@@ -38,7 +38,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `implementerModel` | string (1–120 chars) | Model usage distribution across the fleet |
 | `implementerTier` | enum: `standard`, `complex`, `main` | Tier classification used as the reviewer-separation gate (the user's model choice is sovereign; tier is the mechanism). Cost accounting still keys off `implementerModel`. |
-| `parentModel` | string (1–120 chars) or null | The flagship model the task was delegated FROM (e.g. `claude-opus-4-7`). Added in 3.12.2 alongside `parentModelFamily` so retrospective cost analysis doesn't have to assume the parent identity. Null for clients without a parent context (codex-cli, cursor). |
+| `mainModel` | string (1–120 chars) or null | The flagship model the task was delegated FROM (e.g. `claude-opus-4-7`). Added in 3.12.2 alongside `mainModelFamily` so retrospective cost analysis doesn't have to assume the main agent identity. Null for clients without a main agent context (codex-cli, cursor). |
 
 #### Outcome (4 fields)
 
@@ -47,7 +47,7 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 | `terminalStatus` | enum: `ok`, `incomplete`, `timeout`, `error`, `cost_exceeded`, `brief_too_vague`, `unavailable` | Success/failure rate per route |
 | `workerStatus` | enum: `done`, `done_with_concerns`, `needs_context`, `blocked`, `failed`, `review_loop_aborted` | Worker outcome quality |
 | `errorCode` | enum or null — values include `verify_command_error`, `commit_metadata_invalid`, `commit_metadata_repair_modified_files`, `dirty_worktree`, `diff_review_rejected`, `runner_crash`, `executor_error`, `api_error`, `network_error`, `rate_limit_exceeded`, `incomplete_no_summary`, `reviewer_separation_unsatisfiable`, `other` | Failure attribution (no raw error messages). `incomplete_no_summary` and `reviewer_separation_unsatisfiable` were added in 3.12.1 to surface previously-silent failure modes. |
-| `parentModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
+| `mainModelFamily` | enum: 33 model family values + `other` | Parent-model diversity tracking |
 
 #### Token economics (5 fields)
 
@@ -64,8 +64,8 @@ Emitted at the end of every delegate, audit, review, verify, debug, execute-plan
 |-------|------|-----------------|
 | `totalDurationMs` | integer (0–86,400,000) | Exact elapsed wall-clock time in milliseconds |
 | `totalCostUSD` | float (0–800) or null | Token-times-pricing cost estimate in US dollars. Null when any contributing stage has unresolvable model pricing (honest-null discipline). |
-| `parentEquivalentCostUSD` | float (0–800) or null | What the SAME tokens would have cost on the parent model. Null when `parentModel` is null or its pricing profile is unavailable. Added in 3.12.2. |
-| `costDeltaVsParentUSD` | float (−800 to 800) or null | `totalCostUSD − parentEquivalentCostUSD`. Positive = worker cost more than parent. Negative = saved. Null when either contributing field is null. |
+| `mainEquivalentCostUSD` | float (0–800) or null | What the SAME tokens would have cost on the main model. Null when `mainModel` is null or its pricing profile is unavailable. Added in 3.12.2. |
+| `costDeltaVsMainUSD` | float (−800 to 800) or null | `totalCostUSD − mainEquivalentCostUSD`. Positive = worker cost more than parent. Negative = saved. Null when either contributing field is null. |
 
 #### Per-tier rollup (`tierUsage`)
 
@@ -153,7 +153,7 @@ cost =   inputTokens          × inputRate          (non-cached new input only)
 
 Per-stage cost is computed at that stage's own model rate. The top-level `totalCostUSD` is the sum of per-stage costs (equivalently: the sum of `tierUsage[T].costUSD` across tiers).
 
-`parentEquivalentCostUSD = priceTokens(allTokens, parentRateCard)` — the same totals priced at the parent model's rate. `costDeltaVsParentUSD = totalCostUSD − parentEquivalentCostUSD`. Positive = paid more than parent would have. Negative = saved. Both are null when `parentModel` is null or its pricing profile is unavailable. Like cost, all of these are estimates, not guarantees.
+`mainEquivalentCostUSD = priceTokens(allTokens, parentRateCard)` — the same totals priced at the main model's rate. `costDeltaVsMainUSD = totalCostUSD − mainEquivalentCostUSD`. Positive = paid more than parent would have. Negative = saved. Both are null when `mainModel` is null or its pricing profile is unavailable. Like cost, all of these are estimates, not guarantees.
 
 ### About durations
 
@@ -181,7 +181,7 @@ Full technical schema with every field, enum value, and validation rule: [docs/P
 - **Free-form text:** No unbounded string fields exist in the schema. Every field is a typed enum, a bucket, or a constrained value. Adding one requires a schema change, a PRIVACY.md update, and a CHANGELOG entry.
 - **Timestamps:** No wall-clock timestamps — only monotonic-clock durations. The server's `received_at` is server-set for retention partitioning.
 - **Tool names:** The `topToolNames` field from V2 has been removed. Tool-call counts are aggregated per stage but individual tool names are not transmitted.
-- **Model family fields:** No model family fields beyond the single `parentModelFamily` enum. The old per-stage `modelFamily` fields are removed.
+- **Model family fields:** No model family fields beyond the single `mainModelFamily` enum. The old per-stage `modelFamily` fields are removed.
 
 If you discover us collecting something not listed in "What we collect," that is a bug. Please file an issue — we will treat it as a security incident.
 
@@ -223,6 +223,6 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
-| 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `parentModel` (specific identity alongside `parentModelFamily`), and `parentEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
+| 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `mainModel` (specific identity alongside `mainModelFamily`), and `mainEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
 | 2026-04-29 | 3 | V3 schema: single `task.completed` event type; exact integer/numeric fields replace bucketed approximations; stages array replaces fixed-key stage map; `session.started`, `install.changed`, `skill.installed` event types removed; `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted` removed; `language`, `tzOffsetBucket` removed from batch wrapper; cost formula uses 4-term cached/reasoning rates; consent re-confirmation required on V2→V3 upgrade. |
 | 2026-04-26 | 1 | Initial privacy policy. Document all `task.completed`, `session.started`, `install.changed`, and `skill.installed` fields. Enum-only, bucketed values only, no free-form text, no content capture. Telemetry off by default. |

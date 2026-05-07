@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await server.close(); });
 
-const headers = () => ({ 'authorization': `Bearer ${token}`, 'content-type': 'application/json' });
+const headers = () => ({ 'x-mma-main-model': 'claude-opus-4-7', 'x-mma-client': 'claude-code', 'authorization': `Bearer ${token}`, 'content-type': 'application/json' });
 
 describe('contract: POST /explore handler-level', () => {
   it('1. POST /explore without cwd → 400', async () => {

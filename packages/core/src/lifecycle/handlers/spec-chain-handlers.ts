@@ -190,7 +190,7 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
       turnCount: result.cost?.turnCount ?? 0,
       toolCallCount: result.cost?.toolCallCount ?? 0,
       costUSD: result.cost?.costUSD ?? null,
-      durationMs: null,
+      durationMs: result.cost?.durationMs ?? null,
     }, {
       tier: reviewerTier,
       model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
@@ -243,7 +243,7 @@ function makeSpecReworkHandler(round: 1 | 2) {
       cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
       turnCount: newResult.turns ?? 0,
       toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
-      costUSD: newResult.cost?.totalCostUSD ?? null,
+      costUSD: newResult.cost?.costUSD ?? null,
       durationMs: newResult.durationMs ?? null,
       filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
       filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,

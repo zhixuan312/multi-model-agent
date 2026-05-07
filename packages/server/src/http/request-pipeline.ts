@@ -18,6 +18,9 @@ export interface PipelineConfig {
   loopbackOnlyPaths: ReadonlySet<string>;
   authExemptPaths: ReadonlySet<string>;
   cwdRequiredPaths: ReadonlySet<string>;
+  /** Routes that REQUIRE X-MMA-Main-Model header. Tool dispatches must
+   *  attribute to a main model so wire telemetry's main_model is never null. */
+  mainModelRequiredPaths: ReadonlySet<string>;
 }
 
 export async function handleRequest(
@@ -125,6 +128,27 @@ export async function handleRequest(
   // ── Step 8: Caller identity from headers ────────────────────────────────────
   const identity = resolveCallerIdentity(req);
 
+  if (pipelineCfg.mainModelRequiredPaths.has(pathname)) {
+    if (identity.mainModel === null) {
+      sendError(
+        res,
+        400,
+        'main_model_required',
+        'X-MMA-Main-Model header is required on tool routes (4.0.3+). Set it to your model id, e.g. claude-opus-4-7. Telemetry attribution depends on it; the server refuses billed runs without one.',
+      );
+      return;
+    }
+    if (identity.callerClient === 'other') {
+      sendError(
+        res,
+        400,
+        'client_required',
+        'X-MMA-Client header is required on tool routes (4.0.3+). Set it to one of: claude-code, cursor, codex-cli, gemini-cli. Telemetry attribution depends on it; the server refuses billed runs without one.',
+      );
+      return;
+    }
+  }
+
   // ── Step 9: Hand off to matched handler ────────────────────────────────────
   const ctx: RequestContext = {
     url: urlObj,
@@ -132,6 +156,7 @@ export async function handleRequest(
     body: parsedBody,
     authed: !pipelineCfg.authExemptPaths.has(pathname),
     callerClient: identity.callerClient,
+    mainModel: identity.mainModel,
   };
 
   await match.handler(req, res, match.params, ctx);

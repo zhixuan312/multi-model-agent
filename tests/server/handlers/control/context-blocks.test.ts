@@ -25,6 +25,7 @@ async function createBlock(
   const res = await fetch(`${serverUrl}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
     method: 'POST',
     headers: {
+      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
       Authorization: `Bearer ${token}`,
       'content-type': 'application/json',
     },
@@ -45,6 +46,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -66,6 +68,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -86,6 +89,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -119,6 +123,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -154,6 +159,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -173,6 +179,7 @@ describe('POST /context-blocks', () => {
       const res = await fetch(`${s.url}/context-blocks`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -194,7 +201,7 @@ describe('DELETE /context-blocks/:id', () => {
 
       const res = await fetch(`${s.url}/context-blocks/${id}?cwd=${encodeURIComponent(cwd)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const json = await res.json() as { ok: boolean };
@@ -214,7 +221,7 @@ describe('DELETE /context-blocks/:id', () => {
       const unknownId = randomUUID();
       const res = await fetch(`${s.url}/context-blocks/${unknownId}?cwd=${encodeURIComponent(cwd)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(404);
       const json = await res.json() as { error: { code: string } };
@@ -235,7 +242,7 @@ describe('DELETE /context-blocks/:id', () => {
       // Try to delete it using cwd2 — should get 404 (isolation)
       const res = await fetch(`${s.url}/context-blocks/${id}?cwd=${encodeURIComponent(cwd2)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(404);
       const json = await res.json() as { error: { code: string } };
@@ -261,7 +268,7 @@ describe('DELETE /context-blocks/:id', () => {
 
       const res = await fetch(`${s.url}/context-blocks/${id}?cwd=${encodeURIComponent(cwd)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(409);
       const json = await res.json() as { error: { code: string; details: { refcount: number } } };
@@ -280,7 +287,7 @@ describe('DELETE /context-blocks/:id', () => {
       // cwd project doesn't exist yet (no prior request) — should get 404
       const res = await fetch(`${s.url}/context-blocks/${unknownId}?cwd=${encodeURIComponent(cwd)}`, {
         method: 'DELETE',
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(404);
       const json = await res.json() as { error: { code: string } };

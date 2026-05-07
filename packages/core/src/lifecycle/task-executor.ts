@@ -10,6 +10,7 @@ import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
+import { parseStructuredReport } from '../reporting/structured-report.js';
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
@@ -57,7 +58,7 @@ export async function executeTask<Input, Brief, Report>(
   }
 
   // ── Step 4: Dispatch ──
-  const mainModel = ctx.mainModel ?? ctx.config.defaults?.mainModel ?? undefined;
+  const mainModel = ctx.mainModel;
   const startMs = Date.now();
 
   let results: RunResult[];
@@ -77,7 +78,9 @@ export async function executeTask<Input, Brief, Report>(
         recorder: ctx.recorder,
         route: ctx.route ?? config.name,
         client: ctx.client,
+        mainModel: ctx.mainModel,
         bus: ctx.bus,
+        ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
         reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
         annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
       });
@@ -122,7 +125,9 @@ export async function executeTask<Input, Brief, Report>(
           recorder: ctx.recorder,
           route: ctx.route ?? config.name,
           client: ctx.client,
+          mainModel: ctx.mainModel,
           bus: ctx.bus,
+          ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
           reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
           annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
         }).catch((e: unknown): RunResult => {
@@ -159,13 +164,20 @@ export async function executeTask<Input, Brief, Report>(
   const costSummary = computeAggregateCost(results);
 
   // ── Step 7: Parse structured report ──
+  // First try the per-tool schema. Five of the ten tools (audit, review,
+  // verify, debug, investigate) instruct workers to emit narrative
+  // `## Finding N: ...` rather than JSON; for those, the per-tool schema
+  // always throws. Fall back to the generic narrative parser so the
+  // envelope's structuredReport carries the parsed sections instead of a
+  // "parse failed" sentinel. The narrative parser never throws — empty
+  // input yields an empty ParsedStructuredReport.
   let structuredReport: Record<string, unknown> | NotApplicable;
   const primaryOutput = results[0]?.output;
   if (primaryOutput && primaryOutput.trim().length > 0) {
     try {
       structuredReport = config.reportSchema.parse(primaryOutput) as Record<string, unknown>;
     } catch {
-      structuredReport = notApplicable(`reportSchema.parse failed for ${config.name}`);
+      structuredReport = parseStructuredReport(primaryOutput) as unknown as Record<string, unknown>;
     }
   } else {
     structuredReport = notApplicable('no task output to parse');
@@ -216,12 +228,12 @@ function emptyEnvelope(toolName: string, ctx: ExecutionContext): ExecutorOutput 
     headline: `${toolName}: no tasks executed`,
     results: [],
     batchTimings: { wallClockMs: 0, sumOfTaskMs: 0, estimatedParallelSavingsMs: 0 },
-    costSummary: { totalActualCostUSD: 0, totalCostDeltaVsParentUSD: 0 },
+    costSummary: { totalActualCostUSD: 0, totalCostDeltaVsMainUSD: 0 },
     structuredReport: notApplicable('no briefs produced'),
     error: notApplicable('batch succeeded'),
     batchId: ctx.batchId ?? randomUUID(),
     wallClockMs: 0,
-    mainModel: ctx.mainModel ?? ctx.config.defaults?.mainModel,
+    mainModel: ctx.mainModel,
     specReviewVerdict: 'not_applicable',
     qualityReviewVerdict: 'not_applicable',
     roundsUsed: 0,

@@ -55,7 +55,7 @@ export interface HeartbeatTickInfo {
     toolCalls: number;
   };
   costUSD: number | null;
-  costDeltaVsParentUSD: number | null;
+  costDeltaVsMainUSD: number | null;
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */
   stageIdleMs: number;
   /**
@@ -97,5 +97,5 @@ export interface TransitionFields {
   attemptCap?: number;
   provider?: string;
   costUSD?: number | null;
-  costDeltaVsParentUSD?: number | null;
+  costDeltaVsMainUSD?: number | null;
 }

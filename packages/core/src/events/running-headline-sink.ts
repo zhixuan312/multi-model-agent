@@ -22,26 +22,9 @@ import type { BatchRegistry } from '../stores/batch-registry.js';
 const READ_TOOLS = new Set(['readFile', 'read_file', 'grep', 'glob', 'listFiles', 'list_files']);
 const WRITE_TOOLS = new Set(['writeFile', 'write_file']);
 
-// Coarse stage ordering per tool route. The actual lifecycle plan has more
-// fine-grained rows (3 spec-review rounds, 3 quality-review rounds, rework
-// loops, etc.) — these collapse into "Spec review" / "Quality review" /
-// etc. so the main agent's bracket shows real progress, not row noise.
-//
-// Stages without a runner-shell call (Verifying / Committing) are listed
-// here for accurate `Y` denominators even though the sink can't directly
-// observe them; the bracket advances only on stages with runner activity.
-const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = {
-  delegate:       ['Implementing', 'Spec review', 'Quality review', 'Diff review', 'Verifying', 'Committing', 'Finalizing'],
-  'execute-plan': ['Implementing', 'Spec review', 'Quality review', 'Diff review', 'Verifying', 'Committing', 'Finalizing'],
-  retry:          ['Implementing', 'Spec review', 'Quality review', 'Diff review', 'Verifying', 'Committing', 'Finalizing'],
-  audit:          ['Implementing', 'Annotating', 'Finalizing'],
-  review:         ['Implementing', 'Annotating', 'Finalizing'],
-  verify:         ['Implementing', 'Annotating', 'Finalizing'],
-  debug:          ['Implementing', 'Annotating', 'Finalizing'],
-  investigate:    ['Implementing', 'Annotating', 'Finalizing'],
-  explore:        ['Implementing', 'Finalizing'],
-  'register-context-block': ['Registering', 'Finalizing'],
-};
+// Coarse stage ordering per tool route lives in lifecycle/stage-progression.ts
+// (single source of truth, shared with async-dispatch + test fixtures).
+import { stageProgress } from '../lifecycle/stage-progression.js';
 
 interface PerTaskProgress {
   toolCounts: Record<string, number>;
@@ -55,17 +38,6 @@ interface PerTaskProgress {
 function capitalizeTier(tier: string | undefined): string | undefined {
   if (!tier) return undefined;
   return tier.charAt(0).toUpperCase() + tier.slice(1);
-}
-
-function stageProgress(route: string, stageLabel: string | undefined): string {
-  const order = STAGE_ORDER_BY_ROUTE[route];
-  if (!order || order.length === 0) return '1/1';
-  const total = order.length;
-  if (!stageLabel) return `1/${total}`;
-  const idx = order.indexOf(stageLabel);
-  // Unknown stage labels still surface — fall through to first slot.
-  const oneBased = idx === -1 ? 1 : idx + 1;
-  return `${oneBased}/${total}`;
 }
 
 export class RunningHeadlineSink {

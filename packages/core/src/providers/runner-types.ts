@@ -37,7 +37,7 @@ export interface TokenUsage {
 export interface CostBreakdown {
   costUSD: number | null
   /** Actual cost minus estimated parent cost. Negative = worker cheaper (savings). */
-  costDeltaVsParentUSD: number | null
+  costDeltaVsMainUSD: number | null
 }
 
 export interface TerminationReason {
@@ -196,7 +196,7 @@ export type ProgressEvent = {
     toolCalls: number
   }
   costUSD: number | null
-  costDeltaVsParentUSD: number | null
+  costDeltaVsMainUSD: number | null
   final: boolean
   headline: string
   /** Per-stage idle time (ms since last LLM/tool/text event in the current stage). */

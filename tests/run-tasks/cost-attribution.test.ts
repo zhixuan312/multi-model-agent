@@ -84,7 +84,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
     output: 'mocked ok',
     status: 'ok',
     usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    cost: { costUSD: 0.01, costDeltaVsParentUSD: null },
+    cost: { costUSD: 0.01, costDeltaVsMainUSD: null },
     turns: 2,
     filesRead: ['a.ts'],
     filesWritten: ['b.ts'],
@@ -153,8 +153,8 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     });
 
     // --- Shape assertions ---
-    expect(event.parentModel).toEqual(expect.any(String));
-    expect(event.parentModelFamily).toBe('claude');
+    expect(event.mainModel).toEqual(expect.any(String));
+    expect(event.mainModelFamily).toBe('claude');
     expect(event.tierUsage.standard).toBeDefined();
     expect(event.tierUsage.complex).toBeDefined();
 
@@ -192,11 +192,11 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       parentCard!,
     );
 
-    expect(event.parentEquivalentCostUSD).toBeCloseTo(expectedParent, 6);
+    expect(event.mainEquivalentCostUSD).toBeCloseTo(expectedParent, 6);
 
-    // --- costDeltaVsParentUSD = totalCostUSD − parentEquivalentCostUSD ---
-    expect(event.costDeltaVsParentUSD).toBeCloseTo(
-      event.totalCostUSD! - event.parentEquivalentCostUSD!,
+    // --- costDeltaVsMainUSD = totalCostUSD − mainEquivalentCostUSD ---
+    expect(event.costDeltaVsMainUSD).toBeCloseTo(
+      event.totalCostUSD! - event.mainEquivalentCostUSD!,
       6,
     );
   });
@@ -249,7 +249,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     expect(event.cachedNonReadTokens).toBe(summed.cachedNonReadTokens);
   });
 
-  it('parentModel: null → parentEquivalentCostUSD and costDeltaVsParentUSD are null', () => {
+  it('mainModel: null → mainEquivalentCostUSD and costDeltaVsMainUSD are null', () => {
     const rr = makeRunResult({
       stageStats: {
         implementing:   makeStageStats('implementing', { agentTier: 'standard', inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0, costUSD: 0.005 }),
@@ -271,12 +271,12 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       mainModel: null,
     });
 
-    expect(event.parentModel).toBeNull();
-    expect(event.parentEquivalentCostUSD).toBeNull();
-    expect(event.costDeltaVsParentUSD).toBeNull();
+    expect(event.mainModel).toBeNull();
+    expect(event.mainEquivalentCostUSD).toBeNull();
+    expect(event.costDeltaVsMainUSD).toBeNull();
   });
 
-  it('costDeltaVsParentUSD sign: positive when worker > parent, negative when saved', () => {
+  it('costDeltaVsMainUSD sign: positive when worker > parent, negative when saved', () => {
     // Worker is more expensive than parent → positive delta
     const rrExpensive = makeRunResult({
       stageStats: {
@@ -299,7 +299,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       mainModel: 'claude-haiku-4-6',
     });
 
-    expect(eventExpensive.costDeltaVsParentUSD).toBeGreaterThan(0);
+    expect(eventExpensive.costDeltaVsMainUSD).toBeGreaterThan(0);
 
     // Worker is cheaper than parent → negative delta (saved money)
     const rrCheap = makeRunResult({
@@ -323,7 +323,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
       mainModel: 'claude-opus-4-7',
     });
 
-    expect(eventCheap.costDeltaVsParentUSD).toBeLessThan(0);
+    expect(eventCheap.costDeltaVsMainUSD).toBeLessThan(0);
   });
 
   it('honest-null behavior at the event-builder level: null stageStats cost coerces to 0 in stage entry', () => {
@@ -363,8 +363,8 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     // totalCostUSD is computable (not null) because all stage entries have non-null cost
     expect(event.totalCostUSD).toBe(0);
 
-    // parentEquivalentCostUSD still computable from token counts
-    expect(event.parentEquivalentCostUSD).not.toBeNull();
+    // mainEquivalentCostUSD still computable from token counts
+    expect(event.mainEquivalentCostUSD).not.toBeNull();
   });
 });
 

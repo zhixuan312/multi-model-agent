@@ -129,7 +129,7 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     turnCount: result.cost?.turnCount ?? 0,
     toolCallCount: result.cost?.toolCallCount ?? 0,
     costUSD: result.cost?.costUSD ?? null,
-    durationMs: null,
+    durationMs: result.cost?.durationMs ?? null,
   }, {
     tier: reviewerTier,
     model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,

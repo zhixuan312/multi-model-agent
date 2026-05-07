@@ -122,10 +122,10 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     verifyCommandPresent: true,
     implementerModel: 'claude-sonnet',
     implementerTier: 'standard',
-    parentModel: null,
-    parentModelFamily: 'claude',
+    mainModel: null,
+    mainModelFamily: 'claude',
     tierUsage: {},
-    parentEquivalentCostUSD: null,
+    mainEquivalentCostUSD: null,
     terminalStatus: 'ok',
     workerStatus: 'done',
     errorCode: null,
@@ -135,7 +135,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     cachedNonReadTokens: sum('cachedNonReadTokens'),
     totalDurationMs: sum('durationMs'),
     totalCostUSD: stages.reduce((s: number, st: Record<string, unknown>) => s + ((st.costUSD as number) ?? 0), 0),
-    costDeltaVsParentUSD: null,
+    costDeltaVsMainUSD: null,
     concernCount: 0,
     escalationCount: 0,
     fallbackCount: 0,
@@ -756,21 +756,21 @@ describe('schema v4: split cached fields and nullable cost', () => {
   });
 });
 
-// ── Schema v4: tierUsage and parentModel ─────────────────────────────────
+// ── Schema v4: tierUsage and mainModel ─────────────────────────────────
 
-describe('schema v4: tierUsage and parentModel', () => {
+describe('schema v4: tierUsage and mainModel', () => {
   it('event accepts tierUsage with subset of {standard, complex} keys', () => {
     const ev = makeValidEvent({ tierUsage: { standard: validTierUsage } });
     expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
   });
 
-  it('event accepts parentModel: null', () => {
-    const ev = makeValidEvent({ parentModel: null, parentEquivalentCostUSD: null, costDeltaVsParentUSD: null });
+  it('event accepts mainModel: null', () => {
+    const ev = makeValidEvent({ mainModel: null, mainEquivalentCostUSD: null, costDeltaVsMainUSD: null });
     expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
   });
 
-  it('event accepts parentModel: "claude-opus-4-7"', () => {
-    const ev = makeValidEvent({ parentModel: 'claude-opus-4-7' });
+  it('event accepts mainModel: "claude-opus-4-7"', () => {
+    const ev = makeValidEvent({ mainModel: 'claude-opus-4-7' });
     expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
   });
 });

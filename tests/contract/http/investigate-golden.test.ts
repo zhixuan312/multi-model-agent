@@ -8,7 +8,7 @@ const STAGES: Stage[] = ['ok', 'incomplete', 'max-turns', 'review-rework'];
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<JsonValue> {
   for (let i = 0; i < 180; i++) {
     const poll = await fetch(`${baseUrl}/batch/${batchId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${token}` },
     });
     if (poll.status === 200) return (await poll.json()) as JsonValue;
     if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status}`);
@@ -24,7 +24,7 @@ describe('contract: POST /investigate golden', () => {
       try {
         const dispatch = await fetch(`${h.baseUrl}/investigate?cwd=${encodeURIComponent(process.cwd())}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+          headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
           body: JSON.stringify({ question: 'golden investigate test prompt — echo findings' }),
         });
         expect(dispatch.status).toBe(202);

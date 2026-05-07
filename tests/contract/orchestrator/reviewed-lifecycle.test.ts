@@ -14,13 +14,13 @@ describe('contract: reviewed lifecycle', () => {
     try {
       const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         body: JSON.stringify({ tasks: [{ prompt: 'reviewed-lifecycle test', reviewPolicy: 'none' }] }),
       });
       const { batchId } = (await d.json()) as { batchId: string };
       let envelope: Record<string, unknown> | null = null;
       for (let i = 0; i < 180; i++) {
-        const p = await fetch(`${h.baseUrl}/batch/${batchId}`, { headers: { Authorization: `Bearer ${h.token}` } });
+        const p = await fetch(`${h.baseUrl}/batch/${batchId}`, { headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` } });
         if (p.status === 200) {
           envelope = (await p.json()) as Record<string, unknown>;
           break;

@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchRegistry, ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
+import { STAGE_ORDER_BY_ROUTE } from '@zhixuan92/multi-model-agent-core/lifecycle/stage-progression';
 import type { HandlerDeps } from './handler-deps.js';
 import { buildExecutionContext } from './execution-context.js';
 
@@ -19,7 +20,7 @@ export interface AsyncDispatchOptions<TResult> {
    * the upload (STRICT_ID_REGEX). triggeringSkill was dropped because it's
    * implied by `route` for the 99% case (mma-<route> → /<route>).
    */
-  caller?: { client: string };
+  caller?: { client: string; mainModel?: string | null };
   /**
    * The async function that does the real work. Receives the ExecutionContext
    * and the pre-allocated batchId.
@@ -82,11 +83,29 @@ export function asyncDispatch<TResult>(
           entry.tasksTotal = 1;
           entry.tasksStarted = 1;
           entry.tasksCompleted = 0;
+          // Use the route's stage-order denominator (3 for audit, 7 for
+          // delegate, etc.) so polling shows "Implementing (1/3)" the
+          // instant the executor starts — instead of an opaque
+          // "1/1 running" that doesn't tell the main agent how far along
+          // the lifecycle has progressed.
+          const stagesTotal = STAGE_ORDER_BY_ROUTE[tool]?.length ?? 1;
+          const initialStage = STAGE_ORDER_BY_ROUTE[tool]?.[0] ?? 'Running';
+          const prefix = `${initialStage} (1/${stagesTotal}) - `;
+          const fallback = `${initialStage} (1/${stagesTotal})`;
           batchRegistry.updateRunningHeadlineSnapshot(batchId, {
-            prefix: `1/1 running, `,
+            prefix,
             statsClause: ``,
             dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback: `1/1 running`,
+            fallback,
+          });
+          // Also seed the per-task snapshot so multi-task polling formatters
+          // don't fall through to the legacy single-snapshot path before the
+          // first runner_turn_completed event fires.
+          batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
+            prefix,
+            statsClause: ``,
+            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
+            fallback,
           });
         }
         // Verbose-stderr breadcrumb so operators tailing the daemon see the

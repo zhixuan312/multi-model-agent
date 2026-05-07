@@ -166,7 +166,14 @@ export interface DispatchTaskInput {
   recorder?: ExecutionContext['recorder'];
   route?: string;
   client?: string;
+  /** Calling agent's model (e.g., claude-opus-4-7), threaded into telemetry as mainModel.
+   *  Sourced from X-MMA-Main-Model header → execution-context → here. */
+  mainModel?: string | null;
   bus?: EventEmitter;
+  /** Context block store for expanding contextBlockIds into the task's prompt
+   *  before dispatch. Without this, the worker LLM never sees the prior-round
+   *  audit/review report referenced by contextBlockIds. */
+  contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
   annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
@@ -180,7 +187,14 @@ function toolCategoryForRoute(route: string | undefined): ToolCategory {
 }
 
 function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
-  const { task, resolved, config } = input;
+  const { resolved, config } = input;
+  // Expand contextBlockIds into the task's prompt up-front so every downstream
+  // dispatch path (legacy executor + new lifecycle) sees the materialized
+  // context. Throwing here surfaces missing-block errors at the dispatcher
+  // boundary rather than silently dropping them on the floor.
+  const task = input.contextBlockStore
+    ? expandContextBlocks(input.task, input.contextBlockStore)
+    : input.task;
   const cwd = task.cwd ?? process.cwd();
   const timeoutMs = task.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000;
   const stallTimeoutMs = config.defaults?.stallTimeoutMs ?? 300_000;
@@ -204,7 +218,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     route: input.route ?? '',
     client: input.client ?? '',
-    mainModel: input.recorder ? null : null,
+    mainModel: input.mainModel ?? null,
+    ...(input.contextBlockStore && { contextBlockStore: input.contextBlockStore }),
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
     escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
@@ -307,7 +322,7 @@ export async function runTaskViaDispatcher(
           cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
           turnCount: result.turns ?? 0,
           toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-          costUSD: result.cost?.totalCostUSD ?? null,
+          costUSD: result.cost?.costUSD ?? null,
           durationMs: result.durationMs ?? null,
           filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
           filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,

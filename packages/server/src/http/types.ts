@@ -7,6 +7,8 @@ export interface RequestContext {
   body?: unknown;     // set by body-reader middleware on POST/PATCH/DELETE
   authed: boolean;
   callerClient: CallerClient;
+  /** Calling agent's model id from x-mma-main-model header (null if absent). */
+  mainModel: string | null;
 }
 
 export type Handler = (ctx: RequestContext, res: ServerResponse, params: Record<string, string>) => Promise<void> | void;

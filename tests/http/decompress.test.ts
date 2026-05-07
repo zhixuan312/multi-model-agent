@@ -107,6 +107,8 @@ describe('decompress pipeline integration', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Encoding': 'gzip',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: compressed,
@@ -125,6 +127,8 @@ describe('decompress pipeline integration', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Encoding': 'gzip',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: Buffer.from('not gzip data'),
@@ -144,6 +148,8 @@ describe('decompress pipeline integration', () => {
         headers: {
           'Content-Type': 'application/json',
           'Content-Encoding': 'br',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body,

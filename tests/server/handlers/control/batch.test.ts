@@ -16,7 +16,7 @@ describe('GET /batch/:batchId', () => {
     try {
       const unknownId = randomUUID();
       const res = await fetch(`${s.url}/batch/${unknownId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(404);
       const json = await res.json() as { error: { code: string } };
@@ -33,6 +33,7 @@ describe('GET /batch/:batchId', () => {
       const delegateRes = await fetch(`${s.url}/delegate?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -42,7 +43,7 @@ describe('GET /batch/:batchId', () => {
       const { batchId } = await delegateRes.json() as { batchId: string };
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(202);
       expect(res.headers.get('content-type')).toMatch(/text\/plain/);
@@ -83,14 +84,14 @@ describe('GET /batch/:batchId', () => {
       });
 
       const resAll = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(resAll.status).toBe(200);
       const jsonAll = await resAll.json() as { results: unknown[] };
       expect(jsonAll.results).toHaveLength(3);
 
       const resSliced = await fetch(`${s.url}/batch/${batchId}?taskIndex=1`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(resSliced.status).toBe(200);
       const jsonSliced = await resSliced.json() as { results: unknown[] };
@@ -109,6 +110,7 @@ describe('GET /batch/:batchId', () => {
       const delegateRes = await fetch(`${s.url}/delegate?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -117,7 +119,7 @@ describe('GET /batch/:batchId', () => {
       const { batchId } = await delegateRes.json() as { batchId: string };
 
       const res = await fetch(`${s.url}/batch/${batchId}?taskIndex=abc`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(400);
       const json = await res.json() as { error: { code: string } };
@@ -152,7 +154,7 @@ describe('GET /batch/:batchId', () => {
 
       // taskIndex=1 is out of range for a 1-element array
       const res = await fetch(`${s.url}/batch/${batchId}?taskIndex=1`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(404);
       const json = await res.json() as { error: { code: string } };
@@ -180,7 +182,7 @@ describe('GET /batch/:batchId', () => {
 
       // taskIndex=99 on a pending batch — should NOT error, returns 202 text/plain
       const res = await fetch(`${s.url}/batch/${batchId}?taskIndex=99`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(202);
       expect(res.headers.get('content-type')).toMatch(/text\/plain/);
@@ -215,7 +217,7 @@ describe('GET /batch/:batchId', () => {
       // entry is still in the map now (second sweep removes it)
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const json = await res.json() as { headline: string };
@@ -237,7 +239,7 @@ describe('GET /batch/:batchId', () => {
       s.batchRegistry.fail(batchId, { code: 'runner_crash', message: 'boom' });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json() as { error: { code: string }; results: { kind: string } };
@@ -267,7 +269,7 @@ describe('GET /batch/:batchId', () => {
       });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);

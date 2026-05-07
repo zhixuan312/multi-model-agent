@@ -47,7 +47,7 @@ export class ActivityTracker {
 
   // Cost
   private costUSD: number | null = null;
-  private costDeltaVsParentUSD: number | null = null;
+  private costDeltaVsMainUSD: number | null = null;
 
   // Most recent phase-change, surfaced via getHeartbeatTickInfo so callers can
   // emit task_phase_change events. Cleared after each getHeartbeatTickInfo read.
@@ -102,7 +102,7 @@ export class ActivityTracker {
         toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
-      costDeltaVsParentUSD: this.costDeltaVsParentUSD,
+      costDeltaVsMainUSD: this.costDeltaVsMainUSD,
       stageIdleMs: this.stageLastEventMs > 0 ? now - this.stageLastEventMs : 0,
       headline: this.composeHeadline(formatElapsed(elapsedMs)),
       snapshot: this.getHeadlineSnapshot(),
@@ -135,7 +135,7 @@ export class ActivityTracker {
     this.filesWritten = 0;
     this.toolCalls = 0;
     this.costUSD = null;
-    this.costDeltaVsParentUSD = null;
+    this.costDeltaVsMainUSD = null;
     this.timer = setInterval(() => this.emit(false), this.intervalMs);
   }
 
@@ -161,8 +161,8 @@ export class ActivityTracker {
     if (fields.costUSD !== undefined) {
       this.costUSD = fields.costUSD;
     }
-    if (fields.costDeltaVsParentUSD !== undefined) {
-      this.costDeltaVsParentUSD = fields.costDeltaVsParentUSD;
+    if (fields.costDeltaVsMainUSD !== undefined) {
+      this.costDeltaVsMainUSD = fields.costDeltaVsMainUSD;
     }
 
     // Apply stageCount
@@ -260,10 +260,10 @@ export class ActivityTracker {
     this.toolCalls = toolCalls;
   }
 
-  updateCost(costUSD: number | null, costDeltaVsParentUSD: number | null): void {
+  updateCost(costUSD: number | null, costDeltaVsMainUSD: number | null): void {
     if (!this.started || this.stopped) return;
     this.costUSD = costUSD;
-    this.costDeltaVsParentUSD = costDeltaVsParentUSD;
+    this.costDeltaVsMainUSD = costDeltaVsMainUSD;
   }
 
   recordFileRead(): void {
@@ -276,10 +276,10 @@ export class ActivityTracker {
     this.toolCalls++;
   }
 
-  applyCost(cost: { costUSD: number; costDeltaVsParentUSD: number }): void {
+  applyCost(cost: { costUSD: number; costDeltaVsMainUSD: number }): void {
     if (!this.started || this.stopped) return;
     this.costUSD = cost.costUSD;
-    this.costDeltaVsParentUSD = cost.costDeltaVsParentUSD;
+    this.costDeltaVsMainUSD = cost.costDeltaVsMainUSD;
   }
 
   /**
@@ -328,7 +328,7 @@ export class ActivityTracker {
         toolCalls: this.toolCalls,
       },
       costUSD: this.costUSD,
-      costDeltaVsParentUSD: this.costDeltaVsParentUSD,
+      costDeltaVsMainUSD: this.costDeltaVsMainUSD,
       final,
       headline: this.composeHeadline(elapsed),
       stageIdleMs: this.stageLastEventMs > 0 ? Date.now() - this.stageLastEventMs : 0,
@@ -360,10 +360,10 @@ export class ActivityTracker {
   }
 
   private composeCostClause(): string | null {
-    if (this.mainModel && this.costDeltaVsParentUSD !== null && this.costUSD !== null && this.costDeltaVsParentUSD < 0) {
-      const saved = -this.costDeltaVsParentUSD;
+    if (this.mainModel && this.costDeltaVsMainUSD !== null && this.costUSD !== null && this.costDeltaVsMainUSD < 0) {
+      const saved = -this.costDeltaVsMainUSD;
       if (this.costUSD > 0) {
-        const parentCost = this.costUSD - this.costDeltaVsParentUSD;
+        const parentCost = this.costUSD - this.costDeltaVsMainUSD;
         const roi = parentCost / this.costUSD;
         return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)${this._rateCardUnresolved ? '+' : ''}`;
       }
@@ -409,10 +409,10 @@ export class ActivityTracker {
   }
 
   private composeCostClauseSafe(): string | null {
-    if (this.costDeltaVsParentUSD === null || !Number.isFinite(this.costDeltaVsParentUSD) || this.costDeltaVsParentUSD >= 0) return null;
-    const saved = -this.costDeltaVsParentUSD;
+    if (this.costDeltaVsMainUSD === null || !Number.isFinite(this.costDeltaVsMainUSD) || this.costDeltaVsMainUSD >= 0) return null;
+    const saved = -this.costDeltaVsMainUSD;
     if (this.costUSD !== null && Number.isFinite(this.costUSD) && this.costUSD > 0) {
-      const parentCost = this.costUSD - this.costDeltaVsParentUSD;
+      const parentCost = this.costUSD - this.costDeltaVsMainUSD;
       const roi = parentCost / this.costUSD;
       return `$${saved.toFixed(2)} saved (${roi.toFixed(1)}x)${this._rateCardUnresolved ? '+' : ''}`;
     }
