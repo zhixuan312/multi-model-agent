@@ -7,6 +7,7 @@ import {
   qualityAPTemplate,
   diffTemplate,
 } from '../../review/reviewer-engine.js';
+import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 
 export const executePlanInputSchema = z.object({
   filePaths: z.array(z.string()).length(1, { message: "execute_plan requires exactly one plan filePath" }),
@@ -35,3 +36,16 @@ export function makeExecutePlanReviewer(): ReviewerEngine {
   const builder = new ReviewerPromptBuilder({ spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate });
   return new ReviewerEngine(builder);
 }
+
+export const toolConfig: ToolConfig<ExecutePlanWireInput> = {
+  name: 'execute_plan',
+  category: 'artifact_producing',
+  briefSlot: (input) => input.taskDescriptors.map((task) => ({ task, filePath: input.filePaths[0] })),
+  reportSchema: { parse: (text) => { try { return JSON.parse(text); } catch { return text; } } },
+  headlineTemplate: { compose: ({ taskBrief, status }) => `${status}: ${taskBrief}` },
+  reviewTemplates: {
+    spec: specTemplate,
+    qualityAP: qualityAPTemplate,
+    diff: diffTemplate,
+  },
+};
