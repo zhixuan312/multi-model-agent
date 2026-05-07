@@ -39,9 +39,4 @@ export function prepareExecutionContextHandler(state: LifecycleState): void {
     state.reviewPolicy = task.reviewPolicy;
   }
 
-  // state.executionContext is intentionally NOT defaulted here. It carries
-  // batch-scoped state (providers, timing, bus, heartbeat) that this handler
-  // can't synthesize from the rawRequest alone. Callers that want the new
-  // path running must supply executionContext via DispatchInput.context.
-  void (state as { executionContext?: ExecutionContext }).executionContext;
 }

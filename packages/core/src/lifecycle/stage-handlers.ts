@@ -44,9 +44,9 @@ import {
  *     stores the executor's result in state.executorResult
  *   - compose_response: lifts state.executorResult into state.responseEnvelope
  *
- * Decomposing the executor monolith into per-row handlers (so spec_review_*,
- * quality_review_*, run_verify_command, git_commit each become real stages)
- * is task #45's continuation work.
+ * The executor monolith has been decomposed into per-row handlers
+ * (spec_review_*, quality_review_*, run_verify_command, git_commit each
+ * are now real stage handlers wired below).
  */
 
 export type RouteExecutor = (
