@@ -34,25 +34,44 @@ export class SkillNotFoundError extends Error {
 
 // Discover.ts lives in `packages/core/src/tool-surface/` (or its dist mirror).
 // Skills are bundled by the server package at `packages/server/src/skills/`
-// (and copied to `packages/server/dist/skills/` at build time). Probe both
-// candidates so dev (running .ts) and prod (running .js) resolve to a real
-// skills directory without environment-specific configuration.
-function locateSkillsRoot(): string {
-  const here = path.dirname(fileURLToPath(import.meta.url));
-  const candidates = [
+// (copied to `packages/server/dist/skills/` at build time, then shipped on
+// the `@zhixuan92/multi-model-agent` npm package as `dist/skills/`).
+// Probe candidates for both monorepo dev layouts and the two npm-installed
+// layouts (hoisted siblings, or core nested under server).
+//
+// Exported (and parameterized on `here` + `exists`) so the candidate logic
+// can be unit-tested against fixtures that mimic each layout — the v4.0.1
+// regression was a missing prod candidate.
+export function skillsRootCandidates(here: string): string[] {
+  return [
+    // Dev source: packages/core/src/tool-surface -> packages/server/src/skills
     path.resolve(here, '..', '..', '..', 'server', 'src', 'skills'),
+    // Dev built: packages/core/dist/tool-surface -> packages/server/dist/skills
     path.resolve(here, '..', '..', '..', 'server', 'dist', 'skills'),
-    // Fallback to old location semantics for any caller that doesn't go
-    // through the server package.
+    // npm install (hoisted): node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface
+    //                     -> node_modules/@zhixuan92/multi-model-agent/dist/skills
+    path.resolve(here, '..', '..', '..', 'multi-model-agent', 'dist', 'skills'),
+    // npm install (core nested under server):
+    //   .../multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/dist/tool-surface
+    // -> .../multi-model-agent/dist/skills
+    path.resolve(here, '..', '..', '..', '..', '..', 'dist', 'skills'),
+    // Last-resort fallback for any caller that bundles skills inside core.
     path.resolve(here, '..', 'skills'),
   ];
+}
+
+export function pickSkillsRoot(
+  here: string,
+  exists: (p: string) => boolean = fs.existsSync,
+): string {
+  const candidates = skillsRootCandidates(here);
   for (const c of candidates) {
-    if (fs.existsSync(c)) return c;
+    if (exists(c)) return c;
   }
   return candidates[0]!;
 }
 
-const DEFAULT_SKILLS_ROOT = locateSkillsRoot();
+const DEFAULT_SKILLS_ROOT = pickSkillsRoot(path.dirname(fileURLToPath(import.meta.url)));
 
 /**
  * Return the absolute path to the skills root directory. Production: the
