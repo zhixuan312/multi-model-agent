@@ -8,6 +8,7 @@ import { reviewDiffHandler } from '../../../packages/core/src/lifecycle/handlers
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { ExecutionContext } from '../../../packages/core/src/lifecycle/lifecycle-context.js';
 import type { Provider, RunResult, TaskSpec } from '../../../packages/core/src/types.js';
+import type { ReviewerEngine } from '../../../packages/core/src/review/reviewer-engine.js';
 import type { VerifyStageResult } from '../../../packages/core/src/lifecycle/handlers/verify-stage.js';
 
 const exec = promisify(execFile);
@@ -124,7 +125,8 @@ describe('reviewDiffHandler', () => {
   });
 
   it("kind='approve' → envelope 'approved' (terminal stays false)", async () => {
-    const ctx = makeCtx(repoDir, { complex: mockProvider('APPROVE') });
+    const mockEngine = { runDiff: async () => ({ verdict: 'approve' as const, concerns: [] as string[], cost: { inputTokens: 0, outputTokens: 0, turnCount: 1, toolCallCount: 0, costUSD: null } }) };
+    const ctx = makeCtx(repoDir, { complex: mockProvider('APPROVE') }, { reviewerEngine: mockEngine as unknown as ReviewerEngine });
     const state = makeState({ executionContext: ctx, verifyResult: passingVerify });
     await reviewDiffHandler(state);
     expect(state.diffReviewKind).toBe('approve');
@@ -133,7 +135,8 @@ describe('reviewDiffHandler', () => {
   });
 
   it("kind='concerns' → envelope 'approved' (counter-intuitive mapping)", async () => {
-    const ctx = makeCtx(repoDir, { complex: mockProvider('CONCERNS: minor formatting issue') });
+    const mockEngine = { runDiff: async () => ({ verdict: 'concerns' as const, concerns: ['minor formatting issue'], cost: { inputTokens: 0, outputTokens: 0, turnCount: 1, toolCallCount: 0, costUSD: null } }) };
+    const ctx = makeCtx(repoDir, { complex: mockProvider('CONCERNS: minor formatting issue') }, { reviewerEngine: mockEngine as unknown as ReviewerEngine });
     const state = makeState({ executionContext: ctx, verifyResult: passingVerify });
     await reviewDiffHandler(state);
     expect(state.diffReviewKind).toBe('concerns');
@@ -142,7 +145,8 @@ describe('reviewDiffHandler', () => {
   });
 
   it("kind='reject' → envelope 'changes_required' (terminal=true)", async () => {
-    const ctx = makeCtx(repoDir, { complex: mockProvider('REJECT: serious problem') });
+    const mockEngine = { runDiff: async () => ({ verdict: 'reject' as const, concerns: [] as string[], cost: { inputTokens: 0, outputTokens: 0, turnCount: 1, toolCallCount: 0, costUSD: null } }) };
+    const ctx = makeCtx(repoDir, { complex: mockProvider('REJECT: serious problem') }, { reviewerEngine: mockEngine as unknown as ReviewerEngine });
     const state = makeState({ executionContext: ctx, verifyResult: passingVerify });
     await reviewDiffHandler(state);
     expect(state.diffReviewKind).toBe('reject');

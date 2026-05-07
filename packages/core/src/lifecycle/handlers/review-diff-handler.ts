@@ -3,14 +3,15 @@ import { promisify } from 'node:util';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, AgentType, RunResult } from '../../types.js';
-import { runDiffReview, type DiffReviewVerdict, type DiffReviewOrSkipped } from '../../review/diff-review.js';
+import type { ReviewerDiffCallResult } from '../../review/reviewer-engine.js';
 import { pickReviewer } from '../../escalation/policy.js';
 import {
   runWithFallback,
   isReviewTransportFailure,
   type UnavailableMap,
 } from '../../escalation/fallback.js';
-import { makeSkippedReviewResult } from '../../review/skipped-result.js';
+import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
+import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 import type { VerifyStageResult } from './verify-stage.js';
 
 const exec = promisify(execFile);
@@ -20,11 +21,11 @@ const exec = promisify(execFile);
  *
  * Reads from state:
  *   - state.task / state.executionContext for cwd, providers, timing
- *   - state.verifyResult: VerifyStageResult required by runDiffReview
+ *   - state.verifyResult: VerifyStageResult required by reviewerEngine.runDiff
  *   - state.diffReviewVerdict: idempotency guard
  *
  * Writes to state:
- *   - state.diffReviewKind: raw kind from runDiffReview
+ *   - state.diffReviewKind: raw verdict from reviewerEngine.runDiff
  *   - state.diffReviewVerdict: envelope-mapped status
  *   - state.terminal = true on 'changes_required' (reject) or 'error'
  *
@@ -56,13 +57,11 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
   const reviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier });
 
   let diff = '';
-  let diffTruncated = false;
   try {
     const { stdout } = await exec('git', ['diff', 'HEAD~..HEAD'], { cwd: ctx.cwd });
     const cap = 64 * 1024;
     const bytes = Buffer.byteLength(stdout, 'utf8');
-    diffTruncated = bytes > cap;
-    diff = diffTruncated
+    diff = bytes > cap
       ? Buffer.from(stdout, 'utf8').subarray(0, cap).toString('utf8') + '\n[diff truncated]'
       : stdout;
   } catch {
@@ -74,31 +73,26 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
   state.diffUnavailable ??= new Map() as UnavailableMap;
   const diffUnavailable: UnavailableMap = state.diffUnavailable;
 
-  const diffCall = await runWithFallback<DiffReviewOrSkipped>({
+  const diffCall = await runWithFallback<ReviewerDiffCallResult | SkippedReviewResult>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
     unavailableTiers: diffUnavailable,
-    isTransportFailure: (r) => isReviewTransportFailure(r),
+    isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
     forbiddenTiers: [baseTier],
-    call: (provider) =>
-      runDiffReview({
+    call: async (provider) => {
+      const shell = makeRunnerShell(provider);
+      const engine = ctx.reviewerEngine;
+      if (!engine) throw new Error('reviewerEngine not configured');
+      return engine.runDiff(shell, {
+        workerOutput: diff,
+        brief: `verification: ${verifyResult.status}\n${verifyResult.steps.map(s => `- ${s.command} → ${s.status}`).join('\n')}`,
         cwd: ctx.cwd,
-        diff,
-        diffTruncated,
-        verification: verifyResult,
-        worker: {
-          call: (prompt, opts) =>
-            provider.run(prompt, {
-              cwd: opts?.cwd ?? ctx.cwd,
-              abortSignal: opts?.abortSignal,
-              timeoutMs: opts?.timeoutMs,
-            }),
-        },
-        taskDeadlineMs: ctx.timing.deadlineMs,
         abortSignal: ctx.stall.controller.signal,
-      }),
+        deadlineMs: ctx.timing.deadlineMs,
+      });
+    },
   });
 
   if (diffCall.bothUnavailable) {
@@ -106,16 +100,16 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     return;
   }
   const verdictOrSkipped = diffCall.result;
-  if (!('kind' in verdictOrSkipped)) {
+  if ('status' in verdictOrSkipped && verdictOrSkipped.status === 'skipped') {
     state.diffReviewVerdict = 'skipped';
     return;
   }
-  const verdict: DiffReviewVerdict = verdictOrSkipped;
+  const result = verdictOrSkipped as ReviewerDiffCallResult;
 
-  state.diffReviewKind = verdict.kind;
-  if (verdict.kind === 'approve' || verdict.kind === 'concerns') {
+  state.diffReviewKind = result.verdict;
+  if (result.verdict === 'approve' || result.verdict === 'concerns') {
     state.diffReviewVerdict = 'approved';
-  } else if (verdict.kind === 'reject') {
+  } else if (result.verdict === 'reject') {
     state.diffReviewVerdict = 'changes_required';
     state.terminal = true;
   } else {
