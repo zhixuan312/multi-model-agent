@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/dispatch-task';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/task-runner';
 import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
 
 const defaultConfig: MultiModelConfig = {

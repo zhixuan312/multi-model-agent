@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
-import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/dispatch-task.js';
+import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
 import type { TaskSpec, RunResult, MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 import type { ResolvedAgent } from '../../packages/core/src/escalation/agent-resolver.js';
 import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';

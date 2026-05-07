@@ -18,13 +18,13 @@ export async function registerAllHandlers(registry: ToolSurfaceRegistry): Promis
   const { buildInvestigateHandler } = await import('../handlers/tools/investigate.js');
   const { buildExploreHandler } = await import('../handlers/tools/explore.js');
 
-  registry.setHandler('delegate', (deps) => buildDelegateHandler(deps as HandlerDeps));
-  registry.setHandler('audit', (deps) => buildAuditHandler(deps as HandlerDeps));
-  registry.setHandler('review', (deps) => buildReviewHandler(deps as HandlerDeps));
-  registry.setHandler('verify', (deps) => buildVerifyHandler(deps as HandlerDeps));
-  registry.setHandler('debug', (deps) => buildDebugHandler(deps as HandlerDeps));
-  registry.setHandler('execute_plan', (deps) => buildExecutePlanHandler(deps as HandlerDeps));
-  registry.setHandler('retry_tasks', (deps) => buildRetryHandler(deps as HandlerDeps));
-  registry.setHandler('investigate', (deps) => buildInvestigateHandler(deps as HandlerDeps));
-  registry.setHandler('explore', (deps) => buildExploreHandler(deps as HandlerDeps));
+  registry.setHandler('delegate', (deps) => buildDelegateHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('audit', (deps) => buildAuditHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('review', (deps) => buildReviewHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('verify', (deps) => buildVerifyHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('debug', (deps) => buildDebugHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('execute_plan', (deps) => buildExecutePlanHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('retry_tasks', (deps) => buildRetryHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('investigate', (deps) => buildInvestigateHandler(deps as unknown as HandlerDeps));
+  registry.setHandler('explore', (deps) => buildExploreHandler(deps as unknown as HandlerDeps));
 }
