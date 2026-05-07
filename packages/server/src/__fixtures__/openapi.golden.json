@@ -1212,60 +1212,6 @@
         ]
       }
     },
-    "/register-context-block": {
-      "post": {
-        "parameters": [
-          {
-            "description": "Project working directory",
-            "in": "query",
-            "name": "cwd",
-            "required": true,
-            "schema": {
-              "description": "Project working directory",
-              "type": "string"
-            }
-          }
-        ],
-        "requestBody": {
-          "content": {
-            "application/json": {
-              "schema": {
-                "properties": {
-                  "content": {
-                    "description": "Block content (plain text or markdown)",
-                    "type": "string"
-                  },
-                  "label": {
-                    "description": "Human-readable label",
-                    "type": "string"
-                  }
-                },
-                "required": [
-                  "content"
-                ],
-                "type": "object"
-              }
-            }
-          },
-          "required": true
-        },
-        "responses": {
-          "201": {
-            "description": "Block created"
-          },
-          "400": {
-            "description": "Validation error or content too large"
-          },
-          "401": {
-            "description": "Missing or invalid Bearer token"
-          }
-        },
-        "summary": "Register a context block (alias)",
-        "tags": [
-          "Control"
-        ]
-      }
-    },
     "/retry": {
       "post": {
         "parameters": [

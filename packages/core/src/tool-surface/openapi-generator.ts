@@ -212,32 +212,6 @@ export function buildOpenApiDoc(): Record<string, unknown> {
   });
 
   registry.registerPath({
-    method: 'post',
-    path: '/register-context-block',
-    summary: 'Register a context block (alias)',
-    tags: ['Control'],
-    request: {
-      query: z.object({ cwd: z.string().describe('Project working directory') }),
-      body: {
-        required: true,
-        content: {
-          'application/json': {
-            schema: z.object({
-              content: z.string().describe('Block content (plain text or markdown)'),
-              label: z.string().optional().describe('Human-readable label'),
-            }),
-          },
-        },
-      },
-    },
-    responses: {
-      201: { description: 'Block created' },
-      400: { description: 'Validation error or content too large' },
-      401: response401,
-    },
-  });
-
-  registry.registerPath({
     method: 'delete',
     path: '/context-blocks/{blockId}',
     summary: 'Delete a context block',
