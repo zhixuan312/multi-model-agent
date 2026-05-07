@@ -33,7 +33,7 @@ import {
   removeSkillFromClient,
   getSkillsRoot,
 } from './install-skill.js';
-import { findMissingSkills } from '../install/missing-skills.js';
+import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 
 export interface UpdateSkillsDeps {

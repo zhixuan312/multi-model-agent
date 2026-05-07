@@ -2,8 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, mkdirSync, writeFileSync, existsSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { activeCleanup } from '../../packages/server/src/install/orchestrate.js';
-import { findOrphanedSkills } from '../../packages/server/src/install/missing-skills.js';
+import { activeCleanup, findOrphanedSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 describe('activeCleanup', () => {
   it('removes orphaned mma-clarifications on re-install', () => {

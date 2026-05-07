@@ -29,7 +29,7 @@ import { Queue } from '../telemetry/queue.js';
 import { runUpdateSkills } from './update-skills.js';
 import { listEntries, FutureManifestError } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import { readSkillContent } from './install-skill.js';
-import { findMissingSkills } from '../install/missing-skills.js';
+import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import matter from 'gray-matter';
 

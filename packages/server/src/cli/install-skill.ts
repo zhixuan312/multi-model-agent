@@ -33,7 +33,7 @@ import {
   UnknownTargetError,
   writeSkillToClient,
   removeSkillFromClient,
-} from '../install/manifest-resolve.js';
+} from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 // Re-export everything callers (cli/index.ts + tests) imported from here.
 export type { Client } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
@@ -48,14 +48,14 @@ export {
   UnknownTargetError,
   writeSkillToClient,
   removeSkillFromClient,
-} from '../install/manifest-resolve.js';
+} from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 // ─── Install/Uninstall result ───────────────────────────────────────────────
 
-export type { InstallResult } from '../install/orchestrate.js';
-export { doInstall, doUninstall } from '../install/orchestrate.js';
-import { doInstall, doUninstall, type InstallResult, activeCleanup } from '../install/orchestrate.js';
-import { resolveClientInstallDir } from '../install/manifest-resolve.js';
+export type { InstallResult } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+export { doInstall, doUninstall } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import { doInstall, doUninstall, type InstallResult, activeCleanup } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import { resolveClientInstallDir } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 /**
  * Return codes for `main()`.
