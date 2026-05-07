@@ -120,7 +120,7 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
   const task = state.task as TaskSpec | undefined;
   if (!task) return null;
 
-  const attemptIndex = round; // rework_1 → attemptIndex 1, rework_2 → attemptIndex 2
+  const attemptIndex = round - 1; // rework_1 → attemptIndex 1, rework_2 → attemptIndex 2
   const baseTier: AgentType = ctx.assignedTier;
   const decision = pickEscalation({ loop: 'spec', attemptIndex, baseTier });
 
