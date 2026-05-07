@@ -174,7 +174,7 @@ export {
   qualityAPTemplate,
   diffTemplate,
 } from './review/reviewer-engine.js';
-export type { ReviewTemplate } from './review/reviewer-engine.js';
+export type { ReviewTemplate, QualityReviewRoute } from './review/reviewer-engine.js';
 
 // Intake-pipeline slots
 export { delegateSlot } from './intake/brief-compiler-slots/delegate.js';

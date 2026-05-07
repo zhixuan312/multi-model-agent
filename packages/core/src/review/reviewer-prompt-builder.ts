@@ -1,5 +1,7 @@
 import type { ReviewTemplate } from './templates/shared.js';
 
+export type QualityReviewRoute = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
+
 export class ReviewerPromptBuilder {
   constructor(
     private templates: {
@@ -7,6 +9,7 @@ export class ReviewerPromptBuilder {
       qualityForAP: ReviewTemplate;
       diff: ReviewTemplate;
     },
+    private qualityTemplates: Partial<Record<QualityReviewRoute, ReviewTemplate>> = {},
   ) {}
 
   buildSpec(ctx: { workerOutput: string; brief: string }): { systemPrompt: string; userPrompt: string } {
@@ -16,10 +19,11 @@ export class ReviewerPromptBuilder {
     };
   }
 
-  buildQualityAP(ctx: { workerOutput: string; brief: string }): { systemPrompt: string; userPrompt: string } {
+  buildQualityAP(ctx: { workerOutput: string; brief: string; route?: QualityReviewRoute }): { systemPrompt: string; userPrompt: string } {
+    const template = (ctx.route !== undefined && this.qualityTemplates[ctx.route]) || this.templates.qualityForAP;
     return {
-      systemPrompt: this.templates.qualityForAP.systemPrompt,
-      userPrompt: this.templates.qualityForAP.buildUserPrompt(ctx),
+      systemPrompt: template.systemPrompt,
+      userPrompt: template.buildUserPrompt(ctx),
     };
   }
 

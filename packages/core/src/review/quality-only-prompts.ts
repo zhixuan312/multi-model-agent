@@ -1,27 +1,33 @@
-import { assembleAnnotatorPrompt } from './annotator-prompt-builder.js';
 import type { AnnotatorPromptContext } from './templates/annotator-shared.js';
-import { annotatorAuditTemplate } from './templates/annotator-audit.js';
-import { annotatorReviewTemplate } from './templates/annotator-review.js';
-import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
-import { annotatorDebugTemplate } from './templates/annotator-debug.js';
-import { annotatorInvestigateTemplate } from './templates/annotator-investigate.js';
+import { qualityAuditTemplate } from './templates/quality-review-audit.js';
+import { qualityReviewTemplate } from './templates/quality-review-review.js';
+import { qualityVerifyTemplate } from './templates/quality-review-verify.js';
+import { qualityDebugTemplate } from './templates/quality-review-debug.js';
+import { qualityInvestigateTemplate } from './templates/quality-review-investigate.js';
+
+function buildFromTemplate(
+  template: { systemPrompt: string; buildUserPrompt: (ctx: { workerOutput: string; brief: string }) => string },
+  ctx: AnnotatorPromptContext,
+): string {
+  return `${template.systemPrompt}\n\n${template.buildUserPrompt(ctx)}`;
+}
 
 export function buildAuditQualityPrompt(ctx: AnnotatorPromptContext): string {
-  return assembleAnnotatorPrompt(annotatorAuditTemplate, ctx);
+  return buildFromTemplate(qualityAuditTemplate, ctx);
 }
 
 export function buildReviewQualityPrompt(ctx: AnnotatorPromptContext): string {
-  return assembleAnnotatorPrompt(annotatorReviewTemplate, ctx);
+  return buildFromTemplate(qualityReviewTemplate, ctx);
 }
 
 export function buildVerifyQualityPrompt(ctx: AnnotatorPromptContext): string {
-  return assembleAnnotatorPrompt(annotatorVerifyTemplate, ctx);
+  return buildFromTemplate(qualityVerifyTemplate, ctx);
 }
 
 export function buildInvestigateQualityPrompt(ctx: AnnotatorPromptContext): string {
-  return assembleAnnotatorPrompt(annotatorInvestigateTemplate, ctx);
+  return buildFromTemplate(qualityInvestigateTemplate, ctx);
 }
 
 export function buildDebugQualityPrompt(ctx: AnnotatorPromptContext): string {
-  return assembleAnnotatorPrompt(annotatorDebugTemplate, ctx);
+  return buildFromTemplate(qualityDebugTemplate, ctx);
 }
