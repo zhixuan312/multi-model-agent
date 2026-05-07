@@ -43,21 +43,22 @@ function makeVerifyComposeResponse(): StageHandler {
   };
 }
 
-function makeAnnotatorHandler(engine: AnnotatorEngine): StageHandler {
+function makeAnnotatorHandler(shell: any, route: string): StageHandler {
   return async (state: LifecycleState): Promise<void> => {
     const lastResult = state.lastRunResult as { finalAssistantText?: string } | undefined;
     const workerOutput = lastResult?.finalAssistantText ?? '';
     const cwd = (state as any).cwd ?? process.cwd();
 
-    const result = await engine.annotate({
+    const result = await new AnnotatorEngine().annotate(shell, {
       workerOutput,
       brief: state.userMessage ?? '',
       cwd,
+      route: route as any,
     });
 
     state.lastRunResult = {
       ...state.lastRunResult,
-      finalAssistantText: result.annotatedText,
+      finalAssistantText: result.finalAssistantText,
     } as any;
     state.qualityReviewRound1Verdict = result.verdict;
   };
@@ -99,8 +100,7 @@ describe('verify_work via v4.0 lifecycle', () => {
       compose_response: makeVerifyComposeResponse(),
     });
 
-    const engine = new AnnotatorEngine(dispatcher.shell);
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(engine));
+    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'verify'));
 
     const result = await dispatcher.dispatch({
       route: 'verify',
@@ -124,8 +124,7 @@ describe('verify_work via v4.0 lifecycle', () => {
       compose_response: makeVerifyComposeResponse(),
     });
 
-    const engine = new AnnotatorEngine(dispatcher.shell);
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(engine));
+    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'verify'));
 
     const result = await dispatcher.dispatch({
       route: 'verify',
@@ -149,8 +148,7 @@ describe('verify_work via v4.0 lifecycle', () => {
       compose_response: makeVerifyComposeResponse(),
     });
 
-    const engine = new AnnotatorEngine(dispatcher.shell);
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(engine));
+    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'verify'));
 
     const result = await dispatcher.dispatch({
       route: 'verify',
