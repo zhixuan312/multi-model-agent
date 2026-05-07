@@ -106,6 +106,11 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         toolDefinitions,
         maxTurns,
         cwd,
+        ...(options.abortSignal && { abortSignal: options.abortSignal }),
+        ...(options.bus && { bus: options.bus }),
+        ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.tier !== undefined && { tier: options.tier }),
+        model: providerConfig.model,
       });
 
       const toolCallSummaries = result.toolCalls.map(tc => {

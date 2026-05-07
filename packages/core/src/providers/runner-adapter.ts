@@ -22,6 +22,16 @@ export interface AdapterTurnResult {
   usage: TokenUsage;
   finishReason: 'stop' | 'tool_use' | 'max_tokens' | 'error';
   errorCode?: string;
+  /** Provider-side response shape for verbose diagnostics. Adapters report
+   *  the raw stop_reason and a count of each content block type so the
+   *  runner-shell can emit a `runner_response_received` event when the
+   *  bus is wired. Lets operators see e.g. `{ text: 0, thinking: 1 }`
+   *  when a provider returns reasoning-only and no narrative — the
+   *  signature failure mode that produced silent empty output in 4.0.x. */
+  responseShape?: {
+    stopReason?: string;
+    contentBlocks?: Record<string, number>;
+  };
 }
 
 export interface AdapterCapabilities {

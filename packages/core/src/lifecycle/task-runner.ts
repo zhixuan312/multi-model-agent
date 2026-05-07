@@ -291,6 +291,8 @@ export async function runTaskViaDispatcher(
             taskDeadlineMs: ctx.timing.deadlineMs,
             abortSignal: ctx.stall.controller.signal,
             assignedTier: decision.impl,
+            ...(ctx.bus && { bus: ctx.bus }),
+            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
           },
         );
         const enrichedResult: RunResult = {

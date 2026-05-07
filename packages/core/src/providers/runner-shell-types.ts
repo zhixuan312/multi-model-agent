@@ -1,4 +1,5 @@
 import type { TokenUsage } from './runner-types.js';
+import type { EventEmitter } from '../events/event-emitter.js';
 
 export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed';
 
@@ -11,6 +12,17 @@ export interface RunInput {
   capabilities?: import('./runner-adapter.js').AdapterCapabilities;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
+  /** Bus for per-turn / per-runner-call observability events. When present,
+   *  shell + adapter emit `runner_turn_started` / `runner_response_received`
+   *  / `runner_turn_completed` events so VerboseLogChannel surfaces them
+   *  on stderr in real time during a long task run. */
+  bus?: EventEmitter;
+  /** Identifies the in-flight batch in emitted events. */
+  batchId?: string;
+  /** Tier label (`'standard'` | `'complex'`) included in emitted events. */
+  tier?: string;
+  /** Provider model id included in emitted events. */
+  model?: string;
 }
 
 export interface RunResult {

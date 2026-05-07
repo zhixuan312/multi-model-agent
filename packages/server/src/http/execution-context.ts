@@ -66,8 +66,14 @@ export function buildExecutionContext(
     stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
     implementerToolMode: undefined,
     heartbeat: undefined,
-    verboseStream: () => {},
-    verbose: false,
+    // Propagate config.diagnostics.verbose so the runner-shell + adapter
+    // emit per-turn events. Without this, the runner think verbose is off
+    // even when the daemon was started with diagnostics.verbose=true, and
+    // the only stderr breadcrumbs are the few HTTP-handler events.
+    verboseStream: deps.config.diagnostics?.verbose
+      ? (line: string) => { process.stderr.write(line); }
+      : () => {},
+    verbose: deps.config.diagnostics?.verbose ?? false,
     outputTargets: [],
     reviewerEngine: deps.reviewerEngine,
     annotatorEngine: deps.annotatorEngine,

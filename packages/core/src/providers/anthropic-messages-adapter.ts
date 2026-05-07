@@ -42,11 +42,26 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
       .filter(b => b.type === 'tool_use')
       .map((b: any) => ({ id: b.id, name: b.name, input: b.input }));
 
+    // Tally every content-block type the provider returned so the runner
+    // can emit a `runner_response_received` event that surfaces e.g.
+    // `{ text: 0, thinking: 1 }` when deepseek emitted reasoning-only.
+    // That diagnostic was missing in 4.0.x — the adapter silently dropped
+    // non-text blocks and the runner-shell terminated with empty output.
+    const contentBlocks: Record<string, number> = {};
+    for (const b of response.content) {
+      const t = (b as { type?: string }).type ?? 'unknown';
+      contentBlocks[t] = (contentBlocks[t] ?? 0) + 1;
+    }
+
     return {
       assistantText: text,
       toolCalls,
       usage,
       finishReason: toolCalls.length > 0 ? 'tool_use' : (response.stop_reason === 'end_turn' ? 'stop' : 'max_tokens'),
+      responseShape: {
+        ...(response.stop_reason && { stopReason: response.stop_reason }),
+        contentBlocks,
+      },
     };
   }
 

@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventEmitter, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import { EventEmitter, LocalLogSink, TelemetrySink, VerboseLogChannel, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
@@ -107,10 +107,17 @@ async function registerToolHandlers(
   // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
   let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
   try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-  const bus = new EventEmitter([
+  // v4 bus: three sinks per spec (horizontal_design.md:332). LocalLogSink
+  // gates on diagnostics.log (writer no-ops when disabled). VerboseLogChannel
+  // is wired only when diagnostics.verbose=true so we don't pay the format
+  // + stdout cost in production. TelemetrySink is always present; it no-ops
+  // if telemetry isn't initialized.
+  const sinks = [
     new LocalLogSink(writer),
     new TelemetrySink(recorderForBus),
-  ]);
+    ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
+  ];
+  const bus = new EventEmitter(sinks);
 
   const routeDispatcher = new LifecycleDispatcher();
 
@@ -201,6 +208,7 @@ async function registerControlHandlers(
     const bus = new EventEmitter([
       new LocalLogSink(writer),
       new TelemetrySink(recorderForBus),
+      ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
     const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
       specTemplate, qualityAPTemplate, diffTemplate,
