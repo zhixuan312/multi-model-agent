@@ -5,6 +5,12 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.1] - 2026-05-07
+
+### Fixed
+
+- **`mmagent install-skill` and `mmagent update-skills` resolve their bundled SKILL.md correctly under every npm-install layout.** The 4.0.0 refactor that moved skill-discovery from server into `core/tool-surface/discover.ts` (commit `e886794`) added candidate paths only for the monorepo dev tree (`packages/server/src/skills/` and its `dist` mirror). Globally-installed users (`npm i -g @zhixuan92/multi-model-agent`) saw `Skill 'multi-model-agent' not found. Checked: .../node_modules/@zhixuan92/server/src/skills/multi-model-agent/SKILL.md` for every shipped skill — that path is fictional (the package is `@zhixuan92/multi-model-agent`, not `@zhixuan92/server`). `locateSkillsRoot` now also probes the npm-installed sibling layout (`node_modules/@zhixuan92/multi-model-agent/dist/skills`) and the core-nested-under-server layout (`.../multi-model-agent/node_modules/@zhixuan92/multi-model-agent-core/.../dist/skills`). Tests: 4 in `tests/tool-surface/skills-root-resolution.test.ts` covering every layout. Affects `install-skill`, `update-skills`, and any caller that goes through `getSkillsRoot()` without an explicit override.
+
 ## [4.0.0] - 2026-05-04
 
 Major release: structural rebuild of the labor substrate. Same product surface as 3.12 minus the deliberate clarification removal; all callers must migrate per the Breaking changes list below.
@@ -1270,7 +1276,14 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...HEAD
+[4.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.0...v4.0.1
+[4.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.7...v4.0.0
+[3.12.7]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.6...v3.12.7
+[3.12.6]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.5...v3.12.6
+[3.12.5]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.4...v3.12.5
+[3.12.4]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.3...v3.12.4
+[3.12.3]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.2...v3.12.3
 [3.12.2]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.1...v3.12.2
 [3.12.1]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.0...v3.12.1
 [3.12.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.11.1...v3.12.0
