@@ -87,6 +87,10 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           route: (state.route ?? ctx.route) as ReviewRoute,
           abortSignal: ctx.stall.controller.signal,
           deadlineMs: ctx.timing.deadlineMs,
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+          ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+          stageLabel: 'Spec review',
         });
       } catch (err) {
         if (err instanceof ReviewerParseError) {

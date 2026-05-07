@@ -78,8 +78,8 @@ describe('observability contract — exhaustive', () => {
 });
 
 describe('golden does not drift', () => {
-  it('manifest covers all 23 events', () => {
-    expect(manifest.events).toHaveLength(23);
+  it('manifest covers all 26 events', () => {
+    expect(manifest.events).toHaveLength(26);
   });
 
   it('every event has a unique name', () => {

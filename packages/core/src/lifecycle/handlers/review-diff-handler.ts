@@ -90,6 +90,10 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
         cwd: ctx.cwd,
         abortSignal: ctx.stall.controller.signal,
         deadlineMs: ctx.timing.deadlineMs,
+        ...(ctx.bus && { bus: ctx.bus }),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+        stageLabel: 'Diff review',
       });
     },
   });

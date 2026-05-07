@@ -22,6 +22,12 @@ export interface AnnotatorInput {
   route: AnnotatorRoute;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
+  /** Forwarded to RunInput so the running-headline sink + verbose stderr
+   *  show stage="Annotating" while the read-only review pass runs. */
+  bus?: import('../events/event-emitter.js').EventEmitter;
+  batchId?: string;
+  tier?: string;
+  stageLabel?: string;
 }
 
 export interface AnnotatorCallResult extends AnnotatorParseResult {
@@ -44,6 +50,10 @@ export class AnnotatorEngine {
       toolDefinitions: [],
       maxTurns: 5, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
+      ...(input.bus && { bus: input.bus }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.tier !== undefined && { tier: input.tier }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });
     const parsed = this.parser.parse({ finalAssistantText: result.finalAssistantText, errorCode: result.errorCode });
     return { ...parsed, finalAssistantText: result.finalAssistantText ?? '', cost: extractCost(result) };

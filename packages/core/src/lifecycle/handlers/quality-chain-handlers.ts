@@ -94,6 +94,10 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
             filesWritten,
             abortSignal: ctx.stall.controller.signal,
             deadlineMs: ctx.timing.deadlineMs,
+            ...(ctx.bus && { bus: ctx.bus }),
+            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+            stageLabel: 'Quality review',
           });
         } catch (err) {
           if (err instanceof ReviewerParseError) {
@@ -111,6 +115,10 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
         route: route as AnnotatorRoute,
         abortSignal: ctx.stall.controller.signal,
         deadlineMs: ctx.timing.deadlineMs,
+        ...(ctx.bus && { bus: ctx.bus }),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+        stageLabel: 'Annotating',
       });
     },
   });
