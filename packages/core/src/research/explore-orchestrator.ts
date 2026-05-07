@@ -1,28 +1,28 @@
 import { randomUUID } from 'node:crypto';
-import type { ExecutionContext } from '../lifecycle-context.js';
-import type { ExecutorOutput } from '../executor-output-types.js';
-import type { Input } from '../../tools/explore/schema.js';
-import type { RunResult, MultiModelConfig } from '../../types.js';
-import type { ResearchToolDefinition } from '../../research/types.js';
-import type { EventEmitter } from '../../events/event-emitter.js';
-import { runTaskViaDispatcher } from '../dispatch-task.js';
-import { resolveAgent } from '../../escalation/agent-resolver.js';
-import { createProvider } from '../../providers/provider-factory.js';
-import { computeTimings, computeAggregateCost } from './shared-compute.js';
-import { notApplicable } from '../../reporting/not-applicable.js';
+import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
+import type { ExecutorOutput } from '../lifecycle/executor-output-types.js';
+import type { Input } from '../tools/explore/schema.js';
+import type { RunResult, MultiModelConfig } from '../types.js';
+import type { ResearchToolDefinition } from './types.js';
+import type { EventEmitter } from '../events/event-emitter.js';
+import { runTaskViaDispatcher } from '../lifecycle/dispatch-task.js';
+import { resolveAgent } from '../escalation/agent-resolver.js';
+import { createProvider } from '../providers/provider-factory.js';
+import { computeTimings, computeAggregateCost } from '../lifecycle/executors/shared-compute.js';
+import { notApplicable } from '../reporting/not-applicable.js';
 import {
   compileExplore,
   type ResolvedContextBlock,
-} from '../../intake/brief-compiler-slots/explore.js';
+} from '../intake/brief-compiler-slots/explore.js';
 import {
   parseExploreReport,
   type ParsedExploreReport,
-} from '../../reporting/parse-explore-report.js';
-import { deriveExploreStatus } from '../../reporting/derive-explore-status.js';
-import { composeExploreHeadline } from '../../reporting/compose-explore-headline.js';
-import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
+} from '../reporting/parse-explore-report.js';
+import { deriveExploreStatus } from '../reporting/derive-explore-status.js';
+import { composeExploreHeadline } from '../reporting/compose-explore-headline.js';
+import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 
-export interface ExploreExecutorInput {
+export interface ExploreOrchestratorInput {
   input: Input;
   resolvedContextBlocks: ResolvedContextBlock[];
   canonicalizedAnchors: string[];
@@ -75,7 +75,7 @@ function buildFallbackResult(msg: string): RunResult {
     structuredError: {
       code: 'runner_crash' as const,
       message: msg,
-      where: 'executor:explore' as const,
+      where: 'orchestrator:explore' as const,
     },
   };
 }
@@ -108,12 +108,12 @@ async function runLifecycleTask(args: LifecycleCallArgs): Promise<RunResult> {
 }
 
 // ---------------------------------------------------------------------------
-// Executor
+// Orchestrator
 // ---------------------------------------------------------------------------
 
 export async function executeExplore(
   ctx: ExecutionContext,
-  args: ExploreExecutorInput,
+  args: ExploreOrchestratorInput,
 ): Promise<ExecutorOutput> {
   const { config } = ctx;
   const cwd = ctx.projectContext!.cwd;
@@ -122,8 +122,6 @@ export async function executeExplore(
   const research = config.research;
   const hasBrave = (research?.brave?.apiKeys?.length ?? 0) > 0;
 
-  // Resolve agent inside try/catch so resolution failures produce a normal
-  // ExecutorOutput envelope instead of throwing.
   let resolved: ReturnType<typeof resolveAgent>;
   try {
     resolved = resolveAgent('complex', config);
@@ -146,7 +144,6 @@ export async function executeExplore(
     };
   }
 
-  // Use prompt-facing relative anchors when available; fall back to canonicalized.
   const promptAnchors = args.relativeAnchorsForPrompt.length
     ? args.relativeAnchorsForPrompt
     : args.canonicalizedAnchors;
@@ -176,8 +173,6 @@ export async function executeExplore(
     );
   }
 
-  // Create separate provider instances per worker to avoid cross-task
-  // contamination when provider implementations carry mutable state.
   let internalProvider: ReturnType<typeof resolveAgent>;
   let externalProvider: ReturnType<typeof resolveAgent>;
   try {
@@ -256,7 +251,6 @@ export async function executeExplore(
     externalDurationMs: externalResult.durationMs ?? 0,
   });
 
-  // Track degraded sides for the synthesizer prompt and event emission.
   const degraded: ('internal' | 'external')[] = [];
   if (!internalOk) {
     degraded.push('internal');
@@ -282,7 +276,6 @@ export async function executeExplore(
   const internalReport = internalOk ? extractReportText(internalResult) : undefined;
   const externalReport = externalOk ? extractReportText(externalResult) : undefined;
 
-  // Re-compile synthesizer prompt with injected reports.
   const synthCompiled = compileExplore(
     args.input,
     args.resolvedContextBlocks,
@@ -308,7 +301,6 @@ export async function executeExplore(
     externalAvailable: externalOk,
   });
 
-  // Create a fresh provider for the synthesizer.
   let synthProvider: ReturnType<typeof resolveAgent>;
   try {
     synthProvider = resolveAgent('complex', config);
@@ -370,7 +362,6 @@ export async function executeExplore(
 
   const threadCount = parsedReport?.threads.length ?? 0;
 
-  // Emit per-thread started/completed events
   if (parsedReport) {
     for (const thread of parsedReport.threads) {
       ctx.bus?.emit({
@@ -416,7 +407,6 @@ export async function executeExplore(
     threads: threadCount,
   });
 
-  // Override synthesizer workerStatus authoritatively.
   (synthResult as any).workerStatus = derived.workerStatus;
   if (derived.incompleteReason !== undefined) {
     (synthResult as any).incompleteReason = derived.incompleteReason;
@@ -437,9 +427,6 @@ export async function executeExplore(
     synthFailed,
   });
 
-  // --- Review verdicts ---
-
-  // explore tasks have reviewPolicy: 'none' — reviews are always skipped.
   const reviewVerdicts = mapReviewVerdicts(synthResult, true);
 
   // --- Aggregate ---

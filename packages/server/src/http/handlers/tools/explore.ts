@@ -2,7 +2,7 @@ import * as path from 'node:path';
 import { realpathSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as explore from '@zhixuan92/multi-model-agent-core/tools/explore/schema';
-import { executeExplore } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/explore';
+import { executeExplore } from '@zhixuan92/multi-model-agent-core/research/explore-orchestrator';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';

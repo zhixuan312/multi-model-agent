@@ -212,9 +212,9 @@
       "types": "./dist/lifecycle/executors/investigate.d.ts",
       "import": "./dist/lifecycle/executors/investigate.js"
     },
-    "./lifecycle/executors/explore": {
-      "types": "./dist/lifecycle/executors/explore.d.ts",
-      "import": "./dist/lifecycle/executors/explore.js"
+    "./research/explore-orchestrator": {
+      "types": "./dist/research/explore-orchestrator.d.ts",
+      "import": "./dist/research/explore-orchestrator.js"
     },
     "./lifecycle/task-executor": {
       "types": "./dist/lifecycle/task-executor.d.ts",
