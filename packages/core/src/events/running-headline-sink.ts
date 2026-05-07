@@ -57,15 +57,15 @@ function capitalizeTier(tier: string | undefined): string | undefined {
   return tier.charAt(0).toUpperCase() + tier.slice(1);
 }
 
-function stageBracket(route: string, stageLabel: string | undefined): string {
+function stageProgress(route: string, stageLabel: string | undefined): string {
   const order = STAGE_ORDER_BY_ROUTE[route];
-  if (!order || order.length === 0) return '[1/1]';
+  if (!order || order.length === 0) return '1/1';
   const total = order.length;
-  if (!stageLabel) return `[1/${total}]`;
+  if (!stageLabel) return `1/${total}`;
   const idx = order.indexOf(stageLabel);
   // Unknown stage labels still surface — fall through to first slot.
   const oneBased = idx === -1 ? 1 : idx + 1;
-  return `[${oneBased}/${total}]`;
+  return `${oneBased}/${total}`;
 }
 
 export class RunningHeadlineSink {
@@ -120,26 +120,30 @@ export class RunningHeadlineSink {
 
     const stage = next.stageLabel ?? 'Running';
     const tierStr = capitalizeTier(next.tier);
-    const tierClause = tierStr ? ` (${tierStr})` : '';
-    const bracket = stageBracket(entry.tool, next.stageLabel);
+    const tierClause = tierStr ? `${tierStr} ` : '';
+    const progress = stageProgress(entry.tool, next.stageLabel);
 
-    // Per-task snapshot. The batch handler renders one line per task and
-    // joins them with newlines on the polling response. Each task carries
-    // its own dispatchedAt so elapsed is independent per task.
+    // Per-task snapshot. The batch handler prepends `[taskIdx/total] ` and
+    // appends elapsed + stats. Final shape per line:
+    //   [1/2] Standard Implementing (1/7) - 5m 40s, 2 read, 0 write, 15 tool calls
+    const prefix = `${tierClause}${stage} (${progress}) - `;
+    const fallback = `${tierClause}${stage} (${progress})`;
+    const statsClause = `, ${read} read, ${write} write, ${total} tool calls`;
+
     this.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, taskIndex, {
-      prefix: `${bracket} ${stage}${tierClause} - `,
-      statsClause: `, ${read} read, ${write} write, ${total} tool calls`,
+      prefix,
+      statsClause,
       dispatchedAt: next.startedAt,
-      fallback: `${bracket} ${stage}${tierClause}`,
+      fallback,
     });
 
     // Also update the legacy single-snapshot field so any consumer that
     // hasn't migrated to per-task still sees something current.
     this.batchRegistry.updateRunningHeadlineSnapshot(batchId, {
-      prefix: `${bracket} ${stage}${tierClause} - `,
-      statsClause: `, ${read} read, ${write} write, ${total} tool calls`,
+      prefix,
+      statsClause,
       dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-      fallback: `${bracket} ${stage}${tierClause}`,
+      fallback,
     });
   }
 }
