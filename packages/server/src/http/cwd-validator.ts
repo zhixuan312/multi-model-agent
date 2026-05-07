@@ -1,3 +1,6 @@
+// Request-time validator for the HTTP `cwd` query param: existence, absolute path,
+// directory check, symlink-escape detection. Distinct from `core/identity/cwd-validator.ts`,
+// which is the substrate-level path-confinement guard used inside tool calls.
 import * as fs from 'node:fs';
 import * as path from 'node:path';
 

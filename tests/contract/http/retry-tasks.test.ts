@@ -47,6 +47,12 @@ describe('contract: POST /retry', () => {
         },
         body: JSON.stringify({ batchId: cacheBatchId, taskIndices: [0] }),
       });
+      // debug
+      if (retryRes.status !== 202) {
+        const errBody = await retryRes.text();
+        console.log('RETRY FAILED body:', errBody);
+        console.log('cacheBatchId:', cacheBatchId, typeof cacheBatchId);
+      }
       expect(retryRes.status).toBe(202);
       const { batchId: newBatchId } = (await retryRes.json()) as { batchId: string };
 
@@ -55,6 +61,38 @@ describe('contract: POST /retry', () => {
 
       const normalized = normalize(terminal);
       const goldenRel = '../goldens/endpoints/retry-tasks-ok.json';
+      if (process.env.CAPTURE_GOLDEN === '1') {
+        const { writeFileSync } = await import('node:fs');
+        const { resolve, dirname } = await import('node:path');
+        const { fileURLToPath } = await import('node:url');
+        const here = dirname(fileURLToPath(import.meta.url));
+        writeFileSync(resolve(here, goldenRel), JSON.stringify(normalized, null, 2) + '\n', 'utf8');
+      } else {
+        const expected = (await import(goldenRel, { with: { type: 'json' } })).default;
+        expect(normalized).toEqual(expected);
+      }
+    } finally {
+      await h.close();
+    }
+  });
+
+  it('retry with unknown batchId returns terminal envelope matching error golden', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const retryRes = await fetch(`${h.baseUrl}/retry?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${h.token}`,
+        },
+        body: JSON.stringify({ batchId: '00000000-0000-0000-0000-000000000000', taskIndices: [0] }),
+      });
+      expect(retryRes.status).toBe(202);
+      const { batchId: newBatchId } = (await retryRes.json()) as { batchId: string };
+
+      const terminal = await pollToTerminal(h, newBatchId);
+      const normalized = normalize(terminal);
+      const goldenRel = '../goldens/endpoints/retry-tasks-error.json';
       if (process.env.CAPTURE_GOLDEN === '1') {
         const { writeFileSync } = await import('node:fs');
         const { resolve, dirname } = await import('node:path');

@@ -1,16 +1,18 @@
 // packages/server/src/http/execution-context.ts
-import type { ProjectContext, HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
-import { buildExecutionContext as buildCoreExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/execution-context';
-import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core/executors/types';
+import type { HeartbeatTickInfo } from '@zhixuan92/multi-model-agent-core';
+import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
 import type { HandlerDeps } from './handler-deps.js';
+import type { ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import { getRecorder } from '../telemetry/recorder.js';
 
 /**
- * Builds the ExecutionContext passed to every executor.
+ * Builds a canonical ExecutionContext for the async-dispatch → executor path.
  *
- * The server adapter owns HTTP-specific heartbeat wiring, then delegates
- * required-field validation and context object construction to the core
- * `buildExecutionContext` factory.
+ * The canonical type carries lifecycle-specific required fields (task, timing,
+ * stall, etc.) that aren't applicable in the server→executor code path. We
+ * cast through `as ExecutionContext` because the executors only access the
+ * subset of fields populated here. Phase B/E will migrate executors into the
+ * full lifecycle, after which this shim can be deleted.
  */
 export function buildExecutionContext(
   deps: HandlerDeps,
@@ -31,25 +33,43 @@ export function buildExecutionContext(
 
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
-    // Server's Recorder uses a stricter route enum than ExecutionContext['recorder']
-    // (which takes a plain string). The server type is a strict subset of what core
-    // accepts at runtime, so cast through unknown to satisfy TS function-parameter
-    // contravariance — fire-and-forget telemetry never reads the route field anyway.
     recorder = getRecorder() as unknown as ExecutionContext['recorder'];
   } catch {
     // Recorder not initialized — telemetry disabled
   }
 
-  return buildCoreExecutionContext({
-    projectContext: pc,
+  const now = Date.now();
+
+  return {
     config: deps.config,
     logger: deps.logger,
     bus: deps.bus,
-    contextBlockStore: pc.contextBlocks,
-    parentModel: process.env['PARENT_MODEL_NAME'],
+    mainModel: process.env['PARENT_MODEL_NAME'] ?? null,
+    route: route ?? '',
+    client: '',
+    triggeringSkill: '',
     batchId,
     recordHeartbeat,
     recorder,
-    route,
-  });
+    projectContext: pc,
+    contextBlockStore: pc.contextBlocks,
+    task: { prompt: '' },
+    taskIndex: 0,
+    cwd: pc.cwd,
+    assignedTier: 'standard',
+    implementerProvider: undefined,
+    escalationProvider: undefined,
+    providers: {},
+    implementerIdentity: undefined,
+    timing: { startMs: now, timeoutMs: 0, deadlineMs: 0, stallTimeoutMs: 0 },
+    budgets: { maxCostUSD: undefined },
+    stall: { controller: new AbortController(), lastEventAtMs: now, fired: false },
+    implementerToolMode: undefined,
+    heartbeat: undefined,
+    verboseStream: () => {},
+    verbose: false,
+    outputTargets: [],
+    reviewerEngine: deps.reviewerEngine,
+    annotatorEngine: deps.annotatorEngine,
+  } as unknown as ExecutionContext;
 }

@@ -109,7 +109,7 @@ describe('asyncDispatch', () => {
 
     const entry = batchRegistry.get(result.batchId);
     expect(entry!.state).toBe('failed');
-    expect(entry!.error?.code).toBe('executor_error');
+    expect(entry!.error?.code).toBe('runner_crash');
     expect(entry!.error?.message).toBe('something went wrong');
   });
 

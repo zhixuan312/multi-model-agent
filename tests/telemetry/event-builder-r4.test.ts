@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 
 describe('Item 12: R4 invariant holds for all event-construction paths', () => {
   it('keeps totalDurationMs as wall-clock when stage sum exceeds runResult.durationMs', () => {
@@ -21,7 +21,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 200, outputTokens: 100, totalTokens: 300, costUSD: 0.005 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -58,7 +58,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 500, outputTokens: 200, totalTokens: 700, costUSD: 0.01 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -91,7 +91,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.002 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 
@@ -119,7 +119,7 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
         usage: { inputTokens: 200, outputTokens: 100, totalTokens: 300, costUSD: 0.005 },
       } as any,
       client: 'claude-code',
-      parentModel: null,
+      mainModel: null,
     };
     const ev = buildTaskCompletedEvent(ctx);
 

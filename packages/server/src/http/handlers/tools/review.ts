@@ -1,16 +1,14 @@
 // packages/server/src/http/handlers/tools/review.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as review from '@zhixuan92/multi-model-agent-core/tool-schemas/review';
-import { executeReview } from '@zhixuan92/multi-model-agent-core/executors/review';
+import * as review from '@zhixuan92/multi-model-agent-core/tools/review/schema';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/review/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
+import type { RawHandler } from '../../types.js';
 export function buildReviewHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = review.inputSchema.safeParse(ctx.body);
@@ -20,9 +18,6 @@ export function buildReviewHandler(deps: HandlerDeps): RawHandler {
       });
       return;
     }
-
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('review_code') && !assertCrossTierConfigured(deps.config, res)) return;
 
     const input = parsed.data;
     const cwd = ctx.cwd!;
@@ -45,7 +40,17 @@ export function buildReviewHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeReview(executionCtx, input);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'review',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

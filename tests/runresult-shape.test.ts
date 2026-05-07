@@ -34,7 +34,6 @@ describe('RunResult shape (Phase 0 contract)', () => {
       agents: {
         implementer: 'standard',
         implementerToolMode: 'full',
-        implementerCapabilities: [],
         specReviewer: 'not_applicable',
         qualityReviewer: 'not_applicable',
       },

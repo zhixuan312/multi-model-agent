@@ -1,4 +1,4 @@
-import { composeVerboseLine, toVerboseFields } from '@zhixuan92/multi-model-agent-core/diagnostics/verbose-line';
+import { composeVerboseLine, toVerboseFields } from '@zhixuan92/multi-model-agent-core/events/verbose-line';
 
 describe('composeVerboseLine', () => {
   it('emits canonical shape with event and ts', () => {

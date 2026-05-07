@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/telemetry/types.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 import type { RunResult } from '../../packages/core/src/types.js';
 import { HAPPY } from '../telemetry/fixtures/runresult.js';
 
@@ -30,7 +30,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -45,7 +45,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -62,7 +62,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -82,7 +82,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -95,8 +95,8 @@ describe('diff_review verdict on the wire', () => {
       diffReviewStatus: 'changes_required',
       status: 'error',
       workerStatus: 'failed',
-      errorCode: 'diff_review_rejected',
-      structuredError: { code: 'diff_review_rejected', message: 'diff review rejected implementation' },
+      errorCode: 'review_diff_rejected',
+      structuredError: { code: 'review_diff_rejected', message: 'diff review rejected implementation' },
       terminationReason: { cause: 'error', turnsUsed: 3, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
     });
     const event = buildTaskCompletedEvent({
@@ -104,7 +104,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeDefined();
@@ -121,7 +121,7 @@ describe('diff_review verdict on the wire', () => {
       taskSpec: { filePaths: [] },
       runResult: rr,
       client: 'test',
-      parentModel: null,
+      mainModel: null,
     });
     const stage = event.stages.find((s: any) => s.name === 'diff_review');
     expect(stage).toBeUndefined();

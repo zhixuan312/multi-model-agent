@@ -146,19 +146,21 @@ export const ResearchConfigSchema = z.object({
 export type ResearchConfig = z.infer<typeof ResearchConfigSchema>;
 
 const effortSchema = z.enum(['none', 'low', 'medium', 'high']);
-const hostedToolsSchema = z.array(z.enum(['web_search', 'image_generation', 'code_interpreter']));
-const openAICompatibleHostedToolsSchema = z.array(z.enum(['web_search']));
 const sandboxPolicySchema = z.enum(['none', 'cwd-only']).optional();
 // Per-million-token pricing for cost computation. Must be non-negative; zero
 // is allowed (free agents can set both rates to 0 to get a deterministic
 // costUSD: 0 instead of null).
 const tokenCostSchema = z.number().nonnegative().finite().optional();
 
-const capabilitiesSchema = z.array(z.enum(['web_search', 'web_fetch'])).optional();
+export const pricingSchema = z.object({
+  inputUSDPerMillion: z.number().nonnegative().finite(),
+  outputUSDPerMillion: z.number().nonnegative().finite(),
+  cachedReadUSDPerMillion: z.number().nonnegative().finite(),
+  cachedNonReadUSDPerMillion: z.number().nonnegative().finite(),
+}).strict();
 
 const baseAgentFields = {
-  model: z.string().min(1),
-  capabilities: capabilitiesSchema,
+  model: z.string().min(1, "agents.<tier>.model must be a single non-empty string id; v4.0 enforces tier → single model 1:1 invariant"),
   effort: effortSchema.optional(),
   inputCostPerMTok: tokenCostSchema,
   outputCostPerMTok: tokenCostSchema,
@@ -172,13 +174,11 @@ const openAICompatibleAgentSchema = z.object({
   baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible agents'),
   apiKey: z.string().optional(),
   apiKeyEnv: z.string().optional(),
-  hostedTools: openAICompatibleHostedToolsSchema.optional(),
   ...baseAgentFields,
 });
 
 const claudeAgentSchema = z.object({
   type: z.literal('claude'),
-  hostedTools: hostedToolsSchema.optional(),
   ...baseAgentFields,
 }).strict();
 
@@ -191,13 +191,11 @@ const claudeCompatibleAgentSchema = z.object({
   baseUrl: z.string().min(1, 'baseUrl is required for claude-compatible agents'),
   apiKey: z.string().optional(),
   apiKeyEnv: z.string().optional(),
-  hostedTools: hostedToolsSchema.optional(),
   ...baseAgentFields,
 }).strict();
 
 const codexAgentSchema = z.object({
   type: z.literal('codex'),
-  hostedTools: hostedToolsSchema.optional(),
   ...baseAgentFields,
 }).strict();
 
@@ -217,7 +215,7 @@ const defaultsSchema = z.object({
   tools: z.enum(['none', 'readonly', 'no-shell', 'full']).default('full'),
   sandboxPolicy: z.enum(['none', 'cwd-only']).default('cwd-only'),
   largeResponseThresholdChars: z.number().int().positive().optional(),
-  parentModel: z.string().min(1).optional(),
+  mainModel: z.string().min(1).optional(),
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
@@ -243,7 +241,6 @@ const DEFAULT_SERVER_LIMITS = {
   maxBodyBytes: COMPRESSED_BODY_LIMIT_BYTES,
   batchTtlMs: 3_600_000,
   idleProjectTimeoutMs: 1_800_000,
-  clarificationTimeoutMs: 86_400_000,
   projectCap: 200,
   maxBatchCacheSize: 500,
   maxContextBlockBytes: 524_288,
@@ -263,7 +260,6 @@ const serverLimitsSchema = z.object({
   maxBodyBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBodyBytes),
   batchTtlMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.batchTtlMs),
   idleProjectTimeoutMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.idleProjectTimeoutMs),
-  clarificationTimeoutMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.clarificationTimeoutMs),
   projectCap: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.projectCap),
   maxBatchCacheSize: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBatchCacheSize),
   maxContextBlockBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlockBytes),

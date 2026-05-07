@@ -5,7 +5,7 @@
 import { describe, it, expect } from 'vitest';
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
 import { resolve } from 'node:path';
-import { buildOpenApiDoc, serializeOpenApiDoc } from '../../../packages/server/src/openapi.js';
+import { buildOpenApiDoc, serializeOpenApiDoc } from '../../../packages/core/src/tool-surface/openapi-generator.js';
 
 describe('contract: openapi schema', () => {
   const goldenPath = resolve('tests/contract/goldens/openapi.json');

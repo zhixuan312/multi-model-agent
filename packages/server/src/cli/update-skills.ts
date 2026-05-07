@@ -26,15 +26,15 @@ import {
   appendEntry,
   type ManifestEntry,
   type Client,
-} from '../install/manifest.js';
+} from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import {
   readSkillContent,
   writeSkillToClient,
   removeSkillFromClient,
   getSkillsRoot,
 } from './install-skill.js';
-import { findMissingSkills } from '../install/missing-skills.js';
-import { SUPPORTED_SKILLS } from '../install/discover.js';
+import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 
 export interface UpdateSkillsDeps {
   homeDir?: string;

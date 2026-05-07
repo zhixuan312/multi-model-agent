@@ -3,7 +3,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { boot, type HarnessHandle } from './harness.js';
 import { mockProvider, failProvider } from './mock-providers.js';
-import type { EventType } from '../../../packages/core/src/observability/events.js';
+import type { EventType } from '../../../packages/core/src/events/observability-events.js';
 
 async function bootAndCapture(
   provider: ReturnType<typeof mockProvider>,
@@ -80,7 +80,7 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
   const events: EventType[] = [];
 
   // Sub-fixture A: failProvider returning api_error — triggers batch_failed
-  events.push(...await bootAndCapture(failProvider({ status: 'api_error', errorCode: 'api_error' }), async (h, cwd) => {
+  events.push(...await bootAndCapture(failProvider({ status: 'api_error', errorCode: 'provider_api_error' }), async (h, cwd) => {
     const dispatch = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
       headers: { 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },

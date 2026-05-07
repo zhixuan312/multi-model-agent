@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "3.12.7",
+  "version": "4.0.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -40,125 +40,93 @@
       "types": "./dist/config/load.d.ts",
       "import": "./dist/config/load.js"
     },
-    "./config/read-only-review-flag": {
-      "types": "./dist/config/read-only-review-flag.d.ts",
-      "import": "./dist/config/read-only-review-flag.js"
+    "./config/model-profile-registry": {
+      "types": "./dist/config/model-profile-registry.d.ts",
+      "import": "./dist/config/model-profile-registry.js"
     },
-    "./routing/model-profiles": {
-      "types": "./dist/routing/model-profiles.d.ts",
-      "import": "./dist/routing/model-profiles.js"
+    "./escalation/agent-resolver": {
+      "types": "./dist/escalation/agent-resolver.d.ts",
+      "import": "./dist/escalation/agent-resolver.js"
     },
-    "./routing/resolve-agent": {
-      "types": "./dist/routing/resolve-agent.d.ts",
-      "import": "./dist/routing/resolve-agent.js"
+    "./providers/provider-factory": {
+      "types": "./dist/providers/provider-factory.d.ts",
+      "import": "./dist/providers/provider-factory.js"
     },
-    "./provider": {
-      "types": "./dist/provider.d.ts",
-      "import": "./dist/provider.js"
+    "./lifecycle/task-runner": {
+      "types": "./dist/lifecycle/task-runner.d.ts",
+      "import": "./dist/lifecycle/task-runner.js"
     },
-    "./run-tasks": {
-      "types": "./dist/run-tasks/index.d.ts",
-      "import": "./dist/run-tasks/index.js"
+    "./events/verbose-line": {
+      "types": "./dist/events/verbose-line.d.ts",
+      "import": "./dist/events/verbose-line.js"
     },
-    "./diagnostics/verbose-line": {
-      "types": "./dist/diagnostics/verbose-line.d.ts",
-      "import": "./dist/diagnostics/verbose-line.js"
+    "./events/request-spill": {
+      "types": "./dist/events/request-spill.d.ts",
+      "import": "./dist/events/request-spill.js"
     },
-    "./diagnostics/request-spill": {
-      "types": "./dist/diagnostics/request-spill.d.ts",
-      "import": "./dist/diagnostics/request-spill.js"
+    "./lifecycle/handlers/commit-stage": {
+      "types": "./dist/lifecycle/handlers/commit-stage.d.ts",
+      "import": "./dist/lifecycle/handlers/commit-stage.js"
     },
-    "./run-tasks/commit-stage": {
-      "types": "./dist/run-tasks/commit-stage.d.ts",
-      "import": "./dist/run-tasks/commit-stage.js"
+    "./lifecycle/handlers/verify-stage": {
+      "types": "./dist/lifecycle/handlers/verify-stage.d.ts",
+      "import": "./dist/lifecycle/handlers/verify-stage.js"
     },
-    "./run-tasks/verify-stage": {
-      "types": "./dist/run-tasks/verify-stage.d.ts",
-      "import": "./dist/run-tasks/verify-stage.js"
+    "./lifecycle/metadata-repair": {
+      "types": "./dist/lifecycle/metadata-repair.d.ts",
+      "import": "./dist/lifecycle/metadata-repair.js"
     },
-    "./run-tasks/metadata-repair": {
-      "types": "./dist/run-tasks/metadata-repair.d.ts",
-      "import": "./dist/run-tasks/metadata-repair.js"
-    },
-    "./review/diff-review": {
-      "types": "./dist/review/diff-review.d.ts",
-      "import": "./dist/review/diff-review.js"
-    },
-    "./review/evidence": {
-      "types": "./dist/review/evidence.d.ts",
-      "import": "./dist/review/evidence.js"
-    },
-    "./heartbeat": {
-      "types": "./dist/heartbeat.d.ts",
-      "import": "./dist/heartbeat.js"
+    "./bounded-execution/activity-tracker": {
+      "types": "./dist/bounded-execution/activity-tracker.d.ts",
+      "import": "./dist/bounded-execution/activity-tracker.js"
     },
     "./types": {
       "types": "./dist/types.d.ts",
       "import": "./dist/types.js"
     },
-    "./readiness/readiness": {
-      "types": "./dist/readiness/readiness.d.ts",
-      "import": "./dist/readiness/readiness.js"
-    },
     "./reporting/structured-report": {
       "types": "./dist/reporting/structured-report.d.ts",
       "import": "./dist/reporting/structured-report.js"
-    },
-    "./review/reviewer-prompt": {
-      "types": "./dist/review/reviewer-prompt.d.ts",
-      "import": "./dist/review/reviewer-prompt.js"
-    },
-    "./review/spec-reviewer": {
-      "types": "./dist/review/spec-reviewer.d.ts",
-      "import": "./dist/review/spec-reviewer.js"
-    },
-    "./review/quality-reviewer": {
-      "types": "./dist/review/quality-reviewer.d.ts",
-      "import": "./dist/review/quality-reviewer.js"
-    },
-    "./review/aggregate-result": {
-      "types": "./dist/review/aggregate-result.d.ts",
-      "import": "./dist/review/aggregate-result.js"
     },
     "./error-codes": {
       "types": "./dist/error-codes.d.ts",
       "import": "./dist/error-codes.js"
     },
-    "./cost/cost-meter": {
-      "types": "./dist/cost/cost-meter.d.ts",
-      "import": "./dist/cost/cost-meter.js"
+    "./bounded-execution/cost-meter": {
+      "types": "./dist/bounded-execution/cost-meter.d.ts",
+      "import": "./dist/bounded-execution/cost-meter.js"
     },
-    "./tools/call-cache": {
-      "types": "./dist/tools/call-cache.d.ts",
-      "import": "./dist/tools/call-cache.js"
+    "./providers/call-cache": {
+      "types": "./dist/providers/call-cache.d.ts",
+      "import": "./dist/providers/call-cache.js"
     },
     "./intake/types": {
       "types": "./dist/intake/types.d.ts",
       "import": "./dist/intake/types.js"
     },
-    "./intake/compilers/delegate": {
-      "types": "./dist/intake/compilers/delegate.d.ts",
-      "import": "./dist/intake/compilers/delegate.js"
+    "./intake/brief-compiler-slots/delegate": {
+      "types": "./dist/intake/brief-compiler-slots/delegate.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/delegate.js"
     },
-    "./intake/compilers/review": {
-      "types": "./dist/intake/compilers/review.d.ts",
-      "import": "./dist/intake/compilers/review.js"
+    "./intake/brief-compiler-slots/review": {
+      "types": "./dist/intake/brief-compiler-slots/review.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/review.js"
     },
-    "./intake/compilers/debug": {
-      "types": "./dist/intake/compilers/debug.d.ts",
-      "import": "./dist/intake/compilers/debug.js"
+    "./intake/brief-compiler-slots/debug": {
+      "types": "./dist/intake/brief-compiler-slots/debug.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/debug.js"
     },
-    "./intake/compilers/verify": {
-      "types": "./dist/intake/compilers/verify.d.ts",
-      "import": "./dist/intake/compilers/verify.js"
+    "./intake/brief-compiler-slots/verify": {
+      "types": "./dist/intake/brief-compiler-slots/verify.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/verify.js"
     },
-    "./intake/compilers/audit": {
-      "types": "./dist/intake/compilers/audit.d.ts",
-      "import": "./dist/intake/compilers/audit.js"
+    "./intake/brief-compiler-slots/audit": {
+      "types": "./dist/intake/brief-compiler-slots/audit.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/audit.js"
     },
-    "./intake/compilers/execute-plan": {
-      "types": "./dist/intake/compilers/execute-plan.d.ts",
-      "import": "./dist/intake/compilers/execute-plan.js"
+    "./intake/brief-compiler-slots/execute-plan": {
+      "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
     },
     "./intake/pipeline": {
       "types": "./dist/intake/pipeline.d.ts",
@@ -168,25 +136,13 @@
       "types": "./dist/intake/classify.d.ts",
       "import": "./dist/intake/classify.js"
     },
-    "./intake/infer": {
-      "types": "./dist/intake/infer.d.ts",
-      "import": "./dist/intake/infer.js"
+    "./intake/field-inferer": {
+      "types": "./dist/intake/field-inferer.d.ts",
+      "import": "./dist/intake/field-inferer.js"
     },
     "./intake/resolve": {
       "types": "./dist/intake/resolve.d.ts",
       "import": "./dist/intake/resolve.js"
-    },
-    "./intake/clarification-store": {
-      "types": "./dist/intake/clarification-store.d.ts",
-      "import": "./dist/intake/clarification-store.js"
-    },
-    "./intake/confirm": {
-      "types": "./dist/intake/confirm.d.ts",
-      "import": "./dist/intake/confirm.js"
-    },
-    "./intake/feature-flag": {
-      "types": "./dist/intake/feature-flag.d.ts",
-      "import": "./dist/intake/feature-flag.js"
     },
     "./intake/source-schema": {
       "types": "./dist/intake/source-schema.d.ts",
@@ -196,144 +152,205 @@
       "types": "./dist/intake/draft-id.d.ts",
       "import": "./dist/intake/draft-id.js"
     },
-    "./observability/bus": {
-      "types": "./dist/observability/bus.d.ts",
-      "import": "./dist/observability/bus.js"
+    "./events/observability-events": {
+      "types": "./dist/events/observability-events.d.ts",
+      "import": "./dist/events/observability-events.js"
     },
-    "./observability/events": {
-      "types": "./dist/observability/events.d.ts",
-      "import": "./dist/observability/events.js"
+    "./events/local-log-sink": {
+      "types": "./dist/events/local-log-sink.d.ts",
+      "import": "./dist/events/local-log-sink.js"
     },
-    "./observability/local-log-sink": {
-      "types": "./dist/observability/local-log-sink.d.ts",
-      "import": "./dist/observability/local-log-sink.js"
+    "./events/telemetry-sink": {
+      "types": "./dist/events/telemetry-sink.d.ts",
+      "import": "./dist/events/telemetry-sink.js"
     },
-    "./observability/telemetry-sink": {
-      "types": "./dist/observability/telemetry-sink.d.ts",
-      "import": "./dist/observability/telemetry-sink.js"
+    "./events/jsonl-writer": {
+      "types": "./dist/events/jsonl-writer.d.ts",
+      "import": "./dist/events/jsonl-writer.js"
     },
-    "./diagnostics/jsonl-writer": {
-      "types": "./dist/diagnostics/jsonl-writer.d.ts",
-      "import": "./dist/diagnostics/jsonl-writer.js"
+    "./lifecycle/auto-commit": {
+      "types": "./dist/lifecycle/auto-commit.d.ts",
+      "import": "./dist/lifecycle/auto-commit.js"
     },
-    "./auto-commit": {
-      "types": "./dist/auto-commit.d.ts",
-      "import": "./dist/auto-commit.js"
+    "./bounded-execution/file-artifact-check": {
+      "types": "./dist/bounded-execution/file-artifact-check.d.ts",
+      "import": "./dist/bounded-execution/file-artifact-check.js"
     },
-    "./file-artifact-check": {
-      "types": "./dist/file-artifact-check.d.ts",
-      "import": "./dist/file-artifact-check.js"
+    "./lifecycle/executors": {
+      "types": "./dist/lifecycle/executors/index.d.ts",
+      "import": "./dist/lifecycle/executors/index.js"
     },
-    "./executors": {
-      "types": "./dist/executors/index.d.ts",
-      "import": "./dist/executors/index.js"
+    "./lifecycle/executors/index": {
+      "types": "./dist/lifecycle/executors/index.d.ts",
+      "import": "./dist/lifecycle/executors/index.js"
     },
-    "./executors/index": {
-      "types": "./dist/executors/index.d.ts",
-      "import": "./dist/executors/index.js"
+    "./lifecycle/executors/investigate": {
+      "types": "./dist/lifecycle/executors/investigate.d.ts",
+      "import": "./dist/lifecycle/executors/investigate.js"
     },
-    "./executors/delegate": {
-      "types": "./dist/executors/delegate.d.ts",
-      "import": "./dist/executors/delegate.js"
+    "./research/explore-orchestrator": {
+      "types": "./dist/research/explore-orchestrator.d.ts",
+      "import": "./dist/research/explore-orchestrator.js"
     },
-    "./executors/audit": {
-      "types": "./dist/executors/audit.d.ts",
-      "import": "./dist/executors/audit.js"
+    "./lifecycle/task-executor": {
+      "types": "./dist/lifecycle/task-executor.d.ts",
+      "import": "./dist/lifecycle/task-executor.js"
     },
-    "./executors/investigate": {
-      "types": "./dist/executors/investigate.d.ts",
-      "import": "./dist/executors/investigate.js"
+    "./lifecycle/executors/retry": {
+      "types": "./dist/lifecycle/executors/retry.d.ts",
+      "import": "./dist/lifecycle/executors/retry.js"
     },
-    "./executors/explore": {
-      "types": "./dist/executors/explore.d.ts",
-      "import": "./dist/executors/explore.js"
+    "./lifecycle/executor-output-types": {
+      "types": "./dist/lifecycle/executor-output-types.d.ts",
+      "import": "./dist/lifecycle/executor-output-types.js"
     },
-    "./executors/review": {
-      "types": "./dist/executors/review.d.ts",
-      "import": "./dist/executors/review.js"
+    "./lifecycle/executors/shared-compute": {
+      "types": "./dist/lifecycle/executors/shared-compute.d.ts",
+      "import": "./dist/lifecycle/executors/shared-compute.js"
     },
-    "./executors/verify": {
-      "types": "./dist/executors/verify.d.ts",
-      "import": "./dist/executors/verify.js"
+    "./tools": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
     },
-    "./executors/debug": {
-      "types": "./dist/executors/debug.d.ts",
-      "import": "./dist/executors/debug.js"
+    "./tools/index": {
+      "types": "./dist/tools/index.d.ts",
+      "import": "./dist/tools/index.js"
     },
-    "./executors/execute-plan": {
-      "types": "./dist/executors/execute-plan.d.ts",
-      "import": "./dist/executors/execute-plan.js"
+    "./tools/audit/tool-config": {
+      "types": "./dist/tools/audit/tool-config.d.ts",
+      "import": "./dist/tools/audit/tool-config.js"
     },
-    "./executors/retry": {
-      "types": "./dist/executors/retry.d.ts",
-      "import": "./dist/executors/retry.js"
+    "./tools/debug/tool-config": {
+      "types": "./dist/tools/debug/tool-config.d.ts",
+      "import": "./dist/tools/debug/tool-config.js"
     },
-    "./executors/types": {
-      "types": "./dist/executors/types.d.ts",
-      "import": "./dist/executors/types.js"
+    "./tools/delegate/tool-config": {
+      "types": "./dist/tools/delegate/tool-config.d.ts",
+      "import": "./dist/tools/delegate/tool-config.js"
     },
-    "./executors/execution-context": {
-      "types": "./dist/executors/execution-context.d.ts",
-      "import": "./dist/executors/execution-context.js"
+    "./tools/execute-plan/tool-config": {
+      "types": "./dist/tools/execute-plan/tool-config.d.ts",
+      "import": "./dist/tools/execute-plan/tool-config.js"
     },
-    "./executors/shared-compute": {
-      "types": "./dist/executors/shared-compute.d.ts",
-      "import": "./dist/executors/shared-compute.js"
+    "./tools/explore/tool-config": {
+      "types": "./dist/tools/explore/tool-config.d.ts",
+      "import": "./dist/tools/explore/tool-config.js"
     },
-    "./tool-schemas": {
-      "types": "./dist/tool-schemas/index.d.ts",
-      "import": "./dist/tool-schemas/index.js"
+    "./tools/investigate/tool-config": {
+      "types": "./dist/tools/investigate/tool-config.d.ts",
+      "import": "./dist/tools/investigate/tool-config.js"
     },
-    "./tool-schemas/delegate": {
-      "types": "./dist/tool-schemas/delegate.d.ts",
-      "import": "./dist/tool-schemas/delegate.js"
+    "./tools/register-context-block/tool-config": {
+      "types": "./dist/tools/register-context-block/tool-config.d.ts",
+      "import": "./dist/tools/register-context-block/tool-config.js"
     },
-    "./tool-schemas/audit": {
-      "types": "./dist/tool-schemas/audit.d.ts",
-      "import": "./dist/tool-schemas/audit.js"
+    "./tools/retry/tool-config": {
+      "types": "./dist/tools/retry/tool-config.d.ts",
+      "import": "./dist/tools/retry/tool-config.js"
     },
-    "./tool-schemas/investigate": {
-      "types": "./dist/tool-schemas/investigate.d.ts",
-      "import": "./dist/tool-schemas/investigate.js"
+    "./tools/review/tool-config": {
+      "types": "./dist/tools/review/tool-config.d.ts",
+      "import": "./dist/tools/review/tool-config.js"
     },
-    "./tool-schemas/explore": {
-      "types": "./dist/tool-schemas/explore.d.ts",
-      "import": "./dist/tool-schemas/explore.js"
+    "./tools/verify/tool-config": {
+      "types": "./dist/tools/verify/tool-config.d.ts",
+      "import": "./dist/tools/verify/tool-config.js"
     },
-    "./tool-schemas/review": {
-      "types": "./dist/tool-schemas/review.d.ts",
-      "import": "./dist/tool-schemas/review.js"
+    "./tools/delegate/schema": {
+      "types": "./dist/tools/delegate/schema.d.ts",
+      "import": "./dist/tools/delegate/schema.js"
     },
-    "./tool-schemas/verify": {
-      "types": "./dist/tool-schemas/verify.d.ts",
-      "import": "./dist/tool-schemas/verify.js"
+    "./tools/audit/schema": {
+      "types": "./dist/tools/audit/schema.d.ts",
+      "import": "./dist/tools/audit/schema.js"
     },
-    "./tool-schemas/debug": {
-      "types": "./dist/tool-schemas/debug.d.ts",
-      "import": "./dist/tool-schemas/debug.js"
+    "./tools/investigate/schema": {
+      "types": "./dist/tools/investigate/schema.d.ts",
+      "import": "./dist/tools/investigate/schema.js"
     },
-    "./tool-schemas/execute-plan": {
-      "types": "./dist/tool-schemas/execute-plan.d.ts",
-      "import": "./dist/tool-schemas/execute-plan.js"
+    "./tools/explore/schema": {
+      "types": "./dist/tools/explore/schema.d.ts",
+      "import": "./dist/tools/explore/schema.js"
     },
-    "./tool-schemas/retry": {
-      "types": "./dist/tool-schemas/retry.d.ts",
-      "import": "./dist/tool-schemas/retry.js"
+    "./tools/review/schema": {
+      "types": "./dist/tools/review/schema.d.ts",
+      "import": "./dist/tools/review/schema.js"
     },
-    "./telemetry/consent-rules": {
-      "types": "./dist/telemetry/consent-rules.d.ts",
-      "import": "./dist/telemetry/consent-rules.js"
+    "./tools/verify/schema": {
+      "types": "./dist/tools/verify/schema.d.ts",
+      "import": "./dist/tools/verify/schema.js"
     },
-    "./telemetry/event-builder": {
-      "types": "./dist/telemetry/event-builder.d.ts",
-      "import": "./dist/telemetry/event-builder.js"
+    "./tools/debug/schema": {
+      "types": "./dist/tools/debug/schema.d.ts",
+      "import": "./dist/tools/debug/schema.js"
     },
-    "./telemetry/types": {
-      "types": "./dist/telemetry/types.d.ts",
-      "import": "./dist/telemetry/types.js"
+    "./tools/execute-plan/schema": {
+      "types": "./dist/tools/execute-plan/schema.d.ts",
+      "import": "./dist/tools/execute-plan/schema.js"
+    },
+    "./tools/retry/schema": {
+      "types": "./dist/tools/retry/schema.d.ts",
+      "import": "./dist/tools/retry/schema.js"
+    },
+    "./tools/register-context-block/schema": {
+      "types": "./dist/tools/register-context-block/schema.d.ts",
+      "import": "./dist/tools/register-context-block/schema.js"
+    },
+    "./events/consent-rules": {
+      "types": "./dist/events/consent-rules.d.ts",
+      "import": "./dist/events/consent-rules.js"
+    },
+    "./events/event-builder": {
+      "types": "./dist/events/event-builder.d.ts",
+      "import": "./dist/events/event-builder.js"
+    },
+    "./events/telemetry-types": {
+      "types": "./dist/events/telemetry-types.d.ts",
+      "import": "./dist/events/telemetry-types.js"
+    },
+    "./tool-surface/manifest": {
+      "types": "./dist/tool-surface/manifest.d.ts",
+      "import": "./dist/tool-surface/manifest.js"
+    },
+    "./tool-surface/discover": {
+      "types": "./dist/tool-surface/discover.d.ts",
+      "import": "./dist/tool-surface/discover.js"
+    },
+    "./tool-surface/include-utils": {
+      "types": "./dist/tool-surface/include-utils.d.ts",
+      "import": "./dist/tool-surface/include-utils.js"
+    },
+    "./tool-surface/skill-manifest-sync": {
+      "types": "./dist/tool-surface/skill-manifest-sync.d.ts",
+      "import": "./dist/tool-surface/skill-manifest-sync.js"
+    },
+    "./tool-surface/skill-installers/claude-code": {
+      "types": "./dist/tool-surface/skill-installers/claude-code.d.ts",
+      "import": "./dist/tool-surface/skill-installers/claude-code.js"
+    },
+    "./tool-surface/skill-installers/codex-cli": {
+      "types": "./dist/tool-surface/skill-installers/codex-cli.d.ts",
+      "import": "./dist/tool-surface/skill-installers/codex-cli.js"
+    },
+    "./tool-surface/skill-installers/cursor": {
+      "types": "./dist/tool-surface/skill-installers/cursor.d.ts",
+      "import": "./dist/tool-surface/skill-installers/cursor.js"
+    },
+    "./tool-surface/skill-installers/gemini-cli": {
+      "types": "./dist/tool-surface/skill-installers/gemini-cli.d.ts",
+      "import": "./dist/tool-surface/skill-installers/gemini-cli.js"
+    },
+    "./tool-surface/skill-installer": {
+      "types": "./dist/tool-surface/skill-installer.d.ts",
+      "import": "./dist/tool-surface/skill-installer.js"
+    },
+    "./tool-surface/openapi-generator": {
+      "types": "./dist/tool-surface/openapi-generator.d.ts",
+      "import": "./dist/tool-surface/openapi-generator.js"
     }
   },
   "scripts": {
+    "prebuild": "rm -rf dist",
     "build": "tsc"
   },
   "engines": {

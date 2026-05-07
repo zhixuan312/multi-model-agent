@@ -7,8 +7,8 @@
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
-        "totalTokens": 30,
-        "costUSD": 0.001
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
       },
       "turns": 1,
       "filesRead": [],
@@ -22,7 +22,7 @@
           "turns": 1,
           "inputTokens": 10,
           "outputTokens": 20,
-          "costUSD": 0.001,
+          "costUSD": null,
           "initialPromptLengthChars": 0,
           "initialPromptHash": ""
         }
@@ -31,7 +31,7 @@
       "directoriesListed": [],
       "workerStatus": "done",
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "annotated",
+      "qualityReviewStatus": "error",
       "terminationReason": {
         "cause": "finished",
         "turnsUsed": 1,
@@ -39,207 +39,6 @@
         "usedShell": false,
         "workerSelfAssessment": "done",
         "wasPromoted": false
-      },
-      "concerns": [
-        {
-          "source": "quality_review",
-          "severity": "medium",
-          "message": "[F1] reviewer parse failed; deterministic fallback emitted single catch-all from worker output"
-        }
-      ],
-      "annotatedFindings": [
-        {
-          "id": "<DETERMINISTIC>",
-          "severity": "medium",
-          "claim": "reviewer parse failed; deterministic fallback emitted single catch-all from worker output",
-          "evidence": "needs rework per review",
-          "reviewerConfidence": null,
-          "evidenceGrounded": true
-        }
-      ],
-      "stageStats": {
-        "implementing": {
-          "stage": "implementing",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0.001,
-          "agentTier": "complex",
-          "modelFamily": "other",
-          "model": "mock",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "cachedTokens": 0,
-          "reasoningTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
-        },
-        "spec_rework": {
-          "stage": "spec_rework",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        },
-        "quality_rework": {
-          "stage": "quality_rework",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        },
-        "committing": {
-          "stage": "committing",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        },
-        "verifying": {
-          "stage": "verifying",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "outcome": null,
-          "skipReason": null,
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        },
-        "spec_review": {
-          "stage": "spec_review",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "verdict": null,
-          "roundsUsed": null,
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        },
-        "quality_review": {
-          "stage": "quality_review",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0.002,
-          "agentTier": "standard",
-          "modelFamily": "other",
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 20,
-          "outputTokens": 40,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": 2,
-          "toolCallCount": 0,
-          "filesReadCount": null,
-          "filesWrittenCount": null,
-          "verdict": "annotated",
-          "roundsUsed": 1
-        },
-        "diff_review": {
-          "stage": "diff_review",
-          "entered": false,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": null,
-          "modelFamily": null,
-          "model": null,
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "verdict": null,
-          "roundsUsed": null,
-          "inputTokens": null,
-          "outputTokens": null,
-          "cachedTokens": null,
-          "reasoningTokens": null,
-          "turnCount": null,
-          "toolCallCount": null,
-          "filesReadCount": null,
-          "filesWrittenCount": null
-        }
-      },
-      "reviewRounds": {
-        "spec": 1,
-        "quality": 1,
-        "metadata": 0,
-        "cap": 3
-      },
-      "structuredReport": {
-        "summary": "[Reviewed] needs rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
       },
       "implementationReport": {
         "summary": "needs rework per review",
@@ -249,27 +48,30 @@
         "unresolved": [],
         "extraSections": {}
       },
-      "filePathsSkipped": false,
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
-        "implementerCapabilities": [],
         "specReviewer": "not_applicable",
-        "qualityReviewer": "standard"
+        "qualityReviewer": "skipped"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "",
+      "structuredReport": {
+        "summary": "needs rework per review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
-        "qualityReviewer": "mock-model"
-      },
-      "commits": [],
-      "verification": {
-        "status": "skipped",
-        "steps": [],
-        "totalDurationMs": 0,
-        "skipReason": "no_command"
-      },
-      "taskMaxIdleMs": "<DETERMINISTIC>"
+        "qualityReviewer": null
+      }
     }
   ],
   "batchTimings": {
@@ -278,25 +80,21 @@
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
   "costSummary": {
-    "totalActualCostUSD": 0.001,
+    "totalActualCostUSD": 0,
     "totalCostDeltaVsParentUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "reportSchema.parse failed for debug"
   },
   "error": {
     "kind": "not_applicable",
     "reason": "batch succeeded"
   },
-  "proposedInterpretation": {
-    "kind": "not_applicable",
-    "reason": "batch not awaiting clarification"
-  },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "annotated",
+  "qualityReviewVerdict": "error",
   "roundsUsed": 1,
   "contextBlockId": "<DETERMINISTIC>"
 }

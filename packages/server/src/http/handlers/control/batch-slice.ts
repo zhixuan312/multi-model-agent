@@ -4,7 +4,7 @@ import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
 import type { HandlerDeps } from '../../handler-deps.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 
 const inputSchema = z.object({
   batchId: z.string(),

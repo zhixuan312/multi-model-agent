@@ -1,4 +1,54 @@
 {
-  "error": "Provide filePaths with at least one plan or spec file",
-  "isError": true
+  "headline": "[error] execute_plan",
+  "results": [
+    {
+      "output": "",
+      "status": "error",
+      "usage": {
+        "inputTokens": 0,
+        "outputTokens": 0,
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
+      },
+      "turns": 0,
+      "filesRead": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [],
+      "parsedFindings": null,
+      "error": "reviewer output missing ## Summary section",
+      "errorCode": "runner_crash",
+      "retryable": false,
+      "durationMs": "<DETERMINISTIC>",
+      "structuredError": {
+        "code": "runner_crash",
+        "message": "reviewer output missing ## Summary section",
+        "where": "executor:execute_plan"
+      },
+      "workerStatus": "failed"
+    }
+  ],
+  "batchTimings": {
+    "wallClockMs": "<DETERMINISTIC>",
+    "sumOfTaskMs": "<DETERMINISTIC>",
+    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
+  },
+  "costSummary": {
+    "totalActualCostUSD": 0,
+    "totalCostDeltaVsParentUSD": 0
+  },
+  "structuredReport": {
+    "kind": "not_applicable",
+    "reason": "no task output to parse"
+  },
+  "error": {
+    "kind": "not_applicable",
+    "reason": "batch succeeded"
+  },
+  "batchId": "<DETERMINISTIC>",
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1
 }

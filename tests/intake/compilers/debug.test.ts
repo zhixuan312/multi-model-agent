@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileDebugTask } from '../../../packages/core/src/intake/compilers/debug.js';
+import { compileDebugTask } from '../../../packages/core/src/intake/brief-compiler-slots/debug.js';
 
 describe('debug compiler', () => {
   it('returns single draft', () => {

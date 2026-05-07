@@ -8,19 +8,18 @@ reaches a terminal state.
 | Status | Content-Type | Meaning |
 |---|---|---|
 | `202` | `text/plain` | Still working — body is the running headline (e.g. `1/1 running, 47s elapsed`) |
-| `200` | `application/json` | Terminal — body is the uniform 7-field envelope (see `response-shape.md`) |
+| `200` | `application/json` | Terminal — body is the uniform 6-field envelope (see `response-shape.md`) |
 | `404` / `401` / other | — | Error — stop polling |
 
 ### Terminal envelope states
 
-Every terminal envelope has the same seven fields; inspect these to tell
+Every terminal envelope has the same six fields; inspect `error` to tell
 which terminal state you're in:
 
 | Shape | Meaning |
 |---|---|
 | `error` is a real object | Batch failed — read `error.code` + `error.message` |
-| `proposedInterpretation` is a string | Batch is awaiting clarification — invoke `mma-clarifications` |
-| Both are `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
+| `error` is `{kind: "not_applicable", ...}` | Batch succeeded — read `results` |
 
 ### Poll loop (POSIX sh)
 

@@ -13,7 +13,7 @@ import { tmpdir } from 'node:os';
 import {
   installGeminiCli,
   uninstallGeminiCli,
-} from '../../packages/server/src/install/gemini-cli.js';
+} from '../../packages/core/src/tool-surface/skill-installers/gemini-cli.js';
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { notifySkillInstalled } from '../../packages/server/src/install/notify.js';
+import { notifySkillInstalled } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 interface FakeFetch {
   fetch: typeof globalThis.fetch;

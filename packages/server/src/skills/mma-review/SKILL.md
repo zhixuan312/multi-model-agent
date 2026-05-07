@@ -82,27 +82,26 @@ Every finding has the same shape:
 | `claim` | string | One-sentence summary. |
 | `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
 | `suggestion?` | string | Optional fix recommendation. |
-| `reviewerConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
+| `annotatorConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
 | `evidenceGrounded` | boolean | True when `evidence` is a verbatim substring of worker output. |
 
 ### Verdict states (`qualityReviewVerdict`)
 
 - `'annotated'` — every finding is structured. May be reviewer-emitted (with
-  numeric `reviewerConfidence`) or deterministic-fallback (with
-  `reviewerConfidence: null`). The route ALWAYS reaches `'annotated'` unless
+  numeric `annotatorConfidence`) or deterministic-fallback (with
+  `annotatorConfidence: null`). The route ALWAYS reaches `'annotated'` unless
   the reviewer call itself fails transport.
-- `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW=disabled`).
 - `'error'` — only when the reviewer call fails transport (network / 5xx).
 
 ### Recommended rendering by the main agent
 
 1. Show ALL findings — never silently drop. Confidence and grounding are
    soft signals, not gates.
-2. Default sort: severity (critical → low) then `reviewerConfidence` desc
+2. Default sort: severity (critical → low) then `annotatorConfidence` desc
    (nulls last).
 3. `severity` is the reviewer's authoritative final value — use it directly.
 4. Mark findings with `evidenceGrounded: false` or
-   `reviewerConfidence < 70` as "lower-trust" (collapsed section, lighter
+   `annotatorConfidence < 70` as "lower-trust" (collapsed section, lighter
    color, or `(low confidence)` annotation). User decides what to do.
 5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
 
@@ -129,5 +128,16 @@ If the reviewer needs to check the diff against a design doc, register the doc o
 
 ❌ **Skipping review because "I already read it"**
 Self-review and cross-model review are not the same thing. The whole reason to delegate is the different blind spots. Read the findings; merge what you agree with.
+
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, annotated findings, and per-file review notes). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+**Use cases:**
+- Pass round-N review findings to round N+1 via `contextBlockIds`
+- Feed review results into a downstream `mma-delegate` fix step
+- Accumulate findings across iterative review rounds
+
+The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 
 @include _shared/error-handling.md

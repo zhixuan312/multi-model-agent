@@ -1,5 +1,5 @@
-import { deriveInvestigateWorkerStatus, mapCapToReason } from '../../packages/core/src/reporting/derive-investigate-status.js';
-import type { InvestigationParseResult } from '../../packages/core/src/reporting/parse-investigation-report.js';
+import { deriveInvestigateWorkerStatus } from '../../packages/core/src/reporting/derive-investigate-status.js';
+import type { InvestigationParseResult } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 function makeValidReport(): InvestigationParseResult {
   return {
@@ -14,14 +14,6 @@ function makeValidReport(): InvestigationParseResult {
   };
 }
 const noStructured: InvestigationParseResult = { kind: 'no_structured_report' };
-
-describe('mapCapToReason', () => {
-  it('maps cap kinds to reason names', () => {
-    expect(mapCapToReason('turn')).toBe('turn_cap');
-    expect(mapCapToReason('cost')).toBe('cost_cap');
-    expect(mapCapToReason('wall_clock')).toBe('timeout');
-  });
-});
 
 describe('deriveInvestigateWorkerStatus precedence', () => {
   it('rule 1: needsContext beats no_structured_report', () => {
@@ -55,14 +47,14 @@ describe('deriveInvestigateWorkerStatus precedence', () => {
   it('rule 4: cap reason wins over missing_sections when both apply', () => {
     const r = deriveInvestigateWorkerStatus({
       needsContext: false,
-      capExhausted: 'turn',
+      incompleteReason: 'turn_cap',
       parseResult: { ...makeValidReport(), sectionValidity: { ...makeValidReport().sectionValidity, confidence: 'invalid' } },
     });
     expect(r).toEqual({ workerStatus: 'done_with_concerns', incompleteReason: 'turn_cap' });
   });
 
   it('rule 5: cap with all sections valid → done_with_concerns + cap reason', () => {
-    const r = deriveInvestigateWorkerStatus({ needsContext: false, capExhausted: 'wall_clock', parseResult: makeValidReport() });
+    const r = deriveInvestigateWorkerStatus({ needsContext: false, incompleteReason: 'timeout', parseResult: makeValidReport() });
     expect(r).toEqual({ workerStatus: 'done_with_concerns', incompleteReason: 'timeout' });
   });
 

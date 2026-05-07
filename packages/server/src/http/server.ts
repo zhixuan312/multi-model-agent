@@ -4,8 +4,9 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventBus, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
-import { Router } from './router.js';
+import { EventEmitter, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
+import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
 import { loadToken } from './auth.js';
 import type { ProjectRegistry } from './project-registry.js';
@@ -48,46 +49,44 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/tools/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
   '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
 /**
  * Registers tool handlers (POST /delegate, /audit, /review, /verify, /debug, /execute-plan, /retry).
- * Imported dynamically to avoid circular-dependency issues and to keep startServer lean.
+ * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
+ * iterates `registry.list()` filtered to `surface: 'tool'` entries to drive
+ * route registration. The registry is the canonical source for tool surface
+ * metadata (httpMethod, httpPath, schema, toolCategory).
  */
 async function registerToolHandlers(
-  router: Router,
+  router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
-  const { buildAuditHandler } = await import('./handlers/tools/audit.js');
-  const { buildReviewHandler } = await import('./handlers/tools/review.js');
-  const { buildVerifyHandler } = await import('./handlers/tools/verify.js');
-  const { buildDebugHandler } = await import('./handlers/tools/debug.js');
-  const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
-  const { buildRetryHandler } = await import('./handlers/tools/retry.js');
-  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
-  const { buildExploreHandler } = await import('./handlers/tools/explore.js');
-  const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
+  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+    specTemplate, qualityAPTemplate, diffTemplate,
+    qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+  } =
+    await import('@zhixuan92/multi-model-agent-core');
+
+  const surface = buildToolSurfaceRegistry();
 
   // For tool handlers, we need MultiModelConfig which is part of ServerConfig only
   // when the full mmagent.config.json is loaded. In test/minimal configs that only
   // have `server:`, we create a stub config. Real CLI startup will load full config.
-  // Cast through unknown to avoid type gymnastics here; validation happens in schema.
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
     ? (config as unknown as import('./handler-deps.js').HandlerDeps['config'])
     : undefined;
 
   if (!multiModelConfig) {
-    // Server started with server-only config (e.g. tests): register stubs that return 503
-    for (const [method, path] of [
-      ['POST', '/delegate'], ['POST', '/audit'], ['POST', '/review'],
-      ['POST', '/verify'], ['POST', '/debug'], ['POST', '/execute-plan'], ['POST', '/retry'], ['POST', '/investigate'], ['POST', '/explore'],
-    ] as [string, string][]) {
-      router.register(method, path, (_req, res, _params, _ctx) => {
+    // Server started with server-only config (e.g. tests): register stubs that return 503.
+    // Drive registration from the registry so adding a tool only requires a tool-config edit.
+    for (const entry of surface.list()) {
+      if (entry.surface !== 'tool') continue;
+      router.register(entry.httpMethod, entry.httpPath, (_req, res, _params, _ctx) => {
         sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
       });
     }
@@ -102,10 +101,32 @@ async function registerToolHandlers(
     writer,
   });
 
-  const bus = new EventBus([
+  // Wire TelemetrySink to the server Recorder when telemetry is initialized
+  // (the serve.ts entrypoint calls createRecorder before this code path).
+  // Tests that exercise http/server.ts without initializing telemetry get
+  // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
+  let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
+  try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
+  const bus = new EventEmitter([
     new LocalLogSink(writer),
-    new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+    new TelemetrySink(recorderForBus),
   ]);
+
+  const routeDispatcher = new LifecycleDispatcher();
+
+  const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
+    { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+    {
+      delegate: qualityAPTemplate,
+      'execute-plan': qualityAPTemplate,
+      audit: qualityAuditTemplate,
+      review: qualityReviewTemplate,
+      verify: qualityVerifyTemplate,
+      debug: qualityDebugTemplate,
+      investigate: qualityInvestigateTemplate,
+    },
+  ));
+  const annotatorEngine = new AnnotatorEngine();
 
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
@@ -113,36 +134,51 @@ async function registerToolHandlers(
     bus,
     projectRegistry,
     batchRegistry,
+    routeDispatcher,
+    reviewerEngine,
+    annotatorEngine,
   };
 
-  const delegateHandler = buildDelegateHandler(deps);
-  const auditHandler = buildAuditHandler(deps);
-  const reviewHandler = buildReviewHandler(deps);
-  const verifyHandler = buildVerifyHandler(deps);
-  const debugHandler = buildDebugHandler(deps);
-  const executePlanHandler = buildExecutePlanHandler(deps);
-  const retryHandler = buildRetryHandler(deps);
-  const investigateHandler = buildInvestigateHandler(deps);
-  const exploreHandler = buildExploreHandler(deps);
+  // Per-tool handler builders, keyed by registry routeName. The registry tells
+  // us WHICH route to register and at WHICH path/method; this map answers HOW
+  // to build the per-tool handler.
+  const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
+  const { buildAuditHandler } = await import('./handlers/tools/audit.js');
+  const { buildReviewHandler } = await import('./handlers/tools/review.js');
+  const { buildVerifyHandler } = await import('./handlers/tools/verify.js');
+  const { buildDebugHandler } = await import('./handlers/tools/debug.js');
+  const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
+  const { buildRetryHandler } = await import('./handlers/tools/retry.js');
+  const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
+  const { buildExploreHandler } = await import('./handlers/tools/explore.js');
 
-  router.register('POST', '/delegate', delegateHandler);
-  router.register('POST', '/tools/delegate', delegateHandler);
-  router.register('POST', '/audit', auditHandler);
-  router.register('POST', '/review', reviewHandler);
-  router.register('POST', '/verify', verifyHandler);
-  router.register('POST', '/debug', debugHandler);
-  router.register('POST', '/execute-plan', executePlanHandler);
-  router.register('POST', '/retry', retryHandler);
-  router.register('POST', '/investigate', investigateHandler);
-  router.register('POST', '/explore', exploreHandler);
+  const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
+    delegate: buildDelegateHandler,
+    audit: buildAuditHandler,
+    review: buildReviewHandler,
+    verify: buildVerifyHandler,
+    debug: buildDebugHandler,
+    execute_plan: buildExecutePlanHandler,
+    retry_tasks: buildRetryHandler,
+    investigate: buildInvestigateHandler,
+    explore: buildExploreHandler,
+  };
+
+  for (const entry of surface.list()) {
+    if (entry.surface !== 'tool') continue;
+    const builder = builders[entry.routeName];
+    if (!builder) {
+      throw new Error(`registerToolHandlers: no handler builder registered for route '${entry.routeName}'`);
+    }
+    router.register(entry.httpMethod, entry.httpPath, builder(deps));
+  }
 }
 
 /**
- * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks,
- * POST /clarifications/confirm).
+ * Registers control handlers (GET /batch/:batchId, POST/DELETE /context-blocks).
  */
 async function registerControlHandlers(
-  router: Router,
+  router: RouteDispatcher<RawHandler>,
   config: ServerConfig,
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
@@ -151,7 +187,6 @@ async function registerControlHandlers(
   const { buildRetryHandler } = await import('./handlers/control/retry.js');
   const { buildBatchSliceHandler } = await import('./handlers/control/batch-slice.js');
   const { buildCreateContextBlockHandler, buildDeleteContextBlockHandler } = await import('./handlers/control/context-blocks.js');
-  const { buildClarificationsHandler } = await import('./handlers/control/clarifications.js');
   const { createHttpServerLog } = await import('@zhixuan92/multi-model-agent-core');
 
   const multiModelConfig = (config as unknown as { agents?: unknown }).agents
@@ -161,10 +196,30 @@ async function registerControlHandlers(
   router.register('GET', '/batch/:batchId', buildBatchHandler({ batchRegistry }));
   if (multiModelConfig) {
     const writer = new JsonlWriter({ dir: multiModelConfig.diagnostics?.logDir ?? join(homedir(), '.multi-model', 'logs') });
-    const bus = new EventBus([
+    let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
+    try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
+    const bus = new EventEmitter([
       new LocalLogSink(writer),
-      new TelemetrySink(null), // TODO(task-6-telemetry): wire server Recorder's enqueue
+      new TelemetrySink(recorderForBus),
     ]);
+    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+      specTemplate, qualityAPTemplate, diffTemplate,
+      qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+    } = await import('@zhixuan92/multi-model-agent-core');
+    const routeDispatcher = new LifecycleDispatcher();
+    const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
+      { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+      {
+        delegate: qualityAPTemplate,
+        'execute-plan': qualityAPTemplate,
+        audit: qualityAuditTemplate,
+        review: qualityReviewTemplate,
+        verify: qualityVerifyTemplate,
+        debug: qualityDebugTemplate,
+        investigate: qualityInvestigateTemplate,
+      },
+    ));
+    const annotatorEngine = new AnnotatorEngine();
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -174,9 +229,19 @@ async function registerControlHandlers(
       bus,
       projectRegistry,
       batchRegistry,
+      routeDispatcher,
+      reviewerEngine,
+      annotatorEngine,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
+    router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
+      projectRegistry,
+      routeDispatcher,
+      maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
+      maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
+    }));
+    router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   } else {
     router.register('POST', '/control/retry', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
@@ -184,16 +249,20 @@ async function registerControlHandlers(
     router.register('POST', '/control/batch-slice', (_req, res) => {
       sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
     });
+    router.register('POST', '/context-blocks', (_req, res) => {
+      sendError(res, 503, 'no_agent_config', 'Server started without agent configuration; provide a full mmagent.config.json');
+    });
+    router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
   }
-  router.register('POST', '/context-blocks', buildCreateContextBlockHandler({ projectRegistry, config }));
-  router.register('DELETE', '/context-blocks/:blockId', buildDeleteContextBlockHandler({ projectRegistry }));
-  router.register('POST', '/clarifications/confirm', buildClarificationsHandler({ batchRegistry }));
 }
 
-export async function startServer(config: ServerConfig): Promise<RunningServer> {
+export async function startServer(
+  config: ServerConfig,
+  injectedManifestSync?: import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync').SkillManifestSync,
+): Promise<RunningServer> {
   const token = loadToken(config.server.auth.tokenFile);
 
-  const router = new Router();
+  const router = new RouteDispatcher<RawHandler>();
 
   // ── Create shared registries ───────────────────────────────────────────────
   const { BatchRegistry } = await import('@zhixuan92/multi-model-agent-core');
@@ -201,7 +270,6 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
 
   const batchRegistry = new BatchRegistry({
     batchTtlMs: config.server.limits.batchTtlMs,
-    clarificationTimeoutMs: config.server.limits.clarificationTimeoutMs,
   });
 
   const projectRegistry = new ProjectRegistry({
@@ -213,9 +281,21 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   // Capture serverStartedAt before health registration so /health can expose it.
   const serverStartedAt = Date.now();
 
-  // GET /health — unauthenticated liveness + minimal identity
+  // GET /health — unauthenticated liveness + skill manifest drift check
   const { buildHealthHandler } = await import('./handlers/introspection/health.js');
-  router.register('GET', '/health', buildHealthHandler({ version: SERVER_VERSION, serverStartedAt }));
+  let skillManifestSync: import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync').SkillManifestSync;
+  if (injectedManifestSync) {
+    skillManifestSync = injectedManifestSync;
+  } else {
+    try {
+      const { makeSkillManifestSync } = await import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync');
+      const { discoverPerClientInstallDirs } = await import('@zhixuan92/multi-model-agent-core/tool-surface/discover');
+      skillManifestSync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    } catch {
+      skillManifestSync = { driftReport: () => [] };
+    }
+  }
+  router.register('GET', '/health', buildHealthHandler({ manifestSync: skillManifestSync }));
 
   // Register tool handlers (Phase 6)
   await registerToolHandlers(router, config, batchRegistry, projectRegistry);
@@ -236,6 +316,9 @@ export async function startServer(config: ServerConfig): Promise<RunningServer> 
   // GET /tools — OpenAPI 3.0 document (auth required, NOT loopback-gated)
   const { buildToolsHandler } = await import('./handlers/introspection/tools-list.js');
   router.register('GET', '/tools', buildToolsHandler());
+
+  // GET /openapi — canonical OpenAPI route per spec C13 (same handler as /tools)
+  router.register('GET', '/openapi', buildToolsHandler());
 
   // Test-only: enumerates registered routes. Guarded by env; zero impact on production.
   if (process.env.MMAGENT_TEST_INTROSPECTION === '1') {

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { decideConsent, type ConsentDecision } from '../../packages/core/src/telemetry/consent-rules.js';
+import { decideConsent, type ConsentDecision } from '../../packages/core/src/events/consent-rules.js';
 
 describe('consent-rules — pure decision (env, config) → decision', () => {
   // ENV precedence — first non-empty value

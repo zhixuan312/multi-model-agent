@@ -1,21 +1,18 @@
-// packages/server/src/http/handlers/tools/investigate.ts
 import * as path from 'node:path';
 import { realpathSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import * as investigate from '@zhixuan92/multi-model-agent-core/tool-schemas/investigate';
-import { executeInvestigate } from '@zhixuan92/multi-model-agent-core/executors/investigate';
+import * as investigate from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig, type EnrichedInvestigateInput } from '@zhixuan92/multi-model-agent-core/tools/investigate/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
 
 export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
-  return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
-    // Step 1: schema.
+  return async (_req: IncomingMessage, res: ServerResponse, _params, ctx) => {
     const parsed = investigate.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
       sendError(res, 400, 'invalid_request', 'Request body validation failed', {
@@ -24,12 +21,8 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       return;
     }
     const input = parsed.data;
-
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('investigate_codebase') && !assertCrossTierConfigured(deps.config, res)) return;
     const cwd = ctx.cwd!;
 
-    // Step 2: reservation lifecycle (mirrors audit.ts; reservation is just a cwd-validity gate).
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
       sendError(res, 503, reserveResult.error, reserveResult.message);
@@ -39,7 +32,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    // Step 3: synchronously resolve context blocks.
+    // Resolve context blocks.
     const blockIds = input.contextBlockIds ?? [];
     const resolvedContextBlocks: Array<{ id: string; content: string }> = [];
     const missingBlocks: string[] = [];
@@ -56,7 +49,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
-    // Step 4: synchronously canonicalize filePaths.
+    // Canonicalize file paths.
     const rawPaths = input.filePaths ?? [];
     const canonResult = canonicalizeFilePaths(rawPaths, cwd);
     if (!Array.isArray(canonResult)) {
@@ -65,14 +58,21 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
     }
     const canonicalizedFilePaths = canonResult;
 
-    // Step 5: precompute relative-for-prompt paths so the compiler stays pure.
+    // Pre-compute relative paths for prompt.
     const realCwd = realpathSync(cwd);
     const relativeFilePathsForPrompt = canonicalizedFilePaths.map(p => {
       const rel = path.relative(realCwd, p);
       return rel === '' ? '.' : rel;
     });
 
-    // Step 6: dispatch.
+    // Build enriched input for the generic task executor.
+    const enrichedInput: EnrichedInvestigateInput = {
+      ...input,
+      resolvedContextBlocks,
+      canonicalizedFilePaths,
+      relativeFilePathsForPrompt,
+    };
+
     const { batchId, statusUrl } = asyncDispatch({
       tool: 'investigate',
       projectCwd: cwd,
@@ -80,15 +80,22 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      executor: async (executionCtx) => executeInvestigate(executionCtx, {
-        input,
-        resolvedContextBlocks,
-        canonicalizedFilePaths,
-        relativeFilePathsForPrompt,
-      }),
+      executor: async (executionCtx) => {
+        const callExecutor = () => executeTask(toolConfig, executionCtx, enrichedInput);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'investigate',
+            toolCategory: 'read_only',
+            rawRequest: enrichedInput,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
+      },
     });
 
-    await emitRequestReceived({ config: deps.config, batchId, route: req.url ?? '', parsed: input });
+    await emitRequestReceived({ config: deps.config, batchId, route: _req.url ?? '', parsed: input });
     sendJson(res, 202, { batchId, statusUrl });
   };
 }

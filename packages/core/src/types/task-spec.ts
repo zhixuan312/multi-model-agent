@@ -1,0 +1,48 @@
+// Per-task brief shape — what callers send to /delegate, /audit, etc.
+// Matches spec architecture.md `types/task-spec.ts` slot.
+import type { BriefQualityPolicy } from '../intake/types.js';
+import type { ResearchToolDefinition } from '../research/types.js';
+
+export type ToolMode = 'none' | 'readonly' | 'no-shell' | 'full';
+export type SandboxPolicy = 'none' | 'cwd-only';
+export type AgentType = 'standard' | 'complex';
+export type Effort = 'none' | 'low' | 'medium' | 'high';
+export type CostTier = 'free' | 'low' | 'medium' | 'high';
+export type WorkerStatus = 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed';
+
+export interface FormatConstraints {
+  inputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+  outputFormat?: 'json' | 'yaml' | 'xml' | 'csv' | 'markdown';
+}
+
+export interface TaskSpec {
+  prompt: string
+  agentType?: AgentType
+  filePaths?: string[]
+  done?: string
+  contextBlockIds?: string[]
+  tools?: ToolMode
+  timeoutMs?: number
+  cwd?: string
+  effort?: Effort
+  sandboxPolicy?: SandboxPolicy
+  maxCostUSD?: number
+  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none'
+  briefQualityPolicy?: BriefQualityPolicy
+  mainModel?: string
+  formatConstraints?: FormatConstraints
+  skipCompletionHeuristic?: boolean
+  expectedCoverage?: { minSections?: number; sectionPattern?: string; requiredMarkers?: string[] }
+  testCommand?: string
+  verifyCommand?: string[]
+  autoCommit?: boolean
+  planContext?: string
+  /**
+   * Optional task-specific tool injection. When present, runner adapters
+   * merge these tools into the worker's tool surface ON TOP of whatever
+   * `tools: ToolMode` would normally produce. Used by `/explore` for the
+   * external researcher (taskIndex=1) only; all other executors leave this
+   * undefined. Runners MUST treat `undefined` as a no-op.
+   */
+  customToolset?: ResearchToolDefinition[]
+}

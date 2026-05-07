@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildResearchTools } from '../../packages/core/src/runners/base/research-tools.js';
+import { buildResearchTools } from '../../packages/core/src/providers/base/research-tools.js';
 import { ResearchConfigSchema } from '../../packages/core/src/config/schema.js';
 
 describe('buildResearchTools', () => {

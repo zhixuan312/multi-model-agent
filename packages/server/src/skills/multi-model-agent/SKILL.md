@@ -1,6 +1,6 @@
 ---
 name: multi-model-agent
-description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse, clarification resume) instead of defaulting to inline Agent dispatches
+description: Use first whenever you're about to delegate any tool-using work — picks the right mma-* skill (audit, review, verify, debug, plan execution, codebase investigation, ad-hoc delegation, retry, context-block reuse) instead of defaulting to inline Agent dispatches
 when_to_use: The user asks for work you'd normally delegate — audit, code review, checklist verification, debugging, plan execution, codebase Q&A, or ad-hoc parallel tasks — AND mmagent is running. Read this once, pick the matching mma-* skill, and delegate there. Applies equally whether the user invoked a superpowers methodology skill or asked directly.
 version: "0.0.0-unreleased"
 ---
@@ -62,7 +62,6 @@ digraph picker {
 | `mma-delegate` | Ad-hoc implementation / research with no plan file |
 | `mma-retry` | Re-run specific failed/incomplete tasks from a previous batch by index |
 | `mma-context-blocks` | Register a reused doc once; reference by ID across N tasks |
-| `mma-clarifications` | Confirm or correct the service's proposed interpretation |
 
 ## Best practices
 
@@ -121,8 +120,6 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 
 4. **`full-batch-redispatch`** — Caller re-runs `mma-execute-plan` with the entire task list when only 2 of 8 tasks failed. The 6 successful tasks get re-charged. Corrective: `mma-retry` with the failed indices. (The same anti-pattern applies to multi-task `mma-delegate` batches; `mma-retry` is the corrective there too.)
 
-5. **`clarification-as-info`** — Caller polls a batch, sees `proposedInterpretation` as a string, treats it as advisory, and waits for the batch to complete. The batch is paused — it will not complete until the caller responds via `mma-clarifications`. Corrective: a string `proposedInterpretation` is a hard gate, not an FYI. Either accept the proposal verbatim or correct it.
-
 ## Preflight: auto-start the daemon if it is not running
 
 ```bash
@@ -168,23 +165,25 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 
 If you need `complex` tier on plan-style work, dispatch via `mma-delegate` with the plan task as the prompt and `agentType: "complex"`.
 
-## Reasoning effort: auto-inferred
+## Context block defaults
 
-Independent of tier, every task runs through `inferEffort(prompt)` (`run-tasks/index.ts`) when `effort` is undefined:
+| Default | Value | Notes |
+|---|---|---|
+| Idle TTL | 24 h | Block eligible for eviction after 24 h with no active batch references |
+| `maxEntries` | 500 | Per-project cap on total context blocks |
+| Body cap | 50 MiB | Maximum `content` size per block |
 
-- Code block > 20 lines in the prompt → `low` (treated as exact-write).
-- File path + action verb (`edit`/`modify`/`update`/`fix`/`refactor`/`replace`) → `medium`.
-- Otherwise → falls through to provider config default.
+Context blocks are immutable after creation. To update content, register a new block and switch `contextBlockIds` to the new ID.
 
-This is automatic and not caller-overridable from any `mma-*` skill — it shapes how hard the worker thinks within its tier.
+## Terminal context block
+
+Every completed task across all routes automatically registers a terminal markdown context block with the full task report. The `blockId` is in each task result as `terminalBlockId`. This block is immutable, lives for the session duration (or idle-evicts after 24 h), and counts against the `maxEntries` quota. Use `terminalBlockId` values in downstream `contextBlockIds` to chain findings across workflow steps without re-inlining report content. No caller action needed — blocks are registered server-side at task completion.
 
 ## General flow
 
 1. Call the matching `mma-*` skill → receive `{ batchId, statusUrl }`.
 2. Poll `GET /batch/:id`: `202 text/plain` while pending (body is the running headline), `200 application/json` on terminal.
-3. Read `results` / `error` / `proposedInterpretation` from the 7-field terminal envelope.
-
-If `proposedInterpretation` is a string (not the `not_applicable` sentinel) → use `mma-clarifications` to confirm/correct.
+3. Read `results` / `error` from the 6-field terminal envelope.
 
 ## Common pitfalls
 

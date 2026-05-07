@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
-import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
+import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
 
-describe('HeartbeatTimer.getHeadlineSnapshot', () => {
+describe('ActivityTracker.getHeadlineSnapshot', () => {
   it('emits prefix without elapsed and a stats clause that grows as counters fire', () => {
-    const ht = new HeartbeatTimer(() => {}, { provider: 'gpt-5', parentModel: null });
+    const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: null });
     ht.start(5);
     let snap = ht.getHeadlineSnapshot();
     expect(snap.prefix).toBe('[1/5] Implementing (gpt-5) — ');
@@ -15,7 +15,7 @@ describe('HeartbeatTimer.getHeadlineSnapshot', () => {
   });
 
   it('omits saved-cost clause when costDeltaVsParentUSD is zero', () => {
-    const ht = new HeartbeatTimer(() => {}, { provider: 'gpt-5', parentModel: 'claude-opus-4-7' });
+    const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
     ht.applyCost({ costUSD: 0.01, costDeltaVsParentUSD: 0 });
     const snap = ht.getHeadlineSnapshot();
@@ -23,7 +23,7 @@ describe('HeartbeatTimer.getHeadlineSnapshot', () => {
   });
 
   it('emits saved-cost clause with multiplier when costUSD is positive and costDeltaVsParentUSD is negative (savings)', () => {
-    const ht = new HeartbeatTimer(() => {}, { provider: 'gpt-5', parentModel: 'claude-opus-4-7' });
+    const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
     ht.applyCost({ costUSD: 0.01, costDeltaVsParentUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();
@@ -32,7 +32,7 @@ describe('HeartbeatTimer.getHeadlineSnapshot', () => {
   });
 
   it('omits multiplier when costUSD is zero', () => {
-    const ht = new HeartbeatTimer(() => {}, { provider: 'gpt-5', parentModel: 'claude-opus-4-7' });
+    const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
     ht.applyCost({ costUSD: 0, costDeltaVsParentUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();
@@ -41,7 +41,7 @@ describe('HeartbeatTimer.getHeadlineSnapshot', () => {
   });
 
   it('omits multiplier when costUSD is non-finite', () => {
-    const ht = new HeartbeatTimer(() => {}, { provider: 'gpt-5', parentModel: 'claude-opus-4-7' });
+    const ht = new ActivityTracker(() => {}, { provider: 'gpt-5', mainModel: 'claude-opus-4-7' });
     ht.start(5);
     ht.applyCost({ costUSD: Infinity, costDeltaVsParentUSD: -0.10 });
     const snap = ht.getHeadlineSnapshot();

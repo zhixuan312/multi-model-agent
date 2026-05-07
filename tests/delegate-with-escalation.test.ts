@@ -1,11 +1,11 @@
 import { describe, it, expect, vi } from 'vitest';
-import { delegateWithEscalation } from '../packages/core/src/delegate-with-escalation.js';
+import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
   RunResult,
   Provider,
 } from '../packages/core/src/types.js';
-import type { InternalRunnerEvent } from '../packages/core/src/runners/types.js';
+import type { InternalRunnerEvent } from '../packages/core/src/providers/runner-types.js';
 
 function makeMockResult(
   status: RunResult['status'],
@@ -194,14 +194,14 @@ describe('delegateWithEscalation', () => {
     const secondErr: Provider = {
       name: 'second',
       config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('network_error', longErr, true)),
+      run: vi.fn().mockResolvedValue(makeMockResult('provider_transport_failure', longErr, true)),
     };
 
     const task: TaskSpec = { prompt: 'test' };
     const result = await delegateWithEscalation(task, [firstErr, secondErr]);
 
     expect(result.output).toBe(longErr);
-    expect(result.status).toBe('network_error');
+    expect(result.status).toBe('provider_transport_failure');
     expect(result.escalationLog).toHaveLength(2);
   });
 
@@ -367,7 +367,7 @@ describe('delegateWithEscalation', () => {
       'needs_context',
       'blocked',
       'failed',
-      'review_loop_aborted',
+      'review_loop_capped',
       null,
     ]).toContain(
       (result.terminationReason as { workerSelfAssessment: unknown }).workerSelfAssessment,

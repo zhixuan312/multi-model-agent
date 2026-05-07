@@ -27,7 +27,6 @@ const VOLATILE_KEYS = new Set([
   'version',
   'id',
   'draftId',
-  'clarificationId',
   'retryBatchId',
   'contextBlockId',
   // v3.9.0 — per-stage idle telemetry varies with wall-clock timing
@@ -35,6 +34,8 @@ const VOLATILE_KEYS = new Set([
   'totalIdleMs',
   'activityEvents',
   'taskMaxIdleMs',
+  // v4.0 — skill manifest drift varies per machine
+  'drift',
 ]);
 
 const PATH_LIKE_KEYS = new Set(['path', 'cwd', 'filePath', 'file']);

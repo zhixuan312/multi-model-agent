@@ -106,6 +106,30 @@
       "cost": 0.001
     },
     {
+      "event": "explore_thread_started",
+      "threadIndex": 1
+    },
+    {
+      "event": "explore_thread_completed",
+      "threadIndex": 1
+    },
+    {
+      "event": "explore_thread_started",
+      "threadIndex": 2
+    },
+    {
+      "event": "explore_thread_completed",
+      "threadIndex": 2
+    },
+    {
+      "event": "explore_thread_started",
+      "threadIndex": 3
+    },
+    {
+      "event": "explore_thread_completed",
+      "threadIndex": 3
+    },
+    {
       "event": "explore_synthesize_end",
       "threadCount": 3,
       "recommendedNextStep": true

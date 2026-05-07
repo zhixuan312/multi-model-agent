@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { partitionFilePaths, checkOutputTargets } from '@zhixuan92/multi-model-agent-core/file-artifact-check';
+import { partitionFilePaths, checkOutputTargets } from '@zhixuan92/multi-model-agent-core/bounded-execution/file-artifact-check';
 
 vi.mock('fs', () => ({
   existsSync: vi.fn(),

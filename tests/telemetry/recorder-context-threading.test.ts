@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
 
 describe('recorder context threading', () => {
   it('preserves reviewPolicy and verifyCommandPresent from BuildContext', () => {
@@ -9,7 +9,7 @@ describe('recorder context threading', () => {
       runResult: { status: 'ok', terminationReason: { cause: 'finished' }, durationMs: 100 } as any,
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
-      parentModel: 'claude-sonnet-4-6',
+      mainModel: 'claude-sonnet-4-6',
       reviewPolicy: 'diff_only',
       verifyCommandPresent: true,
     };
@@ -18,13 +18,13 @@ describe('recorder context threading', () => {
     expect(ev.verifyCommandPresent).toBe(true);
   });
 
-  it('normalizes reviewPolicy "off" to "none" on the wire', () => {
+  it('reviewPolicy=none preserves reviewPolicy=none wire value', () => {
     const ctx: any = {
       route: 'delegate',
       taskSpec: { filePaths: [] },
       runResult: { status: 'ok', terminationReason: { cause: 'finished' }, durationMs: 100 } as any,
-      client: 'claude-code', triggeringSkill: 'mma-delegate', parentModel: null,
-      reviewPolicy: 'off', verifyCommandPresent: false,
+      client: 'claude-code', triggeringSkill: 'mma-delegate', mainModel: null,
+      reviewPolicy: 'none', verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);
     expect(ev.reviewPolicy).toBe('none');

@@ -1,17 +1,16 @@
-import { compileInvestigate } from '../../../packages/core/src/intake/compilers/investigate.js';
+import { compileInvestigate } from '../../../packages/core/src/intake/brief-compiler-slots/investigate.js';
 
 describe('compileInvestigate', () => {
-  it('produces a single TaskSpec with the right route and review policy', () => {
+  it('produces a single TaskSpec with the right route and tools default', () => {
     const spec = compileInvestigate({ question: 'How does X work?' }, [], [], [], '/cwd');
     expect(spec.route).toBe('investigate_codebase');
-    expect(spec.reviewPolicy).toBe('quality_only');
-    expect(spec.agentType).toBe('complex');
     expect(spec.tools).toBe('readonly');
   });
 
-  it('always uses agentType=complex regardless of input (hardcoded per G2)', () => {
+  it('delegates agentType and reviewPolicy to the executor (not hardcoded in compiler)', () => {
     const spec = compileInvestigate({ question: 'q' } as any, [], [], [], '/cwd');
-    expect(spec.agentType).toBe('complex');
+    expect(spec.agentType).toBeUndefined();
+    expect(spec.reviewPolicy).toBeUndefined();
   });
 
   it('honours caller tools=none', () => {

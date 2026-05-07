@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileExecutePlan } from '../../../packages/core/src/intake/compilers/execute-plan.js';
+import { compileExecutePlan } from '../../../packages/core/src/intake/brief-compiler-slots/execute-plan.js';
 
 describe('execute-plan compiler', () => {
   const planContent = `# Implementation Plan

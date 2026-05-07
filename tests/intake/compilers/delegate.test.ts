@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileDelegateTasks, compileDelegatePrompt } from '../../../packages/core/src/intake/compilers/delegate.js';
+import { compileDelegateTasks, compileDelegatePrompt } from '../../../packages/core/src/intake/brief-compiler-slots/delegate.js';
 
 describe('delegate compiler', () => {
   it('compiled delegate prompt contains scope-contract clause verbatim', () => {

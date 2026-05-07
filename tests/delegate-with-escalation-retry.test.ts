@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { delegateWithEscalation } from '../packages/core/src/delegate-with-escalation.js';
+import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
   RunResult,
@@ -15,14 +15,15 @@ function makeMockResult(
   return {
     output,
     status,
-    usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD },
+    usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    cost: { costUSD, costDeltaVsParentUSD: null },
     turns: 5,
     filesRead: [],
     filesWritten: [],
     toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [],
-  };
+  } as RunResult;
 }
 
 /** Helper: returns different results on successive calls. */
@@ -57,10 +58,10 @@ describe('delegateWithEscalation retry', () => {
     expect(provider.run).toHaveBeenCalledTimes(2);
   });
 
-  it('retries network_error up to 2 times (3 total attempts)', async () => {
+  it('retries provider_transport_failure up to 2 times (3 total attempts)', async () => {
     const provider = sequenceProvider([
-      makeMockResult('network_error', 'net fail 1'),
-      makeMockResult('network_error', 'net fail 2'),
+      makeMockResult('provider_transport_failure', 'net fail 1'),
+      makeMockResult('provider_transport_failure', 'net fail 2'),
       makeMockResult('ok', 'success'),
     ]);
 

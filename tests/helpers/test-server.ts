@@ -17,7 +17,6 @@ function buildTestConfig(tokenFile: string, overrides?: DeepPartial<ServerConfig
           maxBodyBytes: 10_485_760,
           batchTtlMs: 3_600_000,
           idleProjectTimeoutMs: 1_800_000,
-          clarificationTimeoutMs: 86_400_000,
           projectCap: 200,
           maxBatchCacheSize: 500,
           maxContextBlockBytes: 524_288,
@@ -73,7 +72,7 @@ export async function startTestServer(overrides?: DeepPartial<ServerConfig>): Pr
   writeFileSync(tokenFile, DEFAULT_TEST_TOKEN + '\n', { mode: 0o600 });
 
   const config = buildTestConfig(tokenFile, overrides as Record<string, unknown> | undefined);
-  const server = await startServer(config);
+  const server = await startServer(config, { driftReport: () => [] });
 
   return {
     url: `http://127.0.0.1:${server.port}`,

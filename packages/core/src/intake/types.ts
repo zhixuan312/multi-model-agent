@@ -1,4 +1,4 @@
-import type { TaskSpec } from '../types.js';
+import type { AgentType, TaskSpec } from '../types.js';
 
 export type BriefQualityWarning =
   | 'outsourced_discovery'
@@ -11,14 +11,6 @@ export type BriefQualityWarning =
   | 'huge_brief';
 
 export type BriefQualityPolicy = 'strict' | 'warn' | 'off' | undefined;
-
-export interface ReadinessResult {
-  action: 'refuse' | 'warn' | 'ignored'
-  missingPillars: ('scope' | 'inputs' | 'done_condition' | 'output_contract')[]
-  layer2Warnings: BriefQualityWarning[]
-  layer3Hints: ('concrete_path' | 'named_code_artifact' | 'reasonable_length')[]
-  briefQualityWarnings: BriefQualityWarning[]
-}
 
 export type SourceRoute = 'delegate_tasks' | 'review_code' | 'debug_task' | 'verify_work' | 'audit_document' | 'execute_plan' | 'investigate_codebase';
 
@@ -37,63 +29,20 @@ export interface DraftTask {
   prompt: string;
   done?: string;
   filePaths?: string[];
-  agentType?: string;
+  agentType?: AgentType;
   assumptions?: string[];
   questions?: string[];
   confirmed?: boolean;
   contextBlockIds?: string[];
-  reviewPolicy?: 'full' | 'spec_only' | 'diff_only' | 'off' | 'quality_only';
+  reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommand?: string[];
   skipCompletionHeuristic?: boolean;
-}
-
-export interface StoredDraft {
-  draft: DraftTask;
-  taskIndex: number;
-  roundCount: number;
-  previousReasons?: string[];
-}
-
-export interface ClarificationSet {
-  id: string;
-  drafts: Map<string, StoredDraft>;
-  originalBatchId: string;
-  executedDraftIds: Set<string>;
-  createdAt: number;
-  lastAccessedAt: number;
-}
-
-export interface ConfirmationEntry {
-  prompt: string;
-  filePaths?: string[];
-  done?: string;
-}
-
-export interface ConfirmDraftError {
-  draftId: string;
-  errorCode: string;
-  message: string;
-}
-
-export interface ConfirmResult {
-  confirmedDrafts: DraftTask[];
-  errors: ConfirmDraftError[];
-  executedResultRefs: string[];
 }
 
 export type ClassificationResult = 
   | { draft: DraftTask; classification: 'ready'; reasons: [] }
   | { draft: DraftTask; classification: 'needs_confirmation'; reasons: string[] }
   | { draft: DraftTask; classification: 'unrecoverable'; reasons: string[] };
-
-export interface ClarificationEntry {
-  draftId: string;
-  taskIndex: number;
-  proposedDraft: { prompt: string; filePaths?: string[]; done?: string };
-  assumptions: string[];
-  questions: string[];
-  reason: string;
-}
 
 export interface HardError {
   draftId: string;
@@ -105,7 +54,6 @@ export interface HardError {
 export interface IntakeProgress {
   totalDrafts: number;
   readyDrafts: number;
-  clarificationDrafts: number;
   hardErrorDrafts: number;
   executedDrafts: number;
 }
@@ -118,7 +66,6 @@ export interface ReadyDraft {
 
 export interface IntakeResult {
   ready: ReadyDraft[];
-  clarifications: ClarificationEntry[];
   hardErrors: HardError[];
   intakeProgress: IntakeProgress;
 }

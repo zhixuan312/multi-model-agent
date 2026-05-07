@@ -138,7 +138,7 @@ Each task carries an `exploration` field on its per-task report:
 }
 ```
 
-`workerStatus` is one of `done`, `done_with_concerns`, `needs_context`, `blocked`. When `done_with_concerns`, the per-task report carries `incompleteReason` (`turn_cap`, `cost_cap`, `timeout`, or `missing_sections`). When `needs_context`, the worker flagged a `[needs_context]` bullet under `## Unresolved` — re-dispatch with extra context (anchor paths, a context block, or a clarification turn).
+`workerStatus` is one of `done`, `done_with_concerns`, `needs_context`, `blocked`. When `done_with_concerns`, the per-task report carries `incompleteReason` (`turn_cap`, `cost_cap`, `timeout`, or `missing_sections`). When `needs_context`, the worker flagged a `[needs_context]` bullet under `## Unresolved` — re-dispatch with extra context (anchor paths or a context block).
 
 ## Reading the findings (3.10.5+)
 
@@ -153,10 +153,10 @@ Every finding has the same shape:
 | `claim` | string | One-sentence summary. |
 | `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
 | `suggestion?` | string | Optional fix recommendation. |
-| `reviewerConfidence` | `number \| null` | 0–100; `null` from deterministic fallback. |
+| `annotatorConfidence` | `number \| null` | 0–100; `null` from deterministic fallback. |
 | `evidenceGrounded` | boolean | True iff `evidence` is verbatim from worker output. |
 
-`qualityReviewVerdict` is `'annotated'` (normal), `'skipped'` (kill switch), or `'error'` (reviewer transport failure). See `mma-investigate` SKILL.md for finding-rendering conventions — same shape.
+`qualityReviewVerdict` is `'skipped'` (explore does not run a quality review pass) or `'error'` (reviewer transport failure). See `mma-investigate` SKILL.md for finding-rendering conventions — same shape.
 
 ## Best practices
 
@@ -186,5 +186,11 @@ The worker still produced threads and a synthesis. Read them — partial coverag
 
 ❌ **Inline-research instead of delegating**
 About to run 3+ WebSearch + grep calls just to enumerate options? That's the wrong tradeoff — the worker searches on its cheap budget; you read its synthesis on yours.
+
+## Terminal context block
+
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, exploration threads, synthesis, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+
+Use `terminalBlockId` in downstream `contextBlockIds` to chain findings across the explore → brainstorm → plan workflow without re-inlining content. The block is registered server-side at task completion; no caller action is needed. Delete explicitly via `DELETE /context-blocks/:id` when no longer needed.
 
 @include _shared/error-handling.md

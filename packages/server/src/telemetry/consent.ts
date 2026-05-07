@@ -1,6 +1,6 @@
 import { readFileSync, watch } from 'node:fs';
 import { join } from 'node:path';
-import { decideConsent, type ConsentDecision } from '@zhixuan92/multi-model-agent-core/telemetry/consent-rules';
+import { decideConsent, type ConsentDecision } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 
 export function decide(homeDir: string): ConsentDecision {
   const env = process.env.MMAGENT_TELEMETRY;

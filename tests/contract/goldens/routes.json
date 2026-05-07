@@ -3,10 +3,10 @@
   "GET /__routes",
   "GET /batch/:batchId",
   "GET /health",
+  "GET /openapi",
   "GET /status",
   "GET /tools",
   "POST /audit",
-  "POST /clarifications/confirm",
   "POST /context-blocks",
   "POST /control/batch-slice",
   "POST /control/retry",
@@ -17,6 +17,5 @@
   "POST /investigate",
   "POST /retry",
   "POST /review",
-  "POST /tools/delegate",
   "POST /verify"
 ]

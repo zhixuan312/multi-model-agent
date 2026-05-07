@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { clientHeaders, toHeaderClientName } from '../../packages/server/src/install/headers.js';
+import { clientHeaders, toHeaderClientName } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
 
 describe('clientHeaders', () => {
   it('returns X-MMA-Client: claude-code for claude-code', () => {

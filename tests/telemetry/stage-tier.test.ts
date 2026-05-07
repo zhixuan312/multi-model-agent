@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
 
 describe('Task 21: stage tier and implementerTier', () => {
   it('every stage entry has a tier field; top-level has implementerTier', () => {
@@ -17,15 +17,15 @@ describe('Task 21: stage tier and implementerTier', () => {
       } as any,
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
-      parentModel: null,
-      reviewPolicy: 'off',
+      mainModel: null,
+      reviewPolicy: 'none',
       verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);
     expect(ev.implementerTier).toBe('standard');
     for (const s of ev.stages) {
       expect(s.tier).toBeDefined();
-      expect(['standard', 'complex', 'main']).toContain(s.tier);
+      expect(['standard', 'complex']).toContain(s.tier);
     }
   });
 
@@ -44,8 +44,8 @@ describe('Task 21: stage tier and implementerTier', () => {
       } as any,
       client: 'claude-code',
       triggeringSkill: 'mma-delegate',
-      parentModel: null,
-      reviewPolicy: 'off',
+      mainModel: null,
+      reviewPolicy: 'none',
       verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);

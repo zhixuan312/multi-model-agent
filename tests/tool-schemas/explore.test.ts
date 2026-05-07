@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { inputSchema } from '../../packages/core/src/tool-schemas/explore.js';
+import { inputSchema } from '../../packages/core/src/tools/explore/schema.js';
 
 describe('explore inputSchema', () => {
   const baseValid = {

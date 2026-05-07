@@ -27,7 +27,7 @@ If you wrote, modified, or deleted files, your structured report MUST include a 
 
 Examples:
   type: "feat", scope: "core", subject: "add x"
-  type: "refactor", scope: "run_tasks", subject: "extract Y from Z"
+  type: "refactor", scope: "lifecycle", subject: "extract Y from Z"
   type: "fix", subject: "guard against undefined"
 
 Do NOT write narrative ("Now I'm going to...") in the subject. The runner will compose \`<type>(<scope>): <subject>\` as the commit message; your subject becomes the commit subject line verbatim.

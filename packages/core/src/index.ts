@@ -8,7 +8,6 @@ export type {
   ToolMode,
   SandboxPolicy,
   AgentType,
-  AgentCapability,
   AgentConfig,
   Effort,
   CostTier,
@@ -28,98 +27,104 @@ export type {
   RunTasksRuntime,
   ProgressEvent,
   InternalRunnerEvent,
-} from './runners/types.js';
+} from './providers/runner-types.js';
 export type {
   BatchTimings,
   BatchProgress,
   BatchAggregateCost,
-} from './executors/types.js';
+} from './lifecycle/executor-output-types.js';
 export type {
   EligibilityFailureCheck,
   EligibilityFailure,
   ProviderEligibility,
-} from './routing/types.js';
+} from './escalation/types.js';
 export type {
-  BriefQualityWarning,
   BriefQualityPolicy,
-  ReadinessResult,
 } from './intake/types.js';
 export { ParsedStructuredReport } from './reporting/structured-report.js';
 export { notApplicableSchema, notApplicable, isNotApplicable, type NotApplicable } from './reporting/not-applicable.js';
 export { composeRunningHeadline, type RunningState, type RunningTask } from './reporting/compose-running-headline.js';
 export { composeTerminalHeadline, type TerminalHeadlineInput } from './reporting/compose-terminal-headline.js';
+export { TerminalStatusDeriver, type WorkerStatus, type OverallReviewVerdict, type ArtifactsCheck, type VerifyOutcome, type TerminalStatus, type TerminalInputs, type TerminalDecision } from './reporting/terminal-status-deriver.js';
 
 // Context blocks
 export {
   InMemoryContextBlockStore,
   ContextBlockNotFoundError,
-} from './context/context-block-store.js';
+} from './stores/context-block-tool.js';
 export type {
   ContextBlockStore,
   RegisteredBlock,
   InMemoryContextBlockStoreOptions,
-} from './context/context-block-store.js';
-export { expandContextBlocks } from './context/expand-context-blocks.js';
+} from './stores/context-block-tool.js';
+export { expandContextBlocks } from './stores/expand-context-blocks.js';
 
 // Provider
-export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './provider.js';
+export { createProvider, __setCoreTestProviderOverride, __setCoreTestProviderOverrideMap } from './providers/provider-factory.js';
 
 // Batch cache
-export { BatchCache } from './batch-cache.js';
-export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './batch-cache.js';
+export { BatchCache } from './stores/batch-cache.js';
+export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/batch-cache.js';
 
 // Project context
-export { createProjectContext } from './project-context.js';
-export type { ProjectContext } from './project-context.js';
+export { createProjectContext } from './stores/project-context-registry.js';
+export type { ProjectContext } from './stores/project-context-registry.js';
 
 // Run tasks
-export { runTasks } from './run-tasks/index.js';
-export type { RunTasksOptions } from './run-tasks/index.js';
+export { runTasks } from './lifecycle/task-runner.js';
+export type { RunTasksOptions } from './lifecycle/task-runner.js';
+
+// Lifecycle
+export { ToolSurfaceRegistry } from './tool-surface/tool-surface-registry.js';
+export type { SurfaceEntry } from './tool-surface/tool-surface-registry.js';
+export { registerAllTools, buildToolSurfaceRegistry } from './tool-surface/register-all-tools.js';
+export { LifecycleDispatcher } from './lifecycle/lifecycle-dispatcher.js';
+export type { DispatchInput, DispatchOutput } from './lifecycle/lifecycle-dispatcher.js';
+export type { ExecutionContext } from './lifecycle/lifecycle-context.js';
+
+// Transport (C1 substrate)
+export {
+  HTTPListener,
+  type HTTPListenerOptions,
+  type HTTPRequestHandler,
+  RouteDispatcher,
+  type RouteMetadata,
+  type ResponseShape,
+  isLoopbackAddress,
+  shouldRejectNonLoopback,
+  isAllowedHostHeader,
+} from './transport/index.js';
+
+// Runner shell
+export { RunnerShell } from './providers/runner-shell.js';
 
 // Heartbeat
-export { HeartbeatTimer, formatElapsed } from './heartbeat.js';
+export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
 export type {
-  HeartbeatTimerOptions,
+  ActivityTrackerOptions,
   HeartbeatStage,
   TransitionFields,
   HeartbeatTickInfo,
-} from './heartbeat.js';
-
-// Readiness
-export {
-  evaluateReadiness,
-  hasScopePillar,
-  hasInputsPillar,
-  hasDoneConditionPillar,
-  hasOutputContractPillar,
-  detectOutsourcedDiscovery,
-  detectBrittleLineAnchors,
-  detectMixedEnvironmentActions,
-  detectConcretePath,
-  detectNamedCodeArtifact,
-  detectReasonableLength,
-} from './readiness/readiness.js';
+} from './bounded-execution/activity-tracker.js';
 
 // Agent resolution
-export { resolveAgent } from './routing/resolve-agent.js';
-export type { ResolvedAgent } from './routing/resolve-agent.js';
-export { findModelProfile, getEffectiveCostTier } from './routing/model-profiles.js';
+export { resolveAgent } from './escalation/agent-resolver.js';
+export type { ResolvedAgent } from './escalation/agent-resolver.js';
+export { findModelProfile, getEffectiveCostTier } from './config/model-profile-registry.js';
+export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline
-export { compileDelegateTasks, compileDelegatePrompt } from './intake/compilers/delegate.js';
-export { compileReviewCode } from './intake/compilers/review.js';
-export { compileDebugTask } from './intake/compilers/debug.js';
-export { compileVerifyWork } from './intake/compilers/verify.js';
-export { compileAuditDocument } from './intake/compilers/audit.js';
-export { compileExecutePlan } from './intake/compilers/execute-plan.js';
-export type { ExecutePlanInput } from './intake/compilers/execute-plan.js';
+export { compileDelegateTasks, compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
+export { compileReviewCode } from './intake/brief-compiler-slots/review.js';
+export { compileDebugTask } from './intake/brief-compiler-slots/debug.js';
+export { compileVerifyWork } from './intake/brief-compiler-slots/verify.js';
+export { compileAuditDocument } from './intake/brief-compiler-slots/audit.js';
+export { compileExecutePlan } from './intake/brief-compiler-slots/execute-plan.js';
+export type { ExecutePlanInput } from './intake/brief-compiler-slots/execute-plan.js';
 export { runIntakePipeline } from './intake/pipeline.js';
 export { classifyDraft } from './intake/classify.js';
-export { inferMissingFields } from './intake/infer.js';
+export { inferMissingFields } from './intake/field-inferer.js';
 export { resolveDraft } from './intake/resolve.js';
-export { ClarificationStore } from './intake/clarification-store.js';
-export { processConfirmations } from './intake/confirm.js';
-export { getMaxRoundsPerDraft } from './intake/feature-flag.js';
 export { validateSource } from './intake/source-schema.js';
 export type {
   DraftTask,
@@ -131,13 +136,7 @@ export type {
   VerifySource,
   AuditSource,
   ExecutePlanSource,
-  StoredDraft,
-  ClarificationSet,
-  ConfirmationEntry,
-  ConfirmDraftError,
-  ConfirmResult,
   ClassificationResult,
-  ClarificationEntry,
   HardError,
   IntakeProgress,
   ReadyDraft,
@@ -145,32 +144,63 @@ export type {
 } from './intake/types.js';
 export { createDraftId, parseDraftId, generateRequestId } from './intake/draft-id.js';
 
-// Test seams (gated: NODE_ENV=test AND MMAGENT_TEST_SEAMS=1)
-export {
-  __forceClarification,
-  __forceClarificationGlobal,
-  __clearForcedClarification,
-  __consumeForcedClarification,
-} from './intake/force-clarification.js';
-
 // Batch registry
-export * from './batch-registry.js';
+export * from './stores/batch-registry.js';
 
 // Diagnostics
-export { createHttpServerLog } from './diagnostics/http-server-log.js';
+export { createHttpServerLog } from './events/http-server-log.js';
 export type {
   HttpServerLog,
   ShutdownCause,
   CreateHttpServerLogOptions,
-} from './diagnostics/http-server-log.js';
+} from './events/http-server-log.js';
 
 // Observability
-export { EventBus } from './observability/bus.js';
-export type { EventSink } from './observability/bus.js';
-export { LocalLogSink } from './observability/local-log-sink.js';
-export { TelemetrySink } from './observability/telemetry-sink.js';
-export type { Recorder } from './observability/telemetry-sink.js';
-export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './observability/events.js';
-export type { EventType } from './observability/events.js';
-export { JsonlWriter } from './diagnostics/jsonl-writer.js';
-export type { JsonlWriterOptions } from './diagnostics/jsonl-writer.js';
+export { EventEmitter } from './events/event-emitter.js';
+export type { EventSink } from './events/event-emitter.js';
+export { LocalLogSink } from './events/local-log-sink.js';
+export { TelemetrySink } from './events/telemetry-sink.js';
+export type { Recorder } from './events/telemetry-sink.js';
+export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
+export type { EventType } from './events/observability-events.js';
+export { JsonlWriter } from './events/jsonl-writer.js';
+export type { JsonlWriterOptions } from './events/jsonl-writer.js';
+
+// Review engine (v4.0 lifecycle)
+export {
+  ReviewerEngine,
+  ReviewerPromptBuilder,
+  specTemplate,
+  qualityAPTemplate,
+  diffTemplate,
+  qualityAuditTemplate,
+  qualityReviewTemplate,
+  qualityVerifyTemplate,
+  qualityDebugTemplate,
+  qualityInvestigateTemplate,
+} from './review/reviewer-engine.js';
+export type { ReviewTemplate, QualityReviewRoute } from './review/reviewer-engine.js';
+export { AnnotatorEngine } from './review/annotator-engine.js';
+export type { AnnotatorRoute } from './review/annotator-prompt-builder.js';
+
+// Intake-pipeline slots
+export { delegateSlot } from './intake/brief-compiler-slots/delegate.js';
+export type { DelegateInput, DelegateBrief } from './intake/brief-compiler-slots/delegate.js';
+export { executePlanSlot } from './intake/brief-compiler-slots/execute-plan.js';
+export type { ExecutePlanBrief } from './intake/brief-compiler-slots/execute-plan.js';
+export { makeRetrySlot } from './intake/brief-compiler-slots/retry.js';
+export type { RetryInput, RetryBrief } from './intake/brief-compiler-slots/retry.js';
+
+// Plan extractor
+export { extractPlanSection, PlanExtractionError } from './intake/plan-extractor.js';
+export type { PlanSection } from './intake/plan-extractor.js';
+
+// Reporting slots
+export { delegateReportSchema } from './reporting/report-parser-slots/delegate-report.js';
+export type { DelegateStructuredReport } from './reporting/report-parser-slots/delegate-report.js';
+export { executePlanReportSchema } from './reporting/report-parser-slots/execute-plan-report.js';
+export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-plan-report.js';
+
+// Headline templates
+export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
+export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';

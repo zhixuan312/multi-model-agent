@@ -1,7 +1,9 @@
 // packages/server/src/http/handler-deps.ts
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
-import type { EventBus } from '@zhixuan92/multi-model-agent-core';
+import type { EventEmitter } from '@zhixuan92/multi-model-agent-core';
+import type { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
+import type { ReviewerEngine, AnnotatorEngine } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
@@ -13,8 +15,14 @@ export interface HandlerDeps {
   /** Full multi-model config (agents + defaults). May be undefined in unit tests. */
   config: MultiModelConfig;
   logger: HttpServerLog;
-  /** EventBus for structured observability — dual-sink: local JSONL + cloud telemetry. */
-  bus: EventBus;
+  /** EventEmitter for structured observability — dual-sink: local JSONL + cloud telemetry. */
+  bus: EventEmitter;
   projectRegistry: ProjectRegistry;
   batchRegistry: BatchRegistry;
+  /** Optional LifecycleDispatcher for v4.0 lifecycle dispatch. When set, handlers use the new path. */
+  routeDispatcher?: LifecycleDispatcher;
+  /** v4 ReviewerEngine — instantiated once at server startup, shared across all requests. */
+  reviewerEngine?: ReviewerEngine;
+  /** v4 AnnotatorEngine — instantiated once at server startup, shared across all requests. */
+  annotatorEngine?: AnnotatorEngine;
 }

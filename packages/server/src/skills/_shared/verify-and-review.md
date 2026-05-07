@@ -7,6 +7,6 @@ Set when the worker can run a deterministic local check after editing — `npm t
 | Value | Behavior | Use when |
 |---|---|---|
 | `"full"` | Spec review + quality review (default) | Default for new code or risky edits |
-| `"spec_only"` | Spec review only | Quality review unnecessary (mechanical work) |
+| `"quality_only"` | Quality review only | Read-only audit/review/debug/investigate routes |
 | `"diff_only"` | Single-pass review of the produced diff | Cheap mechanical refactors (file moves, renames, import-path updates) |
-| `"off"` | Skip review entirely | Trusted low-risk tasks where `verifyCommand` is enough |
+| `"none"` | Skip review entirely | Trusted low-risk tasks where `verifyCommand` is enough |

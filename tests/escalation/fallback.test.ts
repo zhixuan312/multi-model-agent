@@ -6,7 +6,7 @@ import {
   type UnavailableMap,
 } from '../../packages/core/src/escalation/fallback.js';
 import type { Provider, RunResult, AgentType } from '../../packages/core/src/types.js';
-import { canonicalIdentity, identityEquals } from '../../packages/core/src/routing/canonical-model-identity.js';
+import { canonicalIdentity, identityEquals } from '../../packages/core/src/config/canonical-model-identity.js';
 
 function mockProvider(name: string, run: () => Promise<RunResult>, config?: unknown): Provider {
   // Default config varies by name so existing tests get DISTINCT effective providers
@@ -33,7 +33,7 @@ function okResult(name: string): RunResult {
   } as unknown as RunResult;
 }
 
-function failResult(status: 'api_error' | 'network_error' | 'timeout'): RunResult {
+function failResult(status: 'api_error' | 'provider_transport_failure' | 'timeout'): RunResult {
   return { ...okResult('failed'), status, output: '' };
 }
 
@@ -60,7 +60,7 @@ describe('runWithFallback — happy path', () => {
 });
 
 describe('runWithFallback — transport failure substitutes alt', () => {
-  it.each(['api_error', 'network_error', 'timeout'] as const)(
+  it.each(['api_error', 'provider_transport_failure', 'timeout'] as const)(
     'falls back on %s with reason=transport_failure',
     async (failStatus) => {
       const map: UnavailableMap = new Map();
@@ -187,7 +187,7 @@ describe('runWithFallback — both unavailable mid-call', () => {
   it('assigned fails, alt also fails — returns alt failure with both triggering statuses preserved', async () => {
     const map: UnavailableMap = new Map();
     const standard = mockProvider('standard', async () => failResult('api_error'));
-    const complex = mockProvider('complex', async () => failResult('network_error'));
+    const complex = mockProvider('complex', async () => failResult('provider_transport_failure'));
     const result = await runWithFallback<RunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
@@ -200,9 +200,9 @@ describe('runWithFallback — both unavailable mid-call', () => {
     expect(result.bothUnavailable).toBe(true);
     expect(result.fallbackFired).toBe(true);
     expect(result.fallbackTriggeringStatus).toBe('api_error');
-    expect(result.unavailableTriggeringStatus).toBe('network_error');
+    expect(result.unavailableTriggeringStatus).toBe('provider_transport_failure');
     expect(result.usedTier).toBe('complex');
-    expect(result.result.status).toBe('network_error');
+    expect(result.result.status).toBe('provider_transport_failure');
     expect(map.get('standard')).toBe('transport_failure');
     expect(map.get('complex')).toBe('transport_failure');
   });

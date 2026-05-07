@@ -9,8 +9,8 @@ import { describe, it, expect } from 'vitest';
 import { mkdtempSync, rmSync, writeFileSync, readdirSync, statSync, existsSync, readFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, relative } from 'node:path';
-import { doInstall, type InstallResult } from '../../../packages/server/src/install/orchestrate.js';
-import type { Client } from '../../../packages/server/src/install/manifest.js';
+import { doInstall, type InstallResult } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import type { Client } from '../../../packages/core/src/tool-surface/manifest.js';
 
 function listAll(root: string): string[] {
   if (!existsSync(root)) return [];

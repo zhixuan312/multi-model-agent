@@ -1,17 +1,14 @@
 import * as path from 'node:path';
 import { realpathSync } from 'node:fs';
 import type { IncomingMessage, ServerResponse } from 'node:http';
-import * as explore from '@zhixuan92/multi-model-agent-core/tool-schemas/explore';
-import { executeExplore } from '@zhixuan92/multi-model-agent-core/executors/explore';
+import * as explore from '@zhixuan92/multi-model-agent-core/tools/explore/schema';
+import { executeExplore } from '@zhixuan92/multi-model-agent-core/research/explore-orchestrator';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { canonicalizeFilePaths } from '../../canonicalize-file-paths.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
 export function buildExploreHandler(deps: HandlerDeps): RawHandler {
   return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
     const parsed = explore.inputSchema.safeParse(ctx.body);
@@ -22,9 +19,6 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
       return;
     }
     const input = parsed.data;
-
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('explore') && !assertCrossTierConfigured(deps.config, res)) return;
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -73,12 +67,24 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
-      executor: async (executionCtx) => executeExplore(executionCtx, {
-        input,
-        resolvedContextBlocks,
-        canonicalizedAnchors,
-        relativeAnchorsForPrompt,
-      }),
+      executor: async (executionCtx) => {
+        const callExecutor = () => executeExplore(executionCtx, {
+          input,
+          resolvedContextBlocks,
+          canonicalizedAnchors,
+          relativeAnchorsForPrompt,
+        });
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'explore',
+            toolCategory: 'research',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
+      },
     });
 
     await emitRequestReceived({ config: deps.config, batchId, route: req.url ?? '', parsed: input });

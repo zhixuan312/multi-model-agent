@@ -2,29 +2,20 @@ import type { TaskSpec } from '../types.js';
 import type { MultiModelConfig } from '../types.js';
 import type { DraftTask, SourceRoute } from './types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../config/schema.js';
+import { ROUTE_DEFAULTS } from './field-inferer.js';
 
 /**
  * Worker output contract per route.
  *
  * The 5 read-only routes (audit / review / verify / debug / investigate) no
- * longer carry a structured-output contract — the quality reviewer extracts
+ * longer carry a structured-output contract — the AnnotatorEngine extracts
  * findings from the worker's free-form narrative in one pass. See
- * packages/core/src/review/quality-only-prompts.ts.
+ * packages/core/src/review/templates/annotator-{audit,review,verify,debug,investigate}.ts.
  *
  * The artifact route `execute_plan` keeps its narrative contract.
  */
 export const OUTPUT_CONTRACT_CLAUSES: Partial<Record<SourceRoute, string>> = {
   execute_plan: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
-};
-
-export const ROUTE_DEFAULTS: Record<SourceRoute, Partial<TaskSpec>> = {
-  delegate_tasks: {},
-  review_code: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  debug_task: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  verify_work: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  audit_document: { agentType: 'complex', reviewPolicy: 'quality_only' },
-  execute_plan: { agentType: 'standard', reviewPolicy: 'full' },
-  investigate_codebase: { agentType: 'complex', reviewPolicy: 'quality_only' },
 };
 
 export function resolveDraft(
@@ -44,7 +35,7 @@ export function resolveDraft(
     prompt,
     done: draft.done,
     filePaths: draft.filePaths,
-    agentType: agentType as 'standard' | 'complex',
+    agentType,
     reviewPolicy: draft.reviewPolicy ?? routeDefaults.reviewPolicy,
     tools: config.defaults?.tools ?? 'full',
     timeoutMs: config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,

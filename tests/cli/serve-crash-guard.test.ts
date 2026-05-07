@@ -25,7 +25,6 @@ function minimalConfig(tokenFile: string) {
         projectCap: 10,
         idleProjectTimeoutMs: 600_000,
         batchTtlMs: 3_600_000,
-        clarificationTimeoutMs: 60_000,
         maxContextBlocksPerProject: 100,
         shutdownDrainMs: 1_000,
         maxBodyBytes: 10_000_000,

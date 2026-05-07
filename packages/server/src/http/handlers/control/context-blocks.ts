@@ -1,15 +1,33 @@
 // packages/server/src/http/handlers/control/context-blocks.ts
+//
+// Hosts POST /context-blocks (register) and DELETE /context-blocks/:id
+// (unregister). Lives under handlers/control/ rather than handlers/tools/
+// because register_context_block is an assist-tier sync state op:
+//
+//   - synchronous request/response (no batchId, no async dispatch)
+//   - no LifecycleDispatcher path (no review chain, no commit stage)
+//   - paired skill is mma-context-blocks/ (covers register + lookup)
+//
+// See vertical_design.md §9 "register_context_block / Assist-tier slot
+// conventions" for the canonical rationale.
+//
+// v4.0: POST /context-blocks is now a thin shim that validates, reserves
+// the project, and dispatches to the LifecycleDispatcher (which routes
+// through the register_to_block_store stage handler per the StagePlan).
+
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { z } from 'zod';
 import { sendError, sendJson } from '../../errors.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import type { ProjectRegistry } from '../../project-registry.js';
-import type { ServerConfig } from '@zhixuan92/multi-model-agent-core';
+import type { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
 
 export interface ContextBlockHandlerDeps {
   projectRegistry: ProjectRegistry;
-  config: ServerConfig;
+  routeDispatcher: LifecycleDispatcher;
+  maxContextBlockBytes: number;
+  maxContextBlocksPerProject: number;
 }
 
 export interface DeleteContextBlockHandlerDeps {
@@ -22,12 +40,12 @@ const createBodySchema = z.object({
 });
 
 /**
- * POST /context-blocks — stores a new context block for the authenticated cwd.
- * Requires cwd query param (cwd-gated).
+ * POST /context-blocks — thin shim that validates, reserves the project,
+ * and delegates block registration to the LifecycleDispatcher StagePlan.
  */
 export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): RawHandler {
   return async (
-    _req: IncomingMessage,
+    req: IncomingMessage,
     res: ServerResponse,
     _params: Record<string, string>,
     ctx,
@@ -47,18 +65,17 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
 
     // ── 2. Content byte-size check ─────────────────────────────────────────
     const byteLen = Buffer.byteLength(content, 'utf8');
-    const maxBytes = deps.config.server.limits.maxContextBlockBytes;
-    if (byteLen > maxBytes) {
+    if (byteLen > deps.maxContextBlockBytes) {
       sendError(
         res,
         413,
         'payload_too_large',
-        `Context block content exceeds the ${maxBytes}-byte limit (got ${byteLen} bytes)`,
+        `Context block content exceeds the ${deps.maxContextBlockBytes}-byte limit (got ${byteLen} bytes)`,
       );
       return;
     }
 
-    // ── 3. Get project context ─────────────────────────────────────────────
+    // ── 3. Reserve project ─────────────────────────────────────────────────
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {
       sendError(res, 503, reserveResult.error, reserveResult.message);
@@ -69,21 +86,27 @@ export function buildCreateContextBlockHandler(deps: ContextBlockHandlerDeps): R
     deps.projectRegistry.cancelReservation(cwd);
 
     // ── 4. Cap check ───────────────────────────────────────────────────────
-    const maxBlocks = deps.config.server.limits.maxContextBlocksPerProject;
-    if (pc.contextBlocks.size >= maxBlocks) {
+    if (pc.contextBlocks.size >= deps.maxContextBlocksPerProject) {
       sendError(
         res,
         409,
         'cap_exhausted',
-        `Project context block cap of ${maxBlocks} reached; delete unused blocks before creating new ones`,
+        `Project context block cap of ${deps.maxContextBlocksPerProject} reached; delete unused blocks before creating new ones`,
       );
       return;
     }
 
-    // ── 5. Create block ────────────────────────────────────────────────────
-    const registered = pc.contextBlocks.register(content);
+    // ── 5. Dispatch to lifecycle ───────────────────────────────────────────
+    const output = await deps.routeDispatcher.dispatch({
+      route: 'register-context-block',
+      toolCategory: 'assist',
+      rawRequest: parsed.data,
+      context: { projectContext: pc },
+    });
 
-    sendJson(res, 201, { id: registered.id });
+    // ── 6. Return dispatcher output ────────────────────────────────────────
+    const status = output.status === 200 ? 201 : output.status;
+    sendJson(res, status as 200 | 201 | 400 | 409, output.body);
   };
 }
 

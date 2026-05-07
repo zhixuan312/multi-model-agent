@@ -3,7 +3,7 @@ import { mkdtempSync, writeFileSync, readFileSync, mkdirSync, existsSync } from 
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { runUpdateSkills } from '../../packages/server/src/cli/update-skills.js';
-import type { InstallManifest } from '../../packages/server/src/install/manifest.js';
+import type { InstallManifest } from '../../packages/core/src/tool-surface/manifest.js';
 
 function makeFakeHome(initial: InstallManifest): string {
   const home = mkdtempSync(join(tmpdir(), 'mma-backfill-'));

@@ -1,16 +1,14 @@
 // packages/server/src/http/handlers/tools/verify.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as verify from '@zhixuan92/multi-model-agent-core/tool-schemas/verify';
-import { executeVerify } from '@zhixuan92/multi-model-agent-core/executors/verify';
+import * as verify from '@zhixuan92/multi-model-agent-core/tools/verify/schema';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/verify/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
+import type { RawHandler } from '../../types.js';
 export function buildVerifyHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = verify.inputSchema.safeParse(ctx.body);
@@ -20,9 +18,6 @@ export function buildVerifyHandler(deps: HandlerDeps): RawHandler {
       });
       return;
     }
-
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('verify_work') && !assertCrossTierConfigured(deps.config, res)) return;
 
     const input = parsed.data;
     const cwd = ctx.cwd!;
@@ -45,7 +40,17 @@ export function buildVerifyHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeVerify(executionCtx, input);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'verify',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

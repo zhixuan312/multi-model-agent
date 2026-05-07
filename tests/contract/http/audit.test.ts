@@ -3,7 +3,7 @@ import { boot } from '../fixtures/harness.js';
 import { mockProvider, type Stage } from '../fixtures/mock-providers.js';
 import { normalize, type JsonValue } from '../serializer/index.js';
 
-const STAGES: Stage[] = ['ok', 'incomplete', 'force-salvage', 'max-turns', 'clarification', 'review-rework'];
+const STAGES: Stage[] = ['ok', 'incomplete', 'max-turns', 'review-rework'];
 
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<JsonValue> {
   for (let i = 0; i < 180; i++) {

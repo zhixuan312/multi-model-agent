@@ -114,7 +114,7 @@ describe('mmagent info (daemon not running)', () => {
 });
 
 describe('mmagent info (daemon running)', () => {
-  it('populates daemonVersion/pid/uptimeMs/startedAt from /health', async () => {
+  it('detects daemon running from /health status=ok', async () => {
     const { tokenFile, dir } = writeToken();
     const cap = capture();
     try {
@@ -126,15 +126,13 @@ describe('mmagent info (daemon running)', () => {
         json: true,
         stdout: cap.stdoutFn,
         stderr: cap.stderrFn,
-        fetch: mockFetch(200, { ok: true, version: '3.1.0', pid: 12345, startedAt: 1000, uptimeMs: 500 }),
+        fetch: mockFetch(200, { status: 'ok' }),
       });
       expect(code).toBe(0);
       const body = JSON.parse(cap.stdout.join(''));
       expect(body.running).toBe(true);
-      expect(body.daemonVersion).toBe('3.1.0');
-      expect(body.pid).toBe(12345);
-      expect(body.startedAt).toBe(1000);
-      expect(body.uptimeMs).toBe(500);
+      expect(body.daemonVersion).toEqual({ kind: 'not_applicable', reason: 'daemon version predates info fields' });
+      expect(body.pid).toEqual({ kind: 'not_applicable', reason: 'daemon version predates info fields' });
     } finally {
       rmSync(dir, { recursive: true, force: true });
     }
@@ -152,7 +150,7 @@ describe('mmagent info (daemon running)', () => {
         json: true,
         stdout: cap.stdoutFn,
         stderr: cap.stderrFn,
-        fetch: mockFetch(200, { ok: true }), // old daemon — no new fields
+        fetch: mockFetch(200, { status: 'ok' }),
       });
       expect(code).toBe(0);
       const body = JSON.parse(cap.stdout.join(''));

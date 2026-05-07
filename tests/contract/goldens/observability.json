@@ -254,7 +254,6 @@
         "ts",
         "route",
         "agentType",
-        "capabilities",
         "toolMode",
         "triggeredFromSkill",
         "client",

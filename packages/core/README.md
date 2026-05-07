@@ -45,6 +45,129 @@ for (const r of results) {
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
 
+## v4 Engine API
+
+The v4 release introduces a unified review surface and generic task executor, replacing the previous per-tool executor pattern.
+
+### ReviewerEngine
+
+Gating reviews for **artifact-producing** tools (`delegate`, `execute-plan`). Runs three review passes against worker output:
+
+| Method | Review Type | Verdict |
+|---|---|---|
+| `runSpec(shell, input)` | Spec compliance review | `approved` \| `changes_required` |
+| `runQualityAP(shell, input)` | Quality review (artifact-producing) | `approved` \| `changes_required` |
+| `runDiff(shell, input)` | Diff review of written files | `approve` \| `concerns` \| `reject` |
+
+Each method accepts a `RunnerShell` and a `ReviewerInput` (`{ workerOutput, brief, cwd, route?, fileContents?, toolCallLog?, filesWritten?, abortSignal?, deadlineMs? }`) and returns a typed result with parsed verdict, findings, and cost breakdown.
+
+```ts
+import { ReviewerEngine, ReviewerPromptBuilder } from '@zhixuan92/multi-model-agent-core/review';
+import { specTemplate, qualityAPTemplate, diffTemplate } from '@zhixuan92/multi-model-agent-core/review';
+
+const engine = new ReviewerEngine(
+  new ReviewerPromptBuilder(
+    { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+    { /* per-route quality templates */ },
+  ),
+);
+
+const result = await engine.runSpec(shell, {
+  workerOutput: '...',
+  brief: 'Add JWT auth to auth.ts',
+  cwd: '/path/to/project',
+});
+// result.verdict → 'approved' | 'changes_required'
+// result.findings → AnnotatedFinding[]
+// result.cost → { inputTokens, outputTokens, turnCount, toolCallCount, costUSD }
+```
+
+Factory shortcut for the default template set:
+
+```ts
+import { createDefaultReviewerEngine } from '@zhixuan92/multi-model-agent-core/review/default-engines';
+const engine = createDefaultReviewerEngine();
+```
+
+### AnnotatorEngine
+
+Read-only annotation pass for **non-artifact-producing** tools (`audit`, `review`, `verify`, `debug`, `investigate`). Verdict is always `'annotated'` (success) or `'error'` (transport failure); never gates rework.
+
+| Method | Description |
+|---|---|
+| `annotate(shell, input)` | Runs an annotation pass, re-judging severity and scoring confidence per finding |
+
+Accepts a `RunnerShell` and an `AnnotatorInput` (`{ workerOutput, brief, cwd, route, abortSignal?, deadlineMs? }`). Returns `AnnotatorCallResult` with parsed findings, raw assistant text, and cost breakdown.
+
+```ts
+import { AnnotatorEngine } from '@zhixuan92/multi-model-agent-core/review';
+
+const engine = new AnnotatorEngine();
+const result = await engine.annotate(shell, {
+  workerOutput: '...',
+  brief: 'Audit security of auth module',
+  cwd: '/path/to/project',
+  route: 'audit',
+});
+// result.findings → AnnotatedFinding[]
+// result.finalAssistantText → string
+```
+
+### executeTask (generic task executor)
+
+A single generic orchestrator (`≤ 200 LOC`) that replaces per-tool executor files. Driven by a `ToolConfig` object that encodes all tool-specific behavior:
+
+```
+briefSlot → resolveAgent → buildTaskSpec → dispatch → autoRegisterContextBlock
+  → computeTimings/cost → parseReport → composeHeadline → mapVerdicts
+```
+
+```ts
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/delegate/tool-config';
+
+const output = await executeTask(toolConfig, ctx, input);
+// output → ExecutorOutput { headline, results, batchTimings, costSummary, structuredReport, ... }
+```
+
+### ToolConfig
+
+Per-tool configuration interface that drives `executeTask`. Each tool exports its own `toolConfig` constant.
+
+```ts
+interface ToolConfig<Input, Brief, Report> {
+  name: string;                                              // tool name
+  category: 'artifact_producing' | 'read_only' | 'research' | 'assist';
+  agentType: AgentType;                                      // 'standard' | 'complex'
+  briefSlot: BriefSlotFiller<Input, Brief[]>;                // input → briefs
+  buildTaskSpec: (brief: Brief, ctx: ExecutionContext) => TaskSpec;
+  reportSchema: ReportSchema<Report>;                        // Zod schema for structured output
+  headlineTemplate: HeadlineTemplate;                        // compose headline from result
+  reviewTemplates?: {                                        // optional per-route review templates
+    spec?: ReviewTemplate;
+    qualityAP?: ReviewTemplate;
+    annotator?: ReviewTemplate;
+    diff?: ReviewTemplate;
+  };
+  postProcessEnvelope?: (envelope, ctx) => any;              // optional envelope post-processing
+}
+```
+
+Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool-config`:
+
+| Tool | Subpath |
+|---|---|
+| delegate | `./tools/delegate/tool-config` |
+| review | `./tools/review/tool-config` |
+| audit | `./tools/audit/tool-config` |
+| verify | `./tools/verify/tool-config` |
+| debug | `./tools/debug/tool-config` |
+| investigate | `./tools/investigate/tool-config` |
+| explore | `./tools/explore/tool-config` |
+| execute-plan | `./tools/execute-plan/tool-config` |
+| retry | `./tools/retry/tool-config` |
+| register-context-block | `./tools/register-context-block/tool-config` |
+
 ## Subpath exports
 
 | Subpath | What |
@@ -71,6 +194,10 @@ for (const r of results) {
 | `./telemetry/types` | `TelemetryEvent`, `UploadBatch`, `InstallMetadata` Zod schemas + `SCHEMA_VERSION` |
 | `./telemetry/event-builder` | `buildTaskCompletedEvent`, `buildSessionStartedEvent`, etc. — pure event constructors |
 | `./telemetry/consent-rules` | `decideConsent` — env / config / default precedence resolver |
+| `./review` | `ReviewerEngine`, `AnnotatorEngine` — v4 review surface (see Engine API below) |
+| `./lifecycle/task-executor` | `executeTask` — generic per-tool orchestrator driven by a `ToolConfig` |
+| `./lifecycle/executor-output-types` | `ExecutorOutput`, `BatchTimings`, `BatchAggregateCost` |
+| `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, verify, debug, investigate, explore, execute-plan, retry, register-context-block) |
 
 ## Diagnostic logging
 
@@ -102,9 +229,15 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new
+## What's new in 4.0.0
 
-Latest: **3.12.3** — Bug-fix patch closing the four real-world regressions surfaced by 3.12.2 telemetry. Reviewer cost + findings recovered for DeepSeek (and any openai-compatible non-OpenAI provider): runner stops forcing `Agent.outputType` on DeepSeek and treats structured-output parse failures as non-fatal everywhere, so `runAnnotationReview`'s text-parser fallback recovers findings from prose instead of dropping the whole call. `agents.implementer` now agrees with stage stats — both report `resolved.slot`; per-call fallback drift remains visible in `implementerHistory` + `fallbackOverrides`. Reviewer separation is **slot-based only**: `forbiddenIdentities` removed from spec/quality/diff reviewer fallback calls, so when the user puts the same model on different tiers the review still runs. `endReviewStage` clamps `totalIdleMs` to `durationMs` to prevent impossible idle ratios from the two-attempt review loop. All 2836 tests pass. Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+- **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
+- **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning; `reasoningTokens` and `cachedCreationTokens` removed. SCHEMA_VERSION → 4.
+- **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
+- **Engine API.** New `ReviewerEngine` (gating reviews for artifact-producing tools) + `AnnotatorEngine` (read-only annotation passes) replace ad-hoc review functions. Per-tool executors collapsed into a single `executeTask` orchestrator driven by `ToolConfig` slot objects. See [Engine API](#v4-engine-api) above.
+- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces three parallel runner files. `ReadinessClassifier`, `EffortInferer`, `AttemptRecorder`, `RequestPipeline`, `TelemetryFlushWorker`, `CrossTierGuard` removed. 2969 tests pass.
+
+Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
 ## Full documentation
 

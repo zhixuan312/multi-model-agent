@@ -1,16 +1,14 @@
 // packages/server/src/http/handlers/tools/debug.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as debug from '@zhixuan92/multi-model-agent-core/tool-schemas/debug';
-import { executeDebug } from '@zhixuan92/multi-model-agent-core/executors/debug';
+import * as debug from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/debug/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
-import { assertCrossTierConfigured } from '../../cross-tier-guard.js';
-import { resolveReadOnlyReviewFlag } from '@zhixuan92/multi-model-agent-core/config/read-only-review-flag';
-
+import type { RawHandler } from '../../types.js';
 export function buildDebugHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = debug.inputSchema.safeParse(ctx.body);
@@ -20,9 +18,6 @@ export function buildDebugHandler(deps: HandlerDeps): RawHandler {
       });
       return;
     }
-
-    const flag = resolveReadOnlyReviewFlag();
-    if (flag.isEnabledFor('debug_task') && !assertCrossTierConfigured(deps.config, res)) return;
 
     const input = parsed.data;
     const cwd = ctx.cwd!;
@@ -45,7 +40,17 @@ export function buildDebugHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeDebug(executionCtx, input);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'debug',
+            toolCategory: 'read_only',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { compileReviewCode } from '../../../packages/core/src/intake/compilers/review.js';
+import { compileReviewCode } from '../../../packages/core/src/intake/brief-compiler-slots/review.js';
 
 describe('review compiler', () => {
   it('returns single draft for no files and no code/inline', () => {

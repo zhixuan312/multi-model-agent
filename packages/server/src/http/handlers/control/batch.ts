@@ -2,7 +2,7 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import { sendError, sendJson } from '../../errors.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 import { notApplicable, type BatchRegistry, formatElapsed } from '@zhixuan92/multi-model-agent-core';
 
 export interface BatchHandlerDeps {
@@ -14,7 +14,6 @@ export interface BatchHandlerDeps {
  *
  * Status split (Theme 7):
  *  - pending                → 202 text/plain — body is the runningHeadline
- *  - awaiting_clarification → 200 JSON uniform 7-field envelope with proposedInterpretation populated
  *  - complete/failed/expired → 200 JSON uniform 7-field envelope
  *
  * Optional ?taskIndex=N slices `results` on a complete envelope.
@@ -69,20 +68,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
       return;
     }
 
-    if (entry.state === 'awaiting_clarification') {
-      const reason = 'batch awaiting clarification';
-      sendJson(res, 200, {
-        headline: `awaiting clarification: ${entry.proposedInterpretation ?? ''}`.trim(),
-        results: notApplicable(reason),
-        batchTimings: notApplicable(reason),
-        costSummary: notApplicable(reason),
-        structuredReport: notApplicable(reason),
-        error: notApplicable(reason),
-        proposedInterpretation: entry.proposedInterpretation ?? notApplicable('clarification proposed but interpretation unavailable'),
-      });
-      return;
-    }
-
     const fullResult = entry.result as Record<string, unknown> | undefined;
 
     if (entry.state === 'failed' || entry.state === 'expired' || !fullResult) {
@@ -100,8 +85,6 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
         costSummary: (fullResult?.['costSummary'] as unknown) ?? notApplicable(reason),
         structuredReport: (fullResult?.['structuredReport'] as unknown) ?? notApplicable(reason),
         error: errPayload,
-        proposedInterpretation:
-          (fullResult?.['proposedInterpretation'] as unknown) ?? notApplicable('batch not awaiting clarification'),
       });
       return;
     }

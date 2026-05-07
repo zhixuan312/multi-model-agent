@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { computeTaskCompletionSummary, formatTaskDoneLine } from '../../packages/core/src/run-tasks/task-completion-summary.js';
+import { computeTaskCompletionSummary, formatTaskDoneLine } from '../../packages/core/src/lifecycle/task-completion-summary.js';
 import { richRunResult } from '../contract/telemetry/fixtures/rich-runresult.js';
 
 describe('TaskCompletionSummary', () => {

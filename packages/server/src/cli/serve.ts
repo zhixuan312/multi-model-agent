@@ -27,10 +27,10 @@ import { createRecorder } from '../telemetry/recorder.js';
 import { Flusher } from '../telemetry/flusher.js';
 import { Queue } from '../telemetry/queue.js';
 import { runUpdateSkills } from './update-skills.js';
-import { listEntries, FutureManifestError } from '../install/manifest.js';
+import { listEntries, FutureManifestError } from '@zhixuan92/multi-model-agent-core/tool-surface/manifest';
 import { readSkillContent } from './install-skill.js';
-import { findMissingSkills } from '../install/missing-skills.js';
-import { SUPPORTED_SKILLS } from '../install/discover.js';
+import { findMissingSkills } from '@zhixuan92/multi-model-agent-core/tool-surface/skill-installer';
+import { SUPPORTED_SKILLS } from '@zhixuan92/multi-model-agent-core/tool-surface/discover';
 import matter from 'gray-matter';
 
 function isSkillBehind(entryName: string, entrySkillVersion: string): boolean {
@@ -167,6 +167,20 @@ export async function startServe(
 
   // Auto-update installed skills before bind (bounded 5s; never blocks indefinitely).
   await maybeAutoUpdateSkills(config, stderr);
+
+  // Drift check — warn if installed skills don't match the canonical manifest.
+  try {
+    const { makeSkillManifestSync } = await import('@zhixuan92/multi-model-agent-core/tool-surface/skill-manifest-sync');
+    const { discoverPerClientInstallDirs } = await import('@zhixuan92/multi-model-agent-core/tool-surface/discover');
+    const sync = makeSkillManifestSync(discoverPerClientInstallDirs());
+    const drift = sync.driftReport();
+    if (drift.length > 0) {
+      const summary = drift.map(d => `${d.client}/${d.skill}=${d.issue}`).join(', ');
+      stderr(`[mmagent] WARN: skill manifest drift detected: ${summary}. Re-run 'mmagent install-skill' to reconcile.\n`);
+    }
+  } catch {
+    // best-effort — never let drift check block serve
+  }
 
   // Pass the full MultiModelConfig (not just the server block) so
   // registerToolHandlers sees `agents` and registers real tool endpoints.

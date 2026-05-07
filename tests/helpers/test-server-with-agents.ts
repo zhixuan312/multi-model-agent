@@ -38,7 +38,6 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
         maxBodyBytes: 10_485_760,
         batchTtlMs: 3_600_000,
         idleProjectTimeoutMs: 1_800_000,
-        clarificationTimeoutMs: 86_400_000,
         projectCap: 200,
         maxBatchCacheSize: 500,
         maxContextBlockBytes: 524_288,
@@ -72,7 +71,10 @@ export async function startTestServerWithAgents(
 
   // startServer accepts ServerConfig but we pass MultiModelConfig (superset).
   // The server checks for .agents to decide whether to register tool handlers.
-  const server = await startServer(config as unknown as import('@zhixuan92/multi-model-agent-core').ServerConfig);
+  const server = await startServer(
+    config as unknown as import('@zhixuan92/multi-model-agent-core').ServerConfig,
+    { driftReport: () => [] },
+  );
 
   return {
     url: `http://127.0.0.1:${server.port}`,

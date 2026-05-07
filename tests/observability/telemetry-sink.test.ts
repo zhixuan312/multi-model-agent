@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from 'vitest';
-import { TelemetrySink } from '../../packages/core/src/observability/telemetry-sink.js';
+import { TelemetrySink } from '../../packages/core/src/events/telemetry-sink.js';
 
 describe('TelemetrySink', () => {
   it('forwards cloud events to recorder.enqueue', () => {

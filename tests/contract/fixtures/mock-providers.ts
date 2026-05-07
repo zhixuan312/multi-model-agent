@@ -7,7 +7,7 @@
 //     filesWritten, toolCalls, outputIsDiagnostic, escalationLog
 //   - Stage-specific optional fields: terminationReason, specReviewStatus,
 //     qualityReviewStatus, workerStatus, etc.
-//   - Usage: { inputTokens, outputTokens, totalTokens, costUSD | null }
+//   - Usage: { inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens }
 
 import type {
   Provider,
@@ -18,13 +18,12 @@ import type {
   AttemptRecord,
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
+import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
 
 export type Stage =
   | 'ok'
   | 'incomplete'
-  | 'force-salvage'
   | 'max-turns'
-  | 'clarification'
   | 'review-rework'
   | 'slow';
 
@@ -53,8 +52,8 @@ const STUB_CONFIG: ProviderConfig = {
   model: 'mock-model',
 } as ProviderConfig;
 
-function usage(cost: number | null): TokenUsage {
-  return { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: cost };
+function usage(_cost: number | null): TokenUsage {
+  return { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 };
 }
 
 function attempt(status: RunStatus, turns: number, cost: number | null): AttemptRecord {
@@ -120,30 +119,6 @@ function buildIncomplete(opts: MockProviderOptions): RunResult {
   };
 }
 
-function buildForceSalvage(opts: MockProviderOptions): RunResult {
-  return {
-    output: opts.output ?? 'mock salvage',
-    status: 'degenerate_exhausted',
-    usage: usage(0.001),
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [attempt('degenerate_exhausted', 1, 0.001)],
-    durationMs: 0,
-    directoriesListed: [],
-    terminationReason: {
-      cause: 'degenerate_exhausted',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
-  };
-}
-
 function buildMaxTurns(opts: MockProviderOptions): RunResult {
   return {
     output: opts.output ?? 'mock max turns',
@@ -160,30 +135,6 @@ function buildMaxTurns(opts: MockProviderOptions): RunResult {
     terminationReason: {
       cause: 'incomplete',
       turnsUsed: 99,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: null,
-      wasPromoted: false,
-    },
-  };
-}
-
-function buildClarificationNeeded(opts: MockProviderOptions): RunResult {
-  return {
-    output: opts.output ?? 'needs clarification',
-    status: 'brief_too_vague',
-    usage: usage(0.0005),
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [attempt('brief_too_vague', 1, 0.0005)],
-    durationMs: 0,
-    directoriesListed: [],
-    terminationReason: {
-      cause: 'brief_too_vague',
-      turnsUsed: 1,
       hasFileArtifacts: false,
       usedShell: false,
       workerSelfAssessment: null,
@@ -280,9 +231,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
     switch (stage) {
       case 'ok': return buildOk(opts as MockProviderOptions & { stage: Stage });
       case 'incomplete': return buildIncomplete(opts as MockProviderOptions & { stage: Stage });
-      case 'force-salvage': return buildForceSalvage(opts as MockProviderOptions & { stage: Stage });
       case 'max-turns': return buildMaxTurns(opts as MockProviderOptions & { stage: Stage });
-      case 'clarification': return buildClarificationNeeded(opts as MockProviderOptions & { stage: Stage });
       case 'review-rework': return buildReviewRework(opts as MockProviderOptions & { stage: Stage });
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
     }
@@ -315,7 +264,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
         return {
           ...buildIncomplete({ stage: 'incomplete', output }),
           status: 'cost_exceeded',
-          capExhausted: 'cost',
+          incompleteReason: 'cost_cap',
           terminationReason: {
             cause: 'cost_exceeded',
             turnsUsed: 1,
@@ -330,7 +279,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
         return {
           ...buildIncomplete({ stage: 'incomplete', output }),
           status: 'timeout',
-          capExhausted: 'wall_clock',
+          incompleteReason: 'timeout',
           terminationReason: {
             cause: 'timeout',
             turnsUsed: 1,
@@ -343,20 +292,7 @@ export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_cloc
       }
       return {
         ...buildMaxTurns({ stage: 'max-turns', output }),
-        capExhausted: 'turn',
-      };
-    },
-  };
-}
-
-export function clarificationProvider(opts: { proposedInterpretation: string }): Provider {
-  return {
-    name: 'mock-clarification',
-    config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
-      return {
-        ...buildClarificationNeeded({ stage: 'clarification', output: opts.proposedInterpretation }),
-        lifecycleClarificationRequested: true,
+        incompleteReason: 'turn_cap',
       };
     },
   };
@@ -417,6 +353,27 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     config: STUB_CONFIG,
     async run(): Promise<RunResult> {
       throw new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
+    },
+  };
+}
+
+export function mockAdapter(opts: {
+  turns: Array<{ assistantText: string; toolCalls: { name: string; input: unknown }[] }>;
+  usage?: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
+  throwOnTurn?: Error;
+}): RunnerAdapter {
+  let i = 0;
+  return {
+    providerType: 'claude',
+    async turn() {
+      if (opts.throwOnTurn) throw opts.throwOnTurn;
+      const t = opts.turns[i++] ?? { assistantText: '', toolCalls: [] };
+      return {
+        assistantText: t.assistantText,
+        toolCalls: t.toolCalls,
+        usage: opts.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+        finishReason: t.toolCalls.length > 0 ? 'tool_use' as const : 'stop' as const,
+      };
     },
   };
 }

@@ -1,10 +1,10 @@
-import { HeartbeatTimer } from '../packages/core/src/heartbeat.js';
-import type { ProgressEvent } from '../packages/core/src/runners/types.js';
+import { ActivityTracker } from '../packages/core/src/bounded-execution/activity-tracker.js';
+import type { ProgressEvent } from '../packages/core/src/providers/runner-types.js';
 
-describe('HeartbeatTimer', () => {
+describe('ActivityTracker', () => {
   it('requires provider at construction', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
     });
     expect(timer).toBeDefined();
@@ -12,7 +12,7 @@ describe('HeartbeatTimer', () => {
 
   it('start() initializes all state and first tick emits correct snapshot', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
       intervalMs: 50,
     });
@@ -43,7 +43,7 @@ describe('HeartbeatTimer', () => {
 
   it('start() does not emit immediately', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 1000,
     });
@@ -54,7 +54,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() emits eagerly with updated fields', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
       intervalMs: 10_000,
     });
@@ -78,7 +78,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() to implementing clears reviewRound and attemptCap', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -94,7 +94,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() to review stage without round fields throws', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -108,7 +108,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() allows stageIndex to go backwards (semantic positions)', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -126,7 +126,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() is suppressed before start()', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -138,7 +138,7 @@ describe('HeartbeatTimer', () => {
 
   it('setProvider() triggers eager emit via transition()', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'provider-a',
       intervalMs: 10_000,
     });
@@ -152,7 +152,7 @@ describe('HeartbeatTimer', () => {
 
   it('updateProgress() does not emit eagerly', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -165,7 +165,7 @@ describe('HeartbeatTimer', () => {
 
   it('updateCost() does not emit eagerly', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -178,7 +178,7 @@ describe('HeartbeatTimer', () => {
 
   it('stop() emits final heartbeat with final: true', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -195,7 +195,7 @@ describe('HeartbeatTimer', () => {
 
   it('stop() is idempotent — no double final emit', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -210,7 +210,7 @@ describe('HeartbeatTimer', () => {
 
   it('no emits after stop()', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -224,11 +224,11 @@ describe('HeartbeatTimer', () => {
     expect(events.length).toBe(countAfterStop);
   });
 
-  it('headline with parentModel shows saved cost', () => {
+  it('headline with mainModel shows saved cost', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
-      parentModel: 'claude-opus-4-6',
+      mainModel: 'claude-opus-4-6',
       intervalMs: 10_000,
     });
     timer.start(3);
@@ -241,9 +241,9 @@ describe('HeartbeatTimer', () => {
     expect(final.headline).toContain('x)');
   });
 
-  it('headline without parentModel shows actual cost', () => {
+  it('headline without mainModel shows actual cost', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'claude-sonnet-4-6',
       intervalMs: 10_000,
     });
@@ -259,7 +259,7 @@ describe('HeartbeatTimer', () => {
 
   it('headline omits cost when both null', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -272,9 +272,9 @@ describe('HeartbeatTimer', () => {
 
   it('getHeartbeatTickInfo() returns a rich per-stage headline matching the onProgress one', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'gpt-5.4',
-      parentModel: 'claude-opus-4-7',
+      mainModel: 'claude-opus-4-7',
       intervalMs: 10_000,
       batchId: 'b-1',
     });
@@ -296,7 +296,7 @@ describe('HeartbeatTimer', () => {
 
   it('updateStageCount() changes denominator', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -312,7 +312,7 @@ describe('HeartbeatTimer', () => {
 
   it('updateProgress() and updateCost() are no-ops before start()', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -327,7 +327,7 @@ describe('HeartbeatTimer', () => {
 
   it('updateStageCount() throws when below current stageIndex', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -343,11 +343,11 @@ describe('HeartbeatTimer', () => {
   // verifying has already advanced stageIndex past the initial start() cap.
   it('off policy + advance to verifying: stageCount auto-grows and is not shrunk', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
-    timer.start(1); // reviewPolicy='off' starts the pipeline at 1
+    timer.start(1); // reviewPolicy='none' starts the pipeline at 1
     timer.setStage('verifying', 4); // autoCommit=true path advances past cap
     timer.stop();
     const final = events.find(e => e.final)!;
@@ -358,7 +358,7 @@ describe('HeartbeatTimer', () => {
 
   it('start() throws on invalid stageCount', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -368,7 +368,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() throws on stageIndex < 1', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -379,7 +379,7 @@ describe('HeartbeatTimer', () => {
 
   it('transition() rejects review fields while in implementing stage', () => {
     const events: ProgressEvent[] = [];
-    const timer = new HeartbeatTimer((e) => events.push(e), {
+    const timer = new ActivityTracker((e) => events.push(e), {
       provider: 'test',
       intervalMs: 10_000,
     });
@@ -391,7 +391,7 @@ describe('HeartbeatTimer', () => {
   it('exposes idleSinceLlmMs/ToolMs/TextMs on the tick', async () => {
     vi.useFakeTimers();
     const ticks: any[] = [];
-    const timer = new HeartbeatTimer((() => {}) as any, {
+    const timer = new ActivityTracker((() => {}) as any, {
       provider: 'codex',
       intervalMs: 10,
       recordHeartbeat: t => ticks.push(t),

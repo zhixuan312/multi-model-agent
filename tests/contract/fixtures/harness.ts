@@ -110,7 +110,6 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
         maxBodyBytes: 10_485_760,
         batchTtlMs: 3_600_000,
         idleProjectTimeoutMs: 1_800_000,
-        clarificationTimeoutMs: 86_400_000,
         projectCap: 200,
         maxBatchCacheSize: 500,
         maxContextBlockBytes: 524_288,
@@ -121,7 +120,7 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
     },
   };
 
-  const server = await startServer(config);
+  const server = await startServer(config, { driftReport: () => [] });
   const baseUrl = `http://127.0.0.1:${server.port}`;
 
   return {

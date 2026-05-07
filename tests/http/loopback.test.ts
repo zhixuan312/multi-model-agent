@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { isLoopbackAddress, shouldRejectNonLoopback } from '../../packages/server/src/http/loopback.js';
+import { isLoopbackAddress, shouldRejectNonLoopback } from '../../packages/core/src/transport/loopback-enforcer.js';
 
 describe('isLoopbackAddress', () => {
   it.each([

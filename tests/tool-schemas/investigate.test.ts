@@ -1,5 +1,5 @@
 // tests/tool-schemas/investigate.test.ts
-import { inputSchema } from '../../packages/core/src/tool-schemas/investigate.js';
+import { inputSchema } from '../../packages/core/src/tools/investigate/schema.js';
 
 describe('investigate inputSchema', () => {
   it('accepts a minimal valid request', () => {

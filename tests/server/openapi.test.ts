@@ -4,7 +4,7 @@ import { existsSync, readFileSync, writeFileSync, mkdirSync } from 'node:fs';
 import { join, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { startTestServer } from '../helpers/test-server.js';
-import { buildOpenApiDoc, serializeOpenApiDoc } from '../../packages/server/src/openapi.js';
+import { buildOpenApiDoc, serializeOpenApiDoc } from '../../packages/core/src/tool-surface/openapi-generator.js';
 
 const thisDir = dirname(fileURLToPath(import.meta.url));
 const GOLDEN_PATH = join(
@@ -68,11 +68,11 @@ describe('OpenAPI document', () => {
     expect(JSON.parse(serialized)).toEqual(JSON.parse(golden));
   });
 
-  it('document covers all 8 tool endpoints and 4 control + 2 introspection routes', () => {
+  it('document covers all 9 tool endpoints and 4 control + 2 introspection routes', () => {
     const doc = buildOpenApiDoc();
     const paths = Object.keys(doc['paths'] as Record<string, unknown>);
 
-    // 8 tool routes (7 prior + /explore)
+    // 9 tool routes
     expect(paths).toContain('/delegate');
     expect(paths).toContain('/audit');
     expect(paths).toContain('/review');
@@ -80,19 +80,19 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/debug');
     expect(paths).toContain('/execute-plan');
     expect(paths).toContain('/retry');
+    expect(paths).toContain('/investigate');
     expect(paths).toContain('/explore');
 
-    // 4 control routes
+    // 3 control routes
     expect(paths).toContain('/batch/{batchId}');
     expect(paths).toContain('/context-blocks');
     expect(paths).toContain('/context-blocks/{blockId}');
-    expect(paths).toContain('/clarifications/confirm');
 
     // 2 introspection routes
     expect(paths).toContain('/health');
     expect(paths).toContain('/status');
 
-    // Total: 15 paths
-    expect(paths.length).toBe(15);
+    // Total: 14 paths
+    expect(paths.length).toBe(14);
   });
 });

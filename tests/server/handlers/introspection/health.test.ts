@@ -1,26 +1,23 @@
 // tests/server/handlers/introspection/health.test.ts
 import { describe, it, expect } from 'vitest';
 import { startTestServer } from '../../../helpers/test-server.js';
-import { shouldRejectNonLoopback } from '../../../../packages/server/src/http/loopback.js';
+import { shouldRejectNonLoopback } from '../../../../packages/core/src/transport/loopback-enforcer.js';
 
 describe('GET /health', () => {
-  it('returns 200 with ok/version/pid/startedAt/uptimeMs without auth', async () => {
+  it('returns 200 with { status: "ok" } when no drift — no other fields', async () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/health`);
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/json');
-      const body = await res.json() as {
-        ok: boolean; version: string; pid: number; startedAt: number; uptimeMs: number;
-      };
-      expect(body.ok).toBe(true);
-      expect(typeof body.version).toBe('string');
-      expect(body.version.length).toBeGreaterThan(0);
-      expect(typeof body.pid).toBe('number');
-      expect(body.pid).toBe(process.pid);
-      expect(typeof body.startedAt).toBe('number');
-      expect(typeof body.uptimeMs).toBe('number');
-      expect(body.uptimeMs).toBeGreaterThanOrEqual(0);
+      const body = await res.json();
+      expect(body).toEqual({ status: 'ok' });
+      expect(body).not.toHaveProperty('drift');
+      expect(body).not.toHaveProperty('version');
+      expect(body).not.toHaveProperty('ok');
+      expect(body).not.toHaveProperty('pid');
+      expect(body).not.toHaveProperty('startedAt');
+      expect(body).not.toHaveProperty('uptimeMs');
     } finally {
       await s.stop();
     }
@@ -36,13 +33,13 @@ describe('GET /health', () => {
     }
   });
 
-  it('body keys are exactly ok/version/pid/startedAt/uptimeMs — no counters, no project data', async () => {
+  it('body keys are exactly status when no drift — no counters, no project data', async () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/health`);
       const body = await res.json() as Record<string, unknown>;
-      expect(new Set(Object.keys(body))).toEqual(new Set(['ok', 'version', 'pid', 'startedAt', 'uptimeMs']));
-      expect(body['ok']).toBe(true);
+      expect(new Set(Object.keys(body))).toEqual(new Set(['status']));
+      expect(body['status']).toBe('ok');
     } finally {
       await s.stop();
     }

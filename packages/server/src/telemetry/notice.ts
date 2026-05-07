@@ -1,6 +1,6 @@
 import { existsSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
-import type { ConsentDecision } from '@zhixuan92/multi-model-agent-core/telemetry/consent-rules';
+import type { ConsentDecision } from '@zhixuan92/multi-model-agent-core/events/consent-rules';
 
 export function firstRunNoticeText(): string {
   return `multi-model-agent collects anonymous usage data to help improve the product.

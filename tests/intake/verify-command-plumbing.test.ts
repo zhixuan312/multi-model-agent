@@ -1,6 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
-import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/compilers/delegate';
-import { compileExecutePlan } from '@zhixuan92/multi-model-agent-core/intake/compilers/execute-plan';
+import { compileDelegateTasks } from '@zhixuan92/multi-model-agent-core/intake/brief-compiler-slots/delegate';
+import { compileExecutePlan } from '@zhixuan92/multi-model-agent-core/intake/brief-compiler-slots/execute-plan';
 import { resolveDraft } from '@zhixuan92/multi-model-agent-core/intake/resolve';
 
 describe('verifyCommand intake plumbing', () => {

@@ -3,7 +3,7 @@ import { Queue } from './queue.js';
 import { readGeneration } from './generation.js';
 import { getOrCreateIdentity, sign } from './identity.js';
 import type { ReadBatchResult } from './queue.js';
-import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/telemetry/types';
+import { SCHEMA_VERSION } from '@zhixuan92/multi-model-agent-core/events/telemetry-types';
 
 export interface FlusherOptions {
   queue: Queue;

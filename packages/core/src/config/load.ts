@@ -4,6 +4,16 @@ import os from 'os';
 import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
+// Re-export resolution helpers + types so existing callers that import them
+// from './load.js' keep working. The canonical home is './config-resolver.js'
+// per architecture.md:58.
+export {
+  collectInlineApiKeyOffenders,
+  resolveMainAgentModel,
+  validateUserPricing,
+} from './config-resolver.js';
+export type { Pricing, MainAgentModelResolution } from './config-resolver.js';
+
 const TOKEN_REGEX = /^[A-Za-z0-9_\-+=/.]+$/;
 
 function expandTilde(p: string): string {
@@ -42,25 +52,6 @@ export function loadAuthToken(opts: { tokenFile: string }): string {
     throw new Error(`config error: auth token file has non-canonical bytes (must match [A-Za-z0-9_\\-+=/.]) (${resolvedPath})`);
   }
   return token;
-}
-
-/**
- * Return the names of openai-compatible agents carrying an inline `apiKey`
- * instead of using `apiKeyEnv`. The schema permits both, but plaintext API
- * keys in a config file are a backup/dotfile/git footgun — serve surfaces
- * this once at startup so the operator can react.
- */
-export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[] {
-  const offenders: string[] = [];
-  for (const [name, agent] of Object.entries(config.agents)) {
-    if (
-      (agent.type === 'openai-compatible' || agent.type === 'claude-compatible') &&
-      typeof (agent as { apiKey?: unknown }).apiKey === 'string'
-    ) {
-      offenders.push(name);
-    }
-  }
-  return offenders;
 }
 
 /**

@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
-import { TelemetrySink } from '../../packages/core/src/observability/telemetry-sink.js';
-import { CLOUD_EVENT_NAMES, type EventType } from '../../packages/core/src/observability/events.js';
+import { TelemetrySink } from '../../packages/core/src/events/telemetry-sink.js';
+import { CLOUD_EVENT_NAMES, type EventType } from '../../packages/core/src/events/observability-events.js';
 
 describe('telemetry envelope (v2)', () => {
   it('TelemetrySink passes cloud events to recorder.enqueue', () => {

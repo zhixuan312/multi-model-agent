@@ -1,0 +1,385 @@
+import type { ProviderConfig } from '../types.js';
+import type { TaskSpec } from '../types.js';
+import type { ModelProfile } from '../config/model-profile-registry.js';
+
+/**
+ * Sub-agent completion supervision.
+ *
+ * The runner calls validateCompletion() after every turn that ends without
+ * a tool call (the SDK signal "agent done"). If the result is degenerate,
+ * the runner injects a re-prompt and continues the loop instead of returning.
+ *
+ * See docs/superpowers/specs/2026-04-10-subagent-completion-supervision-design.md
+ * Parts A.2.2 and A.4 for the full contract.
+ *
+ * --- @openai/agents SDK introspection finding (from Task 1, Step 1) ---
+ * Happy path confirmed. The `@openai/agents` SDK (via @openai/agents-core)
+ * exposes intermediate assistant text on the returned `RunResult`:
+ *   - `result.newItems: RunItem[]` is a discriminated union where entries of
+ *     type `"message_output_item"` are `RunMessageOutputItem` instances with
+ *     `rawItem.role === "assistant"` and `rawItem.content` carrying
+ *     `{ type: "output_text", text: string }` parts (plus `refusal`, `audio`,
+ *     `image`). See node_modules/@openai/agents-core/dist/items.d.ts around
+ *     line 337 (class RunMessageOutputItem) and dist/result.d.ts lines 17-76
+ *     (RunResultData interface — `newItems`, `output`, `history`, `state`).
+ *   - `result.state` additionally holds the full RunState, and
+ *     StreamedRunResult exposes a `RunStreamEvent` async iterator for
+ *     live mid-run observation if we ever need true streaming.
+ * For our scratchpad needs the non-streaming path is sufficient: after any
+ * `agentRun(...)` call (including iterative re-prompt turns), we can iterate
+ * `result.newItems`, pick every `message_output_item`, concatenate its
+ * `output_text` parts, and append the result to the TextScratchpad. This
+ * gives us full intermediate salvage for openai-runner without dropping to
+ * the lower-level OpenAI client or patching hooks. Task 3 should implement
+ * this salvage extraction.
+ * ----------------------------------------------------------------------
+ */
+
+/** Classification of a degenerate model response, including coverage failures. */
+export type DegenerateKind =
+  | 'empty'
+  | 'thinking_only'
+  | 'fragment'
+  | 'no_terminator'
+  | 'insufficient_coverage';
+
+export interface ValidationResult {
+  valid: boolean;
+  kind?: DegenerateKind;
+  reason?: string;
+  /** Last 60 characters of the trimmed text, used by buildRePrompt. */
+  tail?: string;
+}
+
+export interface ValidateCompletionOptions {
+  minLength?: number;
+}
+
+export function validateCoverage(
+  text: string,
+  expected: NonNullable<TaskSpec['expectedCoverage']>,
+): ValidationResult {
+  if (expected.minSections !== undefined) {
+    const pattern = expected.sectionPattern ?? '^## ';
+    let re: RegExp;
+    try {
+      re = new RegExp(pattern, 'gm');
+    } catch (err) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `invalid sectionPattern regex: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+    const count = (text.match(re) ?? []).length;
+    if (count < expected.minSections) {
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${count} sections found, expected at least ${expected.minSections}`,
+      };
+    }
+  }
+
+  if (expected.requiredMarkers?.length) {
+    const missing = expected.requiredMarkers.filter((marker) => !text.includes(marker));
+    if (missing.length > 0) {
+      const preview = missing.slice(0, 5).join(', ');
+      const extra = missing.length > 5 ? ` (+${missing.length - 5} more)` : '';
+      return {
+        valid: false,
+        kind: 'insufficient_coverage',
+        reason: `only ${expected.requiredMarkers.length - missing.length} of ${expected.requiredMarkers.length} required markers found, missing: ${preview}${extra}`,
+      };
+    }
+  }
+
+  return { valid: true };
+}
+
+const DEFAULT_MIN_LENGTH = 10;
+
+/** Tail window (chars) inspected by `endsWithContinuation` for continuation phrases. */
+const CONTINUATION_TAIL_WINDOW = 80;
+
+/** Tail length (chars) quoted back to the model in the re-prompt via `result.tail`. */
+const REPROMPT_TAIL_QUOTE = 60;
+
+/**
+ * Marker returned by `stripThinkingTags` when the entire final message was
+ * `<think>...` reasoning and stripping left nothing. Exported here
+ * (rather than from openai-runner.ts) so that `validateCompletion` can detect
+ * the marker without importing the runner, and so other runners can reuse it
+ * when they implement their own thinking-only salvage. There is exactly one
+ * canonical constant.
+ */
+export const THINKING_DIAGNOSTIC_MARKER =
+  '[model final message contained only <think>...</think> reasoning, no plain-text answer]';
+
+const CONTINUATION_PHRASES = [
+  'let me',
+  'let me check',
+  'let me read',
+  'let me look',
+  'next i',
+  "i'll continue",
+  'i need to',
+  "now i'll",
+  'i should also',
+  'checking',
+  "i'll now",
+];
+
+const FRAGMENT_PUNCTUATION = [':', ',', '…'];
+
+const TERMINAL_PUNCTUATION = ['.', '!', '?', '`', ')', ']', '}'];
+const MARKDOWN_HINTS = [/^#{1,6} /m, /^- /m, /^\d+\. /m, /```/];
+
+function endsWithContinuation(tail: string): boolean {
+  const lower = tail.toLowerCase();
+  return CONTINUATION_PHRASES.some((p) => lower.endsWith(p) || lower.includes(p));
+}
+
+function endsWithFragmentPunctuation(text: string): boolean {
+  const trimmed = text.trimEnd();
+  return FRAGMENT_PUNCTUATION.some((p) => trimmed.endsWith(p));
+}
+
+function hasMarkdownStructure(text: string): boolean {
+  return MARKDOWN_HINTS.some((re) => re.test(text));
+}
+
+function endsWithTerminalPunctuation(text: string): boolean {
+  const trimmed = text.trimEnd();
+  if (trimmed.length === 0) return false;
+  const last = trimmed[trimmed.length - 1];
+  return TERMINAL_PUNCTUATION.includes(last);
+}
+
+// Detector order:
+//   empty → thinking_only → fragment (always, up to FRAGMENT_MAX_LENGTH) →
+//   long-enough → markdown → no_terminator.
+//
+// Fragment detection runs BEFORE the length auto-accept because "let me check..."
+// and "Here is what I found:" are real mid-work stalls regardless of length.
+// But we cap it at FRAGMENT_MAX_LENGTH so a 500-char response that happens to
+// contain "let me" deep inside isn't falsely rejected.
+//
+// The no_terminator check only fires for very short responses (< DEFAULT_MIN_LENGTH)
+// since it's low-value — most short complete answers end with punctuation naturally.
+
+/** Fragment detection applies to text under this length. Above it, continuation
+ *  phrases in the tail are likely part of a valid longer response. */
+const FRAGMENT_MAX_LENGTH = 120;
+
+export function validateCompletion(
+  text: string,
+  opts: ValidateCompletionOptions = {},
+): ValidationResult {
+  const minLength = opts.minLength ?? DEFAULT_MIN_LENGTH;
+
+  if (!text || text.trim().length === 0) {
+    return { valid: false, kind: 'empty', reason: 'response was empty' };
+  }
+  if (text.trim() === THINKING_DIAGNOSTIC_MARKER) {
+    return {
+      valid: false,
+      kind: 'thinking_only',
+      reason: 'response contained only <think> reasoning content',
+    };
+  }
+
+  const trimmed = text.trim();
+  const tail = trimmed.slice(-CONTINUATION_TAIL_WINDOW);
+
+  // Fragment detection: catches real mid-work stalls ("let me check...",
+  // "Here is what I found:") regardless of length, up to FRAGMENT_MAX_LENGTH.
+  // Above that cap, continuation phrases are likely part of a valid response.
+  if (trimmed.length < FRAGMENT_MAX_LENGTH) {
+    if (endsWithFragmentPunctuation(trimmed) || endsWithContinuation(tail)) {
+      return {
+        valid: false,
+        kind: 'fragment',
+        reason: 'response ends like an exploration fragment',
+        tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
+      };
+    }
+  }
+
+  // Long enough → trust the response.
+  if (trimmed.length >= minLength) {
+    return { valid: true };
+  }
+
+  // Very short responses (< minLength, currently 10 chars): valid only with
+  // markdown structure or terminal punctuation.
+  if (hasMarkdownStructure(trimmed)) {
+    return { valid: true };
+  }
+
+  if (!endsWithTerminalPunctuation(trimmed)) {
+    return {
+      valid: false,
+      kind: 'no_terminator',
+      reason: 'response is very short and has no terminal punctuation or markdown structure',
+      tail: trimmed.slice(-REPROMPT_TAIL_QUOTE),
+    };
+  }
+
+  return { valid: true };
+}
+
+export function buildRePrompt(result: ValidationResult): string {
+  if (result.valid) {
+    throw new Error('buildRePrompt called on a valid response — this is a bug');
+  }
+
+  switch (result.kind) {
+    case 'empty':
+      return [
+        'Your previous response was empty. You did not produce a final answer to the task',
+        'and did not call any tools. Please respond again with your complete final answer',
+        'as plain text in this assistant message. The final answer is what gets returned',
+        'to the caller — there are no follow-up turns after you produce it. If you are not',
+        'yet done, call the tools you need first; otherwise produce the final answer now.',
+      ].join(' ');
+
+    case 'thinking_only':
+      return [
+        'Your previous response contained only <think>... reasoning, with no',
+        'plain-text answer outside the tags. The reasoning tags are stripped before the',
+        'response is returned to the caller, so a thinking-only response is equivalent',
+        'to no response at all. Please respond again with your complete final answer as',
+        'plain text outside any reasoning tags.',
+      ].join(' ');
+
+    case 'fragment': {
+      const tail = result.tail ?? '';
+      return [
+        `Your previous response was an exploration fragment (it ended with "${tail}")`,
+        'rather than a final answer. You appear to have stopped mid-thought instead of',
+        'completing the task. Either: (a) continue exploring by calling the tools you',
+        'need, then produce your final answer, or (b) produce your complete final answer',
+        'now with whatever you have gathered so far — partial answers are acceptable and',
+        'useful, empty responses are not. Your final answer must be a plain-text',
+        'assistant message, not a tool call and not a thinking block.',
+      ].join(' ');
+    }
+
+    case 'no_terminator': {
+      const tail = result.tail ?? '';
+      return [
+        `Your previous response appears to have stopped mid-thought (it ended with`,
+        `"${tail}"). Please produce your complete final answer with terminal punctuation`,
+        'or proper markdown structure. If you are still working, call the tools you need',
+        'first; otherwise produce the final answer now.',
+      ].join(' ');
+    }
+
+    case 'insufficient_coverage':
+      return `Your previous answer was structurally valid but does not cover everything the brief required: ${result.reason}. Continue your report by addressing the missing items. Do NOT restart from the beginning — append the missing sections to what you already wrote.`;
+
+    default:
+      return 'Your previous response was incomplete. Please produce your complete final answer as plain text.';
+  }
+}
+
+/**
+ * Compares two consecutive degenerate outputs for byte equality. Used by
+ * the supervision loop's same-output early-out: if the model produces
+ * identical garbage twice in a row, give up immediately instead of
+ * burning the third retry.
+ */
+export function sameDegenerateOutput(a: string, b: string): boolean {
+  return a.trim() === b.trim();
+}
+
+/**
+ * Resolves the effective inputTokenSoftLimit for a (provider, profile) pair.
+ *
+ * Precedence: `config.inputTokenSoftLimit` (user override) wins over
+ * `profile.inputTokenSoftLimit` (family default).
+ *
+ * Both fields are Zod-validated upstream:
+ *   - `ProviderConfig.inputTokenSoftLimit` — `z.number().int().positive().optional()`
+ *     (see packages/core/src/config/schema.ts)
+ *   - `ModelProfile.inputTokenSoftLimit` — `z.number().int().positive()` (required)
+ *
+ * Because profile is guaranteed to carry a positive integer (DEFAULT_PROFILE
+ * supplies `100_000` when no prefix matches), there is no hardcoded
+ * constant fallback — the DEFAULT_PROFILE value is the de-facto fallback
+ * for unprofiled model IDs.
+ */
+export function resolveInputTokenSoftLimit(
+  config: ProviderConfig,
+  profile: ModelProfile,
+): number {
+  return config.inputTokenSoftLimit ?? profile.inputTokenSoftLimit;
+}
+
+/**
+ * Coordinator for sub-agent output validation.
+ *
+ * Priority order (most authoritative first):
+ *
+ *   1. `empty` and `thinking_only` always fail — degeneracy checks.
+ *   2. `expectedCoverage` declared and passes → valid (caller-declared, most trustworthy).
+ *   3. `expectedCoverage` declared and fails → invalid.
+ *   4. `workerStatus: 'done'` + (hasCompletedWork or skipCompletionHeuristic) → valid
+ *      (worker says done AND there's evidence of work or caller opted out).
+ *   5. `workerStatus: 'done'` without work evidence → trust if output passes heuristic.
+ *   6. `workerStatus: 'done_with_concerns'` + hasCompletedWork → valid.
+ *   7. `skipCompletionHeuristic` or `hasCompletedWork` (without workerStatus) → valid.
+ *   8. Fall through to `fragment`/`no_terminator` heuristic (last resort).
+ *
+ * `needs_context` and `blocked` are never auto-validated.
+ */
+export function validateSubAgentOutput(
+  text: string,
+  opts: {
+    expectedCoverage?: TaskSpec['expectedCoverage'];
+    skipCompletionHeuristic?: boolean;
+    workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked';
+    hasCompletedWork?: boolean;
+    hasFileArtifacts?: boolean;
+  } = {},
+): ValidationResult {
+  // 1. Degeneracy checks
+  const completion = validateCompletion(text);
+  if (
+    !completion.valid &&
+    (completion.kind === 'empty' || completion.kind === 'thinking_only')
+  ) {
+    return completion;
+  }
+
+  // 2-3. expectedCoverage — most authoritative when declared
+  if (opts.expectedCoverage) {
+    const coverage = validateCoverage(text, opts.expectedCoverage);
+    if (!coverage.valid) return coverage;
+    return { valid: true };
+  }
+
+  // 4. workerStatus: 'done' + work evidence → trust it
+  if (opts.workerStatus === 'done' && (opts.hasCompletedWork || opts.hasFileArtifacts || opts.skipCompletionHeuristic)) {
+    return { valid: true };
+  }
+
+  // 5. workerStatus: 'done' without evidence → trust if output passes heuristic
+  if (opts.workerStatus === 'done') {
+    return completion;
+  }
+
+  // 6. done_with_concerns + work evidence → trust it
+  if (opts.workerStatus === 'done_with_concerns' && (opts.hasCompletedWork || opts.hasFileArtifacts)) {
+    return { valid: true };
+  }
+
+  // 7. skipCompletionHeuristic or hasCompletedWork without workerStatus
+  if (opts.skipCompletionHeuristic || opts.hasCompletedWork) {
+    return { valid: true };
+  }
+
+  // 8. Fall through to heuristic
+  return completion;
+}

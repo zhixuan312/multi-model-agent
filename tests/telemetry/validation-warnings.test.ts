@@ -6,13 +6,13 @@ import {
   createRecorder,
   collectValidationWarnings,
 } from '../../packages/server/src/telemetry/recorder.js';
-import { buildTaskCompletedEvent } from '../../packages/core/src/telemetry/event-builder.js';
-import type { BuildContext } from '../../packages/core/src/telemetry/event-builder.js';
+import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
+import type { BuildContext } from '../../packages/core/src/events/event-builder.js';
 import {
   TaskCompletedEventSchema,
   UploadBatchSchema,
   type TaskCompletedEventType,
-} from '../../packages/core/src/telemetry/types.js';
+} from '../../packages/core/src/events/telemetry-types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────────────
 
@@ -54,7 +54,6 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     client: 'test-client',
     agentType: 'standard',
     toolMode: 'full',
-    capabilities: [],
     reviewPolicy: 'full',
     verifyCommandPresent: false,
     implementerModel: 'gpt-5',
@@ -68,8 +67,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     inputTokens: 600,
     outputTokens: 150,
     cachedReadTokens: 60,
-    cachedCreationTokens: 0,
-    reasoningTokens: 30,
+    cachedNonReadTokens: 0,
     totalDurationMs: 50000,
     totalCostUSD: 0.031,
     parentEquivalentCostUSD: null,
@@ -79,8 +77,6 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     fallbackCount: 0,
     stallCount: 0,
     taskMaxIdleMs: 5000,
-    clarificationRequested: false,
-    briefQualityWarningCount: 0,
     sandboxViolationCount: 0,
     stages: [
       {
@@ -93,8 +89,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         inputTokens: 500,
         outputTokens: 100,
         cachedReadTokens: 50,
-        cachedCreationTokens: 0,
-        reasoningTokens: 25,
+        cachedNonReadTokens: 0,
         toolCallCount: 4,
         filesReadCount: 2,
         filesWrittenCount: 1,
@@ -112,8 +107,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         inputTokens: 100,
         outputTokens: 50,
         cachedReadTokens: 10,
-        cachedCreationTokens: 0,
-        reasoningTokens: 5,
+        cachedNonReadTokens: 0,
         toolCallCount: 1,
         filesReadCount: 1,
         filesWrittenCount: 1,
@@ -135,12 +129,11 @@ function makeHealthyContext(): BuildContext {
       status: 'ok',
       durationMs: 50000,
       workerStatus: 'done',
-      usage: { inputTokens: 600, outputTokens: 150, costUSD: 0.031 },
+      usage: { inputTokens: 600, outputTokens: 150, cachedReadTokens: 0, cachedNonReadTokens: 0 },
       models: { implementer: 'gpt-5', specReviewer: 'claude-sonnet', qualityReviewer: 'claude-sonnet' },
       agents: {
         implementer: 'standard' as const,
         implementerToolMode: 'full' as const,
-        implementerCapabilities: [] as string[],
       },
       stageStats: {
         implementing: {
@@ -299,11 +292,11 @@ describe('collectValidationWarnings', () => {
 // ── R6b: soft warning for cached grossly exceeding input ─────────────────
 
 describe('R6b soft warning: cached >> input', () => {
-  it('emits validation_warning when cachedReadTokens + cachedCreationTokens > 100 × inputTokens', () => {
+  it('emits validation_warning when cachedReadTokens + cachedNonReadTokens > 100 × inputTokens', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 100;
     event.stages[0].cachedReadTokens = 11_000;
-    event.stages[0].cachedCreationTokens = 0;
+    event.stages[0].cachedNonReadTokens = 0;
     event.stages[0].outputTokens = 50;
 
     const result = collectValidationWarnings(event);
@@ -315,11 +308,11 @@ describe('R6b soft warning: cached >> input', () => {
     );
   });
 
-  it('triggers when cachedCreationTokens alone exceed threshold', () => {
+  it('triggers when cachedNonReadTokens alone exceed threshold', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 100;
     event.stages[0].cachedReadTokens = 0;
-    event.stages[0].cachedCreationTokens = 15_000;
+    event.stages[0].cachedNonReadTokens = 15_000;
     event.stages[0].outputTokens = 50;
 
     const result = collectValidationWarnings(event);
@@ -330,7 +323,7 @@ describe('R6b soft warning: cached >> input', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 100;
     event.stages[0].cachedReadTokens = 6_000;
-    event.stages[0].cachedCreationTokens = 5_000;
+    event.stages[0].cachedNonReadTokens = 5_000;
     event.stages[0].outputTokens = 50;
 
     const result = collectValidationWarnings(event);
@@ -341,7 +334,7 @@ describe('R6b soft warning: cached >> input', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 500;
     event.stages[0].cachedReadTokens = 5_000;
-    event.stages[0].cachedCreationTokens = 0;
+    event.stages[0].cachedNonReadTokens = 0;
 
     const result = collectValidationWarnings(event);
     expect(result.warnings.filter(w => w.rule === 'R6b')).toEqual([]);
@@ -351,7 +344,7 @@ describe('R6b soft warning: cached >> input', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 0;
     event.stages[0].cachedReadTokens = 50_000;
-    event.stages[0].cachedCreationTokens = 50_000;
+    event.stages[0].cachedNonReadTokens = 50_000;
 
     const result = collectValidationWarnings(event);
     expect(result.warnings.filter(w => w.rule === 'R6b')).toEqual([]);
@@ -361,10 +354,10 @@ describe('R6b soft warning: cached >> input', () => {
     const event = makeMinimalValidEvent();
     event.stages[0].inputTokens = 100;
     event.stages[0].cachedReadTokens = 11_000;
-    event.stages[0].cachedCreationTokens = 0;
+    event.stages[0].cachedNonReadTokens = 0;
     event.stages[1].inputTokens = 10;
     event.stages[1].cachedReadTokens = 0;
-    event.stages[1].cachedCreationTokens = 2_000;
+    event.stages[1].cachedNonReadTokens = 2_000;
 
     const result = collectValidationWarnings(event);
     const r6bWarnings = result.warnings.filter(w => w.rule === 'R6b');

@@ -1,9 +1,9 @@
-// Pins the reviewed-lifecycle envelope surface: specReviewStatus,
+// Pins the dispatcher-path review envelope surface: specReviewStatus,
 // qualityReviewStatus, specReviewReason, qualityReviewReason must all be
 // present alongside the reviewed artifacts (implementer output +
-// structuredReport). Ch 6 moves the reviewed lifecycle into
-// run-tasks/reviewed-lifecycle.ts; this test is the envelope-visible
-// guardrail.
+// structuredReport). The legacy reviewed-lifecycle.ts has been replaced
+// by LifecycleDriver + StagePlan handlers; this test is the
+// envelope-visible guardrail for that path.
 import { describe, it, expect } from 'vitest';
 import { boot } from '../fixtures/harness.js';
 import { mockProvider } from '../fixtures/mock-providers.js';
@@ -15,7 +15,7 @@ describe('contract: reviewed lifecycle', () => {
       const d = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
-        body: JSON.stringify({ tasks: [{ prompt: 'reviewed-lifecycle test' }] }),
+        body: JSON.stringify({ tasks: [{ prompt: 'reviewed-lifecycle test', reviewPolicy: 'none' }] }),
       });
       const { batchId } = (await d.json()) as { batchId: string };
       let envelope: Record<string, unknown> | null = null;

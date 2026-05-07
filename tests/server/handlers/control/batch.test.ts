@@ -80,7 +80,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       const resAll = await fetch(`${s.url}/batch/${batchId}`, {
@@ -149,7 +148,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       // taskIndex=1 is out of range for a 1-element array
@@ -186,34 +184,6 @@ describe('GET /batch/:batchId', () => {
       });
       expect(res.status).toBe(202);
       expect(res.headers.get('content-type')).toMatch(/text\/plain/);
-    } finally {
-      await s.stop();
-    }
-  });
-
-  it('returns awaiting_clarification state with proposedInterpretation', async () => {
-    const s = await startTestServerWithAgents();
-    try {
-      const batchId = randomUUID();
-      s.batchRegistry.register({
-        batchId,
-        projectCwd: '/tmp/test',
-        tool: 'delegate',
-        state: 'pending',
-        startedAt: Date.now(),
-        stateChangedAt: Date.now(),
-        blockIds: [],
-        blocksReleased: false,
-      });
-      s.batchRegistry.requestClarification(batchId, 'Did you mean X or Y?');
-
-      const res = await fetch(`${s.url}/batch/${batchId}`, {
-        headers: { Authorization: `Bearer ${s.token}` },
-      });
-      expect(res.status).toBe(200);
-      const json = await res.json() as { proposedInterpretation: string; results: { kind: string } };
-      expect(json.proposedInterpretation).toBe('Did you mean X or Y?');
-      expect(json.results.kind).toBe('not_applicable');
     } finally {
       await s.stop();
     }
@@ -264,14 +234,14 @@ describe('GET /batch/:batchId', () => {
         state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
         blockIds: [], blocksReleased: false,
       });
-      s.batchRegistry.fail(batchId, { code: 'executor_error', message: 'boom' });
+      s.batchRegistry.fail(batchId, { code: 'runner_crash', message: 'boom' });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
         headers: { Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json() as { error: { code: string }; results: { kind: string } };
-      expect(body.error.code).toBe('executor_error');
+      expect(body.error.code).toBe('runner_crash');
       expect(body.results.kind).toBe('not_applicable');
     } finally {
       await s.stop();
@@ -294,7 +264,6 @@ describe('GET /batch/:batchId', () => {
         costSummary: {},
         structuredReport: { kind: 'not_applicable', reason: 'none' },
         error: { kind: 'not_applicable', reason: 'batch succeeded' },
-        proposedInterpretation: { kind: 'not_applicable', reason: 'none' },
       });
 
       const res = await fetch(`${s.url}/batch/${batchId}`, {
@@ -303,7 +272,7 @@ describe('GET /batch/:batchId', () => {
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toMatch(/application\/json/);
       const body = await res.json();
-      for (const key of ['headline', 'results', 'batchTimings', 'costSummary', 'structuredReport', 'error', 'proposedInterpretation']) {
+      for (const key of ['headline', 'results', 'batchTimings', 'costSummary', 'structuredReport', 'error']) {
         expect(body, `missing ${key}`).toHaveProperty(key);
       }
     } finally {

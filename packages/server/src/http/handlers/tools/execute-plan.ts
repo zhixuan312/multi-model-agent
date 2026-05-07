@@ -1,40 +1,27 @@
 // packages/server/src/http/handlers/tools/execute-plan.ts
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
-import * as executePlan from '@zhixuan92/multi-model-agent-core/tool-schemas/execute-plan';
-import { executeExecutePlan } from '@zhixuan92/multi-model-agent-core/executors/execute-plan';
+import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
+import type { ExecutePlanWireInput } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
-import type { RawHandler } from '../../router.js';
+import type { RawHandler } from '../../types.js';
 
 export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
-    const parsed = executePlan.inputSchema.safeParse(ctx.body);
+    const parsed = executePlanInputSchema.safeParse(ctx.body);
     if (!parsed.success) {
-      const fieldErrors: Record<string, string[]> = {};
-      for (const issue of parsed.error.issues) {
-        let path = issue.path.join('.');
-        if (path === '' && issue.message.includes('"agentType"')) {
-          path = 'agentType';
-        } else if (path.startsWith('tasks.') && issue.message === 'Invalid input') {
-          const task = issue.path.reduce<unknown>((value, segment) => {
-            if (value && typeof value === 'object') return (value as Record<string | number, unknown>)[segment as string | number];
-            return undefined;
-          }, ctx.body);
-          if (task && typeof task === 'object' && 'agentType' in task) {
-            path = `${path}.agentType`;
-          }
-        }
-        if (!fieldErrors[path]) fieldErrors[path] = [];
-        fieldErrors[path].push(issue.message);
-      }
-      sendError(res, 400, 'invalid_request', 'Request body validation failed', { fieldErrors });
+      sendError(res, 400, 'invalid_request', 'Request body validation failed', {
+        fieldErrors: parsed.error.flatten(),
+      });
       return;
     }
 
-    const input = parsed.data;
+    const input: ExecutePlanWireInput = parsed.data;
     const cwd = ctx.cwd!;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
@@ -55,7 +42,17 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeExecutePlan(executionCtx, input);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'execute_plan',
+            toolCategory: 'artifact_producing',
+            rawRequest: input,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 

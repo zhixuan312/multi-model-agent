@@ -3,9 +3,9 @@ import { mkdtempSync, realpathSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type { MultiModelConfig, Provider } from '@zhixuan92/multi-model-agent-core';
-import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
-import { EventSchemas } from '../../../packages/core/src/observability/events.js';
-import { EventBus, type EventSink } from '../../../packages/core/src/observability/bus.js';
+import { runTasks } from '@zhixuan92/multi-model-agent-core/lifecycle/task-runner';
+import { EventSchemas } from '../../../packages/core/src/events/observability-events.js';
+import { EventEmitter, type EventSink } from '../../../packages/core/src/events/event-emitter.js';
 
 const BATCH_ID = '00000000-0000-4000-8000-000000000001';
 const TS = '2026-05-02T00:00:00.000Z';
@@ -28,12 +28,12 @@ const factories: Record<string, EventFactory> = {
   stall_abort: () => ({ event: 'stall_abort', ts: TS, batchId: BATCH_ID, taskIndex: 0, idle_ms: 60000, threshold_ms: 30000 }),
   time_check: () => ({ event: 'time_check', ts: TS, batchId: BATCH_ID, taskIndex: 0, stage: 'spec_rework', tripped: true, wallClockMs: 50_000, timeoutMs: 60_000 }),
   cost_check: () => ({ event: 'cost_check', ts: TS, batchId: BATCH_ID, taskIndex: 0, stage: 'spec_rework', tripped: true, cost_used_usd: 8.5, cost_cap_usd: 10, cost_available: true }),
-  task_completed: () => ({ event: 'task_completed', ts: TS, batchId: BATCH_ID, taskIndex: 0, status: 'ok', workerStatus: 'done', turns: 3, durationMs: 25000, filesRead: 5, filesWritten: 2, toolCalls: 7, inputTokens: 500, outputTokens: 200, cachedTokens: 100, reasoningTokens: 50, costUSD: 0.005, taskMaxIdleMs: 5000, stallTriggered: false, stages: JSON.stringify({}) }),
+  task_completed: () => ({ event: 'task_completed', ts: TS, batchId: BATCH_ID, taskIndex: 0, status: 'ok', workerStatus: 'done', turns: 3, durationMs: 25000, filesRead: 5, filesWritten: 2, toolCalls: 7, inputTokens: 500, outputTokens: 250, cachedReadTokens: 80, cachedNonReadTokens: 70, costUSD: 0.005, taskMaxIdleMs: 5000, stallTriggered: false, stages: JSON.stringify({}) }),
   batch_completed: () => ({ event: 'batch_completed', ts: TS, batchId: BATCH_ID, tool: 'delegate', durationMs: 30000, taskCount: 3 }),
   batch_failed: () => ({ event: 'batch_failed', ts: TS, batchId: BATCH_ID, tool: 'delegate', durationMs: 5000, errorCode: 'all_tasks_failed', errorMessage: 'All 3 tasks failed with api_error' }),
   worker_start: () => ({ event: 'worker_start', ts: TS, batchId: BATCH_ID, taskIndex: 0, model: 'claude-sonnet', providerType: 'claude', tier: 'standard' }),
   turn_start: () => ({ event: 'turn_start', ts: TS, batchId: BATCH_ID, taskIndex: 0, turnIndex: 0, providerType: 'claude', model: 'claude-sonnet' }),
-  turn_complete: () => ({ event: 'turn_complete', ts: TS, batchId: BATCH_ID, taskIndex: 0, turnIndex: 0, inputTokens: 500, outputTokens: 200, cachedTokens: 100, reasoningTokens: 50, costUSD: 0.005, durationMs: 3000, providerType: 'claude', model: 'claude-sonnet' }),
+  turn_complete: () => ({ event: 'turn_complete', ts: TS, batchId: BATCH_ID, taskIndex: 0, turnIndex: 0, inputTokens: 500, outputTokens: 250, cachedReadTokens: 80, cachedNonReadTokens: 70, costUSD: 0.005, durationMs: 3000, providerType: 'claude', model: 'claude-sonnet' }),
   tool_call: () => ({ event: 'tool_call', ts: TS, batchId: BATCH_ID, taskIndex: 0, tool: 'read_file', turnIndex: 0 }),
   text_emission: () => ({ event: 'text_emission', ts: TS, batchId: BATCH_ID, taskIndex: 0, chars: 500, turnIndex: 0 }),
   'task.completed': () => ({ event: 'task.completed', ts: TS, route: 'delegate', agentType: 'standard', capabilities: ['web_search', 'web_fetch'], toolMode: 'full', triggeredFromSkill: 'mma-delegate', client: 'claude-code', fileCountBucket: '1-5', durationBucket: '10s-1m', costBucket: '<$0.01', savedCostBucket: '$0', implementerModelFamily: 'claude', implementerModel: 'claude-sonnet', terminalStatus: 'ok', workerStatus: 'done', errorCode: null, escalated: false, fallbackTriggered: false, topToolNames: ['read_file', 'edit_file'], stages: {} }),
@@ -66,11 +66,11 @@ function configFor(provider: Provider): MultiModelConfig {
 export async function runCanonicalRuntimeFixtureAndCaptureEvents(provider: Provider): Promise<Record<string, unknown>[]> {
   const events: Record<string, unknown>[] = [];
   const sink: EventSink = { name: 'capture', emit(event) { events.push(structuredClone(event as Record<string, unknown>)); } };
-  const bus = new EventBus([sink]);
+  const bus = new EventEmitter([sink]);
   const cwd = realpathSync(mkdtempSync(join(tmpdir(), 'mma-telemetry-fixture-')));
 
   await runTasks(
-    [{ prompt: 'implement a tiny change. done when complete.', agentType: 'standard', cwd, reviewPolicy: 'off' } as any],
+    [{ prompt: 'implement a tiny change. done when complete.', agentType: 'standard', cwd, reviewPolicy: 'none' } as any],
     configFor(provider),
     { batchId: randomUUID(), bus, route: 'delegate' },
   );

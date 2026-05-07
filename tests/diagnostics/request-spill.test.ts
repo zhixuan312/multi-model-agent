@@ -1,4 +1,4 @@
-import { spillRequestBody } from '@zhixuan92/multi-model-agent-core/diagnostics/request-spill';
+import { spillRequestBody } from '@zhixuan92/multi-model-agent-core/events/request-spill';
 import { mkdtempSync, readFileSync, rmSync, statSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';

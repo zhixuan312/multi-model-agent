@@ -1,0 +1,243 @@
+{
+  "headline": "explore: 3/3 tasks complete; 0 threads",
+  "results": [
+    {
+      "output": "mocked ok",
+      "status": "ok",
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
+      },
+      "turns": 1,
+      "filesRead": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [
+        {
+          "provider": "mock",
+          "status": "ok",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": null,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": ""
+        }
+      ],
+      "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
+      "workerStatus": "done",
+      "terminationReason": {
+        "cause": "finished",
+        "turnsUsed": 1,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": "done",
+        "wasPromoted": false
+      },
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "readonly",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
+      "structuredReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "models": {
+        "implementer": "mock-model",
+        "specReviewer": null,
+        "qualityReviewer": null
+      }
+    },
+    {
+      "output": "mocked ok",
+      "status": "ok",
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
+      },
+      "turns": 1,
+      "filesRead": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [
+        {
+          "provider": "mock",
+          "status": "ok",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": null,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": ""
+        }
+      ],
+      "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
+      "workerStatus": "done",
+      "terminationReason": {
+        "cause": "finished",
+        "turnsUsed": 1,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": "done",
+        "wasPromoted": false
+      },
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "readonly",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
+      "structuredReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "models": {
+        "implementer": "mock-model",
+        "specReviewer": null,
+        "qualityReviewer": null
+      }
+    },
+    {
+      "output": "mocked ok",
+      "status": "ok",
+      "usage": {
+        "inputTokens": 10,
+        "outputTokens": 20,
+        "cachedReadTokens": 0,
+        "cachedNonReadTokens": 0
+      },
+      "turns": 1,
+      "filesRead": [],
+      "filesWritten": [],
+      "toolCalls": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [
+        {
+          "provider": "mock",
+          "status": "ok",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": null,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": ""
+        }
+      ],
+      "durationMs": "<DETERMINISTIC>",
+      "directoriesListed": [],
+      "workerStatus": "done",
+      "terminationReason": {
+        "cause": "finished",
+        "turnsUsed": 1,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": "done",
+        "wasPromoted": false
+      },
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "none",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
+      "structuredReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "models": {
+        "implementer": "mock-model",
+        "specReviewer": null,
+        "qualityReviewer": null
+      }
+    }
+  ],
+  "batchTimings": {
+    "wallClockMs": "<DETERMINISTIC>",
+    "sumOfTaskMs": "<DETERMINISTIC>",
+    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
+  },
+  "costSummary": {
+    "totalActualCostUSD": 0,
+    "totalCostDeltaVsParentUSD": 0
+  },
+  "structuredReport": {
+    "kind": "not_applicable",
+    "reason": "per-task structured report carried on result"
+  },
+  "error": {
+    "kind": "not_applicable",
+    "reason": "batch succeeded"
+  },
+  "batchId": "<DETERMINISTIC>",
+  "wallClockMs": "<DETERMINISTIC>",
+  "specReviewVerdict": "skipped",
+  "qualityReviewVerdict": "skipped",
+  "roundsUsed": 0
+}

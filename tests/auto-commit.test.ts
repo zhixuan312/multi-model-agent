@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { autoCommitFiles, composeCommitMessage } from '@zhixuan92/multi-model-agent-core/auto-commit';
+import { autoCommitFiles, composeCommitMessage } from '@zhixuan92/multi-model-agent-core/lifecycle/auto-commit';
 
 vi.mock('child_process', () => ({
   execFileSync: vi.fn().mockReturnValue(Buffer.from('abc1234\n')),
