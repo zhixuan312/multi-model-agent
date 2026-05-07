@@ -28,7 +28,7 @@ function defaultResponse(overrides: Record<string, unknown> = {}) {
 describe('OpenAIResponsesAdapter', () => {
   it('maps Responses API usage to canonical 4-field shape with reasoning folded into outputTokens', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: 'You are helpful.',
       userMessage: 'hi',
@@ -54,7 +54,7 @@ describe('OpenAIResponsesAdapter', () => {
         { type: 'function_call', call_id: 'fc_abc123', name: 'read', arguments: '{"path":"/x"}' },
       ],
     }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'read /x',
@@ -73,7 +73,7 @@ describe('OpenAIResponsesAdapter', () => {
       status: 'incomplete',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'truncated' }] }],
     }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -89,7 +89,7 @@ describe('OpenAIResponsesAdapter', () => {
       status: 'cancelled',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'partial' }] }],
     }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -105,7 +105,7 @@ describe('OpenAIResponsesAdapter', () => {
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }],
       status: 'completed',
     });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -118,13 +118,13 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('providerType is always codex', () => {
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'm', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'm' });
     expect(a.providerType).toBe('codex');
   });
 
   it('sends instructions as the system prompt', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     await a.turn({
       systemPrompt: 'You are a helpful coding agent.',
       userMessage: 'read /etc/hosts',
@@ -138,7 +138,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('builds input items with function_call and function_call_output pairs for prior turns', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -183,7 +183,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('stringifies non-string tool results in function_call_output', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -206,7 +206,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('maps tool definitions to Responses API function format', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -226,7 +226,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('omits tools when toolDefinitions is empty', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -248,7 +248,7 @@ describe('OpenAIResponsesAdapter', () => {
       ],
       status: 'completed',
     });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -265,7 +265,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('uses deterministic tool_call_ids across prior turns', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -312,7 +312,7 @@ describe('OpenAIResponsesAdapter', () => {
     const OpenAI = await import('openai');
     mkCreate.mockResolvedValue(defaultResponse());
     const a = new OpenAIResponsesAdapter({
-      apiKey: 'k', baseURL: 'https://chatgpt.com/backend-api/codex', model: 'gpt-5-codex', maxOutputTokens: 4096,
+      apiKey: 'k', baseURL: 'https://chatgpt.com/backend-api/codex', model: 'gpt-5-codex',
     });
     await a.turn({
       systemPrompt: '',
@@ -328,9 +328,9 @@ describe('OpenAIResponsesAdapter', () => {
     });
   });
 
-  it('sends max_output_tokens from constructor', async () => {
+  it('omits max_output_tokens (no token cap; wall-clock + cost are the only worker bounds)', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 8192 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -338,12 +338,12 @@ describe('OpenAIResponsesAdapter', () => {
       toolDefinitions: [],
       capabilities: { cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [] },
     });
-    expect(mkCreate.mock.lastCall[0].max_output_tokens).toBe(8192);
+    expect(mkCreate.mock.lastCall[0].max_output_tokens).toBeUndefined();
   });
 
   it('prior turn without assistantText still emits function_call pairs', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -369,7 +369,7 @@ describe('OpenAIResponsesAdapter', () => {
 
   it('null tool result becomes "null" string in output', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -404,7 +404,7 @@ describe('OpenAIResponsesAdapter', () => {
       ],
       status: 'completed',
     });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',

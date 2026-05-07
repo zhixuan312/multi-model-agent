@@ -5,22 +5,21 @@ export class OpenAIChatAdapter implements RunnerAdapter {
   readonly providerType: 'openai' | 'openai-compatible';
   private client: OpenAI;
   private model: string;
-  private maxOutputTokens: number;
 
   constructor(opts: {
     apiKey: string;
     baseURL?: string;
     model: string;
-    maxOutputTokens: number;
     providerType?: 'openai' | 'openai-compatible';
   }) {
     this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
     this.providerType = opts.providerType ?? 'openai';
     this.model = opts.model;
-    this.maxOutputTokens = opts.maxOutputTokens;
   }
 
   async turn(input: AdapterTurnInput): Promise<AdapterTurnResult> {
+    // No max_completion_tokens — let the model use its full output budget.
+    // Wall-clock + cost ceilings are the only worker bounds.
     const response = await this.client.chat.completions.create({
       model: this.model,
       messages: [
@@ -32,7 +31,6 @@ export class OpenAIChatAdapter implements RunnerAdapter {
         type: 'function' as const,
         function: { name: d.name, description: d.description, parameters: d.schema as Record<string, unknown> },
       })),
-      max_completion_tokens: this.maxOutputTokens,
     });
 
     const reasoning = (response.usage as any)?.completion_tokens_details?.reasoning_tokens ?? 0;
