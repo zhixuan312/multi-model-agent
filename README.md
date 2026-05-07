@@ -32,9 +32,9 @@ Four steps, in order.
 
 ```bash
 npm i -g @zhixuan92/multi-model-agent       # requires Node ≥ 22
-mmagent install-skill                       # auto-detect all clients
+mmagent sync-skills                         # auto-detect all clients (idempotent install + update)
 # or pin a specific target:
-mmagent install-skill --target=claude-code  # claude-code | gemini-cli | codex-cli | cursor
+mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-cli | cursor
 ```
 
 Skills are thin adapters that point your AI client at the running daemon. Once installed, the client has the full tool set with no further setup.
@@ -102,7 +102,7 @@ For a long-running background install (always-on, survives reboots), use [the la
 ```bash
 npm install -g @zhixuan92/multi-model-agent@latest
 pkill -f "mmagent serve"            # stop the running daemon
-mmagent update-skills               # refresh installed skills
+mmagent sync-skills                 # reconcile installed skills with the new bundle
 # next AI-client session respawns the daemon via the skill preflight
 ```
 
@@ -110,7 +110,7 @@ A drift warning prints on `mmagent serve` if installed skills are older than the
 
 ## Skills
 
-Skills are the surface your AI client sees. Installing them with `mmagent install-skill` adds the table below to the client's skill index; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
+Skills are the surface your AI client sees. `mmagent sync-skills` writes the table below into the client's skill index and keeps it reconciled across upgrades; the client then picks the right one based on what you ask. You don't call them by hand — you describe the work, the client routes it.
 
 ### Work-delegation skills
 
@@ -264,8 +264,7 @@ mmagent info  [--json]                           # cliVersion, bind/port, token 
 mmagent status [--json]                          # health + stats from a running daemon
 mmagent logs  [--follow] [--batch=<id>]          # tail today's diagnostic log
 mmagent print-token                              # print the current auth token
-mmagent install-skill [--target=<client>] [--all-targets] [--uninstall]
-mmagent update-skills [--dry-run] [--json]      # refresh installed skills after upgrade
+mmagent sync-skills [--target=<client>] [--all-targets] [--dry-run] [--json]   # idempotent install + update + reconcile
 mmagent telemetry status                         # show consent state + source (env / config / default)
 mmagent telemetry enable                         # opt in (writes ~/.multi-model/config.json)
 mmagent telemetry disable                       # opt out + delete local queue
@@ -289,7 +288,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 |---|---|
 | Port 7337 already in use | `lsof -nP -i :7337` → kill the stale process |
 | Daemon stale after upgrade | `pkill -f "mmagent serve"`; the skill preflight respawns it on next client session |
-| Skill version mismatch | `mmagent update-skills` and restart your client |
+| Skill version mismatch | `mmagent sync-skills` and restart your client |
 | `401 unauthorized` from a skill | `export MMAGENT_AUTH_TOKEN=$(mmagent print-token)` |
 | `pkill` reports success but `mmagent info` still shows the old PID | The pattern didn't match — try `kill <pid-from-mmagent-info>` directly |
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
