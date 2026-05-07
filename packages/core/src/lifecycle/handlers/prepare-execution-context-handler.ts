@@ -1,5 +1,4 @@
 import type { LifecycleState } from '../stage-plan-types.js';
-import type { ExecutionContext } from '../lifecycle-context.js';
 import type { TaskSpec } from '../../types.js';
 
 /**
