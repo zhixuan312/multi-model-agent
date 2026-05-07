@@ -270,6 +270,13 @@
         "handlerKey": "git_commit"
       },
       {
+        "rowId": "5.3.rcb",
+        "stageName": "register_to_block_store",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "register_to_block_store"
+      },
+      {
         "rowId": "5.3",
         "stageName": "compose_response",
         "isRework": false,
@@ -517,6 +524,13 @@
         "handlerKey": "git_commit"
       },
       {
+        "rowId": "5.3.rcb",
+        "stageName": "register_to_block_store",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "register_to_block_store"
+      },
+      {
         "rowId": "5.3",
         "stageName": "compose_response",
         "isRework": false,
@@ -762,6 +776,13 @@
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "5.3.rcb",
+        "stageName": "register_to_block_store",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "register_to_block_store"
       },
       {
         "rowId": "5.3",
