@@ -224,10 +224,6 @@
       "types": "./dist/lifecycle/executors/review.d.ts",
       "import": "./dist/lifecycle/executors/review.js"
     },
-    "./lifecycle/executors/verify": {
-      "types": "./dist/lifecycle/executors/verify.d.ts",
-      "import": "./dist/lifecycle/executors/verify.js"
-    },
     "./lifecycle/task-executor": {
       "types": "./dist/lifecycle/task-executor.d.ts",
       "import": "./dist/lifecycle/task-executor.js"
