@@ -64,7 +64,7 @@ export function asyncDispatch<TResult>(
         // Mark the batch as running so composeRunningHeadline shows
         // "1/1 running, Xs elapsed" instead of "1/1 queued" forever.
         // tasksTotal is a coarse proxy for "some work is underway"; the
-        // per-sub-task counters inside run-tasks track finer progress.
+        // per-sub-task counters inside the lifecycle dispatcher track finer progress.
         const entry = batchRegistry.get(batchId);
         if (entry) {
           entry.tasksTotal = 1;
