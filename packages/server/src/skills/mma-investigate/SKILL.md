@@ -137,7 +137,6 @@ Every finding has the same shape:
   numeric `annotatorConfidence`) or deterministic-fallback (with
   `annotatorConfidence: null`). The route ALWAYS reaches `'annotated'` unless
   the reviewer call itself fails transport.
-- `'skipped'` — kill switch (`MMAGENT_READ_ONLY_REVIEW=disabled`).
 - `'error'` — only when the reviewer call fails transport (network / 5xx).
 
 ### Recommended rendering by the main agent

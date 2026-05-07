@@ -11,7 +11,6 @@ import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
-import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/audit-document.ts ---
@@ -174,9 +173,7 @@ export async function executeAudit(
     const ctxId = autoRegisterContextBlock(results, contextBlockStore);
     const batchTimings = computeTimings(wallClockMs, results);
     const costSummary = computeAggregateCost(results);
-    const flag = resolveReadOnlyReviewFlag();
-    const useQualityReview = flag.isEnabledFor('audit_document');
-    const verdicts = mapReviewVerdicts(results[0], !useQualityReview);
+    const verdicts = mapReviewVerdicts(results[0], false);
 
     return {
       headline: composeTerminalHeadline({ tool: 'audit', tasksTotal: tasks.length, tasksCompleted: results.length }),
@@ -226,9 +223,7 @@ export async function executeAudit(
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
-  const flag2 = resolveReadOnlyReviewFlag();
-  const useQualityReview2 = flag2.isEnabledFor('audit_document');
-  const verdicts = mapReviewVerdicts(result, !useQualityReview2);
+  const verdicts = mapReviewVerdicts(result, false);
 
   return {
     headline: composeTerminalHeadline({ tool: 'audit', tasksTotal: 1, tasksCompleted: results.length }),

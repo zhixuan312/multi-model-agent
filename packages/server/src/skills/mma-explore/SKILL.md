@@ -156,7 +156,7 @@ Every finding has the same shape:
 | `annotatorConfidence` | `number \| null` | 0–100; `null` from deterministic fallback. |
 | `evidenceGrounded` | boolean | True iff `evidence` is verbatim from worker output. |
 
-`qualityReviewVerdict` is `'annotated'` (normal), `'skipped'` (kill switch), or `'error'` (reviewer transport failure). See `mma-investigate` SKILL.md for finding-rendering conventions — same shape.
+`qualityReviewVerdict` is `'skipped'` (explore does not run a quality review pass) or `'error'` (reviewer transport failure). See `mma-investigate` SKILL.md for finding-rendering conventions — same shape.
 
 ## Best practices
 

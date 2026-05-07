@@ -9,7 +9,6 @@ import { notApplicable } from '../../reporting/not-applicable.js';
 import { composeTerminalHeadline } from '../../reporting/compose-terminal-headline.js';
 import { buildDebugQualityPrompt } from '../../review/quality-only-prompts.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
-import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 // --- Ported from packages/mcp/src/tools/debug-task.ts ---
@@ -96,9 +95,7 @@ export async function executeDebug(
   const ctxId = autoRegisterContextBlock(results, contextBlockStore);
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
-  const flag = resolveReadOnlyReviewFlag();
-  const useQualityReview = flag.isEnabledFor('debug_task');
-  const verdicts = mapReviewVerdicts(results[0], !useQualityReview);
+  const verdicts = mapReviewVerdicts(results[0], false);
 
   return {
     headline: composeTerminalHeadline({ tool: 'debug', tasksTotal: 1, tasksCompleted: results.length }),

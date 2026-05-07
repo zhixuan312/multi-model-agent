@@ -15,7 +15,6 @@ import { parseInvestigationReport, type ParsedInvestigation } from '../../report
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { composeInvestigateTerminalHeadline } from '../../reporting/compose-investigate-headline.js';
 import { mapReviewVerdicts } from '../../review/review-verdict-mapping.js';
-import { resolveReadOnlyReviewFlag } from '../../config/read-only-review-flag.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { buildInvestigateQualityPrompt } from '../../review/quality-only-prompts.js';
 
@@ -152,9 +151,7 @@ export async function executeInvestigate(
     ...(derived.incompleteReason !== undefined && { incompleteReason: derived.incompleteReason }),
   });
 
-  const flag = resolveReadOnlyReviewFlag();
-  const useQualityReview = flag.isEnabledFor('investigate_codebase');
-  const reviewVerdicts = mapReviewVerdicts(result, !useQualityReview);
+  const reviewVerdicts = mapReviewVerdicts(result, false);
 
   return {
     headline,
