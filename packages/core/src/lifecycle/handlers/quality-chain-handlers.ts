@@ -78,7 +78,7 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       if (isArtifactProducing) {
         const engine = ctx.reviewerEngine;
@@ -96,7 +96,7 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
             deadlineMs: ctx.timing.deadlineMs,
             ...(ctx.bus && { bus: ctx.bus }),
             ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-            ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+            tier: usedTier,
             stageLabel: 'Quality review',
           });
         } catch (err) {
@@ -117,7 +117,7 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
         deadlineMs: ctx.timing.deadlineMs,
         ...(ctx.bus && { bus: ctx.bus }),
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+        tier: usedTier,
         stageLabel: 'Annotating',
       });
     },
@@ -149,12 +149,12 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
     isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.incompleteReason === undefined,
     getStatus: (r) => r.status,
     makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
-    call: (provider) =>
+    call: (provider, usedTier) =>
       delegateWithEscalation(
         {
           prompt: reworkPrompt,
           cwd: ctx.cwd,
-          agentType: decision.impl,
+          agentType: usedTier,
           briefQualityPolicy: 'off',
           timeoutMs: ctx.timing.timeoutMs,
         },
@@ -163,7 +163,7 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
           explicitlyPinned: true,
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
-          assignedTier: decision.impl,
+          assignedTier: usedTier,
         },
       ),
   });

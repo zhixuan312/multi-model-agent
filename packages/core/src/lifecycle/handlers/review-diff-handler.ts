@@ -80,7 +80,7 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
@@ -92,7 +92,7 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
         deadlineMs: ctx.timing.deadlineMs,
         ...(ctx.bus && { bus: ctx.bus }),
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+        tier: usedTier,
         stageLabel: 'Diff review',
       });
     },

@@ -171,7 +171,7 @@ export async function runWithFallback<T>(
       };
     }
   }
-  const result = await call(provider);
+  const result = await call(provider, usedTier as AgentType);
 
   if (!isTransportFailure(result)) {
     if (!usedIdentity) {
@@ -305,7 +305,7 @@ export async function runWithFallback<T>(
       } : {}),
     };
   }
-  const altResult = await call(altProvider);
+  const altResult = await call(altProvider, altOfUsed);
   if (!usedIdentity) {
     try { usedIdentity = canonicalIdentity(altProvider.config) ?? undefined; } catch { /* leave undefined */ }
   }

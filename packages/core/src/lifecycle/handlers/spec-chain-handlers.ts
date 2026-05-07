@@ -75,7 +75,7 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
@@ -89,7 +89,7 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           deadlineMs: ctx.timing.deadlineMs,
           ...(ctx.bus && { bus: ctx.bus }),
           ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-          ...(ctx.assignedTier !== undefined && { tier: ctx.assignedTier }),
+          tier: usedTier,
           stageLabel: 'Spec review',
         });
       } catch (err) {
@@ -130,12 +130,12 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
     isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.incompleteReason === undefined,
     getStatus: (r) => r.status,
     makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
-    call: (provider) =>
+    call: (provider, usedTier) =>
       delegateWithEscalation(
         {
           prompt: reworkTask.prompt,
           cwd: ctx.cwd,
-          agentType: decision.impl,
+          agentType: usedTier,
           briefQualityPolicy: 'off',
           timeoutMs: ctx.timing.timeoutMs,
         },
@@ -144,7 +144,7 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
           explicitlyPinned: true,
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
-          assignedTier: decision.impl,
+          assignedTier: usedTier,
         },
       ),
   });
