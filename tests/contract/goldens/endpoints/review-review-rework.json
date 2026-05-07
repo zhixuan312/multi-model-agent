@@ -79,7 +79,6 @@
     "sumOfTaskMs": "<DETERMINISTIC>",
     "estimatedParallelSavingsMs": "<DETERMINISTIC>"
   },
-  "contextBlockId": "<DETERMINISTIC>",
   "costSummary": {
     "totalActualCostUSD": 0,
     "totalCostDeltaVsParentUSD": 0
@@ -96,5 +95,6 @@
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "error",
-  "roundsUsed": 1
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

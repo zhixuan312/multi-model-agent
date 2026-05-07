@@ -1,102 +1,24 @@
 {
-  "headline": "verify: 1/1 tasks complete",
-  "results": [
-    {
-      "output": "mock max turns",
-      "status": "incomplete",
-      "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
-        "cachedReadTokens": 0,
-        "cachedNonReadTokens": 0
-      },
-      "turns": 99,
-      "filesRead": [],
-      "filesWritten": [],
-      "toolCalls": [],
-      "outputIsDiagnostic": true,
-      "escalationLog": [
-        {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 99,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
-        }
-      ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "terminationReason": {
-        "cause": "incomplete",
-        "turnsUsed": 99,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": null,
-        "wasPromoted": false
-      },
-      "errorCode": "incomplete",
-      "retryable": false,
-      "implementationReport": {
-        "summary": "mock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "diffReviewStatus": "not_applicable",
-      "commits": [],
-      "agents": {
-        "implementer": "complex",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "structuredReport": {
-        "summary": "mock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "workerStatus": "done",
-      "models": {
-        "implementer": "mock-model",
-        "specReviewer": null,
-        "qualityReviewer": null
-      }
-    }
-  ],
+  "headline": "batch failed",
+  "results": {
+    "kind": "not_applicable",
+    "reason": "batch failed"
+  },
   "batchTimings": {
-    "wallClockMs": "<DETERMINISTIC>",
-    "sumOfTaskMs": "<DETERMINISTIC>",
-    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
+    "kind": "not_applicable",
+    "reason": "batch failed"
   },
   "costSummary": {
-    "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "kind": "not_applicable",
+    "reason": "batch failed"
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "batch failed"
   },
   "error": {
-    "kind": "not_applicable",
-    "reason": "batch succeeded"
-  },
-  "batchId": "<DETERMINISTIC>",
-  "wallClockMs": "<DETERMINISTIC>",
-  "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1
+    "code": "runner_crash",
+    "message": "Cannot read properties of undefined (reading 'filter')",
+    "stack": "TypeError: Cannot read properties of undefined (reading 'filter')\n    at Object.compose (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/reporting/headline-templates/verify.ts:7:30)\n    at executeTask (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/task-executor.ts:180:44)\n    at runInitialImpl (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/stage-handlers.ts:74:20)\n    at LifecycleDriver.run (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-driver.ts:22:7)\n    at LifecycleDispatcher.dispatch (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-dispatcher.ts:75:26)\n    at Object.executor (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/handlers/tools/verify.ts:45:26)\n    at /Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/async-dispatch.ts:74:24"
+  }
 }

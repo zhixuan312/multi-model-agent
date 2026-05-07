@@ -8,7 +8,7 @@ import type { EventEmitter } from '../events/event-emitter.js';
 import { runTaskViaDispatcher } from '../lifecycle/dispatch-task.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { createProvider } from '../providers/provider-factory.js';
-import { computeTimings, computeAggregateCost } from '../lifecycle/executors/shared-compute.js';
+import { computeTimings, computeAggregateCost } from '../lifecycle/shared-compute.js';
 import { notApplicable } from '../reporting/not-applicable.js';
 import {
   compileExplore,
