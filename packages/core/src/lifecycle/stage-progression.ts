@@ -24,6 +24,7 @@
  * "stage progression for these routes" in one place.
  */
 import type { ToolCategory } from '../escalation/escalation-policy.js';
+import type { LifecycleState } from './stage-plan-types.js';
 import { buildStagePlan } from './stage-plan-builder.js';
 
 /** Canonical schemaStage → human-readable label used in `stageLabel` events
@@ -41,20 +42,21 @@ const SCHEMA_STAGE_LABELS: Record<string, string> = {
   finalizing: 'Finalizing',
 };
 
-/** Tool route → ToolCategory. Mirrors task-runner.ts:toolCategoryForRoute.
- *  Keep them in sync; if a divergence appears, treat task-runner as truth
- *  and update here. */
-const ROUTE_TO_CATEGORY: Record<string, ToolCategory> = {
-  delegate:                 'artifact_producing',
-  'execute-plan':           'artifact_producing',
-  retry:                    'artifact_producing',
-  audit:                    'read_only',
-  review:                   'read_only',
-  verify:                   'read_only',
-  debug:                    'read_only',
-  investigate:              'read_only',
-  explore:                  'research',
-  'register-context-block': 'assist',
+/** Tool route → (ToolCategory, default reviewPolicy). Mirrors
+ *  task-runner.ts:toolCategoryForRoute + the reviewPolicy each tool-config
+ *  injects into TaskSpec. Keep in sync; if these drift, the user-facing
+ *  stage bracket will denominator-skew. */
+const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: LifecycleState['reviewPolicy'] }> = {
+  delegate:                 { category: 'artifact_producing', reviewPolicy: 'full' },
+  'execute-plan':           { category: 'artifact_producing', reviewPolicy: 'full' },
+  retry:                    { category: 'artifact_producing', reviewPolicy: 'full' },
+  audit:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
+  review:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
+  verify:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
+  debug:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
+  investigate:              { category: 'read_only',          reviewPolicy: 'quality_only' },
+  explore:                  { category: 'research',           reviewPolicy: 'none' },
+  'register-context-block': { category: 'assist',             reviewPolicy: 'none' },
 };
 
 /** Route-specific overrides for stages that the StagePlan doesn't model
@@ -75,15 +77,55 @@ const ROUTE_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
  *  ramp to completion. Appended to the derived list. */
 const FINALIZING_LABEL = 'Finalizing';
 
-/** Build the user-facing stage label list for a route. The list is the
- *  ordered, distinct sequence of `schemaStage`s that COULD fire on this
- *  route (per the StagePlan), mapped to human labels with route-specific
- *  overrides applied. The denominator (`Y` in `(X/Y)`) is the length. */
-export function stageOrderForRoute(route: string): string[] {
-  const category = ROUTE_TO_CATEGORY[route];
-  if (!category) return [FINALIZING_LABEL];
+/** "Rework-possible happy-path" simulated state. Used to filter StagePlan
+ *  rows by runCondition so the user-facing denominator only counts stages
+ *  that could plausibly fire for this route — not every schemaStage in
+ *  the plan. Verdict flags are set to 'changes_required' so rework rows
+ *  are eligible (the bracket should reflect the maximum reachable
+ *  denominator, not just the happy path). Chain-passed flags are also
+ *  set true so post-chain rows (diff_review / verifying / committing)
+ *  are eligible too. */
+function simulatedStateForRoute(
+  route: string,
+  category: ToolCategory,
+  reviewPolicy: LifecycleState['reviewPolicy'],
+): LifecycleState {
+  return {
+    terminal: false,
+    attemptIndex: 0,
+    attemptBudget: 7,
+    reviewPolicy,
+    shutdownInProgress: false,
+    route,
+    toolCategory: category,
+    // lastRunResult truthy + a non-empty filesWritten so post-impl rows
+    // that gate on artifacts (e.g. 5.2 git_commit) are eligible.
+    lastRunResult: { filesWritten: ['x'] } as unknown as LifecycleState['lastRunResult'],
+    filesChanged: ['x'],
+    // Only artifact_producing routes commit. Setting these correctly here
+    // makes row 5.2 (git_commit) gate off for read_only audit/review/etc.
+    autoCommit: category === 'artifact_producing',
+    readOnlyTask: category === 'read_only',
+    specChainPassed: true,
+    qualityChainPassed: true,
+    specReviewRound1Verdict: 'changes_required',
+    specReviewRound2Verdict: 'changes_required',
+    qualityReviewRound1Verdict: 'changes_required',
+    qualityReviewRound2Verdict: 'changes_required',
+  } as unknown as LifecycleState;
+}
 
-  const plan = buildStagePlan(category);
+/** Build the user-facing stage label list for a route by simulating each
+ *  StagePlan row's runCondition under the route's defaults. Distinct
+ *  schemaStages whose runCondition returns true become the user-facing
+ *  stages, in plan order. Route-specific label overrides + a tail
+ *  "Finalizing" slot give the agent a stable bracket. */
+export function stageOrderForRoute(route: string): string[] {
+  const profile = ROUTE_PROFILE[route];
+  if (!profile) return [FINALIZING_LABEL];
+
+  const plan = buildStagePlan(profile.category);
+  const state = simulatedStateForRoute(route, profile.category, profile.reviewPolicy);
   const seen = new Set<string>();
   const ordered: string[] = [];
   const overrides = ROUTE_LABEL_OVERRIDES[route] ?? {};
@@ -92,13 +134,17 @@ export function stageOrderForRoute(route: string): string[] {
     const schema = row.schemaStage;
     if (!schema) continue;
     if (seen.has(schema)) continue;
+    // Skip rows whose runCondition wouldn't fire for this route's defaults.
+    // E.g. spec_review/spec_rework/diff_review/verifying/committing all
+    // gate on `isAP` — they're absent from the read_only audit denominator.
+    let eligible = false;
+    try { eligible = row.runCondition(state); } catch { eligible = false; }
+    if (!eligible) continue;
     seen.add(schema);
     const label = overrides[schema] ?? SCHEMA_STAGE_LABELS[schema] ?? schema;
     ordered.push(label);
   }
 
-  // Tail "Finalizing" so the bracket reaches Y/Y at terminal even though
-  // no schemaStage row fires last.
   ordered.push(FINALIZING_LABEL);
   return ordered;
 }
