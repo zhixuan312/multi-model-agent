@@ -1,5 +1,5 @@
 import { deriveInvestigateWorkerStatus } from '../../packages/core/src/reporting/derive-investigate-status.js';
-import type { InvestigationParseResult } from '../../packages/core/src/reporting/parse-investigation-report.js';
+import type { InvestigationParseResult } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 function makeValidReport(): InvestigationParseResult {
   return {

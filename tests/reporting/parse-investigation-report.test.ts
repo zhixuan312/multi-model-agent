@@ -1,5 +1,5 @@
 // tests/reporting/parse-investigation-report.test.ts
-import { parseCitations } from '../../packages/core/src/reporting/parse-investigation-report.js';
+import { parseCitations } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 describe('parseCitations', () => {
   it('parses a simple bulleted citation with em-dash', () => {
@@ -68,7 +68,7 @@ describe('parseCitations', () => {
     expect(r.malformedCitationLines).toBe(0);
   });
 });
-import { parseConfidence } from '../../packages/core/src/reporting/parse-investigation-report.js';
+import { parseConfidence } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 describe('parseConfidence', () => {
   it('parses "high — rationale"', () => {
@@ -118,7 +118,7 @@ describe('parseConfidence', () => {
   });
 });
 
-import { parseInvestigationReport } from '../../packages/core/src/reporting/parse-investigation-report.js';
+import { parseInvestigationReport } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
 
 describe('parseInvestigationReport — discriminated union and sectionValidity', () => {
   it('kind=no_structured_report when output is empty', () => {

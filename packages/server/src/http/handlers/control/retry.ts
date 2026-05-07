@@ -6,31 +6,17 @@
 // LifecycleDispatcher).
 //
 // SEE ALSO: handlers/tools/retry.ts (the public /retry route used by
-// the mma-retry skill). Both endpoints share the same executeRetry
-// import; they differ in dispatch policy and pre-validation.
+// the mma-retry skill). Both endpoints share the same toolConfig and
+// executeTask import; they differ in dispatch policy and pre-validation.
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
-import { executeRetry } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/retry';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/retry/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import type { RawHandler } from '../../types.js';
-
-/** Same inject-defaults logic as delegate — fills harness fields from config. */
-function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: TaskSpec[]) => TaskSpec[] {
-  return (tasks: TaskSpec[]) =>
-    tasks.map(t => ({
-      ...t,
-      cwd: t.cwd ?? cwd,
-      tools: t.tools ?? config.defaults?.tools ?? 'full',
-      timeoutMs: t.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000,
-      maxCostUSD: t.maxCostUSD ?? config.defaults?.maxCostUSD ?? 10,
-      sandboxPolicy: t.sandboxPolicy ?? config.defaults?.sandboxPolicy ?? 'cwd-only',
-      mainModel: t.mainModel ?? config.defaults?.mainModel ?? process.env['PARENT_MODEL_NAME'],
-    }));
-}
 
 export function buildRetryHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
@@ -54,9 +40,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
     pc.lastActivityAt = Date.now();
     deps.projectRegistry.cancelReservation(cwd);
 
-    // T4: the protocol exposes one batchId namespace. Validate the exact
-    // registry/delegate id directly in the per-project cache; do not remap via
-    // a terminal envelope's embedded batchId.
     const entry = pc.batchCache.get(input.batchId);
     if (!entry) {
       sendError(res, 404, 'not_found', `Batch ${input.batchId} not found`);
@@ -71,9 +54,27 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        return executeRetry(executionCtx, input, {
-          injectDefaults: makeInjectDefaults(deps.config, cwd),
-        });
+        const batchCache = executionCtx.projectContext!.batchCache;
+        const batch = batchCache.get(input.batchId)!;
+        const subset = input.taskIndices.map((i) => batch.tasks[i]);
+        const retryBatchId = batchCache.remember(executionCtx.batchId!, subset);
+
+        let retryAborted = false;
+        let results: import('@zhixuan92/multi-model-agent-core').RunResult[] = [];
+        try {
+          const result = await executeTask(toolConfig, executionCtx, input);
+          results = Array.isArray(result.results) ? result.results : [];
+          return result;
+        } catch (err) {
+          retryAborted = true;
+          throw err;
+        } finally {
+          if (retryAborted) {
+            try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
+          } else {
+            try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
+          }
+        }
       },
     });
 

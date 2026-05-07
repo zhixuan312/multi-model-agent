@@ -9,36 +9,22 @@
 // SEE ALSO: handlers/control/retry.ts is the protocol-level twin
 // registered at /control/retry — same executor, but synchronous batch
 // validation (404s when the batchId is unknown) and no dispatcher path.
-// The two endpoints exist because the public skill expects async-202
-// semantics while the control surface expects sync validation feedback.
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as retry from '@zhixuan92/multi-model-agent-core/tools/retry/schema';
-import { executeRetry } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/retry';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/retry/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import type { RawHandler } from '../../types.js';
 
-/** Same inject-defaults logic as delegate — fills harness fields from config. */
-function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: TaskSpec[]) => TaskSpec[] {
-  return (tasks: TaskSpec[]) =>
-    tasks.map(t => ({
-      ...t,
-      cwd: t.cwd ?? cwd,
-      tools: t.tools ?? config.defaults?.tools ?? 'full',
-      timeoutMs: t.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000,
-      maxCostUSD: t.maxCostUSD ?? config.defaults?.maxCostUSD ?? 10,
-      sandboxPolicy: t.sandboxPolicy ?? config.defaults?.sandboxPolicy ?? 'cwd-only',
-      mainModel: t.mainModel ?? config.defaults?.mainModel ?? process.env['PARENT_MODEL_NAME'],
-    }));
-}
-
 export function buildRetryHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
     const parsed = retry.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
+      console.error('[retry debug] body:', JSON.stringify(ctx.body));
+      console.error('[retry debug] parse error:', JSON.stringify(parsed.error.flatten()));
       sendError(res, 400, 'invalid_request', 'Request body validation failed', {
         fieldErrors: parsed.error.flatten(),
       });
@@ -49,9 +35,6 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
     const cwd = ctx.cwd!;
 
     // Resolve original batch's toolCategory for dispatcher budget selection.
-    // Missing-batch and invalid-category cases leave originalToolCategory
-    // unset; the dispatcher surfaces the error asynchronously inside the
-    // batch result so retry's 202 stays unconditional.
     let originalToolCategory: 'artifact_producing' | 'read_only' | 'research' | undefined;
     if (deps.routeDispatcher) {
       const original = deps.batchRegistry.get(input.batchId);
@@ -81,9 +64,45 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        const callExecutor = () => executeRetry(executionCtx, input, {
-          injectDefaults: makeInjectDefaults(deps.config, cwd),
-        });
+        const callExecutor = async () => {
+          const batchCache = executionCtx.projectContext!.batchCache;
+
+          const batch = batchCache.get(input.batchId);
+          if (!batch) {
+            throw new Error(
+              `batch "${input.batchId}" is unknown or expired — re-dispatch with full task specs via delegate_tasks`,
+            );
+          }
+          batchCache.touch(input.batchId);
+          for (const i of input.taskIndices) {
+            if (i < 0 || i >= batch.tasks.length) {
+              throw new Error(
+                `index ${i} is out of range for batch ${input.batchId} (size ${batch.tasks.length})`,
+              );
+            }
+          }
+          const subset = input.taskIndices.map((i) => batch.tasks[i]);
+          if (!executionCtx.batchId) throw new Error('retry requires batchId');
+          const retryBatchId = batchCache.remember(executionCtx.batchId, subset);
+
+          let retryAborted = false;
+          let results: import('@zhixuan92/multi-model-agent-core').RunResult[] = [];
+          try {
+            const result = await executeTask(toolConfig, executionCtx, input);
+            results = Array.isArray(result.results) ? result.results : [];
+            return result;
+          } catch (err) {
+            retryAborted = true;
+            throw err;
+          } finally {
+            if (retryAborted) {
+              try { batchCache.abort(retryBatchId); } catch { /* already terminal */ }
+            } else {
+              try { batchCache.complete(retryBatchId, results); } catch { /* already terminal */ }
+            }
+          }
+        };
+
         if (deps.routeDispatcher && originalToolCategory) {
           const result = await deps.routeDispatcher.dispatch({
             route: 'retry',

@@ -1,5 +1,5 @@
 {
-  "headline": "Investigation: \"golden investigate test prompt — echo findings\" — blocked.",
+  "headline": "Investigation: \"Produce a narrative investigation report. Number each findin…\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
       "output": "mocked ok",
@@ -29,7 +29,7 @@
       ],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
-      "workerStatus": "blocked",
+      "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
         "turnsUsed": 1,
@@ -52,7 +52,7 @@
       "commits": [],
       "agents": {
         "implementer": "complex",
-        "implementerToolMode": "readonly",
+        "implementerToolMode": "full",
         "specReviewer": "not_applicable",
         "qualityReviewer": "skipped"
       },
@@ -85,7 +85,7 @@
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "per-task structured report carried on result"
+    "reason": "reportSchema.parse failed for investigate"
   },
   "error": {
     "kind": "not_applicable",
@@ -95,5 +95,6 @@
   "wallClockMs": "<DETERMINISTIC>",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "error",
-  "roundsUsed": 1
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

@@ -2,27 +2,13 @@
 import type { ServerResponse } from 'node:http';
 import type { IncomingMessage } from 'node:http';
 import * as delegate from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
-import { executeDelegate } from '@zhixuan92/multi-model-agent-core/lifecycle/executors/delegate';
-import type { MultiModelConfig, TaskSpec } from '@zhixuan92/multi-model-agent-core';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig } from '@zhixuan92/multi-model-agent-core/tools/delegate/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
 import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
-
-/** Builds injectDefaults for delegate/retry — fills harness-level TaskSpec fields from config. */
-function makeInjectDefaults(config: MultiModelConfig, cwd: string): (tasks: TaskSpec[]) => TaskSpec[] {
-  return (tasks: TaskSpec[]) =>
-    tasks.map(t => ({
-      ...t,
-      cwd: t.cwd ?? cwd,
-      tools: t.tools ?? config.defaults?.tools ?? 'full',
-      timeoutMs: t.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000,
-      maxCostUSD: t.maxCostUSD ?? config.defaults?.maxCostUSD ?? 10,
-      sandboxPolicy: t.sandboxPolicy ?? config.defaults?.sandboxPolicy ?? 'cwd-only',
-      mainModel: t.mainModel ?? config.defaults?.mainModel ?? process.env['PARENT_MODEL_NAME'],
-    }));
-}
 
 export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
   return async (_req: IncomingMessage, res: ServerResponse, _params: Record<string, string>, ctx) => {
@@ -55,20 +41,28 @@ export function buildDelegateHandler(deps: HandlerDeps): RawHandler {
       projectContext: pc,
       deps,
       executor: async (executionCtx) => {
-        const callExecutor = () =>
-          executeDelegate(executionCtx, input, {
-            injectDefaults: makeInjectDefaults(deps.config, cwd),
-          });
+        console.error(`[delegate DEBUG] has routeDispatcher: ${!!deps.routeDispatcher}`);
+        const callExecutor = () => executeTask(toolConfig, executionCtx, input);
         if (deps.routeDispatcher) {
-          const result = await deps.routeDispatcher.dispatch({
-            route: 'delegate',
-            toolCategory: 'artifact_producing',
-            rawRequest: input,
-            executor: () => callExecutor(),
-          });
+          let result;
+          try {
+            result = await deps.routeDispatcher.dispatch({
+              route: 'delegate',
+              toolCategory: 'artifact_producing',
+              rawRequest: input,
+              executor: () => callExecutor(),
+            });
+            console.error(`[delegate DEBUG] dispatch OK, body keys:`, Object.keys(result.body as object || {}));
+          } catch (err) {
+            console.error(`[delegate DEBUG] dispatch ERROR:`, (err as Error).message);
+            throw err;
+          }
           return result.body;
         }
-        return callExecutor();
+        const direct = await callExecutor();
+        console.error(`[delegate DEBUG] direct body keys:`, Object.keys(direct as object));
+        console.error(`[delegate DEBUG] direct body.batchId:`, (direct as any)?.batchId);
+        return direct;
       },
     });
 

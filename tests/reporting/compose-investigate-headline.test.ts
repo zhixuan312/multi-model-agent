@@ -1,4 +1,4 @@
-import { composeInvestigateTerminalHeadline, normalizeHeadlineQuestion } from '../../packages/core/src/reporting/compose-investigate-headline.js';
+import { composeInvestigateTerminalHeadline, normalizeHeadlineQuestion } from '../../packages/core/src/reporting/headline-templates/investigate.js';
 
 describe('normalizeHeadlineQuestion', () => {
   it('collapses runs of whitespace including newlines and NBSP into single spaces', () => {

@@ -50,6 +50,15 @@ export async function executeTask<Input, Brief, Report>(
     config.buildTaskSpec(brief, ctx),
   );
 
+  // Store TaskSpecs in the per-project batch cache so retry can
+  // reconstruct original tasks without re-invoking the brief slot.
+  if (ctx.batchId && ctx.projectContext?.batchCache) {
+    ctx.projectContext.batchCache.remember(ctx.batchId, tasks);
+    console.error(`[executeTask DEBUG] stored ${tasks.length} tasks at batchId=${ctx.batchId}, cache size=${ctx.projectContext.batchCache.size}`);
+  } else {
+    console.error(`[executeTask DEBUG] NOT storing: batchId=${ctx.batchId}, hasPC=${!!ctx.projectContext}, hasBC=${!!ctx.projectContext?.batchCache}`);
+  }
+
   // ── Step 4: Dispatch ──
   const mainModel = ctx.mainModel ?? ctx.config.defaults?.mainModel ?? undefined;
   const startMs = Date.now();

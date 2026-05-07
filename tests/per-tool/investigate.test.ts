@@ -85,9 +85,18 @@ describe('investigate via v4.0 lifecycle', () => {
     expect(result.status).toBe(200);
   });
 
-  it('returns question + answer + citations', async () => {
+  it('returns investigation citations from narrative report', async () => {
     const adapter = mockAdapter({ turns: [
-      { assistantText: '```json\n{"question":"Where is auth logic?","answer":"Auth logic is in src/auth/handler.ts","citations":[{"source":"src/auth/handler.ts","quote":"export function authenticate"}]}\n```', toolCalls: [] },
+      { assistantText: [
+        '## Summary',
+        'Auth logic is in src/auth/handler.ts',
+        '',
+        '## Citations',
+        '- src/auth/handler.ts:42-58 — export function authenticate',
+        '',
+        '## Confidence',
+        'high — all citations verified',
+      ].join('\n'), toolCalls: [] },
       { assistantText: '```json\n{"findings":[]}\n```', toolCalls: [] },
     ] });
 
@@ -104,8 +113,8 @@ describe('investigate via v4.0 lifecycle', () => {
 
     expect(result.status).toBe(200);
     const body: any = result.body;
-    expect(body[0]?.structuredReport?.question).toBe('Where is auth logic?');
-    expect(body[0]?.structuredReport?.citations).toHaveLength(1);
+    expect(body[0]?.structuredReport?.investigation?.citations).toHaveLength(1);
+    expect(body[0]?.structuredReport?.investigation?.citations[0].file).toBe('src/auth/handler.ts');
   });
 
   it('preserves investigate results through annotator pass', async () => {
@@ -204,24 +213,33 @@ describe('investigate via v4.0 lifecycle', () => {
     expect(briefs[0].brief).toContain('Investigate (medium)');
   });
 
-  it('headline template formats results correctly', async () => {
+  it('headline template formats investigation result correctly', async () => {
     const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
     const headline = investigateHeadlineTemplate.compose({
-      report: { question: 'x', answer: 'y', citations: [{ source: 'a.ts', quote: 'q' }, { source: 'b.ts', quote: 'w' }] },
+      report: {
+        kind: 'structured_report',
+        investigation: {
+          citations: [{ file: 'a.ts', lines: '1', claim: 'q' }, { file: 'b.ts', lines: '2', claim: 'w' }],
+          confidence: { level: 'high', rationale: 'verified' },
+          needsCallerClarification: false,
+          diagnostics: { malformedCitationLines: 0, missingRequiredSections: [], invalidRequiredSections: [] },
+        },
+        sectionValidity: { summary: 'valid', citations: 'valid', confidence: 'valid' },
+      },
       status: 'ok',
-      taskBrief: 'investigate x',
+      taskBrief: 'How does auth work?',
     });
-    expect(headline).toBe('[ok] investigate: 2 citations');
+    expect(headline).toBe('Investigation: "How does auth work?" — 2 citations, confidence high, 0 unresolved.');
   });
 
-  it('headline template uses singular for 1 citation', async () => {
+  it('headline template shows blocked on error status', async () => {
     const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
     const headline = investigateHeadlineTemplate.compose({
-      report: { question: 'x', answer: 'y', citations: [{ source: 'a.ts', quote: 'q' }] },
-      status: 'ok',
-      taskBrief: 'investigate x',
+      report: {},
+      status: 'error',
+      taskBrief: 'find the bug',
     });
-    expect(headline).toBe('[ok] investigate: 1 citation');
+    expect(headline).toBe('Investigation: "find the bug" — blocked.');
   });
 
   it('rejects empty question', async () => {

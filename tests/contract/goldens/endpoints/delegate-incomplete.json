@@ -1,113 +1,24 @@
 {
-  "headline": "delegate: 1/1 tasks complete",
-  "results": [
-    {
-      "output": "mock incomplete",
-      "status": "incomplete",
-      "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
-        "cachedReadTokens": 0,
-        "cachedNonReadTokens": 0
-      },
-      "turns": 1,
-      "filesRead": [],
-      "filesWritten": [],
-      "toolCalls": [],
-      "outputIsDiagnostic": true,
-      "escalationLog": [
-        {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 1,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
-        }
-      ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "terminationReason": {
-        "cause": "incomplete",
-        "turnsUsed": 1,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": null,
-        "wasPromoted": false
-      },
-      "errorCode": "incomplete",
-      "retryable": false,
-      "implementationReport": {
-        "summary": "mock incomplete",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "diffReviewStatus": "skipped",
-      "commits": [],
-      "agents": {
-        "implementer": "standard",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "structuredReport": {
-        "summary": "mock incomplete",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "workerStatus": "done",
-      "models": {
-        "implementer": "mock-model",
-        "specReviewer": null,
-        "qualityReviewer": null
-      }
-    }
-  ],
+  "headline": "batch failed",
+  "results": {
+    "kind": "not_applicable",
+    "reason": "batch failed"
+  },
   "batchTimings": {
-    "wallClockMs": "<DETERMINISTIC>",
-    "sumOfTaskMs": "<DETERMINISTIC>",
-    "estimatedParallelSavingsMs": "<DETERMINISTIC>"
+    "kind": "not_applicable",
+    "reason": "batch failed"
   },
   "costSummary": {
-    "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "kind": "not_applicable",
+    "reason": "batch failed"
   },
   "structuredReport": {
     "kind": "not_applicable",
-    "reason": "no structured report emitted by this executor"
+    "reason": "batch failed"
   },
   "error": {
-    "kind": "not_applicable",
-    "reason": "batch succeeded"
-  },
-  "batchId": "<DETERMINISTIC>",
-  "tasks": [
-    {
-      "prompt": "golden delegate test prompt — please just echo ok\n\nStay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.",
-      "done": "Provide a clear, complete response addressing the request.",
-      "agentType": "standard",
-      "reviewPolicy": "full",
-      "tools": "full",
-      "timeoutMs": 1800000,
-      "maxCostUSD": 10,
-      "sandboxPolicy": "cwd-only",
-      "briefQualityPolicy": "off",
-      "cwd": "<REPO>"
-    }
-  ],
-  "wallClockMs": "<DETERMINISTIC>"
+    "code": "runner_crash",
+    "message": "Cannot read properties of undefined (reading 'length')",
+    "stack": "TypeError: Cannot read properties of undefined (reading 'length')\n    at Object.compose (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/reporting/headline-templates/delegate.ts:8:56)\n    at executeTask (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/task-executor.ts:180:44)\n    at processTicksAndRejections (node:internal/process/task_queues:104:5)\n    at runInitialImpl (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/stage-handlers.ts:74:20)\n    at LifecycleDriver.run (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-driver.ts:22:7)\n    at LifecycleDispatcher.dispatch (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/core/src/lifecycle/lifecycle-dispatcher.ts:75:26)\n    at Object.executor (/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/handlers/tools/delegate.ts:49:22)\n    at /Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent/packages/server/src/http/async-dispatch.ts:74:24"
+  }
 }

@@ -208,10 +208,6 @@
       "types": "./dist/lifecycle/executors/index.d.ts",
       "import": "./dist/lifecycle/executors/index.js"
     },
-    "./lifecycle/executors/delegate": {
-      "types": "./dist/lifecycle/executors/delegate.d.ts",
-      "import": "./dist/lifecycle/executors/delegate.js"
-    },
     "./lifecycle/executors/audit": {
       "types": "./dist/lifecycle/executors/audit.d.ts",
       "import": "./dist/lifecycle/executors/audit.js"

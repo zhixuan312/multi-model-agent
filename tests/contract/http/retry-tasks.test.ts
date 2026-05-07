@@ -47,6 +47,12 @@ describe('contract: POST /retry', () => {
         },
         body: JSON.stringify({ batchId: cacheBatchId, taskIndices: [0] }),
       });
+      // debug
+      if (retryRes.status !== 202) {
+        const errBody = await retryRes.text();
+        console.log('RETRY FAILED body:', errBody);
+        console.log('cacheBatchId:', cacheBatchId, typeof cacheBatchId);
+      }
       expect(retryRes.status).toBe(202);
       const { batchId: newBatchId } = (await retryRes.json()) as { batchId: string };
 
