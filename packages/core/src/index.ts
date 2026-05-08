@@ -116,7 +116,6 @@ export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline
 export { compileDelegateTasks, compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
-export { compileReviewCode } from './intake/brief-compiler-slots/review.js';
 export { compileDebugTask } from './intake/brief-compiler-slots/debug.js';
 export { compileVerifyWork } from './intake/brief-compiler-slots/verify.js';
 export { compileExecutePlan } from './intake/brief-compiler-slots/execute-plan.js';
