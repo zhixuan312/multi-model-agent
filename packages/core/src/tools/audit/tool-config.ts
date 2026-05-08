@@ -94,7 +94,7 @@ export function auditBriefSlot(input: Input): ToolAuditBrief[] {
 }
 
 const FINDING_FORMAT_INSTRUCTIONS = [
-  'Produce a narrative audit report. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+  'Produce a narrative audit report. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title>',
   '- Severity: critical | high | medium | low',
@@ -109,7 +109,13 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'Rules:',
   '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
   '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-  '- Do NOT emit JSON. The structured reviewer extracts from this format; if that pass fails the deterministic fallback extracts from this same format — both produce identical structured output, so the format is the single source of truth.',
+  '- Stay within the requested scope. Only cite file:line locations from files you actually read. Do not speculate about files you have not opened.',
+  '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
+].join('\n');
+
+const DELTA_AUDIT_INSTRUCTIONS = [
+  'A prior audit report is provided in the context above. Verify which prior findings have been fixed.',
+  'In your output: **omit** fixed findings; **include** still-present findings (mark "unfixed from prior audit"); **include** new findings; end with a **Fixed** summary line.',
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths: string[]): string {
@@ -128,19 +134,13 @@ function buildPrompt(brief: ToolAuditBrief): string {
     if (fileSection) parts.push(fileSection);
   }
 
+  // Tool sweep #11: emit FINDING_FORMAT_INSTRUCTIONS unconditionally
+  // (pre-fix the DELTA branch dropped them, leaving the worker without
+  // a format spec → annotator could not parse delta-mode output).
   if (brief.hasContextBlocks) {
-    parts.push(
-      'A prior audit report is provided as context above.',
-      'First, verify which prior findings have been fixed. Then perform a full audit as normal — do not skip areas or reduce thoroughness.',
-      'In your output:',
-      '- **Omit** prior findings that have been fixed — do not re-report them.',
-      '- **Include** prior findings that are still present (mark as "unfixed from prior audit").',
-      '- **Include** any new findings not in the prior report.',
-      '- End with a **Fixed** summary listing which prior findings were resolved.',
-    );
-  } else {
-    parts.push(FINDING_FORMAT_INSTRUCTIONS);
+    parts.push(DELTA_AUDIT_INSTRUCTIONS);
   }
+  parts.push(FINDING_FORMAT_INSTRUCTIONS);
 
   return parts.join('\n\n');
 }

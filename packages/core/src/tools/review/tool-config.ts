@@ -54,35 +54,32 @@ function buildReviewPrompt(brief: ReviewBrief): string {
     if (focus && focus.length > 0) parts.push(`Focus areas: ${focus.join(', ')}.`);
   }
 
+  // Tool sweep #11: emit format spec unconditionally (pre-fix the
+  // DELTA branch dropped it, breaking annotator parse on delta runs).
   if (hasContextBlocks) {
     parts.push(
-      'Context is provided above (e.g. a diff or prior review). Perform a full review as normal — do not skip areas or reduce thoroughness.',
-      'If the context contains prior review findings:',
-      '- **Omit** findings that have been addressed — do not re-report them.',
-      '- **Include** findings that are still present (mark as "unfixed from prior review").',
-      '- **Include** any new findings.',
-      '- End with a **Fixed** summary listing which prior findings were resolved.',
-    );
-  } else {
-    parts.push(
-      'Produce a narrative code review. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
-      '',
-      '## Finding 1: <one-line title>',
-      '- Severity: critical | high | medium | low',
-      '- Location: file:line',
-      '- Issue: one-paragraph explanation',
-      '- Suggestion: one-line fix recommendation',
-      '',
-      '## Finding 2: <one-line title>',
-      '- Severity: ...',
-      '- ...',
-      '',
-      'Rules:',
-      '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
-      '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-      '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
+      'A prior review is in the context above. **Omit** addressed findings, **include** still-present ones (mark "unfixed from prior review"), **include** any new findings, and end with a **Fixed** summary.',
     );
   }
+  parts.push(
+    'Produce a narrative code review. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
+    '',
+    '## Finding 1: <one-line title>',
+    '- Severity: critical | high | medium | low',
+    '- Location: file:line',
+    '- Issue: one-paragraph explanation',
+    '- Suggestion: one-line fix recommendation',
+    '',
+    '## Finding 2: <one-line title>',
+    '- Severity: ...',
+    '- ...',
+    '',
+    'Rules:',
+    '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
+    '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
+    '- Stay within the requested scope. Only cite file:line locations from files you actually read.',
+    '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
+  );
 
   return parts.join('\n\n');
 }

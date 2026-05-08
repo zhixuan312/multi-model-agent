@@ -36,10 +36,10 @@ export interface VerifyBrief {
 // ── Prompt builders (lifted from legacy executor) ──
 
 const FINDING_FORMAT_INSTRUCTIONS = [
-  'For each checklist item, use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+  'For each checklist item, use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title (the criterion summary)>',
-  '- Severity: critical | high | medium | low (low = pass; high/medium = fail)',
+  '- Severity: low for PASS, medium or high for FAIL (depending on impact)',
   '- Item: the criterion text',
   '- Result: PASS or FAIL',
   '- Evidence: file:line + what it shows, OR command + output',
@@ -49,9 +49,9 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   '- ...',
   '',
   'Rules:',
-  '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1, one per checklist item.',
+  '- One `## Finding N:` block per checklist item — same count and same order as the checklist. Do not skip items even if they pass trivially.',
   '- Severity / Item / Result / Evidence bullets are on their own lines with the labels exactly as shown.',
-  '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
+  '- Evidence MUST cite a file:line you actually read (or a command you actually ran). Do not fabricate citations.',
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {

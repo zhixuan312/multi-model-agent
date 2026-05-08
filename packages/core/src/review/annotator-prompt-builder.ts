@@ -12,12 +12,64 @@ export class AnnotatorPromptBuilder {
   }
 }
 
+/**
+ * Trim the implementer brief down to the "what was asked" essentials
+ * before sending to the annotator. The annotator does NOT need the
+ * finding-format spec (it has its own format spec via ANNOTATOR_RUBRIC)
+ * or the delta-mode instructions. Sending the full brief wastes
+ * 1-3KB context per call and mildly distracts the model.
+ *
+ * Two prompt shapes covered:
+ *
+ *   1. **Goal-first** (audit / review / verify / debug):
+ *      `<goal + scope>\n\n<format spec at the END>` — slice off the
+ *      format spec, keep everything before it.
+ *
+ *   2. **Spec-first** (investigate): the brief opens with the
+ *      structured-format instructions and ends with `Question: <text>`.
+ *      Pull the question line out as the compact brief.
+ *
+ * If neither shape applies, the brief is returned unchanged.
+ */
+export function trimBriefForAnnotator(brief: string): string {
+  if (typeof brief !== 'string' || brief.length === 0) return brief;
+
+  // Shape 2 (investigate): pull the `Question: ...` line out.
+  const questionMatch = brief.match(/^\s*Question:\s+(.+)$/m);
+  if (questionMatch) {
+    return `Question: ${questionMatch[1].trim()}`;
+  }
+
+  // Shape 1 (audit / review / verify / debug): slice before the first
+  // format-spec marker. Each per-tool implementer prompt structures
+  // the goal at the top, format spec at the bottom — so this gives
+  // the annotator the goal + scope without the duplicated format
+  // instructions.
+  const markers = [
+    /\nProduce a narrative .* report\./i,
+    /\nFor each checklist item, use this EXACT/i,
+    /\nUse hypothesis-driven debugging\./i,
+    /\n## Finding 1:/i,
+    /\nUse this EXACT per-finding format/i,
+  ];
+  let cut = brief.length;
+  for (const m of markers) {
+    const idx = brief.search(m);
+    if (idx >= 0 && idx < cut) cut = idx;
+  }
+  return brief.slice(0, cut).trim();
+}
+
 export function assembleAnnotatorPrompt(template: AnnotatorTemplate, ctx: AnnotatorPromptContext): string {
+  // Tool sweep #11: trim the brief — the format-spec section is
+  // duplicated by ANNOTATOR_RUBRIC below, so sending it again is
+  // redundant + costly.
+  const compactBrief = trimBriefForAnnotator(ctx.brief);
   return `You are reviewing a ${template.role} produced by a worker.
 
 The user requested a ${template.role}. The brief was:
 
-${ctx.brief}
+${compactBrief}
 
 ## On-brief check (per finding)
 
