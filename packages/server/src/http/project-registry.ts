@@ -9,8 +9,8 @@ export type ReserveResult =
 
 /** Storage strategy for the per-project context-block store.
  *  - `file-backed` (default for `npm run serve`): blocks persist to
- *    `<cwd>/.mma/context-blocks/` so they survive daemon restarts. The
- *    Gap 4 fix.
+ *    `~/.multi-model-agent/context-blocks/<sha256(cwd)>/` so they
+ *    survive daemon restarts (Gap 4) without polluting the project tree.
  *  - `in-memory`: tests + ephemeral servers; no filesystem side effects. */
 export type ContextBlockStorageMode = 'file-backed' | 'in-memory';
 
