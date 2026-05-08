@@ -94,6 +94,15 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   briefSlot: reviewBriefSlot,
   buildTaskSpec: (brief, ctx) => {
     const prompt = buildReviewPrompt(brief);
+    // Propagate filePaths + mainModel onto the TaskSpec so the headline
+    // composer can name the file in clean-review headlines and so the
+    // wire telemetry carries main_model attribution. Audit does this
+    // already; review missed it, producing "[ok] review completed"
+    // (no path) even when filePaths was provided. (Tool sweep #2 — gap surfaced
+    // by review batch c24353f6 on packages/core/src/reporting/severity.ts.)
+    const filePaths = brief.filePath
+      ? [brief.filePath]
+      : (brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined);
     return {
       prompt,
       agentType: 'complex',
@@ -106,6 +115,8 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
+      filePaths,
+      mainModel: ctx.mainModel ?? undefined,
       autoCommit: false,
     };
   },
