@@ -139,4 +139,63 @@ describe('review headline composer (4.0.3+ Gap 2)', () => {
 
     expect(headline).toBe('[ok] review /src/auth.ts: 2 findings (1 blocking)');
   });
+
+  // review-tool sweep, Gap A (run id 02af2f9d):
+  // When a clean review finds zero issues, the headline used to fall
+  // back to `[${status}] review: ${taskBrief}` — and taskBrief is just
+  // the route name "review", producing the operator-useless
+  // "[ok] review: review". The fix mirrors audit: use the structured
+  // form whenever a path is known, even with zero findings.
+  it('Gap A: emits "0 findings (0 blocking)" with path when clean review on a file', () => {
+    const task = { prompt: '', filePaths: ['/src/clean.ts'] } as unknown as TaskSpec;
+
+    const headline = reviewHeadlineTemplate.compose({
+      taskBrief: 'review',
+      report: notApplicable('na'),
+      status: 'ok',
+      runResult: { annotatedFindings: [], output: 'No correctness findings identified.' } as unknown as RunResult,
+      task,
+    });
+
+    expect(headline).toBe('[ok] review /src/clean.ts: 0 findings (0 blocking)');
+  });
+
+  it('Gap A: also works when filePath comes from structured report instead of task', () => {
+    const headline = reviewHeadlineTemplate.compose({
+      taskBrief: 'review',
+      report: { filePath: '/from/report.ts', findings: [] },
+      status: 'ok',
+      runResult: { annotatedFindings: [] } as unknown as RunResult,
+    });
+
+    expect(headline).toBe('[ok] review /from/report.ts: 0 findings (0 blocking)');
+  });
+
+  it('Gap A: collapses to "review completed" only when no path AND no findings', () => {
+    // No filePaths on task, no filePath on report, no findings — the
+    // generic-completion fallback. Crucially this is NOT the
+    // "review: review" bug.
+    const headline = reviewHeadlineTemplate.compose({
+      taskBrief: 'review',
+      report: notApplicable('na'),
+      status: 'ok',
+      runResult: { annotatedFindings: [] } as unknown as RunResult,
+    });
+
+    expect(headline).toBe('[ok] review completed');
+  });
+
+  it('Gap A: error status with path still reports structured headline', () => {
+    const task = { prompt: '', filePaths: ['/src/x.ts'] } as unknown as TaskSpec;
+
+    const headline = reviewHeadlineTemplate.compose({
+      taskBrief: 'review',
+      report: notApplicable('na'),
+      status: 'error',
+      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      task,
+    });
+
+    expect(headline).toBe('[error] review /src/x.ts: 0 findings (0 blocking)');
+  });
 });
