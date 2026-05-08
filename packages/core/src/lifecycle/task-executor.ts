@@ -98,6 +98,10 @@ export async function executeTask<Input, Brief, Report>(
       results = [result];
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
+      // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,
+      // including failure envelopes. Pre-fix, error envelopes carried
+      // durationMs:0 — failed runs were invisible in cost-per-time
+      // analysis, retry budgeting, and operator debugging.
       results = [
         {
           output: '',
@@ -113,7 +117,7 @@ export async function executeTask<Input, Brief, Report>(
           error: msg,
           errorCode: 'runner_crash',
           retryable: false,
-          durationMs: 0,
+          durationMs: Date.now() - startMs,
           structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
           workerStatus: 'failed' as const,
         },
@@ -143,6 +147,8 @@ export async function executeTask<Input, Brief, Report>(
           annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
         }).catch((e: unknown): RunResult => {
           const msg = e instanceof Error ? e.message : String(e);
+          // Gap 3 fix (round-2 F5): set durationMs on failure envelopes
+          // so cost-per-time + retry budgeting see real wall-clock.
           return {
             output: '',
             status: 'error' as const,
@@ -157,7 +163,7 @@ export async function executeTask<Input, Brief, Report>(
             error: msg,
             errorCode: 'runner_crash',
             retryable: false,
-            durationMs: 0,
+            durationMs: Date.now() - startMs,
             structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
             workerStatus: 'failed' as const,
           };
@@ -166,6 +172,18 @@ export async function executeTask<Input, Brief, Report>(
     );
   }
   const wallClockMs = Date.now() - startMs;
+
+  // Gap 3 fix (4.0.3+): surface the executor's wall-clock as
+  // result.durationMs on each task. The dispatcher's runResult.durationMs
+  // only covers the implementer's shell.run wall-clock, missing
+  // reviewer/annotator stages. Setting it here means retry callers + the
+  // wire builder's Math.max see the real total. Skip if the result already
+  // has a larger durationMs (e.g., dispatcher tracked something we didn't).
+  for (const r of results) {
+    if (!r.durationMs || r.durationMs < wallClockMs) {
+      (r as { durationMs: number }).durationMs = wallClockMs;
+    }
+  }
 
   // ── Step 5: Auto-register context block ──
   const contextBlockId = autoRegisterContextBlock(results, ctx.contextBlockStore);

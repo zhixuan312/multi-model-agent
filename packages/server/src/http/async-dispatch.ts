@@ -124,11 +124,29 @@ export function asyncDispatch<TResult>(
         batchRegistry.complete(batchId, result);
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
         const durationMs = Date.now() - startedAtMs;
-        deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
-        if (deps.config.diagnostics?.verbose) {
-          process.stdout.write(
-            `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
-          );
+
+        // Gap 5 fix (4.0.3+): inspect the envelope for structured failure
+        // signals. The executor may catch errors and package them into a
+        // result envelope (with structuredError or status='error') instead
+        // of throwing — without this check, batch_completed fires
+        // misleadingly while the verbose log gives operators no signal
+        // that anything went wrong. Detection uses STRUCTURED FIELDS ONLY,
+        // never string comparisons.
+        const failure = detectFailure(resultObj);
+        if (failure) {
+          deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: failure.code, errorMessage: failure.message } as any);
+          if (deps.config.diagnostics?.verbose) {
+            process.stdout.write(
+              `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
+            );
+          }
+        } else {
+          deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
+          if (deps.config.diagnostics?.verbose) {
+            process.stdout.write(
+              `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
+            );
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -153,4 +171,55 @@ export function asyncDispatch<TResult>(
     batchId,
     statusUrl: `/batch/${batchId}`,
   };
+}
+
+/**
+ * Inspect an executor return envelope for structured failure signals.
+ * Returns { code, message } when the envelope indicates failure, null
+ * otherwise.
+ *
+ * Per the Gap 5 fix design (wire-telemetry-gaps plan): NO string
+ * comparison to "batch succeeded". Use only:
+ *   1. Any task result with `structuredError` (most authoritative)
+ *   2. Any task result with `status` other than 'ok'
+ *   3. Envelope-level `error` object whose `kind` is not 'not_applicable'
+ *      (notApplicable() is the structured "no error" sentinel)
+ */
+function detectFailure(envelope: Record<string, unknown> | undefined): { code: string; message: string } | null {
+  if (!envelope) return null;
+
+  const results = Array.isArray(envelope.results) ? envelope.results : [];
+
+  // Source 1: explicit structuredError on any task result
+  for (const r of results as Array<Record<string, unknown>>) {
+    const se = r.structuredError as { code?: string; message?: string } | null | undefined;
+    if (se && typeof se.code === 'string') {
+      return { code: se.code, message: typeof se.message === 'string' ? se.message : se.code };
+    }
+  }
+
+  // Source 2: any task result with status === 'error'.
+  // 'incomplete' is intentionally NOT treated as failure — review-rework
+  // paths can transit through 'incomplete' on intermediate rounds while
+  // the eventual envelope still represents a valid (if imperfect) batch.
+  // Only 'error' and 'failed' are categorical batch-level failures.
+  for (const r of results as Array<Record<string, unknown>>) {
+    const status = r.status;
+    if (typeof status === 'string' && (status === 'error' || status === 'failed')) {
+      const code = (typeof r.errorCode === 'string' && r.errorCode.length > 0) ? r.errorCode : status;
+      const msg = (typeof r.error === 'string' && r.error.length > 0) ? r.error : status;
+      return { code, message: msg };
+    }
+  }
+
+  // Source 3: envelope-level error object with kind != 'not_applicable'
+  const env = envelope.error as { kind?: string; code?: string; message?: string } | undefined;
+  if (env && typeof env.kind === 'string' && env.kind !== 'not_applicable') {
+    return {
+      code: typeof env.code === 'string' ? env.code : 'envelope_error',
+      message: typeof env.message === 'string' ? env.message : 'envelope error',
+    };
+  }
+
+  return null;
 }

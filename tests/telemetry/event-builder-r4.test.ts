@@ -3,11 +3,12 @@ import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-bu
 import { ValidatedTaskCompletedEventSchema } from '../../packages/core/src/events/telemetry-types.js';
 
 describe('Item 12: R4 invariant holds for all event-construction paths', () => {
-  it('keeps totalDurationMs as wall-clock when stage sum exceeds runResult.durationMs', () => {
-    // Salvage-promotion in reviewed-lifecycle can cause stage durations to
-    // double-count overlapping time. The builder must NOT inflate
-    // totalDurationMs to mask the overlap — it must keep wall-clock truth
-    // and proportionally clamp stage durations down.
+  // 4.0.3+ semantics (Gap 3 fix): when stage sum exceeds runResult.durationMs,
+  // totalDurationMs uses max(runResult.durationMs, stageDurationsSum) and
+  // per-stage durations stay truthful (no proportional scale-down). The
+  // earlier behavior — keeping total at wall-clock and shrinking stages —
+  // silently masked the implementer-only durationMs bug Gap 3 fixes.
+  it('uses max(runResult.durationMs, stageSum) as total; stages stay truthful', () => {
     const ctx: any = {
       route: 'delegate',
       taskSpec: {},
@@ -25,24 +26,26 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
     };
     const ev = buildTaskCompletedEvent(ctx);
 
-    // totalDurationMs must be wall-clock truth, NOT inflated to stage sum
-    expect(ev.totalDurationMs).toBe(5000);
+    // total = max(5000, 12000+200) = 12200
+    expect(ev.totalDurationMs).toBe(12200);
 
-    // R4: sum of stage durations must not exceed totalDurationMs
+    // R4: sum of stage durations must not exceed totalDurationMs (now satisfied
+    // self-consistently — total >= sum because Math.max picked sum).
     const sum = ev.stages.reduce((s, st) => s + st.durationMs, 0);
     expect(sum).toBeLessThanOrEqual(ev.totalDurationMs);
 
-    // Individual stages must not exceed total
-    for (const st of ev.stages) {
-      expect(st.durationMs).toBeLessThanOrEqual(ev.totalDurationMs);
-    }
+    // Per-stage durations preserved — no proportional scale-down.
+    const implStage = ev.stages.find(s => s.name === 'implementing')!;
+    expect(implStage.durationMs).toBe(12000);
+    const commitStage = ev.stages.find(s => s.name === 'committing')!;
+    expect(commitStage.durationMs).toBe(200);
 
     // Schema validation must pass R4
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(true);
   });
 
-  it('proportionally scales stages when multiple stages overlap', () => {
+  it('preserves all stage durations truthfully — multi-stage case', () => {
     const ctx: any = {
       route: 'execute-plan',
       taskSpec: {},
@@ -62,16 +65,15 @@ describe('Item 12: R4 invariant holds for all event-construction paths', () => {
     };
     const ev = buildTaskCompletedEvent(ctx);
 
-    // totalDurationMs = wall-clock, not 8000+3000+5000+300 = 16300
-    expect(ev.totalDurationMs).toBe(10000);
+    // totalDurationMs = max(10000, 8000+3000+5000+300) = 16300
+    expect(ev.totalDurationMs).toBe(16300);
 
     const sum = ev.stages.reduce((s, st) => s + st.durationMs, 0);
-    expect(sum).toBeLessThanOrEqual(ev.totalDurationMs);
+    expect(sum).toBe(ev.totalDurationMs);
 
-    // implementing stage should have been scaled largest (proportional)
+    // Per-stage durations preserved — implementing stays at 8000.
     const implStage = ev.stages.find(s => s.name === 'implementing')!;
-    expect(implStage.durationMs).toBeGreaterThan(0);
-    expect(implStage.durationMs).toBeLessThan(8000); // must be reduced from original
+    expect(implStage.durationMs).toBe(8000);
 
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(true);

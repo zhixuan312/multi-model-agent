@@ -39,32 +39,28 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 
   const stages = buildStages(route, runResult);
 
-  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs.
+  // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
+  // is satisfied by Math.max-ing the executor wall-clock against the stage
+  // sum. Pre-fix, runResult.durationMs only covered the implementer's
+  // shell.run — reviewer/annotator wall-clocks were excluded, making
+  // totalDurationMs a fraction of reality. The proportional scale-down
+  // that "fixed" this masked the under-counting by silently shrinking
+  // every per-stage duration to fit. Now:
   //
-  // Use runResult.durationMs as the canonical wall-clock total by default.
-  // Salvage-promotion paths can promote a prior runner's full durationMs
-  // into a single stage, overlapping with other stages and causing Σ
-  // stage.durationMs to exceed the task-level wall clock. When that
-  // happens, proportionally scale stage durations down so the sum fits
-  // within totalDurationMs rather than
-  // inflating the total to mask the double-counting.
+  //   1. Compute the FINAL serialized stage values first (each stage's
+  //      durationMs is already clamped via clampDurationMsStage in
+  //      extractStageData → see line ~233). Per round-2 audit F4: the
+  //      sum MUST be of final serialized values, so post-clamp/round
+  //      drift can't re-introduce R4 violations.
+  //   2. totalDurationMs = max(executor wall-clock, sum of stage durations).
+  //      For sequential v4 stages this picks the stage sum (correct);
+  //      pre-v4 salvage paths still get runResult.durationMs as floor.
+  //   3. NO proportional scale-down. Per-stage durations stay truthful.
+  //      If Σ ever exceeded total in some unforeseen path, we'd want to
+  //      see the bug, not silently mask it.
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
-  const rawTotal = runResult.durationMs ?? stageDurationsSum;
+  const rawTotal = Math.max(runResult.durationMs ?? 0, stageDurationsSum);
   const totalDurationMs = clampDurationMsTotal(rawTotal);
-
-  if (stageDurationsSum > totalDurationMs && stages.length > 0) {
-    const scale = totalDurationMs / stageDurationsSum;
-    let allocated = 0;
-    for (let i = 0; i < stages.length; i++) {
-      const scaled = Math.max(0, Math.floor(stages[i].durationMs * scale));
-      stages[i].durationMs = scaled;
-      allocated += scaled;
-    }
-    // Distribute any remainder to the first stage (always implementing)
-    if (allocated < totalDurationMs) {
-      stages[0].durationMs += totalDurationMs - allocated;
-    }
-  }
 
   // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
   const tierUsage = rollupByTier(stages.map(s => ({
