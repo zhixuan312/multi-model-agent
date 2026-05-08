@@ -17,10 +17,12 @@
  */
 import type { BatchRegistry } from '../stores/batch-registry.js';
 
-// Read-class tools: reads + searches. Write-class: writeFile / write_file.
-// runShell / run_shell are uncategorized and counted only into total tools.
-const READ_TOOLS = new Set(['readFile', 'read_file', 'grep', 'glob', 'listFiles', 'list_files']);
-const WRITE_TOOLS = new Set(['writeFile', 'write_file']);
+// Tool-name sets are centralized in providers/tool-name-sets.ts —
+// historically the sink had WRITE_TOOLS = {writeFile, write_file}
+// while runner-shell had {..., editFile, edit_file}. Drift caused the
+// polling headline to report "0 write" even though `edit_file` modified
+// files. Single source of truth eliminates the risk (Gap 14, 4.0.3+).
+import { READ_TOOL_NAMES as READ_TOOLS, WRITE_TOOL_NAMES as WRITE_TOOLS } from '../providers/tool-name-sets.js';
 
 // Coarse stage ordering per tool route lives in lifecycle/stage-progression.ts
 // (single source of truth, shared with async-dispatch + test fixtures).

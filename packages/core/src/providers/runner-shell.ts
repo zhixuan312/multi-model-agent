@@ -6,13 +6,15 @@ const DEFAULT_CAPABILITIES: AdapterCapabilities = {
   cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [],
 };
 
-// Tool name lookup tables for filesRead/filesWritten attribution. Tools come
-// from different adapters under different snake/camel spellings; treat them
-// as one set so a worker that called `read_file` once shows
-// filesReadCount=1 regardless of which casing the adapter normalized to.
+// Tool-name sets are centralized in `tool-name-sets.ts` so the
+// runner-shell + running-headline-sink can't drift. Note: this
+// runner's READ list is intentionally narrower than the central
+// READ_TOOL_NAMES — runner-shell tracks filesRead by extractable
+// path, and grep/glob/listFiles don't have a single "file" arg. The
+// central set is for the polling headline's read activity counter,
+// which counts every read-class tool call regardless of args.
+import { WRITE_TOOL_NAMES, SHELL_TOOL_NAMES } from './tool-name-sets.js';
 const READ_TOOL_NAMES = new Set(['readFile', 'read_file']);
-const WRITE_TOOL_NAMES = new Set(['writeFile', 'write_file', 'editFile', 'edit_file']);
-const SHELL_TOOL_NAMES = new Set(['runShell', 'run_shell', 'shell', 'bash']);
 
 function extractPathFromToolInput(input: unknown): string | undefined {
   if (typeof input !== 'object' || input === null) return undefined;

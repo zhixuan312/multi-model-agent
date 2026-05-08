@@ -211,12 +211,20 @@ export function recordTaskCompletedHandler(state: LifecycleState): void {
   }
   ensureImplementingStage(last, ctx);
   try {
+    // Gap 15 fix (4.0.3+): thread the per-task reviewPolicy into the
+    // wire BuildContext so the wire row reflects what the lifecycle
+    // actually ran. Pre-fix the BuildContext fell back to the route
+    // default ('full' for delegate, 'quality_only' for read-only),
+    // overriding per-task TaskSpec.reviewPolicy that the lifecycle
+    // had already honored at the row level. Now: per-task wins; the
+    // route default applies only when the task didn't specify.
     recorder.recordTaskCompleted({
       route: ctx.route as Parameters<typeof recorder.recordTaskCompleted>[0]['route'],
       taskSpec: task,
       runResult: last,
       client: ctx.client ?? '',
       mainModel: ctx.mainModel ?? null,
+      ...(task.reviewPolicy !== undefined && { reviewPolicy: task.reviewPolicy }),
     });
   } catch {
     // recorder is best-effort — never break terminal flow on telemetry.
