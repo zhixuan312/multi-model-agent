@@ -276,13 +276,13 @@
       "types": "./dist/tools/investigate/schema.d.ts",
       "import": "./dist/tools/investigate/schema.js"
     },
-    "./tools/explore/schema": {
-      "types": "./dist/tools/explore/schema.d.ts",
-      "import": "./dist/tools/explore/schema.js"
-    },
     "./tools/research/schema": {
       "types": "./dist/tools/research/schema.d.ts",
       "import": "./dist/tools/research/schema.js"
+    },
+    "./tools/research/tool-config": {
+      "types": "./dist/tools/research/tool-config.d.ts",
+      "import": "./dist/tools/research/tool-config.js"
     },
     "./tools/review/schema": {
       "types": "./dist/tools/review/schema.d.ts",

@@ -24,6 +24,11 @@ export function registerResearch(registry: ToolSurfaceRegistry): void {
 
 export interface EnrichedResearchInput extends Input {
   resolvedContextBlocks: ResolvedContextBlock[];
+  /** Operator-configured source descriptors (research.userSources). */
+  userSources: readonly string[];
+  /** True iff research.brave.apiKeys is non-empty (drives the prompt branch
+   *  that says "escalate to web_search"). */
+  hasBrave: boolean;
 }
 
 export interface ResearchBrief {
@@ -36,16 +41,13 @@ export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, Resear
   category: 'research',
   agentType: 'complex',
   briefSlot: (input: EnrichedResearchInput): ResearchBrief[] => {
-    const { task } = compileResearch(
-      input,
-      input.resolvedContextBlocks,
-      // cwd is filled in by buildTaskSpec via ExecutionContext
-      '',
-      {
-        userSources: [],
-        hasBrave: false,
-      },
-    );
+    // cwd is irrelevant to prompt compilation (research is external-only); the
+    // generic executor's buildTaskSpec sets the cwd on the TaskSpec from
+    // ExecutionContext.
+    const { task } = compileResearch(input, input.resolvedContextBlocks, '', {
+      userSources: input.userSources,
+      hasBrave: input.hasBrave,
+    });
     return [{
       compiledPrompt: task.prompt,
       contextBlockIds: input.contextBlockIds ?? [],

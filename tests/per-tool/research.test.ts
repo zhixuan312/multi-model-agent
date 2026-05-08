@@ -20,8 +20,23 @@ describe('research tool config', () => {
       background: 'We currently use a single-pass push parser; want SIMD alternatives.',
       contextBlockIds: [],
       resolvedContextBlocks: [],
+      userSources: [],
+      hasBrave: false,
     });
     expect(briefs).toHaveLength(1);
     expect(briefs[0].compiledPrompt.length).toBeGreaterThan(20);
+  });
+
+  it('briefSlot embeds Brave-search guidance when hasBrave=true', () => {
+    const briefs = toolConfig.briefSlot({
+      researchQuestion: 'What approaches exist for SIMD JSON parsing?',
+      background: 'We currently use a single-pass push parser; want SIMD alternatives.',
+      contextBlockIds: [],
+      resolvedContextBlocks: [],
+      userSources: ['arxiv:cs.PL'],
+      hasBrave: true,
+    });
+    expect(briefs[0].compiledPrompt).toMatch(/web_search/);
+    expect(briefs[0].compiledPrompt).toContain('arxiv:cs.PL');
   });
 });

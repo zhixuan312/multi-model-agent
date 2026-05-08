@@ -1,8 +1,7 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
 import * as research from '@zhixuan92/multi-model-agent-core/tools/research/schema';
-import { compileResearch } from '@zhixuan92/multi-model-agent-core/intake/brief-compiler-slots/research';
-import { runTaskViaDispatcher } from '@zhixuan92/multi-model-agent-core/lifecycle/task-runner';
-import { resolveAgent } from '@zhixuan92/multi-model-agent-core/escalation/agent-resolver';
+import { executeTask } from '@zhixuan92/multi-model-agent-core/lifecycle/task-executor';
+import { toolConfig, type EnrichedResearchInput } from '@zhixuan92/multi-model-agent-core/tools/research/tool-config';
 import { sendError, sendJson } from '../../errors.js';
 import { asyncDispatch } from '../../async-dispatch.js';
 import type { HandlerDeps } from '../../handler-deps.js';
@@ -10,7 +9,7 @@ import { emitRequestReceived } from '../../request-observability.js';
 import type { RawHandler } from '../../types.js';
 
 export function buildResearchHandler(deps: HandlerDeps): RawHandler {
-  return async (req: IncomingMessage, res: ServerResponse, _params, ctx) => {
+  return async (_req: IncomingMessage, res: ServerResponse, _params, ctx) => {
     const parsed = research.inputSchema.safeParse(ctx.body);
     if (!parsed.success) {
       sendError(res, 400, 'invalid_request', 'Request body validation failed', {
@@ -46,6 +45,14 @@ export function buildResearchHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
+    const researchCfg = deps.config.research;
+    const enrichedInput: EnrichedResearchInput = {
+      ...input,
+      resolvedContextBlocks,
+      userSources: researchCfg?.userSources ?? [],
+      hasBrave: (researchCfg?.brave?.apiKeys?.length ?? 0) > 0,
+    };
+
     const { batchId, statusUrl } = asyncDispatch({
       tool: 'research',
       projectCwd: cwd,
@@ -55,30 +62,21 @@ export function buildResearchHandler(deps: HandlerDeps): RawHandler {
       deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
-        const researchConfig = deps.config.research;
-        const hasBrave = (researchConfig?.brave?.apiKeys?.length ?? 0) > 0;
-        const compiled = compileResearch(input, resolvedContextBlocks, cwd, {
-          userSources: researchConfig?.userSources ?? [],
-          hasBrave,
-        });
-        const resolved = resolveAgent('complex', deps.config);
-        return runTaskViaDispatcher({
-          task: compiled.task as any,
-          resolved,
-          config: deps.config,
-          taskIndex: 0,
-          batchId: executionCtx.batchId,
-          recordHeartbeat: executionCtx.recordHeartbeat,
-          logger: executionCtx.logger,
-          recorder: executionCtx.recorder,
-          route: 'research',
-          client: executionCtx.client,
-          bus: executionCtx.bus,
-        });
+        const callExecutor = () => executeTask(toolConfig, executionCtx, enrichedInput);
+        if (deps.routeDispatcher) {
+          const result = await deps.routeDispatcher.dispatch({
+            route: 'research',
+            toolCategory: 'research',
+            rawRequest: enrichedInput,
+            executor: () => callExecutor(),
+          });
+          return result.body;
+        }
+        return callExecutor();
       },
     });
 
-    await emitRequestReceived({ config: deps.config, batchId, route: req.url ?? '', parsed: input });
+    await emitRequestReceived({ config: deps.config, batchId, route: _req.url ?? '', parsed: input });
     sendJson(res, 202, { batchId, statusUrl });
   };
 }

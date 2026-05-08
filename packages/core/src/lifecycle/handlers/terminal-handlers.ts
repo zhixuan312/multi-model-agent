@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { RunResult, TaskSpec } from '../../types.js';
+import { findModelProfile } from '../../config/model-profile-registry.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -242,7 +243,30 @@ export function recordTaskCompletedHandler(state: LifecycleState): void {
  * This is a fallback; it does not replace stats already populated by the
  * runner-shell or lifecycle stage tracker.
  */
-function ensureImplementingStage(rr: RunResult, ctx: { assignedTier?: 'standard' | 'complex' }): void {
+function ensureImplementingStage(
+  rr: RunResult,
+  ctx: {
+    assignedTier?: 'standard' | 'complex';
+    implementerProvider?: { config?: { model?: string } };
+  },
+): void {
+  // Even when no LLM call ever fires (runner_crash, all_tiers_unavailable,
+  // dispatcher-no-result), the configured implementer model is known up
+  // front via ctx.implementerProvider.config. Stamp it into the synthesized
+  // stage and the top-level rr.models so the wire row reports the *intended*
+  // model instead of the literal 'custom' fallback in event-builder.
+  const fallbackModel =
+    (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null;
+  const fallbackFamily = fallbackModel ? findModelProfile(fallbackModel).family : null;
+
+  if (rr.models === undefined && fallbackModel !== null) {
+    (rr as { models?: RunResult['models'] }).models = {
+      implementer: fallbackModel,
+      specReviewer: null,
+      qualityReviewer: null,
+    };
+  }
+
   const existing = (rr.stageStats?.implementing) as { entered?: boolean } | undefined;
   if (existing?.entered) return;
   const usage = rr.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
@@ -252,8 +276,8 @@ function ensureImplementingStage(rr: RunResult, ctx: { assignedTier?: 'standard'
     durationMs: rr.durationMs ?? 0,
     costUSD: rr.cost?.costUSD ?? null,
     agentTier: ctx.assignedTier ?? 'standard',
-    modelFamily: null,
-    model: null,
+    modelFamily: fallbackFamily,
+    model: fallbackModel,
     maxIdleMs: 0,
     totalIdleMs: 0,
     activityEvents: 0,

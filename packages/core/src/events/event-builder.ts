@@ -22,7 +22,7 @@ import {
 } from './clamp.js';
 
 export interface BuildContext {
-  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'register-context-block';
+  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
   client: string;

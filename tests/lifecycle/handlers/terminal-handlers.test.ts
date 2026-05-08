@@ -5,6 +5,7 @@ import {
   emitTaskTerminalHandler,
   persistToBatchRegistryHandler,
   flushTelemetryHandler,
+  recordTaskCompletedHandler,
 } from '../../../packages/core/src/lifecycle/handlers/terminal-handlers.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 import type { ExecutionContext } from '../../../packages/core/src/lifecycle/lifecycle-context.js';
@@ -222,5 +223,124 @@ describe('flushTelemetryHandler', () => {
     const state = makeState({ executionContext: ctx });
     await expect(flushTelemetryHandler(state)).resolves.toBeUndefined();
     expect(state.telemetryFlushed).toBe(true);
+  });
+});
+
+describe('recordTaskCompletedHandler — synthesized stage uses configured model', () => {
+  type RecorderCall = Parameters<NonNullable<ExecutionContext['recorder']>['recordTaskCompleted']>[0];
+
+  function makeRecordingCtx(
+    configuredModel: string,
+    tier: 'standard' | 'complex' = 'standard',
+  ): { ctx: ExecutionContext; calls: RecorderCall[] } {
+    const calls: RecorderCall[] = [];
+    const ctx = makeCtx({
+      assignedTier: tier,
+      implementerProvider: { config: { model: configuredModel } } as ExecutionContext['implementerProvider'],
+    });
+    (ctx as ExecutionContext & { recorder: NonNullable<ExecutionContext['recorder']> }).recorder = {
+      recordTaskCompleted: (params: RecorderCall) => { calls.push(params); },
+    };
+    return { ctx, calls };
+  }
+
+  // The runner_crash construction (task-runner.ts line ~344, task-executor.ts
+  // lines ~110-180) builds a RunResult without stageStats.implementing AND
+  // without rr.models — pre-fix, the synthesizer hardcoded model: null which
+  // event-builder converted to the literal 'custom'. After fix the synthesizer
+  // pulls the configured model from ctx.implementerProvider.config.
+  const runnerCrashRunResult: RunResult = {
+    output: '',
+    status: 'error',
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: true,
+    escalationLog: [],
+    parsedFindings: null,
+    error: 'simulated',
+    errorCode: 'runner_crash',
+    workerStatus: 'failed',
+  } as unknown as RunResult;
+
+  it('stamps the configured model on the synthesized implementing stage when runner crashes', () => {
+    const { ctx, calls } = makeRecordingCtx('deepseek-v4-pro', 'standard');
+    const state = makeState({
+      task: { prompt: 'x' } as TaskSpec,
+      executionContext: ctx,
+      lastRunResult: { ...runnerCrashRunResult },
+    });
+    recordTaskCompletedHandler(state);
+
+    expect(calls).toHaveLength(1);
+    const rr = calls[0]!.runResult as RunResult;
+    const stage = (rr.stageStats as { implementing?: { model?: unknown; modelFamily?: unknown; agentTier?: unknown } } | undefined)?.implementing;
+    expect(stage?.model).toBe('deepseek-v4-pro');
+    expect(stage?.modelFamily).toBe('deepseek');
+    expect(stage?.agentTier).toBe('standard');
+    // Top-level rr.models.implementer also stamped, so event-builder's
+    // implementerModel chain (line 125) finds it before the 'custom' fallback.
+    expect(rr.models?.implementer).toBe('deepseek-v4-pro');
+  });
+
+  it('uses the right family for the complex tier as well', () => {
+    const { ctx, calls } = makeRecordingCtx('gpt-5', 'complex');
+    const state = makeState({
+      task: { prompt: 'x' } as TaskSpec,
+      executionContext: ctx,
+      lastRunResult: { ...runnerCrashRunResult },
+    });
+    recordTaskCompletedHandler(state);
+
+    const rr = calls[0]!.runResult as RunResult;
+    const stage = (rr.stageStats as { implementing?: { model?: unknown; modelFamily?: unknown; agentTier?: unknown } } | undefined)?.implementing;
+    expect(stage?.model).toBe('gpt-5');
+    expect(stage?.modelFamily).toBe('openai');
+    expect(stage?.agentTier).toBe('complex');
+    expect(rr.models?.implementer).toBe('gpt-5');
+  });
+
+  it('does not overwrite an existing entered implementing stage', () => {
+    const { ctx, calls } = makeRecordingCtx('deepseek-v4-pro', 'standard');
+    const lastRunResult = {
+      ...runnerCrashRunResult,
+      status: 'ok',
+      stageStats: {
+        implementing: {
+          stage: 'implementing',
+          entered: true,
+          model: 'gpt-5',
+          modelFamily: 'openai',
+          agentTier: 'complex',
+        },
+      },
+    } as unknown as RunResult;
+    const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx, lastRunResult });
+    recordTaskCompletedHandler(state);
+
+    const rr = calls[0]!.runResult as RunResult;
+    const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;
+    expect(stage?.model).toBe('gpt-5');
+  });
+
+  it('falls back to null model when no provider is wired (preserves pre-fix invariant for that path)', () => {
+    const ctx = makeCtx({ assignedTier: 'standard' });
+    const calls: RecorderCall[] = [];
+    (ctx as ExecutionContext & { recorder: NonNullable<ExecutionContext['recorder']> }).recorder = {
+      recordTaskCompleted: (p: RecorderCall) => { calls.push(p); },
+    };
+    const state = makeState({
+      task: { prompt: 'x' } as TaskSpec,
+      executionContext: ctx,
+      lastRunResult: { ...runnerCrashRunResult },
+    });
+    recordTaskCompletedHandler(state);
+
+    const rr = calls[0]!.runResult as RunResult;
+    const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;
+    expect(stage?.model).toBeNull();
+    expect(rr.models).toBeUndefined();
   });
 });
