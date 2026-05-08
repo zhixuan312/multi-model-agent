@@ -94,10 +94,15 @@ export class RunningHeadlineSink {
     const tierStr = capitalizeTier(next.tier);
     const workerClause = tierStr ? ` by ${tierStr} worker` : '';
     const progress = stageProgress(entry.tool, next.stageLabel);
+    const [progDoneStr, progTotalStr] = progress.split('/');
+    const stageDone = Number(progDoneStr);
+    const stageTotal = Number(progTotalStr);
 
-    // Per-task snapshot. The batch handler prepends `[taskIdx/total] ` and
-    // appends elapsed + stats. Final shape per line:
-    //   [1/2] Implementing by Standard worker (1/7) - 5m 40s, 2 read, 0 write, 15 tool calls
+    // Per-task snapshot. Carries both the legacy pre-rendered prefix/statsClause
+    // (still consumed when no aggregation is possible) AND the structured fields
+    // the batch handler uses to compose ONE aggregated line for batches.
+    // Final single-task shape:
+    //   [1/1] Implementing by Standard worker (1/7) - 5m 40s, 2 read, 0 write, 15 tool calls
     const prefix = `${stage}${workerClause} (${progress}) - `;
     const fallback = `${stage}${workerClause} (${progress})`;
     const statsClause = `, ${read} read, ${write} write, ${total} tool calls`;
@@ -107,6 +112,13 @@ export class RunningHeadlineSink {
       statsClause,
       dispatchedAt: next.startedAt,
       fallback,
+      stageLabel: stage,
+      tier: tierStr,
+      stageDone: Number.isFinite(stageDone) ? stageDone : undefined,
+      stageTotal: Number.isFinite(stageTotal) ? stageTotal : undefined,
+      toolReads: read,
+      toolWrites: write,
+      toolTotal: total,
     });
 
     // Also update the legacy single-snapshot field so any consumer that
@@ -116,6 +128,13 @@ export class RunningHeadlineSink {
       statsClause,
       dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
       fallback,
+      stageLabel: stage,
+      tier: tierStr,
+      stageDone: Number.isFinite(stageDone) ? stageDone : undefined,
+      stageTotal: Number.isFinite(stageTotal) ? stageTotal : undefined,
+      toolReads: read,
+      toolWrites: write,
+      toolTotal: total,
     });
   }
 }

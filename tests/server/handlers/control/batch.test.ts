@@ -250,6 +250,95 @@ describe('GET /batch/:batchId', () => {
     }
   });
 
+  it('multi-task pending batch renders ONE aggregated line with slowest as representative + +K suffix', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false,
+        tasksTotal: 3,
+      });
+      // Three tasks running, each at different stages and counts.
+      // Task 0 dispatched earliest (largest elapsed) → it is the representative.
+      const now = Date.now();
+      s.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
+        prefix: 'Implementing by Standard worker (1/9) - ',
+        statsClause: ', 22 read, 0 write, 22 tool calls',
+        dispatchedAt: now - 360_000, // 6m ago — the laggard
+        fallback: 'Implementing by Standard worker (1/9)',
+        stageLabel: 'Implementing', tier: 'Standard',
+        stageDone: 1, stageTotal: 9,
+        toolReads: 22, toolWrites: 0, toolTotal: 22,
+      });
+      s.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 1, {
+        prefix: 'Reviewing by Complex worker (4/7) - ',
+        statsClause: ', 8 read, 1 write, 14 tool calls',
+        dispatchedAt: now - 130_000,
+        fallback: 'Reviewing by Complex worker (4/7)',
+        stageLabel: 'Reviewing', tier: 'Complex',
+        stageDone: 4, stageTotal: 7,
+        toolReads: 8, toolWrites: 1, toolTotal: 14,
+      });
+      s.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 2, {
+        prefix: 'Verifying by Standard worker (6/8) - ',
+        statsClause: ', 47 read, 3 write, 88 tool calls',
+        dispatchedAt: now - 60_000,
+        fallback: 'Verifying by Standard worker (6/8)',
+        stageLabel: 'Verifying', tier: 'Standard',
+        stageDone: 6, stageTotal: 8,
+        toolReads: 47, toolWrites: 3, toolTotal: 88,
+      });
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(202);
+      const text = await res.text();
+      expect(text).not.toContain('\n'); // ALWAYS one line
+      expect(text).toMatch(/^\[3\/3\] Implementing by Standard worker \(1\/9\) \+2 - /);
+      expect(text).toMatch(/, 77 read, 4 write, 124 tool calls$/); // sums: 22+8+47, 0+1+3, 22+14+88
+    } finally {
+      await s.stop();
+    }
+  });
+
+  it('single-task pending batch renders one line WITHOUT +K suffix (byte-identical shape)', async () => {
+    const s = await startTestServerWithAgents();
+    try {
+      const batchId = randomUUID();
+      s.batchRegistry.register({
+        batchId, projectCwd: '/tmp/test', tool: 'delegate',
+        state: 'pending', startedAt: Date.now(), stateChangedAt: Date.now(),
+        blockIds: [], blocksReleased: false,
+        tasksTotal: 1,
+      });
+      const now = Date.now();
+      s.batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
+        prefix: 'Implementing by Standard worker (1/9) - ',
+        statsClause: ', 22 read, 0 write, 22 tool calls',
+        dispatchedAt: now - 360_000,
+        fallback: 'Implementing by Standard worker (1/9)',
+        stageLabel: 'Implementing', tier: 'Standard',
+        stageDone: 1, stageTotal: 9,
+        toolReads: 22, toolWrites: 0, toolTotal: 22,
+      });
+
+      const res = await fetch(`${s.url}/batch/${batchId}`, {
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
+      });
+      expect(res.status).toBe(202);
+      const text = await res.text();
+      expect(text).not.toContain('\n');
+      expect(text).not.toContain('+'); // no +K suffix when only one running
+      expect(text).toMatch(/^\[1\/1\] Implementing by Standard worker \(1\/9\) - /);
+      expect(text).toMatch(/, 22 read, 0 write, 22 tool calls$/);
+    } finally {
+      await s.stop();
+    }
+  });
+
   it('terminal 200 JSON always includes all 7 envelope fields', async () => {
     const s = await startTestServerWithAgents();
     try {

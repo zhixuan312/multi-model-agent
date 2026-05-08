@@ -17,6 +17,18 @@ export interface HeadlineSnapshot {
   dispatchedAt: number;
   /** Optional fallback headline string for queue / pre-dispatch phases. */
   fallback: string;
+  /** Structured fields for batch aggregation. When present on per-task snapshots,
+   *  the batch handler aggregates them into a single line (slowest task as
+   *  representative + summed counts + "+K" suffix when >1 running) instead of
+   *  rendering one line per task. Optional: writers that don't yet supply these
+   *  still produce a valid (single) headline via prefix/statsClause. */
+  stageLabel?: string;
+  tier?: string;
+  stageDone?: number;
+  stageTotal?: number;
+  toolReads?: number;
+  toolWrites?: number;
+  toolTotal?: number;
 }
 
 /** Lightweight task spec stored in BatchRegistry entries for retry lookups. */
