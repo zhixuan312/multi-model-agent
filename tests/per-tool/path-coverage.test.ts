@@ -12,7 +12,10 @@ import { readdirSync } from 'node:fs';
 // 'verify' per-tool test deleted in Task A3 (legacy-cleanup); active verify
 // integration coverage lives in tests/per-task/verify*.test.ts,
 // tests/contract/http/verify.test.ts, and tests/server/handlers/tools/verify.test.ts.
-const expectedTools = ['delegate', 'execute-plan', 'investigate', 'research', 'retry'];
+// 'delegate' per-tool test deleted in Task A5 (legacy-cleanup); active delegate
+// integration coverage lives in tests/delegate*.test.ts,
+// tests/contract/http/delegate.test.ts, and tests/server/handlers/tools/delegate.test.ts.
+const expectedTools = ['execute-plan', 'investigate', 'research', 'retry'];
 const presentTests = readdirSync(new URL('.', import.meta.url)).filter(f => f.endsWith('.test.ts') && f !== 'path-coverage.test.ts').map(f => f.replace('.test.ts', ''));
 
 describe('per-tool path coverage', () => {

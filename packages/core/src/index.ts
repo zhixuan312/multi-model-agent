@@ -115,7 +115,7 @@ export { findModelProfile, getEffectiveCostTier } from './config/model-profile-r
 export { otherTier } from './config/tier-policy-registry.js';
 
 // Intake pipeline
-export { compileDelegateTasks, compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
+export { compileDelegatePrompt } from './intake/brief-compiler-slots/delegate.js';
 export { compileExecutePlan } from './intake/brief-compiler-slots/execute-plan.js';
 export type { ExecutePlanInput } from './intake/brief-compiler-slots/execute-plan.js';
 export { runIntakePipeline } from './intake/pipeline.js';
@@ -183,8 +183,7 @@ export { AnnotatorEngine } from './review/annotator-engine.js';
 export type { AnnotatorRoute } from './review/annotator-prompt-builder.js';
 
 // Intake-pipeline slots
-export { delegateSlot } from './intake/brief-compiler-slots/delegate.js';
-export type { DelegateInput, DelegateBrief } from './intake/brief-compiler-slots/delegate.js';
+export type { ReviewPolicy } from './intake/brief-compiler-slots/delegate.js';
 export { executePlanSlot } from './intake/brief-compiler-slots/execute-plan.js';
 export type { ExecutePlanBrief } from './intake/brief-compiler-slots/execute-plan.js';
 export { makeRetrySlot } from './intake/brief-compiler-slots/retry.js';
