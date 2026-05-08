@@ -1,5 +1,5 @@
 {
-  "headline": "retry: 1/1 tasks complete",
+  "headline": "[incomplete] retry: 0/1 tasks complete, 1 incomplete",
   "results": [
     {
       "output": "mock incomplete",
@@ -119,5 +119,8 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
+  "specReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "not_applicable",
+  "roundsUsed": 1,
   "retryBatchId": "<DETERMINISTIC>"
 }
