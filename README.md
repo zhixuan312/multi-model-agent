@@ -100,7 +100,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.4",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -299,21 +299,18 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.0.3
+## What's new in 4.0.4
 
-- **Required headers `X-MMA-Main-Model` + `X-MMA-Client` on every tool route.** Telemetry attribution end-to-end now: `client = 'claude-code'` (or codex-cli / gemini-cli / cursor) and `main_model = 'claude-opus-4-7'` (or whatever you set). Server returns `400 main_model_required` / `400 client_required` if missing. Replaces the unreliable daemon-wide `defaults.parentModel` config (removed) and `PARENT_MODEL_NAME` env. The shipped skills set both headers automatically from `MMAGENT_MAIN_MODEL` + `MMAGENT_CLIENT` env vars.
-- **Wire field rename:** `parentModel*` → `mainModel*` (matches the DB column `main_model`). `costDeltaVsParentUSD` → `costDeltaVsMainUSD`, `parentEquivalentCostUSD` → `mainEquivalentCostUSD`. Internal record now matches wire shape 1:1.
-- **Canonical model-name preservation.** `claude-opus-4-7` no longer collapses to `claude-opus` on the wire. Best-effort substring extraction handles arbitrary wrappers (`bedrock.claude-opus-4-7`, `my_router_42_claude-opus-4-7_xyz`, `vertex_ai/anthropic.claude-sonnet-4-6@2024-10-22`).
-- **`contextBlockIds` actually reach the worker prompt.** Round-over-round audit recipes were broken end-to-end pre-4.0.3 — the dispatcher dispatched the unexpanded task. Now: single expanded reference flows through `state.task` and `executionContext.task`. Cache invariant: batch-cache stores the expanded form so retry works after the in-memory store loses entries.
-- **File-backed context blocks survive daemon restarts.** Stored at `<projectCwd>/.mma/context-blocks/<id>.txt` with atomic writes, mode `0700`/`0600`, 7-day TTL, 1 MiB / 100 MiB caps. `.mma/` should go in `.gitignore` (the daemon prints a stderr breadcrumb on first creation).
-- **`totalDurationMs` reflects real wall-clock.** Pre-fix it only covered the implementer's `shell.run`, missing reviewer/annotator stages. Now `max(runResult.durationMs, Σ stageDurations)`. Drops the proportional scale-down that was silently shrinking per-stage durations to mask the bug.
-- **Audit/review/delegate headlines fall back to `runResult.annotatedFindings` / `runResult.filesWritten`.** Pre-fix headlines reported `0 findings (0 high)` and `(0 files)` because workers emit narrative output, not structured JSON.
-- **`batch_failed` fires when the executor packages an error envelope.** Operator visibility — the verbose stream no longer says `batch_completed` while the run actually failed.
-- **`run_shell` write tracking.** Workers writing via `cat >`, `sed -i`, `tee`, etc. now correctly increment the polling headline's write count and `runResult.filesWritten`.
-- **Stage progression denominator derives from `StagePlan`.** Audit shows `(1/3)`, delegate `(1/9)` including reworks, register-context-block `(1/1)`. Single source of truth in `lifecycle/stage-progression.ts`.
-- **Severity helpers split.** `countHighOrCritical` (headline aggregate) vs `bucketFindingsBySeverity` (telemetry exact buckets) — can't be conflated by accident.
+- **Reviewers see the actual diff.** A new `DiffTracker` (snapshot-based, works in non-git directories) captures the pre-task baseline and produces a unified diff at every reviewer call site. Pre-fix every reviewer template (spec / quality / diff) judged the worker's text claim — defaulting to `changes_required` and triggering rework spirals on already-correct work. Now: verdicts must point to specific diff lines.
+- **Coherent prompts via shared rubric.** A new `finding-criteria.ts` is the single source of truth for severity ladder, evidence-grounding, scope discipline, and stage-awareness. Read-only tools share `ANNOTATOR_CHECK_AWARENESS_RO`; artifact-producing tools (delegate / execute-plan) share `REVIEWER_AWARENESS_AP`. Workers self-align with what the reviewer will judge, not against an unstated rubric → cleaner first-round outputs, fewer rework loops.
+- **Lenient JSON parsers** in both `reviewer-output-parser` and `annotator-output-parser`. Accepts ` ```json ` fenced, ` ``` ` (no language tag), bare JSON, and embedded objects/arrays via balanced-brace counting. Caused `verdict: 'error'` and `findings_low: 0` regressions despite valid model output.
+- **Cumulative `filesWritten` across rework rounds.** Pre-fix the implementer's writes were wiped when a no-op rework round overwrote `lastRunResult`. Now unioned across rounds, so the envelope and wire telemetry reflect every successful edit regardless of which round produced it.
+- **Headlines unified across all tools.** Every route now follows `[<status>] <route>: <summary>` (delegate / execute-plan / retry / debug were inconsistent). `execute-plan` (was `execute_plan` snake-case), `retry: N/N tasks complete` now reflects actual per-task status, `debug` carries the file path + finding count.
+- **Implementer system prompt + per-tool prompts hardened.** Worker is told to trust `edit_file`/`write_file` (no defensive re-reads — saves 4-6 min per artifact task on slow models). Read-only tool prompts now include severity calibration, evidence-grounding rules, scope discipline, and stage-awareness so each finding is grounded in evidence the annotator can validate.
+- **Per-tool fixes:** investigate prompt aligned with parser (was producing `0 citations, confidence unparseable`); verify narrative parser + severity wording fixed (`findings_low` now correctly reflects PASS-item count); debug rewritten as proper read-only (PROPOSE the fix, do NOT apply); spec-rework + quality-rework concerns accumulate across rounds so round N+1 can verify prior issues are addressed.
+- **Hardened `firstSentenceOrTruncate`** (off-by-one regex, newline collapse, defensive against invalid `max` values).
 
-**Migration from 4.0.2:** custom HTTP callers must add `X-MMA-Main-Model` and `X-MMA-Client` to every tool-route request. Skills users get this for free after `mmagent sync-skills`. Backend telemetry consumers must update their projection layer to read `mainModel*` field names (was `parentModel*`).
+**Migration from 4.0.3:** none. Wire envelope, schema fields, and route names are unchanged. All improvements are observable as cleaner headlines, faster first-round approvals, and accurate wire telemetry — `npm update` to take the bug fixes.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 
