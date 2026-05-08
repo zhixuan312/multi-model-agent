@@ -73,6 +73,8 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
       autoCommit: false,
+      filePaths: brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined,
+      mainModel: ctx.mainModel ?? undefined,
     };
   },
   reportSchema: { parse: (_text) => { throw new Error('no structured report emitted by this executor'); } },

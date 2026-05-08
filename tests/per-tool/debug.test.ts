@@ -182,13 +182,19 @@ describe('debug_task via v4.0 lifecycle', () => {
   });
 
   it('headline template formats results correctly', async () => {
+    // Tool sweep #4: debug headline now mirrors audit/review/verify.
+    // The composer reads runResult.annotatedFindings (or narrative
+    // fallback). report.rootCause is no longer consulted — debug
+    // never emits a structured report (reportSchema.parse is a thrower).
+    // With no findings and no filePath the composer collapses to
+    // "[<status>] debug completed".
     const { debugHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/debug.js');
     const headline = debugHeadlineTemplate.compose({
       report: { rootCause: 'off-by-one error in loop', hypothesesConsidered: ['a', 'b'], evidenceQuotes: ['line 5'] },
       status: 'ok',
       taskBrief: 'debug crash',
     });
-    expect(headline).toBe('debug: root cause — off-by-one error in loop');
+    expect(headline).toBe('[ok] debug completed');
   });
 
   it('rejects empty problemStatement', async () => {
