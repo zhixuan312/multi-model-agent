@@ -22,6 +22,8 @@
  * `route → toolCategory` mapping mirrors `task-runner.ts:toolCategoryForRoute`
  * — keep in sync. Both maps live in this module so future contributors see
  * "stage progression for these routes" in one place.
+ *
+ * Test fixture: tests/lifecycle/stage-plan-builder.test.ts asserts that stageOrderForRoute() denominators stay stable across plan refactors.
  */
 import type { ToolCategory } from '../escalation/escalation-policy.js';
 import type { LifecycleState } from './stage-plan-types.js';
