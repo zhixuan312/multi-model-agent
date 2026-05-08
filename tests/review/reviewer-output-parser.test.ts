@@ -35,6 +35,34 @@ describe('ReviewerOutputParser.parse — JSON paths', () => {
     expect(parser.parse(text).verdict).toBe('approved');
   });
 
+  it('handles prose with its OWN braces preceding the JSON object', () => {
+    // Prior parser tried firstBrace..lastBrace as a single slice, which
+    // failed on this shape. Tool sweep #6 follow-up: balanced-brace walk.
+    const text = 'The diff matches the brief {expected location} as requested.\n{"verdict":"approved","concerns":[]}';
+    expect(parser.parse(text).verdict).toBe('approved');
+  });
+
+  it('handles JSON object embedded in a longer paragraph', () => {
+    const text = 'Looking at the diff, the comment was added immediately above `export type FindingSeverity` as requested. The change is minimal and matches the brief verbatim, so I am approving. {"verdict":"approved","concerns":[]}';
+    expect(parser.parse(text).verdict).toBe('approved');
+  });
+
+  it('extracts concerns array from JSON embedded in prose', () => {
+    const text = 'Several issues:\n{"verdict":"changes_required","concerns":["missing test","unused import"]}\nPlease address.';
+    const r = parser.parse(text);
+    expect(r.verdict).toBe('changes_required');
+    expect(r.concerns).toEqual(['missing test', 'unused import']);
+  });
+
+  it('handles JSON containing braces inside string values', () => {
+    // Concerns array with JSON-in-string values — the balanced-brace
+    // counter must respect string literals.
+    const text = '{"verdict":"changes_required","concerns":["a {literal} brace inside a string","another {value}"]}';
+    const r = parser.parse(text);
+    expect(r.verdict).toBe('changes_required');
+    expect(r.concerns).toEqual(['a {literal} brace inside a string', 'another {value}']);
+  });
+
   it('case-insensitive verdict values (approve / APPROVED)', () => {
     expect(parser.parse('{"verdict":"approve","concerns":[]}').verdict).toBe('approved');
     expect(parser.parse('{"verdict":"APPROVED","concerns":[]}').verdict).toBe('approved');

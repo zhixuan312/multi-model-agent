@@ -40,23 +40,62 @@ function extractJsonVerdict(text: string): ReviewerVerdict | null {
   const fencedVerdict = fenced ? tryReadVerdict(fenced[1]) : null;
   if (fencedVerdict) return fencedVerdict;
 
-  // Pass 2: first bare JSON object containing a "verdict" key. Use a
-  // greedy {...} match anchored on the first `{` that begins a JSON
-  // object — short responses often contain ONLY the JSON, no prose.
-  // We try progressively-larger candidate slices to handle nested
-  // objects in the concerns array.
-  const firstBrace = text.indexOf('{');
-  if (firstBrace === -1) return null;
-  // Try the trailing slice from each candidate `}` going leftward (the
-  // outermost JSON object's closing brace is the rightmost `}` after
-  // firstBrace). Bounded scan keeps this O(N).
-  for (let end = text.lastIndexOf('}'); end > firstBrace; end = text.lastIndexOf('}', end - 1)) {
-    const candidate = text.slice(firstBrace, end + 1);
+  // Pass 2: scan for the first balanced `{...}` that parses as a JSON
+  // object containing a "verdict" key. Pre-fix the parser only tried
+  // FIRST `{` to LAST `}` — that fails when the text has prose with
+  // its own `{...}` (e.g., "the diff matches {file} criteria...
+  // {"verdict":"approved",...}"). We now walk each `{` left-to-right
+  // and find its matching `}` via balanced-brace counting (string-
+  // literal aware) so prose braces and JSON braces don't collide.
+  return findFirstParseableJsonVerdict(text);
+}
+
+/**
+ * Walk every `{` in `text` from left to right, find its balanced `}`
+ * (respecting strings + escapes), and try to parse the slice as JSON
+ * with a "verdict" field. Returns the first successful match, or null.
+ */
+function findFirstParseableJsonVerdict(text: string): ReviewerVerdict | null {
+  const len = text.length;
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    const end = matchingBrace(text, start);
+    if (end === -1) continue;
+    const candidate = text.slice(start, end + 1);
     if (!/"verdict"\s*:/i.test(candidate)) continue;
-    const verdict = tryReadVerdict(candidate);
-    if (verdict) return verdict;
+    const v = tryReadVerdict(candidate);
+    if (v) return v;
+    // Bound the scan: don't try crazy-large prefixes from the same
+    // position. matchingBrace already returns at most `len`.
+    if (end >= len - 1) break;
   }
   return null;
+}
+
+/**
+ * Return the index of the `}` that balances the `{` at `openPos`,
+ * accounting for nested objects and string literals. Returns -1 when
+ * unbalanced (don't try to parse).
+ */
+function matchingBrace(text: string, openPos: number): number {
+  let depth = 0;
+  let inString = false;
+  let escape = false;
+  for (let i = openPos; i < text.length; i++) {
+    const ch = text[i];
+    if (inString) {
+      if (escape) { escape = false; continue; }
+      if (ch === '\\') { escape = true; continue; }
+      if (ch === '"') { inString = false; continue; }
+      continue;
+    }
+    if (ch === '"') { inString = true; continue; }
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return i;
+    }
+  }
+  return -1;
 }
 
 function readConcernsFromJsonText(text: string): string[] {
@@ -76,11 +115,13 @@ function readConcernsFromJsonText(text: string): string[] {
     const out = tryParse(fenced[1]);
     if (out.length > 0) return out;
   }
-  // Bare JSON fallback (matches extractJsonVerdict's logic).
-  const firstBrace = text.indexOf('{');
-  if (firstBrace === -1) return [];
-  for (let end = text.lastIndexOf('}'); end > firstBrace; end = text.lastIndexOf('}', end - 1)) {
-    const candidate = text.slice(firstBrace, end + 1);
+  // Bare JSON fallback — same balanced-brace walk as extractJsonVerdict
+  // so the two helpers stay in sync. Pre-fix used a fragile first-`{`-
+  // to-last-`}` slice that broke when prose contained `{}`.
+  for (let start = text.indexOf('{'); start !== -1; start = text.indexOf('{', start + 1)) {
+    const end = matchingBrace(text, start);
+    if (end === -1) continue;
+    const candidate = text.slice(start, end + 1);
     if (!/"concerns"\s*:/i.test(candidate)) continue;
     const out = tryParse(candidate);
     if (out.length > 0) return out;
