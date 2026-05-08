@@ -129,6 +129,7 @@ export const toolConfig: ToolConfig<Input, VerifyBrief, unknown> = {
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
       filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
+      mainModel: ctx.mainModel ?? undefined,
     };
   },
   reportSchema: verifyReportSchema,
