@@ -6,6 +6,7 @@
  * findings_high columns.
  */
 
+// canonical severity enum used across audit/review/verify/debug/investigate
 export type FindingSeverity = 'critical' | 'high' | 'medium' | 'low';
 
 const VALID = new Set<FindingSeverity>(['critical', 'high', 'medium', 'low']);

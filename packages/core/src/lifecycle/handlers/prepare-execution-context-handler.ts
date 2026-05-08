@@ -1,5 +1,6 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { TaskSpec } from '../../types.js';
+import { DiffTracker } from '../diff-tracker.js';
 
 /**
  * StageHandler for row 2.5 (prepare_execution_context).
@@ -17,7 +18,7 @@ import type { TaskSpec } from '../../types.js';
  *     so state.task is the per-dispatch task. This handler surfaces task[0]
  *     as a fallback for downstream handlers that need a TaskSpec.
  */
-export function prepareExecutionContextHandler(state: LifecycleState): void {
+export async function prepareExecutionContextHandler(state: LifecycleState): Promise<void> {
   // Fallback: if rawRequest carries a TaskSpec[] and state.task is empty,
   // surface the first task so per-task handlers have something to read.
   if (!state.task) {
@@ -38,4 +39,24 @@ export function prepareExecutionContextHandler(state: LifecycleState): void {
     state.reviewPolicy = task.reviewPolicy;
   }
 
+  // Tool sweep #6: snapshot the worker's declared filePaths BEFORE the
+  // implementer runs so reviewer stages can produce a cumulative diff
+  // against the pre-task baseline. Skip read-only routes (audit / review
+  // / verify / debug / investigate / explore) — they don't write files
+  // by sandbox policy, so a tracker would just be empty noise.
+  if (!state.diffTracker && task && state.toolCategory !== 'read_only') {
+    const cwd = task.cwd;
+    const filePaths = Array.isArray(task.filePaths) ? task.filePaths : [];
+    if (cwd && filePaths.length > 0) {
+      const tracker = new DiffTracker(cwd);
+      try {
+        await tracker.snapshot(filePaths);
+        state.diffTracker = tracker;
+      } catch {
+        // Snapshot failures (permission, unreadable) shouldn't block the
+        // task. Reviewer just sees an empty diff and falls back to the
+        // worker-output-only path — degraded but not broken.
+      }
+    }
+  }
 }

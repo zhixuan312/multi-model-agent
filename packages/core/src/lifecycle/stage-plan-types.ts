@@ -122,6 +122,21 @@ export interface LifecycleState {
   lastRunResult?: unknown;
   verifyResult?: unknown;
   commits?: unknown;
+  /**
+   * Snapshot-based diff tracker. Captured before the implementer runs;
+   * used at every reviewer call site to produce a cumulative unified
+   * diff (every change since task start) so reviewers can ground their
+   * verdicts in evidence rather than the worker's prose claim.
+   * Tool sweep #6.
+   */
+  diffTracker?: import('./diff-tracker.js').DiffTracker;
+  /**
+   * Concerns flagged by spec_review rounds 1..N. Round N+1's reviewer
+   * receives them so it can verify the rework addressed each.
+   */
+  priorSpecConcerns?: string[];
+  /** Same as priorSpecConcerns but for the quality review chain. */
+  priorQualityConcerns?: string[];
   commitError?: string;
   stageStats?: unknown;
   terminalRunResult?: unknown;

@@ -94,6 +94,12 @@ export function buildAdapter(agentConfig: {
 const SYSTEM_PROMPT = [
   'You are a software engineering agent with access to file-system and shell tools.',
   'Work step-by-step. Read files before editing them.',
+  // Tool sweep #6: the spec / quality / diff reviewer stages now see the
+  // cumulative diff against the pre-task baseline. The implementer no
+  // longer needs to verify its own edits — the reviewers will check the
+  // actual change. Skipping post-edit re-reads typically saves 4-6
+  // minutes per task on slow models.
+  'Trust edit_file/write_file: if the tool returns without an error, the edit applied. Do NOT re-read a file just to verify your own successful edit.',
   'When you have completed the task, produce a final answer summarizing what you did.',
 ].join('\n');
 
