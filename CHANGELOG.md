@@ -5,6 +5,28 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.4] - 2026-05-08
+
+### Fixed
+
+- **DiffTracker (NEW: `lifecycle/diff-tracker.ts`) — give reviewers actual diff evidence.** Pre-fix every reviewer template (spec / quality / diff) saw only `Task: <brief>` + `Worker output: <text>` and judged the worker's CLAIM rather than the actual change on disk — defaulting to `changes_required` and triggering endless rework spirals on already-correct work. Snapshot-based (works in non-git directories), captures pre-task baseline and produces unified-diff output (Myers-style line LCS) on demand, capped at 50KB with truncation marker. Reviewer templates rewritten to receive `diff` + `priorConcerns` fields so verdicts must point to specific diff lines.
+- **Coherent prompts via shared finding-quality rubric (NEW: `review/templates/finding-criteria.ts`).** Pre-fix the implementer prompts didn't share the annotator's rubric, so workers emitted weak narrative (miscalibrated severity, unsupported claims, speculative scope) and the annotator had to either downgrade everything or rubber-stamp. Single source of truth for severity ladder, evidence-grounding, scope discipline, and stage-awareness criteria. Read-only tools (audit / review / verify / debug / investigate) get `ANNOTATOR_CHECK_AWARENESS_RO`; artifact-producing tools (delegate / execute-plan) get `REVIEWER_AWARENESS_AP` describing the spec + quality reviewer rubric. Workers self-align with what each reviewer will judge → cleaner first-round outputs → fewer rework spirals.
+- **Lenient JSON parsers (`reviewer-output-parser.ts` + `annotator-output-parser.ts`).** Both parsers were too strict (only ` ```json ` fenced blocks). Some models emit bare JSON, fenced without a language tag, or arrays/objects embedded in prose. Parsers now walk three shapes with balanced-brace counting (string-literal aware): fenced ```json``` → fenced ``` (no lang) → bare `{...}`/`[...]` anywhere in the text. Caused `verdict: 'error'` and `findings_low: 0` regressions despite valid annotator output.
+- **`replaceLastRunResultPreservingTrackers` (`merge-stage-stats.ts`) — cumulative `filesWritten` across rework rounds.** Pre-fix the spec/quality chain handlers replaced `state.lastRunResult` wholesale on every rework round (only `stageStats` preserved), so the implementer's `filesWritten=['x.ts']` was wiped when a no-op rework round ran. Envelope showed `filesWritten=[]` despite the file having been modified on disk; downstream `qualityReviewStatus` collapsed to "no file artifacts to review". Now: union `filesRead` / `filesWritten` / `toolCalls` arrays across rounds.
+- **Headlines unified across all tools.** `delegate`, `execute-plan`, `retry`, `debug` headlines now follow the same `[<status>] <route>: <summary>` format as `audit` / `review` / `verify`. Pre-fix `execute_plan:` (snake-case), `retry: N/N tasks complete` (no status prefix, never reflected actual outcome), `debug: 1/1 tasks complete` (no status prefix, no findings count) all diverged from operator-facing convention.
+- **Investigate prompt aligned with parser.** Pre-fix the implementer prompt asked for a numbered-narrative format but the parser expected `## Summary / ## Citations / ## Confidence` sections — every investigation reported `0 citations, confidence unparseable`. Prompt rewritten to request the exact section format the parser handles. Brief field renamed (`prompt` → `compiledPrompt`) so the headline reads the user's actual question, not the prompt template instructions.
+- **Verify narrative parser + severity wording.** `verifyReportSchema` now accepts both JSON blocks and `## Finding N:` narrative (the prompt explicitly says "Do NOT emit JSON"). Severity field changed from `Severity: low for PASS, medium or high for FAIL` (which produced literal value `low for PASS` that the annotator's enum normalizer rejected) back to `Severity: critical | high | medium | low (use 'low' for PASS items)`. Wire `findings_low` now correctly reflects PASS-item count.
+- **Spec-rework + quality-rework concerns accumulated across rounds.** New `priorSpecConcerns` / `priorQualityConcerns` slots on `LifecycleState` carry concerns from earlier rounds into later ones, so round N+1's reviewer can verify the rework addressed prior issues rather than re-deriving them.
+- **`headline-text.firstSentenceOrTruncate` hardened.** Off-by-one regex bug (could return `safeMax+1` chars), newline collapse before sentence detection, defense against invalid `max` values (NaN / Infinity / 0 / negative all coerced to safe defaults).
+- **Per-tool `filePaths` + `mainModel` propagation onto `TaskSpec`.** Review / verify / debug / investigate `buildTaskSpec` were dropping `ctx.mainModel` and (in some cases) `brief.filePaths`, so the headline composer couldn't name the file and wire telemetry was missing main-model attribution. Audit had this right; the others now match.
+- **Implementer system prompt: trust `edit_file`/`write_file`.** Workers were defensively re-reading files after successful `edit_file` calls — wasted 4-6 minutes per artifact-producing task on slow models. New rule: "if the tool returns without an error, the edit applied. Do NOT re-read a file just to verify your own successful edit."
+- **Retry headline + verdict preservation.** `postProcessEnvelope` previously hard-coded `retry: N/N tasks complete` regardless of actual per-task status, hiding `review_loop_capped` outcomes from operators. Now aggregates ok/incomplete/error counts and emits a status-prefixed headline; preserves `specReviewVerdict` / `qualityReviewVerdict` / `roundsUsed` on the envelope.
+- **Debug rewritten as proper read-only.** `done` clause and finding format both said "Verify the fix resolves the problem" — but debug is read-only and can't apply fixes. Now: "PROPOSE the fix; do NOT apply it; the caller decides whether to apply." Cap of 3-5 most-likely hypotheses (was unbounded).
+
+### Removed
+
+- **Dead investigate compilers.** `intake/brief-compiler-slots/investigate.ts` exported `compileInvestigate` and `investigateSlot` with no production callers — only three test files exercised them. Deleted (per dev-mode rule "delete unused code"). New minimal `tests/per-tool/investigate.test.ts` exercises the actual production `toolConfig.briefSlot` to keep `path-coverage.test.ts` green.
+
 ## [4.0.3] - 2026-05-08
 
 ### Fixed
@@ -1338,7 +1360,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.4...HEAD
+[4.0.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.0...v4.0.1
