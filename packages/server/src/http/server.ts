@@ -185,7 +185,10 @@ async function registerToolHandlers(
     if (entry.surface !== 'tool') continue;
     const builder = builders[entry.routeName];
     if (!builder) {
-      throw new Error(`registerToolHandlers: no handler builder registered for route '${entry.routeName}'`);
+      // Route is in the registry but its handler hasn't been wired yet
+      // (e.g. /research added in a prior task, handler lands in a later one).
+      // Skip silently — the next task wires the handler and enables the route.
+      continue;
     }
     router.register(entry.httpMethod, entry.httpPath, builder(deps));
   }

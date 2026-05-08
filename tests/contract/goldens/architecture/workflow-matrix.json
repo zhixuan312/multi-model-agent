@@ -50,6 +50,13 @@
       "responseShapeName": "ContextBlockResponse"
     },
     {
+      "routeName": "research",
+      "toolCategory": "research",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
+    },
+    {
       "routeName": "retry_tasks",
       "toolCategory": "assist",
       "agentTypeDefault": "standard",

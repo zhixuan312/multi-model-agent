@@ -39,6 +39,7 @@ export const RouteEnum = z.enum([
   'investigate', 'explore',
   'explore_internal', 'explore_external', 'explore_synthesize',
   'register-context-block',
+  'research',
 ]);
 
 export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai', 'openai-compatible', 'codex']);
