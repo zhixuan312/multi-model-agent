@@ -1,7 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { RunResult } from '../../types.js';
+import type { RunResult, TaskSpec } from '../../types.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -65,8 +65,75 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     return;
   }
   const last = state.lastRunResult as RunResult | undefined;
-  const usage = last?.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
-  const stages = JSON.stringify({});
+
+  // Sum tokens / counts across every recorded stage so the local task_completed
+  // event carries the FULL cost (implementer + reviewer + annotator + rework
+  // + diff). Previously this read last.usage directly which only carried the
+  // implementer tokens — reviewer / annotator costs were dropped.
+  let inputTokens = 0;
+  let outputTokens = 0;
+  let cachedReadTokens = 0;
+  let cachedNonReadTokens = 0;
+  let totalCostUSD: number | null = null;
+  let toolCallsTotal = 0;
+  let turnsTotal = 0;
+  let filesReadTotal = 0;
+  let filesWrittenTotal = 0;
+  const ss = (last as { stageStats?: Record<string, Record<string, unknown>> } | undefined)?.stageStats;
+  if (ss) {
+    for (const stage of Object.values(ss)) {
+      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
+      inputTokens += (stage['inputTokens'] as number | null | undefined) ?? 0;
+      outputTokens += (stage['outputTokens'] as number | null | undefined) ?? 0;
+      cachedReadTokens += (stage['cachedReadTokens'] as number | null | undefined) ?? 0;
+      cachedNonReadTokens += (stage['cachedNonReadTokens'] as number | null | undefined) ?? 0;
+      toolCallsTotal += (stage['toolCallCount'] as number | null | undefined) ?? 0;
+      turnsTotal += (stage['turnCount'] as number | null | undefined) ?? 0;
+      filesReadTotal += (stage['filesReadCount'] as number | null | undefined) ?? 0;
+      filesWrittenTotal += (stage['filesWrittenCount'] as number | null | undefined) ?? 0;
+      const stageCost = stage['costUSD'] as number | null | undefined;
+      if (stageCost !== null && stageCost !== undefined) {
+        totalCostUSD = (totalCostUSD ?? 0) + stageCost;
+      }
+    }
+  }
+  // Fallback to last.usage when stageStats wasn't populated (legacy paths).
+  if (inputTokens === 0 && outputTokens === 0 && last?.usage) {
+    inputTokens = last.usage.inputTokens ?? 0;
+    outputTokens = last.usage.outputTokens ?? 0;
+    cachedReadTokens = last.usage.cachedReadTokens ?? 0;
+    cachedNonReadTokens = last.usage.cachedNonReadTokens ?? 0;
+  }
+  if (turnsTotal === 0) turnsTotal = last?.turns ?? 0;
+  if (toolCallsTotal === 0) toolCallsTotal = Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0;
+  if (filesReadTotal === 0) filesReadTotal = Array.isArray(last?.filesRead) ? last!.filesRead.length : 0;
+  if (filesWrittenTotal === 0) filesWrittenTotal = Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0;
+
+  // Emit a per-stage map so consumers see the breakdown without unpacking
+  // RunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
+  // turnCount, toolCallCount, durationMs, tier, model, verdict? }.
+  const stagesMap: Record<string, Record<string, unknown>> = {};
+  if (ss) {
+    for (const [name, stage] of Object.entries(ss)) {
+      if (!stage || !(stage['entered'] as boolean | undefined)) continue;
+      stagesMap[name] = {
+        inputTokens: stage['inputTokens'] ?? 0,
+        outputTokens: stage['outputTokens'] ?? 0,
+        cachedReadTokens: stage['cachedReadTokens'] ?? 0,
+        cachedNonReadTokens: stage['cachedNonReadTokens'] ?? 0,
+        costUSD: stage['costUSD'] ?? null,
+        turnCount: stage['turnCount'] ?? 0,
+        toolCallCount: stage['toolCallCount'] ?? 0,
+        durationMs: stage['durationMs'] ?? null,
+        agentTier: stage['agentTier'] ?? null,
+        model: stage['model'] ?? null,
+        ...(stage['verdict'] !== undefined && { verdict: stage['verdict'] }),
+        ...(stage['roundsUsed'] !== undefined && { roundsUsed: stage['roundsUsed'] }),
+      };
+    }
+  }
+  const stages = JSON.stringify(stagesMap);
+
   bus.emit({
     event: 'task_completed',
     ts: new Date().toISOString(),
@@ -75,16 +142,16 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     route: state.route,
     status: last?.status ?? 'error',
     workerStatus: last?.workerStatus ?? null,
-    turns: last?.turns ?? 0,
+    turns: turnsTotal,
     durationMs: last?.durationMs ?? null,
-    filesRead: Array.isArray(last?.filesRead) ? last!.filesRead.length : 0,
-    filesWritten: Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0,
-    toolCalls: Array.isArray(last?.toolCalls) ? last!.toolCalls.length : 0,
-    inputTokens: usage.inputTokens ?? 0,
-    outputTokens: usage.outputTokens ?? 0,
-    cachedReadTokens: usage.cachedReadTokens ?? 0,
-    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
-    costUSD: null,
+    filesRead: filesReadTotal,
+    filesWritten: filesWrittenTotal,
+    toolCalls: toolCallsTotal,
+    inputTokens,
+    outputTokens,
+    cachedReadTokens,
+    cachedNonReadTokens,
+    costUSD: totalCostUSD,
     taskMaxIdleMs: null,
     stallTriggered: false,
     stages,
@@ -118,6 +185,91 @@ export function persistToBatchRegistryHandler(state: LifecycleState): void {
     // sweep (row 6.3) reconciles via timer.
   }
   state.batchRegistryPersisted = true;
+}
+
+/**
+ * Row 5.6 — record_task_completed.
+ *
+ * Builds the cloud `task.completed` wire event and hands it to the server
+ * recorder. Idempotent on state.taskCompletedRecorded. No-op when the
+ * server hasn't supplied a recorder (CLI/test paths).
+ */
+export function recordTaskCompletedHandler(state: LifecycleState): void {
+  if (state.taskCompletedRecorded) return;
+  const ctx = state.executionContext;
+  if (!ctx) return;
+  const recorder = ctx.recorder;
+  if (!recorder || typeof recorder.recordTaskCompleted !== 'function') {
+    state.taskCompletedRecorded = true;
+    return;
+  }
+  const task = state.task as TaskSpec | undefined;
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!task || !last) {
+    state.taskCompletedRecorded = true;
+    return;
+  }
+  ensureImplementingStage(last, ctx);
+  try {
+    // Gap 15 fix (4.0.3+): thread the per-task reviewPolicy into the
+    // wire BuildContext so the wire row reflects what the lifecycle
+    // actually ran. Pre-fix the BuildContext fell back to the route
+    // default ('full' for delegate, 'quality_only' for read-only),
+    // overriding per-task TaskSpec.reviewPolicy that the lifecycle
+    // had already honored at the row level. Now: per-task wins; the
+    // route default applies only when the task didn't specify.
+    recorder.recordTaskCompleted({
+      route: ctx.route as Parameters<typeof recorder.recordTaskCompleted>[0]['route'],
+      taskSpec: task,
+      runResult: last,
+      client: ctx.client ?? '',
+      mainModel: ctx.mainModel ?? null,
+      ...(task.reviewPolicy !== undefined && { reviewPolicy: task.reviewPolicy }),
+    });
+  } catch {
+    // recorder is best-effort — never break terminal flow on telemetry.
+  }
+  state.taskCompletedRecorded = true;
+}
+
+/**
+ * Synthesize an `implementing` stage entry from top-level RunResult fields
+ * when the per-stage tracker hasn't populated it. Without this, the wire
+ * event ships with `stages: []` for every task, which violates the backend's
+ * R2.1 invariant ("empty stages only allowed for brief_too_vague|error")
+ * for any task that succeeded — every upload would 400.
+ *
+ * This is a fallback; it does not replace stats already populated by the
+ * runner-shell or lifecycle stage tracker.
+ */
+function ensureImplementingStage(rr: RunResult, ctx: { assignedTier?: 'standard' | 'complex' }): void {
+  const existing = (rr.stageStats?.implementing) as { entered?: boolean } | undefined;
+  if (existing?.entered) return;
+  const usage = rr.usage ?? { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
+  const synthesized = {
+    stage: 'implementing' as const,
+    entered: true,
+    durationMs: rr.durationMs ?? 0,
+    costUSD: rr.cost?.costUSD ?? null,
+    agentTier: ctx.assignedTier ?? 'standard',
+    modelFamily: null,
+    model: null,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
+    activityEvents: 0,
+    inputTokens: usage.inputTokens ?? 0,
+    outputTokens: usage.outputTokens ?? 0,
+    cachedReadTokens: usage.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage.cachedNonReadTokens ?? 0,
+    turnCount: rr.turns ?? 0,
+    toolCallCount: Array.isArray(rr.toolCalls) ? rr.toolCalls.length : 0,
+    filesReadCount: Array.isArray(rr.filesRead) ? rr.filesRead.length : 0,
+    filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
+  };
+  (rr as { stageStats?: Record<string, unknown> }).stageStats = {
+    ...((rr.stageStats as Record<string, unknown> | undefined) ?? {}),
+    implementing: synthesized,
+  };
 }
 
 interface RecorderLike {

@@ -1,32 +1,163 @@
 {
-  "headline": "[error] execute_plan",
+  "headline": "[incomplete] execute_plan: mocked ok",
   "results": [
     {
-      "output": "",
-      "status": "error",
+      "output": "mocked ok",
+      "status": "incomplete",
       "usage": {
-        "inputTokens": 0,
-        "outputTokens": 0,
+        "inputTokens": 10,
+        "outputTokens": 20,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 0,
+      "turns": 1,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": false,
-      "escalationLog": [],
-      "parsedFindings": null,
-      "error": "reviewer output missing ## Summary section",
-      "errorCode": "runner_crash",
-      "retryable": false,
+      "escalationLog": [
+        {
+          "provider": "mock",
+          "status": "ok",
+          "turns": 1,
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "costUSD": null,
+          "initialPromptLengthChars": 0,
+          "initialPromptHash": ""
+        }
+      ],
       "durationMs": "<DETERMINISTIC>",
-      "structuredError": {
-        "code": "runner_crash",
-        "message": "reviewer output missing ## Summary section",
-        "where": "executor:execute_plan"
+      "directoriesListed": [],
+      "workerStatus": "review_loop_capped",
+      "terminationReason": {
+        "cause": "incomplete",
+        "turnsUsed": 1,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": "review_loop_capped",
+        "wasPromoted": false
       },
-      "workerStatus": "failed"
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        },
+        "spec_review": {
+          "stage": "spec_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 30,
+          "outputTokens": 60,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 3,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0,
+          "verdict": "changes_required",
+          "roundsUsed": 3,
+          "concernCategories": [],
+          "findingsBySeverity": {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          }
+        },
+        "spec_rework": {
+          "stage": "spec_rework",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 20,
+          "outputTokens": 40,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 2,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0,
+          "triggeringConcernCategories": []
+        }
+      },
+      "concerns": [
+        {
+          "source": "spec_review",
+          "severity": "medium",
+          "message": "reviewer output missing `## Summary` section — defaulting verdict to changes_required"
+        }
+      ],
+      "specReviewStatus": "changes_required",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "skipped",
+      "verification": {
+        "status": "skipped",
+        "steps": [],
+        "totalDurationMs": 0,
+        "skipReason": "no_command"
+      },
+      "commits": [],
+      "agents": {
+        "implementer": "standard",
+        "implementerToolMode": "full",
+        "specReviewer": "complex",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "",
+      "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "models": {
+        "implementer": "mock-model",
+        "specReviewer": "mock-model",
+        "qualityReviewer": null
+      },
+      "errorCode": "review_spec_rejected_terminal"
     }
   ],
   "batchTimings": {
@@ -36,11 +167,15 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "kind": "not_applicable",
-    "reason": "no task output to parse"
+    "summary": "mocked ok",
+    "filesChanged": [],
+    "validationsRun": [],
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -48,7 +183,9 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
-  "specReviewVerdict": "not_applicable",
+  "mainModel": "claude-opus-4-7",
+  "specReviewVerdict": "changes_required",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

@@ -15,8 +15,16 @@ export interface DelegateTaskInput {
 
 const SCOPE_CONTRACT = `Stay scoped to the explicit task description. Do NOT enlarge the task. If the task references files, read those files first; do not enumerate adjacent ones.`;
 
-export function compileDelegatePrompt(input: { prompt: string }): string {
-  return `${input.prompt}\n\n${SCOPE_CONTRACT}`;
+export function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }): string {
+  // When the caller pinned filePaths, surface them as a hard constraint
+  // in the prompt. v4.0.x dropped this on the floor — the brief carried
+  // filePaths as metadata only and the worker freelanced filenames
+  // (e.g. wrote `triangleArea.ts` for a `triangle.ts` ask). The worker
+  // must write to EXACTLY these files; no synonyms, no rename, no extra.
+  const filePathsClause = input.filePaths && input.filePaths.length > 0
+    ? `\n\nFILE CONSTRAINT: write your code to exactly these file path(s), no others, no renames: ${input.filePaths.map((p) => `\`${p}\``).join(', ')}.`
+    : '';
+  return `${input.prompt}\n\n${SCOPE_CONTRACT}${filePathsClause}`;
 }
 
 export function compileDelegateTasks(
@@ -39,7 +47,7 @@ export function compileDelegateTasks(
         route: 'delegate_tasks',
         originalInput,
       } as DelegateSource,
-      prompt: compileDelegatePrompt(task),
+      prompt: compileDelegatePrompt({ prompt: task.prompt, filePaths: task.filePaths }),
       done: task.done,
       filePaths: task.filePaths,
       agentType: task.agentType,

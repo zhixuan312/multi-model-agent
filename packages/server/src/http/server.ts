@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { join, dirname } from 'node:path';
 import { homedir } from 'node:os';
 import type { ServerConfig, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
-import { EventEmitter, LocalLogSink, TelemetrySink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
+import { EventEmitter, LocalLogSink, TelemetrySink, VerboseLogChannel, RunningHeadlineSink, JsonlWriter } from '@zhixuan92/multi-model-agent-core';
 import { RouteDispatcher } from '@zhixuan92/multi-model-agent-core';
 import type { RawHandler } from './types.js';
 import { sendError, sendJson } from './errors.js';
@@ -51,6 +51,15 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 const CWD_REQUIRED_PATHS = new Set([
   '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
   '/control/retry', '/control/batch-slice', '/context-blocks',
+]);
+
+/** Routes that require the X-MMA-Main-Model header. Enforced at request boundary
+ *  so wire telemetry's main_model column is never null for billed runs. The
+ *  9 tool routes + /control/retry (which dispatches a real run) need it; the
+ *  introspection / batch-polling / context-block utility routes do not. */
+const MAIN_MODEL_REQUIRED_PATHS = new Set([
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/control/retry',
 ]);
 
 /**
@@ -107,10 +116,18 @@ async function registerToolHandlers(
   // a null sink — TelemetrySink no-ops cleanly when its recorder is null.
   let recorderForBus: Awaited<ReturnType<typeof getRecorder>> | null = null;
   try { recorderForBus = getRecorder(); } catch { /* not initialized — telemetry disabled */ }
-  const bus = new EventEmitter([
+  // v4 bus: three sinks per spec (horizontal_design.md:332). LocalLogSink
+  // gates on diagnostics.log (writer no-ops when disabled). VerboseLogChannel
+  // is wired only when diagnostics.verbose=true so we don't pay the format
+  // + stdout cost in production. TelemetrySink is always present; it no-ops
+  // if telemetry isn't initialized.
+  const sinks = [
     new LocalLogSink(writer),
     new TelemetrySink(recorderForBus),
-  ]);
+    new RunningHeadlineSink(batchRegistry),
+    ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
+  ];
+  const bus = new EventEmitter(sinks);
 
   const routeDispatcher = new LifecycleDispatcher();
 
@@ -201,6 +218,8 @@ async function registerControlHandlers(
     const bus = new EventEmitter([
       new LocalLogSink(writer),
       new TelemetrySink(recorderForBus),
+      new RunningHeadlineSink(batchRegistry),
+      ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
     const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
       specTemplate, qualityAPTemplate, diffTemplate,
@@ -272,10 +291,20 @@ export async function startServer(
     batchTtlMs: config.server.limits.batchTtlMs,
   });
 
+  // Context-block storage mode: file-backed by default (Gap 4 — round-over-round
+  // audit recipe needs disk persistence to survive daemon restarts). Tests
+  // and ephemeral servers can opt out via the MMAGENT_CONTEXT_BLOCK_STORAGE
+  // env var to avoid filesystem side effects.
+  const cbStorage =
+    process.env.MMAGENT_CONTEXT_BLOCK_STORAGE === 'in-memory'
+      ? 'in-memory' as const
+      : 'file-backed' as const;
+
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
     idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
     evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
+    contextBlockStorage: cbStorage,
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.
@@ -359,4 +388,5 @@ const PIPELINE_CFG = {
   loopbackOnlyPaths: LOOPBACK_ONLY_PATHS,
   authExemptPaths: AUTH_EXEMPT_PATHS,
   cwdRequiredPaths: CWD_REQUIRED_PATHS,
+  mainModelRequiredPaths: MAIN_MODEL_REQUIRED_PATHS,
 };

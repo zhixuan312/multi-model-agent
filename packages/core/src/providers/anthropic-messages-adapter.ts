@@ -22,13 +22,23 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
 
   async turn(input: AdapterTurnInput): Promise<AdapterTurnResult> {
     const messages = this.buildMessages(input);
-    const response = await this.client.messages.create({
+    // Use the streaming endpoint and reduce to a final Message. The
+    // Anthropic SDK rejects non-streaming requests when max_tokens is
+    // high enough that the call could exceed 10 minutes
+    // ("Streaming is required for operations that may take longer than
+    // 10 minutes"). Streaming sidesteps that preflight rejection and
+    // also keeps the connection alive for the actual long calls
+    // reasoning-heavy models like deepseek-v4-pro do. `finalMessage()`
+    // resolves to the same `Message` shape `messages.create()` returned,
+    // so the rest of the adapter is unchanged.
+    const stream = this.client.messages.stream({
       model: this.model,
       system: input.systemPrompt,
       messages,
       tools: this.mapTools(input.toolDefinitions),
       max_tokens: this.maxOutputTokens,
     });
+    const response = await stream.finalMessage();
 
     const usage = {
       inputTokens: response.usage.input_tokens,
@@ -42,11 +52,26 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
       .filter(b => b.type === 'tool_use')
       .map((b: any) => ({ id: b.id, name: b.name, input: b.input }));
 
+    // Tally every content-block type the provider returned so the runner
+    // can emit a `runner_response_received` event that surfaces e.g.
+    // `{ text: 0, thinking: 1 }` when deepseek emitted reasoning-only.
+    // That diagnostic was missing in 4.0.x — the adapter silently dropped
+    // non-text blocks and the runner-shell terminated with empty output.
+    const contentBlocks: Record<string, number> = {};
+    for (const b of response.content) {
+      const t = (b as { type?: string }).type ?? 'unknown';
+      contentBlocks[t] = (contentBlocks[t] ?? 0) + 1;
+    }
+
     return {
       assistantText: text,
       toolCalls,
       usage,
       finishReason: toolCalls.length > 0 ? 'tool_use' : (response.stop_reason === 'end_turn' ? 'stop' : 'max_tokens'),
+      responseShape: {
+        ...(response.stop_reason && { stopReason: response.stop_reason }),
+        contentBlocks,
+      },
     };
   }
 

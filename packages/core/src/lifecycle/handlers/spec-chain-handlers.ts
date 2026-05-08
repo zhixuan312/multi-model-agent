@@ -14,6 +14,7 @@ import {
 } from '../../escalation/fallback.js';
 import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 /**
  * Spec-chain handlers (#45 Step 4a).
@@ -75,7 +76,7 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
@@ -87,6 +88,11 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           route: (state.route ?? ctx.route) as ReviewRoute,
           abortSignal: ctx.stall.controller.signal,
           deadlineMs: ctx.timing.deadlineMs,
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+          tier: usedTier,
+          stageLabel: 'Spec review',
         });
       } catch (err) {
         if (err instanceof ReviewerParseError) {
@@ -126,12 +132,12 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
     isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.incompleteReason === undefined,
     getStatus: (r) => r.status,
     makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
-    call: (provider) =>
+    call: (provider, usedTier) =>
       delegateWithEscalation(
         {
           prompt: reworkTask.prompt,
           cwd: ctx.cwd,
-          agentType: decision.impl,
+          agentType: usedTier,
           briefQualityPolicy: 'off',
           timeoutMs: ctx.timing.timeoutMs,
         },
@@ -140,7 +146,17 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
           explicitlyPinned: true,
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
-          assignedTier: decision.impl,
+          assignedTier: usedTier,
+          // Without bus the rework's runner-shell.emit calls go nowhere — the
+          // implementer turns then run silently, the reviewer keeps seeing
+          // (slightly) updated code, and the chain marches through 3 rounds
+          // with no visible Implementing events. Pass the same bus + ids the
+          // initial-impl call uses so verbose stderr + the running headline
+          // surface the rework's progress.
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+          ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+          stageLabel: `Spec rework round ${round - 1}`,
         },
       ),
   });
@@ -160,7 +176,49 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
     const result = await runSpecReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = result.verdict;
+    // Persist concerns into lastRunResult so the wire's per-stage
+    // findingsBySeverity (driven by rr.concerns) reflects what the
+    // reviewer raised — without this, findings_critical/high/medium/low
+    // for spec_review stays 0 even on changes_required outcomes.
+    persistSpecReviewConcerns(state, result);
+    // Record per-round cost so wire task.completed sums reviewer tokens
+    // and the spec_review stage entry has cumulative roundsUsed across
+    // 1..3 rounds. Reviewer tier is derived from policy (round-based).
+    const baseTier: AgentType = ctx.assignedTier;
+    const reviewerTier = (round - 1 < 2)
+      ? (baseTier === 'standard' ? 'complex' : 'standard')
+      : baseTier; // round 3 swaps back to base tier per SPEC_LOOP policy
+    const reviewerProvider = ctx.providers[reviewerTier];
+    mergeStageStats(state, 'spec_review', {
+      inputTokens: result.cost?.inputTokens ?? 0,
+      outputTokens: result.cost?.outputTokens ?? 0,
+      turnCount: result.cost?.turnCount ?? 0,
+      toolCallCount: result.cost?.toolCallCount ?? 0,
+      costUSD: result.cost?.costUSD ?? null,
+      durationMs: result.cost?.durationMs ?? null,
+    }, {
+      tier: reviewerTier,
+      model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+      verdict: result.verdict,
+    });
   };
+}
+
+/** Push reviewer concerns into state.lastRunResult.concerns so the wire
+ *  findingsBySeverity bucket for spec_review counts them. Spec reviewer
+ *  emits free-text concerns (no per-item severity), so we default to
+ *  'medium' — this matches the v3.x defaulting in event-builder. */
+function persistSpecReviewConcerns(state: LifecycleState, result: ReviewerCallResult): void {
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!last) return;
+  const reviewerConcerns = result.concerns;
+  if (!Array.isArray(reviewerConcerns) || reviewerConcerns.length === 0) return;
+  const newConcerns = reviewerConcerns.map(text => ({
+    source: 'spec_review' as const,
+    severity: 'medium' as const,
+    message: text,
+  }));
+  last.concerns = [...(last.concerns ?? []), ...newConcerns];
 }
 
 function makeSpecReworkHandler(round: 1 | 2) {
@@ -168,8 +226,53 @@ function makeSpecReworkHandler(round: 1 | 2) {
     const ctx = state.executionContext;
     if (!ctx) return;
     const newResult = await runSpecRework({ state, ctx, round: (round + 1) as 2 | 3 });
-    if (!newResult) return;
-    state.lastRunResult = newResult;
+    if (!newResult) {
+      // The rework's implementer call did not return an ok RunResult.
+      // Don't silently fall through to the next review round — that would
+      // re-review the unchanged code and produce the "3 reviews, 0 reworks"
+      // pattern. Mark the chain failed so the next round's `!s.terminal`
+      // gate stops the cascade and settle_spec_chain can record the
+      // failure on the wire envelope.
+      state.specReworkFailed = true;
+      state.terminal = true;
+      if (ctx.verbose && typeof ctx.verboseStream === 'function') {
+        ctx.verboseStream(
+          `[mmagent verbose] event=spec_rework_failed ts=${new Date().toISOString()} batch_id=${ctx.batchId ?? ''} task_index=${ctx.taskIndex ?? 0} round=${round}\n`,
+        );
+      }
+      return;
+    }
+    // Preserve accumulated stageStats when replacing lastRunResult — the
+    // fresh RunResult from the rework's call has no stageStats of its own,
+    // and overwriting wholesale would drop every prior stage entry
+    // (implementing, spec_review, etc.) so the wire event would only show
+    // the rework's own slice.
+    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
+    state.lastRunResult = priorStageStats
+      ? { ...newResult, stageStats: priorStageStats }
+      : newResult;
+    // Record rework cost in spec_rework stage stats so wire telemetry sees
+    // it. round=1 → attemptIndex 1, round=2 → attemptIndex 2; rework tier
+    // mirrors pickEscalation (impl=standard for attemptIndex 1; impl=complex
+    // for attemptIndex 2 when baseTier=standard).
+    const baseTier: AgentType = ctx.assignedTier;
+    const reworkTier: AgentType = (round === 2 && baseTier === 'standard') ? 'complex' : baseTier;
+    const reworkProvider = ctx.providers[reworkTier];
+    mergeStageStats(state, 'spec_rework', {
+      inputTokens: newResult.usage?.inputTokens ?? 0,
+      outputTokens: newResult.usage?.outputTokens ?? 0,
+      cachedReadTokens: newResult.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
+      turnCount: newResult.turns ?? 0,
+      toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
+      costUSD: newResult.cost?.costUSD ?? null,
+      durationMs: newResult.durationMs ?? null,
+      filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
+      filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,
+    }, {
+      tier: reworkTier,
+      model: (reworkProvider?.config as { model?: string } | undefined)?.model ?? null,
+    });
   };
 }
 

@@ -6,6 +6,7 @@ import { OpenAIChatAdapter } from './openai-chat-adapter.js';
 import { OpenAIResponsesAdapter } from './openai-responses-adapter.js';
 import { makeToolDefinitions } from './tool-definitions.js';
 import type { RunnerAdapter } from './runner-adapter.js';
+import { getCodexAuth } from '../identity/auth-token-store.js';
 
 let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
@@ -26,6 +27,18 @@ export function __setCoreTestProviderOverrideMap(map: Map<string, Provider> | nu
   coreTestProviderOverrideMap = map;
 }
 
+// No output-token caps anywhere — the only worker bounds are the
+// task-level wall-clock deadline and (when set) the per-task cost
+// ceiling. OpenAI Chat + Responses adapters omit max_tokens entirely
+// so the model uses its full output budget. Anthropic Messages
+// **requires** max_tokens per API spec, so we pass a value high
+// enough to never bite in practice (matches the largest documented
+// ceiling across the Claude family). If a model accepts less, the
+// API rejects loudly — easier to triage than a silent truncation,
+// which is the failure mode 4.0.x hit at the 4096 default when
+// deepseek-v4-pro burned its budget on a thinking block.
+const ANTHROPIC_MAX_TOKENS_REQUIRED = 64000;
+
 export function buildAdapter(agentConfig: {
   type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex';
   model: string;
@@ -35,7 +48,6 @@ export function buildAdapter(agentConfig: {
 }): RunnerAdapter {
   const apiKey = agentConfig.apiKey
     ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
-  const maxOutputTokens = 4096;
 
   switch (agentConfig.type) {
     case 'claude':
@@ -44,7 +56,7 @@ export function buildAdapter(agentConfig: {
         apiKey: apiKey || 'not-needed',
         baseURL: agentConfig.baseUrl,
         model: agentConfig.model,
-        maxOutputTokens,
+        maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
         providerType: agentConfig.type,
       });
     case 'openai-compatible':
@@ -52,16 +64,30 @@ export function buildAdapter(agentConfig: {
         apiKey: apiKey || 'not-needed',
         baseURL: agentConfig.baseUrl,
         model: agentConfig.model,
-        maxOutputTokens,
         providerType: 'openai-compatible',
       });
-    case 'codex':
+    case 'codex': {
+      // Prefer ChatGPT/Codex OAuth (~/.codex/auth.json) — this is how
+      // users who logged in via `codex` CLI authenticate. Without it, the
+      // request hits api.openai.com with a placeholder key and 401s. If
+      // OAuth is missing, fall back to whatever apiKey the user supplied
+      // (so the codex type can also be pointed at api.openai.com with a
+      // real key, or any other OpenAI-Responses-compatible endpoint).
+      const oauth = getCodexAuth();
+      if (oauth && !apiKey && !agentConfig.baseUrl) {
+        return new OpenAIResponsesAdapter({
+          apiKey: oauth.accessToken,
+          baseURL: 'https://chatgpt.com/backend-api/codex',
+          model: agentConfig.model,
+          defaultHeaders: { 'chatgpt-account-id': oauth.accountId },
+        });
+      }
       return new OpenAIResponsesAdapter({
         apiKey: apiKey || 'not-needed',
         baseURL: agentConfig.baseUrl,
         model: agentConfig.model,
-        maxOutputTokens,
       });
+    }
   }
 }
 
@@ -98,7 +124,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         : SYSTEM_PROMPT;
 
       const adapter = buildAdapter(agentConfig);
-      const shell = new RunnerShell(adapter);
+      const shell = new RunnerShell(adapter, providerConfig.model);
 
       const result = await shell.run({
         systemPrompt: effectiveSystemPrompt,
@@ -106,6 +132,13 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         toolDefinitions,
         maxTurns,
         cwd,
+        ...(options.abortSignal && { abortSignal: options.abortSignal }),
+        ...(options.bus && { bus: options.bus }),
+        ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
+        ...(options.tier !== undefined && { tier: options.tier }),
+        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
+        model: providerConfig.model,
       });
 
       const toolCallSummaries = result.toolCalls.map(tc => {
@@ -119,15 +152,19 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
         output: result.finalAssistantText,
         status: result.workerStatus === 'done' ? 'ok' : 'incomplete',
         usage: result.usage,
-        turns: result.toolCalls.length,
-        filesRead: [],
-        filesWritten: [],
+        turns: result.turns,
+        durationMs: result.durationMs,
+        filesRead: result.filesRead,
+        filesWritten: result.filesWritten,
         toolCalls: toolCallSummaries,
         outputIsDiagnostic: false,
         escalationLog: [],
         parsedFindings: null,
         workerStatus: result.workerStatus,
         errorCode: result.errorCode,
+        ...(result.costUSD !== null && {
+          cost: { costUSD: result.costUSD, costDeltaVsMainUSD: null },
+        }),
       };
     } catch (err) {
       return {

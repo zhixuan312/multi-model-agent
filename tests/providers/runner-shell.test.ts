@@ -55,6 +55,29 @@ describe('RunnerShell', () => {
     expect(result.finalAssistantText).toBe('still working...');
   });
 
+  it('returns failed with empty_output when adapter stops with no tool calls AND empty text (4.0.3 regression)', async () => {
+    // 4.0.x silently reported workerStatus='done' here because it trusted
+    // the adapter's "no tool calls = stop" signal regardless of whether the
+    // model produced any narrative. With deepseek + thinking-only responses
+    // (or any provider returning end_turn with no text block), this looked
+    // like a successful empty audit. Now: failed + empty_output.
+    const adapter = mockAdapter({
+      turns: [{ assistantText: '   ', toolCalls: [] }],
+    });
+    const shell = new RunnerShell(adapter);
+    const result = await shell.run({
+      systemPrompt: 'sys',
+      userMessage: 'audit this',
+      toolDefinitions: [],
+      maxTurns: 5,
+      cwd: '/tmp',
+    });
+    expect(result.workerStatus).toBe('failed');
+    expect(result.errorCode).toBe('empty_output');
+    expect(result.finalAssistantText).toBe('');
+    expect(result.toolCalls).toHaveLength(0);
+  });
+
   it('returns blocked with errorCode when maxTurns is 0', async () => {
     const adapter = mockAdapter({
       turns: [{ assistantText: 'done', toolCalls: [] }],

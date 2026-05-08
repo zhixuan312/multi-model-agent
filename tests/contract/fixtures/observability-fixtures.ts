@@ -33,7 +33,7 @@ async function bootAndCapture(
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<void> {
   for (let i = 0; i < 180; i++) {
     const poll = await fetch(`${baseUrl}/batch/${batchId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${token}` },
     });
     if (poll.status === 200) return;
     if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status} polling batch ${batchId}`);
@@ -67,7 +67,7 @@ export async function runTaskLifecycleFixtures(): Promise<EventType[]> {
   return bootAndCapture(provider, async (h, cwd) => {
     const dispatch = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [{ prompt: 'task 0', filePaths: ['a.ts'] }, { prompt: 'task 1', filePaths: ['b.ts'] }] }),
     });
     const { batchId } = (await dispatch.json()) as { batchId: string };
@@ -83,7 +83,7 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
   events.push(...await bootAndCapture(failProvider({ status: 'api_error', errorCode: 'provider_api_error' }), async (h, cwd) => {
     const dispatch = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [{ prompt: 'will fail' }] }),
     });
     const { batchId } = (await dispatch.json()) as { batchId: string };
@@ -94,7 +94,7 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
   events.push(...await bootAndCapture(mockProvider({ delayMs: 10_000 }), async (h, cwd) => {
     await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [{ prompt: 'stall' }] }),
     });
     // Do not poll to terminal; the server will abort the stall on its own
@@ -105,7 +105,7 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
   events.push(...await bootAndCapture(mockProvider({}), async (h, cwd) => {
     const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(cwd)}`, {
       method: 'POST',
-      headers: { 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}`, 'Content-Type': 'application/json' },
       body: JSON.stringify({ tasks: [{ /* missing prompt field */ }] }),
     });
     // Expect 400 — no batch emitted; fixture captures any events that happen
@@ -124,8 +124,8 @@ export async function runEdgeCaseFixtures(): Promise<EventType[]> {
  * pipeline and will automatically pick up cloud events as they are wired. */
 export async function runCloudFixtures(): Promise<EventType[]> {
   return bootAndCapture(mockProvider({}), async (h, cwd) => {
-    await fetch(`${h.baseUrl}/health`, { headers: { 'Authorization': `Bearer ${h.token}` } });
-    await fetch(`${h.baseUrl}/status`, { headers: { 'Authorization': `Bearer ${h.token}` } });
-    await fetch(`${h.baseUrl}/tools`, { headers: { 'Authorization': `Bearer ${h.token}` } });
+    await fetch(`${h.baseUrl}/health`, { headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}` } });
+    await fetch(`${h.baseUrl}/status`, { headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}` } });
+    await fetch(`${h.baseUrl}/tools`, { headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", 'Authorization': `Bearer ${h.token}` } });
   });
 }

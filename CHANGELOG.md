@@ -5,6 +5,52 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.3] - 2026-05-08
+
+### Fixed
+
+- **Telemetry attribution end-to-end (`client`, `mainModel`, family).** Pre-fix, every wire row reported `client = 'other'` and `main_model = NULL` because the daemon had no way to know which calling agent was dispatching. New required headers `X-MMA-Main-Model` and `X-MMA-Client` are enforced at the request boundary on every tool route — server returns `400 main_model_required` / `400 client_required` if missing. Drops the unreliable daemon-wide `defaults.mainModel` config + `PARENT_MODEL_NAME` env: a single daemon serves multiple parents (e.g. Claude Code + Cursor sessions concurrently), so the header per-request is the only correct source. All 10 shipped SKILL.md curl examples updated; `_shared/auth.md` documents the two new headers.
+- **Canonical model-name preservation on the wire (`mainModel`, `implementerModel`).** `extractCanonicalModelName` previously collapsed `claude-opus-4-7` → `claude-opus`, losing version info on every Anthropic model. Now preserves model + version across vendor namespaces (`bedrock.claude-opus-4-7`, `vertex_ai/anthropic.claude-sonnet-4-6@2024-10-22`, etc.), strips date/release suffixes (`@YYYY-MM-DD`, `-YYYYMMDD`, `-latest`, `-v1`), removes wrapper boundaries (`_`, `:`, `@`), and supports best-effort substring extraction for ids embedded in arbitrary wrappers (`my_router_42_claude-opus-4-7_xyz` → `claude-opus-4-7`). `findModelProfile` still uses prefix collapse for cost lookup — separate concern.
+- **`parent*` → `main*` rename through the wire.** Wire schema now carries `mainModel`, `mainModelFamily`, `mainEquivalentCostUSD`, `costDeltaVsMainUSD` directly (matches DB column `main_model`). `buildWirePayload` no longer translates — internal === wire. Backend projection layer needs the corresponding read-side rename in lockstep (separate ticket).
+- **`contextBlockIds` reach the worker prompt (Gap 1, CRITICAL).** Pre-fix, `runTaskViaDispatcher` expanded the task into `executionContext.task` but the dispatcher dispatched the original unexpanded `input.task`; the executor read `state.task` (unexpanded) so the worker never saw the prepended block content. Round-over-round audit recipes were broken end-to-end. Now the task is expanded ONCE up-front and the same reference flows through both `state.task` and `executionContext.task` (single source of truth). Cache invariant: `task-executor.ts` expands BEFORE writing to `projectContext.batchCache` so retry sees the expanded prompt directly.
+- **Headline reads `runResult.annotatedFindings` when `report.findings` is empty (Gap 2).** Audit/review headlines previously reported `0 findings (0 high)` whenever the worker emitted narrative `## Finding N:` blocks instead of structured JSON — the per-tool `reportSchema` parse failed and the structuredReport fallback didn't have a `findings` field. Composer now falls back to `runResult.annotatedFindings`, populated by the quality-chain handler. Path also falls back to `task.filePaths[0]` when `report.documentPath` is missing.
+- **`HeadlineTemplate.compose` signature extended with `runResult` + `task`.** Backwards-compatible (both optional). Composers that ignore them keep working; audit/review use them for the Gap 2 fallback.
+- **Severity helpers split — headline aggregate vs telemetry buckets.** New `reporting/severity.ts`: `normalizeSeverity` (lowercase canonicalizer), `countHighOrCritical` (HEADLINE-only — `high` + `critical` both count), `bucketFindingsBySeverity` (TELEMETRY-only — exact per-bucket counts). Telemetry `findings_critical/high/medium/low` columns are now computed from the bucket helper and can't be conflated with headline counting.
+- **`totalDurationMs` reflects real wall-clock (Gap 3).** Pre-fix, `runResult.durationMs` only covered the implementer's `shell.run`, missing reviewer/annotator stages — wire `totalDurationMs` reported ~30s when an audit took ~165s. The proportional scale-down that "fixed" R4 was masking this by silently shrinking per-stage durations to fit. Now: `totalDurationMs = max(runResult.durationMs, Σ stageDurations)` — for sequential v4 stages, the stage sum wins (correct). Drops the scale-down. Per-stage durations stay truthful. `task-executor.ts` also sets `result.durationMs = wallClockMs` on every return path including failure envelopes (was 0 — invisible in retry budgeting).
+- **`batch_failed` fires when executor packages an error envelope (Gap 5).** Previously, `task-executor.ts` caught errors and packaged them with `structuredError`/`status: 'error'` rather than throwing; `async-dispatch.ts` saw a "successful" return and emitted `batch_completed`, hiding the failure from operator-facing telemetry. New `detectFailure` helper inspects the envelope using STRUCTURED FIELDS ONLY (no string comparisons): any task with `structuredError`, any task with `status === 'error'/'failed'`, or envelope-level `error.kind !== 'not_applicable'` triggers `batch_failed`. `incomplete` status excluded — review-rework intermediate state isn't a categorical failure.
+- **Stage-progression denominator derives from `StagePlan` (single source of truth).** Pre-fix, two duplicated lists (one in async-dispatch, one in RunningHeadlineSink) computed the polling bracket. Audit reported `(1/9)` because the read-only StagePlan filter wasn't applied. New `lifecycle/stage-progression.ts` simulates each row's `runCondition` under route defaults — audit shows `(1/3)`, delegate `(1/9)` including reworks, register-context-block `(1/1)`, etc.
+- **File-backed context-block persistence (Gap 4).** Context blocks now persist to `<projectCwd>/.mma/context-blocks/<id>.txt` with atomic writes (temp + fsync + rename), permissions `0700`/`0600`, 7-day TTL, 1 MiB per-block + 100 MiB per-store caps, oldest-first eviction. Round-over-round audit recipes survive daemon restarts. Tests opt into in-memory via `MMAGENT_CONTEXT_BLOCK_STORAGE=in-memory`. `.mma/` added to `.gitignore`; `PRIVACY.md` documents the local-only directory.
+- **`run_shell` write tracking (Gap 11).** Worker writes via `cat >`, `sed -i`, `tee`, etc. used to show `0 write` for the entire run despite actively producing artifacts. New `shellCommandWritesFs` heuristic detects common write patterns; the runner-shell emits `shellWrites` on `runner_turn_completed`; the polling sink + `runResult.filesWritten` both reflect real activity. False-negative-averse — better to over-report than silently lie about progress. Stderr-merge `2>&1` explicitly excluded.
+- **Centralized tool-name sets (Gap 14).** Pre-fix, `RunningHeadlineSink.WRITE_TOOLS` was `{writeFile, write_file}` while `runner-shell` had `{..., editFile, edit_file}`. Worker calling `edit_file` correctly bumped `runResult.filesWritten` but the polling headline reported `0 write`. New `providers/tool-name-sets.ts` is the single source of truth — both consumers import from it; drift impossible without editing the shared module.
+- **Per-task `reviewPolicy` reaches the wire (Gap 15).** Previously `event-builder.ts` always fell back to the route default — wire reported `'full'` for delegate even when the task dispatched with `reviewPolicy: 'none'`. `terminal-handlers.ts` now threads the per-task value into the recorder call.
+- **Delegate headline reads `runResult.filesWritten` when `report.filesChanged` is empty (Gap 13).** Same source-of-truth pattern as audit Gap 2 — workers that write via `edit_file` populate `filesWritten` but rarely emit a structured `filesChanged` array, so the headline used to report `(0 files)` despite a successful edit.
+- **One-sentence headline trim (Gap 12).** New `reporting/headline-text.ts:firstSentenceOrTruncate` keeps the operator-facing headline short and deterministic. Worker summaries can be paragraphs long and end mid-sentence; pre-fix, the entire summary was inlined verbatim. Used by delegate + execute-plan composers.
+
+### Added
+
+- **`MMAGENT_CONTEXT_BLOCK_STORAGE` env var** to opt the daemon into the legacy in-memory context-block store. Used by tests; production daemon defaults to file-backed (`'file-backed'`).
+- **Stage progression exports** `STAGE_ORDER_BY_ROUTE`, `stageProgress`, `stageOrderForRoute` from `@zhixuan92/multi-model-agent-core/lifecycle/stage-progression`.
+- **All shipped skills (10 SKILL.md files)** now include `X-MMA-Main-Model` + `X-MMA-Client` headers in their curl examples and document the `400 main_model_required` / `400 client_required` errors.
+
+### Changed
+
+- **`extractCanonicalModelName` semantics** changed to preserve model + version (was: collapse to profile prefix). Tests rewritten accordingly. `findModelProfile` still uses prefix collapse for cost lookup — distinct concern.
+- **`HeadlineTemplate.compose` signature** added optional `runResult: RunResult` and `task: TaskSpec` params. Backwards-compatible.
+- **`ContextBlockStore` interface** extended with `size`, `pin`/`unpin`/`refcount`, `clear`, `ttlMs` so callers can program against the abstraction (both in-memory and file-backed implementations satisfy the same contract).
+- **`createProjectContext`** now defaults to `FileBackedContextBlockStore`; `createInMemoryProjectContext` is the new test-only convenience.
+
+### Removed
+
+- **`config.defaults.mainModel`** — replaced by the required `X-MMA-Main-Model` header.
+- **Wire field rename shim in `buildWirePayload`** — internal record now matches wire shape 1:1 (was translating `mainModel*` → `parentModel*`).
+- **Proportional stage-duration scale-down in `event-builder.ts`** — was masking the implementer-only `runResult.durationMs` bug fixed by Gap 3.
+
+### BREAKING
+
+- **`X-MMA-Main-Model` and `X-MMA-Client` are required on every tool route.** Callers using the shipped skills (Claude Code, Codex, Gemini, Cursor) get this for free after `mmagent sync-skills`. Custom callers MUST add both headers; server returns `400` otherwise. This is a deliberate hard gate for telemetry attribution correctness.
+- **Wire schema field rename:** `parentModel` → `mainModel`, `parentModelFamily` → `mainModelFamily`, `parentEquivalentCostUSD` → `mainEquivalentCostUSD`, `costDeltaVsParentUSD` → `costDeltaVsMainUSD`. Backend projection layer needs the read-side rename in lockstep (separate ticket).
+- **`config.defaults.mainModel` removed.** Header is the only source.
+
 ## [4.0.2] - 2026-05-07
 
 ### Fixed
@@ -1292,7 +1338,8 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...HEAD
+[4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2
 [4.0.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.0...v4.0.1
 [4.0.0]: https://github.com/zhixuan312/multi-model-agent/compare/v3.12.7...v4.0.0

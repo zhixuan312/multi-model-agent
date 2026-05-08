@@ -33,11 +33,12 @@ describe('asyncDispatch progress wiring (3.1.2 regression guard)', () => {
   it('sets tasksStarted=1 before executor runs so headline leaves "queued"', async () => {
     const reg = new BatchRegistry();
     const deps = stubDeps(reg);
-    const pc = createProjectContext({
-      cwd: '/tmp/test',
-      contextBlockTtlMs: 60_000,
-      maxContextBlocksPerProject: 10,
-    });
+    // Use the in-memory ProjectContext factory so the test doesn't write
+    // to the filesystem (Gap 4: file-backed store is the daemon default).
+    const { createInMemoryProjectContext } = await import(
+      '@zhixuan92/multi-model-agent-core'
+    );
+    const pc = createInMemoryProjectContext('/tmp/test');
 
     // Resolve when the executor has been invoked but BEFORE it returns,
     // so we can inspect the BatchEntry mid-flight.

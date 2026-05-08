@@ -28,7 +28,7 @@ function defaultResponse(overrides: Record<string, unknown> = {}) {
 describe('OpenAIChatAdapter', () => {
   it('maps OpenAI usage to canonical 4-field shape with reasoning folded into outputTokens', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -59,7 +59,7 @@ describe('OpenAIChatAdapter', () => {
         },
       }],
     }));
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -76,7 +76,7 @@ describe('OpenAIChatAdapter', () => {
     mkCreate.mockResolvedValue(defaultResponse({
       choices: [{ finish_reason: 'length', message: { content: 'truncated', tool_calls: null } }],
     }));
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -92,7 +92,7 @@ describe('OpenAIChatAdapter', () => {
       choices: [{ finish_reason: 'stop', message: { content: 'ok', tool_calls: null } }],
     });
     const a = new OpenAIChatAdapter({
-      apiKey: 'k', model: 'custom-model', maxOutputTokens: 4096, providerType: 'openai-compatible',
+      apiKey: 'k', model: 'custom-model', providerType: 'openai-compatible',
     });
     const r = await a.turn({
       systemPrompt: '',
@@ -110,18 +110,18 @@ describe('OpenAIChatAdapter', () => {
   });
 
   it('providerType defaults to openai', () => {
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'm', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'm' });
     expect(a.providerType).toBe('openai');
   });
 
   it('providerType can be set to openai-compatible', () => {
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'm', maxOutputTokens: 4096, providerType: 'openai-compatible' });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'm', providerType: 'openai-compatible' });
     expect(a.providerType).toBe('openai-compatible');
   });
 
   it('builds messages with tool_calls and tool results for prior turns', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
 
     await a.turn({
       systemPrompt: 'You are helpful.',
@@ -165,7 +165,7 @@ describe('OpenAIChatAdapter', () => {
 
   it('stringifies non-string tool results', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
 
     await a.turn({
       systemPrompt: '',
@@ -188,7 +188,7 @@ describe('OpenAIChatAdapter', () => {
 
   it('maps tool definitions to OpenAI function format', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
 
     await a.turn({
       systemPrompt: '',
@@ -221,7 +221,7 @@ describe('OpenAIChatAdapter', () => {
         },
       }],
     });
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -241,7 +241,7 @@ describe('OpenAIChatAdapter', () => {
       usage: { prompt_tokens: 5, completion_tokens: 0 },
       choices: [],
     });
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -257,7 +257,7 @@ describe('OpenAIChatAdapter', () => {
 
   it('uses deterministic tool_call_ids across prior turns', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 4096 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
 
     await a.turn({
       systemPrompt: '',
@@ -296,9 +296,9 @@ describe('OpenAIChatAdapter', () => {
     expect(msgs[5].tool_call_id).toBe('call_1_0');
   });
 
-  it('sends max_completion_tokens from constructor', async () => {
+  it('omits max_completion_tokens (no token cap; wall-clock + cost are the only worker bounds)', async () => {
     mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5', maxOutputTokens: 8192 });
+    const a = new OpenAIChatAdapter({ apiKey: 'k', model: 'gpt-5' });
     await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -306,6 +306,6 @@ describe('OpenAIChatAdapter', () => {
       toolDefinitions: [],
       capabilities: { cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [] },
     });
-    expect(mkCreate.mock.lastCall[0].max_completion_tokens).toBe(8192);
+    expect(mkCreate.mock.lastCall[0].max_completion_tokens).toBeUndefined();
   });
 });

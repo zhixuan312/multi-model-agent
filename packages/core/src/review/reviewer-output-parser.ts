@@ -55,18 +55,42 @@ function extractDiffVerdict(text: string): DiffReviewerVerdict | null {
 
 export class ReviewerOutputParser {
   parse(text: string): ReviewerParseResult {
+    // Lenient parse: a missing `## Summary` section used to throw and crash
+    // the entire run with `runner_crash`. Reviewer models that don't follow
+    // the format strictly (some reasoning models freelance the response
+    // shape) would take the whole task down. Treat malformed output as
+    // `changes_required` with a meta-concern surfacing the format failure
+    // so the rework loop can re-prompt instead of crashing.
     const summary = extractSummarySection(text);
-    if (!summary) throw new ReviewerParseError('reviewer output missing ## Summary section');
+    const concerns = extractDeviationsAndUnresolved(text);
+    if (!summary) {
+      return {
+        verdict: 'changes_required',
+        concerns: [
+          'reviewer output missing `## Summary` section — defaulting verdict to changes_required',
+          ...concerns,
+        ],
+      };
+    }
     const lower = summary.toLowerCase();
     const verdict: ReviewerVerdict = lower.includes('changes_required') ? 'changes_required' : 'approved';
-    const concerns = extractDeviationsAndUnresolved(text);
     return { verdict, concerns };
   }
 
   parseDiff(text: string): ReviewerDiffParseResult {
+    // Same leniency for diff review: missing verdict marker → concerns
+    // (default conservative) plus a meta-concern. Don't crash the run.
     const verdict = extractDiffVerdict(text);
-    if (!verdict) throw new ReviewerParseError('diff reviewer output missing verdict');
     const concerns = extractDeviationsAndUnresolved(text);
+    if (!verdict) {
+      return {
+        verdict: 'concerns',
+        concerns: [
+          'diff reviewer output missing APPROVE / CONCERNS: / REJECT: marker — defaulting verdict to concerns',
+          ...concerns,
+        ],
+      };
+    }
     return { verdict, concerns };
   }
 }

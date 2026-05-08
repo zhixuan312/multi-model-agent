@@ -9,6 +9,31 @@ vi.mock('openai', () => ({
   })),
 }));
 
+// The adapter streams `responses.create({stream: true, store: false})` and
+// consumes Responses-API events. Tests mock the response by listing the
+// response shape they want; this helper converts that shape into the
+// equivalent async-iterable stream-event sequence.
+function asStream(response: any): AsyncIterable<any> {
+  const events: any[] = [];
+  for (const item of response.output ?? []) {
+    if (item.type === 'message') {
+      for (const c of item.content ?? []) {
+        if (c.type === 'output_text') {
+          events.push({ type: 'response.output_text.delta', delta: c.text });
+        }
+      }
+    } else if (item.type === 'function_call') {
+      events.push({ type: 'response.output_item.done', item });
+    }
+  }
+  events.push({ type: 'response.completed', response });
+  return {
+    async *[Symbol.asyncIterator]() {
+      for (const e of events) yield e;
+    },
+  };
+}
+
 function defaultResponse(overrides: Record<string, unknown> = {}) {
   return {
     usage: {
@@ -27,8 +52,8 @@ function defaultResponse(overrides: Record<string, unknown> = {}) {
 
 describe('OpenAIResponsesAdapter', () => {
   it('maps Responses API usage to canonical 4-field shape with reasoning folded into outputTokens', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: 'You are helpful.',
       userMessage: 'hi',
@@ -47,14 +72,14 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('infers finishReason tool_use when function_call items present in response.output', async () => {
-    mkCreate.mockResolvedValue(defaultResponse({
+    mkCreate.mockResolvedValue(asStream(defaultResponse({
       status: 'completed',
       output: [
         { type: 'message', content: [{ type: 'output_text', text: 'Using tool' }] },
         { type: 'function_call', call_id: 'fc_abc123', name: 'read', arguments: '{"path":"/x"}' },
       ],
-    }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    })));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'read /x',
@@ -69,11 +94,11 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('infers finishReason max_tokens on incomplete status', async () => {
-    mkCreate.mockResolvedValue(defaultResponse({
+    mkCreate.mockResolvedValue(asStream(defaultResponse({
       status: 'incomplete',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'truncated' }] }],
-    }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    })));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -85,11 +110,11 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('infers finishReason max_tokens on cancelled status', async () => {
-    mkCreate.mockResolvedValue(defaultResponse({
+    mkCreate.mockResolvedValue(asStream(defaultResponse({
       status: 'cancelled',
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'partial' }] }],
-    }));
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    })));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -101,11 +126,11 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('handles missing usage fields gracefully', async () => {
-    mkCreate.mockResolvedValue({
+    mkCreate.mockResolvedValue(asStream({
       output: [{ type: 'message', content: [{ type: 'output_text', text: 'ok' }] }],
       status: 'completed',
-    });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    }));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -118,13 +143,13 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('providerType is always codex', () => {
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'm', maxOutputTokens: 4096 });
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'm' });
     expect(a.providerType).toBe('codex');
   });
 
   it('sends instructions as the system prompt', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     await a.turn({
       systemPrompt: 'You are a helpful coding agent.',
       userMessage: 'read /etc/hosts',
@@ -137,8 +162,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('builds input items with function_call and function_call_output pairs for prior turns', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -182,8 +207,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('stringifies non-string tool results in function_call_output', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -205,8 +230,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('maps tool definitions to Responses API function format', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -225,8 +250,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('omits tools when toolDefinitions is empty', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -241,14 +266,14 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('wraps malformed JSON tool arguments instead of crashing', async () => {
-    mkCreate.mockResolvedValue({
+    mkCreate.mockResolvedValue(asStream({
       usage: { input_tokens: 10, output_tokens: 5 },
       output: [
         { type: 'function_call', call_id: 'fc_bad', name: 'run', arguments: '{not valid json' },
       ],
       status: 'completed',
-    });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    }));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -264,8 +289,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('uses deterministic tool_call_ids across prior turns', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -310,9 +335,9 @@ describe('OpenAIResponsesAdapter', () => {
   it('passes custom baseURL to OpenAI client', async () => {
     // Re-import to verify the constructor arg is passed through
     const OpenAI = await import('openai');
-    mkCreate.mockResolvedValue(defaultResponse());
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
     const a = new OpenAIResponsesAdapter({
-      apiKey: 'k', baseURL: 'https://chatgpt.com/backend-api/codex', model: 'gpt-5-codex', maxOutputTokens: 4096,
+      apiKey: 'k', baseURL: 'https://chatgpt.com/backend-api/codex', model: 'gpt-5-codex',
     });
     await a.turn({
       systemPrompt: '',
@@ -328,9 +353,9 @@ describe('OpenAIResponsesAdapter', () => {
     });
   });
 
-  it('sends max_output_tokens from constructor', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 8192 });
+  it('omits max_output_tokens (no token cap; wall-clock + cost are the only worker bounds)', async () => {
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     await a.turn({
       systemPrompt: '',
       userMessage: 'hi',
@@ -338,12 +363,12 @@ describe('OpenAIResponsesAdapter', () => {
       toolDefinitions: [],
       capabilities: { cache_control: false, thinking: false, vision: false, tool_use: true, streaming: false, other: [] },
     });
-    expect(mkCreate.mock.lastCall[0].max_output_tokens).toBe(8192);
+    expect(mkCreate.mock.lastCall[0].max_output_tokens).toBeUndefined();
   });
 
   it('prior turn without assistantText still emits function_call pairs', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -368,8 +393,8 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('null tool result becomes "null" string in output', async () => {
-    mkCreate.mockResolvedValue(defaultResponse());
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    mkCreate.mockResolvedValue(asStream(defaultResponse()));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
 
     await a.turn({
       systemPrompt: '',
@@ -391,7 +416,7 @@ describe('OpenAIResponsesAdapter', () => {
   });
 
   it('extracts multiple output_text blocks from a message', async () => {
-    mkCreate.mockResolvedValue({
+    mkCreate.mockResolvedValue(asStream({
       usage: { input_tokens: 50, output_tokens: 20 },
       output: [
         {
@@ -403,8 +428,8 @@ describe('OpenAIResponsesAdapter', () => {
         },
       ],
       status: 'completed',
-    });
-    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex', maxOutputTokens: 4096 });
+    }));
+    const a = new OpenAIResponsesAdapter({ apiKey: 'k', model: 'gpt-5-codex' });
     const r = await a.turn({
       systemPrompt: '',
       userMessage: 'hi',

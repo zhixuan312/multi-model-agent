@@ -66,6 +66,8 @@ Dispatch one or more ad-hoc tasks to workers concurrently. Each task is an indep
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
+  -H "X-MMA-Main-Model: $MAIN_MODEL" \
+  -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"tasks":[{"prompt":"Refactor utils.ts to remove dead code","filePaths":["/project/src/utils.ts"]}]}' \

@@ -8,7 +8,6 @@ describe('recorder context threading', () => {
       taskSpec: { filePaths: [] },
       runResult: { status: 'ok', terminationReason: { cause: 'finished' }, durationMs: 100 } as any,
       client: 'claude-code',
-      triggeringSkill: 'mma-delegate',
       mainModel: 'claude-sonnet-4-6',
       reviewPolicy: 'diff_only',
       verifyCommandPresent: true,
@@ -23,7 +22,7 @@ describe('recorder context threading', () => {
       route: 'delegate',
       taskSpec: { filePaths: [] },
       runResult: { status: 'ok', terminationReason: { cause: 'finished' }, durationMs: 100 } as any,
-      client: 'claude-code', triggeringSkill: 'mma-delegate', mainModel: null,
+      client: 'claude-code', mainModel: null,
       reviewPolicy: 'none', verifyCommandPresent: false,
     };
     const ev = buildTaskCompletedEvent(ctx);

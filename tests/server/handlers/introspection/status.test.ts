@@ -49,7 +49,7 @@ describe('GET /status', () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/status`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       expect(res.headers.get('content-type')).toContain('application/json');
@@ -93,7 +93,7 @@ describe('GET /status', () => {
     const s = await startTestServer();
     try {
       const res = await fetch(`${s.url}/status`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json() as Record<string, unknown>;
@@ -122,7 +122,7 @@ describe('GET /status', () => {
       // Create a project by touching a cwd via /status (pre-populated by other means)
       // Just verify the shape holds with zero projects
       const res = await fetch(`${s.url}/status`, {
-        headers: { Authorization: `Bearer ${s.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}` },
       });
       expect(res.status).toBe(200);
       const body = await res.json() as {

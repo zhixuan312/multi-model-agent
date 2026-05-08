@@ -67,6 +67,7 @@ export function buildExploreHandler(deps: HandlerDeps): RawHandler {
       batchRegistry: deps.batchRegistry,
       projectContext: pc,
       deps,
+      caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
         const callExecutor = () => executeExplore(executionCtx, {
           input,

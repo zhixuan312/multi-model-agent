@@ -1,9 +1,12 @@
-import { InMemoryContextBlockStore } from './context-block-tool.js';
+import { InMemoryContextBlockStore, type ContextBlockStore } from './context-block-tool.js';
+import { FileBackedContextBlockStore } from './file-backed-context-block-store.js';
 import { BatchCache } from './batch-cache.js';
 
 export interface ProjectContext {
   readonly cwd: string;
-  readonly contextBlocks: InMemoryContextBlockStore;
+  /** 4.0.3+: store is the interface — concrete class chosen at
+   *  createProjectContext (file-backed by default, in-memory in tests). */
+  readonly contextBlocks: ContextBlockStore;
   /** Per-project terminal-only retention index; authoritative live-batch lookup is via BatchRegistry.countActiveForProject(cwd). */
   readonly batchCache: BatchCache;
   readonly createdAt: number;
@@ -16,11 +19,22 @@ export interface ProjectContext {
   pendingReservations: number;
 }
 
-export function createProjectContext(cwd: string): ProjectContext {
+export interface CreateProjectContextOptions {
+  /** Override the context-block store. When omitted, defaults to a
+   *  FileBackedContextBlockStore rooted at `<cwd>/.mma/context-blocks/`
+   *  so blocks survive daemon restarts (Gap 4 fix). Tests pass an
+   *  InMemoryContextBlockStore to avoid filesystem side effects. */
+  contextBlockStore?: ContextBlockStore;
+}
+
+export function createProjectContext(
+  cwd: string,
+  opts: CreateProjectContextOptions = {},
+): ProjectContext {
   const now = Date.now();
   return {
     cwd,
-    contextBlocks: new InMemoryContextBlockStore(),
+    contextBlocks: opts.contextBlockStore ?? new FileBackedContextBlockStore(cwd),
     batchCache: new BatchCache(),
     createdAt: now,
     lastActivityAt: now,
@@ -28,4 +42,11 @@ export function createProjectContext(cwd: string): ProjectContext {
     activeRequests: 0,
     pendingReservations: 0,
   };
+}
+
+/** Test-only convenience constructor that uses the in-memory store. Call
+ *  sites that need filesystem isolation (and don't care about persistence)
+ *  should use this instead of passing the option each time. */
+export function createInMemoryProjectContext(cwd: string): ProjectContext {
+  return createProjectContext(cwd, { contextBlockStore: new InMemoryContextBlockStore() });
 }

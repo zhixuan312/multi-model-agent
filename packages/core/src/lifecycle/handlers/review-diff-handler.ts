@@ -13,6 +13,7 @@ import {
 import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 import type { VerifyStageResult } from './verify-stage.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 const exec = promisify(execFile);
 
@@ -80,7 +81,7 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
@@ -90,6 +91,11 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
         cwd: ctx.cwd,
         abortSignal: ctx.stall.controller.signal,
         deadlineMs: ctx.timing.deadlineMs,
+        ...(ctx.bus && { bus: ctx.bus }),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+        tier: usedTier,
+        stageLabel: 'Diff review',
       });
     },
   });
@@ -115,4 +121,33 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
     state.diffReviewVerdict = 'error';
     state.terminal = true;
   }
+  // Persist diff-reviewer concerns into lastRunResult.concerns so the
+  // wire's findings_* DB columns reflect them on diff_review verdicts
+  // other than 'approve'. Without this, findings counts stay 0 even when
+  // the diff reviewer rejected with explicit concerns.
+  if (Array.isArray(result.concerns) && result.concerns.length > 0) {
+    const last = state.lastRunResult as RunResult | undefined;
+    if (last) {
+      const newConcerns = result.concerns.map(text => ({
+        source: 'diff_review' as const,
+        severity: 'medium' as const,
+        message: text,
+      }));
+      last.concerns = [...(last.concerns ?? []), ...newConcerns];
+    }
+  }
+  // Record diff_review cost so wire telemetry sees it.
+  const reviewerProvider = ctx.providers[reviewerTier];
+  mergeStageStats(state, 'diff_review', {
+    inputTokens: result.cost?.inputTokens ?? 0,
+    outputTokens: result.cost?.outputTokens ?? 0,
+    turnCount: result.cost?.turnCount ?? 0,
+    toolCallCount: result.cost?.toolCallCount ?? 0,
+    costUSD: result.cost?.costUSD ?? null,
+    durationMs: result.cost?.durationMs ?? null,
+  }, {
+    tier: reviewerTier,
+    model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+    verdict: state.diffReviewVerdict,
+  });
 }

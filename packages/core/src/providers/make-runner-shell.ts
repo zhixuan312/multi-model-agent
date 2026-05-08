@@ -7,14 +7,15 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
   // Test/mock providers expose `__mockAdapter` so the engine path can run
   // without making real HTTP calls. Production providers carry a real config
   // and use `buildAdapter` to produce a real runner adapter.
+  const cfgModel = (provider.config as { model?: string } | undefined)?.model;
   const maybeMock = (provider as Provider & { __mockAdapter?: RunnerAdapter }).__mockAdapter;
-  if (maybeMock) return new RunnerShell(maybeMock);
+  if (maybeMock) return new RunnerShell(maybeMock, cfgModel);
 
   // If the provider looks like a test mock (named 'mock' OR config.model === 'mock'),
   // synthesize a bridge adapter from `provider.run(prompt)` so the engine path
   // works in tests without each test wiring `__mockAdapter` explicitly.
   const cfg = provider.config as { model?: string } | undefined;
-  const isMock = provider.name === 'mock' || cfg?.model === 'mock' || cfg?.model === 'mock-model';
+  const isMock = provider.name === 'mock' || cfgModel === 'mock' || cfgModel === 'mock-model';
   if (isMock && typeof provider.run === 'function') {
     const adapter: RunnerAdapter = {
       providerType: 'mock' as unknown as RunnerAdapter['providerType'],
@@ -34,7 +35,7 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
         };
       },
     };
-    return new RunnerShell(adapter);
+    return new RunnerShell(adapter, cfgModel);
   }
 
   let adapter: RunnerAdapter | undefined;
@@ -72,8 +73,8 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
         };
       },
     };
-    return new RunnerShell(bridgeAdapter);
+    return new RunnerShell(bridgeAdapter, cfgModel);
   }
 
-  return new RunnerShell(adapter as RunnerAdapter);
+  return new RunnerShell(adapter as RunnerAdapter, cfgModel);
 }

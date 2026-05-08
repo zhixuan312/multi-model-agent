@@ -17,6 +17,7 @@ import {
 import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 import type { SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 /**
  * Quality-chain handlers (#45 Step 4b).
@@ -78,7 +79,7 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
     isTransportFailure: (r) => isReviewTransportFailure(r as { status?: string }),
     getStatus: (r) => (r as { status?: RunResult['status'] }).status,
     makeSyntheticFailure: () => makeSkippedReviewResult('all_tiers_unavailable'),
-    call: async (provider) => {
+    call: async (provider, usedTier) => {
       const shell = makeRunnerShell(provider);
       if (isArtifactProducing) {
         const engine = ctx.reviewerEngine;
@@ -94,6 +95,11 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
             filesWritten,
             abortSignal: ctx.stall.controller.signal,
             deadlineMs: ctx.timing.deadlineMs,
+            ...(ctx.bus && { bus: ctx.bus }),
+            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+            tier: usedTier,
+            stageLabel: 'Quality review',
           });
         } catch (err) {
           if (err instanceof ReviewerParseError) {
@@ -111,6 +117,11 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
         route: route as AnnotatorRoute,
         abortSignal: ctx.stall.controller.signal,
         deadlineMs: ctx.timing.deadlineMs,
+        ...(ctx.bus && { bus: ctx.bus }),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+        tier: usedTier,
+        stageLabel: 'Annotating',
       });
     },
   });
@@ -141,12 +152,12 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
     isTransportFailure: (r) => TRANSPORT_FAILURES.has(r.status) && r.incompleteReason === undefined,
     getStatus: (r) => r.status,
     makeSyntheticFailure: (assigned) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable'),
-    call: (provider) =>
+    call: (provider, usedTier) =>
       delegateWithEscalation(
         {
           prompt: reworkPrompt,
           cwd: ctx.cwd,
-          agentType: decision.impl,
+          agentType: usedTier,
           briefQualityPolicy: 'off',
           timeoutMs: ctx.timing.timeoutMs,
         },
@@ -155,7 +166,12 @@ async function runQualityRework(state: LifecycleState, ctx: ExecutionContext, at
           explicitlyPinned: true,
           taskDeadlineMs: ctx.timing.deadlineMs,
           abortSignal: ctx.stall.controller.signal,
-          assignedTier: decision.impl,
+          assignedTier: usedTier,
+          // Same fix as spec-chain rework — pass bus so runner events fire.
+          ...(ctx.bus && { bus: ctx.bus }),
+          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+          ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+          stageLabel: `Quality rework round ${attemptIndex}`,
         },
       ),
   });
@@ -180,7 +196,81 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
     const result = await runQualityReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = mapQualityVerdict(result);
+    // Persist findings + concerns onto lastRunResult so:
+    //   - the wire event-builder's findingsBySeverity (reads rr.concerns)
+    //     populates findings_critical/high/medium/low DB columns instead
+    //     of zeros even on annotated audit/review/verify/debug/investigate runs;
+    //   - the terminal envelope's annotatedFindings field carries the
+    //     parsed findings the user can read (was empty before — the
+    //     consumer had to fall back to extraSections).
+    persistReviewFindings(state, result);
+    // Record per-round cost in quality_review stageStats. Annotator path
+    // (read-only routes) and reviewer path both share the same stage slot;
+    // the verdict differentiates ('annotated' vs 'approved'/'changes_required').
+    const baseTier: AgentType = ctx.assignedTier;
+    const reviewerTier: AgentType = (round - 1 < 2)
+      ? (baseTier === 'standard' ? 'complex' : 'standard')
+      : baseTier;
+    const reviewerProvider = ctx.providers[reviewerTier];
+    const cost = (result as ReviewerCallResult | AnnotatorCallResult).cost;
+    mergeStageStats(state, 'quality_review', {
+      inputTokens: cost?.inputTokens ?? 0,
+      outputTokens: cost?.outputTokens ?? 0,
+      turnCount: cost?.turnCount ?? 0,
+      toolCallCount: cost?.toolCallCount ?? 0,
+      costUSD: cost?.costUSD ?? null,
+      durationMs: cost?.durationMs ?? null,
+    }, {
+      tier: reviewerTier,
+      model: (reviewerProvider?.config as { model?: string } | undefined)?.model ?? null,
+      verdict: (result as ReviewerCallResult | AnnotatorCallResult).verdict,
+    });
   };
+}
+
+/** Push the reviewer/annotator's findings into state.lastRunResult so the
+ *  wire telemetry's per-stage `findingsBySeverity` + the terminal envelope's
+ *  `annotatedFindings` see them. Without this:
+ *    - wire findings_critical/high/medium/low all stay 0 even when the
+ *      annotator returned a populated array;
+ *    - envelope.results[N].annotatedFindings is empty and consumers have
+ *      to mine extraSections to find the data.
+ *  Idempotent across rounds (each round appends; the wire dedupes by
+ *  per-stage filter so no double-counting). */
+function persistReviewFindings(
+  state: LifecycleState,
+  result: ReviewerCallResult | AnnotatorCallResult | SkippedReviewResult,
+): void {
+  if ('status' in result && result.status === 'skipped') return;
+  const last = state.lastRunResult as RunResult | undefined;
+  if (!last) return;
+
+  // Annotator result: structured findings array.
+  const annotatorFindings = (result as AnnotatorCallResult).annotatedFindings;
+  if (Array.isArray(annotatorFindings) && annotatorFindings.length > 0) {
+    const merged = [...(last.annotatedFindings ?? []), ...annotatorFindings];
+    last.annotatedFindings = merged;
+    const newConcerns = annotatorFindings.map(f => ({
+      source: 'quality_review' as const,
+      severity: ((f as { severity?: string }).severity ?? 'medium') as 'critical' | 'high' | 'medium' | 'low',
+      message: f.claim,
+    }));
+    last.concerns = [...(last.concerns ?? []), ...newConcerns];
+    return;
+  }
+
+  // Reviewer result: free-text concerns array (no severity per item).
+  // Default to 'medium' so the wire's findingsBySeverity bucketing isn't
+  // skewed toward 'critical' by accident.
+  const reviewerConcerns = (result as ReviewerCallResult).concerns;
+  if (Array.isArray(reviewerConcerns) && reviewerConcerns.length > 0) {
+    const newConcerns = reviewerConcerns.map(text => ({
+      source: 'quality_review' as const,
+      severity: 'medium' as const,
+      message: text,
+    }));
+    last.concerns = [...(last.concerns ?? []), ...newConcerns];
+  }
 }
 
 function makeQualityReworkHandler(reworkIndex: 1 | 2) {
@@ -191,8 +281,45 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
     const ctx = state.executionContext;
     if (!ctx) return;
     const newResult = await runQualityRework(state, ctx, attemptIndex);
-    if (!newResult) return;
-    state.lastRunResult = newResult;
+    if (!newResult) {
+      // The rework's implementer call did not return an ok RunResult.
+      // Mark the chain failed so the next round's `!s.terminal` gate stops
+      // the cascade and settle_quality_chain records the failure on the
+      // wire envelope. See spec-chain-handlers for the same fix shape.
+      state.qualityReworkFailed = true;
+      state.terminal = true;
+      if (ctx.verbose && typeof ctx.verboseStream === 'function') {
+        ctx.verboseStream(
+          `[mmagent verbose] event=quality_rework_failed ts=${new Date().toISOString()} batch_id=${ctx.batchId ?? ''} task_index=${ctx.taskIndex ?? 0} rework_index=${reworkIndex}\n`,
+        );
+      }
+      return;
+    }
+    // Preserve stageStats when replacing lastRunResult — see spec-chain-handlers.
+    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
+    state.lastRunResult = priorStageStats
+      ? { ...newResult, stageStats: priorStageStats }
+      : newResult;
+    // Record rework cost. Quality rework_2 (attemptIndex 2) escalates impl
+    // from base tier to the other tier; rework_1 stays on base.
+    const baseTier: AgentType = ctx.assignedTier;
+    const reworkTier: AgentType = (attemptIndex === 2 && baseTier === 'standard') ? 'complex' : baseTier;
+    const reworkProvider = ctx.providers[reworkTier];
+    mergeStageStats(state, 'quality_rework', {
+      inputTokens: newResult.usage?.inputTokens ?? 0,
+      outputTokens: newResult.usage?.outputTokens ?? 0,
+      cachedReadTokens: newResult.usage?.cachedReadTokens ?? 0,
+      cachedNonReadTokens: newResult.usage?.cachedNonReadTokens ?? 0,
+      turnCount: newResult.turns ?? 0,
+      toolCallCount: Array.isArray(newResult.toolCalls) ? newResult.toolCalls.length : 0,
+      costUSD: newResult.cost?.costUSD ?? null,
+      durationMs: newResult.durationMs ?? null,
+      filesReadCount: Array.isArray(newResult.filesRead) ? newResult.filesRead.length : 0,
+      filesWrittenCount: Array.isArray(newResult.filesWritten) ? newResult.filesWritten.length : 0,
+    }, {
+      tier: reworkTier,
+      model: (reworkProvider?.config as { model?: string } | undefined)?.model ?? null,
+    });
   };
 }
 

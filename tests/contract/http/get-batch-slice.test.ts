@@ -6,7 +6,7 @@ import { normalize } from '../serializer/index.js';
 async function pollToTerminal(h: HarnessHandle, batchId: string): Promise<void> {
   for (let i = 0; i < 60; i++) {
     const poll = await fetch(`${h.baseUrl}/batch/${batchId}`, {
-      headers: { Authorization: `Bearer ${h.token}` },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
     });
     if (poll.status === 200) return;
     expect(poll.status).toBe(202);
@@ -23,6 +23,7 @@ describe('contract: GET /batch/:id?taskIndex=N', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ tasks: [{ prompt: 'task one' }, { prompt: 'task two' }] }),
@@ -33,7 +34,7 @@ describe('contract: GET /batch/:id?taskIndex=N', () => {
       await pollToTerminal(h, batchId);
 
       const res = await fetch(`${h.baseUrl}/batch/${batchId}?taskIndex=0`, {
-        headers: { Authorization: `Bearer ${h.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       });
       expect(res.status).toBe(200);
       const normalized = normalize(await res.json());
@@ -60,6 +61,7 @@ describe('contract: GET /batch/:id?taskIndex=N', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ tasks: [{ prompt: 'task one' }, { prompt: 'task two' }] }),
@@ -70,7 +72,7 @@ describe('contract: GET /batch/:id?taskIndex=N', () => {
       await pollToTerminal(h, batchId);
 
       const res = await fetch(`${h.baseUrl}/batch/${batchId}?taskIndex=5`, {
-        headers: { Authorization: `Bearer ${h.token}` },
+        headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
       });
       expect(res.status).toBe(404);
       const normalized2 = normalize(await res.json());

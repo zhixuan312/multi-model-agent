@@ -4,6 +4,7 @@ import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './telemetry-types.js';
 
+import { bucketFindingsBySeverity } from '../reporting/severity.js';
 import { rollupByTier, sumTokens } from '../bounded-execution/cost-rollup.js';
 import { priceTokens, resolveRateCard } from '../bounded-execution/cost-compute.js';
 import {
@@ -39,32 +40,28 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 
   const stages = buildStages(route, runResult);
 
-  // R4 invariant: totalDurationMs MUST be >= Σ stage.durationMs.
+  // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
+  // is satisfied by Math.max-ing the executor wall-clock against the stage
+  // sum. Pre-fix, runResult.durationMs only covered the implementer's
+  // shell.run — reviewer/annotator wall-clocks were excluded, making
+  // totalDurationMs a fraction of reality. The proportional scale-down
+  // that "fixed" this masked the under-counting by silently shrinking
+  // every per-stage duration to fit. Now:
   //
-  // Use runResult.durationMs as the canonical wall-clock total by default.
-  // Salvage-promotion paths can promote a prior runner's full durationMs
-  // into a single stage, overlapping with other stages and causing Σ
-  // stage.durationMs to exceed the task-level wall clock. When that
-  // happens, proportionally scale stage durations down so the sum fits
-  // within totalDurationMs rather than
-  // inflating the total to mask the double-counting.
+  //   1. Compute the FINAL serialized stage values first (each stage's
+  //      durationMs is already clamped via clampDurationMsStage in
+  //      extractStageData → see line ~233). Per round-2 audit F4: the
+  //      sum MUST be of final serialized values, so post-clamp/round
+  //      drift can't re-introduce R4 violations.
+  //   2. totalDurationMs = max(executor wall-clock, sum of stage durations).
+  //      For sequential v4 stages this picks the stage sum (correct);
+  //      pre-v4 salvage paths still get runResult.durationMs as floor.
+  //   3. NO proportional scale-down. Per-stage durations stay truthful.
+  //      If Σ ever exceeded total in some unforeseen path, we'd want to
+  //      see the bug, not silently mask it.
   const stageDurationsSum = stages.reduce((s, st) => s + st.durationMs, 0);
-  const rawTotal = runResult.durationMs ?? stageDurationsSum;
+  const rawTotal = Math.max(runResult.durationMs ?? 0, stageDurationsSum);
   const totalDurationMs = clampDurationMsTotal(rawTotal);
-
-  if (stageDurationsSum > totalDurationMs && stages.length > 0) {
-    const scale = totalDurationMs / stageDurationsSum;
-    let allocated = 0;
-    for (let i = 0; i < stages.length; i++) {
-      const scaled = Math.max(0, Math.floor(stages[i].durationMs * scale));
-      stages[i].durationMs = scaled;
-      allocated += scaled;
-    }
-    // Distribute any remainder to the first stage (always implementing)
-    if (allocated < totalDurationMs) {
-      stages[0].durationMs += totalDurationMs - allocated;
-    }
-  }
 
   // ── Tier-level rollup (§3.2, §3.3) ───────────────────────────────────
   const tierUsage = rollupByTier(stages.map(s => ({
@@ -98,11 +95,11 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
   const mainCard = resolveRateCard(mainModel);
-  const parentEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
+  const mainEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
 
-  const costDeltaVsParentUSD = (totalCostUSD === null || parentEquivalentCostUSD === null)
+  const costDeltaVsMainUSD = (totalCostUSD === null || mainEquivalentCostUSD === null)
     ? null
-    : totalCostUSD - parentEquivalentCostUSD;
+    : totalCostUSD - mainEquivalentCostUSD;
 
   // Canonicalize mainModel for emission (matches implementerModel emission path).
   const mainNormalized = mainModel ? normalizeModel(mainModel) : null;
@@ -143,8 +140,8 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     cachedNonReadTokens: totalCachedNonReadTokens,
     totalDurationMs,
     totalCostUSD,
-    parentEquivalentCostUSD,
-    costDeltaVsParentUSD,
+    mainEquivalentCostUSD,
+    costDeltaVsMainUSD,
     concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
@@ -158,18 +155,13 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 }
 
 /**
- * Translates an internal telemetry record (mainModel*) into the v4 wire shape
- * (parentModel*). Single point of wire translation.
+ * Wire payload builder. Internal record fields match the wire schema 1:1
+ * after the v4.0.3 rename (mainModel/mainModelFamily everywhere — DB column
+ * is `main_model`, header is `X-MMA-Main-Model`, no more `mainModel`
+ * translation shim).
  */
 export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
-  const wire: Record<string, unknown> = {
-    ...internalRecord,
-    parentModel: internalRecord.mainModel,
-    parentModelFamily: internalRecord.mainModelFamily,
-  };
-  delete wire.mainModel;
-  delete wire.mainModelFamily;
-  return wire as unknown as WireTelemetryRecord;
+  return internalRecord as unknown as WireTelemetryRecord;
 }
 
 function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {
@@ -270,14 +262,23 @@ function buildReviewStage(
   const concernSource = name;
   const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
-  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const c of stageConcerns) {
-    const sev = (c as any).severity ?? 'medium';
-    if (sev in findingsBySeverity) {
-      findingsBySeverity[sev as keyof typeof findingsBySeverity] =
-        Math.min(findingsBySeverity[sev as keyof typeof findingsBySeverity] + 1, 200);
-    }
-  }
+  // 4.0.3+ Gap 2 round-2 F1: use shared bucketFindingsBySeverity helper
+  // (separate from headline's countHighOrCritical) so the wire's exact
+  // per-bucket counts can't be conflated by accident with the headline's
+  // aggregate count. Severity normalization (lowercasing) is shared.
+  // Defaulting unknowns to 'medium' is a property of THIS function only;
+  // the bucketing helper drops unparseable entries — so we explicitly
+  // pass severity ?? 'medium' to preserve the existing wire behavior.
+  const concernsForBucketing = stageConcerns.map(c => ({
+    severity: ((c as { severity?: unknown }).severity ?? 'medium'),
+  }));
+  const rawBuckets = bucketFindingsBySeverity(concernsForBucketing);
+  const findingsBySeverity = {
+    critical: Math.min(rawBuckets.critical, 200),
+    high: Math.min(rawBuckets.high, 200),
+    medium: Math.min(rawBuckets.medium, 200),
+    low: Math.min(rawBuckets.low, 200),
+  };
 
   let verdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable' =
     (status as any) ?? 'not_applicable';

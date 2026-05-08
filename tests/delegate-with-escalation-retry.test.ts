@@ -16,7 +16,7 @@ function makeMockResult(
     output,
     status,
     usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    cost: { costUSD, costDeltaVsParentUSD: null },
+    cost: { costUSD, costDeltaVsMainUSD: null },
     turns: 5,
     filesRead: [],
     filesWritten: [],

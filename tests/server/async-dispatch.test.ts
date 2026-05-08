@@ -113,7 +113,7 @@ describe('asyncDispatch', () => {
     expect(entry!.error?.message).toBe('something went wrong');
   });
 
-  it('bumps runningHeadlineSnapshot to "1/1 running" when the executor begins (4.0.2 fix)', async () => {
+  it('bumps runningHeadlineSnapshot to the route\'s first stage when the executor begins (4.0.3+)', async () => {
     // Regression for the v4.0.1 "0/1 queued forever" UX: even though
     // tasksStarted=1 was set when the executor body fired, the polling
     // endpoint's `entry.runningHeadlineSnapshot.fallback` stayed at
@@ -122,6 +122,9 @@ describe('asyncDispatch', () => {
     // no progress indication — making it look like the daemon itself
     // was deadlocked. async-dispatch now updates the snapshot directly
     // so the polling endpoint reports running state immediately.
+    //
+    // 4.0.3+: snapshot uses the StagePlan-derived stage progression so
+    // the bracket is route-aware (e.g. audit → "Implementing (1/3) - ").
     const batchRegistry = new BatchRegistry();
     const pc = createProjectContext(cwd);
     const deps = makeStubDeps(batchRegistry);
@@ -146,8 +149,11 @@ describe('asyncDispatch', () => {
     const entry = batchRegistry.get(result.batchId);
     expect(entry!.state).toBe('pending'); // executor still in flight
     expect(entry!.tasksStarted).toBe(1);
-    expect(entry!.runningHeadlineSnapshot.prefix).toBe('1/1 running, ');
-    expect(entry!.runningHeadlineSnapshot.fallback).toBe('1/1 running');
+    // audit route's first user-facing stage is "Implementing"; total stages
+    // is whatever the StagePlan exposes (routes derive denominator from the
+    // shared stage-progression module — DON'T hardcode the count here).
+    expect(entry!.runningHeadlineSnapshot.prefix).toMatch(/^Implementing \(1\/\d+\) - $/);
+    expect(entry!.runningHeadlineSnapshot.fallback).toMatch(/^Implementing \(1\/\d+\)$/);
 
     // Cleanup so vitest doesn't hang on the unresolved promise.
     resolveExecutor({});
@@ -202,5 +208,143 @@ describe('asyncDispatch', () => {
     const entry = batchRegistry.get(result.batchId);
     expect(entry!.state).toBe('complete');
     expect(batchRegistry.countActiveForProject(cwd)).toBe(0);
+  });
+
+  // Gap 5 regression (4.0.3+): silent failures in the executor's catch
+  // block (envelope with structuredError or non-ok status) used to fire
+  // batch_completed, hiding the failure from operator-facing telemetry.
+  // Now these envelopes fire batch_failed.
+  describe('detectFailure (Gap 5)', () => {
+    it('emits batch_failed when envelope carries structuredError', async () => {
+      const batchRegistry = new BatchRegistry();
+      const pc = createProjectContext(cwd);
+      const deps = makeStubDeps(batchRegistry);
+
+      const result = asyncDispatch({
+        tool: 'audit',
+        projectCwd: cwd,
+        blockIds: [],
+        batchRegistry,
+        projectContext: pc,
+        deps,
+        executor: async () => ({
+          headline: '[error] failed',
+          results: [{
+            output: '',
+            status: 'error',
+            structuredError: { code: 'runner_crash', message: 'context block missing' },
+          }],
+          error: { kind: 'not_applicable', reason: 'batch succeeded' },
+          batchId: 'x',
+        }),
+      });
+
+      // Drain microtasks so the executor body completes.
+      await new Promise<void>((r) => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
+
+      const emitMock = (deps.bus.emit as ReturnType<typeof vi.fn>);
+      const eventNames = emitMock.mock.calls.map(c => (c[0] as { event: string }).event);
+      expect(eventNames).toContain('batch_failed');
+      expect(eventNames).not.toContain('batch_completed');
+
+      const failedCall = emitMock.mock.calls.find(c => (c[0] as { event: string }).event === 'batch_failed');
+      expect(failedCall![0]).toMatchObject({
+        event: 'batch_failed',
+        batchId: result.batchId,
+        errorCode: 'runner_crash',
+        errorMessage: 'context block missing',
+      });
+    });
+
+    it('emits batch_failed when any task result has status=error', async () => {
+      const batchRegistry = new BatchRegistry();
+      const pc = createProjectContext(cwd);
+      const deps = makeStubDeps(batchRegistry);
+
+      asyncDispatch({
+        tool: 'audit',
+        projectCwd: cwd,
+        blockIds: [],
+        batchRegistry,
+        projectContext: pc,
+        deps,
+        executor: async () => ({
+          headline: 'failed',
+          results: [{ output: '', status: 'error', errorCode: 'all_tiers_unavailable', error: 'no provider' }],
+          error: { kind: 'not_applicable', reason: 'batch succeeded' },
+          batchId: 'x',
+        }),
+      });
+
+      await new Promise<void>((r) => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
+
+      const emitMock = (deps.bus.emit as ReturnType<typeof vi.fn>);
+      const failedCall = emitMock.mock.calls.find(c => (c[0] as { event: string }).event === 'batch_failed');
+      expect(failedCall).toBeDefined();
+      expect(failedCall![0]).toMatchObject({ errorCode: 'all_tiers_unavailable' });
+    });
+
+    it('does NOT treat incomplete status as batch failure (review-rework intermediate)', async () => {
+      // Review-rework paths can transit through 'incomplete' on intermediate
+      // rounds while the eventual envelope is still a valid completion.
+      // detectFailure must not over-trigger on 'incomplete'.
+      const batchRegistry = new BatchRegistry();
+      const pc = createProjectContext(cwd);
+      const deps = makeStubDeps(batchRegistry);
+
+      asyncDispatch({
+        tool: 'delegate',
+        projectCwd: cwd,
+        blockIds: [],
+        batchRegistry,
+        projectContext: pc,
+        deps,
+        executor: async () => ({
+          headline: 'incomplete',
+          results: [{ output: 'partial', status: 'incomplete', errorCode: 'turn_cap' }],
+          error: { kind: 'not_applicable', reason: 'batch succeeded' },
+          batchId: 'x',
+        }),
+      });
+
+      await new Promise<void>((r) => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
+
+      const emitMock = (deps.bus.emit as ReturnType<typeof vi.fn>);
+      const eventNames = emitMock.mock.calls.map(c => (c[0] as { event: string }).event);
+      expect(eventNames).toContain('batch_completed');
+      expect(eventNames).not.toContain('batch_failed');
+    });
+
+    it('emits batch_completed when envelope is healthy (no failure signals)', async () => {
+      const batchRegistry = new BatchRegistry();
+      const pc = createProjectContext(cwd);
+      const deps = makeStubDeps(batchRegistry);
+
+      asyncDispatch({
+        tool: 'audit',
+        projectCwd: cwd,
+        blockIds: [],
+        batchRegistry,
+        projectContext: pc,
+        deps,
+        executor: async () => ({
+          headline: '[ok] audit done',
+          results: [{ output: 'good', status: 'ok' }],
+          error: { kind: 'not_applicable', reason: 'batch succeeded' },
+          batchId: 'x',
+        }),
+      });
+
+      await new Promise<void>((r) => setImmediate(r));
+      await new Promise<void>((r) => setImmediate(r));
+
+      const emitMock = (deps.bus.emit as ReturnType<typeof vi.fn>);
+      const eventNames = emitMock.mock.calls.map(c => (c[0] as { event: string }).event);
+      expect(eventNames).toContain('batch_completed');
+      expect(eventNames).not.toContain('batch_failed');
+    });
   });
 });

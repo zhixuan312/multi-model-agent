@@ -19,20 +19,20 @@ import { loadConfigFromFile } from '@zhixuan92/multi-model-agent-core/config/loa
 import { runTasks } from '@zhixuan92/multi-model-agent-core/run-tasks';
 
 // Uses the same ~/.multi-model/config.json as the standalone daemon —
-// agents.standard, agents.complex, defaults.parentModel, etc.
+// agents.standard, agents.complex, etc.
 const config = await loadConfigFromFile();
 
 const results = await runTasks([
-  { prompt: 'Refactor auth.ts to use JWT.',         agentType: 'complex' },
-  { prompt: 'Write unit tests for auth module.',    agentType: 'standard' },
+  { prompt: 'Refactor auth.ts to use JWT.',         agentType: 'complex', mainModel: 'claude-opus-4-7' },
+  { prompt: 'Write unit tests for auth module.',    agentType: 'standard', mainModel: 'claude-opus-4-7' },
 ], config);
 
 for (const r of results) {
-  console.log(r.status, r.usage.costUSD, r.usage.costDeltaVsParentUSD, r.output);
+  console.log(r.status, r.cost?.costUSD, r.cost?.costDeltaVsMainUSD, r.output);
 }
 ```
 
-`costDeltaVsParentUSD` is populated when `defaults.parentModel` is set in the config — it's `actualCost − parentCost` (negative = worker cheaper/savings). Use it to surface a `$X saved (Y× ROI)` figure in your own UI.
+`costDeltaVsMainUSD` is populated when `mainModel` is set on the TaskSpec — it's `actualCost − mainCost` (negative = worker cheaper/savings). Use it to surface a `$X saved (Y× ROI)` figure in your own UI. (4.0.3 rename: was `costDeltaVsParentUSD`.)
 
 ## What's inside
 
@@ -229,13 +229,25 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
+## What's new in 4.0.3
+
+- **Wire field rename:** `parentModel*` → `mainModel*`. `costDeltaVsParentUSD` → `costDeltaVsMainUSD`, `parentEquivalentCostUSD` → `mainEquivalentCostUSD`. Internal record now matches wire shape 1:1 (no more rename shim in `buildWirePayload`).
+- **`config.defaults.mainModel` removed.** Library callers should pass `mainModel` per-task on the `TaskSpec`. The standalone daemon reads it from the `X-MMA-Main-Model` header.
+- **Canonical model-name preservation.** `extractCanonicalModelName('claude-opus-4-7')` now returns `'claude-opus-4-7'` (was: `'claude-opus'`). Best-effort extraction handles arbitrary wrappers.
+- **`HeadlineTemplate.compose` signature** added optional `runResult: RunResult` and `task: TaskSpec` params (backwards-compatible). Audit/review/delegate composers use them to fall back to `runResult.annotatedFindings` / `runResult.filesWritten` when the structured report doesn't carry them.
+- **`ContextBlockStore` interface** extended with `size`, `pin`/`unpin`/`refcount`, `clear`, `ttlMs`. New `FileBackedContextBlockStore` implementation persists to `<projectCwd>/.mma/context-blocks/` (the daemon's default; tests use `createInMemoryProjectContext`).
+- **`totalDurationMs` reflects real wall-clock.** `event-builder.ts` now uses `max(runResult.durationMs, Σ stageDurations)`. The proportional scale-down was masking the implementer-only bug — gone.
+- **New shared modules** under `core/`: `lifecycle/stage-progression`, `reporting/severity`, `reporting/headline-text`, `providers/tool-name-sets`. Each centralizes a previously-duplicated concern.
+
+Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
+
 ## What's new in 4.0.0
 
 - **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
 - **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning; `reasoningTokens` and `cachedCreationTokens` removed. SCHEMA_VERSION → 4.
 - **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
 - **Engine API.** New `ReviewerEngine` (gating reviews for artifact-producing tools) + `AnnotatorEngine` (read-only annotation passes) replace ad-hoc review functions. Per-tool executors collapsed into a single `executeTask` orchestrator driven by `ToolConfig` slot objects. See [Engine API](#v4-engine-api) above.
-- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces three parallel runner files. `ReadinessClassifier`, `EffortInferer`, `AttemptRecorder`, `RequestPipeline`, `TelemetryFlushWorker`, `CrossTierGuard` removed. 2969 tests pass.
+- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces three parallel runner files. `ReadinessClassifier`, `EffortInferer`, `AttemptRecorder`, `RequestPipeline`, `TelemetryFlushWorker`, `CrossTierGuard` removed.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

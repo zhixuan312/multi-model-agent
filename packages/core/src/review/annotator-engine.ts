@@ -22,6 +22,13 @@ export interface AnnotatorInput {
   route: AnnotatorRoute;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
+  /** Forwarded to RunInput so the running-headline sink + verbose stderr
+   *  show stage="Annotating" while the read-only review pass runs. */
+  bus?: import('../events/event-emitter.js').EventEmitter;
+  batchId?: string;
+  taskIndex?: number;
+  tier?: string;
+  stageLabel?: string;
 }
 
 export interface AnnotatorCallResult extends AnnotatorParseResult {
@@ -29,7 +36,7 @@ export interface AnnotatorCallResult extends AnnotatorParseResult {
    *  parse this via their per-tool report schema (audit, review, verify each
    *  have their own shape that does not match AnnotatedFinding). */
   finalAssistantText: string;
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null };
+  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
 export class AnnotatorEngine {
@@ -44,18 +51,24 @@ export class AnnotatorEngine {
       toolDefinitions: [],
       maxTurns: 5, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
+      ...(input.bus && { bus: input.bus }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.tier !== undefined && { tier: input.tier }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });
     const parsed = this.parser.parse({ finalAssistantText: result.finalAssistantText, errorCode: result.errorCode });
     return { ...parsed, finalAssistantText: result.finalAssistantText ?? '', cost: extractCost(result) };
   }
 }
 
-function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null } }): AnnotatorCallResult['cost'] {
+function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null }; costUSD?: number | null; durationMs?: number | null }): AnnotatorCallResult['cost'] {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
     toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    costUSD: r.costUSD ?? r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    durationMs: r.durationMs ?? null,
   };
 }

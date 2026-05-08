@@ -9,15 +9,15 @@ describe('PRIVACY.md ↔ schema sync', () => {
     const expected = [
       'installId', 'schemaVersion', 'mmagentVersion', 'os', 'nodeMajor',
       'route', 'client', 'terminalStatus', 'implementerModel', 'eventId',
-      'totalDurationMs', 'totalCostUSD', 'costDeltaVsParentUSD', 'parentEquivalentCostUSD',
+      'totalDurationMs', 'totalCostUSD', 'costDeltaVsMainUSD', 'mainEquivalentCostUSD',
       'inputTokens', 'outputTokens',
       'cachedReadTokens', 'cachedNonReadTokens',
-      'tierUsage', 'parentModel', 'round',
+      'tierUsage', 'mainModel', 'round',
       'concernCount', 'escalationCount', 'fallbackCount',
       'stallCount', 'taskMaxIdleMs',
       'reviewPolicy', 'verifyCommandPresent',
       'agentType', 'toolMode', 'capabilities',
-      'verdict', 'errorCode', 'parentModelFamily',
+      'verdict', 'errorCode', 'mainModelFamily',
     ];
     for (const f of expected) {
       const occurrences = (md.match(new RegExp(`\\b${f}\\b`, 'g')) || []).length;

@@ -46,6 +46,28 @@
         "unresolved": [],
         "extraSections": {}
       },
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        }
+      },
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -118,6 +140,28 @@
         "unresolved": [],
         "extraSections": {}
       },
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        }
+      },
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -189,6 +233,28 @@
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
+      },
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        }
       },
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -225,7 +291,7 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
     "kind": "not_applicable",
@@ -237,6 +303,7 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
+  "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "skipped",
   "qualityReviewVerdict": "skipped",
   "roundsUsed": 0

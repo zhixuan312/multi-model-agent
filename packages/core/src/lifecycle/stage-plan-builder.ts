@@ -166,6 +166,12 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
     { rowId: '5.5', stageName: 'persist_to_batch_registry',
       runCondition: () => true, isRework: false, handlerKey: 'persist_to_batch_registry',
       runOnTerminal: true },
+    // 5.6: record_task_completed — server-only; calls ctx.recorder.recordTaskCompleted
+    //      to enqueue the cloud task.completed wire event. No-ops on CLI/test paths
+    //      (no recorder). Must run on terminal so failures still record.
+    { rowId: '5.6', stageName: 'record_task_completed',
+      runCondition: () => true, isRework: false, handlerKey: 'record_task_completed',
+      runOnTerminal: true },
 
     // Stage 6 — emit + cleanup (rows 6.1–6.3)
     // 6.1: flush_telemetry — always; fires on terminal so failure events drain

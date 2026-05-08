@@ -6,7 +6,7 @@ import { normalize } from '../serializer/index.js';
 async function pollToTerminal(h: HarnessHandle, batchId: string): Promise<Record<string, unknown>> {
   for (let i = 0; i < 60; i++) {
     const poll = await fetch(`${h.baseUrl}/batch/${batchId}`, {
-      headers: { Authorization: `Bearer ${h.token}` },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
     });
     if (poll.status === 200) {
       return await poll.json() as Record<string, unknown>;
@@ -26,6 +26,7 @@ describe('contract: POST /retry', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ tasks: [{ prompt: 'hello' }] }),
@@ -43,6 +44,7 @@ describe('contract: POST /retry', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ batchId: cacheBatchId, taskIndices: [0] }),
@@ -83,6 +85,7 @@ describe('contract: POST /retry', () => {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ batchId: '00000000-0000-0000-0000-000000000000', taskIndices: [0] }),

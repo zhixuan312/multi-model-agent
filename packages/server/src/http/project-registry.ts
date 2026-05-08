@@ -1,4 +1,4 @@
-import { createProjectContext, type ProjectContext, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
+import { createProjectContext, createInMemoryProjectContext, type ProjectContext, BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 import { validateCwd } from './cwd-validator.js';
 
 export type ReserveError = 'project_cap' | 'invalid_cwd' | 'missing_cwd' | 'cwd_not_dir' | 'forbidden_cwd';
@@ -7,10 +7,19 @@ export type ReserveResult =
   | { ok: true; projectContext: ProjectContext; created: boolean }
   | { ok: false; error: ReserveError; message: string };
 
+/** Storage strategy for the per-project context-block store.
+ *  - `file-backed` (default for `npm run serve`): blocks persist to
+ *    `<cwd>/.mma/context-blocks/` so they survive daemon restarts. The
+ *    Gap 4 fix.
+ *  - `in-memory`: tests + ephemeral servers; no filesystem side effects. */
+export type ContextBlockStorageMode = 'file-backed' | 'in-memory';
+
 export interface ProjectRegistryOptions {
   cap: number;
   idleEvictionMs: number;
   evictionIntervalMs: number;
+  /** Defaults to 'file-backed' to match the production daemon's recipe. */
+  contextBlockStorage?: ContextBlockStorageMode;
   onProjectCreated?: (cwd: string) => void;
   onProjectEvicted?: (cwd: string, idleMs: number) => void;
 }
@@ -20,6 +29,7 @@ export class ProjectRegistry {
   private readonly cap: number;
   private readonly idleEvictionMs: number;
   private readonly evictionIntervalMs: number;
+  private readonly contextBlockStorage: ContextBlockStorageMode;
   private evictionTimer: NodeJS.Timeout | null = null;
   private readonly onProjectCreated?: (cwd: string) => void;
   private readonly onProjectEvicted?: (cwd: string, idleMs: number) => void;
@@ -28,6 +38,7 @@ export class ProjectRegistry {
     this.cap = options.cap;
     this.idleEvictionMs = options.idleEvictionMs;
     this.evictionIntervalMs = options.evictionIntervalMs;
+    this.contextBlockStorage = options.contextBlockStorage ?? 'file-backed';
     this.onProjectCreated = options.onProjectCreated;
     this.onProjectEvicted = options.onProjectEvicted;
   }
@@ -57,7 +68,9 @@ export class ProjectRegistry {
     if (this.map.size >= this.cap) {
       return { ok: false, error: 'project_cap', message: `server at ${this.cap} projects; close some connections and retry` };
     }
-    const pc = createProjectContext(key);
+    const pc = this.contextBlockStorage === 'in-memory'
+      ? createInMemoryProjectContext(key)
+      : createProjectContext(key);
     pc.pendingReservations = 1;
     this.map.set(key, pc);
     this.onProjectCreated?.(key);

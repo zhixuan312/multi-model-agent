@@ -7,6 +7,8 @@ async function authedFetch(url: string, token: string, init?: RequestInit): Prom
     ...init,
     headers: {
       ...(init?.headers ?? {}),
+      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
       Authorization: `Bearer ${token}`,
     },
   });

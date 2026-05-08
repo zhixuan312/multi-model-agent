@@ -13,7 +13,6 @@ export const TaskCompletedCloudEvent = z.object({
   route: RouteEnum,
   agentType: TierEnum,
   toolMode: z.enum(['none', 'readonly', 'no-shell', 'full']),
-  triggeredFromSkill: z.string(),
   client: z.string(),
   fileCountBucket: z.enum(['0', '1-5', '6-20', '21-50', '51+']),
   durationBucket: z.enum(['<10s', '10s-1m', '1m-5m', '5m-30m', '30m+']),

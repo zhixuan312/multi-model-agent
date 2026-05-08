@@ -27,6 +27,7 @@ import {
   registerTerminalBlockHandler,
   emitTaskTerminalHandler,
   persistToBatchRegistryHandler,
+  recordTaskCompletedHandler,
   flushTelemetryHandler,
 } from './terminal-handlers.js';
 
@@ -183,7 +184,53 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         };
       }
 
+      // Chain-failure status override: the implementer's lastRunResult.status
+      // is 'ok' when its turn finished cleanly, but if the spec/quality chain
+      // (or its rework) ultimately rejected the work, the wire envelope must
+      // reflect that — otherwise task_completed reports status=ok despite
+      // spec_chain_passed=false. Mutate state.lastRunResult so emit_task_terminal
+      // (which reads lastRunResult.status directly) picks up the corrected
+      // shape.
+      const chainFailed =
+        state.specReworkFailed === true ||
+        state.qualityReworkFailed === true ||
+        state.specChainPassed === false ||
+        state.qualityChainPassed === false;
+      if (chainFailed) {
+        enriched.status = 'incomplete';
+        enriched.workerStatus = 'review_loop_capped';
+        if (state.specReworkFailed === true || state.qualityReworkFailed === true) {
+          enriched.errorCode = 'lifecycle_review_loop_capped';
+        } else if (state.specChainPassed === false) {
+          enriched.errorCode = 'review_spec_rejected_terminal';
+        } else {
+          enriched.errorCode = 'review_quality_findings_unresolved';
+        }
+        // The wire event derives terminalStatus + workerStatus from
+        // RunResult.terminationReason. The implementer's RunResult has
+        // cause='finished' + workerSelfAssessment='done', which produces
+        // terminalStatus='ok' regardless of our status/errorCode overrides
+        // — yielding the R1 invariant violation (terminalStatus=ok with
+        // non-null errorCode). Override terminationReason so the chain-fail
+        // path produces a clean terminalStatus='incomplete' on the wire.
+        const priorTr = (typeof enriched.terminationReason === 'object' && enriched.terminationReason !== null)
+          ? enriched.terminationReason
+          : undefined;
+        enriched.terminationReason = {
+          cause: 'incomplete',
+          turnsUsed: priorTr?.turnsUsed ?? last.turns ?? 0,
+          hasFileArtifacts: priorTr?.hasFileArtifacts ?? (Array.isArray(last.filesWritten) && last.filesWritten.length > 0),
+          usedShell: priorTr?.usedShell ?? false,
+          workerSelfAssessment: 'review_loop_capped',
+          wasPromoted: false,
+        };
+      }
+
       state.responseEnvelope = enriched;
+      // emit_task_terminal reads state.lastRunResult, not state.responseEnvelope,
+      // so propagate the chain-failure overrides back to the underlying slot
+      // so the wire `task_completed` event carries them too.
+      state.lastRunResult = enriched;
       return;
     }
     state.responseEnvelope = undefined;
@@ -226,6 +273,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     register_terminal_block: registerTerminalBlockHandler,
     emit_task_terminal: emitTaskTerminalHandler,
     persist_to_batch_registry: persistToBatchRegistryHandler,
+    record_task_completed: recordTaskCompletedHandler,
 
     flush_telemetry: flushTelemetryHandler,
     project_idle_cleanup_tick: noop,

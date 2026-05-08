@@ -29,7 +29,7 @@ export interface RunWithFallbackInput<T> {
    *  Returns undefined for results that don't carry a status field (custom T types). */
   getStatus?: (result: T) => RunStatus | undefined;
   makeSyntheticFailure: (assigned: AgentType) => T;
-  call: (provider: Provider) => Promise<T>;
+  call: (provider: Provider, tier: AgentType) => Promise<T>;
   /** Canonical identities to exclude from candidate selection. When a candidate
    *  provider's resolved identity matches one in this set, the candidate is skipped
    *  as a separation violation. If identity resolution throws on a successfully-constructed

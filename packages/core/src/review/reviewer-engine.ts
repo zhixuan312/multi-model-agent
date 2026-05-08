@@ -30,14 +30,23 @@ export interface ReviewerInput {
   filesWritten?: string[];
   abortSignal?: AbortSignal;
   deadlineMs?: number;
+  /** Forwarded to RunInput so the running-headline sink + verbose stderr
+   *  show which lifecycle stage the model is in (Spec review / Quality
+   *  review / Diff review). The implementer call sets this from
+   *  task-runner; reviewer call sites set it on the input. */
+  bus?: import('../events/event-emitter.js').EventEmitter;
+  batchId?: string;
+  taskIndex?: number;
+  tier?: string;
+  stageLabel?: string;
 }
 
 export interface ReviewerCallResult extends ReviewerParseResult {
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null };
+  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
 export interface ReviewerDiffCallResult extends ReviewerDiffParseResult {
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null };
+  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
 export class ReviewerEngine {
@@ -50,6 +59,11 @@ export class ReviewerEngine {
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
       maxTurns: 5, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
+      ...(input.bus && { bus: input.bus }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.tier !== undefined && { tier: input.tier }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });
     const parsed = this.parser.parse(result.finalAssistantText ?? '');
     return { ...parsed, cost: extractCost(result) };
@@ -61,6 +75,11 @@ export class ReviewerEngine {
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
       maxTurns: 5, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
+      ...(input.bus && { bus: input.bus }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.tier !== undefined && { tier: input.tier }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });
     const parsed = this.parser.parse(result.finalAssistantText ?? '');
     return { ...parsed, cost: extractCost(result) };
@@ -72,19 +91,26 @@ export class ReviewerEngine {
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
       maxTurns: 5, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
+      ...(input.bus && { bus: input.bus }),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      ...(input.tier !== undefined && { tier: input.tier }),
+      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
     });
     const parsed = this.parser.parseDiff(result.finalAssistantText ?? '');
     return { ...parsed, cost: extractCost(result) };
   }
 }
 
-function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null } }): ReviewerCallResult['cost'] {
+function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null }; costUSD?: number | null; durationMs?: number | null }): ReviewerCallResult['cost'] {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
     toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    // shell.run now exposes top-level costUSD; legacy paths used cost.costUSD or usage.costUSD.
+    costUSD: r.costUSD ?? r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    durationMs: r.durationMs ?? null,
   };
 }
 

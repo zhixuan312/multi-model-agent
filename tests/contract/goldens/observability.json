@@ -1,6 +1,37 @@
 {
   "events": [
     {
+      "name": "runner_turn_started",
+      "requiredFields": [
+        "event",
+        "ts",
+        "providerType",
+        "turnIndex"
+      ]
+    },
+    {
+      "name": "runner_response_received",
+      "requiredFields": [
+        "event",
+        "ts",
+        "providerType",
+        "turnIndex",
+        "finishReason",
+        "assistantTextLen",
+        "toolCallCount"
+      ]
+    },
+    {
+      "name": "runner_turn_completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "providerType",
+        "turnIndex",
+        "terminated"
+      ]
+    },
+    {
       "name": "task_started",
       "requiredFields": [
         "event",
@@ -255,7 +286,6 @@
         "route",
         "agentType",
         "toolMode",
-        "triggeredFromSkill",
         "client",
         "fileCountBucket",
         "durationBucket",

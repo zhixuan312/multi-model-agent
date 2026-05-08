@@ -33,7 +33,7 @@ describe('ActivityTracker', () => {
         expect(first.attemptCap).toBeUndefined();
         expect(first.progress).toEqual({ filesRead: 0, filesWritten: 0, toolCalls: 0 });
         expect(first.costUSD).toBeNull();
-        expect(first.costDeltaVsParentUSD).toBeNull();
+        expect(first.costDeltaVsMainUSD).toBeNull();
         expect(first.final).toBe(false);
         expect(first.headline).toContain('[1/3] Implementing');
         resolve();

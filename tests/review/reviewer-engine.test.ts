@@ -24,6 +24,11 @@ function shellResult(overrides: Partial<RunResult> = {}): RunResult {
     finalAssistantText: '',
     toolCalls: [],
     usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    durationMs: 0,
+    filesRead: [],
+    filesWritten: [],
+    costUSD: null,
     ...overrides,
   };
 }
@@ -128,6 +133,7 @@ describe('ReviewerEngine.runSpec', () => {
       turnCount: 0,
       toolCallCount: 2,
       costUSD: null,
+      durationMs: 0,
     });
   });
 });
@@ -221,6 +227,7 @@ describe('ReviewerEngine.runDiff', () => {
       turnCount: 0,
       toolCallCount: 0,
       costUSD: null,
+      durationMs: 0,
     });
   });
 });
@@ -229,33 +236,37 @@ describe('ReviewerEngine.runDiff', () => {
 // Negative cases
 // ---------------------------------------------------------------------------
 describe('ReviewerEngine negative cases', () => {
-  it('throws ReviewerParseError when ## Summary section is missing', async () => {
+  it('returns changes_required + meta-concern when ## Summary section is missing (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
     const shell = mockShell(shellResult({
       finalAssistantText: 'no summary here, just rambling',
     }));
 
-    await expect(engine.runSpec(shell, baseInput)).rejects.toThrow(ReviewerParseError);
-    await expect(engine.runSpec(shell, baseInput)).rejects.toThrow('reviewer output missing ## Summary section');
+    const result = await engine.runSpec(shell, baseInput);
+    expect(result.verdict).toBe('changes_required');
+    expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });
 
-  it('throws ReviewerParseError when finalAssistantText is empty', async () => {
+  it('returns changes_required when finalAssistantText is empty (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
     const shell = mockShell(shellResult({
       finalAssistantText: '',
     }));
 
-    await expect(engine.runSpec(shell, baseInput)).rejects.toThrow(ReviewerParseError);
+    const result = await engine.runSpec(shell, baseInput);
+    expect(result.verdict).toBe('changes_required');
+    expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });
 
-  it('throws ReviewerParseError for diff when verdict is missing', async () => {
+  it('returns concerns + meta-concern for diff when verdict marker is missing (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
     const shell = mockShell(shellResult({
       finalAssistantText: '## Summary\nlooks good to me',
     }));
 
-    await expect(engine.runDiff(shell, baseInput)).rejects.toThrow(ReviewerParseError);
-    await expect(engine.runDiff(shell, baseInput)).rejects.toThrow('diff reviewer output missing verdict');
+    const result = await engine.runDiff(shell, baseInput);
+    expect(result.verdict).toBe('concerns');
+    expect(result.concerns[0]).toMatch(/missing.*marker/);
   });
 
   it('propagates transport error from shell', async () => {
@@ -294,12 +305,14 @@ describe('ReviewerEngine negative cases', () => {
     expect(callInput.deadlineMs).toBe(30_000);
   });
 
-  it('handles null/undefined finalAssistantText gracefully (parse error, not crash)', async () => {
+  it('handles null/undefined finalAssistantText gracefully (lenient parse, not crash)', async () => {
     const engine = makeEngine();
     // shellResult defaults finalAssistantText to '', but we explicitly pass null-ish
     const shell = mockShell(shellResult({ finalAssistantText: undefined as unknown as string }));
 
-    // finalAssistantText ?? '' → '' → missing Summary → parse error
-    await expect(engine.runSpec(shell, baseInput)).rejects.toThrow(ReviewerParseError);
+    // finalAssistantText ?? '' → '' → missing Summary → lenient changes_required
+    const result = await engine.runSpec(shell, baseInput);
+    expect(result.verdict).toBe('changes_required');
+    expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });
 });

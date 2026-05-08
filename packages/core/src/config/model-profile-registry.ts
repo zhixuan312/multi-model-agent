@@ -68,18 +68,142 @@ const TRAILING_MARKERS = [
  * Idempotent: repeated application returns the same result.
  * Bare model names pass through unchanged.
  */
+/**
+ * Returns the canonical wire-display model name for telemetry.
+ *
+ * v4.0.3+: preserves the model + version (e.g. `claude-opus-4-7` instead
+ * of collapsing to the prefix `claude-opus`). Strategy:
+ *   1. Strip vendor namespace prefixes (`vertex_ai/anthropic.`, `aws-bedrock-`).
+ *   2. If the result starts with a known profile prefix → return the
+ *      namespace-stripped form WITH date/release-tag suffixes removed,
+ *      preserving model + version.
+ *   3. If only the trailing-marker-stripped form matches a prefix → return
+ *      the trailing-marker-stripped form (date suffix gone, version may
+ *      have been part of the trailing marker).
+ *   4. No prefix match → 'custom'.
+ *
+ * Date-only suffix stripping uses DATE_TRAILING_MARKERS (YYYY-MM-DD,
+ * @timestamps, -latest) — NOT the broader TRAILING_MARKERS that strip
+ * version digits. Family resolution still uses prefix collapsing via
+ * `findModelProfile` — this function feeds the wire `mainModel` /
+ * `implementerModel` slots that downstream cost analysis groups by.
+ */
+const DATE_TRAILING_MARKERS = [
+  /@\d{4}-\d{2}-\d{2}$/i,   // claude-opus-4-1@2025-07-15
+  /-\d{4}-\d{2}-\d{2}$/i,   // claude-3-opus-2024-02-29 (long form)
+  /-\d{8}$/,                // claude-3-opus-20240229 (compact)
+  /-latest$/i,
+];
+
+function stripDateMarkers(raw: string): string {
+  let result = raw;
+  let changed = true;
+  while (changed) {
+    changed = false;
+    for (const marker of DATE_TRAILING_MARKERS) {
+      const next = result.replace(marker, '');
+      if (next !== result) {
+        result = next;
+        changed = true;
+        break;
+      }
+    }
+  }
+  return result;
+}
+
+/** Truncate at the first token-boundary character that's not part of a
+ *  model id (`_`, `:`, ` `, `@`, `/`). These mark the start of an
+ *  out-of-band wrapper suffix the user didn't intend as part of the
+ *  model name. Preserves `-` and `.` since those ARE part of standard
+ *  model id syntax (claude-opus-4-7, gpt-5.5). */
+function truncateAtWrapperBoundary(form: string): string {
+  const boundary = form.search(/[_: @\/]/);
+  return boundary === -1 ? form : form.slice(0, boundary);
+}
+
+/** Strip random-suffix junk that survived prior cleaning passes. Real
+ *  wire data sometimes carries trailing tokens that aren't proper
+ *  release tags (e.g., `claude-sonnet-4-6-suffix`). Heuristic: if the
+ *  trailing dash-segment is a known model-noise word, strip it. */
+const TRAILING_NOISE_WORDS = new Set([
+  'suffix', 'junk', 'tag', 'rev', 'build', 'release',
+]);
+function stripTrailingNoise(form: string): string {
+  const lastDash = form.lastIndexOf('-');
+  if (lastDash === -1) return form;
+  const tail = form.slice(lastDash + 1).toLowerCase();
+  return TRAILING_NOISE_WORDS.has(tail) ? form.slice(0, lastDash) : form;
+}
+
+/** Strip provisioning-version markers like `-v1`, `-v2` (AWS Bedrock,
+ *  Vertex). Distinct from the model's semantic version (`claude-opus-4-7`)
+ *  — `-v1` is a deployment artifact, not part of the canonical id. We
+ *  can't use the broader TRAILING_MARKERS list here because that strips
+ *  trailing digit segments like `-7` which IS part of the model name. */
+const PROVISIONING_VERSION_MARKER = /-v\d+$/i;
+function stripProvisioningVersion(form: string): string {
+  return form.replace(PROVISIONING_VERSION_MARKER, '');
+}
+
+/** Run the full clean pipeline on a candidate form. Each step strips
+ *  one class of noise; we run boundary truncation EVERY pass because
+ *  any prior step may have exposed new wrapper junk. */
+function cleanCandidate(form: string): string {
+  let result = stripLeadingNamespace(form);
+  result = truncateAtWrapperBoundary(result);
+  result = stripDateMarkers(result);
+  result = stripProvisioningVersion(result);
+  result = stripTrailingNoise(result);
+  return result;
+}
+
 export function extractCanonicalModelName(raw: string): string {
   if (!STRICT_ID_REGEX.test(raw)) return 'custom';
 
-  const namespaceStripped = stripLeadingNamespace(raw);
-  const preservedMatch = longestPrefixCanonical(namespaceStripped);
-  if (preservedMatch) return preservedMatch;
+  // First pass: clean the raw input and check if it starts with a known
+  // profile prefix. Covers the common case (`claude-opus-4-7`,
+  // `bedrock.claude-opus-4-7`, `vertex_ai/anthropic.claude-sonnet-4-5`).
+  const cleaned = cleanCandidate(raw);
+  if (longestPrefixCanonical(cleaned)) return cleaned;
 
-  const fullyStripped = stripTrailingMarkers(namespaceStripped);
-  const strippedMatch = longestPrefixCanonical(fullyStripped);
-  if (strippedMatch) return strippedMatch;
+  // Fallback A: aggressive trailing-marker stripping (release tags etc.)
+  const fullyStripped = stripTrailingMarkers(cleaned);
+  if (longestPrefixCanonical(fullyStripped)) return fullyStripped;
+
+  // Fallback B: best-effort substring extraction for ids embedded in
+  // arbitrary wrappers (`my_router_42_claude-opus-4-7_xyz`,
+  // `proxy:claude-opus-4-7@v3`). Find the longest known profile prefix
+  // appearing anywhere in the raw input, slice from that position, and
+  // re-clean. This covers wire data from custom routers / proxies that
+  // sandwich the canonical id between random tokens.
+  const substringMatch = longestPrefixSubstring(raw);
+  if (substringMatch !== null) {
+    const cleanedSlice = cleanCandidate(raw.slice(substringMatch.startIndex));
+    if (cleanedSlice.length > 0 && longestPrefixCanonical(cleanedSlice)) {
+      return cleanedSlice;
+    }
+  }
 
   return 'custom';
+}
+
+/** Search `candidate` for any known profile prefix appearing as a
+ *  substring (case-insensitive). Returns the start index of the longest
+ *  match, or null if none found. Used by the best-effort fallback in
+ *  extractCanonicalModelName so model ids embedded in arbitrary
+ *  wrappers still resolve to a canonical slice. */
+function longestPrefixSubstring(candidate: string): { startIndex: number; prefix: string } | null {
+  const normalized = candidate.toLowerCase();
+  let best: { startIndex: number; prefix: string } | null = null;
+  for (const entry of PROFILE_ENTRIES) {
+    const idx = normalized.indexOf(entry.prefix.toLowerCase());
+    if (idx === -1) continue;
+    if (!best || entry.prefix.length > best.prefix.length) {
+      best = { startIndex: idx, prefix: entry.prefix };
+    }
+  }
+  return best;
 }
 
 const tierSchema = z.enum(['trivial', 'standard', 'reasoning']);

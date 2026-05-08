@@ -19,7 +19,7 @@ beforeAll(async () => {
 });
 afterAll(async () => { await server.close(); });
 
-const headers = () => ({ 'authorization': `Bearer ${token}`, 'content-type': 'application/json' });
+const headers = () => ({ 'x-mma-main-model': 'claude-opus-4-7', 'x-mma-client': 'claude-code', 'authorization': `Bearer ${token}`, 'content-type': 'application/json' });
 
 describe('contract: POST /investigate handler-level', () => {
   it('1. POST /investigate without cwd → 400', async () => {
@@ -102,7 +102,7 @@ describe('contract: POST /investigate handler-level', () => {
       const url2 = `${altServer.baseUrl}/investigate?cwd=${encodeURIComponent(join(root, 'app'))}`;
       const r = await fetch(url2, {
         method: 'POST',
-        headers: { 'authorization': `Bearer ${altServer.token}`, 'content-type': 'application/json' },
+        headers: { 'x-mma-main-model': 'claude-opus-4-7', 'x-mma-client': 'claude-code', 'authorization': `Bearer ${altServer.token}`, 'content-type': 'application/json' },
         body: JSON.stringify({ question: 'q', filePaths: [join(root, 'app2/y.ts')] }),
       });
       expect(r.status).toBe(400);

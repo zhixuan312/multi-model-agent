@@ -67,8 +67,9 @@ export { BatchCache } from './stores/batch-cache.js';
 export type { BatchEntry, BatchEntryStatus, BatchCacheOptions } from './stores/batch-cache.js';
 
 // Project context
-export { createProjectContext } from './stores/project-context-registry.js';
+export { createProjectContext, createInMemoryProjectContext } from './stores/project-context-registry.js';
 export type { ProjectContext } from './stores/project-context-registry.js';
+export { FileBackedContextBlockStore } from './stores/file-backed-context-block-store.js';
 
 // Run tasks
 export { runTasks } from './lifecycle/task-runner.js';
@@ -160,6 +161,8 @@ export { EventEmitter } from './events/event-emitter.js';
 export type { EventSink } from './events/event-emitter.js';
 export { LocalLogSink } from './events/local-log-sink.js';
 export { TelemetrySink } from './events/telemetry-sink.js';
+export { VerboseLogChannel } from './events/verbose-log-channel.js';
+export { RunningHeadlineSink } from './events/running-headline-sink.js';
 export type { Recorder } from './events/telemetry-sink.js';
 export { Event, EventSchemas, CLOUD_EVENT_NAMES } from './events/observability-events.js';
 export type { EventType } from './events/observability-events.js';

@@ -34,7 +34,7 @@ describe('body-size middleware', () => {
         const res = await fetch(`${s.url}/delegate?cwd=/tmp`, {
           method: 'POST',
           body: small,
-          headers: { Authorization: `Bearer ${s.token}`, 'content-type': 'application/json' },
+          headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${s.token}`, 'content-type': 'application/json' },
         });
         expect(res.status).not.toBe(413);
         const body = await res.json();

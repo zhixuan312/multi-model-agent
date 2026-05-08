@@ -30,7 +30,6 @@ function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
     cwd: os.tmpdir(),
     route: 'delegate',
     client: 'test',
-    triggeringSkill: '',
     mainModel: null,
     assignedTier: 'standard' as const,
     implementerProvider: {} as ExecutionContext['implementerProvider'],
@@ -94,6 +93,19 @@ describe('quality-chain handlers — defensive no-ops', () => {
     const ctx = makeCtx({ providers: {} });
     const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx });
     await qualityReworkRound1Handler(state);
+    expect(state.lastRunResult).toBeUndefined();
+  });
+
+  it('rework_1 marks chain failed when impl call returns no usable result', async () => {
+    // Symmetric with spec-chain: when the rework's implementer call doesn't
+    // produce an ok RunResult, the handler must set qualityReworkFailed +
+    // terminal so the next review round's `!s.terminal` gate halts the
+    // cascade. Without this the chain re-reviews unchanged code three times.
+    const ctx = makeCtx({ providers: {} });
+    const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx });
+    await qualityReworkRound1Handler(state);
+    expect(state.qualityReworkFailed).toBe(true);
+    expect(state.terminal).toBe(true);
     expect(state.lastRunResult).toBeUndefined();
   });
 });

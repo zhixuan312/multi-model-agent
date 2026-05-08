@@ -3,9 +3,20 @@ import { AnthropicMessagesAdapter } from '../../packages/core/src/providers/anth
 
 const mkCreate = vi.fn();
 
+// Adapter uses `messages.stream(...)` and awaits `stream.finalMessage()`.
+// The mock returns a synthetic stream object whose finalMessage() resolves
+// to the value mkCreate was configured with — keeps the existing per-test
+// `mkCreate.mockResolvedValue(defaultResponse())` shape working.
 vi.mock('@anthropic-ai/sdk', () => ({
   default: vi.fn().mockImplementation(() => ({
-    messages: { create: mkCreate },
+    messages: {
+      stream: (args: unknown) => {
+        const result = mkCreate(args);
+        return {
+          finalMessage: () => Promise.resolve(result),
+        };
+      },
+    },
   })),
 }));
 

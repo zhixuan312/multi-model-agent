@@ -51,7 +51,7 @@ export async function runVerifyCommandHandler(state: LifecycleState): Promise<vo
 
   state.verifyResult = verification;
 
-  emitVerifyEvents(ctx.bus, verification);
+  emitVerifyEvents(ctx.bus, verification, { batchId: ctx.batchId, taskIndex: ctx.taskIndex ?? 0 });
 
   // Stage stats integration deferred: endVerifyStage takes cost meter +
   // agent info + idle stats that don't yet flow through ExecutionContext.
@@ -59,12 +59,23 @@ export async function runVerifyCommandHandler(state: LifecycleState): Promise<vo
   // cost-rollup and idle tracking are part of the context.
 }
 
-function emitVerifyEvents(bus: EventEmitter | undefined, verification: VerifyStageResult): void {
+function emitVerifyEvents(
+  bus: EventEmitter | undefined,
+  verification: VerifyStageResult,
+  taskCtx: { batchId: string | undefined; taskIndex: number },
+): void {
   if (!bus) return;
+  // verify_step / verify_skipped extend TaskBase which requires batchId
+  // and taskIndex. The 4.0.x emit was missing both — schema validation
+  // failed at emit-time and crashed the lifecycle. Surfaced only after
+  // the reviewer-parser stopped throwing on malformed reviewer output;
+  // before that, the lifecycle never reached this stage.
   for (const step of verification.steps) {
     bus.emit({
       event: 'verify_step',
       ts: new Date().toISOString(),
+      ...(taskCtx.batchId !== undefined && { batchId: taskCtx.batchId }),
+      taskIndex: taskCtx.taskIndex,
       command: step.command,
       status: step.status,
       ...(step.exitCode !== null && { exitCode: step.exitCode }),
@@ -77,6 +88,8 @@ function emitVerifyEvents(bus: EventEmitter | undefined, verification: VerifySta
     bus.emit({
       event: 'verify_skipped',
       ts: new Date().toISOString(),
+      ...(taskCtx.batchId !== undefined && { batchId: taskCtx.batchId }),
+      taskIndex: taskCtx.taskIndex,
       reason: verification.skipReason ?? 'no_command',
       stage: 'verifying',
     } as Record<string, unknown>);

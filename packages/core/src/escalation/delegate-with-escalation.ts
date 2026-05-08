@@ -11,6 +11,7 @@ import type {
   RunStatus,
   TerminationReason,
 } from '../providers/runner-types.js';
+import type { EventEmitter } from '../events/event-emitter.js';
 import { retryableFor } from '../error-codes.js';
 import { hasCompletedWork, extractToolName } from '../providers/stall-detector.js';
 
@@ -45,6 +46,29 @@ export interface DelegateOptions {
    * each provider attempt to its assigned tier.
    */
   assignedTier?: AgentType;
+  /**
+   * Bus for runner-shell and adapter events (`runner_turn_started`,
+   * `runner_response_received`, `runner_turn_completed`). When set, the
+   * server's VerboseLogChannel + LocalLogSink + TelemetrySink consume them.
+   * Forwarded into provider.run as `RunOptions.bus`.
+   */
+  bus?: EventEmitter;
+  /**
+   * Batch identifier propagated onto runner events so verbose stderr lines
+   * carry the same `batch=...` field as the HTTP-handler breadcrumbs.
+   */
+  batchId?: string;
+  /**
+   * Identifies which task within the batch is running. Threaded through to
+   * runner events so per-task progress can be tracked separately when a
+   * batch has multiple parallel tasks.
+   */
+  taskIndex?: number;
+  /**
+   * Lifecycle stage label forwarded to RunInput.stageLabel so the running-
+   * headline polling response shows the current stage (e.g. 'Implementing').
+   */
+  stageLabel?: string;
 }
 
 const TRANSIENT_STATUSES: ReadonlySet<string> = new Set(['api_error', 'provider_transport_failure']);
@@ -152,6 +176,11 @@ export async function delegateWithEscalation(
           initialPromptLengthChars = meta.lengthChars;
           initialPromptHash = meta.sha256;
         },
+        ...(options.bus && { bus: options.bus }),
+        ...(options.batchId !== undefined && { batchId: options.batchId }),
+        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
+        ...(options.assignedTier !== undefined && { tier: options.assignedTier }),
+        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
       });
 
       const maxRetries = maxRetriesForStatus(result.status);

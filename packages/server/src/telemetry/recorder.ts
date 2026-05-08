@@ -121,6 +121,8 @@ function _buildRecorder(opts: { homeDir: string; mmagentVersion: string }): Reco
 
   const enqueue = (event: Record<string, unknown>): void => {
     try {
+      const d = decide(homeDir);
+      if (!d.enabled) return;
       const id = resolveInstallId();
       const meta = buildInstallMeta({ installId: id, mmagentVersion });
       const gen = readGeneration(homeDir);

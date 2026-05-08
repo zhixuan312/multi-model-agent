@@ -48,7 +48,7 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
       sandboxPolicy: origTask?.sandboxPolicy ?? defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: origTask?.cwd ?? ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: origTask?.contextBlockIds ?? [],
-      mainModel: origTask?.mainModel ?? defaults?.mainModel ?? undefined,
+      mainModel: origTask?.mainModel,
       done: origTask?.done,
       autoCommit: origTask?.autoCommit ?? false,
     };

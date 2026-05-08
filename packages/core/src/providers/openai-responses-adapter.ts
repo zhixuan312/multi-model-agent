@@ -5,21 +5,33 @@ export class OpenAIResponsesAdapter implements RunnerAdapter {
   readonly providerType = 'codex' as const;
   private client: OpenAI;
   private model: string;
-  private maxOutputTokens: number;
 
-  constructor(opts: { apiKey: string; baseURL?: string; model: string; maxOutputTokens: number }) {
-    this.client = new OpenAI({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+  constructor(opts: { apiKey: string; baseURL?: string; model: string; defaultHeaders?: Record<string, string> }) {
+    this.client = new OpenAI({
+      apiKey: opts.apiKey,
+      baseURL: opts.baseURL,
+      ...(opts.defaultHeaders && { defaultHeaders: opts.defaultHeaders }),
+    });
     this.model = opts.model;
-    this.maxOutputTokens = opts.maxOutputTokens;
   }
 
   async turn(input: AdapterTurnInput): Promise<AdapterTurnResult> {
     const inputItems = this.buildInputItems(input);
 
-    const response = await this.client.responses.create({
+    // Stream the response. Two reasons:
+    //   1. The chatgpt.com/backend-api/codex endpoint (used when codex
+    //      OAuth is the auth path) only accepts streaming + store:false;
+    //      a non-streaming responses.create returns 400-no-body there.
+    //   2. api.openai.com supports streaming the same shape, so streaming
+    //      is the universal path.
+    // store:false tells the server not to persist response state — required
+    // by chatgpt backend, harmless for api.openai.com.
+    const stream = await this.client.responses.create({
       model: this.model,
       instructions: input.systemPrompt,
       input: inputItems as any,
+      stream: true,
+      store: false,
       tools: input.toolDefinitions.length > 0
         ? input.toolDefinitions.map(d => ({
             type: 'function' as const,
@@ -29,48 +41,62 @@ export class OpenAIResponsesAdapter implements RunnerAdapter {
             strict: false,
           }))
         : undefined,
-      max_output_tokens: this.maxOutputTokens,
     });
 
-    const reasoning = (response.usage as any)?.output_tokens_details?.reasoning_tokens ?? 0;
+    let assistantText = '';
+    const toolCalls: Array<{ id: string; name: string; input: unknown }> = [];
+    let inputTokens = 0;
+    let outputTokens = 0;
+    let cachedReadTokens = 0;
+    let reasoningTokens = 0;
+    let status: string | undefined;
+    let sawCompleted = false;
+
+    for await (const event of stream as any) {
+      const et = event?.type as string | undefined;
+      if (!et) continue;
+
+      if (et === 'response.output_text.delta') {
+        assistantText += event.delta ?? '';
+      } else if (et === 'response.output_item.done') {
+        const item = event.item;
+        if (item?.type === 'function_call') {
+          let inputObj: unknown;
+          try {
+            inputObj = JSON.parse(item.arguments ?? '{}');
+          } catch (e) {
+            inputObj = {
+              __mma_invalid_arguments: item.arguments,
+              __mma_parse_error: (e as Error).message,
+            };
+          }
+          toolCalls.push({ id: item.call_id, name: item.name, input: inputObj });
+        }
+      } else if (et === 'response.completed') {
+        sawCompleted = true;
+        const r = event.response;
+        if (r?.usage) {
+          const u = r.usage as Record<string, any>;
+          inputTokens = u.input_tokens ?? 0;
+          outputTokens = u.output_tokens ?? 0;
+          reasoningTokens = u.output_tokens_details?.reasoning_tokens ?? u.reasoning_tokens ?? 0;
+          cachedReadTokens = u.input_tokens_details?.cached_tokens ?? u.cached_input_tokens ?? 0;
+        }
+        if (r?.status) status = r.status;
+      }
+    }
+
+    if (!sawCompleted) {
+      throw new Error('Codex stream ended without a response.completed event');
+    }
+
     const usage = {
-      inputTokens: response.usage?.input_tokens ?? 0,
-      outputTokens: (response.usage?.output_tokens ?? 0) + reasoning,
-      cachedReadTokens: (response.usage as any)?.input_tokens_details?.cached_tokens ?? 0,
+      inputTokens,
+      outputTokens: outputTokens + reasoningTokens,
+      cachedReadTokens,
       cachedNonReadTokens: 0,
     };
 
-    const outputItems = (response.output ?? []) as any[];
-    const assistantText = outputItems
-      .filter((it: any) => it.type === 'message')
-      .flatMap((it: any) => it.content ?? [])
-      .filter((c: any) => c.type === 'output_text')
-      .map((c: any) => c.text)
-      .join('');
-
-    const toolCalls = outputItems
-      .filter((it: any) => it.type === 'function_call')
-      .map((it: any) => {
-        let inputObj: unknown;
-        try {
-          inputObj = JSON.parse(it.arguments ?? '{}');
-        } catch (e) {
-          inputObj = {
-            __mma_invalid_arguments: it.arguments,
-            __mma_parse_error: (e as Error).message,
-          };
-        }
-        return {
-          id: it.call_id,
-          name: it.name,
-          input: inputObj,
-        };
-      });
-
-    // Compute finishReason: the Responses API uses response.status.
-    // 'completed' means the model produced a final response (stop).
-    // If there are tool calls, the model is waiting for tool outputs.
-    const status = response.status as string;
     let finishReason: AdapterTurnResult['finishReason'];
     if (toolCalls.length > 0) {
       finishReason = 'tool_use';

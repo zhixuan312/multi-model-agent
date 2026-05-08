@@ -38,13 +38,20 @@ mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-c
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
-### 2. Choose your parent model — intentionally
+### 2. Choose your main model — intentionally (4.0.3+)
 
-`defaults.parentModel` is **the model you'd use without mmagent**. It's the cost baseline for every per-task headline (`$X actual / $Y saved vs <parentModel> (Z× ROI)`). Leave it unset and you lose the savings/ROI signal.
+Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
 - Heavy Claude Code user → `claude-opus-4-7`
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
+
+Starting in 4.0.3, the main model is set **per request** via the required `X-MMA-Main-Model` header. The shipped skills do this for you (read from `MMAGENT_MAIN_MODEL` env, default `claude-opus-4-7`). Custom callers MUST send both `X-MMA-Main-Model` and `X-MMA-Client` on every tool route — server returns `400 main_model_required` / `400 client_required` otherwise.
+
+```bash
+export MMAGENT_MAIN_MODEL=claude-opus-4-7
+export MMAGENT_CLIENT=claude-code
+```
 
 ### 3. Write the config
 
@@ -64,13 +71,12 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
       "type": "codex",
       "model": "gpt-5.5"
     }
-  },
-  "defaults": {
-    "parentModel": "claude-opus-4-7"
   }
 }
 EOF
 ```
+
+> **Removed in 4.0.3:** `defaults.parentModel` is no longer accepted. Main model now comes from the per-request `X-MMA-Main-Model` header.
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
@@ -84,7 +90,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.3",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -194,7 +200,6 @@ Every `defaults` knob has a built-in. Override only when you need to.
 | `defaults.maxCostUSD` | `10` | Hard per-task cost ceiling; returns `cost_exceeded` when hit |
 | `defaults.tools` | `"full"` | Tool surface: `none` / `readonly` / `no-shell` / `full` |
 | `defaults.sandboxPolicy` | `"cwd-only"` | Path-traversal + symlink confinement to the request's `cwd` |
-| `defaults.parentModel` | *(none)* | Cost baseline for the per-task ROI headline. **Set this on purpose.** |
 
 ### Telemetry
 
@@ -285,14 +290,20 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.0.0
+## What's new in 4.0.3
 
-- **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
-- **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning. Telemetry SCHEMA_VERSION bumped to 4.
-- **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
-- **Wire field rename.** Internal `mainModel*` ↔ wire `parentModel*`. `reviewerConfidence` → `annotatorConfidence`. errorCodes renamed: `verify_command_error` → `validator_verify_command_failed`; `dirty_worktree` → `validator_dirty_worktree`. Removed: `intake_clarification_expired`, `lifecycle_round_cap_exceeded`.
-- **New: `register_context_block` route.** Re-installing skills now actively cleans up orphan files. Context-block defaults: 24 h idle TTL, `maxEntries` 500, HTTP body cap 50 MiB hard `413`.
-- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces the three parallel runner files. 2969 tests pass.
+- **Required headers `X-MMA-Main-Model` + `X-MMA-Client` on every tool route.** Server returns `400 main_model_required` / `400 client_required` if missing. Replaces `defaults.parentModel` config (removed) and `PARENT_MODEL_NAME` env. Shipped skills set both headers automatically from `MMAGENT_MAIN_MODEL` + `MMAGENT_CLIENT` env vars.
+- **Wire field rename:** `parentModel*` → `mainModel*` (matches DB column `main_model`). `costDeltaVsParentUSD` → `costDeltaVsMainUSD`. Internal record now matches wire 1:1.
+- **Canonical model-name preservation.** `claude-opus-4-7` no longer collapses to `claude-opus`. Best-effort extraction handles arbitrary wrappers (`bedrock.claude-opus-4-7`, `vertex_ai/anthropic.claude-sonnet-4-6@2024-10-22`).
+- **`contextBlockIds` actually reach the worker prompt.** Round-over-round audit recipes were broken pre-4.0.3 — the dispatcher dispatched the unexpanded task. Now the same expanded reference flows through both `state.task` and `executionContext.task`.
+- **File-backed context blocks survive daemon restarts.** Stored at `<projectCwd>/.mma/context-blocks/<id>.txt` with atomic writes, mode `0700`/`0600`, 7-day TTL, 1 MiB / 100 MiB caps. `.mma/` belongs in `.gitignore` (daemon prints a stderr breadcrumb on first creation).
+- **`totalDurationMs` reflects real wall-clock** (was implementer-only). Per-stage durations stay truthful — drops the proportional scale-down that was masking the under-counting.
+- **Audit/review/delegate headlines** fall back to `runResult.annotatedFindings` and `runResult.filesWritten` when the structured report lacks them. Pre-fix headlines reported `0 findings (0 high)` and `(0 files)` for narrative-emitting tools.
+- **`batch_failed` fires when the executor packages an error envelope.** Operator visibility — verbose stream no longer says `batch_completed` while the run actually failed.
+- **`run_shell` write tracking.** Workers writing via `cat >`, `sed -i`, `tee`, etc. correctly increment the polling headline's write count.
+- **Stage-progression denominator derives from the StagePlan.** Audit `(1/3)`, delegate `(1/9)`, register-context-block `(1/1)`. Single source of truth.
+
+**Migration from 4.0.2:** custom HTTP callers must add `X-MMA-Main-Model` and `X-MMA-Client`. Skills users get this for free after `mmagent sync-skills`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

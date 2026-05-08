@@ -66,6 +66,10 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   freezeClock();
   process.env.MMAGENT_TEST_INTROSPECTION = '1';
   process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
+  // Gap 4 (4.0.3+): force in-memory context-block storage for tests so
+  // contract runs don't write to the project's `.mma/context-blocks/`
+  // dir, which would persist between runs and trip the per-project cap.
+  process.env.MMAGENT_CONTEXT_BLOCK_STORAGE = 'in-memory';
   __setCoreTestProviderOverride(opts.provider);
   // Give standard and complex different canonical identities so R3 separation
   // (forbiddenIdentities) doesn't block fallback in single-provider test mode.

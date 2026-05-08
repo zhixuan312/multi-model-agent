@@ -1,9 +1,9 @@
 {
-  "headline": "[ok] audit completed",
+  "headline": "[incomplete] audit : 0 findings (0 high)",
   "results": [
     {
       "output": "needs rework per review",
-      "status": "ok",
+      "status": "incomplete",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
@@ -29,15 +29,15 @@
       ],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
-      "workerStatus": "done",
+      "workerStatus": "review_loop_capped",
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "error",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "incomplete",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "review_loop_capped",
         "wasPromoted": false
       },
       "implementationReport": {
@@ -47,6 +47,57 @@
         "deviationsFromBrief": [],
         "unresolved": [],
         "extraSections": {}
+      },
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 10,
+          "outputTokens": 20,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 1,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0,
+          "verdict": "error",
+          "roundsUsed": 1,
+          "concernCategories": [],
+          "findingsBySeverity": {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          }
+        }
       },
       "diffReviewStatus": "not_applicable",
       "commits": [],
@@ -71,7 +122,8 @@
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "errorCode": "review_quality_findings_unresolved"
     }
   ],
   "batchTimings": {
@@ -81,11 +133,15 @@
   },
   "costSummary": {
     "totalActualCostUSD": 0,
-    "totalCostDeltaVsParentUSD": 0
+    "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "kind": "not_applicable",
-    "reason": "reportSchema.parse failed for audit"
+    "summary": "needs rework per review",
+    "filesChanged": [],
+    "validationsRun": [],
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -93,6 +149,7 @@
   },
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
+  "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "error",
   "roundsUsed": 1,

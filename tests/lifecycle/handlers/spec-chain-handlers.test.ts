@@ -30,7 +30,6 @@ function makeCtx(overrides: Partial<ExecutionContext> = {}): ExecutionContext {
     cwd: os.tmpdir(),
     route: 'delegate',
     client: 'test',
-    triggeringSkill: '',
     mainModel: null,
     assignedTier: 'standard' as const,
     implementerProvider: {} as ExecutionContext['implementerProvider'],
@@ -109,6 +108,21 @@ describe('spec-chain handlers — defensive no-ops', () => {
     const ctx = makeCtx({ providers: {} });
     const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx });
     await specReworkRound1Handler(state);
+    expect(state.lastRunResult).toBeUndefined();
+  });
+
+  it('rework_1 marks chain failed when impl call returns no usable result', async () => {
+    // When both tiers are unavailable (no providers configured at all),
+    // runWithFallback bails with bothUnavailable=true and runSpecRework
+    // returns null. The handler must NOT silently fall through — it must
+    // set state.specReworkFailed and state.terminal so the next review
+    // round's `!s.terminal` gate stops the chain instead of re-reviewing
+    // the unchanged code.
+    const ctx = makeCtx({ providers: {} });
+    const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx });
+    await specReworkRound1Handler(state);
+    expect(state.specReworkFailed).toBe(true);
+    expect(state.terminal).toBe(true);
     expect(state.lastRunResult).toBeUndefined();
   });
 });

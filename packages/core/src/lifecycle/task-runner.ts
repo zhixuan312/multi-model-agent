@@ -20,6 +20,7 @@ import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import { mergeStageStats } from './merge-stage-stats.js';
 export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -59,7 +60,6 @@ export interface RunTasksOptions {
       taskSpec: TaskSpec;
       runResult: RunResult;
       client: string;
-      triggeringSkill: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
       verifyCommandPresent?: boolean;
@@ -67,7 +67,6 @@ export interface RunTasksOptions {
   };
   route?: string;
   client?: string;
-  triggeringSkill?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
@@ -142,7 +141,6 @@ export async function runTasks(
         ...(options.recorder && { recorder: options.recorder }),
         ...(options.route !== undefined && { route: options.route }),
         ...(options.client !== undefined && { client: options.client }),
-        ...(options.triggeringSkill !== undefined && { triggeringSkill: options.triggeringSkill }),
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
         ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
@@ -168,8 +166,14 @@ export interface DispatchTaskInput {
   recorder?: ExecutionContext['recorder'];
   route?: string;
   client?: string;
-  triggeringSkill?: string;
+  /** Calling agent's model (e.g., claude-opus-4-7), threaded into telemetry as mainModel.
+   *  Sourced from X-MMA-Main-Model header → execution-context → here. */
+  mainModel?: string | null;
   bus?: EventEmitter;
+  /** Context block store for expanding contextBlockIds into the task's prompt
+   *  before dispatch. Without this, the worker LLM never sees the prior-round
+   *  audit/review report referenced by contextBlockIds. */
+  contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
   annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
@@ -183,7 +187,14 @@ function toolCategoryForRoute(route: string | undefined): ToolCategory {
 }
 
 function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
-  const { task, resolved, config } = input;
+  const { resolved, config } = input;
+  // Expand contextBlockIds into the task's prompt up-front so every downstream
+  // dispatch path (legacy executor + new lifecycle) sees the materialized
+  // context. Throwing here surfaces missing-block errors at the dispatcher
+  // boundary rather than silently dropping them on the floor.
+  const task = input.contextBlockStore
+    ? expandContextBlocks(input.task, input.contextBlockStore)
+    : input.task;
   const cwd = task.cwd ?? process.cwd();
   const timeoutMs = task.timeoutMs ?? config.defaults?.timeoutMs ?? 1_800_000;
   const stallTimeoutMs = config.defaults?.stallTimeoutMs ?? 300_000;
@@ -207,8 +218,8 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     route: input.route ?? '',
     client: input.client ?? '',
-    triggeringSkill: input.triggeringSkill ?? '',
-    mainModel: input.recorder ? null : null,
+    mainModel: input.mainModel ?? null,
+    ...(input.contextBlockStore && { contextBlockStore: input.contextBlockStore }),
     assignedTier: resolved.slot,
     implementerProvider: resolved.provider,
     escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
@@ -236,7 +247,16 @@ export async function runTaskViaDispatcher(
   input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
 ): Promise<RunResult> {
-  const executionContext = buildExecutionContext(input);
+  // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
+  // so the SAME expanded task object reaches BOTH state.task AND
+  // executionContext.task (single source of truth — no two references).
+  // buildExecutionContext also expands internally, but that becomes a no-op
+  // because expandContextBlocks strips contextBlockIds on first pass.
+  const expandedTask = input.contextBlockStore
+    ? expandContextBlocks(input.task, input.contextBlockStore)
+    : input.task;
+
+  const executionContext = buildExecutionContext({ ...input, task: expandedTask });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
 
@@ -245,8 +265,8 @@ export async function runTaskViaDispatcher(
   const out = await dispatcher.dispatch({
     route,
     toolCategory,
-    rawRequest: { tasks: [input.task] },
-    context: { task: input.task, executionContext },
+    rawRequest: { tasks: [expandedTask] },
+    context: { task: expandedTask, executionContext },
     executor: async (_rawRequest: unknown, state: LifecycleState): Promise<undefined> => {
       const task = state.task as TaskSpec | undefined;
       const ctx = state.executionContext as ExecutionContext | undefined;
@@ -291,6 +311,10 @@ export async function runTaskViaDispatcher(
             taskDeadlineMs: ctx.timing.deadlineMs,
             abortSignal: ctx.stall.controller.signal,
             assignedTier: decision.impl,
+            stageLabel: 'Implementing',
+            ...(ctx.bus && { bus: ctx.bus }),
+            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            taskIndex: ctx.taskIndex,
           },
         );
         const enrichedResult: RunResult = {
@@ -298,6 +322,23 @@ export async function runTaskViaDispatcher(
           ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
         } as unknown as RunResult;
         state.lastRunResult = enrichedResult;
+        // Record the implementer's per-stage cost so emit_task_terminal +
+        // wire task.completed include it in the totals + per-stage breakdown.
+        mergeStageStats(state, 'implementing', {
+          inputTokens: result.usage.inputTokens ?? 0,
+          outputTokens: result.usage.outputTokens ?? 0,
+          cachedReadTokens: result.usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
+          turnCount: result.turns ?? 0,
+          toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+          costUSD: result.cost?.costUSD ?? null,
+          durationMs: result.durationMs ?? null,
+          filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
+          filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
+        }, {
+          tier: ctx.assignedTier,
+          model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+        });
         if (result.status !== 'ok') {
           state.terminal = true;
         }

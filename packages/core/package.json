@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.0.2",
+  "version": "4.0.3",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -55,6 +55,10 @@
     "./lifecycle/task-runner": {
       "types": "./dist/lifecycle/task-runner.d.ts",
       "import": "./dist/lifecycle/task-runner.js"
+    },
+    "./lifecycle/stage-progression": {
+      "types": "./dist/lifecycle/stage-progression.d.ts",
+      "import": "./dist/lifecycle/stage-progression.js"
     },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",

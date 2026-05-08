@@ -1,4 +1,5 @@
 import type { HeadlineTemplate } from '../headline-composer.js';
+import { firstSentenceOrTruncate } from '../headline-text.js';
 
 interface TaskOutcome {
   taskIndex: number;
@@ -20,7 +21,9 @@ export const executePlanHeadlineTemplate: HeadlineTemplate = {
       return `execute_plan: ${completed}/${r.taskOutcomes.length} tasks complete`;
     }
     if (r?.summary && typeof r.summary === 'string') {
-      return `[${status}] execute_plan: ${r.summary}`;
+      // Gap 12 fix (4.0.3+): trim worker's narrative summary so the
+      // headline doesn't dump multi-sentence prose ending mid-thought.
+      return `[${status}] execute_plan: ${firstSentenceOrTruncate(r.summary)}`;
     }
     return `[${status}] execute_plan`;
   },

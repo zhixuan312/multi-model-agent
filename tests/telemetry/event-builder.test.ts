@@ -84,7 +84,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     expect(ev.tierUsage.complex?.costUSD).toBeCloseTo(0.10, 10);
   });
 
-  it('parentEquivalentCostUSD is computed via priceTokens when parentModel is set', () => {
+  it('mainEquivalentCostUSD is computed via priceTokens when mainModel is set', () => {
     const rr = makeFixtureRunResult({
       stageStats: {
         implementing: { stage: 'implementing', entered: true, durationMs: 1000, costUSD: 0.435, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', inputTokens: 1_000_000, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0, round: 0 } as any,
@@ -98,12 +98,12 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       client: 'test',
       mainModel: 'claude-opus-4-7',
     });
-    expect(ev.parentEquivalentCostUSD).toBeGreaterThan(0);
-    expect(ev.parentEquivalentCostUSD).toEqual(expect.any(Number));
-    expect(ev.costDeltaVsParentUSD).toEqual(expect.any(Number));
+    expect(ev.mainEquivalentCostUSD).toBeGreaterThan(0);
+    expect(ev.mainEquivalentCostUSD).toEqual(expect.any(Number));
+    expect(ev.costDeltaVsMainUSD).toEqual(expect.any(Number));
   });
 
-  it('parentModel: null → parentEquivalentCostUSD: null and costDeltaVsParentUSD: null', () => {
+  it('mainModel: null → mainEquivalentCostUSD: null and costDeltaVsMainUSD: null', () => {
     const rr = makeFixtureRunResult({
       stageStats: {
         implementing: { stage: 'implementing', entered: true, durationMs: 1000, costUSD: 0.01, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 0, round: 0 } as any,
@@ -117,12 +117,12 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       client: 'test',
       mainModel: null,
     });
-    expect(ev.parentModel).toBeNull();
-    expect(ev.parentEquivalentCostUSD).toBeNull();
-    expect(ev.costDeltaVsParentUSD).toBeNull();
+    expect(ev.mainModel).toBeNull();
+    expect(ev.mainEquivalentCostUSD).toBeNull();
+    expect(ev.costDeltaVsMainUSD).toBeNull();
   });
 
-  it('emits specific parentModel string alongside parentModelFamily', () => {
+  it('emits specific mainModel string alongside mainModelFamily', () => {
     const rr = makeFixtureRunResult({});
     const ev = buildTaskCompletedEvent({
       route: 'delegate',
@@ -131,10 +131,10 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
       client: 'test',
       mainModel: 'claude-opus-4-7',
     });
-    // parentModel is canonicalized via normalizeModel (strips vendor prefixes
-    // and version suffixes). It must be non-null when parentModel is provided.
-    expect(ev.parentModel).toEqual(expect.any(String));
-    expect(ev.parentModelFamily).toBe('claude');
+    // mainModel is canonicalized via normalizeModel (strips vendor prefixes
+    // and version suffixes). It must be non-null when mainModel is provided.
+    expect(ev.mainModel).toEqual(expect.any(String));
+    expect(ev.mainModelFamily).toBe('claude');
   });
 
   it('stage entries include round and split cached fields', () => {

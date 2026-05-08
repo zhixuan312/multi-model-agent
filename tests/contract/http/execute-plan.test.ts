@@ -11,7 +11,7 @@ const STAGES: Stage[] = ['ok', 'incomplete', 'max-turns', 'review-rework'];
 async function pollToTerminal(baseUrl: string, token: string, batchId: string): Promise<ReturnType<typeof normalize>> {
   for (let i = 0; i < 180; i++) {
     const poll = await fetch(`${baseUrl}/batch/${batchId}`, {
-      headers: { Authorization: `Bearer ${token}` },
+      headers: { "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${token}` },
     });
     if (poll.status === 200) return normalize((await poll.json()) as any);
     if (poll.status !== 202) throw new Error(`Unexpected status ${poll.status}`);
@@ -36,7 +36,7 @@ describe('contract: POST /execute-plan', () => {
       try {
         const dispatch = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(dir)}`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+          headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
           body: JSON.stringify({ filePaths: [planPath], taskDescriptors: [heading] }),
         });
         expect(dispatch.status).toBe(202);
@@ -68,7 +68,7 @@ describe('POST /execute-plan rejects agentType', () => {
     try {
       const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(dir)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         body: JSON.stringify({ agentType: 'complex', filePaths: [planPath], taskDescriptors: ['test task'] }),
       });
 
@@ -91,7 +91,7 @@ describe('POST /execute-plan rejects agentType', () => {
     try {
       const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(dir)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         body: JSON.stringify({ filePaths: [planPath], taskDescriptors: [], agentType: 'complex' }),
       });
 
@@ -113,7 +113,7 @@ describe('POST /execute-plan rejects agentType', () => {
     try {
       const res = await fetch(`${h.baseUrl}/execute-plan?cwd=${encodeURIComponent(dir)}`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${h.token}` },
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
         body: JSON.stringify({ agentType: 'complex', filePaths: [planPath], taskDescriptors: ['test task'] }),
       });
 

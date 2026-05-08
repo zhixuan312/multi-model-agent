@@ -76,6 +76,15 @@ export interface LifecycleState {
   specChainPassed?: boolean;
   qualityChainPassed?: boolean;
 
+  // Set by rework handlers when their implementer call returns null (call
+  // failed before producing an updated RunResult — e.g. the runner aborted
+  // at the abortSignal check, the deadline was exhausted, or the provider
+  // returned a non-ok status the rework loop couldn't recover). Without
+  // these, the chain would silently advance to the next review round on
+  // the same code, producing the "3 rounds, 0 reworks" pattern.
+  specReworkFailed?: boolean;
+  qualityReworkFailed?: boolean;
+
   // Per-chain attempt counters for telemetry. Populated by review-round
   // handlers when they call pickEscalation. Quality starts at 1 because
   // attemptIndex 0 has impl: null in the quality loop and pickEscalation
@@ -125,6 +134,7 @@ export interface LifecycleState {
   terminalBlockId?: string;
   taskTerminalEmitted?: boolean;
   batchRegistryPersisted?: boolean;
+  taskCompletedRecorded?: boolean;
   telemetryFlushed?: boolean;
 
   // Per-project runtime state — plumbed from DispatchInput.context.projectContext

@@ -56,13 +56,81 @@ export function buildBatchHandler(deps: BatchHandlerDeps): RawHandler {
       taskIndex = parseInt(rawTaskIndex, 10);
     }
 
-    // Pending → 202 text/plain progress line
+    // Pending → 202 text/plain progress line.
+    // ALWAYS one line, regardless of single-task or batch. For batches, the
+    // line aggregates per-task state: slowest running task is the headline's
+    // representative (largest elapsed = oldest dispatchedAt, ties broken by
+    // lowest taskIndex), counts are summed across all started tasks, and a
+    // " +K" suffix marks how many other tasks are running concurrently.
+    // Final shape (identical for N=1 and N>1):
+    //   [X/Y] Implementing by Standard worker (1/9)[+K] - 6m 0s, 142 read, 8 write, 234 tool calls
     if (entry.state === 'pending') {
-      const snap = entry.runningHeadlineSnapshot;
-      const elapsedMs = Date.now() - snap.dispatchedAt;
-      const headline = snap.prefix
-        ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
-        : snap.fallback;
+      const perTask = entry.perTaskHeadlineSnapshots;
+      // tasksTotal is set by async-dispatch to a placeholder (1) before the
+      // executor knows the real fan-out size; perTask.size reflects actual
+      // tasks that have started, so prefer the larger of the two.
+      const totalTasks = Math.max(entry.tasksTotal ?? 1, perTask?.size ?? 0);
+      let headline: string;
+      if (perTask && perTask.size > 0) {
+        const sortedIndices = [...perTask.keys()].sort((a, b) => a - b);
+        // Slowest = oldest dispatchedAt (i.e., largest elapsed). Stable
+        // tie-break on lowest taskIndex (sortedIndices is already ascending).
+        let slowestIdx = sortedIndices[0];
+        let slowest = perTask.get(slowestIdx)!;
+        for (const idx of sortedIndices) {
+          const snap = perTask.get(idx)!;
+          if (snap.dispatchedAt < slowest.dispatchedAt) {
+            slowest = snap;
+            slowestIdx = idx;
+          }
+        }
+        // Sum counts across all started tasks for the aggregate stats clause.
+        let sumRead = 0;
+        let sumWrite = 0;
+        let sumTotal = 0;
+        let haveStructuredCounts = false;
+        for (const idx of sortedIndices) {
+          const snap = perTask.get(idx)!;
+          if (
+            typeof snap.toolReads === 'number' ||
+            typeof snap.toolWrites === 'number' ||
+            typeof snap.toolTotal === 'number'
+          ) {
+            haveStructuredCounts = true;
+            sumRead += snap.toolReads ?? 0;
+            sumWrite += snap.toolWrites ?? 0;
+            sumTotal += snap.toolTotal ?? 0;
+          }
+        }
+        const startedCount = perTask.size;
+        const taskBracket = `[${startedCount}/${totalTasks}]`;
+        const runningSuffix = startedCount > 1 ? ` +${startedCount - 1}` : '';
+        const elapsedMs = Date.now() - slowest.dispatchedAt;
+        if (haveStructuredCounts && slowest.stageLabel) {
+          const tierClause = slowest.tier ? ` by ${slowest.tier} worker` : '';
+          const stageProgressClause =
+            typeof slowest.stageDone === 'number' && typeof slowest.stageTotal === 'number'
+              ? ` (${slowest.stageDone}/${slowest.stageTotal})`
+              : '';
+          const statsClause = `, ${sumRead} read, ${sumWrite} write, ${sumTotal} tool calls`;
+          headline = `${taskBracket} ${slowest.stageLabel}${tierClause}${stageProgressClause}${runningSuffix} - ${formatElapsed(elapsedMs)}${statsClause}`;
+        } else if (slowest.prefix) {
+          // Older snapshot path: inject the +K suffix before the prefix's " - "
+          // separator if needed.
+          const prefixWithSuffix = runningSuffix
+            ? slowest.prefix.replace(/ - $/, `${runningSuffix} - `)
+            : slowest.prefix;
+          headline = `${taskBracket} ${prefixWithSuffix}${formatElapsed(elapsedMs)}${slowest.statsClause}`;
+        } else {
+          headline = `${taskBracket} ${slowest.fallback}${runningSuffix}`;
+        }
+      } else {
+        const snap = entry.runningHeadlineSnapshot;
+        const elapsedMs = Date.now() - snap.dispatchedAt;
+        headline = snap.prefix
+          ? `${snap.prefix}${formatElapsed(elapsedMs)}${snap.statsClause}`
+          : snap.fallback;
+      }
       res.writeHead(202, { 'content-type': 'text/plain; charset=utf-8' });
       res.end(headline);
       return;

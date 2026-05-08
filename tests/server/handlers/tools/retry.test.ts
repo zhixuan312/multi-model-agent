@@ -22,6 +22,8 @@ describe('POST /retry handler', () => {
       const res = await fetch(`${s.url}/retry?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -44,6 +46,8 @@ describe('POST /retry handler', () => {
       const res = await fetch(`${s.url}/retry?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
@@ -65,6 +69,8 @@ describe('POST /retry handler', () => {
       const res = await fetch(`${s.url}/retry?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
         headers: {
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },

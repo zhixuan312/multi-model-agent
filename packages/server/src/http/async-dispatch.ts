@@ -2,6 +2,7 @@
 import { randomUUID } from 'node:crypto';
 import type { BatchRegistry, ProjectContext } from '@zhixuan92/multi-model-agent-core';
 import type { ExecutionContext } from '@zhixuan92/multi-model-agent-core';
+import { STAGE_ORDER_BY_ROUTE } from '@zhixuan92/multi-model-agent-core/lifecycle/stage-progression';
 import type { HandlerDeps } from './handler-deps.js';
 import { buildExecutionContext } from './execution-context.js';
 
@@ -12,6 +13,14 @@ export interface AsyncDispatchOptions<TResult> {
   batchRegistry: BatchRegistry;
   projectContext: ProjectContext;
   deps: HandlerDeps;
+  /**
+   * Caller identity from the x-mma-client request header. Threaded into
+   * ExecutionContext so the cloud `task.completed` event carries the client.
+   * Without this the wire event has an empty string and the backend rejects
+   * the upload (STRICT_ID_REGEX). triggeringSkill was dropped because it's
+   * implied by `route` for the 99% case (mma-<route> → /<route>).
+   */
+  caller?: { client: string; mainModel?: string | null };
   /**
    * The async function that does the real work. Receives the ExecutionContext
    * and the pre-allocated batchId.
@@ -53,7 +62,7 @@ export function asyncDispatch<TResult>(
   });
 
   // Build execution context for this batch
-  const ctx = buildExecutionContext(deps, projectContext, batchId, tool);
+  const ctx = buildExecutionContext(deps, projectContext, batchId, tool, opts.caller);
 
   // Schedule executor asynchronously — do not await here
   const startedAtMs = Date.now();
@@ -74,11 +83,29 @@ export function asyncDispatch<TResult>(
           entry.tasksTotal = 1;
           entry.tasksStarted = 1;
           entry.tasksCompleted = 0;
+          // Use the route's stage-order denominator (3 for audit, 7 for
+          // delegate, etc.) so polling shows "Implementing (1/3)" the
+          // instant the executor starts — instead of an opaque
+          // "1/1 running" that doesn't tell the main agent how far along
+          // the lifecycle has progressed.
+          const stagesTotal = STAGE_ORDER_BY_ROUTE[tool]?.length ?? 1;
+          const initialStage = STAGE_ORDER_BY_ROUTE[tool]?.[0] ?? 'Running';
+          const prefix = `${initialStage} (1/${stagesTotal}) - `;
+          const fallback = `${initialStage} (1/${stagesTotal})`;
           batchRegistry.updateRunningHeadlineSnapshot(batchId, {
-            prefix: `1/1 running, `,
+            prefix,
             statsClause: ``,
             dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
-            fallback: `1/1 running`,
+            fallback,
+          });
+          // Also seed the per-task snapshot so multi-task polling formatters
+          // don't fall through to the legacy single-snapshot path before the
+          // first runner_turn_completed event fires.
+          batchRegistry.updatePerTaskHeadlineSnapshot(batchId, 0, {
+            prefix,
+            statsClause: ``,
+            dispatchedAt: entry.runningHeadlineSnapshot.dispatchedAt,
+            fallback,
           });
         }
         // Verbose-stderr breadcrumb so operators tailing the daemon see the
@@ -97,11 +124,29 @@ export function asyncDispatch<TResult>(
         batchRegistry.complete(batchId, result);
         const taskCount = Array.isArray(resultObj?.results) ? resultObj.results.length : 0;
         const durationMs = Date.now() - startedAtMs;
-        deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
-        if (deps.config.diagnostics?.verbose) {
-          process.stdout.write(
-            `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
-          );
+
+        // Gap 5 fix (4.0.3+): inspect the envelope for structured failure
+        // signals. The executor may catch errors and package them into a
+        // result envelope (with structuredError or status='error') instead
+        // of throwing — without this check, batch_completed fires
+        // misleadingly while the verbose log gives operators no signal
+        // that anything went wrong. Detection uses STRUCTURED FIELDS ONLY,
+        // never string comparisons.
+        const failure = detectFailure(resultObj);
+        if (failure) {
+          deps.bus.emit({ event: 'batch_failed', ts: new Date().toISOString(), batchId, tool, durationMs, errorCode: failure.code, errorMessage: failure.message } as any);
+          if (deps.config.diagnostics?.verbose) {
+            process.stdout.write(
+              `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
+            );
+          }
+        } else {
+          deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
+          if (deps.config.diagnostics?.verbose) {
+            process.stdout.write(
+              `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
+            );
+          }
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
@@ -126,4 +171,55 @@ export function asyncDispatch<TResult>(
     batchId,
     statusUrl: `/batch/${batchId}`,
   };
+}
+
+/**
+ * Inspect an executor return envelope for structured failure signals.
+ * Returns { code, message } when the envelope indicates failure, null
+ * otherwise.
+ *
+ * Per the Gap 5 fix design (wire-telemetry-gaps plan): NO string
+ * comparison to "batch succeeded". Use only:
+ *   1. Any task result with `structuredError` (most authoritative)
+ *   2. Any task result with `status` other than 'ok'
+ *   3. Envelope-level `error` object whose `kind` is not 'not_applicable'
+ *      (notApplicable() is the structured "no error" sentinel)
+ */
+function detectFailure(envelope: Record<string, unknown> | undefined): { code: string; message: string } | null {
+  if (!envelope) return null;
+
+  const results = Array.isArray(envelope.results) ? envelope.results : [];
+
+  // Source 1: explicit structuredError on any task result
+  for (const r of results as Array<Record<string, unknown>>) {
+    const se = r.structuredError as { code?: string; message?: string } | null | undefined;
+    if (se && typeof se.code === 'string') {
+      return { code: se.code, message: typeof se.message === 'string' ? se.message : se.code };
+    }
+  }
+
+  // Source 2: any task result with status === 'error'.
+  // 'incomplete' is intentionally NOT treated as failure — review-rework
+  // paths can transit through 'incomplete' on intermediate rounds while
+  // the eventual envelope still represents a valid (if imperfect) batch.
+  // Only 'error' and 'failed' are categorical batch-level failures.
+  for (const r of results as Array<Record<string, unknown>>) {
+    const status = r.status;
+    if (typeof status === 'string' && (status === 'error' || status === 'failed')) {
+      const code = (typeof r.errorCode === 'string' && r.errorCode.length > 0) ? r.errorCode : status;
+      const msg = (typeof r.error === 'string' && r.error.length > 0) ? r.error : status;
+      return { code, message: msg };
+    }
+  }
+
+  // Source 3: envelope-level error object with kind != 'not_applicable'
+  const env = envelope.error as { kind?: string; code?: string; message?: string } | undefined;
+  if (env && typeof env.kind === 'string' && env.kind !== 'not_applicable') {
+    return {
+      code: typeof env.code === 'string' ? env.code : 'envelope_error',
+      message: typeof env.message === 'string' ? env.message : 'envelope error',
+    };
+  }
+
+  return null;
 }
