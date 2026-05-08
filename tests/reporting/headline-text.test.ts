@@ -120,4 +120,34 @@ describe('firstSentenceOrTruncate (Gap 12)', () => {
     const out = firstSentenceOrTruncate(text, 1_000_000_000);
     expect(out.length).toBe(2000);
   });
+
+  // audit-2 follow-up (run id 2909e5d2):
+  // N1: captured sentence must be ≤ safeMax (was safeMax+1).
+  // N2: sentences wrapping across a newline must still be detected.
+  it('N1: captured sentence never exceeds max (off-by-one fix)', () => {
+    // "Hello." is 6 chars; with max=5 the sentence does NOT fit, so we
+    // hard-truncate instead of returning the over-budget sentence.
+    expect(firstSentenceOrTruncate('Hello. Details', 5)).toBe('Hell…');
+  });
+
+  it('N1: sentence exactly equal to max still matches', () => {
+    // "Hello." is 6 chars; with max=6 it should match exactly.
+    expect(firstSentenceOrTruncate('Hello. Details', 6)).toBe('Hello.');
+  });
+
+  it('N1: max=1 leaves no room for "X." → falls through to truncate', () => {
+    expect(firstSentenceOrTruncate('Hello.', 1)).toBe('…');
+  });
+
+  it('N2: detects sentence that wraps across a newline before punctuation', () => {
+    expect(firstSentenceOrTruncate('Fixed auth\nissue. More details')).toBe(
+      'Fixed auth issue.',
+    );
+  });
+
+  it('N2: extracts first sentence cleanly when newline follows punctuation', () => {
+    expect(firstSentenceOrTruncate('First sentence.\nSecond sentence.')).toBe(
+      'First sentence.',
+    );
+  });
 });

@@ -47,20 +47,25 @@ export function firstSentenceOrTruncate(s: string, max = 80): string {
       ? Math.min(Math.floor(max), 2000)
       : 80;
 
-  // Build the sentence-end regex from `safeMax` so callers passing a
-  // non-default value get behavior matching the contract. Lazy
-  // quantifier `{1,N}?` lets internal `.!?` characters pass through
-  // (version numbers, decimals, filenames) until we hit one followed
-  // by whitespace or end-of-string — the actual sentence boundary.
-  const sentenceEnd = new RegExp(`^([^\\n]{1,${safeMax}}?[.!?])(\\s|$)`);
-  const m = trimmed.match(sentenceEnd);
-  if (m) return collapseNewlines(m[1]);
-
-  // F1 fix (audit, medium): the truncate fallback used to slice raw
-  // characters and could keep embedded `\n`, breaking the
-  // single-line headline contract. Collapse all whitespace runs
-  // (including newlines) into single spaces before truncating.
+  // N2 fix (audit-2, low): collapse whitespace BEFORE sentence detection.
+  // Doing it after meant a sentence wrapping across a newline before
+  // its terminator (e.g., "Fixed auth\nissue. More") never matched the
+  // boundary regex and fell through to a generic truncate.
   const oneLine = collapseNewlines(trimmed);
+
+  // N1 fix (audit-2, low): cap the captured sentence at exactly `safeMax`
+  // chars including the terminating punctuation. The leading run is
+  // therefore at most `safeMax - 1` chars. Skip sentence detection
+  // entirely when there's no room for even "X." (safeMax < 2).
+  // Lazy quantifier `{1,N}?` lets internal `.!?` characters pass
+  // through (version numbers, decimals, filenames) until we hit one
+  // followed by whitespace or end-of-string — the real sentence boundary.
+  if (safeMax >= 2) {
+    const sentenceEnd = new RegExp(`^(.{1,${safeMax - 1}}?[.!?])(\\s|$)`);
+    const m = oneLine.match(sentenceEnd);
+    if (m) return m[1];
+  }
+
   return oneLine.length > safeMax ? oneLine.slice(0, safeMax - 1) + '…' : oneLine;
 }
 
