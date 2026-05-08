@@ -12,6 +12,7 @@ const DEFAULT_CAPABILITIES: AdapterCapabilities = {
 // filesReadCount=1 regardless of which casing the adapter normalized to.
 const READ_TOOL_NAMES = new Set(['readFile', 'read_file']);
 const WRITE_TOOL_NAMES = new Set(['writeFile', 'write_file', 'editFile', 'edit_file']);
+const SHELL_TOOL_NAMES = new Set(['runShell', 'run_shell', 'shell', 'bash']);
 
 function extractPathFromToolInput(input: unknown): string | undefined {
   if (typeof input !== 'object' || input === null) return undefined;
@@ -19,6 +20,66 @@ function extractPathFromToolInput(input: unknown): string | undefined {
   for (const key of ['path', 'file_path', 'filePath']) {
     const v = obj[key];
     if (typeof v === 'string') return v;
+  }
+  return undefined;
+}
+
+/**
+ * Heuristic: does the given shell command write to the filesystem?
+ *
+ * Gap 11 fix (4.0.3+): the polling headline tracks file writes by tool
+ * name (writeFile/write_file/edit_file). Workers that bypass these and
+ * write via run_shell (cat >, sed -i, tee, etc.) used to show "0 write"
+ * for the entire run despite actively producing artifacts. This
+ * heuristic looks for common write patterns in the command string;
+ * false positives are acceptable (operator gets a slightly noisy count)
+ * but false negatives are not (the headline lies about progress).
+ *
+ * Patterns detected:
+ *   - Output redirects: `> file`, `>> file`, `&> file`, `>| file`
+ *   - Heredoc to file: `<<EOF > file`, `cat <<...> file`
+ *   - `sed -i` / `sed -i ''` (in-place edit)
+ *   - `awk -i inplace` / `gawk -i inplace`
+ *   - `tee file`, `tee -a file`
+ *   - `cp/mv/touch/install` (file creation/moves)
+ *   - `mkdir`, `rm`, `chmod`, `chown` (filesystem mutation)
+ *   - `git checkout/reset/restore/pull/merge` (modifies files)
+ *   - `python/node -c '... open(... "w") ...'` is NOT detected — too
+ *     ambiguous; keeps false-positive rate low.
+ */
+const SHELL_WRITE_PATTERNS: RegExp[] = [
+  /[^&|>]>>?\s*[^&|>\s]/,                // > file or >> file (excluding 2>&1, &> handled below)
+  /&>\s*[^&|>\s]/,                       // &> file
+  />\|\s*[^&|>\s]/,                      // >| file
+  /\bsed\s+(?:-[a-z]*i[a-z]*\b|--in-place\b)/i,  // sed -i / sed --in-place
+  /\b(?:awk|gawk|nawk)\s+-i\s+inplace\b/i,
+  /\btee\b/,
+  /\b(?:cp|mv|touch|install|ln)\s+/,
+  /\bmkdir\s+/,
+  /\brm\s+/,
+  /\bchmod\s+/,
+  /\bchown\s+/,
+  /\bgit\s+(?:checkout|reset|restore|pull|merge|clean|stash|cherry-pick|rebase|apply)\b/,
+  /\bnpm\s+(?:install|i|ci|uninstall|update|run\s+build|run\s+test)\b/,
+  /\bpnpm\s+(?:install|add|remove|update|run)\b/,
+  /\byarn\s+(?:install|add|remove|upgrade)\b/,
+];
+
+export function shellCommandWritesFs(command: string): boolean {
+  if (!command || command.length === 0) return false;
+  for (const pattern of SHELL_WRITE_PATTERNS) {
+    if (pattern.test(command)) return true;
+  }
+  return false;
+}
+
+function extractShellCommand(input: unknown): string | undefined {
+  if (typeof input !== 'object' || input === null) return undefined;
+  const obj = input as Record<string, unknown>;
+  for (const key of ['command', 'cmd', 'shell']) {
+    const v = obj[key];
+    if (typeof v === 'string') return v;
+    if (Array.isArray(v)) return v.join(' ');
   }
   return undefined;
 }
@@ -152,6 +213,20 @@ export class RunnerShell {
             const path = extractPathFromToolInput(call.input);
             if (READ_TOOL_NAMES.has(call.name) && path) filesRead.push(path);
             else if (WRITE_TOOL_NAMES.has(call.name) && path) filesWritten.push(path);
+            else if (SHELL_TOOL_NAMES.has(call.name)) {
+              // Gap 11 fix (4.0.3+): workers writing via run_shell
+              // (cat >, sed -i, tee, etc.) used to show "0 write" in
+              // polling for the entire run despite actively producing
+              // artifacts. Detect common write patterns in the command
+              // arg and attribute as a synthetic write entry tagged
+              // `shell:` so callers can distinguish it from explicit
+              // write_file calls. False positives acceptable; false
+              // negatives are not — the headline must reflect reality.
+              const command = extractShellCommand(call.input);
+              if (command && shellCommandWritesFs(command)) {
+                filesWritten.push(`shell:${command.slice(0, 80)}`);
+              }
+            }
           }
         }
         history.push(turnRecord);
@@ -161,8 +236,16 @@ export class RunnerShell {
       // instead of the bare "tool_call_count=6". The user can immediately
       // tell read vs write activity without inspecting the JSONL log.
       const toolCallsByName: Record<string, number> = {};
+      // Gap 11 (4.0.3+): also count shell calls that wrote to the
+      // filesystem so the headline reflects worker-produced artifacts
+      // even when the worker bypassed write_file/edit_file.
+      let shellWritesThisTurn = 0;
       for (const tc of turnResult.toolCalls) {
         toolCallsByName[tc.name] = (toolCallsByName[tc.name] ?? 0) + 1;
+        if (SHELL_TOOL_NAMES.has(tc.name)) {
+          const cmd = extractShellCommand(tc.input);
+          if (cmd && shellCommandWritesFs(cmd)) shellWritesThisTurn += 1;
+        }
       }
 
       input.bus?.emit({
@@ -173,6 +256,7 @@ export class RunnerShell {
         terminated: willTerminate,
         toolCallCount: turnResult.toolCalls.length,
         ...(turnResult.toolCalls.length > 0 && { toolCalls: toolCallsByName }),
+        ...(shellWritesThisTurn > 0 && { shellWrites: shellWritesThisTurn }),
       });
 
       if (willTerminate) break;

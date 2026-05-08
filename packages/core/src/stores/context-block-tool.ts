@@ -31,6 +31,20 @@ export interface ContextBlockStore {
   delete(id: string): boolean;
   /** Walk entries and evict those past the idle TTL. Returns count evicted. */
   runIdleSweep(now: number, idleTtlMs: number): number;
+  /** Number of entries. Used by status + size-cap checks. */
+  readonly size: number;
+  /** Increment pin count — used by BatchRegistry to hold blocks across an
+   *  active dispatch so they can't be evicted mid-run. Disk-backed
+   *  implementations may treat this as advisory. */
+  pin(id: string): void;
+  /** Decrement pin count. */
+  unpin(id: string): void;
+  /** Current pin count for an entry. Returns 0 if unknown. */
+  refcount(id: string): number;
+  /** Wipe every entry. Used by project-registry on idle eviction. */
+  clear(): void;
+  /** Configured idle TTL (ms). Tests + observability surfaces read it. */
+  readonly ttlMs: number;
 }
 
 /**

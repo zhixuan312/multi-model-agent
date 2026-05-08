@@ -291,10 +291,20 @@ export async function startServer(
     batchTtlMs: config.server.limits.batchTtlMs,
   });
 
+  // Context-block storage mode: file-backed by default (Gap 4 — round-over-round
+  // audit recipe needs disk persistence to survive daemon restarts). Tests
+  // and ephemeral servers can opt out via the MMAGENT_CONTEXT_BLOCK_STORAGE
+  // env var to avoid filesystem side effects.
+  const cbStorage =
+    process.env.MMAGENT_CONTEXT_BLOCK_STORAGE === 'in-memory'
+      ? 'in-memory' as const
+      : 'file-backed' as const;
+
   const projectRegistry = new ProjectRegistry({
     cap: config.server.limits.projectCap,
     idleEvictionMs: config.server.limits.idleProjectTimeoutMs,
     evictionIntervalMs: Math.min(config.server.limits.idleProjectTimeoutMs, 60_000),
+    contextBlockStorage: cbStorage,
   });
 
   // Capture serverStartedAt before health registration so /health can expose it.

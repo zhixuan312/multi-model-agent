@@ -185,6 +185,18 @@ Full technical schema with every field, enum value, and validation rule: [docs/P
 
 If you discover us collecting something not listed in "What we collect," that is a bug. Please file an issue — we will treat it as a security incident.
 
+## Local-only data: `.mma/` directory
+
+Starting in 4.0.3, the daemon writes context blocks (worker-output snippets used by round-over-round audit recipes) to disk under `<projectCwd>/.mma/context-blocks/<id>.txt` so they survive daemon restarts. This data:
+
+- **Stays local.** Never uploaded to telemetry. Never leaves your machine.
+- **Has restrictive permissions.** Directory `0700`, files `0600`. User-only access.
+- **Has a 7-day TTL** (configurable). Expired entries are deleted on next access or via periodic GC.
+- **Is size-capped.** 1 MiB per block, 100 MiB per project on disk. Oldest-first eviction beyond the cap.
+- **Should be in `.gitignore`.** Context blocks contain worker output (which can contain code excerpts and audit findings). On first creation of `.mma/` in a project, the daemon prints a stderr breadcrumb suggesting you add `.mma/` to that project's `.gitignore`. The daemon does NOT auto-edit your `.gitignore` — that decision is yours.
+
+Delete the `.mma/` directory at any time to wipe local context blocks.
+
 ## How to opt out
 
 Telemetry is **disabled by default**. If you previously opted in to V2 telemetry:

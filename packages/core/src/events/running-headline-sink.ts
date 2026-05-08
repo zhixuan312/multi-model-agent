@@ -28,6 +28,11 @@ import { stageProgress } from '../lifecycle/stage-progression.js';
 
 interface PerTaskProgress {
   toolCounts: Record<string, number>;
+  /** Gap 11 (4.0.3+): cumulative count of run_shell calls that wrote to
+   *  the filesystem (sed -i, cat >, tee, etc.). Tracked separately from
+   *  WRITE_TOOLS because run_shell isn't categorized by tool name; the
+   *  runner-shell emits this in `shellWrites` on runner_turn_completed. */
+  shellWrites: number;
   stageLabel?: string;
   tier?: string;
   /** ms since epoch when the first event for this (batch, task) arrived;
@@ -57,6 +62,7 @@ export class RunningHeadlineSink {
     const taskIndex = typeof event['taskIndex'] === 'number' ? (event['taskIndex'] as number) : 0;
 
     const toolCalls = (event['toolCalls'] as Record<string, number> | undefined) ?? {};
+    const shellWritesDelta = typeof event['shellWrites'] === 'number' ? (event['shellWrites'] as number) : 0;
     const stageLabel = typeof event['stageLabel'] === 'string' ? event['stageLabel'] : undefined;
     const tier = typeof event['tier'] === 'string' ? event['tier'] : undefined;
 
@@ -72,6 +78,7 @@ export class RunningHeadlineSink {
     }
     const next: PerTaskProgress = {
       toolCounts: nextCounts,
+      shellWrites: (prior?.shellWrites ?? 0) + shellWritesDelta,
       stageLabel: stageLabel ?? prior?.stageLabel,
       tier: tier ?? prior?.tier,
       startedAt: prior?.startedAt ?? Date.now(),
@@ -89,6 +96,10 @@ export class RunningHeadlineSink {
       if (READ_TOOLS.has(name)) read += count;
       else if (WRITE_TOOLS.has(name)) write += count;
     }
+    // Gap 11 (4.0.3+): include run_shell calls that wrote to the FS so
+    // the headline shows real activity instead of "0 write" while
+    // sed -i / cat > / tee actively produces artifacts.
+    write += next.shellWrites;
 
     const stage = next.stageLabel ?? 'Running';
     const tierStr = capitalizeTier(next.tier);
