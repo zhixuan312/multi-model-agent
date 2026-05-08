@@ -128,24 +128,25 @@ export class Flusher {
       // Single identity snapshot per flush — threaded into both head-truncation and uploadBatch.
       const identity = getOrCreateIdentity(this.#dir);
 
-      // A record at the head cannot be sent if EITHER its schemaVersion is below
-      // SCHEMA_VERSION OR its installId does not match the current identity. In both
-      // cases the record is permanently un-authenticatable; retrying the same signed
-      // payload always fails. Drop the contiguous head-prefix locally, then re-read
-      // so subsequent meta byteOffsets reflect the post-truncate file layout.
-      let unflushableHead = 0;
-      while (
-        unflushableHead < batch.records.length &&
-        (
-          batch.records[unflushableHead].schemaVersion < SCHEMA_VERSION ||
-          batch.records[unflushableHead].installId !== identity.installId
-        )
-      ) {
-        unflushableHead++;
+      // V4-only: drop EVERY record that can't be authenticated, not just a
+      // contiguous head-prefix. Records older than SCHEMA_VERSION or whose
+      // installId doesn't match the current identity are permanently
+      // un-authenticatable; retrying the same signed payload always fails.
+      // Previously we only dropped a contiguous head — a sandwiched older
+      // record (e.g. queued during a roll-back/forward, or installId churn)
+      // would either propagate into an upload or split the upload into
+      // versioned groups. Now: full-batch filter, then re-read to refresh
+      // meta byteOffsets after the file rewrite.
+      const dropHashes = new Set<string>();
+      for (let i = 0; i < batch.records.length; i++) {
+        const r = batch.records[i];
+        if (r.schemaVersion < SCHEMA_VERSION || r.installId !== identity.installId) {
+          dropHashes.add(batch.meta[i].sha256);
+        }
       }
-      if (unflushableHead > 0) {
-        await this.#queue.truncate(batch.meta.slice(0, unflushableHead));
-        this.#dropped += unflushableHead;
+      if (dropHashes.size > 0) {
+        const removed = await this.#queue.removeRecords(dropHashes);
+        this.#dropped += removed;
         batch = await this.#queue.readBatch(MAX_BATCH);
         if (batch.records.length === 0) {
           this.clearBackoff();
