@@ -162,55 +162,6 @@ export const CostCheckEvent = TaskBase.extend({
   cost_available: z.boolean(),
 }).strict();
 
-// === Explore-specific events (6) — batch-level, no taskIndex ===
-
-export const ExploreParallelStartEvent = BatchBase.extend({
-  event: z.literal('explore_parallel_start'),
-  internalRoute: z.string(),
-  externalRoute: z.string(),
-}).strict();
-
-export const ExploreParallelEndEvent = BatchBase.extend({
-  event: z.literal('explore_parallel_end'),
-  internalOk: z.boolean(),
-  externalOk: z.boolean(),
-  internalDurationMs: z.number().int().min(0),
-  externalDurationMs: z.number().int().min(0),
-}).strict();
-
-export const ExploreInternalUnavailableEvent = BatchBase.extend({
-  event: z.literal('explore_internal_unavailable'),
-  reason: z.string(),
-}).strict();
-
-export const ExploreExternalUnavailableEvent = BatchBase.extend({
-  event: z.literal('explore_external_unavailable'),
-  reason: z.string(),
-}).strict();
-
-export const ExploreSynthesizeStartEvent = BatchBase.extend({
-  event: z.literal('explore_synthesize_start'),
-  internalAvailable: z.boolean(),
-  externalAvailable: z.boolean(),
-}).strict();
-
-export const ExploreSynthesizeEndEvent = BatchBase.extend({
-  event: z.literal('explore_synthesize_end'),
-  threadCount: z.number().int().min(0),
-  recommendedNextStep: z.boolean(),
-  durationMs: z.number().int().min(0),
-}).strict();
-
-export const ExploreThreadStartedEvent = BatchBase.extend({
-  event: z.literal('explore_thread_started'),
-  threadIndex: z.number().int().min(0),
-}).strict();
-
-export const ExploreThreadCompletedEvent = BatchBase.extend({
-  event: z.literal('explore_thread_completed'),
-  threadIndex: z.number().int().min(0),
-}).strict();
-
 export const BatchCompletedEvent = BatchBase.extend({
   event: z.literal('batch_completed'),
   tool: z.string(),
@@ -366,15 +317,6 @@ export const Event = z.discriminatedUnion('event', [
   BatchCompletedEvent,
   BatchFailedEvent,
   TaskCompletedLocalEvent,
-  // Explore
-  ExploreParallelStartEvent,
-  ExploreParallelEndEvent,
-  ExploreInternalUnavailableEvent,
-  ExploreExternalUnavailableEvent,
-  ExploreSynthesizeStartEvent,
-  ExploreSynthesizeEndEvent,
-  ExploreThreadStartedEvent,
-  ExploreThreadCompletedEvent,
   // Runner internals
   WorkerStartEvent,
   TurnStartEvent,
@@ -422,15 +364,6 @@ export const EventSchemas: Record<string, z.ZodType> = {
   task_completed:             TaskCompletedLocalEvent,
   batch_completed:            BatchCompletedEvent,
   batch_failed:               BatchFailedEvent,
-  // Explore
-  explore_parallel_start:         ExploreParallelStartEvent,
-  explore_parallel_end:           ExploreParallelEndEvent,
-  explore_internal_unavailable:   ExploreInternalUnavailableEvent,
-  explore_external_unavailable:   ExploreExternalUnavailableEvent,
-  explore_synthesize_start:       ExploreSynthesizeStartEvent,
-  explore_synthesize_end:         ExploreSynthesizeEndEvent,
-  explore_thread_started:         ExploreThreadStartedEvent,
-  explore_thread_completed:       ExploreThreadCompletedEvent,
   // Runner internals
   worker_start:    WorkerStartEvent,
   turn_start:      TurnStartEvent,

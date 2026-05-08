@@ -19,7 +19,8 @@ import * as debug from '../tools/debug/schema.js';
 import * as executePlan from '../tools/execute-plan/schema.js';
 import * as retry from '../tools/retry/schema.js';
 import * as investigate from '../tools/investigate/schema.js';
-import * as explore from '../tools/explore/schema.js';
+import * as research from '../tools/research/schema.js';
+
 
 // Extend Zod once with openapi support.
 extendZodWithOpenApi(z);
@@ -115,9 +116,9 @@ const TOOL_ENDPOINTS: Array<{ path: string; summary: string; schema: z.ZodTypeAn
     schema: investigate.inputSchema,
   },
   {
-    path: '/explore',
-    summary: 'Explore a topic with parallel internal codebase search and external web research',
-    schema: explore.inputSchema,
+    path: '/research',
+    summary: 'External multi-source research with citations (arxiv, semantic_scholar, github_search, rss, brave-with-site:-filters)',
+    schema: research.inputSchema,
   },
 ];
 

@@ -11,5 +11,4 @@ export * as debug from './debug/schema.js';
 export * as executePlan from './execute-plan/schema.js';
 export * as retry from './retry/schema.js';
 export * as investigate from './investigate/schema.js';
-export * as explore from './explore/schema.js';
 export * as registerContextBlock from './register-context-block/schema.js';
