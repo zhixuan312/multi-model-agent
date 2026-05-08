@@ -6,12 +6,12 @@ import { auditHeadlineTemplate } from '../../reporting/headline-templates/audit.
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec } from '../../types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
-  SEVERITY_LADDER,
-  EVIDENCE_GROUNDING,
-  SCOPE_DISCIPLINE,
-  ANNOTATOR_CHECK_AWARENESS_RO,
-} from '../../review/templates/finding-criteria.js';
+  EVIDENCE_RULE_AUDIT,
+  SCOPE_RULE_AUDIT,
+  ANNOTATOR_AWARENESS_AUDIT,
+} from './implementer-criteria.js';
 
 export function registerAudit(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -122,11 +122,11 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   // Result: fewer downgraded findings, fewer missed criticals.
   SEVERITY_LADDER,
   '',
-  EVIDENCE_GROUNDING,
+  EVIDENCE_RULE_AUDIT,
   '',
-  SCOPE_DISCIPLINE,
+  SCOPE_RULE_AUDIT,
   '',
-  ANNOTATOR_CHECK_AWARENESS_RO,
+  ANNOTATOR_AWARENESS_AUDIT,
 ].join('\n');
 
 const DELTA_AUDIT_INSTRUCTIONS = [

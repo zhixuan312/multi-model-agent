@@ -8,12 +8,12 @@ import { reviewBriefSlot, type ReviewBrief } from '../../intake/brief-compiler-s
 import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
 import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
-  SEVERITY_LADDER,
-  EVIDENCE_GROUNDING,
-  SCOPE_DISCIPLINE,
-  ANNOTATOR_CHECK_AWARENESS_RO,
-} from '../../review/templates/finding-criteria.js';
+  EVIDENCE_RULE_REVIEW,
+  SCOPE_RULE_REVIEW,
+  ANNOTATOR_AWARENESS_REVIEW,
+} from './implementer-criteria.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -88,7 +88,7 @@ function buildReviewPrompt(brief: ReviewBrief): string {
 
   // Tool sweep #12: share the annotator's rubric with the implementer
   // so the worker self-aligns with what the reviewer will check.
-  parts.push(SEVERITY_LADDER, EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
+  parts.push(SEVERITY_LADDER, EVIDENCE_RULE_REVIEW, SCOPE_RULE_REVIEW, ANNOTATOR_AWARENESS_REVIEW);
 
   return parts.join('\n\n');
 }

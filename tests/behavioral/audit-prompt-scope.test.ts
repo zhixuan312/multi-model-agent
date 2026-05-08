@@ -44,11 +44,8 @@ describe('audit prompt scope contract (§6.1 AC)', () => {
   it('includes the scope contract in the compiled prompt', () => {
     const drafts = compileAuditPrompts({ document: '# Test', auditType: 'correctness' });
     for (const draft of drafts) {
-      // NOTE: A1 phase asserts on the CURRENT shared scope text. Phase
-      // C1 Step 3 (added below) updates these assertions to the new
-      // SCOPE_RULE_AUDIT phrases. This split keeps each phase's commit
-      // green-on-its-own.
-      expect(draft.prompt).toContain('Stay within the requested files');
+      expect(draft.prompt).toContain('Do NOT enumerate the repository');
+      expect(draft.prompt).toContain('the goal is to evaluate the document, not catalog the codebase');
     }
   });
 
@@ -56,7 +53,7 @@ describe('audit prompt scope contract (§6.1 AC)', () => {
     const drafts = compileAuditPrompts({ filePaths: ['/a/x.ts', '/a/y.ts'], auditType: 'security' });
     expect(drafts.length).toBe(2);
     for (const draft of drafts) {
-      expect(draft.prompt).toContain('Stay within the requested files');
+      expect(draft.prompt).toContain('Do NOT enumerate the repository');
     }
   });
 });
