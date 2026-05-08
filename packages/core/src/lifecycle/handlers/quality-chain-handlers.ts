@@ -357,6 +357,28 @@ export function settleQualityChainHandler(state: LifecycleState): void {
     return;
   }
   if (v1 === 'error' || v2 === 'error' || v3 === 'error') {
+    // 4.0.3+ soft-success path for read-only routes (audit / review /
+    // verify / debug / investigate). These routes have NO rework loop —
+    // the annotator is single-pass. When the annotator returns 'error'
+    // (typically a parse failure on its own JSON block) BUT the
+    // implementer produced a non-empty narrative output, the findings
+    // are still recoverable from `lastRunResult.output` in the canonical
+    // `## Finding N:` format. Treat that as chain-passed so the wire
+    // envelope reports terminal_status='ok' / worker_status='done'
+    // instead of leaking 'review_loop_capped' (artifact-producing-route
+    // terminology). Round-1 verdict='error' stays in stage stats as a
+    // soft telemetry signal. Headline composers + envelope builders
+    // fall back to narrative parsing for the findings count.
+    const last = state.lastRunResult as { output?: string } | undefined;
+    const isReadOnly = state.toolCategory === 'read_only';
+    const implementerProducedOutput =
+      typeof last?.output === 'string' && last.output.trim().length > 0;
+    if (isReadOnly && implementerProducedOutput) {
+      state.qualityChainPassed = true;
+      return;
+    }
+    // Artifact-producing route, OR read-only with empty implementer
+    // output: hard-fail (no findings to recover).
     state.qualityChainPassed = false;
     state.terminal = true;
     return;

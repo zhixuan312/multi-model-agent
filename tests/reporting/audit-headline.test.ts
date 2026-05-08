@@ -88,6 +88,35 @@ describe('audit headline composer (4.0.3+ Gap 2)', () => {
 
     expect(headline).toBe('[ok] audit completed');
   });
+
+  // 4.0.3+ Gap 16: when annotator errors, fall back to parsing
+  // ## Finding N: blocks from the implementer's output. Validates the
+  // actual telemetry id 854913 case where annotator errored but the
+  // implementer produced 2 valid narrative findings.
+  it('falls back to parseNarrativeFindings when annotator errored (annotatedFindings empty)', () => {
+    const runResult = {
+      annotatedFindings: [],
+      output: `## Finding 1: Regex chokes on internal periods
+- Severity: medium
+- Location: headline-text.ts:15
+
+## Finding 2: Max param ignored
+- Severity: low
+- Location: headline-text.ts:15
+`,
+    } as unknown as RunResult;
+    const task = { prompt: '', filePaths: ['/a/b/headline-text.ts'] } as unknown as TaskSpec;
+
+    const headline = auditHeadlineTemplate.compose({
+      taskBrief: 'audit',
+      report: notApplicable('reportSchema parse failed'),
+      status: 'ok',
+      runResult,
+      task,
+    });
+
+    expect(headline).toBe('[ok] audit /a/b/headline-text.ts: 2 findings (0 high)');
+  });
 });
 
 describe('review headline composer (4.0.3+ Gap 2)', () => {

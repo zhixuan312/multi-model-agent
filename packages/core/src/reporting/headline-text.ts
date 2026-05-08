@@ -12,8 +12,6 @@
  * sanitize narrative text for headline display.
  */
 
-const SENTENCE_END = /^([^.!?\n]{1,80}[.!?])(\s|$)/;
-
 /**
  * Return the first sentence of `s`, or a hard-truncated form with
  * trailing ellipsis when no sentence boundary exists in the first
@@ -23,6 +21,11 @@ const SENTENCE_END = /^([^.!?\n]{1,80}[.!?])(\s|$)/;
  * then details" pattern; the first sentence carries the operator-
  * relevant signal. Truncating mid-sentence (the prior bug) loses
  * that signal AND looks broken.
+ *
+ * Sentence-end heuristic: a `.!?` followed by whitespace OR end-of-
+ * string. The match is non-greedy and ranges over `max` characters,
+ * so internal punctuation (version numbers like `v4.0.3`, decimals
+ * like `1.5`, filenames like `auth.ts`) does NOT block the scan.
  *
  * @param s     raw text (may be empty / whitespace-only)
  * @param max   hard truncation cap when no sentence break is found.
@@ -34,7 +37,13 @@ export function firstSentenceOrTruncate(s: string, max = 80): string {
   if (!s || typeof s !== 'string') return '';
   const trimmed = s.trim();
   if (trimmed.length === 0) return '';
-  const m = trimmed.match(SENTENCE_END);
+  // Build the sentence-end regex from `max` so callers passing a
+  // non-default value get behavior matching the contract. Lazy
+  // quantifier `{1,N}?` lets internal `.!?` characters pass through
+  // (version numbers, decimals, filenames) until we hit one followed
+  // by whitespace or end-of-string — the actual sentence boundary.
+  const sentenceEnd = new RegExp(`^([^\\n]{1,${max}}?[.!?])(\\s|$)`);
+  const m = trimmed.match(sentenceEnd);
   if (m) return m[1];
   return trimmed.length > max ? trimmed.slice(0, max - 1) + '…' : trimmed;
 }

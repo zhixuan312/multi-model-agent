@@ -59,3 +59,41 @@ export function bucketFindingsBySeverity(
   }
   return buckets;
 }
+
+/**
+ * Extract findings from an implementer's narrative `## Finding N:` output
+ * block-by-block. The audit / review / verify / debug / investigate
+ * tool prompts instruct workers to emit findings in this exact format:
+ *
+ *     ## Finding 1: <title>
+ *     - Severity: critical | high | medium | low
+ *     - Location: file:line
+ *     - Issue: ...
+ *     - Suggestion: ...
+ *
+ * The annotator normally consumes that narrative and emits a structured
+ * JSON array. When the annotator errors (parse failure, exhaustion
+ * mid-block, etc.), this helper recovers the findings from the
+ * implementer's output so the headline + envelope still report the
+ * correct count. Returns one entry per finding with the parsed severity
+ * (lowercase canonical, or null if no severity line was found).
+ */
+export function parseNarrativeFindings(
+  output: string,
+): Array<{ severity: FindingSeverity | null; claim: string }> {
+  if (!output || typeof output !== 'string') return [];
+  const findings: Array<{ severity: FindingSeverity | null; claim: string }> = [];
+  // Split on `## Finding N:` headings (case-insensitive, lenient
+  // whitespace + colon). Block 0 is everything BEFORE the first
+  // heading — discard.
+  const blocks = output.split(/^##\s+Finding\s+\d+\s*:?/im);
+  for (let i = 1; i < blocks.length; i++) {
+    const block = blocks[i];
+    const titleMatch = block.match(/^[^\n]+/);
+    const claim = titleMatch ? titleMatch[0].trim() : '';
+    const sevMatch = block.match(/^\s*[-*]?\s*severity\s*:\s*(\w+)/im);
+    const severity = sevMatch ? normalizeSeverity(sevMatch[1]) : null;
+    findings.push({ severity, claim });
+  }
+  return findings;
+}

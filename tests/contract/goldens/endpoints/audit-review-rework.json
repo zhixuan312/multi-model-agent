@@ -1,9 +1,9 @@
 {
-  "headline": "[incomplete] audit : 0 findings (0 high)",
+  "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
       "output": "needs rework per review",
-      "status": "incomplete",
+      "status": "ok",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
@@ -29,15 +29,15 @@
       ],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
-      "workerStatus": "review_loop_capped",
+      "workerStatus": "done",
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "error",
       "terminationReason": {
-        "cause": "incomplete",
+        "cause": "finished",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "review_loop_capped",
+        "workerSelfAssessment": "done",
         "wasPromoted": false
       },
       "implementationReport": {
@@ -122,8 +122,7 @@
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      },
-      "errorCode": "review_quality_findings_unresolved"
+      }
     }
   ],
   "batchTimings": {

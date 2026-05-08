@@ -44,4 +44,38 @@ describe('firstSentenceOrTruncate (Gap 12)', () => {
   it('trims leading/trailing whitespace before processing', () => {
     expect(firstSentenceOrTruncate('  Hello.  Bye.  ')).toBe('Hello.');
   });
+
+  // 4.0.3 audit findings (telemetry id 854913):
+  //
+  // F1: regex must allow internal `.!?` (version numbers, decimals,
+  //     filenames) — only break on a `.!?` followed by whitespace OR EOL.
+  // F2: `max` parameter MUST scope the search range, not just the
+  //     truncation fallback. Hardcoded 80 ignored callers' overrides.
+  it('handles internal version-number periods (v4.0.3) without falling through', () => {
+    expect(firstSentenceOrTruncate('Fixed v4.0.3 regression. Details follow.'))
+      .toBe('Fixed v4.0.3 regression.');
+  });
+
+  it('handles internal decimal numbers (1.5) without falling through', () => {
+    expect(firstSentenceOrTruncate('Raised threshold to 1.5. Additional context.'))
+      .toBe('Raised threshold to 1.5.');
+  });
+
+  it('handles internal filenames (auth.ts) without falling through', () => {
+    expect(firstSentenceOrTruncate('Updated auth.ts. More details.'))
+      .toBe('Updated auth.ts.');
+  });
+
+  it('respects a custom max parameter for sentence-search range', () => {
+    // 100-char first sentence — without max=120, falls through to truncate at 80.
+    const longFirst = 'A'.repeat(100) + '.';
+    const followup = ' Then more.';
+    const out = firstSentenceOrTruncate(longFirst + followup, 120);
+    expect(out).toBe(longFirst); // full first sentence, since 101 ≤ 120
+  });
+
+  it('default max=80 still finds sentences ≤80 chars', () => {
+    const text = 'A'.repeat(70) + '. Then more.';
+    expect(firstSentenceOrTruncate(text)).toBe('A'.repeat(70) + '.');
+  });
 });
