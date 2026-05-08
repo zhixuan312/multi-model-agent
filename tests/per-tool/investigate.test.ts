@@ -1,262 +1,128 @@
 import { describe, it, expect } from 'vitest';
-import { mockAdapter } from '../contract/fixtures/mock-providers.js';
-import { bootstrapWithMockAdapterAndOverrides } from '../helpers/bootstrap.js';
-import { investigateSlot } from '../../packages/core/src/intake/brief-compiler-slots/investigate.js';
-import type { InvestigateInput } from '../../packages/core/src/intake/brief-compiler-slots/investigate.js';
-import { investigateReportSchema } from '../../packages/core/src/reporting/report-parser-slots/investigate-report.js';
-import { AnnotatorEngine } from '../../packages/core/src/review/annotator-engine.js';
-import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
-import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import { toolConfig } from '../../packages/core/src/tools/investigate/tool-config.js';
+import type {
+  EnrichedInvestigateInput,
+  InvestigateBrief,
+} from '../../packages/core/src/tools/investigate/tool-config.js';
 
-function makeInvestigateParseBrief(): StageHandler {
-  return (state: LifecycleState): void => {
-    const req = state.request as InvestigateInput | undefined;
-    if (!req || typeof req.question !== 'string' || req.question.trim().length === 0) {
-      state.terminal = true;
-      state.errorCode = 'intake_brief_invalid';
-      return;
-    }
-    const briefs = investigateSlot(req);
-    (state as any).investigateBriefs = briefs;
-    state.userMessage = briefs[0].brief;
-    (state as any).reviewPolicy = briefs[0].reviewPolicy;
-    (state as any).cwd = briefs[0].cwd;
-  };
+// Per-tool integration coverage for investigate.
+//
+// Replaces the previous test file that exercised the legacy
+// `compileInvestigate` / `investigateSlot` helpers in
+// brief-compiler-slots/investigate.ts. Those helpers had no production
+// callers (verified by grep across packages/) and were deleted under
+// dev-mode rule "delete unused code". The active production path is
+// toolConfig.briefSlot + toolConfig.buildTaskSpec, defined inline in
+// tools/investigate/tool-config.ts. These tests pin its observable
+// shape so the path-coverage.test.ts coverage check stays green and
+// the tool sweep #5 fix (renaming brief.prompt → brief.compiledPrompt
+// so the headline reads the user's question, not the prompt template)
+// can't regress silently.
+
+function makeInput(overrides: Partial<EnrichedInvestigateInput> = {}): EnrichedInvestigateInput {
+  return {
+    question: 'How does X work?',
+    resolvedContextBlocks: [],
+    canonicalizedFilePaths: [],
+    relativeFilePathsForPrompt: [],
+    ...overrides,
+  } as EnrichedInvestigateInput;
 }
 
-function makeInvestigateComposeResponse(): StageHandler {
-  return (state: LifecycleState): void => {
-    const lastResult = state.lastRunResult as { finalAssistantText?: string; workerStatus?: string; errorCode?: string } | undefined;
-    const workerOutput = lastResult?.finalAssistantText ?? '';
-
-    let structuredReport: unknown = null;
-    try {
-      structuredReport = investigateReportSchema.parse(workerOutput);
-    } catch { /* leave null */ }
-
-    (state as any).responseEnvelope = [{
-      terminalStatus: state.terminalStatus ?? (lastResult?.errorCode ? 'error' : 'ok'),
-      structuredReport,
-      workerStatus: lastResult?.workerStatus,
-      errorCode: lastResult?.errorCode,
-    }];
-  };
-}
-
-function makeAnnotatorHandler(shell: any, route: string): StageHandler {
-  return async (state: LifecycleState): Promise<void> => {
-    const lastResult = state.lastRunResult as { finalAssistantText?: string } | undefined;
-    const workerOutput = lastResult?.finalAssistantText ?? '';
-    const cwd = (state as any).cwd ?? process.cwd();
-
-    const result = await new AnnotatorEngine().annotate(shell, {
-      workerOutput,
-      brief: state.userMessage ?? '',
-      cwd,
-      route: route as any,
-    });
-
-    state.lastRunResult = {
-      ...state.lastRunResult,
-      finalAssistantText: result.finalAssistantText,
-    } as any;
-    state.qualityReviewRound1Verdict = result.verdict;
-  };
-}
-
-describe('investigate via v4.0 lifecycle', () => {
-  it('forces reviewPolicy=quality_only even if caller passes other', async () => {
-    const adapter = mockAdapter({ turns: [
-      { assistantText: '```json\n{"question":"x","answer":"y","citations":[{"source":"a.ts","quote":"q"}]}\n```', toolCalls: [] },
-      { assistantText: '```json\n{"findings":[]}\n```', toolCalls: [] },
-    ] });
-
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-      compose_response: makeInvestigateComposeResponse(),
-    });
-
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: 'x', reviewPolicy: 'none' },
-    });
-
-    expect(result.status).toBe(200);
-  });
-
-  it('returns investigation citations from narrative report', async () => {
-    const adapter = mockAdapter({ turns: [
-      { assistantText: [
-        '## Summary',
-        'Auth logic is in src/auth/handler.ts',
-        '',
-        '## Citations',
-        '- src/auth/handler.ts:42-58 — export function authenticate',
-        '',
-        '## Confidence',
-        'high — all citations verified',
-      ].join('\n'), toolCalls: [] },
-      { assistantText: '```json\n{"findings":[]}\n```', toolCalls: [] },
-    ] });
-
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-      compose_response: makeInvestigateComposeResponse(),
-    });
-
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: 'Where is auth logic?' },
-    });
-
-    expect(result.status).toBe(200);
-    const body: any = result.body;
-    expect(body[0]?.structuredReport?.investigation?.citations).toHaveLength(1);
-    expect(body[0]?.structuredReport?.investigation?.citations[0].file).toBe('src/auth/handler.ts');
-  });
-
-  it('preserves investigate results through annotator pass', async () => {
-    const adapter = mockAdapter({ turns: [
-      { assistantText: '```json\n{"question":"find error handling","answer":"Error handling is in src/errors.ts","citations":[{"source":"src/errors.ts","quote":"class AppError extends Error"},{"source":"src/middleware.ts","quote":"next(err)"}]}\n```', toolCalls: [] },
-      { assistantText: '```json\n{"findings":[{"severity":"high","category":"correctness","message":"error handling centralized","evidenceQuote":"class AppError extends Error","annotatorConfidence":0.9}]}\n```', toolCalls: [] },
-    ] });
-
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-      compose_response: makeInvestigateComposeResponse(),
-    });
-
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'investigate'));
-
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: 'find error handling' },
-    });
-
-    expect(result.status).toBe(200);
-    const body: any = result.body;
-    // structuredReport may be null after annotator reformats output shape,
-    // but terminalStatus should still be ok
-    expect(body[0]?.terminalStatus).toBe('ok');
-  });
-
-  it('annotator produces annotated verdict for read_only investigate', async () => {
-    const adapter = mockAdapter({ turns: [
-      { assistantText: '```json\n{"question":"test q","answer":"test a","citations":[{"source":"f.ts","quote":"some code here yes"}]}\n```', toolCalls: [] },
-      { assistantText: '```json\n{"findings":[{"severity":"critical","category":"security","message":"test finding","evidenceQuote":"some code here yes","annotatorConfidence":0.88}]}\n```', toolCalls: [] },
-    ] });
-
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-      compose_response: makeInvestigateComposeResponse(),
-    });
-
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'investigate'));
-
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: 'test q' },
-    });
-
-    expect(result.status).toBe(200);
-    const body: any = result.body;
-    expect(body[0]?.terminalStatus).toBe('ok');
-  });
-
-  it('annotator error does not drop results', async () => {
-    const adapter = mockAdapter({ turns: [
-      { assistantText: '```json\n{"question":"q","answer":"a","citations":[{"source":"f.ts","quote":"some code here yes"}]}\n```', toolCalls: [] },
-      { assistantText: 'unparseable annotator output without json block', toolCalls: [] },
-    ] });
-
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-      compose_response: makeInvestigateComposeResponse(),
-    });
-
-    dispatcher.overrideHandler('quality_review_round_1', makeAnnotatorHandler(dispatcher.shell, 'investigate'));
-
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: 'q' },
-    });
-
-    expect(result.status).toBe(200);
-    const body: any = result.body;
-    expect(body[0]?.terminalStatus).toBe('ok');
-  });
-
-  it('slot builds correct brief from question and depth', () => {
-    const briefs = investigateSlot({
-      question: 'How is authentication implemented?',
-      depth: 'deep',
-      cwd: '/tmp/test',
-    });
-
+describe('investigate toolConfig.briefSlot', () => {
+  it('produces exactly one brief regardless of file count', () => {
+    const briefs = toolConfig.briefSlot(
+      makeInput({
+        canonicalizedFilePaths: ['/x/a.ts', '/x/b.ts'],
+        relativeFilePathsForPrompt: ['a.ts', 'b.ts'],
+      }),
+    );
     expect(briefs).toHaveLength(1);
-    expect(briefs[0].taskIndex).toBe(0);
-    expect(briefs[0].reviewPolicy).toBe('quality_only');
-    expect(briefs[0].agentType).toBe('complex');
-    expect(briefs[0].cwd).toBe('/tmp/test');
-    expect(briefs[0].brief).toContain('Investigate (deep)');
-    expect(briefs[0].brief).toContain('How is authentication implemented?');
   });
 
-  it('slot defaults cwd and depth when not provided', () => {
-    const briefs = investigateSlot({ question: 'something' });
-    expect(briefs[0].cwd).toBe(process.cwd());
-    expect(briefs[0].brief).toContain('Investigate (medium)');
+  it('preserves the user question on the brief (drives headline)', () => {
+    const briefs = toolConfig.briefSlot(makeInput({ question: 'How does the auth-token rule work?' }));
+    expect(briefs[0].question).toBe('How does the auth-token rule work?');
   });
 
-  it('headline template formats investigation result correctly', async () => {
-    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
-    const headline = investigateHeadlineTemplate.compose({
-      report: {
-        kind: 'structured_report',
-        investigation: {
-          citations: [{ file: 'a.ts', lines: '1', claim: 'q' }, { file: 'b.ts', lines: '2', claim: 'w' }],
-          confidence: { level: 'high', rationale: 'verified' },
-          needsCallerClarification: false,
-          diagnostics: { malformedCitationLines: 0, missingRequiredSections: [], invalidRequiredSections: [] },
-        },
-        sectionValidity: { summary: 'valid', citations: 'valid', confidence: 'valid' },
-      },
-      status: 'ok',
-      taskBrief: 'How does auth work?',
-    });
-    expect(headline).toBe('Investigation: "How does auth work?" — 2 citations, confidence high, 0 unresolved.');
+  it('renders the compiled prompt under `compiledPrompt` (NOT `prompt`)', () => {
+    // Sweep #5 fix: a `prompt` field on the brief would cause the
+    // task-executor's taskBrief chain to leak the prompt template
+    // text into the headline instead of the question.
+    const briefs = toolConfig.briefSlot(makeInput({ question: 'q' }));
+    const brief = briefs[0] as InvestigateBrief & { prompt?: unknown };
+    expect(brief.compiledPrompt).toContain('Question: q');
+    expect(brief.compiledPrompt).toContain('## Summary');
+    expect(brief.compiledPrompt).toContain('## Citations');
+    expect(brief.compiledPrompt).toContain('## Confidence');
+    expect(brief.prompt).toBeUndefined();
   });
 
-  it('headline template shows blocked on error status', async () => {
-    const { investigateHeadlineTemplate } = await import('../../packages/core/src/reporting/headline-templates/investigate.js');
-    const headline = investigateHeadlineTemplate.compose({
-      report: {},
-      status: 'error',
-      taskBrief: 'find the bug',
-    });
-    expect(headline).toBe('Investigation: "find the bug" — blocked.');
+  it('embeds anchor paths into the compiled prompt', () => {
+    const briefs = toolConfig.briefSlot(
+      makeInput({
+        canonicalizedFilePaths: ['/cwd/src/auth.ts'],
+        relativeFilePathsForPrompt: ['src/auth.ts'],
+      }),
+    );
+    expect(briefs[0].compiledPrompt).toContain('- src/auth.ts');
+    expect(briefs[0].compiledPrompt).not.toContain('/cwd/src/auth.ts');
   });
 
-  it('rejects empty question', async () => {
-    const adapter = mockAdapter({ turns: [] });
-    const dispatcher = bootstrapWithMockAdapterAndOverrides(adapter, {
-      parse_brief: makeInvestigateParseBrief(),
-    });
+  it('embeds resolved context blocks before the question', () => {
+    const briefs = toolConfig.briefSlot(
+      makeInput({
+        resolvedContextBlocks: [{ id: 'ctx-1', content: 'PRIOR REPORT BODY' }],
+        question: 'follow-up?',
+      }),
+    );
+    expect(briefs[0].compiledPrompt).toContain('PRIOR REPORT BODY');
+    expect(briefs[0].compiledPrompt).toContain('Refine or extend');
+    // Question must come AFTER the prior context block.
+    const idxCtx = briefs[0].compiledPrompt.indexOf('PRIOR REPORT BODY');
+    const idxQ = briefs[0].compiledPrompt.indexOf('Question: follow-up?');
+    expect(idxCtx).toBeLessThan(idxQ);
+  });
 
-    const result = await dispatcher.dispatch({
-      route: 'investigate',
-      toolCategory: 'read_only',
-      rawRequest: { question: '' },
-    });
+  it('forwards tools=readonly default and respects caller tools=none', () => {
+    const briefsDefault = toolConfig.briefSlot(makeInput({ tools: undefined }));
+    expect(briefsDefault[0].tools).toBeUndefined();
+    const briefsNone = toolConfig.briefSlot(makeInput({ tools: 'none' }));
+    expect(briefsNone[0].tools).toBe('none');
+  });
+});
 
-    expect(result.status).toBe(200);
-    // compose_response (runOnTerminal:true) fires even when parse_brief sets
-    // terminal — the envelope reflects the brief-rejection state.
-    expect(result.body).toBeDefined();
+describe('investigate toolConfig.buildTaskSpec', () => {
+  it('forwards brief.compiledPrompt as TaskSpec.prompt', () => {
+    const briefs = toolConfig.briefSlot(makeInput({ question: 'q1' }));
+    const ctx = {
+      cwd: '/cwd',
+      mainModel: 'claude-opus-4-7',
+      config: { defaults: {} },
+    } as unknown as Parameters<typeof toolConfig.buildTaskSpec>[1];
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    expect(spec.prompt).toContain('Question: q1');
+  });
+
+  it('propagates ctx.mainModel onto the TaskSpec', () => {
+    const briefs = toolConfig.briefSlot(makeInput());
+    const ctx = {
+      cwd: '/cwd',
+      mainModel: 'claude-opus-4-7',
+      config: { defaults: {} },
+    } as unknown as Parameters<typeof toolConfig.buildTaskSpec>[1];
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    expect(spec.mainModel).toBe('claude-opus-4-7');
+  });
+
+  it('coerces ctx.mainModel=null to undefined (TaskSpec accepts string|undefined only)', () => {
+    const briefs = toolConfig.briefSlot(makeInput());
+    const ctx = {
+      cwd: '/cwd',
+      mainModel: null,
+      config: { defaults: {} },
+    } as unknown as Parameters<typeof toolConfig.buildTaskSpec>[1];
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    expect(spec.mainModel).toBeUndefined();
   });
 });
