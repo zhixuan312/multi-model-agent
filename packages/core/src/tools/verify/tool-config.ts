@@ -45,7 +45,7 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'For each checklist item, use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title (the criterion summary)>',
-  '- Severity: low for PASS, medium or high for FAIL (depending on impact)',
+  '- Severity: critical | high | medium | low (use `low` for PASS items; `medium` or `high` for FAIL items per impact)',
   '- Item: the criterion text',
   '- Result: PASS or FAIL',
   '- Evidence: file:line + what it shows, OR command + output',

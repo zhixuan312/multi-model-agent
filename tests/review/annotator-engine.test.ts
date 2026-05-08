@@ -162,30 +162,33 @@ describe('AnnotatorEngine', () => {
       expect(result.errorReason).toBe('no output');
     });
 
-    it('returns error when finalAssistantText has no fenced JSON block', async () => {
+    it('returns error when finalAssistantText has no JSON array (any shape)', async () => {
+      // Tool sweep #12: parser is now lenient — fenced ```json``` /
+      // fenced ``` (no lang tag) / bare `[...]` are all accepted.
+      // Error fires only when none of those produce a parseable array.
       const shell = shellStub({ finalAssistantText: 'Here are some findings but no code block.' });
       const result = await engine.annotate(shell, { ...defaultInput, route: 'review' });
 
       expect(result.verdict).toBe('error');
-      expect(result.errorReason).toBe('no fenced JSON block');
+      expect(result.errorReason).toBe('no JSON array found in annotator output');
     });
 
-    it('returns error for invalid JSON inside the fenced block', async () => {
+    it('returns error for invalid JSON inside the fenced block (no recoverable array)', async () => {
       const text = '```json\n{ invalid json !!\n```';
       const shell = shellStub({ finalAssistantText: text });
       const result = await engine.annotate(shell, { ...defaultInput, route: 'review' });
 
       expect(result.verdict).toBe('error');
-      expect(result.errorReason).toMatch(/^JSON parse failed:/);
+      expect(result.errorReason).toBe('no JSON array found in annotator output');
     });
 
-    it('returns error when JSON is not an array', async () => {
+    it('returns error when output is an object with no embedded array', async () => {
       const text = '```json\n{ "id": "F1", "claim": "not an array" }\n```';
       const shell = shellStub({ finalAssistantText: text });
       const result = await engine.annotate(shell, { ...defaultInput, route: 'review' });
 
       expect(result.verdict).toBe('error');
-      expect(result.errorReason).toBe('expected JSON array');
+      expect(result.errorReason).toBe('no JSON array found in annotator output');
     });
 
     it('uses errorCode when finalAssistantText is undefined', async () => {
