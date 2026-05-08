@@ -1,5 +1,5 @@
 {
-  "headline": "[incomplete] mocked ok (0 files)",
+  "headline": "[incomplete] delegate: mocked ok (0 files)",
   "results": [
     {
       "output": "mocked ok",
@@ -114,7 +114,7 @@
         {
           "source": "spec_review",
           "severity": "medium",
-          "message": "reviewer output missing `## Summary` section — defaulting verdict to changes_required"
+          "message": "reviewer output missing structured verdict (no JSON block, no `## Summary` section) — defaulting to changes_required"
         }
       ],
       "specReviewStatus": "changes_required",

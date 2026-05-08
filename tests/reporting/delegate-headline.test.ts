@@ -22,7 +22,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       runResult,
     });
 
-    expect(headline).toBe('[ok] The edit has been applied successfully. (1 file)');
+    expect(headline).toBe('[ok] delegate: The edit has been applied successfully. (1 file)');
   });
 
   it('prefers report.filesChanged over runResult.filesWritten when both populated', () => {
@@ -41,7 +41,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
     });
 
     // Structured report wins (1), not runResult (3).
-    expect(headline).toBe('[ok] Did the thing. (1 file)');
+    expect(headline).toBe('[ok] delegate: Did the thing. (1 file)');
   });
 
   it('truncates multi-sentence summary to first sentence (Gap 12)', () => {
@@ -57,7 +57,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       runResult,
     });
 
-    expect(headline).toBe('[ok] Edit complete. (1 file)');
+    expect(headline).toBe('[ok] delegate: Edit complete. (1 file)');
   });
 
   it('handles "no structured report" envelope gracefully', () => {
@@ -68,7 +68,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       runResult: { filesWritten: [] } as unknown as RunResult,
     });
 
-    expect(headline).toBe('[ok] no structured report available');
+    expect(headline).toBe('[ok] delegate: no structured report available');
   });
 
   it('still surfaces file count even when report is not_applicable but runResult has writes', () => {
@@ -80,7 +80,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       runResult: { filesWritten: ['/a.ts', '/b.ts'] } as unknown as RunResult,
     });
 
-    expect(headline).toBe('[ok] (2 files)');
+    expect(headline).toBe('[ok] delegate: (2 files)');
   });
 
   it('handles synthetic shell:<cmd> filesWritten entries (Gap 11 interop)', () => {
@@ -96,6 +96,6 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       } as unknown as RunResult,
     });
 
-    expect(headline).toBe('[ok] Patched. (1 file)');
+    expect(headline).toBe('[ok] delegate: Patched. (1 file)');
   });
 });
