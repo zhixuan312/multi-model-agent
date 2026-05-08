@@ -1,4 +1,4 @@
-import { ANNOTATOR_RUBRIC, type AnnotatorPromptContext, type AnnotatorTemplate } from './templates/annotator-shared.js';
+import { buildAnnotatorRubric, type AnnotatorPromptContext, type AnnotatorTemplate } from './templates/annotator-shared.js';
 
 export type AnnotatorRoute = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
 
@@ -15,7 +15,7 @@ export class AnnotatorPromptBuilder {
 /**
  * Trim the implementer brief down to the "what was asked" essentials
  * before sending to the annotator. The annotator does NOT need the
- * finding-format spec (it has its own format spec via ANNOTATOR_RUBRIC)
+ * finding-format spec (it has its own format spec via buildAnnotatorRubric)
  * or the delta-mode instructions. Sending the full brief wastes
  * 1-3KB context per call and mildly distracts the model.
  *
@@ -62,7 +62,7 @@ export function trimBriefForAnnotator(brief: string): string {
 
 export function assembleAnnotatorPrompt(template: AnnotatorTemplate, ctx: AnnotatorPromptContext): string {
   // Tool sweep #11: trim the brief — the format-spec section is
-  // duplicated by ANNOTATOR_RUBRIC below, so sending it again is
+  // duplicated by buildAnnotatorRubric below, so sending it again is
   // redundant + costly.
   const compactBrief = trimBriefForAnnotator(ctx.brief);
   return `You are reviewing a ${template.role} produced by a worker.
@@ -79,5 +79,5 @@ ${template.onBriefCheck}
 
 ${ctx.workerOutput}
 
-${ANNOTATOR_RUBRIC}`;
+${buildAnnotatorRubric(template)}`;
 }

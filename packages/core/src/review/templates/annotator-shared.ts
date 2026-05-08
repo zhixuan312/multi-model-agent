@@ -9,9 +9,16 @@ export interface AnnotatorPromptContext {
 export interface AnnotatorTemplate {
   role: string;
   onBriefCheck: string;
+  /** Per-tool evidence rule. Tells the annotator what counts as
+   *  grounded evidence for findings from this tool. */
+  evidenceRule: string;
+  /** Per-tool scope rule. Tells the annotator what is in/out of scope
+   *  for findings from this tool. */
+  scopeRule: string;
 }
 
-export const ANNOTATOR_RUBRIC = String.raw`
+export function buildAnnotatorRubric(template: AnnotatorTemplate): string {
+  return String.raw`
 ## Output format (REQUIRED)
 
 Respond with exactly one fenced JSON code block AS THE LAST BLOCK in your
@@ -27,46 +34,34 @@ the worker presented them. Example:
     "suggestion": "Use a parameterized API or escape input",
     "annotatorConfidence": 90,
     "category": "security"
-  },
-  {
-    "id": "F2",
-    "severity": "medium",
-    "claim": "Auth check missing on /admin endpoint",
-    "evidence": "router.get('/admin', adminHandler) — no auth middleware applied",
-    "annotatorConfidence": 60,
-    "category": "security"
   }
 ]
 ` + '```' + `
 
 Field rules:
-- ` + '`id`' + `: assign sequentially F1, F2, F3, ... (your choice; must be unique).
+- ` + '`id`' + `: assign sequentially F1, F2, F3, ... (must be unique).
 - ` + '`severity`' + `: one of "critical" | "high" | "medium" | "low" — YOUR
-   final judgment, not the worker's. The worker's value is a hint; you may
-   dial it up or down based on actual impact (workers tend to inflate).
-   - critical: must fix before any other work (RCE, auth bypass, data loss)
-   - high:     serious bug / security issue, blocks release
-   - medium:   real issue, should fix soon
-   - low:      minor issue, nice to fix
-   Map worker-said "mid" -> "medium". When the worker omitted severity, judge.
+   final judgment. The worker's value is a hint; calibrate to actual impact.
 - ` + '`claim`' + `: one-sentence summary.
 - ` + '`evidence`' + `: REQUIRED, ≥20 chars, MUST be a verbatim quote from the
-   worker's output. The parser flags non-substring quotes — quote precisely.
+   worker's output.
 - ` + '`suggestion`' + `: optional; quote or paraphrase the worker's recommended fix.
-- ` + '`annotatorConfidence`' + `: integer 0-100. How confident YOU (reviewer) are
-   that the finding is correct, on-brief, and well-grounded:
-     80-100: defend without hesitation
-     60-79:  plausible, minor gaps
-     40-59:  thin evidence
-     20-39:  weak / off-brief
-      0-19:  unsupported / fabricated
+- ` + '`annotatorConfidence`' + `: integer 0-100. How confident YOU are
+   that the finding is correct, on-brief, and well-grounded.
 - ` + '`category`' + `: optional, one of: "missing_test" | "scope_creep" |
    "incomplete_impl" | "style_lint" | "security" | "performance" |
    "maintainability" | "doc_gap" | "doc_drift" | "contract_violation" |
    "coverage_gap" | "dead_code" | "queue_hygiene" | "other".
-   When omitted, the parser will infer from the claim text. Prefer to emit
-   it when the category is unambiguous from your reading.
 
-If the worker raised NO issues, return ` + '`[]`' + `. Surrounding prose is allowed
-but ignored by the parser — only the LAST ` + '```json' + ` block is read.
+## Tool-specific evidence rule (apply when judging "well-grounded")
+
+` + template.evidenceRule + `
+
+## Tool-specific scope rule (apply when judging "on-brief")
+
+` + template.scopeRule + `
+
+If the worker raised NO issues, return ` + '`[]`' + `. Surrounding prose is
+allowed but ignored by the parser — only the LAST ` + '```json' + ` block is read.
 `.trim();
+}

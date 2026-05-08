@@ -81,6 +81,8 @@ describe('assembleAnnotatorPrompt', () => {
     const template = {
       role: 'audit',
       onBriefCheck: 'For each finding, ask: ...',
+      evidenceRule: '(stub for test)',
+      scopeRule: '(stub for test)',
     };
     const ctx = {
       brief: 'Audit for security issues.\n\nRead and analyze this file:\n- src/x.ts\n\nProduce a narrative audit report. ## Finding 1:',
