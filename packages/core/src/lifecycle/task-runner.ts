@@ -247,7 +247,16 @@ export async function runTaskViaDispatcher(
   input: DispatchTaskInput,
   dispatcher: LifecycleDispatcher = new LifecycleDispatcher(),
 ): Promise<RunResult> {
-  const executionContext = buildExecutionContext(input);
+  // Gap 1 fix: expand contextBlockIds into the task's prompt once, up-front,
+  // so the SAME expanded task object reaches BOTH state.task AND
+  // executionContext.task (single source of truth — no two references).
+  // buildExecutionContext also expands internally, but that becomes a no-op
+  // because expandContextBlocks strips contextBlockIds on first pass.
+  const expandedTask = input.contextBlockStore
+    ? expandContextBlocks(input.task, input.contextBlockStore)
+    : input.task;
+
+  const executionContext = buildExecutionContext({ ...input, task: expandedTask });
   const route = input.route ?? '';
   const toolCategory = toolCategoryForRoute(route);
 
@@ -256,8 +265,8 @@ export async function runTaskViaDispatcher(
   const out = await dispatcher.dispatch({
     route,
     toolCategory,
-    rawRequest: { tasks: [input.task] },
-    context: { task: input.task, executionContext },
+    rawRequest: { tasks: [expandedTask] },
+    context: { task: expandedTask, executionContext },
     executor: async (_rawRequest: unknown, state: LifecycleState): Promise<undefined> => {
       const task = state.task as TaskSpec | undefined;
       const ctx = state.executionContext as ExecutionContext | undefined;

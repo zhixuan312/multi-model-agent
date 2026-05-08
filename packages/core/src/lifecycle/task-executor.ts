@@ -11,6 +11,7 @@ import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
 import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
+import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 
 /**
  * Generic per-task orchestrator. Takes a ToolConfig (which encodes all
@@ -46,13 +47,23 @@ export async function executeTask<Input, Brief, Report>(
   // ── Step 2: Resolve agent ──
   const resolved = resolveAgent(config.agentType, ctx.config);
 
-  // ── Step 3: Build TaskSpecs from briefs ──
-  const tasks: TaskSpec[] = briefs.map((brief) =>
-    config.buildTaskSpec(brief, ctx),
-  );
+  // ── Step 3: Build TaskSpecs from briefs, then expand contextBlockIds ──
+  // Gap 1 cache-invariant fix (4.0.3+): batch cache MUST store the EXPANDED,
+  // contextBlockIds-stripped task. If we cache the original (with
+  // contextBlockIds) and the contextBlockStore loses entries before retry,
+  // retry resolves stale IDs and fails. expandContextBlocks strips
+  // contextBlockIds from the returned task, so subsequent expansion calls
+  // are a no-op (idempotent).
+  const tasks: TaskSpec[] = briefs.map((brief) => {
+    const built = config.buildTaskSpec(brief, ctx);
+    return ctx.contextBlockStore
+      ? expandContextBlocks(built, ctx.contextBlockStore)
+      : built;
+  });
 
   // Store TaskSpecs in the per-project batch cache so retry can
   // reconstruct original tasks without re-invoking the brief slot.
+  // (Tasks here are already expanded — see comment above.)
   if (ctx.batchId && ctx.projectContext?.batchCache) {
     ctx.projectContext.batchCache.remember(ctx.batchId, tasks);
   }
