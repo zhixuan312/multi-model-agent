@@ -9,6 +9,11 @@ import type { InvestigateReportOutput } from '../../reporting/report-parser-slot
 import { investigateHeadlineTemplate } from '../../reporting/headline-templates/investigate.js';
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerInvestigate(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -100,6 +105,12 @@ function compilePrompt(input: EnrichedInvestigateInput): string {
       'A prior investigation report is provided as context above. Refine or extend that investigation. In your output, mark which prior unresolved questions you resolved this round and which remain open.',
     );
   }
+  // Tool sweep #12: shared rubric. Investigate doesn't use the
+  // SEVERITY_LADDER (its findings are citations, not severity-rated)
+  // but evidence-grounding + scope-discipline + annotator-awareness
+  // apply just as much. Workers that cite hallucinated lines or
+  // speculate about unread files now have the rubric inline.
+  promptParts.push(EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
   return promptParts.join('\n\n');
 }
 

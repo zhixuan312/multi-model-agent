@@ -49,42 +49,6 @@ interface ReviewRoundInput {
   round: 1 | 2 | 3;
 }
 
-/**
- * Tool sweep #11: short-circuit the annotator call for read-only routes
- * when the worker emitted ZERO `## Finding N:` blocks AND the narrative
- * is short. The annotator's job in that case is trivial (return `[]`)
- * — saves one full LLM round-trip (~5-15 sec) per clean run, which is
- * roughly half of audit / review / verify / debug / investigate calls.
- *
- * Returns the synthetic empty-findings result when short-circuit
- * applies, otherwise null (caller proceeds with the model call).
- */
-export function trySkipAnnotatorOnZeroFindings(
-  output: string | undefined,
-  isArtifactProducing: boolean,
-): AnnotatorCallResult | null {
-  if (isArtifactProducing) return null; // diff-bearing routes always review
-  if (typeof output !== 'string') return null;
-  const trimmed = output.trim();
-  if (trimmed.length === 0) return null;
-  // Heuristic 1: count `## Finding N:` headings (case-insensitive).
-  const findingHeadingCount = (trimmed.match(/^##\s+Finding\s+\d+\s*:/gim) ?? []).length;
-  if (findingHeadingCount > 0) return null; // narrative HAS findings → must annotate
-  // Heuristic 2: bound the bypass to short narratives. Above this length
-  // the worker may have free-form findings the annotator should look at.
-  if (trimmed.length > 400) return null;
-  // Heuristic 3: look for an explicit no-issues marker. Conservative — we
-  // only short-circuit when the worker itself signals "nothing found".
-  const noIssueMarker = /\b(no findings|no issues|no concerns|nothing to (?:report|flag)|all checks pass)\b/i;
-  if (!noIssueMarker.test(trimmed)) return null;
-  return {
-    verdict: 'approved',
-    concerns: [],
-    annotatedFindings: [],
-    cost: { inputTokens: 0, outputTokens: 0, turnCount: 0, toolCallCount: 0, costUSD: 0, durationMs: 0 },
-  } as unknown as AnnotatorCallResult;
-}
-
 async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerCallResult | AnnotatorCallResult | null> {
   const { state, ctx, round } = input;
   const last = state.lastRunResult as RunResult | undefined;
@@ -100,12 +64,6 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
 
   const route = (state.route ?? ctx.route) as ReviewRoute;
   const isArtifactProducing = state.toolCategory === 'artifact_producing';
-
-  // Tool sweep #11: skip the annotator call when the read-only worker
-  // emitted no findings + a short "no issues" narrative. Saves the
-  // entire annotator round-trip on clean runs.
-  const skip = trySkipAnnotatorOnZeroFindings(last.output, isArtifactProducing);
-  if (skip) return skip;
 
   const fileContents: Record<string, string> = {};
   const toolCallLog: string[] = last.toolCalls ?? [];

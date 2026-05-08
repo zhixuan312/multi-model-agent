@@ -8,6 +8,12 @@ import { reviewBriefSlot, type ReviewBrief } from '../../intake/brief-compiler-s
 import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
 import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -77,9 +83,12 @@ function buildReviewPrompt(brief: ReviewBrief): string {
     'Rules:',
     '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
     '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-    '- Stay within the requested scope. Only cite file:line locations from files you actually read.',
     '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
   );
+
+  // Tool sweep #12: share the annotator's rubric with the implementer
+  // so the worker self-aligns with what the reviewer will check.
+  parts.push(SEVERITY_LADDER, EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
 
   return parts.join('\n\n');
 }

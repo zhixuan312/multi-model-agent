@@ -10,6 +10,7 @@ import { toolExecutePlanBriefSlot, type ToolExecutePlanBrief } from '../../intak
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';
 import { executePlanReportSchema } from '../../reporting/report-parser-slots/execute-plan-report.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { REVIEWER_AWARENESS_AP } from '../../review/templates/finding-criteria.js';
 
 export const executePlanInputSchema = z.object({
   filePaths: z.array(z.string()).length(1, { message: "execute_plan requires exactly one plan filePath" }),
@@ -68,6 +69,10 @@ function buildExecutePlanPrompt(
     'Implement the task fully. Follow any acceptance criteria, file paths, and',
     'constraints in the plan section above. If you cannot find or understand',
     'the task, report that explicitly and do not implement anything.',
+    '',
+    // Tool sweep #12: share spec + quality reviewer rubric so the
+    // worker self-aligns on what each reviewer will judge against.
+    REVIEWER_AWARENESS_AP,
   );
   return parts.join('\n');
 }

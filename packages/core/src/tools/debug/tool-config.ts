@@ -7,6 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from '../../intake/brief-compiler-slots/debug.js';
 import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerDebug(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -38,8 +44,17 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'Rules:',
   '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
   '- Severity / Hypothesis / Evidence / Fix bullets are on their own lines with the labels exactly as shown.',
-  '- Stay within the requested scope. Only cite file:line locations from files you actually read; do not speculate about untouched files.',
   '- This is a read-only diagnostic — do NOT edit any file. Propose fixes; the caller applies them.',
+  '- Limit yourself to 3-5 most-likely hypotheses. Do not enumerate implausible ones to pad the list.',
+  '',
+  // Tool sweep #12: shared rubric so worker self-aligns with the annotator.
+  SEVERITY_LADDER,
+  '',
+  EVIDENCE_GROUNDING,
+  '',
+  SCOPE_DISCIPLINE,
+  '',
+  ANNOTATOR_CHECK_AWARENESS_RO,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {

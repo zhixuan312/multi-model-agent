@@ -6,6 +6,12 @@ import { auditHeadlineTemplate } from '../../reporting/headline-templates/audit.
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import type { TaskSpec } from '../../types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerAudit(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -109,8 +115,18 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'Rules:',
   '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
   '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-  '- Stay within the requested scope. Only cite file:line locations from files you actually read. Do not speculate about files you have not opened.',
   '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
+  '',
+  // Tool sweep #12: share the annotator's rubric with the implementer
+  // so the worker self-aligns with what the reviewer will check.
+  // Result: fewer downgraded findings, fewer missed criticals.
+  SEVERITY_LADDER,
+  '',
+  EVIDENCE_GROUNDING,
+  '',
+  SCOPE_DISCIPLINE,
+  '',
+  ANNOTATOR_CHECK_AWARENESS_RO,
 ].join('\n');
 
 const DELTA_AUDIT_INSTRUCTIONS = [

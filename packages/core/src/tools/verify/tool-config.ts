@@ -7,6 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { verifyReportSchema } from '../../reporting/report-parser-slots/verify-report.js';
 import { verifyHeadlineTemplate } from '../../reporting/headline-templates/verify.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerVerify(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -51,7 +57,18 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'Rules:',
   '- One `## Finding N:` block per checklist item — same count and same order as the checklist. Do not skip items even if they pass trivially.',
   '- Severity / Item / Result / Evidence bullets are on their own lines with the labels exactly as shown.',
-  '- Evidence MUST cite a file:line you actually read (or a command you actually ran). Do not fabricate citations.',
+  '',
+  // Tool sweep #12: shared rubric so worker calibrates the same way the
+  // annotator validates. For verify, severity is bound to the result —
+  // the SEVERITY_LADDER below explains the ladder; here we just bind:
+  // PASS -> low, FAIL -> medium/high based on impact.
+  SEVERITY_LADDER,
+  '',
+  EVIDENCE_GROUNDING,
+  '',
+  SCOPE_DISCIPLINE,
+  '',
+  ANNOTATOR_CHECK_AWARENESS_RO,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {
