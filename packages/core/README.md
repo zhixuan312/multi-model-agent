@@ -163,7 +163,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | verify | `./tools/verify/tool-config` |
 | debug | `./tools/debug/tool-config` |
 | investigate | `./tools/investigate/tool-config` |
-| explore | `./tools/explore/tool-config` |
+| research | `./tools/research/tool-config` |
 | execute-plan | `./tools/execute-plan/tool-config` |
 | retry | `./tools/retry/tool-config` |
 | register-context-block | `./tools/register-context-block/tool-config` |

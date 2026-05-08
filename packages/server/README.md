@@ -117,7 +117,8 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-delegate` | `POST /delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
 | `mma-execute-plan` | `POST /execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | `POST /investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | `POST /explore` | Divergent ideation — 3-5 distinct threads from parallel codebase + web research, before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-explore` | (orchestrator playbook — no dedicated route) | Fans out `mma-investigate` + `mma-research` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-research` | `POST /research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | `POST /audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
@@ -245,7 +246,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
 | `POST /investigate?cwd=<abs>` | Codebase Q&A — structured answer with file:line citations + confidence |
-| `POST /explore?cwd=<abs>` | Divergent ideation — 3-5 distinct threads from internal codebase + external web research |
+| `POST /research?cwd=<abs>` | External multi-source research — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question |
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |

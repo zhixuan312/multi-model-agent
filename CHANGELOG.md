@@ -5,6 +5,35 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.5] - 2026-05-09
+
+### BREAKING
+
+- **`/explore` HTTP route removed.** Replaced by single-task `/research` (external multi-source research only). Migration: callers using `/explore` must now dispatch `/investigate` (for the internal half) and `/research` (for the external half) themselves and synthesise the results. The `mma-explore` skill performs this orchestration if you are calling via skill, not raw HTTP.
+- **`mma-explore` skill body rewritten.** It is now a main-agent playbook that fans out `mma-investigate` + `mma-research` in parallel and mandates a 3–5 thread synthesis output (each thread carries one internal citation or sentinel + one external citation or sentinel + a one-line divergence reason, ending with `## Recommended next step`). Skill consumers that scripted against the old single-call `/explore` shape must update.
+- **8 explore-specific telemetry events removed:** `explore_parallel_start`, `explore_parallel_end`, `explore_internal_unavailable`, `explore_external_unavailable`, `explore_synthesize_start`, `explore_synthesize_end`, `explore_thread_started`, `explore_thread_completed`. Internal dashboards consuming these must be updated.
+
+### Added
+
+- **`/research` route (server).** Single-task external multi-source research (arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters). Schema: `researchQuestion`, `background`, `contextBlockIds`. `reviewPolicy: 'none'`. The previous `/explore` external-leg prompt is preserved verbatim with field renames (`currentContext` → `background`, `explorationQuestion` → `researchQuestion`).
+- **`mma-research` skill (server).** Thin 1:1 wrapper around `/research`. Pairs with `mma-investigate` under `mma-explore` for divergent landscape scans.
+- **Per-tool integration test for research** (`tests/per-tool/research.test.ts`).
+
+### Changed
+
+- **Synthesis is now main-agent work.** The previous synthesizer worker (no-tools, text-in/text-out) is removed; main agents reading `mma-explore` produce the 3–5 thread synthesis themselves. The 11 actionable skills now span: `mma-audit`, `mma-context-blocks`, `mma-debug`, `mma-delegate`, `mma-execute-plan`, `mma-explore`, `mma-investigate`, `mma-research`, `mma-retry`, `mma-review`, `mma-verify`.
+
+### Removed
+
+- `packages/core/src/research/explore-orchestrator.ts`, `intake/brief-compiler-slots/explore.ts`, `reporting/parse-explore-report.ts`, `reporting/compose-explore-headline.ts`, `reporting/derive-explore-status.ts`, `reporting/report-parser-slots/explore-report.ts`, `reporting/headline-templates/explore.ts`, `tools/explore/{schema,tool-config}.ts`, `server/http/handlers/tools/explore.ts`.
+- 4 contract goldens under `tests/contract/goldens/endpoints/explore-*.json` and `observability/explore-events.json`, plus matching contract + per-tool tests.
+
+### Fixed
+
+- **Telemetry flusher drops every record older than `SCHEMA_VERSION`** (not just a contiguous head-prefix). A sandwiched stale record (queued during a roll-back/forward, or `installId` churn after re-enrollment) used to either propagate into an upload and 401/400 server-side, or split the upload into versioned groups. New `Queue.removeRecords(hashes)` rebuilds the queue file from scratch; flusher hashes records with `schemaVersion < SCHEMA_VERSION` OR mismatched `installId`, calls `removeRecords` once, then refreshes meta byteOffsets.
+
+[4.0.5]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.4...v4.0.5
+
 ## [4.0.4] - 2026-05-08
 
 ### Fixed
