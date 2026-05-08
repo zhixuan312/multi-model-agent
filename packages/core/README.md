@@ -40,7 +40,7 @@ for (const r of results) {
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
-- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate, explore (used by the HTTP server package)
+- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate, research (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
@@ -187,7 +187,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
-| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate`, `explore` |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate`, `research` |
 | `./reporting/parse-investigation-report` | `parseInvestigationReport`, `parseCitations`, `parseConfidence` (3.4.0) |
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
@@ -197,7 +197,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./review` | `ReviewerEngine`, `AnnotatorEngine` — v4 review surface (see Engine API below) |
 | `./lifecycle/task-executor` | `executeTask` — generic per-tool orchestrator driven by a `ToolConfig` |
 | `./lifecycle/executor-output-types` | `ExecutorOutput`, `BatchTimings`, `BatchAggregateCost` |
-| `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, verify, debug, investigate, explore, execute-plan, retry, register-context-block) |
+| `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, verify, debug, investigate, research, execute-plan, retry, register-context-block) |
 
 ## Diagnostic logging
 
@@ -229,17 +229,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.0.4
+## What's new in 4.0.5
 
-- **`DiffTracker` (NEW: `lifecycle/diff-tracker.ts`).** Snapshot-based unified-diff helper used by spec / quality / diff reviewers. Captures pre-task baseline of declared `task.filePaths` (works in non-git directories), produces a Myers-style line-LCS unified diff at any review point, capped at 50KB with truncation marker. Reviewer templates and engine extended to receive the diff plus `priorConcerns` so verdicts must point to specific diff lines.
-- **`finding-criteria.ts` (NEW shared module).** Single source of truth for `SEVERITY_LADDER`, `EVIDENCE_GROUNDING`, `SCOPE_DISCIPLINE`, `ANNOTATOR_CHECK_AWARENESS_RO` (read-only), `REVIEWER_AWARENESS_AP` (artifact-producing). Per-tool implementer prompts include the criteria so workers self-align with what each reviewer will validate.
-- **Lenient JSON output parsers.** Both `reviewer-output-parser` and `annotator-output-parser` now accept ` ```json ` fenced, ` ``` ` (no language tag), bare JSON, and embedded objects/arrays via balanced-brace counting (string-literal aware).
-- **`replaceLastRunResultPreservingTrackers` (`merge-stage-stats.ts`).** Spec/quality chain handlers now union `filesRead` / `filesWritten` / `toolCalls` arrays across rework rounds rather than wiping them when a no-op rework round overwrites `lastRunResult`.
-- **`HeadlineTemplate.compose`** ergonomics: every artifact-producing tool's headline now follows `[<status>] <route>: <summary>` (delegate / execute-plan / retry / debug). Verify, audit, review composers now also propagate `task.filePaths[0]` for clean-run path display.
-- **Verify report parser accepts narrative + JSON.** `verifyReportSchema.parse` accepts both ` ```json ` blocks and `## Finding N:` narrative — matches the implementer prompt's "Do NOT emit JSON" instruction.
-- **Investigate prompt rewritten to match parser.** `## Summary` / `## Citations` / `## Confidence` sections — pre-fix the prompt asked for numbered narrative which the parser couldn't extract (every investigation reported `0 citations, confidence unparseable`).
-- **`priorSpecConcerns` / `priorQualityConcerns` slots on `LifecycleState`** carry concerns from earlier rework rounds into later ones, so round N+1's reviewer can verify prior issues are addressed.
-- **`firstSentenceOrTruncate`** hardened (off-by-one regex fix, newline collapse before sentence detection, defense against invalid `max` values).
+- **`/research` — single-task external research route.** New `POST /research` endpoint and `toolConfig` at `tools/research/tool-config.ts`. Schema at `tools/research/schema.ts`, brief compiler at `intake/brief-compiler-slots/research.ts`, report parser at `reporting/report-parser-slots/research-report.ts`, headline template at `reporting/headline-templates/research.ts`. Replaces the 3-worker `/explore` orchestrator.
+- **`mma-research` skill + `mma-explore` skill rewrite.** `mma-research` is a thin 1:1 wrapper around `/research`. `mma-explore` is now a main-agent playbook that fans out `mma-investigate` + `mma-research` in parallel; synthesis moves from a worker to the main agent.
+- **`/explore` HTTP route removed.** `tools/explore/`, `intake/brief-compiler-slots/explore.ts`, `reporting/parse-explore-report.ts`, `reporting/report-parser-slots/explore-report.ts`, `reporting/headline-templates/explore.ts`, `research/explore-orchestrator.ts`, and the HTTP handler removed. 8 explore-specific telemetry events removed from `observability-events.ts` and `telemetry-types.ts`.
+
+**Migration from 4.0.4:** library consumers referencing `tools/explore/`, `explore-orchestrator`, or explore-route enums must update to `tools/research/`. `RouteName` drops `'explore_internal' | 'explore_external' | 'explore_synthesize'` and adds `'research'`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

@@ -1389,7 +1389,7 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...HEAD
 [4.0.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2
