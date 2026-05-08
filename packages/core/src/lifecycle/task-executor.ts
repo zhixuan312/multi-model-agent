@@ -213,6 +213,9 @@ export async function executeTask<Input, Brief, Report>(
   }
 
   // ── Step 8: Compose headline ──
+  // 4.0.3+ Gap 2 fix: pass runResult + task so audit/review composers
+  // can read annotatedFindings and filePaths fallbacks when the
+  // structured report doesn't carry them (narrative-emitting tools).
   const headline = config.headlineTemplate.compose({
     taskBrief: typeof briefs[0] === 'object' && briefs[0] !== null
       ? ((briefs[0] as Record<string, unknown>).prompt as string)
@@ -222,6 +225,8 @@ export async function executeTask<Input, Brief, Report>(
       : config.name,
     report: structuredReport,
     status: results[0]?.status ?? 'error',
+    ...(results[0] && { runResult: results[0] }),
+    ...(tasks[0] && { task: tasks[0] }),
   });
 
   // ── Step 9: Map review verdicts ──

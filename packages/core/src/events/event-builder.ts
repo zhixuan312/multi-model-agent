@@ -4,6 +4,7 @@ import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './telemetry-types.js';
 
+import { bucketFindingsBySeverity } from '../reporting/severity.js';
 import { rollupByTier, sumTokens } from '../bounded-execution/cost-rollup.js';
 import { priceTokens, resolveRateCard } from '../bounded-execution/cost-compute.js';
 import {
@@ -261,14 +262,23 @@ function buildReviewStage(
   const concernSource = name;
   const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
-  const findingsBySeverity = { critical: 0, high: 0, medium: 0, low: 0 };
-  for (const c of stageConcerns) {
-    const sev = (c as any).severity ?? 'medium';
-    if (sev in findingsBySeverity) {
-      findingsBySeverity[sev as keyof typeof findingsBySeverity] =
-        Math.min(findingsBySeverity[sev as keyof typeof findingsBySeverity] + 1, 200);
-    }
-  }
+  // 4.0.3+ Gap 2 round-2 F1: use shared bucketFindingsBySeverity helper
+  // (separate from headline's countHighOrCritical) so the wire's exact
+  // per-bucket counts can't be conflated by accident with the headline's
+  // aggregate count. Severity normalization (lowercasing) is shared.
+  // Defaulting unknowns to 'medium' is a property of THIS function only;
+  // the bucketing helper drops unparseable entries — so we explicitly
+  // pass severity ?? 'medium' to preserve the existing wire behavior.
+  const concernsForBucketing = stageConcerns.map(c => ({
+    severity: ((c as { severity?: unknown }).severity ?? 'medium'),
+  }));
+  const rawBuckets = bucketFindingsBySeverity(concernsForBucketing);
+  const findingsBySeverity = {
+    critical: Math.min(rawBuckets.critical, 200),
+    high: Math.min(rawBuckets.high, 200),
+    medium: Math.min(rawBuckets.medium, 200),
+    low: Math.min(rawBuckets.low, 200),
+  };
 
   let verdict: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped' | 'annotated' | 'not_applicable' =
     (status as any) ?? 'not_applicable';
