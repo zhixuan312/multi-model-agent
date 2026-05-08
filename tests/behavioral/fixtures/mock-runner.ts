@@ -25,7 +25,9 @@ export class MockRunner implements Provider {
   async run(prompt: string): Promise<RunResult> {
     this.capturedPrompts.push(prompt);
 
-    const hasScopeClause = prompt.includes('Do NOT enumerate the repository');
+    const hasScopeClause =
+      prompt.includes('Do NOT enumerate the repository') ||
+      prompt.includes('Stay within the requested files');
     const toolCalls: string[] = [];
 
     // Deterministic base: always emit at least one scoped readFile to
