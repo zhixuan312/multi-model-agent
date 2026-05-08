@@ -37,13 +37,35 @@ export function firstSentenceOrTruncate(s: string, max = 80): string {
   if (!s || typeof s !== 'string') return '';
   const trimmed = s.trim();
   if (trimmed.length === 0) return '';
-  // Build the sentence-end regex from `max` so callers passing a
+
+  // F2 fix (audit, low): defend against invalid `max` values. Headlines
+  // are single-line operator-facing strings; a buggy caller passing
+  // `max=0`, negative, `NaN`, or `Infinity` shouldn't make the regex
+  // throw or overrun. Coerce to a sane bound: integer in [1, 2000].
+  const safeMax =
+    Number.isFinite(max) && max >= 1
+      ? Math.min(Math.floor(max), 2000)
+      : 80;
+
+  // Build the sentence-end regex from `safeMax` so callers passing a
   // non-default value get behavior matching the contract. Lazy
   // quantifier `{1,N}?` lets internal `.!?` characters pass through
   // (version numbers, decimals, filenames) until we hit one followed
   // by whitespace or end-of-string — the actual sentence boundary.
-  const sentenceEnd = new RegExp(`^([^\\n]{1,${max}}?[.!?])(\\s|$)`);
+  const sentenceEnd = new RegExp(`^([^\\n]{1,${safeMax}}?[.!?])(\\s|$)`);
   const m = trimmed.match(sentenceEnd);
-  if (m) return m[1];
-  return trimmed.length > max ? trimmed.slice(0, max - 1) + '…' : trimmed;
+  if (m) return collapseNewlines(m[1]);
+
+  // F1 fix (audit, medium): the truncate fallback used to slice raw
+  // characters and could keep embedded `\n`, breaking the
+  // single-line headline contract. Collapse all whitespace runs
+  // (including newlines) into single spaces before truncating.
+  const oneLine = collapseNewlines(trimmed);
+  return oneLine.length > safeMax ? oneLine.slice(0, safeMax - 1) + '…' : oneLine;
+}
+
+/** Replace any whitespace run (including newlines, tabs, and CRs) with
+ *  a single space so the returned headline stays on one line. */
+function collapseNewlines(s: string): string {
+  return s.replace(/\s+/g, ' ').trim();
 }

@@ -78,4 +78,46 @@ describe('firstSentenceOrTruncate (Gap 12)', () => {
     const text = 'A'.repeat(70) + '. Then more.';
     expect(firstSentenceOrTruncate(text)).toBe('A'.repeat(70) + '.');
   });
+
+  // Follow-up audit findings (run id ff925105):
+  // F1: truncated output must stay single-line (collapse \n to space).
+  // F2: invalid `max` (NaN, Infinity, ≤0) must not throw or overrun.
+  it('F1: collapses embedded newlines (single-line headline contract)', () => {
+    const multiline = 'A long line goes here\nand then another newline\nand a third';
+    const out = firstSentenceOrTruncate(multiline, 200);
+    expect(out).not.toContain('\n');
+    expect(out).toBe('A long line goes here and then another newline and a third');
+  });
+
+  it('F1: collapses tabs + CRs', () => {
+    expect(firstSentenceOrTruncate('foo\tbar\r\nbaz', 200)).toBe('foo bar baz');
+  });
+
+  it('F1: collapses newlines AND truncates', () => {
+    const messy = 'A'.repeat(50) + '\n' + 'B'.repeat(50);
+    const out = firstSentenceOrTruncate(messy, 30);
+    expect(out).not.toContain('\n');
+    expect(out.length).toBe(30);
+    expect(out.endsWith('…')).toBe(true);
+  });
+
+  it('F2: max=0 falls back to 80', () => {
+    expect(firstSentenceOrTruncate('Hello.', 0)).toBe('Hello.');
+  });
+
+  it('F2: negative max falls back to 80', () => {
+    expect(firstSentenceOrTruncate('Hello.', -5)).toBe('Hello.');
+  });
+
+  it('F2: NaN / non-finite max falls back to 80', () => {
+    expect(firstSentenceOrTruncate('Hello.', NaN)).toBe('Hello.');
+    expect(firstSentenceOrTruncate('Hello.', Infinity)).toBe('Hello.');
+    expect(firstSentenceOrTruncate('Hello.', -Infinity)).toBe('Hello.');
+  });
+
+  it('F2: caps max at 2000 to avoid unbounded regex backtracking', () => {
+    const text = 'A'.repeat(2500) + '.';
+    const out = firstSentenceOrTruncate(text, 1_000_000_000);
+    expect(out.length).toBe(2000);
+  });
 });
