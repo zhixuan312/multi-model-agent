@@ -15,6 +15,7 @@
   "POST /execute-plan",
   "POST /explore",
   "POST /investigate",
+  "POST /research",
   "POST /retry",
   "POST /review",
   "POST /verify"

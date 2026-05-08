@@ -1,7 +1,8 @@
 // packages/core/src/reporting/report-parser-slots/research-report.ts
+import type { ReportSchema } from '../structured-report-parser.js';
 import { z } from 'zod';
 
-export const researchReportSchema = z.object({
+const researchReportZod = z.object({
   findings: z.array(z.object({
     index: z.number().int().nonnegative(),
     body: z.string(),
@@ -18,7 +19,15 @@ export const researchReportSchema = z.object({
     note: z.string().optional(),
   })),
 });
-export type ResearchReport = z.infer<typeof researchReportSchema>;
+export type ResearchReport = z.infer<typeof researchReportZod>;
+
+/** ReportSchema that parses worker narrative text (numbered findings +
+ *  `## Sources used` table) into a structured ResearchReport. */
+export const researchReportSchema: ReportSchema<ResearchReport> = {
+  parse(text: string): ResearchReport {
+    return parseResearchReport(text);
+  },
+};
 
 const NUMBERED_FINDING_RE = /^\s*(\d+)\.\s+([\s\S]*?)(?=^\s*\d+\.\s+|\n##\s|\n#\s|$)/gmu;
 const URL_RE = /https?:\/\/[^\s)]+/g;

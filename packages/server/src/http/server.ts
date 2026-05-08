@@ -168,6 +168,7 @@ async function registerToolHandlers(
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
   const { buildExploreHandler } = await import('./handlers/tools/explore.js');
+  const { buildResearchHandler } = await import('./handlers/tools/research.js');
 
   const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
     delegate: buildDelegateHandler,
@@ -179,6 +180,7 @@ async function registerToolHandlers(
     retry_tasks: buildRetryHandler,
     investigate: buildInvestigateHandler,
     explore: buildExploreHandler,
+    research: buildResearchHandler,
   };
 
   for (const entry of surface.list()) {

@@ -132,6 +132,10 @@
       "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
       "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
     },
+    "./intake/brief-compiler-slots/research": {
+      "types": "./dist/intake/brief-compiler-slots/research.d.ts",
+      "import": "./dist/intake/brief-compiler-slots/research.js"
+    },
     "./intake/pipeline": {
       "types": "./dist/intake/pipeline.d.ts",
       "import": "./dist/intake/pipeline.js"
@@ -275,6 +279,10 @@
     "./tools/explore/schema": {
       "types": "./dist/tools/explore/schema.d.ts",
       "import": "./dist/tools/explore/schema.js"
+    },
+    "./tools/research/schema": {
+      "types": "./dist/tools/research/schema.d.ts",
+      "import": "./dist/tools/research/schema.js"
     },
     "./tools/review/schema": {
       "types": "./dist/tools/review/schema.d.ts",
