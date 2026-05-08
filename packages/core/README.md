@@ -229,15 +229,17 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.0.3
+## What's new in 4.0.4
 
-- **Wire field rename:** `parentModel*` → `mainModel*`. `costDeltaVsParentUSD` → `costDeltaVsMainUSD`, `parentEquivalentCostUSD` → `mainEquivalentCostUSD`. Internal record now matches wire shape 1:1 (no more rename shim in `buildWirePayload`).
-- **`config.defaults.mainModel` removed.** Library callers should pass `mainModel` per-task on the `TaskSpec`. The standalone daemon reads it from the `X-MMA-Main-Model` header.
-- **Canonical model-name preservation.** `extractCanonicalModelName('claude-opus-4-7')` now returns `'claude-opus-4-7'` (was: `'claude-opus'`). Best-effort extraction handles arbitrary wrappers.
-- **`HeadlineTemplate.compose` signature** added optional `runResult: RunResult` and `task: TaskSpec` params (backwards-compatible). Audit/review/delegate composers use them to fall back to `runResult.annotatedFindings` / `runResult.filesWritten` when the structured report doesn't carry them.
-- **`ContextBlockStore` interface** extended with `size`, `pin`/`unpin`/`refcount`, `clear`, `ttlMs`. New `FileBackedContextBlockStore` implementation persists to `<projectCwd>/.mma/context-blocks/` (the daemon's default; tests use `createInMemoryProjectContext`).
-- **`totalDurationMs` reflects real wall-clock.** `event-builder.ts` now uses `max(runResult.durationMs, Σ stageDurations)`. The proportional scale-down was masking the implementer-only bug — gone.
-- **New shared modules** under `core/`: `lifecycle/stage-progression`, `reporting/severity`, `reporting/headline-text`, `providers/tool-name-sets`. Each centralizes a previously-duplicated concern.
+- **`DiffTracker` (NEW: `lifecycle/diff-tracker.ts`).** Snapshot-based unified-diff helper used by spec / quality / diff reviewers. Captures pre-task baseline of declared `task.filePaths` (works in non-git directories), produces a Myers-style line-LCS unified diff at any review point, capped at 50KB with truncation marker. Reviewer templates and engine extended to receive the diff plus `priorConcerns` so verdicts must point to specific diff lines.
+- **`finding-criteria.ts` (NEW shared module).** Single source of truth for `SEVERITY_LADDER`, `EVIDENCE_GROUNDING`, `SCOPE_DISCIPLINE`, `ANNOTATOR_CHECK_AWARENESS_RO` (read-only), `REVIEWER_AWARENESS_AP` (artifact-producing). Per-tool implementer prompts include the criteria so workers self-align with what each reviewer will validate.
+- **Lenient JSON output parsers.** Both `reviewer-output-parser` and `annotator-output-parser` now accept ` ```json ` fenced, ` ``` ` (no language tag), bare JSON, and embedded objects/arrays via balanced-brace counting (string-literal aware).
+- **`replaceLastRunResultPreservingTrackers` (`merge-stage-stats.ts`).** Spec/quality chain handlers now union `filesRead` / `filesWritten` / `toolCalls` arrays across rework rounds rather than wiping them when a no-op rework round overwrites `lastRunResult`.
+- **`HeadlineTemplate.compose`** ergonomics: every artifact-producing tool's headline now follows `[<status>] <route>: <summary>` (delegate / execute-plan / retry / debug). Verify, audit, review composers now also propagate `task.filePaths[0]` for clean-run path display.
+- **Verify report parser accepts narrative + JSON.** `verifyReportSchema.parse` accepts both ` ```json ` blocks and `## Finding N:` narrative — matches the implementer prompt's "Do NOT emit JSON" instruction.
+- **Investigate prompt rewritten to match parser.** `## Summary` / `## Citations` / `## Confidence` sections — pre-fix the prompt asked for numbered narrative which the parser couldn't extract (every investigation reported `0 citations, confidence unparseable`).
+- **`priorSpecConcerns` / `priorQualityConcerns` slots on `LifecycleState`** carry concerns from earlier rework rounds into later ones, so round N+1's reviewer can verify prior issues are addressed.
+- **`firstSentenceOrTruncate`** hardened (off-by-one regex fix, newline collapse before sentence detection, defense against invalid `max` values).
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

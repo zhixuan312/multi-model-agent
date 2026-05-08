@@ -28,6 +28,20 @@ export interface ReviewerInput {
   fileContents?: Record<string, string>;
   toolCallLog?: string[];
   filesWritten?: string[];
+  /**
+   * Cumulative unified diff of every change made since task start.
+   * Tool sweep #6: reviewer prompts include this so the LLM can
+   * judge work against actual code changes, not the worker's text
+   * claim. Empty when no files changed (or read-only routes).
+   */
+  diff?: string;
+  /**
+   * Concrete concerns raised by previous reviewer rounds in this
+   * chain (round 1 = empty, round N+1 = concerns from round 1..N).
+   * Lets the reviewer verify the rework addressed prior issues
+   * without re-deriving them.
+   */
+  priorConcerns?: string[];
   abortSignal?: AbortSignal;
   deadlineMs?: number;
   /** Forwarded to RunInput so the running-headline sink + verbose stderr

@@ -8,6 +8,12 @@ import { reviewBriefSlot, type ReviewBrief } from '../../intake/brief-compiler-s
 import { reviewReportSchema } from '../../reporting/report-parser-slots/review-report.js';
 import { reviewHeadlineTemplate } from '../../reporting/headline-templates/review.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -54,35 +60,35 @@ function buildReviewPrompt(brief: ReviewBrief): string {
     if (focus && focus.length > 0) parts.push(`Focus areas: ${focus.join(', ')}.`);
   }
 
+  // Tool sweep #11: emit format spec unconditionally (pre-fix the
+  // DELTA branch dropped it, breaking annotator parse on delta runs).
   if (hasContextBlocks) {
     parts.push(
-      'Context is provided above (e.g. a diff or prior review). Perform a full review as normal — do not skip areas or reduce thoroughness.',
-      'If the context contains prior review findings:',
-      '- **Omit** findings that have been addressed — do not re-report them.',
-      '- **Include** findings that are still present (mark as "unfixed from prior review").',
-      '- **Include** any new findings.',
-      '- End with a **Fixed** summary listing which prior findings were resolved.',
-    );
-  } else {
-    parts.push(
-      'Produce a narrative code review. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
-      '',
-      '## Finding 1: <one-line title>',
-      '- Severity: critical | high | medium | low',
-      '- Location: file:line',
-      '- Issue: one-paragraph explanation',
-      '- Suggestion: one-line fix recommendation',
-      '',
-      '## Finding 2: <one-line title>',
-      '- Severity: ...',
-      '- ...',
-      '',
-      'Rules:',
-      '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
-      '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
-      '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
+      'A prior review is in the context above. **Omit** addressed findings, **include** still-present ones (mark "unfixed from prior review"), **include** any new findings, and end with a **Fixed** summary.',
     );
   }
+  parts.push(
+    'Produce a narrative code review. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
+    '',
+    '## Finding 1: <one-line title>',
+    '- Severity: critical | high | medium | low',
+    '- Location: file:line',
+    '- Issue: one-paragraph explanation',
+    '- Suggestion: one-line fix recommendation',
+    '',
+    '## Finding 2: <one-line title>',
+    '- Severity: ...',
+    '- ...',
+    '',
+    'Rules:',
+    '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
+    '- Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
+    '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
+  );
+
+  // Tool sweep #12: share the annotator's rubric with the implementer
+  // so the worker self-aligns with what the reviewer will check.
+  parts.push(SEVERITY_LADDER, EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
 
   return parts.join('\n\n');
 }
@@ -94,6 +100,15 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
   briefSlot: reviewBriefSlot,
   buildTaskSpec: (brief, ctx) => {
     const prompt = buildReviewPrompt(brief);
+    // Propagate filePaths + mainModel onto the TaskSpec so the headline
+    // composer can name the file in clean-review headlines and so the
+    // wire telemetry carries main_model attribution. Audit does this
+    // already; review missed it, producing "[ok] review completed"
+    // (no path) even when filePaths was provided. (Tool sweep #2 — gap surfaced
+    // by review batch c24353f6 on packages/core/src/reporting/severity.ts.)
+    const filePaths = brief.filePath
+      ? [brief.filePath]
+      : (brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined);
     return {
       prompt,
       agentType: 'complex',
@@ -106,6 +121,8 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
+      filePaths,
+      mainModel: ctx.mainModel ?? undefined,
       autoCommit: false,
     };
   },

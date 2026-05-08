@@ -57,18 +57,35 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
   const baseTier: AgentType = ctx.assignedTier;
   const reviewerTier = pickReviewer({ loop: 'spec', attemptIndex: 0, baseTier });
 
+  // Tool sweep #6: prefer the snapshot-based DiffTracker (works in
+  // non-git dirs, captures the cumulative across rework rounds against
+  // the pre-task baseline). Fall back to `git diff HEAD~..HEAD` for
+  // legacy callers (autoCommit pipelines that ran before the tracker
+  // was wired in). If BOTH sources fail, hard-error: reviewing without
+  // evidence would be the very bug this sweep is fixing.
   let diff = '';
-  try {
-    const { stdout } = await exec('git', ['diff', 'HEAD~..HEAD'], { cwd: ctx.cwd });
-    const cap = 64 * 1024;
-    const bytes = Buffer.byteLength(stdout, 'utf8');
-    diff = bytes > cap
-      ? Buffer.from(stdout, 'utf8').subarray(0, cap).toString('utf8') + '\n[diff truncated]'
-      : stdout;
-  } catch {
-    state.diffReviewVerdict = 'error';
-    state.terminal = true;
-    return;
+  let trackerProvided = false;
+  if (state.diffTracker) {
+    try {
+      diff = await state.diffTracker.cumulativeDiff();
+      trackerProvided = true;
+    } catch {
+      // tracker error — fall through to git
+    }
+  }
+  if (!trackerProvided) {
+    try {
+      const { stdout } = await exec('git', ['diff', 'HEAD~..HEAD'], { cwd: ctx.cwd });
+      const cap = 64 * 1024;
+      const bytes = Buffer.byteLength(stdout, 'utf8');
+      diff = bytes > cap
+        ? Buffer.from(stdout, 'utf8').subarray(0, cap).toString('utf8') + '\n[diff truncated]'
+        : stdout;
+    } catch {
+      state.diffReviewVerdict = 'error';
+      state.terminal = true;
+      return;
+    }
   }
 
   state.diffUnavailable ??= new Map() as UnavailableMap;
@@ -85,9 +102,17 @@ export async function reviewDiffHandler(state: LifecycleState): Promise<void> {
       const shell = makeRunnerShell(provider);
       const engine = ctx.reviewerEngine;
       if (!engine) throw new Error('reviewerEngine not configured');
+      // Tool sweep #6: pass diff via the dedicated `diff` field so the
+      // template's "# Cumulative diff" section gets actual diff content
+      // instead of conflating it with the worker's text summary.
+      // workerOutput stays as the verification summary so the diff
+      // reviewer has both signals.
+      const lastResult = state.lastRunResult as { output?: string } | undefined;
+      const verifySummary = `Verification: ${verifyResult.status}\n${verifyResult.steps.map(s => `- ${s.command} → ${s.status}`).join('\n')}`;
       return engine.runDiff(shell, {
-        workerOutput: diff,
+        workerOutput: lastResult?.output ?? verifySummary,
         brief: `verification: ${verifyResult.status}\n${verifyResult.steps.map(s => `- ${s.command} → ${s.status}`).join('\n')}`,
+        diff,
         cwd: ctx.cwd,
         abortSignal: ctx.stall.controller.signal,
         deadlineMs: ctx.timing.deadlineMs,

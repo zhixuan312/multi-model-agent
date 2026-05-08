@@ -14,7 +14,7 @@ import {
 } from '../../escalation/fallback.js';
 import { makeSkippedReviewResult, type SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
-import { mergeStageStats } from '../merge-stage-stats.js';
+import { mergeStageStats, replaceLastRunResultPreservingTrackers } from '../merge-stage-stats.js';
 
 /**
  * Spec-chain handlers (#45 Step 4a).
@@ -69,6 +69,19 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
   state.specUnavailable ??= new Map() as UnavailableMap;
   const specUnavailable: UnavailableMap = state.specUnavailable;
 
+  // Tool sweep #6: produce the cumulative diff so the reviewer sees
+  // the actual code change, not just the worker's text claim. Empty
+  // string when no diff tracker (read-only routes) or no changes.
+  let cumulativeDiff = '';
+  if (state.diffTracker) {
+    try {
+      cumulativeDiff = await state.diffTracker.cumulativeDiff();
+    } catch {
+      // Diff failures shouldn't block review. Falls back to text-only.
+    }
+  }
+  const priorConcerns = Array.isArray(state.priorSpecConcerns) ? state.priorSpecConcerns : [];
+
   const reviewerCall = await runWithFallback<ReviewerCallResult | SkippedReviewResult>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
@@ -86,6 +99,8 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           brief: task.prompt ?? '',
           cwd: ctx.cwd,
           route: (state.route ?? ctx.route) as ReviewRoute,
+          diff: cumulativeDiff,
+          priorConcerns,
           abortSignal: ctx.stall.controller.signal,
           deadlineMs: ctx.timing.deadlineMs,
           ...(ctx.bus && { bus: ctx.bus }),
@@ -176,6 +191,21 @@ function makeSpecReviewHandler(round: 1 | 2 | 3) {
     const result = await runSpecReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = result.verdict;
+    // Tool sweep #6: accumulate concerns across rounds so the next
+    // reviewer can verify the rework addressed each one. We append
+    // unique concerns (skip duplicates from earlier rounds).
+    if (Array.isArray(result.concerns) && result.concerns.length > 0) {
+      const prior = Array.isArray(state.priorSpecConcerns) ? state.priorSpecConcerns : [];
+      const seen = new Set(prior);
+      const merged = [...prior];
+      for (const c of result.concerns) {
+        if (typeof c === 'string' && !seen.has(c)) {
+          seen.add(c);
+          merged.push(c);
+        }
+      }
+      state.priorSpecConcerns = merged;
+    }
     // Persist concerns into lastRunResult so the wire's per-stage
     // findingsBySeverity (driven by rr.concerns) reflects what the
     // reviewer raised — without this, findings_critical/high/medium/low
@@ -242,15 +272,13 @@ function makeSpecReworkHandler(round: 1 | 2) {
       }
       return;
     }
-    // Preserve accumulated stageStats when replacing lastRunResult — the
-    // fresh RunResult from the rework's call has no stageStats of its own,
-    // and overwriting wholesale would drop every prior stage entry
-    // (implementing, spec_review, etc.) so the wire event would only show
-    // the rework's own slice.
-    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
-    state.lastRunResult = priorStageStats
-      ? { ...newResult, stageStats: priorStageStats }
-      : newResult;
+    // Tool sweep #6: union filesRead/filesWritten/toolCalls + preserve
+    // stageStats. Pre-fix this branch only kept stageStats and dropped
+    // file-tracker arrays — a spec-rework with 0 writes wiped the
+    // implementer's recorded write, the envelope's filesWritten went
+    // empty, and downstream qualityReviewStatus reported "no file
+    // artifacts to review" despite the file being modified on disk.
+    replaceLastRunResultPreservingTrackers(state, newResult);
     // Record rework cost in spec_rework stage stats so wire telemetry sees
     // it. round=1 → attemptIndex 1, round=2 → attemptIndex 2; rework tier
     // mirrors pickEscalation (impl=standard for attemptIndex 1; impl=complex

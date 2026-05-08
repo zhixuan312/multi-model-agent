@@ -21,17 +21,28 @@ export const delegateHeadlineTemplate: HeadlineTemplate = {
     const fileCount = reportFiles.length > 0 ? reportFiles.length : runFiles.length;
 
     if (reportInapplicable && fileCount === 0) {
-      return `[${status}] no structured report available`;
+      return `[${status}] delegate: no structured report available`;
     }
 
     // Gap 12 fix (4.0.3+): trim worker's narrative `summary` to first
     // sentence (or 80-char truncate). Pre-fix, the entire summary —
     // sometimes multi-sentence prose ending mid-thought — was inlined
     // into the headline.
-    const rawSummary = !reportInapplicable && typeof r?.summary === 'string' ? r!.summary : '';
+    //
+    // Tool sweep #6 follow-up: when the structured report carries no
+    // summary, fall back to the worker's `output` text (also trimmed to
+    // first sentence) so the headline is informative even on no-op /
+    // 0-file outcomes. Pre-fix, those collapsed to `[incomplete] (0
+    // files)` with NO clue why.
+    const rawSummary = (!reportInapplicable && typeof r?.summary === 'string' && r.summary.length > 0)
+      ? r.summary
+      : (typeof runResult?.output === 'string' ? runResult.output : '');
     const summary = firstSentenceOrTruncate(rawSummary);
 
     const summaryClause = summary.length > 0 ? ` ${summary}` : '';
-    return `[${status}]${summaryClause} (${fileCount} file${fileCount === 1 ? '' : 's'})`;
+    // Tool sweep #6 follow-up: prefix with `delegate:` for parity with
+    // audit / review / verify / debug / investigate headlines so the
+    // operator can tell the route at a glance.
+    return `[${status}] delegate:${summaryClause} (${fileCount} file${fileCount === 1 ? '' : 's'})`;
   },
 };

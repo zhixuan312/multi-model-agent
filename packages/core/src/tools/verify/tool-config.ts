@@ -7,6 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { verifyReportSchema } from '../../reporting/report-parser-slots/verify-report.js';
 import { verifyHeadlineTemplate } from '../../reporting/headline-templates/verify.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerVerify(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -36,10 +42,10 @@ export interface VerifyBrief {
 // ── Prompt builders (lifted from legacy executor) ──
 
 const FINDING_FORMAT_INSTRUCTIONS = [
-  'For each checklist item, use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+  'For each checklist item, use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title (the criterion summary)>',
-  '- Severity: critical | high | medium | low (low = pass; high/medium = fail)',
+  '- Severity: critical | high | medium | low (use `low` for PASS items; `medium` or `high` for FAIL items per impact)',
   '- Item: the criterion text',
   '- Result: PASS or FAIL',
   '- Evidence: file:line + what it shows, OR command + output',
@@ -49,9 +55,20 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   '- ...',
   '',
   'Rules:',
-  '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1, one per checklist item.',
+  '- One `## Finding N:` block per checklist item — same count and same order as the checklist. Do not skip items even if they pass trivially.',
   '- Severity / Item / Result / Evidence bullets are on their own lines with the labels exactly as shown.',
-  '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
+  '',
+  // Tool sweep #12: shared rubric so worker calibrates the same way the
+  // annotator validates. For verify, severity is bound to the result —
+  // the SEVERITY_LADDER below explains the ladder; here we just bind:
+  // PASS -> low, FAIL -> medium/high based on impact.
+  SEVERITY_LADDER,
+  '',
+  EVIDENCE_GROUNDING,
+  '',
+  SCOPE_DISCIPLINE,
+  '',
+  ANNOTATOR_CHECK_AWARENESS_RO,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {
@@ -129,6 +146,7 @@ export const toolConfig: ToolConfig<Input, VerifyBrief, unknown> = {
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
       filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
+      mainModel: ctx.mainModel ?? undefined,
     };
   },
   reportSchema: verifyReportSchema,

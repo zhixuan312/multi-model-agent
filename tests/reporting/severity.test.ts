@@ -84,4 +84,82 @@ describe('severity helpers (4.0.3+ Gap 2)', () => {
       expect(buckets).toEqual({ critical: 1, high: 1, medium: 0, low: 1 });
     });
   });
+
+  // 4.0.3+ Gap 16 — narrative-findings fallback when annotator errors.
+  describe('parseNarrativeFindings', () => {
+    it('extracts each ## Finding N: block with its severity', async () => {
+      const { parseNarrativeFindings } = await import(
+        '../../packages/core/src/reporting/severity.js'
+      );
+      const out = `Some preamble.
+
+## Finding 1: First problem
+- Severity: high
+- Issue: A real bug.
+
+## Finding 2: Second problem
+- Severity: medium
+- Issue: Smaller issue.
+
+## Finding 3: Third
+- Severity: low
+- Suggestion: minor.
+`;
+      const findings = parseNarrativeFindings(out);
+      expect(findings).toHaveLength(3);
+      expect(findings[0]).toEqual({ severity: 'high', claim: 'First problem' });
+      expect(findings[1]).toEqual({ severity: 'medium', claim: 'Second problem' });
+      expect(findings[2]).toEqual({ severity: 'low', claim: 'Third' });
+    });
+
+    it('returns empty array when no Finding blocks are present', async () => {
+      const { parseNarrativeFindings } = await import(
+        '../../packages/core/src/reporting/severity.js'
+      );
+      expect(parseNarrativeFindings('No findings here, just prose.')).toEqual([]);
+      expect(parseNarrativeFindings('')).toEqual([]);
+      expect(parseNarrativeFindings(undefined as unknown as string)).toEqual([]);
+    });
+
+    it('records null severity when the severity line is missing', async () => {
+      const { parseNarrativeFindings } = await import(
+        '../../packages/core/src/reporting/severity.js'
+      );
+      const out = `## Finding 1: untyped
+- Issue: no severity here.
+`;
+      const findings = parseNarrativeFindings(out);
+      expect(findings).toHaveLength(1);
+      expect(findings[0]).toEqual({ severity: null, claim: 'untyped' });
+    });
+
+    it('handles case-insensitive Finding heading', async () => {
+      const { parseNarrativeFindings } = await import(
+        '../../packages/core/src/reporting/severity.js'
+      );
+      const out = `## finding 1: lowercase heading
+- severity: critical
+`;
+      expect(parseNarrativeFindings(out)).toEqual([
+        { severity: 'critical', claim: 'lowercase heading' },
+      ]);
+    });
+
+    it('integrates with countHighOrCritical for headline counting', async () => {
+      const { parseNarrativeFindings } = await import(
+        '../../packages/core/src/reporting/severity.js'
+      );
+      const out = `## Finding 1: A
+- Severity: critical
+
+## Finding 2: B
+- Severity: high
+
+## Finding 3: C
+- Severity: low
+`;
+      const findings = parseNarrativeFindings(out);
+      expect(countHighOrCritical(findings)).toBe(2);
+    });
+  });
 });

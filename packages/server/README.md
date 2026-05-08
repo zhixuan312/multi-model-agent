@@ -90,7 +90,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.4",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -290,20 +290,17 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.0.3
+## What's new in 4.0.4
 
-- **Required headers `X-MMA-Main-Model` + `X-MMA-Client` on every tool route.** Server returns `400 main_model_required` / `400 client_required` if missing. Replaces `defaults.parentModel` config (removed) and `PARENT_MODEL_NAME` env. Shipped skills set both headers automatically from `MMAGENT_MAIN_MODEL` + `MMAGENT_CLIENT` env vars.
-- **Wire field rename:** `parentModel*` → `mainModel*` (matches DB column `main_model`). `costDeltaVsParentUSD` → `costDeltaVsMainUSD`. Internal record now matches wire 1:1.
-- **Canonical model-name preservation.** `claude-opus-4-7` no longer collapses to `claude-opus`. Best-effort extraction handles arbitrary wrappers (`bedrock.claude-opus-4-7`, `vertex_ai/anthropic.claude-sonnet-4-6@2024-10-22`).
-- **`contextBlockIds` actually reach the worker prompt.** Round-over-round audit recipes were broken pre-4.0.3 — the dispatcher dispatched the unexpanded task. Now the same expanded reference flows through both `state.task` and `executionContext.task`.
-- **File-backed context blocks survive daemon restarts.** Stored at `<projectCwd>/.mma/context-blocks/<id>.txt` with atomic writes, mode `0700`/`0600`, 7-day TTL, 1 MiB / 100 MiB caps. `.mma/` belongs in `.gitignore` (daemon prints a stderr breadcrumb on first creation).
-- **`totalDurationMs` reflects real wall-clock** (was implementer-only). Per-stage durations stay truthful — drops the proportional scale-down that was masking the under-counting.
-- **Audit/review/delegate headlines** fall back to `runResult.annotatedFindings` and `runResult.filesWritten` when the structured report lacks them. Pre-fix headlines reported `0 findings (0 high)` and `(0 files)` for narrative-emitting tools.
-- **`batch_failed` fires when the executor packages an error envelope.** Operator visibility — verbose stream no longer says `batch_completed` while the run actually failed.
-- **`run_shell` write tracking.** Workers writing via `cat >`, `sed -i`, `tee`, etc. correctly increment the polling headline's write count.
-- **Stage-progression denominator derives from the StagePlan.** Audit `(1/3)`, delegate `(1/9)`, register-context-block `(1/1)`. Single source of truth.
+- **Reviewers see the actual diff.** New `DiffTracker` (snapshot-based, works in non-git directories) gives spec / quality / diff reviewers the cumulative unified diff against the pre-task baseline. Pre-fix the reviewer judged the worker's text claim alone, defaulted to `changes_required`, and triggered rework spirals on already-correct work. Verdicts must now point to specific diff lines.
+- **Coherent prompts via shared rubric.** `finding-criteria.ts` is the single source of truth for severity ladder, evidence-grounding, scope discipline, and stage awareness. Read-only tools share `ANNOTATOR_CHECK_AWARENESS_RO`; artifact-producing tools share `REVIEWER_AWARENESS_AP`. Workers self-align with what the reviewer will judge → cleaner first-round outputs.
+- **Lenient JSON parsers** in both reviewer and annotator output paths. Accepts ` ```json ` fenced, ` ``` ` (no language tag), bare JSON, and embedded objects/arrays. Caused `verdict: 'error'` and `findings_low: 0` regressions despite valid model output.
+- **Cumulative `filesWritten` across rework rounds.** Pre-fix the implementer's writes were wiped when a no-op rework round overwrote `lastRunResult`. Now unioned across rounds.
+- **Headlines unified across all tools** — `[<status>] <route>: <summary>`. `execute-plan` (was `execute_plan` snake-case), `retry: N/N tasks complete` now reflects per-task status, debug carries file path + finding count.
+- **Implementer system prompt + per-tool prompts hardened.** "Trust `edit_file`/`write_file` — do NOT re-read just to verify your own successful edit" saves 4-6 min per artifact task. Read-only prompts include severity calibration, evidence-grounding, scope discipline, stage awareness.
+- **Per-tool fixes:** investigate prompt aligned with parser, verify `findings_low` correctly populated, debug rewritten as proper read-only (PROPOSE — do NOT apply), spec / quality concerns accumulated across rounds.
 
-**Migration from 4.0.2:** custom HTTP callers must add `X-MMA-Main-Model` and `X-MMA-Client`. Skills users get this for free after `mmagent sync-skills`.
+**Migration from 4.0.3:** none. Wire envelope, schema fields, and route names are unchanged. `npm update` to take the bug fixes.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

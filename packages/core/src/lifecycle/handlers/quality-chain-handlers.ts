@@ -17,7 +17,7 @@ import {
 import { makeSkippedReviewResult } from '../../review/skipped-result.js';
 import type { SkippedReviewResult } from '../../review/skipped-result.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
-import { mergeStageStats } from '../merge-stage-stats.js';
+import { mergeStageStats, replaceLastRunResultPreservingTrackers } from '../merge-stage-stats.js';
 
 /**
  * Quality-chain handlers (#45 Step 4b).
@@ -72,6 +72,20 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
   state.qualityUnavailable ??= new Map() as UnavailableMap;
   const qualityUnavailable: UnavailableMap = state.qualityUnavailable;
 
+  // Tool sweep #6: cumulative diff for quality review (artifact-producing
+  // routes). Same plumbing as spec-chain — reviewer needs to see the
+  // actual code change to make precise findings. Read-only routes don't
+  // have a diffTracker, so this is empty for them (and harmless).
+  let cumulativeDiff = '';
+  if (state.diffTracker) {
+    try {
+      cumulativeDiff = await state.diffTracker.cumulativeDiff();
+    } catch {
+      // Diff failures shouldn't block review.
+    }
+  }
+  const priorConcerns = Array.isArray(state.priorQualityConcerns) ? state.priorQualityConcerns : [];
+
   const reviewerCall = await runWithFallback<ReviewerCallResult | AnnotatorCallResult | SkippedReviewResult>({
     assigned: reviewerTier,
     providerFor: (tier: AgentType) => ctx.providers[tier] as Provider | undefined,
@@ -93,6 +107,8 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
             fileContents,
             toolCallLog,
             filesWritten,
+            diff: cumulativeDiff,
+            priorConcerns,
             abortSignal: ctx.stall.controller.signal,
             deadlineMs: ctx.timing.deadlineMs,
             ...(ctx.bus && { bus: ctx.bus }),
@@ -196,6 +212,21 @@ function makeQualityReviewHandler(round: 1 | 2 | 3) {
     const result = await runQualityReviewRound({ state, ctx, round });
     if (!result) return;
     state[slot] = mapQualityVerdict(result);
+    // Tool sweep #6: accumulate concerns across rounds for reviewer
+    // continuity. Same merge pattern as priorSpecConcerns.
+    const concernsList = (result as { concerns?: unknown }).concerns;
+    if (Array.isArray(concernsList) && concernsList.length > 0) {
+      const prior = Array.isArray(state.priorQualityConcerns) ? state.priorQualityConcerns : [];
+      const seen = new Set(prior);
+      const merged = [...prior];
+      for (const c of concernsList) {
+        if (typeof c === 'string' && !seen.has(c)) {
+          seen.add(c);
+          merged.push(c);
+        }
+      }
+      state.priorQualityConcerns = merged;
+    }
     // Persist findings + concerns onto lastRunResult so:
     //   - the wire event-builder's findingsBySeverity (reads rr.concerns)
     //     populates findings_critical/high/medium/low DB columns instead
@@ -295,11 +326,10 @@ function makeQualityReworkHandler(reworkIndex: 1 | 2) {
       }
       return;
     }
-    // Preserve stageStats when replacing lastRunResult — see spec-chain-handlers.
-    const priorStageStats = (state.lastRunResult as RunResult | undefined)?.stageStats;
-    state.lastRunResult = priorStageStats
-      ? { ...newResult, stageStats: priorStageStats }
-      : newResult;
+    // Tool sweep #6: same fix as spec-chain — union file-tracker arrays
+    // across rework rounds so the envelope reflects ALL writes, not
+    // just the most recent attempt's writes.
+    replaceLastRunResultPreservingTrackers(state, newResult);
     // Record rework cost. Quality rework_2 (attemptIndex 2) escalates impl
     // from base tier to the other tier; rework_1 stays on base.
     const baseTier: AgentType = ctx.assignedTier;
@@ -357,6 +387,28 @@ export function settleQualityChainHandler(state: LifecycleState): void {
     return;
   }
   if (v1 === 'error' || v2 === 'error' || v3 === 'error') {
+    // 4.0.3+ soft-success path for read-only routes (audit / review /
+    // verify / debug / investigate). These routes have NO rework loop —
+    // the annotator is single-pass. When the annotator returns 'error'
+    // (typically a parse failure on its own JSON block) BUT the
+    // implementer produced a non-empty narrative output, the findings
+    // are still recoverable from `lastRunResult.output` in the canonical
+    // `## Finding N:` format. Treat that as chain-passed so the wire
+    // envelope reports terminal_status='ok' / worker_status='done'
+    // instead of leaking 'review_loop_capped' (artifact-producing-route
+    // terminology). Round-1 verdict='error' stays in stage stats as a
+    // soft telemetry signal. Headline composers + envelope builders
+    // fall back to narrative parsing for the findings count.
+    const last = state.lastRunResult as { output?: string } | undefined;
+    const isReadOnly = state.toolCategory === 'read_only';
+    const implementerProducedOutput =
+      typeof last?.output === 'string' && last.output.trim().length > 0;
+    if (isReadOnly && implementerProducedOutput) {
+      state.qualityChainPassed = true;
+      return;
+    }
+    // Artifact-producing route, OR read-only with empty implementer
+    // output: hard-fail (no findings to recover).
     state.qualityChainPassed = false;
     state.terminal = true;
     return;

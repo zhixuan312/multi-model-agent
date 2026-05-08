@@ -104,3 +104,66 @@ function combineCost(a: number | null | undefined, b: number | null): number | n
   if (b === null) return a;
   return a + b;
 }
+
+/**
+ * Replace state.lastRunResult with the rework-stage's `newResult`, but
+ * preserve cumulative file-tracker arrays AND stageStats from the prior
+ * lastRunResult.
+ *
+ * Tool sweep #6 fix: the spec-chain and quality-chain handlers both
+ * replaced `state.lastRunResult` with the rework's RunResult, only
+ * keeping `stageStats`. Implementing-stage file writes were thereby
+ * lost when a spec-rework round produced no writes:
+ *   implementer:   filesWritten=['/x.ts']  ← real edit applied
+ *   spec_review:   no run
+ *   spec_rework:   filesWritten=[]         ← reads but no writes
+ * Envelope read `lastRunResult.filesWritten` → `[]`, downstream
+ * `qualityReviewStatus` collapsed to "task produced no file artifacts
+ * to review" and the headline reported "(0 files)" even though the
+ * implementer had successfully made the requested edit.
+ *
+ * Stage stats already tracked the writes correctly per-stage (the wire
+ * telemetry's `findings_low` etc. are computed from stageStats). Only
+ * the result envelope's `filesRead` / `filesWritten` / `toolCalls`
+ * arrays were broken.
+ *
+ * Fix: union the arrays across all rework rounds. Stable de-dupe via
+ * Set so a file edited twice doesn't appear twice in the envelope.
+ */
+export function replaceLastRunResultPreservingTrackers(
+  state: LifecycleState,
+  newResult: RunResult,
+): void {
+  const prior = state.lastRunResult as RunResult | undefined;
+  if (!prior) {
+    state.lastRunResult = newResult;
+    return;
+  }
+  const unionStrings = (
+    a: ReadonlyArray<string> | undefined,
+    b: ReadonlyArray<string> | undefined,
+  ): string[] => {
+    const out: string[] = [];
+    const seen = new Set<string>();
+    for (const x of a ?? []) {
+      if (typeof x === 'string' && !seen.has(x)) {
+        seen.add(x);
+        out.push(x);
+      }
+    }
+    for (const x of b ?? []) {
+      if (typeof x === 'string' && !seen.has(x)) {
+        seen.add(x);
+        out.push(x);
+      }
+    }
+    return out;
+  };
+  state.lastRunResult = {
+    ...newResult,
+    stageStats: prior.stageStats ?? newResult.stageStats,
+    filesRead: unionStrings(prior.filesRead, newResult.filesRead),
+    filesWritten: unionStrings(prior.filesWritten, newResult.filesWritten),
+    toolCalls: [...(prior.toolCalls ?? []), ...(newResult.toolCalls ?? [])],
+  };
+}

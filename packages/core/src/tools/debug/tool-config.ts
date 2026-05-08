@@ -7,6 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from '../../intake/brief-compiler-slots/debug.js';
 import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  SEVERITY_LADDER,
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerDebug(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -23,13 +29,13 @@ export function registerDebug(registry: ToolSurfaceRegistry): void {
 }
 
 const FINDING_FORMAT_INSTRUCTIONS = [
-  'Use hypothesis-driven debugging. Use this EXACT per-finding format so the deterministic extractor can recover findings if the structured reviewer pass fails:',
+  'Use hypothesis-driven debugging. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title>',
   '- Severity: critical | high | medium | low',
   '- Hypothesis: the candidate cause',
   '- Evidence: trace, log, or code path with file:line',
-  '- Fix: proposed change',
+  '- Fix: proposed change (PROPOSE only — do NOT apply the fix)',
   '',
   '## Finding 2: <one-line title>',
   '- Severity: ...',
@@ -38,7 +44,17 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   'Rules:',
   '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
   '- Severity / Hypothesis / Evidence / Fix bullets are on their own lines with the labels exactly as shown.',
-  '- Do NOT emit JSON. Both the structured reviewer and the deterministic fallback extract from this same format — the format is the single source of truth.',
+  '- This is a read-only diagnostic — do NOT edit any file. Propose fixes; the caller applies them.',
+  '- Limit yourself to 3-5 most-likely hypotheses. Do not enumerate implausible ones to pad the list.',
+  '',
+  // Tool sweep #12: shared rubric so worker self-aligns with the annotator.
+  SEVERITY_LADDER,
+  '',
+  EVIDENCE_GROUNDING,
+  '',
+  SCOPE_DISCIPLINE,
+  '',
+  ANNOTATOR_CHECK_AWARENESS_RO,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {
@@ -65,7 +81,7 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       agentType: 'complex',
       reviewPolicy: 'quality_only',
       briefQualityPolicy: 'off',
-      done: 'Identify the root cause with evidence (file, line, mechanism). Propose a fix. Verify the fix resolves the problem.',
+      done: 'Identify the root cause with evidence (file, line, mechanism) and PROPOSE a fix. Do NOT apply the fix — debug is a read-only diagnostic; the caller decides whether to apply.',
       tools: ctx.config.defaults?.tools ?? 'full',
       timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
       maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
@@ -73,6 +89,8 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       cwd: ctx.projectContext?.cwd ?? ctx.cwd,
       contextBlockIds: brief.contextBlockIds,
       autoCommit: false,
+      filePaths: brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined,
+      mainModel: ctx.mainModel ?? undefined,
     };
   },
   reportSchema: { parse: (_text) => { throw new Error('no structured report emitted by this executor'); } },

@@ -9,6 +9,11 @@ import type { InvestigateReportOutput } from '../../reporting/report-parser-slot
 import { investigateHeadlineTemplate } from '../../reporting/headline-templates/investigate.js';
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import {
+  EVIDENCE_GROUNDING,
+  SCOPE_DISCIPLINE,
+  ANNOTATOR_CHECK_AWARENESS_RO,
+} from '../../review/templates/finding-criteria.js';
 
 export function registerInvestigate(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -39,8 +44,20 @@ export interface EnrichedInvestigateInput extends Input {
 }
 
 export interface InvestigateBrief {
+  /** The user's original question — drives the headline text. */
   question: string;
-  prompt: string;
+  /**
+   * The fully compiled implementer prompt (template + question + anchors +
+   * context blocks). Stored here for buildTaskSpec to forward as
+   * TaskSpec.prompt, but deliberately NOT named `prompt`/`brief`. The
+   * task-executor's `taskBrief` resolution chain reads
+   * `briefs[0].prompt ?? .brief ?? .question`; a `prompt` field here would
+   * cause the headline to be the prompt-template instructions (the tool
+   * sweep #5 bug — headline read 'Investigation: "Produce a narrative
+   * investigation report. Number each findin…"'). Falling through to
+   * `question` is the desired behavior.
+   */
+  compiledPrompt: string;
   filePaths: string[];
   contextBlockIds: string[];
   tools?: 'none' | 'readonly';
@@ -49,7 +66,29 @@ export interface InvestigateBrief {
 function compilePrompt(input: EnrichedInvestigateInput): string {
   const promptParts: string[] = [];
   promptParts.push(
-    'Produce a narrative investigation report. Number each finding (1, 2, 3, ...). For each finding, on its own line, state Severity: critical|high|medium|low, then a one-paragraph explanation citing file:line for code-level claims (or describing what was searched for project-level claims). Optional Suggestion line. The reviewer will extract structured findings — do NOT emit JSON.',
+    [
+      'Produce an investigation report in this EXACT structured format. The deterministic',
+      'parser extracts citations, confidence, and unresolved items by section — do NOT emit',
+      'JSON, and do NOT use a numbered-list narrative. Sections MUST use h2 headers (`##`).',
+      '',
+      '## Summary',
+      'One paragraph stating the answer to the question, in plain prose.',
+      '',
+      '## Citations',
+      'One bullet per evidence item, in this exact format:',
+      '`- file/path.ts:LINE — claim` (em-dash, OR `--` is also accepted)',
+      'Use a `LINE-LINE` range when an evidence span covers multiple lines.',
+      'If the question is fully project-level (no code evidence applies), write `(none)`',
+      'on its own line — but only when Confidence is `low`.',
+      '',
+      '## Confidence',
+      'One of `high`, `medium`, or `low`, optionally followed by ` — <one-line rationale>`.',
+      '',
+      '## Unresolved',
+      'Optional bullets describing follow-up questions; write `(none)` if there are none.',
+      'Prefix a bullet with `[needs_context]` if it requires the caller to supply more',
+      'information before the question can be answered.',
+    ].join('\n'),
   );
   for (const block of input.resolvedContextBlocks) {
     promptParts.push(block.content);
@@ -66,6 +105,12 @@ function compilePrompt(input: EnrichedInvestigateInput): string {
       'A prior investigation report is provided as context above. Refine or extend that investigation. In your output, mark which prior unresolved questions you resolved this round and which remain open.',
     );
   }
+  // Tool sweep #12: shared rubric. Investigate doesn't use the
+  // SEVERITY_LADDER (its findings are citations, not severity-rated)
+  // but evidence-grounding + scope-discipline + annotator-awareness
+  // apply just as much. Workers that cite hallucinated lines or
+  // speculate about unread files now have the rubric inline.
+  promptParts.push(EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
   return promptParts.join('\n\n');
 }
 
@@ -74,17 +119,17 @@ export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, 
   category: 'read_only',
   agentType: 'complex',
   briefSlot: (input: EnrichedInvestigateInput): InvestigateBrief[] => {
-    const prompt = compilePrompt(input);
+    const compiledPrompt = compilePrompt(input);
     return [{
       question: input.question,
-      prompt,
+      compiledPrompt,
       filePaths: input.canonicalizedFilePaths,
       contextBlockIds: input.contextBlockIds ?? [],
       tools: input.tools,
     }];
   },
   buildTaskSpec: (brief: InvestigateBrief, ctx: ExecutionContext) => ({
-    prompt: brief.prompt,
+    prompt: brief.compiledPrompt,
     agentType: 'complex' as const,
     reviewPolicy: 'quality_only' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
@@ -94,6 +139,7 @@ export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, 
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+    mainModel: ctx.mainModel ?? undefined,
   }),
   reportSchema: investigateReportSchema,
   headlineTemplate: investigateHeadlineTemplate,

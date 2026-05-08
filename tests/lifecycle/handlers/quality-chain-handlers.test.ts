@@ -155,8 +155,50 @@ describe('settleQualityChainHandler', () => {
     expect(state.terminal).toBe(false);
   });
 
-  it('hard-fails (terminal) when any round is error', () => {
-    const state = makeState({ qualityReviewRound2Verdict: 'error' });
+  it('hard-fails (terminal) when any round is error on artifact_producing route', () => {
+    const state = makeState({
+      qualityReviewRound2Verdict: 'error',
+      toolCategory: 'artifact_producing',
+    });
+    settleQualityChainHandler(state);
+    expect(state.qualityChainPassed).toBe(false);
+    expect(state.terminal).toBe(true);
+  });
+
+  // 4.0.3+ soft-success path for read-only routes (Gap 16):
+  // When the annotator returns 'error' but the implementer produced
+  // narrative output, the chain passes and the run completes 'ok'.
+  // Headline composers fall back to parseNarrativeFindings to
+  // recover findings from the implementer's output.
+  it('soft-succeeds for read_only when annotator errors but implementer has output', () => {
+    const state = makeState({
+      qualityReviewRound1Verdict: 'error',
+      toolCategory: 'read_only',
+      lastRunResult: {
+        output: '## Finding 1: real bug\n- Severity: medium\n',
+      } as unknown as LifecycleState['lastRunResult'],
+    });
+    settleQualityChainHandler(state);
+    expect(state.qualityChainPassed).toBe(true);
+    expect(state.terminal).toBeFalsy();
+  });
+
+  it('hard-fails for read_only when annotator errors AND implementer output is empty', () => {
+    const state = makeState({
+      qualityReviewRound1Verdict: 'error',
+      toolCategory: 'read_only',
+      lastRunResult: { output: '' } as unknown as LifecycleState['lastRunResult'],
+    });
+    settleQualityChainHandler(state);
+    expect(state.qualityChainPassed).toBe(false);
+    expect(state.terminal).toBe(true);
+  });
+
+  it('hard-fails for read_only when annotator errors AND no lastRunResult', () => {
+    const state = makeState({
+      qualityReviewRound1Verdict: 'error',
+      toolCategory: 'read_only',
+    });
     settleQualityChainHandler(state);
     expect(state.qualityChainPassed).toBe(false);
     expect(state.terminal).toBe(true);
