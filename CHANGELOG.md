@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`mma-execute-plan` prompt rewritten for fidelity-first plan execution.** The execute-plan's purpose is now explicitly framed around the plan author's standard — the diff should make the author say "yes, that's exactly what I wrote", not "close, but with liberties". Prompt now includes:
+  - An orientation block at the top naming the success criterion (plan-author fidelity, not "good code") and explicit fidelity rules (follow the plan exactly, use code blocks verbatim, do not redesign / substitute / improve).
+  - A 9-category failure-mode taxonomy (plan rewrite, step skip, step reorder, code substitution, acceptance-criteria overrun, acceptance-criteria underrun, wrong-task match, cross-task contamination, problem-not-flagged).
+  - A plan-fidelity reminder counter-balancing the worker's usual "improve it" instinct, with a code-block faithfulness walk and worked example demonstrating CODE SUBSTITUTION (a worker who renames `parse` to `parseTokens` "for clarity" breaks the import contract the plan established).
+  - A scope rule explicitly forbidding cross-task contamination (other tasks have other workers; touching their files creates merge conflicts and ownership ambiguity).
+- **Restored discipline lines that the slot-style refactor dropped.** The legacy `compileExecutePlan` function had load-bearing lines like *"Follow the plan exactly as written. If the plan provides code blocks, use them verbatim. Do not redesign, do not substitute your own approach. The plan was written by a higher-capability model — your job is to execute it faithfully."* The newer slot-style `buildExecutePlanPrompt` (the canonical path used by the v4 ToolConfig) had silently dropped these. They are now back, integrated into `EXECUTE_PLAN_PURPOSE_ORIENTATION`.
+
 - **`mma-investigate` prompt rewritten for answer-and-act calibration.** The investigate's purpose is now explicitly framed as the loop where the caller acts on the answer — wrong file paths become bugs, stale quotes become wrong edits, overstated confidence becomes misallocated effort. Prompt now includes:
   - An orientation block at the top naming the success criterion (caller acts on this answer literally; would they end up with correct code?) and the four required guarantees per claim (file:line, read this session, every link of synthesis cited, confidence reflects evidence).
   - An 8-category failure-mode taxonomy (wrong file, stale quote, hallucinated citation, confidence overstatement, citation gap, question shift, synthesis without grounding, assumed-current-state).

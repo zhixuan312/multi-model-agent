@@ -11,6 +11,12 @@ import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/
 import { executePlanReportSchema } from '../../reporting/report-parser-slots/execute-plan-report.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { REVIEWER_AWARENESS_AP } from '../../review/templates/finding-criteria.js';
+import {
+  EXECUTE_PLAN_PURPOSE_ORIENTATION,
+  EXECUTE_PLAN_SCOPE_RULE,
+  EXECUTE_PLAN_FAILURE_MODES,
+  PLAN_FIDELITY_REMINDER,
+} from './implementer-criteria.js';
 
 export const executePlanInputSchema = z.object({
   filePaths: z.array(z.string()).length(1, { message: "execute_plan requires exactly one plan filePath" }),
@@ -40,6 +46,14 @@ export function registerExecutePlan(registry: ToolSurfaceRegistry): void {
 /**
  * Build a compact worker prompt for one plan task. Extracted from the legacy
  * executor — just the section matched by the slot, not the full plan file.
+ *
+ * The prompt is structured top-down: orientation (why this exists) →
+ * task descriptor → matched plan section → file paths → fidelity rules
+ * (RESTORED in 4.1.0; the older `compileExecutePlan` had them, the
+ * slot-style refactor that became the canonical path dropped them) →
+ * failure-mode taxonomy → reviewer awareness. Without the orientation
+ * + fidelity blocks, workers default to "implement the goal" and treat
+ * the plan as a starting suggestion rather than the contract.
  */
 function buildExecutePlanPrompt(
   filePaths: string[],
@@ -47,6 +61,11 @@ function buildExecutePlanPrompt(
   taskSection: string | undefined,
 ): string {
   const parts: string[] = [
+    // Orientation goes FIRST — fidelity-first framing before the
+    // task descriptor, so the worker reads the section through the
+    // execution lens instead of the "improve it" lens.
+    EXECUTE_PLAN_PURPOSE_ORIENTATION,
+    '',
     `Execute this task from the plan: "${task}"`,
     '',
   ];
@@ -56,12 +75,12 @@ function buildExecutePlanPrompt(
     parts.push(
       'No unique plan section matched that task heading. The full plan file is at:',
       ...filePaths.map((p) => `  - ${p}`),
-      'Read the plan file(s) yourself to find the task.',
+      'Read the plan file(s) yourself to find the task. If still no unique match, report that and stop — do not implement anything.',
       '',
     );
   }
   parts.push(
-    'Plan files for reference (read on demand if you need adjacent context):',
+    'Plan files for reference (read on demand if you need adjacent context — but do not enlarge scope into other tasks):',
     ...filePaths.map((p) => `  - ${p}`),
     '',
   );
@@ -69,6 +88,12 @@ function buildExecutePlanPrompt(
     'Implement the task fully. Follow any acceptance criteria, file paths, and',
     'constraints in the plan section above. If you cannot find or understand',
     'the task, report that explicitly and do not implement anything.',
+    '',
+    EXECUTE_PLAN_SCOPE_RULE,
+    '',
+    EXECUTE_PLAN_FAILURE_MODES,
+    '',
+    PLAN_FIDELITY_REMINDER,
     '',
     // Tool sweep #12: share spec + quality reviewer rubric so the
     // worker self-aligns on what each reviewer will judge against.
