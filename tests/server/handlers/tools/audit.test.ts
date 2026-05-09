@@ -16,7 +16,7 @@ describe('POST /audit handler', () => {
     try {
       const body = {
         document: 'function foo() { return 1; }',
-        auditType: 'correctness',
+        auditType: 'default',
       };
       const res = await fetch(`${s.url}/audit?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
@@ -38,7 +38,7 @@ describe('POST /audit handler', () => {
     }
   });
 
-  it('returns 400 invalid_request when auditType is missing', async () => {
+  it('accepts request with auditType omitted (Zod default fires to `default`)', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
@@ -46,16 +46,38 @@ describe('POST /audit handler', () => {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ document: 'some code' }),
+        body: JSON.stringify({ document: 'some prose to audit, more than a few words so the spec compiler does not balk.' }),
       });
 
-      expect(res.status).toBe(400);
-      const json = await res.json() as { error: { code: string } };
-      expect(json.error.code).toBe('invalid_request');
+      expect(res.status).toBe(202);
+      const json = await res.json() as { batchId: string };
+      expect(json.batchId).toBeTypeOf('string');
+    } finally {
+      await s.stop();
+    }
+  });
+
+  it('returns 400 invalid_request on legacy auditType values (correctness/style/general)', async () => {
+    const s = await startTestServerWithAgents();
+    const cwd = makeTmpCwd();
+    try {
+      for (const legacy of ['correctness', 'style', 'general']) {
+        const res = await fetch(`${s.url}/audit?cwd=${encodeURIComponent(cwd)}`, {
+          method: 'POST',
+          headers: {
+            "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+            Authorization: `Bearer ${s.token}`,
+            'content-type': 'application/json',
+          },
+          body: JSON.stringify({ document: 'code', auditType: legacy }),
+        });
+        expect(res.status, `legacy '${legacy}' should be rejected`).toBe(400);
+        const json = await res.json() as { error: { code: string } };
+        expect(json.error.code).toBe('invalid_request');
+      }
     } finally {
       await s.stop();
     }

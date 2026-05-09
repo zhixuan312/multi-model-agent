@@ -32,13 +32,42 @@ function isValidLineToken(token: string): boolean {
   return true;
 }
 
+/**
+ * Strip leading/trailing backticks from a `file:line` token.
+ *
+ * Workers commonly wrap the file:line portion in backticks for visual
+ * styling (e.g. `` `src/foo.ts:42` ``). The CITATION_RE matches the raw
+ * pattern, so strip the backticks before matching. Without this, every
+ * backtick-wrapped citation would be flagged as malformed even though
+ * the content is correct.
+ */
+function stripBacktickWrap(s: string): string {
+  // Strip a leading backtick if it exists, and a trailing backtick at the
+  // end of the file:line portion (just before the em-dash separator). We
+  // do this conservatively: only strip when both ends actually have a
+  // backtick at expected positions, to avoid mangling claims that
+  // legitimately contain backticks (e.g. `` `auditType` is a parameter ``).
+  let out = s;
+  // Leading backtick: `path:line` ...
+  if (out.startsWith('`')) {
+    const closeIdx = out.indexOf('`', 1);
+    // Only strip if the closing backtick comes BEFORE the em-dash separator
+    // (i.e. it wraps just the path:line portion, not the whole line).
+    const sepIdx = out.search(/\s+(?:—|--)\s+/);
+    if (closeIdx !== -1 && (sepIdx === -1 || closeIdx < sepIdx)) {
+      out = out.slice(1, closeIdx) + out.slice(closeIdx + 1);
+    }
+  }
+  return out;
+}
+
 export function parseCitations(rawLines: string[]): ParseCitationsResult {
   const citations: Citation[] = [];
   let malformed = 0;
   for (const raw of rawLines) {
     const trimmed = raw.trim();
     if (!trimmed) continue;
-    const stripped = trimmed.replace(BULLET_RE, '');
+    const stripped = stripBacktickWrap(trimmed.replace(BULLET_RE, ''));
     const match = stripped.match(CITATION_RE);
     if (!match || !match.groups) {
       malformed++;
@@ -70,7 +99,18 @@ const CONFIDENCE_HEAD_RE = /^(high|medium|low)(?:(?:\s+(?:—|--)\s+|:\s*)(.*))?
 export function parseConfidence(rawLines: string[]): Confidence | null {
   const firstIdx = rawLines.findIndex(l => l.trim());
   if (firstIdx === -1) return null;
-  const head = rawLines[firstIdx]!.trim();
+  // Strip a leading wrapping backtick if the worker styled the level
+  // (e.g. "`high` — rationale"). This mirrors stripBacktickWrap in the
+  // citation parser; without it, a backtick-styled level token is
+  // flagged as malformed even though the content is correct.
+  let head = rawLines[firstIdx]!.trim();
+  if (head.startsWith('`')) {
+    const closeIdx = head.indexOf('`', 1);
+    const sepIdx = head.search(/\s+(?:—|--)\s+/);
+    if (closeIdx !== -1 && (sepIdx === -1 || closeIdx < sepIdx)) {
+      head = head.slice(1, closeIdx) + head.slice(closeIdx + 1);
+    }
+  }
   const m = head.match(CONFIDENCE_HEAD_RE);
   if (!m) return null;
   const level = m[1]!.toLowerCase() as 'high' | 'medium' | 'low';

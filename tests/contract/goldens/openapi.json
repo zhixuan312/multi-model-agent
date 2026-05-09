@@ -214,32 +214,14 @@
               "schema": {
                 "properties": {
                   "auditType": {
-                    "anyOf": [
-                      {
-                        "enum": [
-                          "security",
-                          "performance",
-                          "correctness",
-                          "style",
-                          "general"
-                        ],
-                        "type": "string"
-                      },
-                      {
-                        "items": {
-                          "enum": [
-                            "security",
-                            "performance",
-                            "correctness",
-                            "style"
-                          ],
-                          "type": "string"
-                        },
-                        "minItems": 1,
-                        "type": "array"
-                      }
+                    "default": "default",
+                    "description": "Audit focus. `default` is the comprehensive sweep — recommended for specs, plans, designs, recommendation docs, post-mortems. Use `security` or `performance` only when you specifically want to narrow the lens to that single dimension (threat models, scaling designs).",
+                    "enum": [
+                      "default",
+                      "security",
+                      "performance"
                     ],
-                    "description": "Audit focus."
+                    "type": "string"
                   },
                   "contextBlockIds": {
                     "description": "IDs from register_context_block to prepend to prompt. Use for delta audits, diff-scoped reviews, or shared specs.",
@@ -260,9 +242,6 @@
                     "type": "array"
                   }
                 },
-                "required": [
-                  "auditType"
-                ],
                 "type": "object"
               }
             }

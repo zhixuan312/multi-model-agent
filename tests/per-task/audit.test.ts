@@ -75,7 +75,7 @@ function makeCtx() {
 async function executeAuditFixture() {
   mockCreateProvider.mockImplementation((slot: string) => makeProvider(slot));
   const ctx = makeCtx();
-  const input = { auditType: 'correctness' as const, filePaths: ['/tmp/spec.md'] };
+  const input = { auditType: 'default' as const, filePaths: ['/tmp/spec.md'] };
   return executeTask(toolConfig, ctx, input);
 }
 

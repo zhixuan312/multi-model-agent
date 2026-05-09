@@ -23,7 +23,7 @@ function compileAuditPrompts(input: { document?: string; filePaths?: string[]; a
 async function dispatchAuditFixture({ runner }: { runner: MockRunner }) {
   const drafts = compileAuditPrompts({
     document: '# Test Specification\n\nThis is a test document for behavioral scope-contract verification.',
-    auditType: 'correctness',
+    auditType: 'default',
   });
   const results = await Promise.all(drafts.map((d) => runner.run(d.prompt)));
   return { results, drafts };
@@ -42,7 +42,7 @@ describe('audit prompt scope contract (§6.1 AC)', () => {
   });
 
   it('includes the scope contract in the compiled prompt', () => {
-    const drafts = compileAuditPrompts({ document: '# Test', auditType: 'correctness' });
+    const drafts = compileAuditPrompts({ document: '# Test', auditType: 'default' });
     for (const draft of drafts) {
       expect(draft.prompt).toContain('Do NOT enumerate the repository');
       expect(draft.prompt).toContain('the goal is to evaluate the document, not catalog the codebase');

@@ -5,12 +5,83 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-05-09
+
+### Changed
+
+- **`mma-delegate` prompt rewritten for smallest-complete-change discipline.** The delegate's purpose is now explicitly framed around the reviewer's standard — the diff should be minimal AND complete simultaneously. Prompt now includes:
+  - An orientation block at the top naming the success criterion (reviewer would approve without flagging gaps or extras) and the file-constraint semantics (non-existent paths in `filePaths` are OUTPUT TARGETS; files outside the list are off-limits to write).
+  - A 9-category failure-mode taxonomy (scope creep, silent partial fix, wrong file target, phantom test pass, cross-cutting damage, convention drift, incomplete refactor, spec overreach, undocumented assumption).
+  - A completeness reminder counter-balancing the worker's tendency to either bloat (extra refactor / cleanup) or skim (declared done with regression test missing). Includes a brief-vs-diff walk: for every brief item, locate the diff hunk that satisfies it; for every diff hunk, name the brief item it satisfies. Both directions must close.
+  - A worked example walking the bug-fix-plus-regression-test pattern: naive worker rewrites a function clean and skips the test (SILENT PARTIAL FIX + SCOPE CREEP); correct worker changes one line, adds one test, runs the verifyCommand, stops.
+- **Strengthened file-constraint clause.** Replaced the one-line *"write your code to exactly these file path(s)…"* with a contract that distinguishes existing files (modify), non-existent paths in `filePaths` (create), and files outside the list (off-limits unless the brief's task genuinely requires it — and call out the deviation in the summary).
+
+- **`mma-execute-plan` prompt rewritten for fidelity-first plan execution.** The execute-plan's purpose is now explicitly framed around the plan author's standard — the diff should make the author say "yes, that's exactly what I wrote", not "close, but with liberties". Prompt now includes:
+  - An orientation block at the top naming the success criterion (plan-author fidelity, not "good code") and explicit fidelity rules (follow the plan exactly, use code blocks verbatim, do not redesign / substitute / improve).
+  - A 9-category failure-mode taxonomy (plan rewrite, step skip, step reorder, code substitution, acceptance-criteria overrun, acceptance-criteria underrun, wrong-task match, cross-task contamination, problem-not-flagged).
+  - A plan-fidelity reminder counter-balancing the worker's usual "improve it" instinct, with a code-block faithfulness walk and worked example demonstrating CODE SUBSTITUTION (a worker who renames `parse` to `parseTokens` "for clarity" breaks the import contract the plan established).
+  - A scope rule explicitly forbidding cross-task contamination (other tasks have other workers; touching their files creates merge conflicts and ownership ambiguity).
+- **Restored discipline lines that the slot-style refactor dropped.** The legacy `compileExecutePlan` function had load-bearing lines like *"Follow the plan exactly as written. If the plan provides code blocks, use them verbatim. Do not redesign, do not substitute your own approach. The plan was written by a higher-capability model — your job is to execute it faithfully."* The newer slot-style `buildExecutePlanPrompt` (the canonical path used by the v4 ToolConfig) had silently dropped these. They are now back, integrated into `EXECUTE_PLAN_PURPOSE_ORIENTATION`.
+
+- **`mma-investigate` prompt rewritten for answer-and-act calibration.** The investigate's purpose is now explicitly framed as the loop where the caller acts on the answer — wrong file paths become bugs, stale quotes become wrong edits, overstated confidence becomes misallocated effort. Prompt now includes:
+  - An orientation block at the top naming the success criterion (caller acts on this answer literally; would they end up with correct code?) and the four required guarantees per claim (file:line, read this session, every link of synthesis cited, confidence reflects evidence).
+  - An 8-category failure-mode taxonomy (wrong file, stale quote, hallucinated citation, confidence overstatement, citation gap, question shift, synthesis without grounding, assumed-current-state).
+  - A confidence-discipline reminder explicitly distinguishing evidence strength from assertion strength, plus a citation-chain walk with worked example showing how to verify a claim by reading both the import line and the consumer line.
+  - Updated annotator template requiring negative findings to be explicit ("searched X in Y, not found"), validating that cited lines were read in the current session, and accepting inference-with-citations as fully valid (vs. downgrading as speculation).
+
+### Fixed
+
+- **Investigate report parser tolerates backtick-wrapped citations and confidence levels.** Workers commonly wrap the `path:line` portion of a citation bullet (e.g. `` `src/foo.ts:42` — claim ``) or the confidence level (`` `high` — rationale ``) in backticks for visual styling. The previous parser rejected these as malformed, producing 0-citation / unparseable-confidence terminal envelopes despite correct semantic content. The parser now strips a single pair of leading/trailing backticks before matching, conservatively scoped so it does not mangle claims that legitimately contain backticks. Citation format spec updated to clarify that backticks are tolerated but not canonical.
+
+- **`mma-verify` prompt rewritten for false-claim-gate verification.** The verify's purpose is now explicitly framed as the "are we lying when we say it is done?" gate — every PASS becomes evidence trail behind a stakeholder claim, and a wrong PASS ships a false claim. Prompt now includes:
+  - An orientation block at the top naming the success criterion (re-verifiable PASS by stakeholder) and three valid evidence shapes (EXECUTION, FILE-LEVEL, NEGATIVE).
+  - A 7-category failure-mode taxonomy (claim-without-evidence, stale evidence, implicit-criterion gap, partial coverage, conflated criteria, wrong-artifact evidence, assumed-PASS-on-untested).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint with an evidence-shape walk and worked example demonstrating implicit-sub-criterion detection.
+  - Updated evidence rules accepting NEGATIVE evidence ("cannot verify from this artifact, would need X") as the correct verdict for unverifiable claims, no longer collapsing them to assumed-PASS or skipped.
+  - Updated annotator template explicitly accepting NEGATIVE-evidence FAILs as fully valid and rejecting prose-claim PASSes as rubber stamps.
+  - Per-finding output format expanded to require an Evidence shape (was: file:line OR command output).
+- **Effect** (validated on two real-world dispatches against the audit-prompt rewrite this release): truthful 6-item checklist returned 6/6 PASS with file:line and execution-output evidence; 6-item checklist with 4 deliberately-false claims mixed in returned 2/6 PASS with all 4 FAILs at `critical` severity and accurate detection of subtle distinctions like display-text vs enum-value (WRONG-ARTIFACT-EVIDENCE category). 0 rubber-stamps across both runs.
+
+- **`mma-debug` prompt rewritten for symptom-vs-cause-first debugging.** The debug's purpose is now explicitly framed as producing a fix specification a maintainer can apply WITHOUT redoing the investigation. Prompt now includes:
+  - An orientation block at the top naming the success criterion (replace, not augment, the maintainer's root-cause work) and the six required output fields per finding (Reproduction, Symptom, Trace, Cause, Fix, Falsifier).
+  - A 9-category failure-mode taxonomy (symptom-not-cause, scapegoat file, incomplete trace, untested hypothesis, parallel causes, pre-existing-vs-new entanglement, wrong fix scope, missing reproduction, confidence overstatement).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint, with a symptom→cause walk and worked example tracing a TypeError from a failing test assertion upstream through a route handler to the actual cause in a fixture loader.
+  - Updated evidence rules requiring at least three citations per finding (symptom → intermediate state → cause), each with `file:line`. Findings without a falsifier are guesses, not findings.
+  - Updated annotator template explicitly accepting partial-evidence hypotheses with marked gaps as fully valid (debug is speculation narrowed by evidence; hand-waving is the failure mode, not careful gap-marking) and rejecting findings where the cited cause is not upstream of the cited symptom.
+  - Per-finding output format now prompts for Reproduction / Symptom / Trace / Cause / Fix / Falsifier (was: Hypothesis / Evidence / Fix only).
+- **Effect** (validated on a synthetic 4-file Python target with a known symptom-vs-cause separation): worker correctly identified the upstream cause (`discount.py:17` — missing fraction-to-percent conversion) rather than the symptom (`tests/test_handler.py:22` — assertion failure) or the algebraic surface (`discount.py:18` — math expression that is correct given its inputs). 5-step trace, full reproduction + falsifier, HIGH severity calibrated to evidence strength.
+
+- **`mma-review` prompt rewritten for merge-safety-first reviewing.** The review's purpose is now explicitly framed as the pre-merge gate where the maintainer's verdict is treated as authoritative — a miss ships a regression. Prompt now includes:
+  - An orientation block at the top naming the success criterion (merge safety) and 10 specific failure-mode triggers a careful maintainer would scan for.
+  - A 10-category failure-mode taxonomy (test gap, cross-file ripple, pre-existing-bug-vs-new-regression separation, missing edge case, race / concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint, with a cross-file pass and worked example walking `changed symbol → grep → broken caller`.
+  - Updated evidence rules accepting cross-file ripple findings (with call-site references) and test-gap findings (with sibling test-file references) as fully valid — no longer downgraded as "speculation about untouched files."
+  - Per-focus done conditions rewritten to apply the full taxonomy through each lens; security/correctness/performance now apply to every change regardless of `focus`.
+- **Effect**: across three real-source-file dispatches, prompt produces accurate findings with 0 false positives. Cross-file ripple pass actually executes when a diff is provided via `code` field, identifying changed symbols and verifying each call site.
+- **`mma-review` SKILL.md updated** to lead with the pre-merge-gate framing and document the diff-as-input pattern for cross-file ripple detection.
+
+### BREAKING
+
+- **`auditType` schema collapsed to `'default' | 'security' | 'performance'`.** The legacy values `correctness`, `style`, `general` and the array form (`['correctness', 'style']` etc.) are removed — they were a false dichotomy that biased workers toward stylistic proofreading on prose artifacts. Sending any legacy value now returns `400 invalid_request`. Migration: use `default` (or omit the field) for the comprehensive sweep; use `security`/`performance` only when you specifically want to narrow the lens to that single dimension. The `auditType` field is now optional with a default of `default`.
+
+### Changed
+
+- **`mma-audit` prompt rewritten for executability-first auditing.** The audit's purpose is now explicitly framed as "make the artifact executable by a low-judgment worker who follows instructions literally." Prompt now includes:
+  - An orientation block at the top naming the success criterion (executability) and 10 specific failure-mode triggers a literal-following worker would hit.
+  - An 11-category failure-mode taxonomy (recommendation-coherence, internal contradiction, cross-item duplication, independence-claimed-without-evidence, argument soundness, completeness-against-constraints, fix actionability, drift / staleness, scope-creep / framing, structural consistency, metadata completeness).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint (which is calibrated for code-review, not prose-document audits where under-finding is the typical failure).
+  - A required principle-mapping pass when the doc has a principles/constraints section, with a worked example that walks `recommendation → constraint → infeasibility`.
+  - A fourth valid evidence shape: **internal-coherence** (cross-section reasoning), accepted by the annotator without being downgraded as "speculation."
+- **Effect** (measured on a 22 KB recommendations doc): old prompt produced 16 findings across 4 rounds, 0 critical / 0 high / 3 medium / 13 low — almost all stylistic. New prompt produces 9 findings in a single round at 3 critical / 0 high / 3 medium / 3 low — load-bearing executability blockers.
+- **`mma-audit` SKILL.md rewritten** to lead with the executability framing and document the new 3-value `auditType` enum.
+
 ## [4.0.6] - 2026-05-09
 
 ### Fixed
 
 - **`agentType` per-task override honored in delegate routing (core).** `task-executor.ts` resolved one agent per batch using `config.agentType` (each tool's hardcoded default), so delegate's per-task `agentType: 'complex'` request was silently dropped — every task ran on the standard tier regardless of caller intent. Provider was now resolved per task via `task.agentType ?? config.agentType`. Other tools' `buildTaskSpec` already hardcodes their tier (audit/review/verify/debug/investigate/research → complex, execute-plan → standard, retry → inherits original), so this change preserves the policy that delegate is the only tool letting the main agent choose its tier. Added an `agent_not_configured` error path so a misconfigured tier on one task fails just that task rather than the whole batch.
 
+[4.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.6...v4.1.0
 [4.0.6]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...v4.0.6
 
 ## [4.0.5] - 2026-05-09

@@ -1,7 +1,7 @@
 ---
 name: mma-audit
-description: Use when the user asks to audit a document, spec, config, or PR description for security, correctness, performance, or style issues — and 2+ files need independent audit passes
-when_to_use: User asks for a doc/spec/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code.
+description: Use when the user asks to audit a spec, plan, design doc, recommendation doc, or config — the audit checks whether a literal-following worker could execute the artifact without ambiguity, contradiction, or missing context. Default is the comprehensive sweep; narrow lenses (security/performance) exist for cases that want only one dimension.
+when_to_use: User asks for a doc/spec/plan/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,15 +9,15 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Send a document or set of files to workers for structured auditing. Each file is audited independently in parallel; per-file results are indexed by path in the terminal envelope.
+Send a spec, plan, design doc, or recommendation doc to a worker for structured auditing. The audit's purpose is to make the artifact **executable by a low-judgment worker** — meaning a sub-agent that follows instructions literally and cannot disambiguate. Findings target executability blockers: ambiguity, internal contradictions, unspecified branches, missing verification, overloaded terms, out-of-order steps.
 
 **Core principle:** One worker per file = no cross-file context pollution. The aggregator (you) decides what to do with the findings.
 
 ## When to Use
 
 **Use when:**
-- A spec / design doc / API contract / config file needs a critical read
-- The audit type is `security`, `performance`, `correctness`, or `style` (or a combination)
+- A spec, plan, design doc, recommendation doc, or post-mortem needs a critical read
+- The artifact will subsequently be executed by a worker (or any reader who follows it literally)
 - 2+ files would benefit from parallel audit
 
 **Don't use when:**
@@ -36,7 +36,7 @@ Send a document or set of files to workers for structured auditing. Each file is
 ```json
 {
   "document": "inline content to audit (optional if filePaths given)",
-  "auditType": "correctness",
+  "auditType": "default",
   "filePaths": ["/project/docs/spec.md"],
   "contextBlockIds": []
 }
@@ -45,13 +45,23 @@ Send a document or set of files to workers for structured auditing. Each file is
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `document` | string | no | Inline document content |
-| `auditType` | string \| string[] | yes | `security`, `performance`, `correctness`, `style`, or `general`; or an array of the first four |
+| `auditType` | `'default' \| 'security' \| 'performance'` | no (defaults to `'default'`) | See "Picking auditType" below — `default` is right for ~90% of audits |
 | `filePaths` | string[] | no | Files to audit (one worker per file, parallel) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
 Either `document` or `filePaths` (or both) must be provided.
 
 > Worker tier for `mma-audit` is hardcoded to `complex` and is not caller-configurable. Sending `agentType` is rejected with HTTP 400.
+
+### Picking auditType
+
+| Value | When to use |
+|---|---|
+| `default` (or omit the field) | **Right answer for ~90% of audits.** Spec, plan, design doc, recommendation doc, post-mortem, audit, brief, README — any prose artifact. Sweeps the full executability + correctness + clarity taxonomy with security and performance lenses applied. |
+| `security` | Narrow opt-in. Use ONLY when you specifically want security findings and not general audit findings (e.g., a threat model where stylistic noise is unwanted). |
+| `performance` | Narrow opt-in. Use ONLY when you specifically want performance findings (e.g., a scaling design where you want hot-path / latency / unbounded-loop findings only). |
+
+The legacy values `correctness`, `style`, and `general` no longer exist — they were a false dichotomy. Sending any of them returns `400 invalid_request` with a hint to use `default`.
 
 ## Full example
 
@@ -61,7 +71,7 @@ BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"auditType":"correctness","filePaths":["/project/docs/api-spec.md"]}' \
+  -d '{"auditType":"default","filePaths":["/project/docs/api-spec.md"]}' \
   "http://localhost:$PORT/audit?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
@@ -124,8 +134,8 @@ The auditor lacks codebase context (no type info, no call-site lookup, no test a
 ❌ **Single huge `document` string instead of `filePaths`**
 Inline docs lose the file boundary, so the per-file parallel split degenerates to one worker. **Fix:** save to disk first, pass `filePaths`.
 
-❌ **Asking for `auditType: "general"` when you mean something specific**
-`"general"` is a catch-all that produces watery findings. **Fix:** pick the dimension you actually care about (`"correctness"` for spec gaps, `"security"` for threat models, etc.).
+❌ **Sending legacy auditType values (`correctness`, `style`, `general`)**
+These were removed — they were a false dichotomy that biased workers toward stylistic proofreading on prose artifacts. **Fix:** use `default` (or omit the field). Use `security` or `performance` only when you specifically want a narrow lens.
 
 ❌ **Re-auditing the same files round after round without delta context**
 Round 2 worker has no idea what round 1 found. **Fix:** register the round 1 findings as a context block (`mma-context-blocks`) and pass `contextBlockIds` to round 2.

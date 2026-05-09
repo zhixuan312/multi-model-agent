@@ -10,9 +10,12 @@ import { investigateHeadlineTemplate } from '../../reporting/headline-templates/
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import {
+  INVESTIGATE_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_INVESTIGATE,
   SCOPE_RULE_INVESTIGATE,
   ANNOTATOR_AWARENESS_INVESTIGATE,
+  INVESTIGATE_FAILURE_MODES,
+  CONFIDENCE_REMINDER_INVESTIGATE,
 } from './implementer-criteria.js';
 
 export function registerInvestigate(registry: ToolSurfaceRegistry): void {
@@ -65,6 +68,12 @@ export interface InvestigateBrief {
 
 function compilePrompt(input: EnrichedInvestigateInput): string {
   const promptParts: string[] = [];
+  // Orientation goes FIRST — the worker needs to know why this
+  // investigation exists (caller will act on this answer; wrong file
+  // path becomes a bug) before reading the format spec / taxonomy.
+  // Without it, workers default to plausible-sounding answers with
+  // shaky citations.
+  promptParts.push(INVESTIGATE_PURPOSE_ORIENTATION);
   promptParts.push(
     [
       'Produce an investigation report in this EXACT structured format. The deterministic',
@@ -75,14 +84,15 @@ function compilePrompt(input: EnrichedInvestigateInput): string {
       'One paragraph stating the answer to the question, in plain prose.',
       '',
       '## Citations',
-      'One bullet per evidence item, in this exact format:',
-      '`- file/path.ts:LINE — claim` (em-dash, OR `--` is also accepted)',
-      'Use a `LINE-LINE` range when an evidence span covers multiple lines.',
-      'If the question is fully project-level (no code evidence applies), write `(none)`',
-      'on its own line — but only when Confidence is `low`.',
+      'One bullet per evidence item. Each bullet must start with `-` and contain `<file>:<LINE> — <claim>` (em-dash, OR `--` is also accepted). The parser tolerates an optional pair of backticks wrapping the path:line portion (e.g. `` `src/foo.ts:42` — claim ``) but the canonical form is without backticks.',
+      'Examples (use either form):',
+      '  - src/foo.ts:42 — claim about line 42',
+      '  - src/foo.ts:42-58 — claim about a span',
+      'Use a LINE-LINE range when an evidence span covers multiple lines.',
+      'If the question is fully project-level (no code evidence applies), write `(none)` on its own line — but only when Confidence is `low`.',
       '',
       '## Confidence',
-      'One of `high`, `medium`, or `low`, optionally followed by ` — <one-line rationale>`.',
+      'One of high, medium, or low, optionally followed by ` — <one-line rationale>`. Do NOT wrap the level in backticks; emit it as plain text.',
       '',
       '## Unresolved',
       'Optional bullets describing follow-up questions; write `(none)` if there are none.',
@@ -110,7 +120,13 @@ function compilePrompt(input: EnrichedInvestigateInput): string {
   // but evidence-grounding + scope-discipline + annotator-awareness
   // apply just as much. Workers that cite hallucinated lines or
   // speculate about unread files now have the rubric inline.
-  promptParts.push(EVIDENCE_RULE_INVESTIGATE, SCOPE_RULE_INVESTIGATE, ANNOTATOR_AWARENESS_INVESTIGATE);
+  promptParts.push(
+    INVESTIGATE_FAILURE_MODES,
+    CONFIDENCE_REMINDER_INVESTIGATE,
+    EVIDENCE_RULE_INVESTIGATE,
+    SCOPE_RULE_INVESTIGATE,
+    ANNOTATOR_AWARENESS_INVESTIGATE,
+  );
   return promptParts.join('\n\n');
 }
 

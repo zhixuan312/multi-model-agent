@@ -7,10 +7,9 @@ import { buildOutputEnvelopeSchema } from '../shared-output.js';
 // cross-package coupling.
 export const inputSchema = z.object({
   document: z.string().optional().describe('Inline document content to audit'),
-  auditType: z.union([
-    z.enum(['security', 'performance', 'correctness', 'style', 'general']),
-    z.array(z.enum(['security', 'performance', 'correctness', 'style'])).min(1),
-  ]).describe('Audit focus.'),
+  auditType: z.enum(['default', 'security', 'performance'])
+    .default('default')
+    .describe('Audit focus. `default` is the comprehensive sweep — recommended for specs, plans, designs, recommendation docs, post-mortems. Use `security` or `performance` only when you specifically want to narrow the lens to that single dimension (threat models, scaling designs).'),
   filePaths: z.array(z.string()).optional()
     .describe('Files the sub-agent should focus on. Multiple files are processed in parallel.'),
   contextBlockIds: z.array(z.string()).optional()

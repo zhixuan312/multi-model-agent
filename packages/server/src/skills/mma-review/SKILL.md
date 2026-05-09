@@ -9,9 +9,11 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Send code files to workers for structured review. Each file is reviewed independently in parallel; results are index-aligned with `filePaths`.
+mma-review is the **pre-merge gate**. Send code files (or a diff) to a worker for structured review against an executability bar: would a maintainer who reads only the verdict and the diff understand which changes are required, why each is required, and where each lives — well enough to apply the fix and re-merge without re-investigating?
 
-**Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses.
+Each file is reviewed independently in parallel; results are index-aligned with `filePaths`.
+
+**Core principle:** Reviewer is a different model from the implementer — different training, different blind spots. Cross-model review catches what self-review misses. The reviewer runs against a 10-category failure-mode taxonomy (test gap, cross-file ripple, missing edge case, race, resource leak, backward-compat break, security/performance regression, implicit-contract assumption, pre-existing-bug-vs-new-regression separation) and weighs every change through the security, performance, and correctness lenses regardless of `focus`.
 
 ## When to Use
 
@@ -25,6 +27,13 @@ Send code files to workers for structured review. Each file is reviewed independ
 - The thing being reviewed is prose / spec / config → `mma-audit` (better-suited prompt template)
 - You want to know whether a complete branch is mergeable → run `/ultrareview` (multi-model branch review) instead
 - The diff is one-line / one-character → reading inline is faster than dispatch
+
+## How to invoke for cross-file ripple detection
+
+The cross-file ripple pass (changed-symbol → broken caller) only fires when the worker can identify what changed. Two patterns:
+
+- **Diff-as-input (preferred for cross-file ripple)**: pass the diff via the `code` field, plus the named files via `filePaths`. The worker treats the diff as the change-set and greps for callers of changed public symbols.
+- **Files-only (static review)**: pass only `filePaths`. The worker reviews the files in their current state without a change-set, so cross-file ripple is degenerate. Test gap, missing edge case, race, leak, and security/performance findings still fire.
 
 ## Endpoint
 

@@ -9,9 +9,12 @@ import { verifyHeadlineTemplate } from '../../reporting/headline-templates/verif
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
+  VERIFY_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_VERIFY,
   SCOPE_RULE_VERIFY,
   ANNOTATOR_AWARENESS_VERIFY,
+  VERIFY_FAILURE_MODES,
+  THOROUGHNESS_REMINDER_VERIFY,
 } from './implementer-criteria.js';
 
 export function registerVerify(registry: ToolSurfaceRegistry): void {
@@ -42,13 +45,19 @@ export interface VerifyBrief {
 // ── Prompt builders (lifted from legacy executor) ──
 
 const FINDING_FORMAT_INSTRUCTIONS = [
+  // Orientation goes FIRST — the worker needs to know why this verify
+  // exists (false-claim gate, every PASS must be re-verifiable) before
+  // reading the format spec / taxonomy / evidence rules. Without it,
+  // workers default to rubber-stamping based on prose claims.
+  VERIFY_PURPOSE_ORIENTATION,
+  '',
   'For each checklist item, use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title (the criterion summary)>',
   '- Severity: critical | high | medium | low (use `low` for PASS items; `medium` or `high` for FAIL items per impact)',
   '- Item: the criterion text',
   '- Result: PASS or FAIL',
-  '- Evidence: file:line + what it shows, OR command + output',
+  '- Evidence: EXECUTION (command + observed output), FILE-LEVEL (file:line + quoted excerpt), or NEGATIVE ("cannot verify from this artifact, would need X")',
   '',
   '## Finding 2: <one-line title>',
   '- Severity: ...',
@@ -63,6 +72,16 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   // the SEVERITY_LADDER below explains the ladder; here we just bind:
   // PASS -> low, FAIL -> medium/high based on impact.
   SEVERITY_LADDER,
+  '',
+  // Verify failure-mode taxonomy. Without this block, workers tend to
+  // rubber-stamp PASS based on prose claims instead of demanding
+  // execution-level evidence. The 7 categories enumerate the ways a
+  // verifier can ship a false claim.
+  VERIFY_FAILURE_MODES,
+  '',
+  // Counter-balances the SEVERITY_LADDER's anti-inflation hint and
+  // includes the evidence-shape walk with worked example.
+  THOROUGHNESS_REMINDER_VERIFY,
   '',
   EVIDENCE_RULE_VERIFY,
   '',
