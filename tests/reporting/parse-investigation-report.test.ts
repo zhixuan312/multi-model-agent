@@ -242,4 +242,24 @@ describe('parseInvestigationReport — additional contracts', () => {
     expect(r.investigation.citations.length).toBe(1);
     expect(r.investigation.diagnostics.malformedCitationLines).toBe(1);
   });
+
+  it('tolerates backtick-wrapped path:line in citation bullets', () => {
+    const r = parseCitations([
+      '- `src/foo.ts:42` — claim about line 42',
+      '- `packages/core/src/tools/audit/schema.ts:9` — auditType enum',
+    ]);
+    expect(r.citations.length).toBe(2);
+    expect(r.citations[0]!.file).toBe('src/foo.ts');
+    expect(r.citations[0]!.lines).toBe('42');
+    expect(r.citations[1]!.file).toBe('packages/core/src/tools/audit/schema.ts');
+    expect(r.citations[1]!.lines).toBe('9');
+    expect(r.malformedCitationLines).toBe(0);
+  });
+
+  it('tolerates backtick-wrapped confidence level (smoke-test via full parse)', () => {
+    const out = '## Summary\nx\n## Citations\n- src/a.ts:1 — c\n## Confidence\n`high` — read this session, no ambiguity\n';
+    const r = parseInvestigationReport(out);
+    if (r.kind !== 'structured_report') throw new Error();
+    expect(r.investigation.confidence?.level).toBe('high');
+  });
 });

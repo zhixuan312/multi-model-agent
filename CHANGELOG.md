@@ -9,6 +9,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`mma-investigate` prompt rewritten for answer-and-act calibration.** The investigate's purpose is now explicitly framed as the loop where the caller acts on the answer — wrong file paths become bugs, stale quotes become wrong edits, overstated confidence becomes misallocated effort. Prompt now includes:
+  - An orientation block at the top naming the success criterion (caller acts on this answer literally; would they end up with correct code?) and the four required guarantees per claim (file:line, read this session, every link of synthesis cited, confidence reflects evidence).
+  - An 8-category failure-mode taxonomy (wrong file, stale quote, hallucinated citation, confidence overstatement, citation gap, question shift, synthesis without grounding, assumed-current-state).
+  - A confidence-discipline reminder explicitly distinguishing evidence strength from assertion strength, plus a citation-chain walk with worked example showing how to verify a claim by reading both the import line and the consumer line.
+  - Updated annotator template requiring negative findings to be explicit ("searched X in Y, not found"), validating that cited lines were read in the current session, and accepting inference-with-citations as fully valid (vs. downgrading as speculation).
+
+### Fixed
+
+- **Investigate report parser tolerates backtick-wrapped citations and confidence levels.** Workers commonly wrap the `path:line` portion of a citation bullet (e.g. `` `src/foo.ts:42` — claim ``) or the confidence level (`` `high` — rationale ``) in backticks for visual styling. The previous parser rejected these as malformed, producing 0-citation / unparseable-confidence terminal envelopes despite correct semantic content. The parser now strips a single pair of leading/trailing backticks before matching, conservatively scoped so it does not mangle claims that legitimately contain backticks. Citation format spec updated to clarify that backticks are tolerated but not canonical.
+
 - **`mma-verify` prompt rewritten for false-claim-gate verification.** The verify's purpose is now explicitly framed as the "are we lying when we say it is done?" gate — every PASS becomes evidence trail behind a stakeholder claim, and a wrong PASS ships a false claim. Prompt now includes:
   - An orientation block at the top naming the success criterion (re-verifiable PASS by stakeholder) and three valid evidence shapes (EXECUTION, FILE-LEVEL, NEGATIVE).
   - A 7-category failure-mode taxonomy (claim-without-evidence, stale evidence, implicit-criterion gap, partial coverage, conflated criteria, wrong-artifact evidence, assumed-PASS-on-untested).
