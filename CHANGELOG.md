@@ -5,6 +5,14 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.6] - 2026-05-09
+
+### Fixed
+
+- **`agentType` per-task override honored in delegate routing (core).** `task-executor.ts` resolved one agent per batch using `config.agentType` (each tool's hardcoded default), so delegate's per-task `agentType: 'complex'` request was silently dropped — every task ran on the standard tier regardless of caller intent. Provider was now resolved per task via `task.agentType ?? config.agentType`. Other tools' `buildTaskSpec` already hardcodes their tier (audit/review/verify/debug/investigate/research → complex, execute-plan → standard, retry → inherits original), so this change preserves the policy that delegate is the only tool letting the main agent choose its tier. Added an `agent_not_configured` error path so a misconfigured tier on one task fails just that task rather than the whole batch.
+
+[4.0.6]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...v4.0.6
+
 ## [4.0.5] - 2026-05-09
 
 ### BREAKING
@@ -1397,7 +1405,7 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.6...HEAD
 [4.0.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2

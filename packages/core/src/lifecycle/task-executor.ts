@@ -44,10 +44,7 @@ export async function executeTask<Input, Brief, Report>(
     return emptyEnvelope(config.name, ctx);
   }
 
-  // ── Step 2: Resolve agent ──
-  const resolved = resolveAgent(config.agentType, ctx.config);
-
-  // ── Step 3: Build TaskSpecs from briefs, then expand contextBlockIds ──
+  // ── Step 2: Build TaskSpecs from briefs, then expand contextBlockIds ──
   // Gap 1 cache-invariant fix (4.0.3+): batch cache MUST store the EXPANDED,
   // contextBlockIds-stripped task. If we cache the original (with
   // contextBlockIds) and the contextBlockStore loses entries before retry,
@@ -61,6 +58,22 @@ export async function executeTask<Input, Brief, Report>(
       : built;
   });
 
+  // ── Step 3: Resolve agent per task ──
+  // Each task's agentType (set by the brief slot) selects its provider.
+  // For tools where agentTypeOverridable=false, every brief carries the
+  // tool default and this collapses to one resolution per agent slot;
+  // for tools where it's true (delegate, retry), this honors per-task
+  // overrides instead of forcing the whole batch onto one tier.
+  const resolvedPerTask = tasks.map((task) => {
+    try {
+      return resolveAgent(task.agentType ?? config.agentType, ctx.config);
+    } catch (err) {
+      return {
+        error: err instanceof Error ? err.message : String(err),
+      } as const;
+    }
+  });
+
   // Store TaskSpecs in the per-project batch cache so retry can
   // reconstruct original tasks without re-invoking the brief slot.
   // (Tasks here are already expanded — see comment above.)
@@ -72,15 +85,54 @@ export async function executeTask<Input, Brief, Report>(
   const mainModel = ctx.mainModel;
   const startMs = Date.now();
 
-  let results: RunResult[];
-  if (tasks.length === 1) {
-    // Single task: dispatch directly.
+  const buildCrashResult = (msg: string): RunResult => ({
+    output: '',
+    status: 'error' as const,
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: false,
+    escalationLog: [],
+    parsedFindings: null,
+    error: msg,
+    errorCode: 'runner_crash',
+    retryable: false,
+    durationMs: Date.now() - startMs,
+    structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
+    workerStatus: 'failed' as const,
+  });
+
+  const buildAgentNotConfiguredResult = (msg: string): RunResult => ({
+    output: '',
+    status: 'error' as const,
+    usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+    turns: 0,
+    filesRead: [],
+    filesWritten: [],
+    toolCalls: [],
+    outputIsDiagnostic: false,
+    escalationLog: [],
+    parsedFindings: null,
+    error: msg,
+    errorCode: 'agent_not_configured',
+    retryable: false,
+    durationMs: Date.now() - startMs,
+    workerStatus: 'failed' as const,
+  });
+
+  const dispatchOne = async (task: TaskSpec, i: number): Promise<RunResult> => {
+    const r = resolvedPerTask[i]!;
+    if ('error' in r) {
+      return buildAgentNotConfiguredResult(r.error);
+    }
     try {
-      const result = await runTaskViaDispatcher({
-        task: tasks[0]!,
-        resolved,
+      return await runTaskViaDispatcher({
+        task,
+        resolved: r,
         config: ctx.config,
-        taskIndex: 0,
+        taskIndex: i,
         batchId: ctx.batchId,
         recordHeartbeat: ctx.recordHeartbeat,
         logger: ctx.logger,
@@ -95,82 +147,19 @@ export async function executeTask<Input, Brief, Report>(
         reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
         annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
       });
-      results = [result];
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
       // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,
       // including failure envelopes. Pre-fix, error envelopes carried
       // durationMs:0 — failed runs were invisible in cost-per-time
       // analysis, retry budgeting, and operator debugging.
-      results = [
-        {
-          output: '',
-          status: 'error' as const,
-          usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: false,
-          escalationLog: [],
-          parsedFindings: null,
-          error: msg,
-          errorCode: 'runner_crash',
-          retryable: false,
-          durationMs: Date.now() - startMs,
-          structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
-          workerStatus: 'failed' as const,
-        },
-      ];
+      return buildCrashResult(e instanceof Error ? e.message : String(e));
     }
-  } else {
-    // Fan-out: dispatch all tasks in parallel.
-    results = await Promise.all(
-      tasks.map((task, i) =>
-        runTaskViaDispatcher({
-          task,
-          resolved,
-          config: ctx.config,
-          taskIndex: i,
-          batchId: ctx.batchId,
-          recordHeartbeat: ctx.recordHeartbeat,
-          logger: ctx.logger,
-          verbose: ctx.verbose,
-          verboseStream: ctx.verboseStream,
-          recorder: ctx.recorder,
-          route: ctx.route ?? config.name,
-          client: ctx.client,
-          mainModel: ctx.mainModel,
-          bus: ctx.bus,
-          ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
-          reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
-          annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
-        }).catch((e: unknown): RunResult => {
-          const msg = e instanceof Error ? e.message : String(e);
-          // Gap 3 fix (round-2 F5): set durationMs on failure envelopes
-          // so cost-per-time + retry budgeting see real wall-clock.
-          return {
-            output: '',
-            status: 'error' as const,
-            usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-            turns: 0,
-            filesRead: [],
-            filesWritten: [],
-            toolCalls: [],
-            outputIsDiagnostic: false,
-            escalationLog: [],
-            parsedFindings: null,
-            error: msg,
-            errorCode: 'runner_crash',
-            retryable: false,
-            durationMs: Date.now() - startMs,
-            structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
-            workerStatus: 'failed' as const,
-          };
-        }),
-      ),
-    );
-  }
+  };
+
+  const results: RunResult[] =
+    tasks.length === 1
+      ? [await dispatchOne(tasks[0]!, 0)]
+      : await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));
   const wallClockMs = Date.now() - startMs;
 
   // Gap 3 fix (4.0.3+): surface the executor's wall-clock as
