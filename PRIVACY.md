@@ -12,14 +12,14 @@ Every uploaded event is a single `task.completed` event. Install metadata travel
 
 ### Task lifecycle event (`task.completed`)
 
-Emitted at the end of every delegate, audit, review, verify, debug, execute-plan, investigate, and retry run. The event has 25 top-level scalar fields plus a `stages` array.
+Emitted at the end of every delegate, audit, review, verify, debug, execute-plan, investigate, research, retry, and register-context-block run. The event has 25 top-level scalar fields plus a `stages` array.
 
 #### Identity (3 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `eventId` | UUIDv4 string | At-most-once dedup within the 90-day retention window |
-| `route` | enum: `delegate`, `audit`, `review`, `verify`, `debug`, `execute-plan`, `retry`, `investigate` | Route distribution + per-route quality metrics |
+| `route` | enum: `delegate`, `audit`, `review`, `verify`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `register-context-block` | Route distribution + per-route quality metrics |
 | `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
 
 #### Configuration (5 fields)
