@@ -1,16 +1,30 @@
 import { describe, it, expect } from 'vitest';
 import { MockRunner } from './fixtures/mock-runner.js';
-import { compileAuditDocument } from '../../packages/core/src/intake/brief-compiler-slots/audit.js';
+import { toolConfig as auditToolConfig } from '../../packages/core/src/tools/audit/tool-config.js';
+import type { ExecutionContext } from '../../packages/core/src/lifecycle/lifecycle-context.js';
+
+const ctx = {
+  cwd: '/tmp',
+  config: { defaults: {} },
+  projectContext: undefined,
+  mainModel: undefined,
+} as unknown as ExecutionContext;
+
+function compileAuditPrompts(input: { document?: string; filePaths?: string[]; auditType: string }) {
+  const briefs = auditToolConfig.briefSlot({
+    document: input.document,
+    auditType: input.auditType,
+    filePaths: input.filePaths ?? [],
+    contextBlockIds: [],
+  } as any);
+  return briefs.map(b => auditToolConfig.buildTaskSpec(b, ctx));
+}
 
 async function dispatchAuditFixture({ runner }: { runner: MockRunner }) {
-  const drafts = compileAuditDocument(
-    {
-      document: '# Test Specification\n\nThis is a test document for behavioral scope-contract verification.',
-      auditType: 'correctness',
-    },
-    'test-g7-request',
-  );
-
+  const drafts = compileAuditPrompts({
+    document: '# Test Specification\n\nThis is a test document for behavioral scope-contract verification.',
+    auditType: 'correctness',
+  });
   const results = await Promise.all(drafts.map((d) => runner.run(d.prompt)));
   return { results, drafts };
 }
@@ -21,35 +35,22 @@ describe('audit prompt scope contract (§6.1 AC)', () => {
     await dispatchAuditFixture({ runner: mock });
 
     const calls = mock.capturedToolCalls;
-    // The mock should produce at least one base tool call (readFile)
-    // on any audit fixture — the fixture references an .md file in
-    // its document text. If capturedToolCalls is empty, the mock's
-    // prompt detection heuristics may need updating.
     expect(calls.length).toBeGreaterThan(0);
-
     for (const c of calls) {
       expect(c).not.toMatch(/^glob\(.+\*\*/);
     }
   });
 
   it('includes the scope contract in the compiled prompt', () => {
-    const drafts = compileAuditDocument(
-      { document: '# Test', auditType: 'correctness' },
-      'test-g7-scope',
-    );
-
+    const drafts = compileAuditPrompts({ document: '# Test', auditType: 'correctness' });
     for (const draft of drafts) {
       expect(draft.prompt).toContain('Do NOT enumerate the repository');
-      expect(draft.prompt).toContain('Stay scoped: the goal is to evaluate the document');
+      expect(draft.prompt).toContain('the goal is to evaluate the document, not catalog the codebase');
     }
   });
 
   it('multicase: each fan-out draft includes the scope contract', () => {
-    const drafts = compileAuditDocument(
-      { filePaths: ['/a/x.ts', '/a/y.ts'], auditType: 'security' },
-      'test-g7-multi',
-    );
-
+    const drafts = compileAuditPrompts({ filePaths: ['/a/x.ts', '/a/y.ts'], auditType: 'security' });
     expect(drafts.length).toBe(2);
     for (const draft of drafts) {
       expect(draft.prompt).toContain('Do NOT enumerate the repository');

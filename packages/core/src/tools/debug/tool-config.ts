@@ -7,12 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { debugBriefSlot, type ToolDebugBrief } from '../../intake/brief-compiler-slots/debug.js';
 import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
-  SEVERITY_LADDER,
-  EVIDENCE_GROUNDING,
-  SCOPE_DISCIPLINE,
-  ANNOTATOR_CHECK_AWARENESS_RO,
-} from '../../review/templates/finding-criteria.js';
+  EVIDENCE_RULE_DEBUG,
+  SCOPE_RULE_DEBUG,
+  ANNOTATOR_AWARENESS_DEBUG,
+} from './implementer-criteria.js';
 
 export function registerDebug(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -50,11 +50,11 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   // Tool sweep #12: shared rubric so worker self-aligns with the annotator.
   SEVERITY_LADDER,
   '',
-  EVIDENCE_GROUNDING,
+  EVIDENCE_RULE_DEBUG,
   '',
-  SCOPE_DISCIPLINE,
+  SCOPE_RULE_DEBUG,
   '',
-  ANNOTATOR_CHECK_AWARENESS_RO,
+  ANNOTATOR_AWARENESS_DEBUG,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {

@@ -169,6 +169,52 @@ export class Queue {
     return { records, meta };
   }
 
+  /**
+   * Remove records whose SHA-256 hashes are in the provided set.
+   * Rebuilds the queue file from scratch — safe for arbitrary (non-contiguous)
+   * removal. Returns the number of records actually removed.
+   */
+  async removeRecords(hashes: Set<string>): Promise<number> {
+    if (hashes.size === 0) return 0;
+    if (!existsSync(this.#queuePath)) return 0;
+
+    let release: (() => Promise<void>) | null = null;
+    try {
+      release = await lockfile.lock(this.#queuePath, LOCK_OPTIONS);
+    } catch {
+      return 0;
+    }
+
+    try {
+      if (!existsSync(this.#queuePath)) return 0;
+
+      const content = await readFile(this.#queuePath, 'utf8');
+      const lines = content.split('\n');
+      let removed = 0;
+      const kept: string[] = [];
+
+      for (const line of lines) {
+        if (!line.trim()) continue;
+        const lineBytes = line + '\n';
+        if (hashes.has(hashLine(lineBytes))) {
+          removed++;
+        } else {
+          kept.push(line);
+        }
+      }
+
+      if (removed === 0) return 0;
+
+      const newContent = kept.join('\n') + (kept.length > 0 ? '\n' : '');
+      const tmpPath = this.#queuePath + '.rm.' + Date.now();
+      await writeFile(tmpPath, newContent, { mode: 0o600 });
+      await rename(tmpPath, this.#queuePath);
+      return removed;
+    } finally {
+      if (release) await release();
+    }
+  }
+
   async truncate(expectedMeta: RecordMeta[]): Promise<void> {
     if (expectedMeta.length === 0) return;
     if (!existsSync(this.#queuePath)) return;

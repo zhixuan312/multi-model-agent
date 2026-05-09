@@ -10,10 +10,10 @@ import { investigateHeadlineTemplate } from '../../reporting/headline-templates/
 import { deriveInvestigateWorkerStatus } from '../../reporting/derive-investigate-status.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import {
-  EVIDENCE_GROUNDING,
-  SCOPE_DISCIPLINE,
-  ANNOTATOR_CHECK_AWARENESS_RO,
-} from '../../review/templates/finding-criteria.js';
+  EVIDENCE_RULE_INVESTIGATE,
+  SCOPE_RULE_INVESTIGATE,
+  ANNOTATOR_AWARENESS_INVESTIGATE,
+} from './implementer-criteria.js';
 
 export function registerInvestigate(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -110,7 +110,7 @@ function compilePrompt(input: EnrichedInvestigateInput): string {
   // but evidence-grounding + scope-discipline + annotator-awareness
   // apply just as much. Workers that cite hallucinated lines or
   // speculate about unread files now have the rubric inline.
-  promptParts.push(EVIDENCE_GROUNDING, SCOPE_DISCIPLINE, ANNOTATOR_CHECK_AWARENESS_RO);
+  promptParts.push(EVIDENCE_RULE_INVESTIGATE, SCOPE_RULE_INVESTIGATE, ANNOTATOR_AWARENESS_INVESTIGATE);
   return promptParts.join('\n\n');
 }
 

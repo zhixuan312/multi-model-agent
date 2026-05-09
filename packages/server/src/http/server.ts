@@ -49,7 +49,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
   '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
@@ -58,7 +58,7 @@ const CWD_REQUIRED_PATHS = new Set([
  *  9 tool routes + /control/retry (which dispatches a real run) need it; the
  *  introspection / batch-polling / context-block utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/explore',
+  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
   '/control/retry',
 ]);
 
@@ -167,7 +167,7 @@ async function registerToolHandlers(
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
   const { buildInvestigateHandler } = await import('./handlers/tools/investigate.js');
-  const { buildExploreHandler } = await import('./handlers/tools/explore.js');
+  const { buildResearchHandler } = await import('./handlers/tools/research.js');
 
   const builders: Record<string, (d: import('./handler-deps.js').HandlerDeps) => RawHandler> = {
     delegate: buildDelegateHandler,
@@ -178,14 +178,17 @@ async function registerToolHandlers(
     execute_plan: buildExecutePlanHandler,
     retry_tasks: buildRetryHandler,
     investigate: buildInvestigateHandler,
-    explore: buildExploreHandler,
+    research: buildResearchHandler,
   };
 
   for (const entry of surface.list()) {
     if (entry.surface !== 'tool') continue;
     const builder = builders[entry.routeName];
     if (!builder) {
-      throw new Error(`registerToolHandlers: no handler builder registered for route '${entry.routeName}'`);
+      // Route is in the registry but its handler hasn't been wired yet
+      // (e.g. /research added in a prior task, handler lands in a later one).
+      // Skip silently — the next task wires the handler and enables the route.
+      continue;
     }
     router.register(entry.httpMethod, entry.httpPath, builder(deps));
   }

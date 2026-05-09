@@ -5,6 +5,43 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.0.5] - 2026-05-09
+
+### BREAKING
+
+- **`/explore` HTTP route removed.** Replaced by single-task `/research` (external multi-source research only). Migration: callers using `/explore` must now dispatch `/investigate` (for the internal half) and `/research` (for the external half) themselves and synthesise the results. The `mma-explore` skill performs this orchestration if you are calling via skill, not raw HTTP.
+- **`mma-explore` skill body rewritten.** It is now a main-agent playbook that fans out `mma-investigate` + `mma-research` in parallel and mandates a 3–5 thread synthesis output (each thread carries one internal citation or sentinel + one external citation or sentinel + a one-line divergence reason, ending with `## Recommended next step`). Skill consumers that scripted against the old single-call `/explore` shape must update.
+- **8 explore-specific telemetry events removed:** `explore_parallel_start`, `explore_parallel_end`, `explore_internal_unavailable`, `explore_external_unavailable`, `explore_synthesize_start`, `explore_synthesize_end`, `explore_thread_started`, `explore_thread_completed`. Internal dashboards consuming these must be updated.
+
+### Added
+
+- **`/research` route (server).** Single-task external multi-source research (arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters). Schema: `researchQuestion`, `background`, `contextBlockIds`. `reviewPolicy: 'none'`. The previous `/explore` external-leg prompt is preserved verbatim with field renames (`currentContext` → `background`, `explorationQuestion` → `researchQuestion`).
+- **`mma-research` skill (server).** Thin 1:1 wrapper around `/research`. Pairs with `mma-investigate` under `mma-explore` for divergent landscape scans.
+- **Per-tool integration test for research** (`tests/per-tool/research.test.ts`).
+
+### Changed
+
+- **Synthesis is now main-agent work.** The previous synthesizer worker (no-tools, text-in/text-out) is removed; main agents reading `mma-explore` produce the 3–5 thread synthesis themselves. The 11 actionable skills now span: `mma-audit`, `mma-context-blocks`, `mma-debug`, `mma-delegate`, `mma-execute-plan`, `mma-explore`, `mma-investigate`, `mma-research`, `mma-retry`, `mma-review`, `mma-verify`.
+- **Per-tool prompt calibration (core).** `EVIDENCE_GROUNDING / SCOPE_DISCIPLINE / ANNOTATOR_CHECK_AWARENESS_RO` removed from shared `review/templates/finding-criteria.ts`; replaced by per-tool blocks at `tools/<tool>/implementer-criteria.ts` for audit/review/verify/debug/investigate/research. Each tool's worker prompt now uses evidence + scope rules calibrated to its actual job — audit accepts absence-references and cross-section reasoning; debug allows hypothesis-with-partial-evidence and requires cross-file tracing; investigate accepts negative findings ("searched X, not found"); verify binds severity to PASS/FAIL. Shared layer keeps only `SEVERITY_LADDER` and `REVIEWER_AWARENESS_AP` — constants that genuinely apply identically across consumers.
+- **Annotator rubric per-tool (core).** `AnnotatorTemplate` extended with `evidenceRule` + `scopeRule` fields; static `ANNOTATOR_RUBRIC` constant replaced by `buildAnnotatorRubric(template)` that interpolates per-tool rules. The annotator now judges findings against the same calibration the worker was given — no more downgrading correctly-emitted absence-findings (audit) or negative results (investigate) or hypothesis chains (debug) for failing a generic "must quote code" rubric.
+
+### Removed
+
+- `packages/core/src/research/explore-orchestrator.ts`, `intake/brief-compiler-slots/explore.ts`, `reporting/parse-explore-report.ts`, `reporting/compose-explore-headline.ts`, `reporting/derive-explore-status.ts`, `reporting/report-parser-slots/explore-report.ts`, `reporting/headline-templates/explore.ts`, `tools/explore/{schema,tool-config}.ts`, `server/http/handlers/tools/explore.ts`.
+- 4 contract goldens under `tests/contract/goldens/endpoints/explore-*.json` and `observability/explore-events.json`, plus matching contract + per-tool tests.
+- **v3 legacy compile-functions and dead spec-C8 stubs (core).** Dropped `compileAuditDocument`, `compileReviewCode`, `compileVerifyWork`, `compileDebugTask`, `compileDelegateTasks` and the unused v4-iter slot stubs `auditSlot` / `reviewSlot` / `verifySlot` / `debugSlot` / `delegateSlot` together with their tests. Active production paths (`reviewBriefSlot`, `debugBriefSlot`, `compileDelegatePrompt`, plus the per-tool `briefSlot` defined inline in each `tools/<tool>/tool-config.ts`) are preserved.
+- **9 stale subpath exports dropped from `@zhixuan92/multi-model-agent-core` (core).** Removed `exports` entries for files deleted in this release — `./research/explore-orchestrator`, `./tools/explore/tool-config`, `./lifecycle/executors{,/index,/investigate,/retry,/shared-compute}`, and `./intake/brief-compiler-slots/{audit,verify}`. Without this cleanup the published tarball would export subpaths that resolve to non-existent `dist/` files. None were part of the documented public API.
+
+### Fixed
+
+- **Telemetry flusher drops every record older than `SCHEMA_VERSION`** (not just a contiguous head-prefix). A sandwiched stale record (queued during a roll-back/forward, or `installId` churn after re-enrollment) used to either propagate into an upload and 401/400 server-side, or split the upload into versioned groups. New `Queue.removeRecords(hashes)` rebuilds the queue file from scratch; flusher hashes records with `schemaVersion < SCHEMA_VERSION` OR mismatched `installId`, calls `removeRecords` once, then refreshes meta byteOffsets.
+- **`/research` HTTP handler shape (server).** Handler was calling `runTaskViaDispatcher` directly and returning a raw `RunResult` instead of the standard 6-field `ExecutorOutput` envelope — headlines were missing, `results[]` was empty, and `main_model` wasn't propagated from the `X-MMA-Main-Model` header. Rewritten to use the v4 generic `executeTask` orchestrator (matches the investigate / verify / delegate handler pattern). `EnrichedResearchInput` now carries `userSources` + `hasBrave` + `resolvedContextBlocks`; `briefSlot` compiles the prompt without handler-side cwd plumbing.
+- **Telemetry route enum missing `'research'` (core).** `route` enum in the wire schema (`events/telemetry-types.ts`) and `BuildContext.route` (`event-builder.ts`) didn't include `'research'` after the 4.0.5 cutover. Recorder logged `mma-telemetry: schema warning` on every research event (rows still flushed under warn-only validation). Now silenced and pinned in the wire contract.
+- **Subpath export missing for research tool config (core).** `packages/core/package.json` was missing the `./tools/research/tool-config` ESM subpath, so the server handler's import resolved nowhere. Added next to `./tools/research/schema`. Stale `./tools/explore/schema` entry left over from the route deletion was also removed.
+- **Synthesized implementing stage uses configured model (core).** When the runner crashes before any LLM call fires (`runner_crash` / `all_tiers_unavailable` / dispatcher-no-result), `ensureImplementingStage` now reads the configured implementer model from `ctx.implementerProvider.config.model` instead of stamping `null`. The synthesized stage and top-level `rr.models.implementer` now report the *intended* model (e.g. `deepseek-v4-pro`, `gpt-5`) — the wire row carries the correct family rather than the literal `'custom'` event-builder fallback.
+
+[4.0.5]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.4...v4.0.5
+
 ## [4.0.4] - 2026-05-08
 
 ### Fixed
@@ -1360,7 +1397,7 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.4...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...HEAD
 [4.0.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2

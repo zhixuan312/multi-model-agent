@@ -21,9 +21,11 @@ export interface ProjectContext {
 
 export interface CreateProjectContextOptions {
   /** Override the context-block store. When omitted, defaults to a
-   *  FileBackedContextBlockStore rooted at `<cwd>/.mma/context-blocks/`
-   *  so blocks survive daemon restarts (Gap 4 fix). Tests pass an
-   *  InMemoryContextBlockStore to avoid filesystem side effects. */
+   *  FileBackedContextBlockStore rooted at
+   *  `~/.multi-model-agent/context-blocks/<sha256(cwd)>/` so blocks
+   *  survive daemon restarts (Gap 4 fix) without polluting the project
+   *  tree. Tests pass an InMemoryContextBlockStore to avoid filesystem
+   *  side effects. */
   contextBlockStore?: ContextBlockStore;
 }
 

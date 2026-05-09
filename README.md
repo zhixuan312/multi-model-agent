@@ -100,7 +100,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.4",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.0.5",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -127,7 +127,8 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-delegate` | Ad-hoc implementation or research tasks **without** a plan file — run them in parallel on cheap workers. |
 | `mma-execute-plan` | A plan / spec markdown exists on disk with numbered task headings; implement one or more tasks from it. |
 | `mma-investigate` | Answer a question about *this* codebase ("how does X work", "where is Y called") without burning main-context tokens on grep + reads. |
-| `mma-explore` | Divergent ideation — 3-5 distinct threads from parallel codebase + web research, run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-explore` | Orchestrator playbook — fans out `mma-investigate` + `mma-research` in parallel and synthesises 3–5 distinct directions. Run before `superpowers:brainstorming`. Not for "where is X" questions (use `mma-investigate`). |
+| `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
@@ -299,18 +300,14 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.0.4
+## What's new in 4.0.5
 
-- **Reviewers see the actual diff.** A new `DiffTracker` (snapshot-based, works in non-git directories) captures the pre-task baseline and produces a unified diff at every reviewer call site. Pre-fix every reviewer template (spec / quality / diff) judged the worker's text claim — defaulting to `changes_required` and triggering rework spirals on already-correct work. Now: verdicts must point to specific diff lines.
-- **Coherent prompts via shared rubric.** A new `finding-criteria.ts` is the single source of truth for severity ladder, evidence-grounding, scope discipline, and stage-awareness. Read-only tools share `ANNOTATOR_CHECK_AWARENESS_RO`; artifact-producing tools (delegate / execute-plan) share `REVIEWER_AWARENESS_AP`. Workers self-align with what the reviewer will judge, not against an unstated rubric → cleaner first-round outputs, fewer rework loops.
-- **Lenient JSON parsers** in both `reviewer-output-parser` and `annotator-output-parser`. Accepts ` ```json ` fenced, ` ``` ` (no language tag), bare JSON, and embedded objects/arrays via balanced-brace counting. Caused `verdict: 'error'` and `findings_low: 0` regressions despite valid model output.
-- **Cumulative `filesWritten` across rework rounds.** Pre-fix the implementer's writes were wiped when a no-op rework round overwrote `lastRunResult`. Now unioned across rounds, so the envelope and wire telemetry reflect every successful edit regardless of which round produced it.
-- **Headlines unified across all tools.** Every route now follows `[<status>] <route>: <summary>` (delegate / execute-plan / retry / debug were inconsistent). `execute-plan` (was `execute_plan` snake-case), `retry: N/N tasks complete` now reflects actual per-task status, `debug` carries the file path + finding count.
-- **Implementer system prompt + per-tool prompts hardened.** Worker is told to trust `edit_file`/`write_file` (no defensive re-reads — saves 4-6 min per artifact task on slow models). Read-only tool prompts now include severity calibration, evidence-grounding rules, scope discipline, and stage-awareness so each finding is grounded in evidence the annotator can validate.
-- **Per-tool fixes:** investigate prompt aligned with parser (was producing `0 citations, confidence unparseable`); verify narrative parser + severity wording fixed (`findings_low` now correctly reflects PASS-item count); debug rewritten as proper read-only (PROPOSE the fix, do NOT apply); spec-rework + quality-rework concerns accumulate across rounds so round N+1 can verify prior issues are addressed.
-- **Hardened `firstSentenceOrTruncate`** (off-by-one regex, newline collapse, defensive against invalid `max` values).
+- **`/research` — single-task external research route.** New `POST /research` endpoint (arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters) replaces the 3-worker `/explore` orchestrator. Schema: `researchQuestion`, `background`, `contextBlockIds`. `reviewPolicy: 'none'`.
+- **`mma-research` — thin 1:1 skill** wrapping `/research`. Pairs with `mma-investigate` under the rewritten `mma-explore` skill for divergent landscape scans.
+- **`mma-explore` skill rewritten** as a main-agent playbook. Fans out `mma-investigate` + `mma-research` in parallel; synthesis moves from a worker to the main agent's judgment. Mandates 3–5 threads with internal + external citations (or sentinels) and a recommended next step.
+- **`/explore` HTTP route removed.** Migration: use `/investigate` + `/research` directly, or the `mma-explore` orchestration skill. 8 explore-specific telemetry events removed.
 
-**Migration from 4.0.3:** none. Wire envelope, schema fields, and route names are unchanged. All improvements are observable as cleaner headlines, faster first-round approvals, and accurate wire telemetry — `npm update` to take the bug fixes.
+**Migration from 4.0.4:** callers using `/explore` must now dispatch `/investigate` (for the internal half) and `/research` (for the external half) themselves and synthesise the results. Skill consumers using `mma-explore` get the new parallel-fan-out playbook automatically after `mmagent sync-skills`. CHANGELOG has the detailed BREAKING section.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 

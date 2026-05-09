@@ -1,4 +1,4 @@
-// One-stop registration for all 10 tools' SurfaceEntry rows. Production
+// One-stop registration for all 11 tools' SurfaceEntry rows. Production
 // boot (packages/server/src/http/server.ts) calls this once; the
 // workflow-matrix contract test does the same. Adding a new tool means
 // editing this file plus the new tool-config.ts, nowhere else.
@@ -12,7 +12,7 @@ import { registerDebug } from '../tools/debug/tool-config.js';
 import { registerExecutePlan } from '../tools/execute-plan/tool-config.js';
 import { registerRetry } from '../tools/retry/tool-config.js';
 import { registerInvestigate } from '../tools/investigate/tool-config.js';
-import { registerExplore } from '../tools/explore/tool-config.js';
+import { registerResearch } from '../tools/research/tool-config.js';
 import { registerContextBlock } from '../tools/register-context-block/tool-config.js';
 
 export function registerAllTools(registry: ToolSurfaceRegistry): void {
@@ -24,7 +24,7 @@ export function registerAllTools(registry: ToolSurfaceRegistry): void {
   registerExecutePlan(registry);
   registerRetry(registry);
   registerInvestigate(registry);
-  registerExplore(registry);
+  registerResearch(registry);
   registerContextBlock(registry);
 }
 

@@ -37,8 +37,8 @@ export const TierEnum = z.enum(['standard', 'complex']);
 export const RouteEnum = z.enum([
   'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
   'investigate', 'explore',
-  'explore_internal', 'explore_external', 'explore_synthesize',
   'register-context-block',
+  'research',
 ]);
 
 export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai', 'openai-compatible', 'codex']);
@@ -98,9 +98,7 @@ export const FindingConfidenceSchema = z.number().int().min(0).max(100);
 // need the phase grouping. New event kinds add here AND in the spec §7 table.
 export const EventTypeEnum = z.enum([
   'batch_completed','batch_failed','cost_check','escalation','escalation_unavailable',
-  'explore_external_unavailable','explore_internal_unavailable','explore_parallel_end',
-  'explore_parallel_start','explore_synthesize_end','explore_synthesize_start',
-  'explore_thread_completed','explore_thread_started','fallback','fallback_unavailable',
+  'fallback','fallback_unavailable',
   'heartbeat','read_only_review.quality','read_only_review.terminal','review_decision',
   'stage_change','stall_abort','task_completed','task_started','text_emission',
   'time_check','tool_call','turn_complete','turn_start','verify_skipped','verify_step','worker_start',

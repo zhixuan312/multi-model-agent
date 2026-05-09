@@ -18,7 +18,7 @@ export { qualityInvestigateTemplate } from './templates/quality-review-investiga
 export { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 export type { QualityReviewRoute } from './reviewer-prompt-builder.js';
 
-export type ReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'verify' | 'investigate' | 'debug' | 'explore';
+export type ReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'verify' | 'investigate' | 'debug' | 'research';
 
 export interface ReviewerInput {
   workerOutput: string;

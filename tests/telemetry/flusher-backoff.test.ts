@@ -6,6 +6,7 @@ import { gunzipSync } from 'node:zlib';
 import { Queue } from '../../packages/server/src/telemetry/queue.js';
 import { Flusher } from '../../packages/server/src/telemetry/flusher.js';
 import { getOrCreateIdentity } from '../../packages/server/src/telemetry/identity.js';
+import { SCHEMA_VERSION } from '../../packages/core/src/events/telemetry-types.js';
 import type { QueueRecord, RecordMeta, ReadBatchResult } from '../../packages/server/src/telemetry/queue.js';
 
 const INITIAL_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
@@ -98,8 +99,9 @@ describe('flusher head-truncation', () => {
     }
   });
 
-  // Test 2 primary — interleaved stale records: only contiguous prefix dropped
-  it('drops only contiguous stale prefix, trailing stale stays for next flush (Test 2 primary)', async () => {
+  // Test 2 primary — interleaved stale records: ALL stales dropped locally
+  // (full-batch filter; no longer just the contiguous head-prefix).
+  it('drops every stale record locally regardless of position in queue (Test 2 primary)', async () => {
     const originalFetch = globalThis.fetch;
     try {
       const identity = getOrCreateIdentity(dir);
@@ -107,6 +109,9 @@ describe('flusher head-truncation', () => {
       const staleId = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
       const queue = new Queue(dir);
 
+      // Sandwich: stale, current, stale. Pre-V4-cleanup, only the head-stale
+      // was dropped locally and the trailing stale propagated to a (failing)
+      // upload. Post-cleanup, both stales are dropped before any fetch.
       await queue.append(makeRecord({ installId: staleId }));
       await queue.append(makeRecord({ installId: currentInstallId }));
       await queue.append(makeRecord({ installId: staleId }));
@@ -122,37 +127,23 @@ describe('flusher head-truncation', () => {
       const flusher = new Flusher({ queue, dir, endpoint: 'http://test/ingest' });
       await flusher.flush();
 
-      // 2 fetch calls: current (204), trailing stale (401 → 5xx)
-      expect(calls).toHaveLength(2);
+      // Exactly 1 fetch — for the current install only. Both stales filtered.
+      expect(calls).toHaveLength(1);
       expect(calls[0].installId).toBe(currentInstallId);
       expect(calls[0].status).toBe(204);
-      expect(calls[1].installId).toBe(staleId);
-      expect(calls[1].status).toBe(401);
-      expect(flusher.dropped).toBe(1);
-      expect(flusher.backoffActive).toBe(true);
-
-      let batch = await queue.readBatch(50);
-      expect(batch.records).toHaveLength(1);
-      expect(batch.records[0].installId).toBe(staleId);
-
-      flusher.clearBackoff();
-
-      // Flush 2: trailing stale now at head → dropped locally → clearBackoff
-      await flusher.flush();
-
-      expect(calls).toHaveLength(2); // no new fetch calls
       expect(flusher.dropped).toBe(2);
       expect(flusher.backoffActive).toBe(false);
 
-      batch = await queue.readBatch(50);
+      const batch = await queue.readBatch(50);
       expect(batch.records).toHaveLength(0);
     } finally {
       restoreFetch(originalFetch);
     }
   });
 
-  // Test 2 secondary — 400 variant (backend-aligned)
-  it('drops stale prefix and 400-drops trailing stale in one flush (Test 2 secondary)', async () => {
+  // Test 2 secondary — 400 variant (backend-aligned). Same expectation: full
+  // local filter means no 400 ever fires for a stale record.
+  it('drops sandwiched stale record locally — no 400 ever fires for it (Test 2 secondary)', async () => {
     const originalFetch = globalThis.fetch;
     try {
       const identity = getOrCreateIdentity(dir);
@@ -175,9 +166,9 @@ describe('flusher head-truncation', () => {
       const flusher = new Flusher({ queue, dir, endpoint: 'http://test/ingest' });
       await flusher.flush();
 
-      expect(calls).toHaveLength(2);
+      // Only the current install's record is fetched; both stales dropped locally.
+      expect(calls).toHaveLength(1);
       expect(calls[0].status).toBe(204);
-      expect(calls[1].status).toBe(400);
 
       const batch = await queue.readBatch(50);
       expect(batch.records).toHaveLength(0);
@@ -218,6 +209,55 @@ describe('flusher head-truncation', () => {
 
       expect(flusher.backoffActive).toBe(false);
       expect(flusher.dropped).toBe(2);
+    } finally {
+      restoreFetch(originalFetch);
+    }
+  });
+
+  // V4-cleanup regression — sandwiched older-schemaVersion record
+  it('drops a sandwiched record with schemaVersion < SCHEMA_VERSION before upload', async () => {
+    const originalFetch = globalThis.fetch;
+    try {
+      const identity = getOrCreateIdentity(dir);
+      const queue = new Queue(dir);
+
+      // [V4 current, V3 sandwiched, V4 current, V4 current]. Pre-cleanup, the
+      // V3 record could split groups or propagate; post-cleanup, it's filtered
+      // before any group/upload and ONE batched upload of 3 V4 records goes out.
+      await queue.append(makeRecord({ installId: identity.installId }));
+      await (queue.append as any)({
+        schemaVersion: 3,
+        install: {
+          installId: identity.installId,
+          mmagentVersion: '3.12.0',
+          os: 'linux',
+          nodeMajor: '22',
+        },
+        generation: 0,
+        events: [{ eventId: '99999999-9999-4999-8999-999999999999' }],
+      });
+      await queue.append(makeRecord({ installId: identity.installId }));
+      await queue.append(makeRecord({ installId: identity.installId }));
+
+      const calls: { body: Buffer }[] = [];
+      (globalThis as any).fetch = async (_url: string, init: RequestInit) => {
+        calls.push({ body: init.body as Buffer });
+        return new Response(null, { status: 204 });
+      };
+
+      const flusher = new Flusher({ queue, dir, endpoint: 'http://test/ingest' });
+      await flusher.flush();
+
+      // Single upload, all 3 V4 events — V3 was filtered out locally.
+      expect(calls).toHaveLength(1);
+      const uploaded = JSON.parse(gunzipSync(calls[0].body).toString('utf8'));
+      expect(uploaded.schemaVersion).toBe(SCHEMA_VERSION);
+      expect(uploaded.events).toHaveLength(3);
+      expect(flusher.dropped).toBe(1);
+      expect(flusher.backoffActive).toBe(false);
+
+      const batch = await queue.readBatch(50);
+      expect(batch.records).toHaveLength(0);
     } finally {
       restoreFetch(originalFetch);
     }

@@ -7,12 +7,12 @@ import type { ExecutionContext } from '../../lifecycle/lifecycle-context.js';
 import { verifyReportSchema } from '../../reporting/report-parser-slots/verify-report.js';
 import { verifyHeadlineTemplate } from '../../reporting/headline-templates/verify.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
+import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
-  SEVERITY_LADDER,
-  EVIDENCE_GROUNDING,
-  SCOPE_DISCIPLINE,
-  ANNOTATOR_CHECK_AWARENESS_RO,
-} from '../../review/templates/finding-criteria.js';
+  EVIDENCE_RULE_VERIFY,
+  SCOPE_RULE_VERIFY,
+  ANNOTATOR_AWARENESS_VERIFY,
+} from './implementer-criteria.js';
 
 export function registerVerify(registry: ToolSurfaceRegistry): void {
   registry.register({
@@ -64,11 +64,11 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   // PASS -> low, FAIL -> medium/high based on impact.
   SEVERITY_LADDER,
   '',
-  EVIDENCE_GROUNDING,
+  EVIDENCE_RULE_VERIFY,
   '',
-  SCOPE_DISCIPLINE,
+  SCOPE_RULE_VERIFY,
   '',
-  ANNOTATOR_CHECK_AWARENESS_RO,
+  ANNOTATOR_AWARENESS_VERIFY,
 ].join('\n');
 
 function buildFilePathsPrompt(filePaths?: string[]): string {

@@ -81,7 +81,7 @@ describe('OpenAPI document', () => {
     expect(paths).toContain('/execute-plan');
     expect(paths).toContain('/retry');
     expect(paths).toContain('/investigate');
-    expect(paths).toContain('/explore');
+    expect(paths).toContain('/research');
 
     // 3 control routes
     expect(paths).toContain('/batch/{batchId}');

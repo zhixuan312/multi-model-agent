@@ -29,13 +29,6 @@
       "responseShapeName": "BatchResponse"
     },
     {
-      "routeName": "explore",
-      "toolCategory": "research",
-      "agentTypeDefault": "complex",
-      "agentTypeOverridable": false,
-      "responseShapeName": "BatchResponse"
-    },
-    {
       "routeName": "investigate",
       "toolCategory": "read_only",
       "agentTypeDefault": "complex",
@@ -48,6 +41,13 @@
       "agentTypeDefault": "standard",
       "agentTypeOverridable": false,
       "responseShapeName": "ContextBlockResponse"
+    },
+    {
+      "routeName": "research",
+      "toolCategory": "research",
+      "agentTypeDefault": "complex",
+      "agentTypeOverridable": false,
+      "responseShapeName": "BatchResponse"
     },
     {
       "routeName": "retry_tasks",
