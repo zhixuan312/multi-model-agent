@@ -9,6 +9,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`mma-delegate` prompt rewritten for smallest-complete-change discipline.** The delegate's purpose is now explicitly framed around the reviewer's standard — the diff should be minimal AND complete simultaneously. Prompt now includes:
+  - An orientation block at the top naming the success criterion (reviewer would approve without flagging gaps or extras) and the file-constraint semantics (non-existent paths in `filePaths` are OUTPUT TARGETS; files outside the list are off-limits to write).
+  - A 9-category failure-mode taxonomy (scope creep, silent partial fix, wrong file target, phantom test pass, cross-cutting damage, convention drift, incomplete refactor, spec overreach, undocumented assumption).
+  - A completeness reminder counter-balancing the worker's tendency to either bloat (extra refactor / cleanup) or skim (declared done with regression test missing). Includes a brief-vs-diff walk: for every brief item, locate the diff hunk that satisfies it; for every diff hunk, name the brief item it satisfies. Both directions must close.
+  - A worked example walking the bug-fix-plus-regression-test pattern: naive worker rewrites a function clean and skips the test (SILENT PARTIAL FIX + SCOPE CREEP); correct worker changes one line, adds one test, runs the verifyCommand, stops.
+- **Strengthened file-constraint clause.** Replaced the one-line *"write your code to exactly these file path(s)…"* with a contract that distinguishes existing files (modify), non-existent paths in `filePaths` (create), and files outside the list (off-limits unless the brief's task genuinely requires it — and call out the deviation in the summary).
+
 - **`mma-execute-plan` prompt rewritten for fidelity-first plan execution.** The execute-plan's purpose is now explicitly framed around the plan author's standard — the diff should make the author say "yes, that's exactly what I wrote", not "close, but with liberties". Prompt now includes:
   - An orientation block at the top naming the success criterion (plan-author fidelity, not "good code") and explicit fidelity rules (follow the plan exactly, use code blocks verbatim, do not redesign / substitute / improve).
   - A 9-category failure-mode taxonomy (plan rewrite, step skip, step reorder, code substitution, acceptance-criteria overrun, acceptance-criteria underrun, wrong-task match, cross-task contamination, problem-not-flagged).
