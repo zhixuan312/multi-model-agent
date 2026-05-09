@@ -10,9 +10,12 @@ import { reviewHeadlineTemplate } from '../../reporting/headline-templates/revie
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
+  REVIEW_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_REVIEW,
   SCOPE_RULE_REVIEW,
   ANNOTATOR_AWARENESS_REVIEW,
+  CODE_REVIEW_FAILURE_MODES,
+  THOROUGHNESS_REMINDER_REVIEW,
 } from './implementer-criteria.js';
 
 export function registerReview(registry: ToolSurfaceRegistry): void {
@@ -29,20 +32,39 @@ export function registerReview(registry: ToolSurfaceRegistry): void {
   });
 }
 
+/**
+ * Per-focus "done" conditions.
+ *
+ * The full failure-mode taxonomy in CODE_REVIEW_FAILURE_MODES applies to
+ * all reviews regardless of focus. These per-focus conditions tell the
+ * worker which lens to weight, not which categories to skip. Security,
+ * performance, and correctness lenses are universally applicable to
+ * every code change — the focus array picks emphasis, not gating.
+ *
+ * When focus is empty/missing, the worker performs a comprehensive sweep
+ * applying all four lenses with the executability/merge-safety
+ * orientation block at the top of the prompt.
+ */
 const REVIEW_DONE_CONDITIONS: Record<string, string> = {
-  security: 'Identify security vulnerabilities with severity, location, and remediation.',
-  performance: 'Identify performance issues with impact level, location, and fix recommendation.',
-  correctness: 'Identify logic errors, edge cases, and contract violations with severity and location.',
-  style: 'Identify style issues, naming inconsistencies, and dead code with location and fix.',
+  security:
+    'Lens emphasis: security. Apply the full failure-mode taxonomy through the security lens: auth bypass, injection (SQL/command/prompt), untrusted input flowing to a sink (eval/exec/HTML), data exposure, weakened sandboxing, and hardcoded secrets. Each finding has severity, location, and remediation.',
+  performance:
+    'Lens emphasis: performance. Apply the full failure-mode taxonomy through the performance lens: N+1 queries, unbounded loops, blocking I/O on hot paths, unnecessary deep clones, work shifted from build/init time to request time, and missing caching where the same value is recomputed. Each finding has impact level, location, and fix recommendation.',
+  correctness:
+    'Lens emphasis: correctness. Apply the full failure-mode taxonomy through the correctness lens: logic errors, off-by-one, unhandled edge cases (null/undefined/empty/timeout/error/zero/negative), type mismatches, contract violations, race conditions, and resource leaks. Each finding has severity, location, and correct behavior.',
+  style:
+    'Lens emphasis: style. Apply the full failure-mode taxonomy through the style lens: naming, formatting, dead code, inconsistent patterns, deprecated APIs, and missing types. Note: style is rarely the highest-value review lens for a non-trivial diff — sweep the correctness, security, and performance categories too.',
 };
 
 const DELTA_REVIEW_SUFFIX = ' Perform a full review (do not reduce thoroughness). Verify each prior finding as addressed or unaddressed. Omit addressed prior findings. Include unaddressed prior findings and new findings. End with a summary of which prior findings were resolved.';
 
 function resolveReviewDoneCondition(focus: string[] | undefined, hasContextBlocks: boolean): string {
+  let base: string;
   if (!focus || focus.length === 0) {
-    return `Review code for correctness, security, performance, and style. Each finding has category, severity, location, and recommendation.${hasContextBlocks ? DELTA_REVIEW_SUFFIX : ''}`;
+    base = 'Comprehensive code review. Apply the full failure-mode taxonomy (the orientation block above) through all four lenses (correctness, security, performance, style). Emphasize TEST GAP, CROSS-FILE RIPPLE, MISSING EDGE CASE, and IMPLICIT-CONTRACT ASSUMPTION — these are the categories most often missed and most likely to ship regressions. Each finding has category, severity, location, and recommendation.';
+  } else {
+    base = focus.map(f => REVIEW_DONE_CONDITIONS[f] ?? '').filter(Boolean).join(' ');
   }
-  const base = focus.map(f => REVIEW_DONE_CONDITIONS[f] ?? '').filter(Boolean).join(' ');
   return hasContextBlocks ? base + DELTA_REVIEW_SUFFIX : base;
 }
 
@@ -73,6 +95,13 @@ function buildReviewPrompt(brief: ReviewBrief): string {
 }
 
 const FINDING_FORMAT_INSTRUCTIONS = [
+  // Orientation goes FIRST — the worker needs to know why this review
+  // exists (pre-merge gate, your verdict is authoritative, missing a
+  // regression here ships) before reading the format spec / taxonomy /
+  // evidence rules. Without it, workers do line-by-line proofreading and
+  // miss cross-file ripples and test gaps.
+  REVIEW_PURPOSE_ORIENTATION,
+  '',
   'Produce a narrative code review. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title>',
@@ -91,6 +120,15 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   '- If you found no issues, say "No findings." in plain prose and emit zero `## Finding N:` blocks.',
   '',
   SEVERITY_LADDER,
+  '',
+  // Code-review failure-mode taxonomy. Without this block, workers
+  // calibrated on line-by-line proofreading miss the cross-file ripple,
+  // test gap, and implicit-contract findings that actually block merges.
+  CODE_REVIEW_FAILURE_MODES,
+  '',
+  // Counter-balances the SEVERITY_LADDER's anti-inflation hint and
+  // includes the cross-file pass with worked example.
+  THOROUGHNESS_REMINDER_REVIEW,
   '',
   EVIDENCE_RULE_REVIEW,
   '',

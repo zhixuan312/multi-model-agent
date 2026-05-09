@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [4.1.0] - 2026-05-09
 
+### Changed
+
+- **`mma-review` prompt rewritten for merge-safety-first reviewing.** The review's purpose is now explicitly framed as the pre-merge gate where the maintainer's verdict is treated as authoritative — a miss ships a regression. Prompt now includes:
+  - An orientation block at the top naming the success criterion (merge safety) and 10 specific failure-mode triggers a careful maintainer would scan for.
+  - A 10-category failure-mode taxonomy (test gap, cross-file ripple, pre-existing-bug-vs-new-regression separation, missing edge case, race / concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint, with a cross-file pass and worked example walking `changed symbol → grep → broken caller`.
+  - Updated evidence rules accepting cross-file ripple findings (with call-site references) and test-gap findings (with sibling test-file references) as fully valid — no longer downgraded as "speculation about untouched files."
+  - Per-focus done conditions rewritten to apply the full taxonomy through each lens; security/correctness/performance now apply to every change regardless of `focus`.
+- **Effect**: across three real-source-file dispatches, prompt produces accurate findings with 0 false positives. Cross-file ripple pass actually executes when a diff is provided via `code` field, identifying changed symbols and verifying each call site.
+- **`mma-review` SKILL.md updated** to lead with the pre-merge-gate framing and document the diff-as-input pattern for cross-file ripple detection.
+
 ### BREAKING
 
 - **`auditType` schema collapsed to `'default' | 'security' | 'performance'`.** The legacy values `correctness`, `style`, `general` and the array form (`['correctness', 'style']` etc.) are removed — they were a false dichotomy that biased workers toward stylistic proofreading on prose artifacts. Sending any legacy value now returns `400 invalid_request`. Migration: use `default` (or omit the field) for the comprehensive sweep; use `security`/`performance` only when you specifically want to narrow the lens to that single dimension. The `auditType` field is now optional with a default of `default`.

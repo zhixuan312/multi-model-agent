@@ -144,7 +144,7 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   '',
   // Doc-audit failure-mode taxonomy. Without this block, workers calibrated
   // on code-audit rubrics produce only surface-level proofreading nits on
-  // prose artifacts. The 9 categories below are what actually goes wrong
+  // prose artifacts. The 11 categories below are what actually goes wrong
   // in non-trivial specs/plans/recommendation docs.
   DOC_AUDIT_FAILURE_MODES,
   '',

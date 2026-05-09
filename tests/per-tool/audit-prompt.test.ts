@@ -27,7 +27,7 @@ describe('audit prompt content', () => {
   it('includes the doc-audit failure-mode taxonomy', () => {
     const briefs = toolConfig.briefSlot({ auditType: 'default', filePaths: ['/x/spec.md'], document: undefined, contextBlockIds: [] } as any);
     const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-    // The 9 categories should each surface in the worker's prompt.
+    // All 11 categories should each surface in the worker's prompt.
     expect(spec.prompt).toContain('RECOMMENDATION-COHERENCE');
     expect(spec.prompt).toContain('INTERNAL CONTRADICTION');
     expect(spec.prompt).toContain('CROSS-ITEM DUPLICATION');
@@ -37,6 +37,8 @@ describe('audit prompt content', () => {
     expect(spec.prompt).toContain('FIX ACTIONABILITY');
     expect(spec.prompt).toContain('DRIFT / STALENESS');
     expect(spec.prompt).toContain('SCOPE-CREEP / FRAMING');
+    expect(spec.prompt).toContain('STRUCTURAL CONSISTENCY');
+    expect(spec.prompt).toContain('METADATA COMPLETENESS');
   });
 
   it('counter-balances the anti-inflation hint with a thoroughness reminder', () => {

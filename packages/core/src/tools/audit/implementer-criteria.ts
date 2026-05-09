@@ -85,7 +85,7 @@ export const SCOPE_RULE_AUDIT = [
  * This is the load-bearing addition. Without an explicit taxonomy, workers
  * calibrated on source-code rubrics (off-by-one, type mismatches, dead code)
  * have nothing to look for in a spec/plan/recommendation doc and emit only
- * surface nits. The 9 categories below cover what actually goes wrong in
+ * surface nits. The 11 categories below cover what actually goes wrong in
  * non-trivial prose artifacts and are independent of the audit-type label.
  */
 export const DOC_AUDIT_FAILURE_MODES = [
