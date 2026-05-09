@@ -131,7 +131,7 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-research` | External multi-source research with citations — arxiv, semantic_scholar, github_search, rss, brave-with-`site:`-filters — for a focused question. |
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
-| `mma-audit` | Audit a prose document — spec, config, PR description — for correctness, security, or style. |
+| `mma-audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
 | `mma-verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
 
 ### Plumbing skills
