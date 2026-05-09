@@ -9,9 +9,12 @@ import { debugHeadlineTemplate } from '../../reporting/headline-templates/debug.
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
+  DEBUG_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_DEBUG,
   SCOPE_RULE_DEBUG,
   ANNOTATOR_AWARENESS_DEBUG,
+  DEBUG_FAILURE_MODES,
+  THOROUGHNESS_REMINDER_DEBUG,
 } from './implementer-criteria.js';
 
 export function registerDebug(registry: ToolSurfaceRegistry): void {
@@ -29,13 +32,22 @@ export function registerDebug(registry: ToolSurfaceRegistry): void {
 }
 
 const FINDING_FORMAT_INSTRUCTIONS = [
+  // Orientation goes FIRST — the worker needs to know why this debug
+  // exists (fix specification, not a hint; symptom-vs-cause matters)
+  // before reading the format spec / taxonomy / evidence rules.
+  // Without it, workers point at the failing line and call it the cause.
+  DEBUG_PURPOSE_ORIENTATION,
+  '',
   'Use hypothesis-driven debugging. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title>',
   '- Severity: critical | high | medium | low',
-  '- Hypothesis: the candidate cause',
-  '- Evidence: trace, log, or code path with file:line',
+  '- Reproduction: command/input/state to trigger the failure',
+  '- Symptom: file:line where the failure surfaces',
+  '- Trace: each step file:line + observed value, ending at the cause',
+  '- Cause: file:line that, if changed, would prevent the failure',
   '- Fix: proposed change (PROPOSE only — do NOT apply the fix)',
+  '- Falsifier: how the maintainer verifies the fix works',
   '',
   '## Finding 2: <one-line title>',
   '- Severity: ...',
@@ -43,12 +55,21 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   '',
   'Rules:',
   '- Each finding heading MUST start with "## Finding N: " (h2, "Finding ", number, colon, title) — number sequentially from 1.',
-  '- Severity / Hypothesis / Evidence / Fix bullets are on their own lines with the labels exactly as shown.',
+  '- Reproduction / Symptom / Trace / Cause / Fix / Falsifier bullets are on their own lines with the labels exactly as shown.',
   '- This is a read-only diagnostic — do NOT edit any file. Propose fixes; the caller applies them.',
   '- Limit yourself to 3-5 most-likely hypotheses. Do not enumerate implausible ones to pad the list.',
   '',
   // Tool sweep #12: shared rubric so worker self-aligns with the annotator.
   SEVERITY_LADDER,
+  '',
+  // Debug failure-mode taxonomy. Without this block, workers stop at
+  // the first plausible explanation (often the symptom) instead of
+  // tracing upstream to the actual cause.
+  DEBUG_FAILURE_MODES,
+  '',
+  // Counter-balances the SEVERITY_LADDER's anti-inflation hint and
+  // includes the symptom→cause walk with worked example.
+  THOROUGHNESS_REMINDER_DEBUG,
   '',
   EVIDENCE_RULE_DEBUG,
   '',

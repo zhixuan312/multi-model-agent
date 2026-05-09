@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`mma-debug` prompt rewritten for symptom-vs-cause-first debugging.** The debug's purpose is now explicitly framed as producing a fix specification a maintainer can apply WITHOUT redoing the investigation. Prompt now includes:
+  - An orientation block at the top naming the success criterion (replace, not augment, the maintainer's root-cause work) and the six required output fields per finding (Reproduction, Symptom, Trace, Cause, Fix, Falsifier).
+  - A 9-category failure-mode taxonomy (symptom-not-cause, scapegoat file, incomplete trace, untested hypothesis, parallel causes, pre-existing-vs-new entanglement, wrong fix scope, missing reproduction, confidence overstatement).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint, with a symptom→cause walk and worked example tracing a TypeError from a failing test assertion upstream through a route handler to the actual cause in a fixture loader.
+  - Updated evidence rules requiring at least three citations per finding (symptom → intermediate state → cause), each with `file:line`. Findings without a falsifier are guesses, not findings.
+  - Updated annotator template explicitly accepting partial-evidence hypotheses with marked gaps as fully valid (debug is speculation narrowed by evidence; hand-waving is the failure mode, not careful gap-marking) and rejecting findings where the cited cause is not upstream of the cited symptom.
+  - Per-finding output format now prompts for Reproduction / Symptom / Trace / Cause / Fix / Falsifier (was: Hypothesis / Evidence / Fix only).
+- **Effect** (validated on a synthetic 4-file Python target with a known symptom-vs-cause separation): worker correctly identified the upstream cause (`discount.py:17` — missing fraction-to-percent conversion) rather than the symptom (`tests/test_handler.py:22` — assertion failure) or the algebraic surface (`discount.py:18` — math expression that is correct given its inputs). 5-step trace, full reproduction + falsifier, HIGH severity calibrated to evidence strength.
+
 - **`mma-review` prompt rewritten for merge-safety-first reviewing.** The review's purpose is now explicitly framed as the pre-merge gate where the maintainer's verdict is treated as authoritative — a miss ships a regression. Prompt now includes:
   - An orientation block at the top naming the success criterion (merge safety) and 10 specific failure-mode triggers a careful maintainer would scan for.
   - A 10-category failure-mode taxonomy (test gap, cross-file ripple, pre-existing-bug-vs-new-regression separation, missing edge case, race / concurrency, resource leak, backward-compat break, security regression, performance regression, implicit-contract assumption).
