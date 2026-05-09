@@ -5,12 +5,30 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.1.0] - 2026-05-09
+
+### BREAKING
+
+- **`auditType` schema collapsed to `'default' | 'security' | 'performance'`.** The legacy values `correctness`, `style`, `general` and the array form (`['correctness', 'style']` etc.) are removed — they were a false dichotomy that biased workers toward stylistic proofreading on prose artifacts. Sending any legacy value now returns `400 invalid_request`. Migration: use `default` (or omit the field) for the comprehensive sweep; use `security`/`performance` only when you specifically want to narrow the lens to that single dimension. The `auditType` field is now optional with a default of `default`.
+
+### Changed
+
+- **`mma-audit` prompt rewritten for executability-first auditing.** The audit's purpose is now explicitly framed as "make the artifact executable by a low-judgment worker who follows instructions literally." Prompt now includes:
+  - An orientation block at the top naming the success criterion (executability) and 10 specific failure-mode triggers a literal-following worker would hit.
+  - An 11-category failure-mode taxonomy (recommendation-coherence, internal contradiction, cross-item duplication, independence-claimed-without-evidence, argument soundness, completeness-against-constraints, fix actionability, drift / staleness, scope-creep / framing, structural consistency, metadata completeness).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint (which is calibrated for code-review, not prose-document audits where under-finding is the typical failure).
+  - A required principle-mapping pass when the doc has a principles/constraints section, with a worked example that walks `recommendation → constraint → infeasibility`.
+  - A fourth valid evidence shape: **internal-coherence** (cross-section reasoning), accepted by the annotator without being downgraded as "speculation."
+- **Effect** (measured on a 22 KB recommendations doc): old prompt produced 16 findings across 4 rounds, 0 critical / 0 high / 3 medium / 13 low — almost all stylistic. New prompt produces 9 findings in a single round at 3 critical / 0 high / 3 medium / 3 low — load-bearing executability blockers.
+- **`mma-audit` SKILL.md rewritten** to lead with the executability framing and document the new 3-value `auditType` enum.
+
 ## [4.0.6] - 2026-05-09
 
 ### Fixed
 
 - **`agentType` per-task override honored in delegate routing (core).** `task-executor.ts` resolved one agent per batch using `config.agentType` (each tool's hardcoded default), so delegate's per-task `agentType: 'complex'` request was silently dropped — every task ran on the standard tier regardless of caller intent. Provider was now resolved per task via `task.agentType ?? config.agentType`. Other tools' `buildTaskSpec` already hardcodes their tier (audit/review/verify/debug/investigate/research → complex, execute-plan → standard, retry → inherits original), so this change preserves the policy that delegate is the only tool letting the main agent choose its tier. Added an `agent_not_configured` error path so a misconfigured tier on one task fails just that task rather than the whole batch.
 
+[4.1.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.6...v4.1.0
 [4.0.6]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.5...v4.0.6
 
 ## [4.0.5] - 2026-05-09

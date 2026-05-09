@@ -8,9 +8,12 @@ import type { TaskSpec } from '../../types.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 import { SEVERITY_LADDER } from '../../review/templates/finding-criteria.js';
 import {
+  AUDIT_PURPOSE_ORIENTATION,
   EVIDENCE_RULE_AUDIT,
   SCOPE_RULE_AUDIT,
   ANNOTATOR_AWARENESS_AUDIT,
+  DOC_AUDIT_FAILURE_MODES,
+  THOROUGHNESS_REMINDER_AUDIT,
 } from './implementer-criteria.js';
 
 export function registerAudit(registry: ToolSurfaceRegistry): void {
@@ -39,31 +42,42 @@ export interface ToolAuditBrief {
   perFilePath?: string;
 }
 
+/**
+ * Per-audit-type "done" conditions.
+ *
+ * The audit tool's primary target is prose artifacts: specs, plans,
+ * recommendation docs, design docs, briefs, API contracts, configs.
+ * A secondary target is source code (when filePaths point at .ts/.py/etc.).
+ *
+ * `default` is the comprehensive sweep — what 90%+ of audit calls should
+ * use. `security` and `performance` are narrow opt-in lenses for cases
+ * where the caller specifically wants ONE dimension (a threat model, a
+ * scaling design). The full failure-mode taxonomy applies regardless;
+ * the lens just tells the worker which dimension to weight slightly more.
+ */
 const AUDIT_DONE_CONDITIONS: Record<string, string> = {
-  security: 'Identify all security vulnerabilities (injection, auth bypass, data exposure, OWASP top 10). Each finding has severity (critical/high/medium/low), location, and remediation.',
-  performance: 'Identify all performance issues (O(n²) loops, unnecessary allocations, missing caching, blocking I/O). Each finding has impact level, location, and fix recommendation.',
-  correctness: 'Identify all logic errors, off-by-one bugs, unhandled edge cases, type mismatches, and contract violations. Each finding has severity, location, and correct behavior.',
-  style: 'Identify all style issues (naming, formatting, dead code, inconsistent patterns). Each finding has location and recommended fix.',
-  general: 'Identify issues across security, performance, correctness, and style. Each finding has category, severity, location, and remediation.',
+  default:
+    'Comprehensive audit. Apply the full failure-mode taxonomy through the executability lens (the orientation block above). For prose artifacts (specs, plans, recommendation docs, designs, post-mortems, audits, briefs): emphasize RECOMMENDATION-COHERENCE, INTERNAL CONTRADICTION, ARGUMENT SOUNDNESS, COMPLETENESS AGAINST CONSTRAINTS, FIX ACTIONABILITY, DRIFT, and SCOPE-CREEP — i.e., would a literal-following worker who reads this artifact and follows it without judgment produce the right outcome? Are sections internally consistent? Does each recommendation actually solve its stated problem given the doc\'s own constraints? Sweep style/clarity issues only when they would cause a worker to misinterpret. For source code: logic errors, contract violations, off-by-one bugs, type mismatches, unhandled edge cases. Each finding has severity (critical/high/medium/low), location, and remediation.',
+  security:
+    'Narrow lens: security ONLY. Use this only when the caller specifically wants security findings and not general audit findings. For prose artifacts (threat models, security designs, auth specs): identify missing controls, ambiguous trust boundaries, undeclared attack surfaces, leaked-secret patterns in examples, recommendations that introduce new attack surface without mitigation, and threat-model gaps. For source code: injection, auth bypass, data exposure, OWASP top 10. Apply the full failure-mode taxonomy through the security lens. Skip non-security findings. Each finding has severity, location, and remediation.',
+  performance:
+    'Narrow lens: performance ONLY. Use this only when the caller specifically wants performance findings and not general audit findings. For prose artifacts (designs, scaling plans, latency-sensitive specs): identify unstated complexity, missing hot-path consideration, unbounded loops in proposed designs, omitted scaling story, recommendations that mandate work that does not scale, and missing latency/throughput targets. For source code: O(n²) loops, unnecessary allocations, missing caching, blocking I/O. Apply the full failure-mode taxonomy through the performance lens. Skip non-performance findings. Each finding has impact level, location, and fix recommendation.',
 };
 
 const DELTA_AUDIT_SUFFIX = ' Perform a full audit (do not reduce thoroughness). Verify each prior finding as fixed or unfixed. Omit fixed prior findings from the main report. Include unfixed prior findings and new findings. End with a summary of which prior findings were resolved.';
 
-function resolveAuditTypeText(auditType: Input['auditType']): string {
-  if (auditType === 'general') return 'security, performance, correctness, and style';
-  if (Array.isArray(auditType)) return auditType.join(', ');
-  return auditType;
+function resolveAuditTypeText(auditType: Input['auditType'] | undefined): string {
+  // Defensive: at the HTTP layer Zod's `.default('default')` fires, but
+  // internal callers may still construct Input directly without going
+  // through the schema. Treat undefined as the same as `'default'`.
+  const t = auditType ?? 'default';
+  if (t === 'default') return 'comprehensive (executability + correctness + clarity, with security and performance lenses applied)';
+  return `narrow (${t} only)`;
 }
 
-function resolveDoneCondition(auditType: Input['auditType'], hasContextBlocks: boolean): string {
-  let base: string;
-  if (auditType === 'general') {
-    base = AUDIT_DONE_CONDITIONS.general;
-  } else if (Array.isArray(auditType)) {
-    base = auditType.map(t => AUDIT_DONE_CONDITIONS[t]).join(' ');
-  } else {
-    base = AUDIT_DONE_CONDITIONS[auditType] ?? AUDIT_DONE_CONDITIONS.general;
-  }
+function resolveDoneCondition(auditType: Input['auditType'] | undefined, hasContextBlocks: boolean): string {
+  const t = auditType ?? 'default';
+  const base = AUDIT_DONE_CONDITIONS[t] ?? AUDIT_DONE_CONDITIONS.default;
   return hasContextBlocks ? base + DELTA_AUDIT_SUFFIX : base;
 }
 
@@ -100,6 +114,12 @@ export function auditBriefSlot(input: Input): ToolAuditBrief[] {
 }
 
 const FINDING_FORMAT_INSTRUCTIONS = [
+  // Orientation goes FIRST — the worker needs to know why this audit
+  // exists before reading the format spec / taxonomy / evidence rules.
+  // Without it, workers calibrated on "find issues in this doc" produce
+  // stylistic proofreading; with it, they target executability blockers.
+  AUDIT_PURPOSE_ORIENTATION,
+  '',
   'Produce a narrative audit report. Use this EXACT per-finding format — both the structured reviewer and the deterministic fallback extract from this same format:',
   '',
   '## Finding 1: <one-line title>',
@@ -121,6 +141,16 @@ const FINDING_FORMAT_INSTRUCTIONS = [
   // so the worker self-aligns with what the reviewer will check.
   // Result: fewer downgraded findings, fewer missed criticals.
   SEVERITY_LADDER,
+  '',
+  // Doc-audit failure-mode taxonomy. Without this block, workers calibrated
+  // on code-audit rubrics produce only surface-level proofreading nits on
+  // prose artifacts. The 9 categories below are what actually goes wrong
+  // in non-trivial specs/plans/recommendation docs.
+  DOC_AUDIT_FAILURE_MODES,
+  '',
+  // Counter-balances the SEVERITY_LADDER's anti-inflation hint for the
+  // prose-document case, where the typical failure is under-finding.
+  THOROUGHNESS_REMINDER_AUDIT,
   '',
   EVIDENCE_RULE_AUDIT,
   '',

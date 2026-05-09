@@ -75,7 +75,7 @@ describe('executeAudit — quality_only review', () => {
       logger: { info: () => {}, warn: () => {}, error: () => {}, log: () => {} },
     } as any;
 
-    const input = { auditType: 'correctness' as const, filePaths: ['/tmp/spec.md'] };
+    const input = { auditType: 'default' as const, filePaths: ['/tmp/spec.md'] };
 
     const result = await executeTask(toolConfig, ctx, input);
 
