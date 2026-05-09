@@ -120,14 +120,6 @@
       "types": "./dist/intake/brief-compiler-slots/debug.d.ts",
       "import": "./dist/intake/brief-compiler-slots/debug.js"
     },
-    "./intake/brief-compiler-slots/verify": {
-      "types": "./dist/intake/brief-compiler-slots/verify.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/verify.js"
-    },
-    "./intake/brief-compiler-slots/audit": {
-      "types": "./dist/intake/brief-compiler-slots/audit.d.ts",
-      "import": "./dist/intake/brief-compiler-slots/audit.js"
-    },
     "./intake/brief-compiler-slots/execute-plan": {
       "types": "./dist/intake/brief-compiler-slots/execute-plan.d.ts",
       "import": "./dist/intake/brief-compiler-slots/execute-plan.js"
@@ -184,37 +176,13 @@
       "types": "./dist/bounded-execution/file-artifact-check.d.ts",
       "import": "./dist/bounded-execution/file-artifact-check.js"
     },
-    "./lifecycle/executors": {
-      "types": "./dist/lifecycle/executors/index.d.ts",
-      "import": "./dist/lifecycle/executors/index.js"
-    },
-    "./lifecycle/executors/index": {
-      "types": "./dist/lifecycle/executors/index.d.ts",
-      "import": "./dist/lifecycle/executors/index.js"
-    },
-    "./lifecycle/executors/investigate": {
-      "types": "./dist/lifecycle/executors/investigate.d.ts",
-      "import": "./dist/lifecycle/executors/investigate.js"
-    },
-    "./research/explore-orchestrator": {
-      "types": "./dist/research/explore-orchestrator.d.ts",
-      "import": "./dist/research/explore-orchestrator.js"
-    },
     "./lifecycle/task-executor": {
       "types": "./dist/lifecycle/task-executor.d.ts",
       "import": "./dist/lifecycle/task-executor.js"
     },
-    "./lifecycle/executors/retry": {
-      "types": "./dist/lifecycle/executors/retry.d.ts",
-      "import": "./dist/lifecycle/executors/retry.js"
-    },
     "./lifecycle/executor-output-types": {
       "types": "./dist/lifecycle/executor-output-types.d.ts",
       "import": "./dist/lifecycle/executor-output-types.js"
-    },
-    "./lifecycle/executors/shared-compute": {
-      "types": "./dist/lifecycle/executors/shared-compute.d.ts",
-      "import": "./dist/lifecycle/executors/shared-compute.js"
     },
     "./tools": {
       "types": "./dist/tools/index.d.ts",
@@ -239,10 +207,6 @@
     "./tools/execute-plan/tool-config": {
       "types": "./dist/tools/execute-plan/tool-config.d.ts",
       "import": "./dist/tools/execute-plan/tool-config.js"
-    },
-    "./tools/explore/tool-config": {
-      "types": "./dist/tools/explore/tool-config.d.ts",
-      "import": "./dist/tools/explore/tool-config.js"
     },
     "./tools/investigate/tool-config": {
       "types": "./dist/tools/investigate/tool-config.d.ts",
