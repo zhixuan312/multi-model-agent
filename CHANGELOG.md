@@ -9,6 +9,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- **`mma-verify` prompt rewritten for false-claim-gate verification.** The verify's purpose is now explicitly framed as the "are we lying when we say it is done?" gate — every PASS becomes evidence trail behind a stakeholder claim, and a wrong PASS ships a false claim. Prompt now includes:
+  - An orientation block at the top naming the success criterion (re-verifiable PASS by stakeholder) and three valid evidence shapes (EXECUTION, FILE-LEVEL, NEGATIVE).
+  - A 7-category failure-mode taxonomy (claim-without-evidence, stale evidence, implicit-criterion gap, partial coverage, conflated criteria, wrong-artifact evidence, assumed-PASS-on-untested).
+  - A thoroughness reminder counter-balancing the shared `SEVERITY_LADDER`'s anti-inflation hint with an evidence-shape walk and worked example demonstrating implicit-sub-criterion detection.
+  - Updated evidence rules accepting NEGATIVE evidence ("cannot verify from this artifact, would need X") as the correct verdict for unverifiable claims, no longer collapsing them to assumed-PASS or skipped.
+  - Updated annotator template explicitly accepting NEGATIVE-evidence FAILs as fully valid and rejecting prose-claim PASSes as rubber stamps.
+  - Per-finding output format expanded to require an Evidence shape (was: file:line OR command output).
+- **Effect** (validated on two real-world dispatches against the audit-prompt rewrite this release): truthful 6-item checklist returned 6/6 PASS with file:line and execution-output evidence; 6-item checklist with 4 deliberately-false claims mixed in returned 2/6 PASS with all 4 FAILs at `critical` severity and accurate detection of subtle distinctions like display-text vs enum-value (WRONG-ARTIFACT-EVIDENCE category). 0 rubber-stamps across both runs.
+
 - **`mma-debug` prompt rewritten for symptom-vs-cause-first debugging.** The debug's purpose is now explicitly framed as producing a fix specification a maintainer can apply WITHOUT redoing the investigation. Prompt now includes:
   - An orientation block at the top naming the success criterion (replace, not augment, the maintainer's root-cause work) and the six required output fields per finding (Reproduction, Symptom, Trace, Cause, Fix, Falsifier).
   - A 9-category failure-mode taxonomy (symptom-not-cause, scapegoat file, incomplete trace, untested hypothesis, parallel causes, pre-existing-vs-new entanglement, wrong fix scope, missing reproduction, confidence overstatement).

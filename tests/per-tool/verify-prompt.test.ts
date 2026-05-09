@@ -16,4 +16,31 @@ describe('verify prompt content', () => {
     expect(spec.prompt).toContain('PASS = low');
     expect(spec.prompt).toContain('1:1 to a checklist item');
   });
+
+  it('opens with the false-claim-gate orientation block', () => {
+    const briefs = toolConfig.briefSlot({ work: 'build', checklist: ['unit tests pass'], filePaths: [], contextBlockIds: [] } as any);
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    expect(spec.prompt).toContain('"are we lying when we say it is done?"');
+    expect(spec.prompt).toContain('rubber stamp');
+  });
+
+  it('includes the verify failure-mode taxonomy', () => {
+    const briefs = toolConfig.briefSlot({ work: 'build', checklist: ['unit tests pass'], filePaths: [], contextBlockIds: [] } as any);
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    // All 7 categories should each surface in the worker's prompt.
+    expect(spec.prompt).toContain('CLAIM-WITHOUT-EVIDENCE');
+    expect(spec.prompt).toContain('STALE EVIDENCE');
+    expect(spec.prompt).toContain('IMPLICIT-CRITERION GAP');
+    expect(spec.prompt).toContain('PARTIAL COVERAGE');
+    expect(spec.prompt).toContain('CONFLATED CRITERIA');
+    expect(spec.prompt).toContain('WRONG-ARTIFACT EVIDENCE');
+    expect(spec.prompt).toContain('ASSUMED-PASS-ON-UNTESTED');
+  });
+
+  it('accepts NEGATIVE evidence as a valid third shape', () => {
+    const briefs = toolConfig.briefSlot({ work: 'build', checklist: ['unit tests pass'], filePaths: [], contextBlockIds: [] } as any);
+    const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+    expect(spec.prompt).toContain('NEGATIVE');
+    expect(spec.prompt).toContain('cannot verify from this artifact');
+  });
 });
