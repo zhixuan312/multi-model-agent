@@ -86,7 +86,16 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
 
   constructor(projectCwd: string, opts: FileBackedContextBlockStoreOptions = {}) {
     const home = opts.homeDir ?? os.homedir();
-    const projectHash = createHash('sha256').update(path.resolve(projectCwd)).digest('hex');
+    let canonical: string;
+    try {
+      canonical = fs.realpathSync(path.resolve(projectCwd));
+    } catch {
+      // Path doesn't exist on disk yet — fall back to absolute. The store is
+      // still usable for callers who pass a future cwd; symlink-collapse
+      // semantics only kick in once the path exists.
+      canonical = path.resolve(projectCwd);
+    }
+    const projectHash = createHash('sha256').update(canonical).digest('hex');
     this.rootDir = path.join(home, '.multi-model', 'context-blocks', projectHash);
     this._ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.gcCheckIntervalMs = opts.gcCheckIntervalMs ?? DEFAULT_GC_INTERVAL_MS;
