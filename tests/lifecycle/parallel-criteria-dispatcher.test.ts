@@ -148,6 +148,67 @@ describe('dispatchParallelCriteria', () => {
     });
   });
 
+  it('per-angle 10-minute hard cap aborts the worker and synthesizes a [N/A] finding', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
+    try {
+      const events: any[] = [];
+      const bus = { on: vi.fn(), emit: (e: any) => events.push(e) } as any;
+      // Simulate criterion #2 hanging beyond the cap; others finish promptly.
+      const prime = vi.fn(async () => ({
+        cacheControlSent: true, durationMs: 100,
+        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      }));
+      const run = vi.fn(async (input: any) => {
+        const id = (input.userMessage as string).match(/criterion (\d+)/)?.[1] ?? '?';
+        if (id === '2') {
+          // Hang until aborted by the angle cap. Returns {errorCode:'aborted'}.
+          await new Promise<void>((resolve) => {
+            input.abortSignal.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return {
+            finalAssistantText: '',
+            workerStatus: 'blocked' as const,
+            errorCode: 'aborted' as const,
+            usage: { inputTokens: 100, outputTokens: 0, cachedReadTokens: 50, cachedNonReadTokens: 0 },
+            turns: 5,
+            toolCalls: [],
+            filesRead: [],
+            filesWritten: [],
+            durationMs: 600_000,
+            costUSD: 0.05,
+          };
+        }
+        return {
+          finalAssistantText: `## Finding 1: ok ${id}\n- Severity: medium\n- Issue: x\n`,
+          workerStatus: 'done' as const,
+          usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 80, cachedNonReadTokens: 0 },
+          turns: 1, toolCalls: [], filesRead: [], filesWritten: [], durationMs: 50, costUSD: 0.01,
+        };
+      });
+      const shell = { prime, run } as any;
+
+      const dispatched = dispatchParallelCriteria({
+        shell, cachedPrefix: 'PREFIX', criteria: CRITERIA, buildSuffix, cwd: '/tmp', bus,
+      });
+      // Advance past the 10-min cap so the angle aborts.
+      await vi.advanceTimersByTimeAsync(11 * 60 * 1000);
+      const result = await dispatched;
+
+      // Soft warning fired at 5 min; hard cap fired at 10 min.
+      expect(events.find(e => e.event === 'criteria_subworker_soft_warning' && e.criterionId === '2')).toBeDefined();
+      expect(events.find(e => e.event === 'criteria_subworker_hard_cap' && e.criterionId === '2')).toBeDefined();
+      // Cap-hit angle is treated as covered (succeeded) — synthesized [N/A] finding.
+      expect(result.partialCriteriaCovered.sort()).toEqual(['1', '2', '3']);
+      expect(result.partialCriteriaFailed).toEqual([]);
+      // The synthesized narrative starts with a [N/A] Finding 1 block so the merge annotator drops it.
+      const cappedOutput = result.workerOutputs.find(o => o.criterionId === '2');
+      expect(cappedOutput).toBeDefined();
+      expect(cappedOutput!.narrative).toMatch(/^## Finding 1: \[N\/A\]/);
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
   it('emits per-sub-worker observability events through the bus', async () => {
     const events: any[] = [];
     const bus = {
