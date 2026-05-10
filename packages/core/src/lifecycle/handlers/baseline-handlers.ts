@@ -218,11 +218,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
       if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {
+        // Narrow ToolMode to the subset crossCheckFilesWritten accepts.
+        // `'no-shell'` was added to ToolMode but isn't part of A4b's contract;
+        // for cross-check purposes treat it as `'full'` (worker has write
+        // capability via the non-shell tools).
+        const ctxToolMode = ctx?.implementerToolMode;
+        const toolsMode: 'full' | 'readonly' | 'none' | undefined =
+          ctxToolMode === 'no-shell' ? 'full' : ctxToolMode;
         const xc = crossCheckFilesWritten({
           cwd,
           filesWritten: enriched.filesWritten,
           workerSelfAssessment: workerSelfAssessment ?? null,
-          toolsMode: ctx?.implementerToolMode,
+          toolsMode,
           autoCommit: state.autoCommit,
         });
         enriched.filesWritten = xc.filesWritten;

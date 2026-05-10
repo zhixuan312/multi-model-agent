@@ -53,6 +53,14 @@ export interface RunResult {
   filesRead: string[];
   /** Files written during this run (paths from successful write_file/writeFile/edit_file tool calls). */
   filesWritten: string[];
+  /** A4b §2a (4.2.2+): worker write attempts that failed the path-validity
+   *  filter — shell heredoc commands, absolute paths, paths containing
+   *  shell metacharacters. NOT real, verifiable disk artifacts. The
+   *  lifecycle layer drains this into LifecycleContext.diagnostics for
+   *  the `writes_unverifiable` daemon-log message; not surfaced on the
+   *  public HTTP envelope. Optional so legacy consumers / mocks compile
+   *  without setting the field. */
+  filesWrittenRejected?: string[];
   /** USD cost computed from usage tokens and the model's rate card.
    *  null when the model isn't in the rate-card registry (treated as honest-null
    *  by the wire, not zero). */
