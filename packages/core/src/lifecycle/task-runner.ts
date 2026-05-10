@@ -23,7 +23,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
-import { READ_ONLY_ROUTES, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
 import { makeRunnerShell } from '../providers/make-runner-shell.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
@@ -321,7 +321,17 @@ export async function runTaskViaDispatcher(
       // synthesize a RunResult with workerOutputs[] for the merge annotator.
       if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
         try {
-          const routeSpec = READ_ONLY_ROUTES[route];
+          // A12: when the audit task carries auditType='plan', use the
+          // plan-audit route spec (different criteria + orientation +
+          // semantics) instead of the default audit spec. Other audit
+          // types (default/security/performance) and other read-only
+          // routes use their static route spec unchanged.
+          const taskWithAuditType = task as TaskSpec & { auditType?: string };
+          const lookupKey: ReadOnlyRouteName =
+            (route === 'audit' && taskWithAuditType.auditType === 'plan')
+              ? 'audit_plan'
+              : route;
+          const routeSpec = READ_ONLY_ROUTES[lookupKey];
           const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
           const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
           const preReadFiles: Record<string, string> = {};

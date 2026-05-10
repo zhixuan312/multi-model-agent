@@ -56,4 +56,12 @@ export interface TaskSpec {
    * statement. Investigate: question.
    */
   parallelTarget?: string
+  /**
+   * Audit-specific. Set by tools/audit/tool-config.ts buildTaskSpec when
+   * input.auditType is 'plan'. The lifecycle's parallel-criteria
+   * dispatcher reads this to route plan-audit tasks to the `audit_plan`
+   * route spec (different orientation / criteria / semantics) instead
+   * of the default audit spec. Other tools leave this undefined.
+   */
+  auditType?: 'default' | 'security' | 'performance' | 'plan'
 }
