@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.1] - 2026-05-10
+
+### Fixed
+
+- **Per-annotator 10-min wall-clock cap (core).** The 4.2.0 merge annotator was unbounded — observed runs at 28+ min on audit batches with N=11 sub-worker narratives. Adds the same 10-min hard / 5-min soft warning pattern used by the warmer + per-angle caps. On hard cap, abortSignal fires; parser yields empty findings; the read-only route's soft-success path returns implementer narratives so the user still gets the per-criterion findings instead of a hung route. Bounds total route wall-clock to ~32 min worst case (warmer ≤10 + max angle ≤10 + merge ≤10).
+- **Annotator merge prompt tightened to text-only (core).** The 4.2.0 merge instructions encouraged the annotator to "spot-check whether two findings reference the same code path." The annotator has no tools, so this guidance produced no behavior change in v4.2.0 — but it could mislead readers and was inconsistent with the actual capability. Merge prompt now says "text-only — do NOT read files; you have no tools" and "if you can't dedup confidently from the text, keep both findings and let the reader decide."
+- **2 new observability events** for the annotator cap: `criteria_annotator_soft_warning` (5-min checkpoint) and `criteria_annotator_hard_cap` (10-min force-abort). Manifest count now 41.
+
+### Added
+
+- **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
+
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...HEAD
+[4.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...v4.2.1
+
 ## [4.2.0] - 2026-05-10
 
 ### Added
@@ -45,7 +60,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Misleading `cache_written` field on warmer event.** Detection used `cachedNonReadTokens > 0` which doesn't fire on deepseek's claude-compatible endpoint (they don't break out cache-creation tokens distinctly). Renamed to `cacheControlSent` (true iff we sent the marker) and added `cacheHitConfirmed` to the post-fanout `criteria_fanout_summary` event (true iff sub-workers reported `cachedReadTokens > 0`).
 - **Telemetry `terminalStatus` reported `"incomplete"` even when status='ok' on read-only routes.** Wire envelope's `deriveTerminalStatus` reads `terminationReason.cause`; without one, defaults to `"incomplete"`. Now set in the dispatcher branch based on the ⌈N/2⌉ majority threshold.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...HEAD
 [4.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.1.0...v4.2.0
 
 ## [4.1.0] - 2026-05-09
