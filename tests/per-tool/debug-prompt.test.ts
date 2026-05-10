@@ -28,19 +28,15 @@ describe('debug prompt content', () => {
     expect(spec.prompt).toContain('Falsifier:');
   });
 
-  it('includes the debug failure-mode taxonomy', () => {
+  it('includes the 5 debug root-cause angles', () => {
     const briefs = toolConfig.briefSlot({ problem: 'crash on login', filePaths: ['/x/auth.ts'], contextBlockIds: [] } as any);
     const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-    // All 9 categories should each surface in the worker's prompt.
-    expect(spec.prompt).toContain('SYMPTOM-NOT-CAUSE');
-    expect(spec.prompt).toContain('SCAPEGOAT FILE');
-    expect(spec.prompt).toContain('INCOMPLETE TRACE');
-    expect(spec.prompt).toContain('UNTESTED HYPOTHESIS');
-    expect(spec.prompt).toContain('PARALLEL CAUSES');
-    expect(spec.prompt).toContain('PRE-EXISTING-VS-NEW ENTANGLEMENT');
-    expect(spec.prompt).toContain('WRONG FIX SCOPE');
-    expect(spec.prompt).toContain('MISSING REPRODUCTION');
-    expect(spec.prompt).toContain('CONFIDENCE OVERSTATEMENT');
+    // 5 parallel angles for finding root cause; each sub-worker takes one.
+    expect(spec.prompt).toContain('SYMPTOM-LOCATION ANGLE');
+    expect(spec.prompt).toContain('RECENT-CHANGE ANGLE');
+    expect(spec.prompt).toContain('TEST-FAILURE ANGLE');
+    expect(spec.prompt).toContain('REPRODUCTION ANGLE');
+    expect(spec.prompt).toContain('CONCURRENCY / CONFIGURATION ANGLE');
   });
 
   it('includes the symptom-cause walk with worked example', () => {

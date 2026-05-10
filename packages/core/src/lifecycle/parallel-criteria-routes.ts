@@ -56,6 +56,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       medium: 'argument-soundness gap, fix-actionability gap, drift between sections, structural inconsistency between similar items, scope-creep risk that needs a guardrail.',
       low: 'stylistic / labeling / formatting issue; missing metadata; minor cross-reference fix.',
     },
+    mustEmitAtLeastOne: false,
   },
   review: {
     goalLine: 'Find ALL issues of THIS specific kind in the diff / source above.',
@@ -67,6 +68,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       medium: 'contract violation, maintainability issue, doc gap, deprecated API, performance regression on a non-hot path — fix soon, not blocking.',
       low: 'style, naming, comment nit, dead code — nice-to-fix.',
     },
+    mustEmitAtLeastOne: false,
   },
   verify: {
     goalLine: 'Apply THIS criterion to the work product against the user\'s checklist. Each finding is a verification verdict for one checklist item: PASS / FAIL / cannot-verify, with the evidence quoted.',
@@ -78,6 +80,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       medium: 'partial coverage — some sub-criteria pass, others ambiguous; OR a clear PASS on a non-load-bearing item.',
       low: 'minor stylistic gap in the verification narrative; no impact on the verdict.',
     },
+    mustEmitAtLeastOne: true,
   },
   debug: {
     goalLine: 'Apply THIS failure mode as the lens. Each finding is a root-cause hypothesis (or contributing factor), framed against this lens; severity = strength of the evidence chain.',
@@ -89,6 +92,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       medium: 'likely candidate cause, needs verification — the trace has 1-2 inferred steps, fix scope unclear.',
       low: 'possible contributing factor, low confidence — speculation worth noting but not the primary lead.',
     },
+    mustEmitAtLeastOne: true,
   },
   investigate: {
     goalLine: 'Answer the user\'s question above. Each finding is a CANDIDATE ANSWER (or sub-answer / partial answer) to the question, presented through this criterion\'s lens. Pay extra care to AVOID this criterion\'s failure mode (it is a known way investigators go wrong on questions like this).',
@@ -100,6 +104,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       medium: 'likely answer / partial answer — inference from evidence, some gaps in chain. Mark "verify by reading <file>" so the user knows where to confirm.',
       low: 'possible answer / candidate — weak evidence, presented as an alternative for the user to consider against other sub-workers\' candidates.',
     },
+    mustEmitAtLeastOne: true,
   },
 };
 

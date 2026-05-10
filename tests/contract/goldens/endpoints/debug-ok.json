@@ -2,15 +2,15 @@
   "headline": "[ok] debug completed",
   "results": [
     {
-      "output": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmocked ok\n\n--- SCAPEGOAT FILE (criterion 2) ---\nmocked ok\n\n--- INCOMPLETE TRACE (criterion 3) ---\nmocked ok\n\n--- UNTESTED HYPOTHESIS (criterion 4) ---\nmocked ok\n\n--- PARALLEL CAUSES (criterion 5) ---\nmocked ok\n\n--- PRE-EXISTING-VS-NEW ENTANGLEMENT (criterion 6) ---\nmocked ok\n\n--- WRONG FIX SCOPE (criterion 7) ---\nmocked ok\n\n--- MISSING REPRODUCTION (criterion 8) ---\nmocked ok\n\n--- CONFIDENCE OVERSTATEMENT (criterion 9) ---\nmocked ok",
+      "output": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmocked ok\n\n--- RECENT-CHANGE ANGLE (criterion 2) ---\nmocked ok\n\n--- TEST-FAILURE ANGLE (criterion 3) ---\nmocked ok\n\n--- REPRODUCTION ANGLE (criterion 4) ---\nmocked ok\n\n--- CONCURRENCY / CONFIGURATION ANGLE (criterion 5) ---\nmocked ok",
       "status": "ok",
       "usage": {
-        "inputTokens": 90,
-        "outputTokens": 180,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 9,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 9,
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -29,47 +29,27 @@
       "workerOutputs": [
         {
           "criterionId": "1",
-          "criterionTitle": "SYMPTOM-NOT-CAUSE",
+          "criterionTitle": "SYMPTOM-LOCATION ANGLE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "SCAPEGOAT FILE",
+          "criterionTitle": "RECENT-CHANGE ANGLE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "INCOMPLETE TRACE",
+          "criterionTitle": "TEST-FAILURE ANGLE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "UNTESTED HYPOTHESIS",
+          "criterionTitle": "REPRODUCTION ANGLE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "PARALLEL CAUSES",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "PRE-EXISTING-VS-NEW ENTANGLEMENT",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "WRONG FIX SCOPE",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "MISSING REPRODUCTION",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "CONFIDENCE OVERSTATEMENT",
+          "criterionTitle": "CONCURRENCY / CONFIGURATION ANGLE",
           "narrative": "mocked ok"
         }
       ],
@@ -78,15 +58,11 @@
         "2",
         "3",
         "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9"
+        "5"
       ],
       "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmocked ok",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -94,7 +70,7 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmocked ok",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -113,11 +89,11 @@
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 90,
-          "outputTokens": 180,
+          "inputTokens": 50,
+          "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 9,
+          "turnCount": 5,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -183,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmocked ok",
+    "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmocked ok",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

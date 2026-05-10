@@ -30,6 +30,17 @@ export interface RouteSemantics {
    *  semantic is "propose an answer" (investigate) or "report a
    *  verification verdict" (verify). */
   findingMeaningParagraph: string;
+  /** Whether each sub-worker MUST emit at least one finding.
+   *
+   *  - `false` (problem-finding routes — audit/review): "no findings
+   *    for this criterion" is a valid honest result; the artifact may
+   *    have no problems in the category.
+   *  - `true` (answer-finding routes — debug/verify/investigate): the
+   *    user asked a question; every parallel angle owes at least one
+   *    contribution (even low-severity / low-confidence). The merge
+   *    annotator dedups + ranks; soft signals are valuable, not noise.
+   */
+  mustEmitAtLeastOne: boolean;
 }
 
 /**
@@ -149,6 +160,9 @@ export function buildReadOnlyCriterionSuffix(
   semantics: RouteSemantics,
   criterion: CriterionEntry,
 ): string {
+  const minimumLine = semantics.mustEmitAtLeastOne
+    ? 'MINIMUM: emit AT LEAST ONE finding from this angle. Even a low-severity / low-confidence contribution is valuable — the merge annotator will dedup and rank against other angles. Silence is the worst outcome.'
+    : semantics.emptyOutcomeLine;
   return [
     `Your assignment: criterion ${criterion.id} — "${criterion.title}".`,
     '',
@@ -156,8 +170,8 @@ export function buildReadOnlyCriterionSuffix(
     '',
     semantics.goalLine,
     '',
-    semantics.emptyOutcomeLine,
+    minimumLine,
     '',
-    'Do NOT drift outside this criterion; other parallel sub-workers cover the other categories.',
+    'Do NOT drift outside this angle; other parallel sub-workers cover the other angles.',
   ].join('\n');
 }

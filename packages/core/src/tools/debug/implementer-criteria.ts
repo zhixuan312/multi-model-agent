@@ -71,23 +71,19 @@ export const SCOPE_RULE_DEBUG = [
  * a careful debugger would consciously check for.
  */
 export const DEBUG_FAILURE_MODES = [
-  'Patterns to consciously check for. Apply on EVERY debug investigation:',
+  'Five parallel angles for finding the root cause. EACH angle is a distinct perspective; from your assigned angle, propose one or more candidate root-cause hypotheses (or contributing factors). Severity = strength of the evidence chain from THIS angle.',
   '',
-  '1. SYMPTOM-NOT-CAUSE — the suspicious line you first hit is where the failure SURFACES, not where it is CAUSED. Trace upstream until you find a state that, if changed, prevents the failure. The cited cause must be upstream of the cited symptom in the call/data flow.',
-  '2. SCAPEGOAT FILE — the failing test or the throwing line is in a file that is just the messenger. The actual defect lives in a file the failure passes through. Read the call stack / data path and place the finding at the source, not the sink.',
-  '3. INCOMPLETE TRACE — the chain from symptom to cause has unfilled gaps ("...somewhere in the middleware..."). Each step in the trace must be a file:line citation or an observed value. Gaps mean the maintainer redoes the investigation.',
-  '4. UNTESTED HYPOTHESIS — the proposed fix has no falsifier. Always state HOW the maintainer can verify the fix worked: which assertion now passes, which output is now right, which command no longer errors.',
-  '5. PARALLEL CAUSES — more than one independent root cause is plausible. If the evidence is consistent with two unrelated mechanisms, name both as separate findings. Do NOT collapse them.',
-  '6. PRE-EXISTING-VS-NEW ENTANGLEMENT — multiple bugs are entangled in one failure. Separate them. Identify which one the caller asked about; note the others under a separate section.',
-  '7. WRONG FIX SCOPE — the proposed fix is broader than the cause requires (a refactor when a one-line fix would do) or narrower than the cause requires (a band-aid that masks the bug). Match fix scope to the cause depth.',
-  '8. MISSING REPRODUCTION — there is no command, input, or state the maintainer can use to trigger the failure. Without reproduction the fix cannot be verified. If the caller did not provide one, infer it and state it explicitly.',
-  '9. CONFIDENCE OVERSTATEMENT — the chain has gaps but the finding is filed at `high` severity. Calibrate severity to evidence strength: gaps in the chain = lower severity OR explicit "this is the most likely candidate; verify by X" caveat.',
+  '1. SYMPTOM-LOCATION ANGLE — start from where the failure surfaces (the throwing line, the failing assertion, the visible bad output). Trace UPSTREAM through the call/data path until you find a state that, if changed, prevents the failure. Each step must be a file:line citation or an observed value. Your candidate cause is the upstream state-change site you identify.',
+  '2. RECENT-CHANGE ANGLE — read git log / recent diffs on the involved files. Which lines changed in the last N commits? Which changes plausibly altered the behavior under question? Your candidate cause is a specific recent change that could have introduced the bug; cite the commit + the line.',
+  '3. TEST-FAILURE ANGLE — read the failing test (or the test that would fail). What assertion fires, with what expected vs actual? Read the implementation it exercises and identify where the contract is broken. Your candidate cause is "the implementation does X but the test contract requires Y at <file:line>".',
+  '4. REPRODUCTION ANGLE — what minimum input / state / config triggers the failure? If no reproduction exists in the bug report, infer one from the code: which entry point + arguments would land in the failing path? Your candidate cause is "the failure requires <state>; the bug is the code path that handles that state at <file:line>".',
+  '5. CONCURRENCY / CONFIGURATION ANGLE — does the failure depend on timing, ordering, async-ness, env vars, feature flags, or runtime config? Look for shared state, locks, awaits between check-and-act, conditional code gated on env. Your candidate cause is the race / config dependency, or "no concurrency/config dependency suspected" with reasoning.',
   '',
-  'Severity calibration for debug:',
-  '- critical: confirmed root cause where applying the proposed fix incorrectly would ship a regression (e.g. fix at the wrong layer that hides the bug).',
-  '- high: confirmed root cause with full chain symptom → cause → reproduction → falsifier. The maintainer can apply directly.',
-  '- medium: plausible cause with most of the chain, one or two gaps the maintainer can fill. Mark gaps explicitly.',
-  '- low: partial trace, multiple candidates, or hypothesis without sufficient evidence. Use sparingly — most findings should be medium or high.',
+  'Severity calibration for each candidate root cause:',
+  '- critical: confirmed root cause + reproducible evidence + concrete fix is implied. The maintainer can act now without re-investigation.',
+  '- high: strong root-cause hypothesis with traced upstream evidence (file:line citations along the call/data path), single chain, no inferred steps.',
+  '- medium: likely candidate cause with most of the chain; 1-2 inferred steps; mark gaps explicitly with "verify by reading <file>" or "verify by running <cmd>".',
+  '- low: possible contributing factor or partial trace; weak evidence but worth surfacing for the maintainer to consider against other angles\' candidates.',
 ].join('\n');
 
 /**

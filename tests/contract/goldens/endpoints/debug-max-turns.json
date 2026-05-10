@@ -2,15 +2,15 @@
   "headline": "[ok] debug completed",
   "results": [
     {
-      "output": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmock max turns\n\n--- SCAPEGOAT FILE (criterion 2) ---\nmock max turns\n\n--- INCOMPLETE TRACE (criterion 3) ---\nmock max turns\n\n--- UNTESTED HYPOTHESIS (criterion 4) ---\nmock max turns\n\n--- PARALLEL CAUSES (criterion 5) ---\nmock max turns\n\n--- PRE-EXISTING-VS-NEW ENTANGLEMENT (criterion 6) ---\nmock max turns\n\n--- WRONG FIX SCOPE (criterion 7) ---\nmock max turns\n\n--- MISSING REPRODUCTION (criterion 8) ---\nmock max turns\n\n--- CONFIDENCE OVERSTATEMENT (criterion 9) ---\nmock max turns",
+      "output": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock max turns\n\n--- RECENT-CHANGE ANGLE (criterion 2) ---\nmock max turns\n\n--- TEST-FAILURE ANGLE (criterion 3) ---\nmock max turns\n\n--- REPRODUCTION ANGLE (criterion 4) ---\nmock max turns\n\n--- CONCURRENCY / CONFIGURATION ANGLE (criterion 5) ---\nmock max turns",
       "status": "ok",
       "usage": {
-        "inputTokens": 90,
-        "outputTokens": 180,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 9,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 9,
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -29,47 +29,27 @@
       "workerOutputs": [
         {
           "criterionId": "1",
-          "criterionTitle": "SYMPTOM-NOT-CAUSE",
+          "criterionTitle": "SYMPTOM-LOCATION ANGLE",
           "narrative": "mock max turns"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "SCAPEGOAT FILE",
+          "criterionTitle": "RECENT-CHANGE ANGLE",
           "narrative": "mock max turns"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "INCOMPLETE TRACE",
+          "criterionTitle": "TEST-FAILURE ANGLE",
           "narrative": "mock max turns"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "UNTESTED HYPOTHESIS",
+          "criterionTitle": "REPRODUCTION ANGLE",
           "narrative": "mock max turns"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "PARALLEL CAUSES",
-          "narrative": "mock max turns"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "PRE-EXISTING-VS-NEW ENTANGLEMENT",
-          "narrative": "mock max turns"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "WRONG FIX SCOPE",
-          "narrative": "mock max turns"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "MISSING REPRODUCTION",
-          "narrative": "mock max turns"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "CONFIDENCE OVERSTATEMENT",
+          "criterionTitle": "CONCURRENCY / CONFIGURATION ANGLE",
           "narrative": "mock max turns"
         }
       ],
@@ -78,15 +58,11 @@
         "2",
         "3",
         "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9"
+        "5"
       ],
       "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmock max turns",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -94,7 +70,7 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmock max turns",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -113,11 +89,11 @@
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 90,
-          "outputTokens": 180,
+          "inputTokens": 50,
+          "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 9,
+          "turnCount": 5,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -183,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nmock max turns",
+    "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

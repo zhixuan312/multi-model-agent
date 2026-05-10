@@ -2,15 +2,15 @@
   "headline": "[ok] debug completed",
   "results": [
     {
-      "output": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nneeds rework per review\n\n--- SCAPEGOAT FILE (criterion 2) ---\nneeds rework per review\n\n--- INCOMPLETE TRACE (criterion 3) ---\nneeds rework per review\n\n--- UNTESTED HYPOTHESIS (criterion 4) ---\nneeds rework per review\n\n--- PARALLEL CAUSES (criterion 5) ---\nneeds rework per review\n\n--- PRE-EXISTING-VS-NEW ENTANGLEMENT (criterion 6) ---\nneeds rework per review\n\n--- WRONG FIX SCOPE (criterion 7) ---\nneeds rework per review\n\n--- MISSING REPRODUCTION (criterion 8) ---\nneeds rework per review\n\n--- CONFIDENCE OVERSTATEMENT (criterion 9) ---\nneeds rework per review",
+      "output": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review\n\n--- RECENT-CHANGE ANGLE (criterion 2) ---\nneeds rework per review\n\n--- TEST-FAILURE ANGLE (criterion 3) ---\nneeds rework per review\n\n--- REPRODUCTION ANGLE (criterion 4) ---\nneeds rework per review\n\n--- CONCURRENCY / CONFIGURATION ANGLE (criterion 5) ---\nneeds rework per review",
       "status": "ok",
       "usage": {
-        "inputTokens": 90,
-        "outputTokens": 180,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 9,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 9,
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -29,47 +29,27 @@
       "workerOutputs": [
         {
           "criterionId": "1",
-          "criterionTitle": "SYMPTOM-NOT-CAUSE",
+          "criterionTitle": "SYMPTOM-LOCATION ANGLE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "SCAPEGOAT FILE",
+          "criterionTitle": "RECENT-CHANGE ANGLE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "INCOMPLETE TRACE",
+          "criterionTitle": "TEST-FAILURE ANGLE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "UNTESTED HYPOTHESIS",
+          "criterionTitle": "REPRODUCTION ANGLE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "PARALLEL CAUSES",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "PRE-EXISTING-VS-NEW ENTANGLEMENT",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "WRONG FIX SCOPE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "MISSING REPRODUCTION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "CONFIDENCE OVERSTATEMENT",
+          "criterionTitle": "CONCURRENCY / CONFIGURATION ANGLE",
           "narrative": "needs rework per review"
         }
       ],
@@ -78,15 +58,11 @@
         "2",
         "3",
         "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9"
+        "5"
       ],
       "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nneeds rework per review",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -94,7 +70,7 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nneeds rework per review",
+        "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -113,11 +89,11 @@
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 90,
-          "outputTokens": 180,
+          "inputTokens": 50,
+          "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 9,
+          "turnCount": 5,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -183,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- SYMPTOM-NOT-CAUSE (criterion 1) ---\nneeds rework per review",
+    "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
