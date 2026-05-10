@@ -29,6 +29,14 @@ export interface RunResult {
   turns: number
   filesRead: string[]
   filesWritten: string[]
+  /** A4b §2a (4.2.2+): worker write attempts that failed the path-validity
+   *  filter — shell heredoc commands, absolute paths, paths containing
+   *  shell metacharacters. NOT real, verifiable disk artifacts. The
+   *  lifecycle layer drains this into LifecycleContext.diagnostics for the
+   *  `writes_unverifiable` daemon-log message; not surfaced on the public
+   *  HTTP envelope. Optional so legacy consumers / mocks compile without
+   *  setting the field. */
+  filesWrittenRejected?: string[]
   toolCalls: string[]
   outputIsDiagnostic: boolean
   escalationLog: AttemptRecord[]

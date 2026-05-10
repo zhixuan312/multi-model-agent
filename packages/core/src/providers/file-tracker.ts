@@ -15,6 +15,40 @@
  * it impossible to tell whether the worker had done substantial work or had
  * bailed out immediately.
  */
+
+/**
+ * A4b §2a path-validity filter (4.2.2+).
+ *
+ * Returns true iff `entry` is a real, sandbox-safe relative filesystem
+ * path that the platform can verify via `stat(taskSpec.cwd, entry)`.
+ * Returns false for anything that looks like a shell-channel artifact,
+ * shell injection, or sandbox-escape attempt.
+ *
+ * The five rules (in order — first match wins):
+ *  1. Reject the literal `shell:` prefix (used by Gap-11 shell-detection
+ *     to attribute heuristic shell writes; A4b stops conflating those
+ *     with real paths).
+ *  2. Reject entries with shell control characters: < > | & ; ` $ ( )
+ *  3. Reject entries that don't match ^[A-Za-z0-9_.][^\s'"]*$
+ *     (must start with alphanumeric/underscore/dot; no whitespace/quotes).
+ *  4. Reject entries longer than 4096 chars (PATH_MAX guard).
+ *  5. Reject absolute paths. `path.join(cwd, '/etc/passwd')` returns
+ *     `/etc/passwd` (path.join ignores cwd when arg2 is absolute) — silent
+ *     sandbox escape.
+ */
+export function filterValidWritePath(entry: string): boolean {
+  if (typeof entry !== 'string' || entry.length === 0) return false;
+  if (entry.length > 4096) return false;
+  if (entry.startsWith('shell:')) return false;
+  // Shell control chars: <, >, |, &, ;, backtick (`), $, (, )
+  if (/[<>|&;`$()]/.test(entry)) return false;
+  // Path shape: alphanumeric/_/. start, no whitespace, no quotes
+  if (!/^[A-Za-z0-9_.][^\s'"]*$/.test(entry)) return false;
+  // Sandbox-escape guard
+  if (entry.startsWith('/')) return false;
+  return true;
+}
+
 export class FileTracker {
   private reads = new Set<string>();
   private dirs: string[] = [];
