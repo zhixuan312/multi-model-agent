@@ -329,6 +329,85 @@
         "skill",
         "client"
       ]
+    },
+    {
+      "name": "stall_watchdog_armed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "stallTimeoutMs"
+      ]
+    },
+    {
+      "name": "stall_watchdog_fired",
+      "requiredFields": [
+        "event",
+        "ts",
+        "idleMs",
+        "stallTimeoutMs"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_start",
+      "requiredFields": [
+        "event",
+        "ts",
+        "parallelism"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_complete",
+      "requiredFields": [
+        "event",
+        "ts",
+        "durationMs",
+        "cacheWritten"
+      ]
+    },
+    {
+      "name": "criteria_subworker_started",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle"
+      ]
+    },
+    {
+      "name": "criteria_subworker_completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "status",
+        "durationMs"
+      ]
+    },
+    {
+      "name": "criteria_subworker_retry",
+      "requiredFields": [
+        "event",
+        "ts",
+        "retriedCount"
+      ]
+    },
+    {
+      "name": "criteria_fanout_summary",
+      "requiredFields": [
+        "event",
+        "ts",
+        "parallelism",
+        "succeededCount",
+        "failedCount"
+      ]
+    },
+    {
+      "name": "criteria_fanout_tools_unavailable",
+      "requiredFields": [
+        "event",
+        "ts",
+        "reason"
+      ]
     }
   ]
 }

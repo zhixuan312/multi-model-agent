@@ -166,7 +166,28 @@ async function runOneSubWorker(
 }
 
 export async function dispatchParallelCriteria(input: DispatchInput): Promise<DispatchResult> {
-  const toolDefs = input.toolDefinitions ?? filterToReadOnly(makeToolDefinitions({ cwd: input.cwd }));
+  // makeToolDefinitions constructs a CWDValidator that synchronously
+  // realpath()s the cwd; if cwd doesn't exist (test fixtures, future
+  // ephemeral cwds) we fall back to an empty tool surface — the
+  // sub-workers still have the inlined doc/files content in the cached
+  // prefix and can answer without reading more files.
+  let toolDefs: ToolDefinition[];
+  if (input.toolDefinitions) {
+    toolDefs = input.toolDefinitions;
+  } else {
+    try {
+      toolDefs = filterToReadOnly(makeToolDefinitions({ cwd: input.cwd }));
+    } catch (err) {
+      input.bus?.emit({
+        event: 'criteria_fanout_tools_unavailable',
+        ts: new Date().toISOString(),
+        ...(input.batchId !== undefined && { batchId: input.batchId }),
+        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+        reason: err instanceof Error ? err.message : String(err),
+      });
+      toolDefs = [];
+    }
+  }
 
   input.bus?.emit({
     event: 'criteria_fanout_warm_start',
@@ -223,6 +244,26 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
 
   succeeded.sort((a, b) => Number(a.criterionId) - Number(b.criterionId));
   finalFailures.sort((a, b) => Number(a.id) - Number(b.id));
+
+  input.bus?.emit({
+    event: 'criteria_fanout_summary',
+    ts: new Date().toISOString(),
+    ...(input.batchId !== undefined && { batchId: input.batchId }),
+    ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+    ...(input.route !== undefined && { route: input.route }),
+    parallelism: input.criteria.length,
+    succeededCount: succeeded.length,
+    failedCount: finalFailures.length,
+    coveredIds: succeeded.map(s => s.criterionId),
+    failedIds: finalFailures.map(f => f.id),
+    warmCacheWritten: warm.cacheWritten,
+    warmDurationMs: warm.durationMs,
+    totalInputTokens: succeeded.reduce((a, s) => a + s.usage.inputTokens, 0),
+    totalCachedReadTokens: succeeded.reduce((a, s) => a + s.usage.cachedReadTokens, 0),
+    totalOutputTokens: succeeded.reduce((a, s) => a + s.usage.outputTokens, 0),
+    totalCostUSD: succeeded.reduce((a, s) => a + (s.costUSD ?? 0), 0),
+    longestSubWorkerMs: succeeded.reduce((a, s) => Math.max(a, s.durationMs), 0),
+  });
 
   const totalUsage = succeeded.reduce(
     (acc, s) => ({

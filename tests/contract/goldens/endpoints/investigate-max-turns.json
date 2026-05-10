@@ -2,46 +2,85 @@
   "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
-      "output": "mock max turns",
-      "status": "incomplete",
+      "output": "--- WRONG FILE (criterion 1) ---\nmock max turns\n\n--- STALE QUOTE (criterion 2) ---\nmock max turns\n\n--- HALLUCINATED CITATION (criterion 3) ---\nmock max turns\n\n--- CONFIDENCE OVERSTATEMENT (criterion 4) ---\nmock max turns\n\n--- CITATION GAP (criterion 5) ---\nmock max turns\n\n--- QUESTION SHIFT (criterion 6) ---\nmock max turns\n\n--- SYNTHESIS WITHOUT GROUNDING (criterion 7) ---\nmock max turns\n\n--- ASSUMED-CURRENT-STATE (criterion 8) ---\nmock max turns",
+      "status": "ok",
       "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
+        "inputTokens": 80,
+        "outputTokens": 160,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 99,
+      "turns": 8,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
-      "outputIsDiagnostic": true,
-      "escalationLog": [
+      "outputIsDiagnostic": false,
+      "escalationLog": [],
+      "parsedFindings": null,
+      "workerStatus": "done",
+      "workerOutputs": [
         {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 99,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
+          "criterionId": "1",
+          "criterionTitle": "WRONG FILE",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "2",
+          "criterionTitle": "STALE QUOTE",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "3",
+          "criterionTitle": "HALLUCINATED CITATION",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "4",
+          "criterionTitle": "CONFIDENCE OVERSTATEMENT",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "5",
+          "criterionTitle": "CITATION GAP",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "6",
+          "criterionTitle": "QUESTION SHIFT",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "7",
+          "criterionTitle": "SYNTHESIS WITHOUT GROUNDING",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "8",
+          "criterionTitle": "ASSUMED-CURRENT-STATE",
+          "narrative": "mock max turns"
         }
       ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "terminationReason": {
-        "cause": "incomplete",
-        "turnsUsed": 99,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": null,
-        "wasPromoted": false
-      },
-      "errorCode": "incomplete",
-      "retryable": false,
+      "partialCriteriaCovered": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8"
+      ],
+      "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "mock max turns",
+        "summary": "--- WRONG FILE (criterion 1) ---\nmock max turns",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "--- WRONG FILE (criterion 1) ---\nmock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -53,8 +92,28 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 80,
+          "outputTokens": 160,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 8,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
           "modelFamily": null,
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
@@ -64,39 +123,40 @@
           "outputTokens": 20,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 99,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
-          "filesWrittenCount": 0
+          "filesWrittenCount": 0,
+          "verdict": "error",
+          "roundsUsed": 1,
+          "concernCategories": [],
+          "findingsBySeverity": {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          }
         }
       },
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
+      "qualityReviewStatus": "error",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "qualityReviewer": "skipped"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "structuredReport": {
-        "summary": "mock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "workerStatus": "done",
+      "qualityReviewReason": "",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "durationMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {
@@ -109,7 +169,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock max turns",
+    "summary": "--- WRONG FILE (criterion 1) ---\nmock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -124,6 +184,7 @@
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1
+  "qualityReviewVerdict": "error",
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

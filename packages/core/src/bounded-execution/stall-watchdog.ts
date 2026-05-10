@@ -28,9 +28,19 @@ export interface StallWatchdogContext {
   stall: { controller: AbortController; lastEventAtMs: number; fired: boolean };
   timing: { stallTimeoutMs: number };
   bus?: EventEmitter;
+  batchId?: string;
+  taskIndex?: number;
 }
 
 export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
+  ctx.bus?.emit({
+    event: 'stall_watchdog_armed',
+    ts: new Date().toISOString(),
+    ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+    ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+    stallTimeoutMs: ctx.timing.stallTimeoutMs,
+  });
+
   ctx.bus?.on((event) => {
     const eventName = typeof event.event === 'string' ? event.event : '';
     if (RESET_EVENTS.has(eventName)) {
@@ -51,9 +61,18 @@ export function startStallWatchdog(ctx: StallWatchdogContext): () => void {
       ctx.stall.fired = true;
       return;
     }
-    if (Date.now() - ctx.stall.lastEventAtMs >= ctx.timing.stallTimeoutMs) {
+    const idleMs = Date.now() - ctx.stall.lastEventAtMs;
+    if (idleMs >= ctx.timing.stallTimeoutMs) {
       ctx.stall.fired = true;
       ctx.stall.controller.abort();
+      ctx.bus?.emit({
+        event: 'stall_watchdog_fired',
+        ts: new Date().toISOString(),
+        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+        ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+        idleMs,
+        stallTimeoutMs: ctx.timing.stallTimeoutMs,
+      });
     }
   }, pollIntervalMs);
 

@@ -5,7 +5,7 @@ import type {
   Provider,
   AgentType,
 } from '../types.js';
-import type { ProgressEvent, RunTasksRuntime } from '../providers/runner-types.js';
+import type { ProgressEvent, RunTasksRuntime, RunStatus } from '../providers/runner-types.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
@@ -22,6 +22,10 @@ import { delegateWithEscalation } from '../escalation/delegate-with-escalation.j
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
+import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
+import { READ_ONLY_ROUTES, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { makeRunnerShell } from '../providers/make-runner-shell.js';
+import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -267,7 +271,13 @@ export async function runTaskViaDispatcher(
   // ctx.stall has been declared since v3.x but never armed; this wires the
   // timer that fires .abort() after stallTimeoutMs of no runner events.
   // Disposed in finally{} below so it's torn down on the success path too.
-  const stopWatchdog = startStallWatchdog(executionContext);
+  const stopWatchdog = startStallWatchdog({
+    stall: executionContext.stall,
+    timing: executionContext.timing,
+    ...(executionContext.bus && { bus: executionContext.bus }),
+    ...(executionContext.batchId !== undefined && { batchId: executionContext.batchId }),
+    ...(executionContext.taskIndex !== undefined && { taskIndex: executionContext.taskIndex }),
+  });
 
   let out;
   try {
@@ -304,6 +314,136 @@ export async function runTaskViaDispatcher(
         state.terminal = true;
         return undefined;
       }
+      // Read-only routes (audit/review/verify/debug/investigate) fan out
+      // one sub-worker per criterion via the parallel-criteria dispatcher.
+      // Spec §4.6: prime the prompt cache once, dispatch N sub-workers in
+      // parallel, retry failed sub-workers once on the warm cache,
+      // synthesize a RunResult with workerOutputs[] for the merge annotator.
+      if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
+        try {
+          const routeSpec = READ_ONLY_ROUTES[route];
+          const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
+          const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
+          const preReadFiles: Record<string, string> = {};
+          for (const fp of filePaths) {
+            try {
+              preReadFiles[fp] = await fsReadFile(fp, 'utf8');
+            } catch {
+              // tolerated — sub-worker can read on demand via tools
+            }
+          }
+          // The route's existing prompt builder produced task.prompt with
+          // the brief, the inline document/code (if any), and the
+          // file-path list. Use it verbatim as the "target" content in the
+          // cached prefix so we don't lose route-specific framing. Our own
+          // prefix builder adds orientation, evidence/scope/severity rules,
+          // the criterion taxonomy reference, and the per-criterion finding
+          // format on top.
+          const targetContent = (taskWithFiles.document && taskWithFiles.document.trim().length > 0)
+            ? taskWithFiles.document
+            : task.prompt;
+          const cachedPrefix = routeSpec.buildPrefix({
+            document: targetContent,
+            preReadFiles,
+            filePaths,
+          });
+          const shell = makeRunnerShell(provider);
+          const dispatchResult = await dispatchParallelCriteria({
+            shell,
+            cachedPrefix,
+            criteria: routeSpec.criteria,
+            buildSuffix: routeSpec.buildSuffix,
+            cwd: ctx.cwd,
+            ...(ctx.stall.controller.signal && { abortSignal: ctx.stall.controller.signal }),
+            deadlineMs: ctx.timing.deadlineMs,
+            ...(ctx.bus && { bus: ctx.bus }),
+            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
+            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
+            tier: decision.impl,
+            route,
+          });
+
+          const totalCriteria = routeSpec.criteria.length;
+          const succeededCount = dispatchResult.workerOutputs.length;
+          const majorityThreshold = Math.ceil(totalCriteria / 2);
+          const status: RunStatus = succeededCount === 0
+            ? 'error'
+            : succeededCount >= majorityThreshold ? 'ok' : 'incomplete';
+          const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
+            ? ('missing_sections' as const)
+            : undefined;
+          const synthesizedOutput = dispatchResult.workerOutputs
+            .map(o => `--- ${o.criterionTitle} (criterion ${o.criterionId}) ---\n${o.narrative}`)
+            .join('\n\n');
+
+          // Always set implementationReport so quality_review_round_1
+           // (which gates on `last.implementationReport ?? last.structuredReport`)
+           // fires even when the synthesized output contains no parseable
+           // structured-report blocks. Non-empty workerOutputs is the
+           // post-dispatch invariant that means "the implementer stage
+           // produced something the annotator can merge."
+          const parsedReport = parseStructuredReport(synthesizedOutput) ?? { findings: [], structuredReportSchemaUsed: 'fallback' as unknown as never };
+          state.lastRunResult = {
+            output: synthesizedOutput,
+            status,
+            usage: dispatchResult.totalUsage,
+            turns: dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0),
+            filesRead: filePaths,
+            filesWritten: [],
+            toolCalls: [],
+            outputIsDiagnostic: false,
+            escalationLog: [],
+            parsedFindings: null,
+            workerStatus: succeededCount === 0 ? 'failed' : 'done',
+            workerOutputs: dispatchResult.workerOutputs.map(o => ({
+              criterionId: o.criterionId,
+              criterionTitle: o.criterionTitle,
+              narrative: o.narrative,
+            })),
+            partialCriteriaCovered: dispatchResult.partialCriteriaCovered,
+            partialCriteriaFailed: dispatchResult.partialCriteriaFailed,
+            ...(incompleteReason && { incompleteReason }),
+            implementationReport: parsedReport,
+            structuredReport: parsedReport,
+          } as unknown as RunResult;
+
+          mergeStageStats(state, 'implementing', {
+            inputTokens: dispatchResult.totalUsage.inputTokens,
+            outputTokens: dispatchResult.totalUsage.outputTokens,
+            cachedReadTokens: dispatchResult.totalUsage.cachedReadTokens,
+            cachedNonReadTokens: dispatchResult.totalUsage.cachedNonReadTokens,
+            turnCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0),
+            toolCallCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.toolCallCount, 0),
+            costUSD: dispatchResult.workerOutputs.reduce((a, o) => a + (o.costUSD ?? 0), 0),
+            durationMs: Math.max(0, ...dispatchResult.workerOutputs.map(o => o.durationMs)),
+          }, {
+            tier: ctx.assignedTier,
+            model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
+          });
+          if (status !== 'ok') state.terminal = true;
+          return undefined;
+        } catch (err) {
+          const message = err instanceof Error ? err.message : String(err);
+          state.lastRunResult = {
+            output: '',
+            status: 'error',
+            usage: { inputTokens: 0, outputTokens: 0 },
+            turns: 0,
+            filesRead: [],
+            filesWritten: [],
+            toolCalls: [],
+            outputIsDiagnostic: true,
+            escalationLog: [],
+            parsedFindings: null,
+            error: message,
+            errorCode: 'runner_crash',
+            workerStatus: 'failed',
+          } as unknown as RunResult;
+          state.terminal = true;
+          return undefined;
+        }
+      }
+
       try {
         const result = await delegateWithEscalation(
           {

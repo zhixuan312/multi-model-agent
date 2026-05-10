@@ -2,44 +2,103 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "mocked ok",
+      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nmocked ok\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nmocked ok\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nmocked ok\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nmocked ok\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nmocked ok\n\n--- FIX ACTIONABILITY (criterion 7) ---\nmocked ok\n\n--- DRIFT / STALENESS (criterion 8) ---\nmocked ok\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nmocked ok\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nmocked ok\n\n--- METADATA COMPLETENESS (criterion 11) ---\nmocked ok",
       "status": "ok",
       "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
+        "inputTokens": 110,
+        "outputTokens": 220,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 1,
+      "turns": 11,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": false,
-      "escalationLog": [
+      "escalationLog": [],
+      "parsedFindings": null,
+      "workerStatus": "done",
+      "workerOutputs": [
         {
-          "provider": "mock",
-          "status": "ok",
-          "turns": 1,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": ""
+          "criterionId": "1",
+          "criterionTitle": "RECOMMENDATION-COHERENCE",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "2",
+          "criterionTitle": "INTERNAL CONTRADICTION",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "3",
+          "criterionTitle": "CROSS-ITEM DUPLICATION",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "4",
+          "criterionTitle": "INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "5",
+          "criterionTitle": "ARGUMENT SOUNDNESS",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "6",
+          "criterionTitle": "COMPLETENESS AGAINST CONSTRAINTS",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "7",
+          "criterionTitle": "FIX ACTIONABILITY",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "8",
+          "criterionTitle": "DRIFT / STALENESS",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "9",
+          "criterionTitle": "SCOPE-CREEP / FRAMING",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "10",
+          "criterionTitle": "STRUCTURAL CONSISTENCY",
+          "narrative": "mocked ok"
+        },
+        {
+          "criterionId": "11",
+          "criterionTitle": "METADATA COMPLETENESS",
+          "narrative": "mocked ok"
         }
       ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "workerStatus": "done",
-      "terminationReason": {
-        "cause": "finished",
-        "turnsUsed": 1,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": "done",
-        "wasPromoted": false
-      },
+      "partialCriteriaCovered": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10",
+        "11"
+      ],
+      "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "mocked ok",
+        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -51,18 +110,18 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 10,
-          "outputTokens": 20,
+          "inputTokens": 110,
+          "outputTokens": 220,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 1,
+          "turnCount": 11,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -110,19 +169,12 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "",
-      "structuredReport": {
-        "summary": "mocked ok",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "durationMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {
@@ -135,7 +187,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mocked ok",
+    "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

@@ -100,6 +100,15 @@ export interface RunResult {
   implementationReport?: import('../reporting/structured-report.js').ParsedStructuredReport
   specReviewReport?: import('../reporting/structured-report.js').ParsedStructuredReport
   qualityReviewReport?: import('../reporting/structured-report.js').ParsedStructuredReport
+  /** Per-criterion narratives from parallel-criteria fan-out. Read-only
+   *  routes populate this; artifact-producing routes leave it undefined.
+   *  The merge annotator reads this to produce the unified
+   *  annotatedFindings array. */
+  workerOutputs?: Array<{ criterionId: string; criterionTitle: string; narrative: string }>
+  /** IDs of criteria whose sub-workers succeeded. Read-only routes only. */
+  partialCriteriaCovered?: string[]
+  /** Failed criteria with reason. Read-only routes only. */
+  partialCriteriaFailed?: Array<{ id: string; title: string; reason: 'timeout' | 'transport' | 'parse' | 'other'; lastError: string }>
 }
 
 export interface ReviewPromptParts {

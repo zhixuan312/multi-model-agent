@@ -1,47 +1,80 @@
 {
-  "headline": "[incomplete] verify completed",
+  "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "mock incomplete",
-      "status": "incomplete",
+      "output": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nmock incomplete\n\n--- STALE EVIDENCE (criterion 2) ---\nmock incomplete\n\n--- IMPLICIT-CRITERION GAP (criterion 3) ---\nmock incomplete\n\n--- PARTIAL COVERAGE (criterion 4) ---\nmock incomplete\n\n--- CONFLATED CRITERIA (criterion 5) ---\nmock incomplete\n\n--- WRONG-ARTIFACT EVIDENCE (criterion 6) ---\nmock incomplete\n\n--- ASSUMED-PASS-ON-UNTESTED (criterion 7) ---\nmock incomplete",
+      "status": "ok",
       "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
+        "inputTokens": 70,
+        "outputTokens": 140,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 1,
+      "turns": 7,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
-      "outputIsDiagnostic": true,
-      "escalationLog": [
+      "outputIsDiagnostic": false,
+      "escalationLog": [],
+      "parsedFindings": null,
+      "workerStatus": "done",
+      "workerOutputs": [
         {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 1,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
+          "criterionId": "1",
+          "criterionTitle": "CLAIM-WITHOUT-EVIDENCE",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "2",
+          "criterionTitle": "STALE EVIDENCE",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "3",
+          "criterionTitle": "IMPLICIT-CRITERION GAP",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "4",
+          "criterionTitle": "PARTIAL COVERAGE",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "5",
+          "criterionTitle": "CONFLATED CRITERIA",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "6",
+          "criterionTitle": "WRONG-ARTIFACT EVIDENCE",
+          "narrative": "mock incomplete"
+        },
+        {
+          "criterionId": "7",
+          "criterionTitle": "ASSUMED-PASS-ON-UNTESTED",
+          "narrative": "mock incomplete"
         }
       ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "terminationReason": {
-        "cause": "incomplete",
-        "turnsUsed": 1,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": null,
-        "wasPromoted": false
-      },
-      "errorCode": "incomplete",
-      "retryable": false,
+      "partialCriteriaCovered": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7"
+      ],
+      "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "mock incomplete",
+        "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nmock incomplete",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nmock incomplete",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -53,8 +86,28 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 70,
+          "outputTokens": 140,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 7,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
           "modelFamily": null,
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
@@ -67,36 +120,37 @@
           "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
-          "filesWrittenCount": 0
+          "filesWrittenCount": 0,
+          "verdict": "error",
+          "roundsUsed": 1,
+          "concernCategories": [],
+          "findingsBySeverity": {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          }
         }
       },
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
+      "qualityReviewStatus": "error",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "qualityReviewer": "skipped"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "structuredReport": {
-        "summary": "mock incomplete",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "workerStatus": "done",
+      "qualityReviewReason": "",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "durationMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {
@@ -109,7 +163,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock incomplete",
+    "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nmock incomplete",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -124,6 +178,7 @@
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1
+  "qualityReviewVerdict": "error",
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

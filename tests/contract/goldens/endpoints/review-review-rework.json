@@ -2,46 +2,97 @@
   "headline": "[ok] review completed",
   "results": [
     {
-      "output": "needs rework per review",
+      "output": "--- TEST GAP (criterion 1) ---\nneeds rework per review\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nneeds rework per review\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nneeds rework per review\n\n--- MISSING EDGE CASE (criterion 4) ---\nneeds rework per review\n\n--- RACE / CONCURRENCY (criterion 5) ---\nneeds rework per review\n\n--- RESOURCE LEAK (criterion 6) ---\nneeds rework per review\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nneeds rework per review\n\n--- SECURITY REGRESSION (criterion 8) ---\nneeds rework per review\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nneeds rework per review\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nneeds rework per review",
       "status": "ok",
       "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
+        "inputTokens": 100,
+        "outputTokens": 200,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 1,
+      "turns": 10,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": false,
-      "escalationLog": [
+      "escalationLog": [],
+      "parsedFindings": null,
+      "workerStatus": "done",
+      "workerOutputs": [
         {
-          "provider": "mock",
-          "status": "ok",
-          "turns": 1,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": ""
+          "criterionId": "1",
+          "criterionTitle": "TEST GAP",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "2",
+          "criterionTitle": "CROSS-FILE RIPPLE",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "3",
+          "criterionTitle": "PRE-EXISTING-BUG-VS-NEW-REGRESSION",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "4",
+          "criterionTitle": "MISSING EDGE CASE",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "5",
+          "criterionTitle": "RACE / CONCURRENCY",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "6",
+          "criterionTitle": "RESOURCE LEAK",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "7",
+          "criterionTitle": "BACKWARD-COMPAT BREAK",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "8",
+          "criterionTitle": "SECURITY REGRESSION",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "9",
+          "criterionTitle": "PERFORMANCE REGRESSION",
+          "narrative": "needs rework per review"
+        },
+        {
+          "criterionId": "10",
+          "criterionTitle": "IMPLICIT-CONTRACT ASSUMPTION",
+          "narrative": "needs rework per review"
         }
       ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
-      "workerStatus": "done",
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "error",
-      "terminationReason": {
-        "cause": "finished",
-        "turnsUsed": 1,
-        "hasFileArtifacts": false,
-        "usedShell": false,
-        "workerSelfAssessment": "done",
-        "wasPromoted": false
-      },
+      "partialCriteriaCovered": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5",
+        "6",
+        "7",
+        "8",
+        "9",
+        "10"
+      ],
+      "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "needs rework per review",
+        "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -53,18 +104,18 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 10,
-          "outputTokens": 20,
+          "inputTokens": 100,
+          "outputTokens": 200,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 1,
+          "turnCount": 10,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -99,6 +150,8 @@
           }
         }
       },
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "error",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
@@ -110,19 +163,12 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "",
-      "structuredReport": {
-        "summary": "needs rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "durationMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {
@@ -135,7 +181,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "needs rework per review",
+    "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
