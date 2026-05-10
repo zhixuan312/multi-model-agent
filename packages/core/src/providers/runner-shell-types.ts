@@ -31,6 +31,11 @@ export interface RunInput {
    *  on the running-headline polling response so the main agent's poll
    *  loop shows which lifecycle stage is currently active. */
   stageLabel?: string;
+  /** When set, ask the provider to attach a cache_control marker to the
+   *  system prompt so the prefix can be reused by subsequent calls.
+   *  Honored by adapters that expose explicit cache control (Anthropic);
+   *  no-op on adapters that auto-cache (OpenAI) or don't cache (codex). */
+  cacheControl?: { type: 'ephemeral' };
 }
 
 export interface RunResult {

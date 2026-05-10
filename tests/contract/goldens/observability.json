@@ -329,6 +329,125 @@
         "skill",
         "client"
       ]
+    },
+    {
+      "name": "stall_watchdog_armed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "stallTimeoutMs"
+      ]
+    },
+    {
+      "name": "stall_watchdog_fired",
+      "requiredFields": [
+        "event",
+        "ts",
+        "idleMs",
+        "stallTimeoutMs"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_start",
+      "requiredFields": [
+        "event",
+        "ts",
+        "parallelism"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_complete",
+      "requiredFields": [
+        "event",
+        "ts",
+        "durationMs",
+        "cacheControlSent"
+      ]
+    },
+    {
+      "name": "criteria_subworker_started",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle"
+      ]
+    },
+    {
+      "name": "criteria_subworker_completed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "status",
+        "durationMs"
+      ]
+    },
+    {
+      "name": "criteria_subworker_retry",
+      "requiredFields": [
+        "event",
+        "ts",
+        "retriedCount"
+      ]
+    },
+    {
+      "name": "criteria_fanout_summary",
+      "requiredFields": [
+        "event",
+        "ts",
+        "parallelism",
+        "succeededCount",
+        "failedCount",
+        "cacheHitConfirmed",
+        "cacheHitRatio"
+      ]
+    },
+    {
+      "name": "criteria_fanout_tools_unavailable",
+      "requiredFields": [
+        "event",
+        "ts",
+        "reason"
+      ]
+    },
+    {
+      "name": "criteria_subworker_soft_warning",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle",
+        "elapsedMs",
+        "remainingMs"
+      ]
+    },
+    {
+      "name": "criteria_subworker_hard_cap",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle",
+        "elapsedMs"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_soft_warning",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs",
+        "remainingMs"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_cap_hit",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs"
+      ]
     }
   ]
 }

@@ -131,3 +131,8 @@ export const ANNOTATOR_AWARENESS_REVIEW = [
   '- Is the finding within scope (named files + cross-file ripples on changed symbols + sibling test files), or is it speculation about unrelated code?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but cross-file ripple findings backed by call-site references and test-gap findings backed by sibling-test-file references are FULLY VALID, do NOT downgrade them as "speculation about untouched files."',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. */
+export const REVIEW_CRITERIA: readonly CriterionEntry[] = parseCriteria(CODE_REVIEW_FAILURE_MODES);

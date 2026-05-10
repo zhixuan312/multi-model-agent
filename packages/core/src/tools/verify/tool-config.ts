@@ -152,8 +152,12 @@ export const toolConfig: ToolConfig<Input, VerifyBrief, unknown> = {
       ? buildPerFilePrompt(brief.filePaths[0]!, brief.promptTemplate)
       : buildVerifyPrompt(brief.work, brief.filePaths.length > 0 ? brief.filePaths : undefined, brief.checklist);
 
+    const checklistFmt = brief.checklist.map((c, i) => `${i + 1}. ${c}`).join('\n');
     return {
       prompt,
+      // Pure user work + checklist for the parallel-criteria dispatcher's
+      // cached prefix; bypasses the legacy verify format spec.
+      parallelTarget: `Work to verify:\n${brief.work}\n\nChecklist (verify each item):\n${checklistFmt}`,
       agentType: 'complex',
       reviewPolicy: 'quality_only',
       briefQualityPolicy: 'off',

@@ -6,6 +6,7 @@ import { annotatorReviewTemplate } from './templates/annotator-review.js';
 import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
 import { annotatorDebugTemplate } from './templates/annotator-debug.js';
 import { annotatorInvestigateTemplate } from './templates/annotator-investigate.js';
+import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 const DEFAULT_ANNOTATOR_TEMPLATES = {
   audit: annotatorAuditTemplate,
@@ -16,7 +17,10 @@ const DEFAULT_ANNOTATOR_TEMPLATES = {
 } as const;
 
 export interface AnnotatorInput {
-  workerOutput: string;
+  /** N parallel sub-worker narratives, one per criterion the dispatcher
+   *  fanned out. With N=1 the engine behaves as a single-narrative
+   *  annotator (legacy compatibility for any non-fan-out caller). */
+  workerOutputs: Array<{ criterion: string; narrative: string }>;
   brief: string;
   cwd: string;
   route: AnnotatorRoute;
@@ -31,6 +35,11 @@ export interface AnnotatorInput {
   stageLabel?: string;
 }
 
+/** Sentinel narrative emitted by sub-workers when their criterion has no
+ *  matches in the artifact. Filtered out before merging so the annotator
+ *  doesn't waste tokens parsing empty content. */
+const NO_FINDINGS_SENTINEL = 'No findings for this criterion.';
+
 export interface AnnotatorCallResult extends AnnotatorParseResult {
   /** Raw assistant text from the shell run — per-tool compose_response handlers
    *  parse this via their per-tool report schema (audit, review, verify each
@@ -44,12 +53,22 @@ export class AnnotatorEngine {
   private parser = new AnnotatorOutputParser();
 
   async annotate(shell: RunnerShell, input: AnnotatorInput): Promise<AnnotatorCallResult> {
-    const prompt = this.builder.build(input.route, { workerOutput: input.workerOutput, brief: input.brief });
+    // Drop "No findings for this criterion." sentinels — they're valid
+    // empty results, not findings to merge. If ALL narratives are empty
+    // sentinels, send a synthetic empty narrative so the annotator
+    // returns []  via its standard "no findings raised" path.
+    const usableOutputs = input.workerOutputs.filter(
+      o => o.narrative.trim() !== NO_FINDINGS_SENTINEL,
+    );
+    const inputsForPrompt = usableOutputs.length > 0
+      ? usableOutputs
+      : [{ criterion: 'all sub-workers reported no findings', narrative: '(all sub-worker narratives were "No findings for this criterion." — return [])' }];
+    const prompt = this.builder.build(input.route, { workerOutputs: inputsForPrompt, brief: input.brief });
     const result = await shell.run({
       systemPrompt: prompt,
       userMessage: 'Annotate the findings above.',
       toolDefinitions: [],
-      maxTurns: 5, cwd: input.cwd,
+      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),

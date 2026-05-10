@@ -24,17 +24,15 @@ describe('verify prompt content', () => {
     expect(spec.prompt).toContain('rubber stamp');
   });
 
-  it('includes the verify failure-mode taxonomy', () => {
+  it('includes the 5 verify evidence sources', () => {
     const briefs = toolConfig.briefSlot({ work: 'build', checklist: ['unit tests pass'], filePaths: [], contextBlockIds: [] } as any);
     const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-    // All 7 categories should each surface in the worker's prompt.
-    expect(spec.prompt).toContain('CLAIM-WITHOUT-EVIDENCE');
-    expect(spec.prompt).toContain('STALE EVIDENCE');
-    expect(spec.prompt).toContain('IMPLICIT-CRITERION GAP');
-    expect(spec.prompt).toContain('PARTIAL COVERAGE');
-    expect(spec.prompt).toContain('CONFLATED CRITERIA');
-    expect(spec.prompt).toContain('WRONG-ARTIFACT EVIDENCE');
-    expect(spec.prompt).toContain('ASSUMED-PASS-ON-UNTESTED');
+    // 5 parallel evidence sources; each sub-worker takes one.
+    expect(spec.prompt).toContain('TEST-SUITE EVIDENCE');
+    expect(spec.prompt).toContain('SOURCE-CODE DIRECT-READ');
+    expect(spec.prompt).toContain('DOCUMENTATION EVIDENCE');
+    expect(spec.prompt).toContain('RUN-OUTPUT EVIDENCE');
+    expect(spec.prompt).toContain('DIFF EVIDENCE');
   });
 
   it('accepts NEGATIVE evidence as a valid third shape', () => {

@@ -86,7 +86,7 @@ describe('assembleAnnotatorPrompt', () => {
     };
     const ctx = {
       brief: 'Audit for security issues.\n\nRead and analyze this file:\n- src/x.ts\n\nProduce a narrative audit report. ## Finding 1:',
-      workerOutput: '## Finding 1: bug\n- Severity: high',
+      workerOutputs: [{ criterion: 'all criteria', narrative: '## Finding 1: bug\n- Severity: high' }],
     };
     const prompt = assembleAnnotatorPrompt(template, ctx);
     // Brief section should NOT contain the format spec

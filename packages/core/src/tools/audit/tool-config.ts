@@ -196,21 +196,33 @@ export const toolConfig: ToolConfig<Input, ToolAuditBrief, AuditReport> = {
   category: 'read_only',
   agentType: 'complex',
   briefSlot: auditBriefSlot,
-  buildTaskSpec: (brief, ctx) => ({
-    prompt: buildPrompt(brief),
-    agentType: 'complex',
-    reviewPolicy: 'quality_only',
-    briefQualityPolicy: 'off',
-    done: brief.done,
-    tools: ctx.config.defaults?.tools ?? 'full',
-    timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
-    maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
-    sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: ctx.projectContext?.cwd ?? ctx.cwd,
-    contextBlockIds: brief.contextBlockIds,
-    filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
-    mainModel: ctx.mainModel,
-  } as TaskSpec),
+  buildTaskSpec: (brief, ctx) => {
+    // For the parallel-criteria dispatcher's cached prefix, hand it the
+    // pure document/file targets — not buildPrompt's full spec which
+    // embeds the legacy ## Finding format and would compete with the
+    // dispatcher's own format spec.
+    const targetParts: string[] = [`Audit for ${brief.auditTypeText} issues.`];
+    if (brief.document) targetParts.push(`Document:\n\n${brief.document}`);
+    if (brief.filePaths.length > 0) {
+      targetParts.push(`Target files:\n${brief.filePaths.map(p => `- ${p}`).join('\n')}`);
+    }
+    return {
+      prompt: buildPrompt(brief),
+      parallelTarget: targetParts.join('\n\n'),
+      agentType: 'complex',
+      reviewPolicy: 'quality_only',
+      briefQualityPolicy: 'off',
+      done: brief.done,
+      tools: ctx.config.defaults?.tools ?? 'full',
+      timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
+      maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
+      sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
+      cwd: ctx.projectContext?.cwd ?? ctx.cwd,
+      contextBlockIds: brief.contextBlockIds,
+      filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
+      mainModel: ctx.mainModel,
+    } as TaskSpec;
+  },
   reportSchema: auditReportSchema,
   headlineTemplate: auditHeadlineTemplate,
   reviewTemplates: {

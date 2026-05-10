@@ -31,9 +31,16 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
     // reasoning-heavy models like deepseek-v4-pro do. `finalMessage()`
     // resolves to the same `Message` shape `messages.create()` returned,
     // so the rest of the adapter is unchanged.
+    // When the caller marked the prefix as cacheable, send `system` as a
+    // single text block with cache_control: { type: 'ephemeral' } attached.
+    // Anthropic's Messages API caches the prefix up through that marker so
+    // sibling sub-worker calls (criteria-fanout) can serve from cache.
+    const systemPayload = input.cacheControl
+      ? [{ type: 'text' as const, text: input.systemPrompt, cache_control: input.cacheControl }]
+      : input.systemPrompt;
     const stream = this.client.messages.stream({
       model: this.model,
-      system: input.systemPrompt,
+      system: systemPayload as any,
       messages,
       tools: this.mapTools(input.toolDefinitions),
       max_tokens: this.maxOutputTokens,

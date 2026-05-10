@@ -1,47 +1,76 @@
 {
-  "headline": "[incomplete] verify completed",
+  "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "mock max turns",
-      "status": "incomplete",
+      "output": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns\n\n--- SOURCE-CODE DIRECT-READ (criterion 2) ---\nmock max turns\n\n--- DOCUMENTATION EVIDENCE (criterion 3) ---\nmock max turns\n\n--- RUN-OUTPUT EVIDENCE (criterion 4) ---\nmock max turns\n\n--- DIFF EVIDENCE (criterion 5) ---\nmock max turns",
+      "status": "ok",
       "usage": {
-        "inputTokens": 10,
-        "outputTokens": 20,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 99,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
-      "outputIsDiagnostic": true,
-      "escalationLog": [
-        {
-          "provider": "mock",
-          "status": "incomplete",
-          "turns": 99,
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "costUSD": null,
-          "initialPromptLengthChars": 0,
-          "initialPromptHash": "",
-          "reason": "status=incomplete"
-        }
-      ],
-      "durationMs": "<DETERMINISTIC>",
-      "directoriesListed": [],
+      "outputIsDiagnostic": false,
+      "escalationLog": [],
+      "parsedFindings": null,
+      "workerStatus": "done",
       "terminationReason": {
-        "cause": "incomplete",
-        "turnsUsed": 99,
+        "cause": "finished",
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": null,
+        "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "errorCode": "incomplete",
-      "retryable": false,
+      "workerOutputs": [
+        {
+          "criterionId": "1",
+          "criterionTitle": "TEST-SUITE EVIDENCE",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "2",
+          "criterionTitle": "SOURCE-CODE DIRECT-READ",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "3",
+          "criterionTitle": "DOCUMENTATION EVIDENCE",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "4",
+          "criterionTitle": "RUN-OUTPUT EVIDENCE",
+          "narrative": "mock max turns"
+        },
+        {
+          "criterionId": "5",
+          "criterionTitle": "DIFF EVIDENCE",
+          "narrative": "mock max turns"
+        }
+      ],
+      "partialCriteriaCovered": [
+        "1",
+        "2",
+        "3",
+        "4",
+        "5"
+      ],
+      "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "mock max turns",
+        "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -53,8 +82,28 @@
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
+          "costUSD": 0,
           "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 50,
+          "outputTokens": 100,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 5,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
+        },
+        "quality_review": {
+          "stage": "quality_review",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "standard",
           "modelFamily": null,
           "model": "mock-model",
           "maxIdleMs": "<DETERMINISTIC>",
@@ -64,39 +113,40 @@
           "outputTokens": 20,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 99,
+          "turnCount": 1,
           "toolCallCount": 0,
           "filesReadCount": 0,
-          "filesWrittenCount": 0
+          "filesWrittenCount": 0,
+          "verdict": "error",
+          "roundsUsed": 1,
+          "concernCategories": [],
+          "findingsBySeverity": {
+            "critical": 0,
+            "high": 0,
+            "medium": 0,
+            "low": 0
+          }
         }
       },
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
+      "qualityReviewStatus": "error",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "qualityReviewer": "skipped"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "structuredReport": {
-        "summary": "mock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "workerStatus": "done",
+      "qualityReviewReason": "",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
         "qualityReviewer": null
-      }
+      },
+      "durationMs": "<DETERMINISTIC>"
     }
   ],
   "batchTimings": {
@@ -109,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock max turns",
+    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -124,6 +174,7 @@
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1
+  "qualityReviewVerdict": "error",
+  "roundsUsed": 1,
+  "contextBlockId": "<DETERMINISTIC>"
 }

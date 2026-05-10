@@ -126,8 +126,17 @@ async function runQualityReviewRound(input: ReviewRoundInput): Promise<ReviewerC
       }
       const annotator = ctx.annotatorEngine;
       if (!annotator) throw new Error('annotatorEngine not configured');
+      // Read-only routes go through dispatchParallelCriteria which writes
+      // workerOutputs[] onto lastRunResult. When that field is present,
+      // pass through verbatim. When absent (initial migration window or
+      // any future caller that hasn't fanned out), wrap last.output as
+      // a single-narrative input so the annotator path stays uniform.
+      const fanoutOutputs = (last as { workerOutputs?: Array<{ criterionId: string; criterionTitle: string; narrative: string }> }).workerOutputs;
+      const workerOutputs = Array.isArray(fanoutOutputs) && fanoutOutputs.length > 0
+        ? fanoutOutputs.map(o => ({ criterion: `criterion ${o.criterionId} — ${o.criterionTitle}`, narrative: o.narrative }))
+        : [{ criterion: 'all criteria', narrative: last.output }];
       return annotator.annotate(shell, {
-        workerOutput: last.output,
+        workerOutputs,
         brief: task.prompt ?? '',
         cwd: ctx.cwd,
         route: route as AnnotatorRoute,

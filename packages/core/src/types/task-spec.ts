@@ -45,4 +45,15 @@ export interface TaskSpec {
    * undefined. Runners MUST treat `undefined` as a no-op.
    */
   customToolset?: ResearchToolDefinition[]
+  /**
+   * For read-only routes that go through the parallel-criteria dispatcher,
+   * this is the user's pure question / work / problem text (route-specific
+   * shape). Used as the "target" content embedded in the cached prefix so
+   * sub-workers see ONLY the user's request — not the legacy monolithic
+   * format spec that lives in `prompt`. When absent, the dispatcher falls
+   * back to `document` then `prompt`. Audit: the inlined document. Review:
+   * the code snippet + filePaths. Verify: work + checklist. Debug: problem
+   * statement. Investigate: question.
+   */
+  parallelTarget?: string
 }

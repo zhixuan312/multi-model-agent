@@ -78,21 +78,19 @@ export const SCOPE_RULE_VERIFY = [
  * a careful verifier would consciously check for.
  */
 export const VERIFY_FAILURE_MODES = [
-  'Patterns to consciously check for. Apply on EVERY checklist item:',
+  'Five parallel evidence sources for verifying the user\'s checklist. From your assigned source, examine EVERY applicable checklist item and emit a finding (PASS / FAIL / cannot-verify) per item, with the evidence quoted. Severity = how decisive the verdict is.',
   '',
-  '1. CLAIM-WITHOUT-EVIDENCE — the work product says "the bug is fixed" or "tests added" but you have no execution output and no file:line citation backing the claim. Marking PASS on prose alone is a rubber stamp. Demand evidence; mark FAIL if none.',
-  '2. STALE EVIDENCE — the cited test run, build output, or commit was captured BEFORE the change being verified. Always check the timestamp / SHA / sequence — if the evidence predates the change, it does not demonstrate the criterion.',
-  '3. IMPLICIT-CRITERION GAP — a checklist item like "fix bug X" has an implicit sub-criterion (regression test added, no behavior change in unrelated code). If a reasonable stakeholder reading the criterion would expect the implicit sub-criterion, mark FAIL when it is not met. Do NOT silently exclude the implicit sub-criterion from the verdict.',
-  '4. PARTIAL COVERAGE — the criterion has multiple parts (e.g. "fix the bug AND add a regression test"). You only checked one part. Mark FAIL with explicit note of which part was satisfied and which was not. Do NOT mark PASS based on partial satisfaction.',
-  '5. CONFLATED CRITERIA — evidence for criterion B is used to claim criterion A. Each Finding\'s Evidence must directly demonstrate the criterion in that Finding\'s Item field, not a neighboring criterion.',
-  '6. WRONG-ARTIFACT EVIDENCE — the cited file or test name looks valid but does not actually exercise the change. Verify that the cited test name exists, that the cited line is in the cited file, and that the executed command produced the quoted output.',
-  '7. ASSUMED-PASS-ON-UNTESTED — the criterion cannot be verified from the artifact provided. The correct verdict is FAIL with "cannot verify from this artifact, would need X" — NOT assumed-PASS, NOT skipped, NOT marked PASS-with-caveats.',
+  '1. TEST-SUITE EVIDENCE — read the test files exercising the work product. Does an existing or newly-added test cover the criterion? Did the test pass on the most recent run? Cite the test name + file:line + the assertion. If no test exists for the criterion, that is itself a finding (FAIL: "no test exercises this criterion").',
+  '2. SOURCE-CODE DIRECT-READ — read the implementation files directly. Does the code actually do what the criterion requires? Trace the relevant function / class / module, cite file:line for the lines that satisfy (or fail to satisfy) the criterion. This is the highest-fidelity evidence — no second-hand claims.',
+  '3. DOCUMENTATION EVIDENCE — read README, docstrings, design docs, commit messages, CHANGELOG. Does the docs corroborate the criterion is met? Quote the docs passage + cite source. Doc-only evidence is medium-confidence (docs can be stale); always cross-check with TEST or SOURCE evidence when possible.',
+  '4. RUN-OUTPUT EVIDENCE — read recent test-run logs, build output, CI artifacts, shell-command output that the work-product author cited. Does the output demonstrate the criterion? Verify timestamps to ensure evidence post-dates the change. Run-output evidence is the strongest "it actually worked" signal.',
+  '5. DIFF EVIDENCE — read the recent diff (git log / git diff). Is the change actually in the diff for the relevant files/lines? A claim of "implemented X in module Y" must show up in the diff for module Y. If the diff is empty or unrelated, FAIL the criterion regardless of other claims.',
   '',
-  'Severity calibration for verify:',
-  '- critical: FAIL on a release-blocking criterion, acceptance test failure, security gate failure. The caller must NOT claim done.',
-  '- high: FAIL on a substantial criterion that affects the work product\'s correctness or safety. The claim of done is materially wrong.',
-  '- medium: FAIL on an implicit sub-criterion or partial coverage. The work is mostly done but the claim is partially overstated.',
-  '- low: PASS — every PASS is `low` severity regardless of importance, because the verdict is "done correctly" and severity reflects departure from done.',
+  'Severity calibration for each verification finding:',
+  '- critical: FAIL on a release-blocking criterion with rock-solid contradicting evidence from THIS source — the user must NOT claim done.',
+  '- high: FAIL on a substantial criterion with strong evidence from THIS source; OR a strong PASS on a load-bearing criterion with rock-solid evidence from THIS source.',
+  '- medium: PARTIAL coverage / cannot-verify-from-this-source / a clear PASS on a non-load-bearing criterion. Mark "verify by also checking <other source>" so the user knows where to triangulate.',
+  '- low: minor stylistic gap in the verification narrative; a low-confidence PASS or absence-of-counter-evidence; defer to other angles\' findings.',
 ].join('\n');
 
 /**
@@ -127,3 +125,8 @@ export const ANNOTATOR_AWARENESS_VERIFY = [
   '- For FAIL items: is the FAIL backed by a specific shortfall (which sub-criterion missed, which test failed, which file does not implement what the criterion requires)?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but FAIL with NEGATIVE evidence ("cannot verify from this artifact") is FULLY VALID and the correct verdict when the artifact is insufficient. Do NOT downgrade NEGATIVE-evidence FAILs to "cannot determine" or assumed-PASS.',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. */
+export const VERIFY_CRITERIA: readonly CriterionEntry[] = parseCriteria(VERIFY_FAILURE_MODES);
