@@ -185,6 +185,20 @@ export class RunnerShell {
 
       finalText = turnResult.assistantText;
 
+      // Diagnostic visibility (4.2.3+): include the assistant text on
+      // `runner_response_received` when verbose logging is meaningful.
+      // Pre-fix, only `assistantTextLen` was emitted, which made it
+      // impossible to tell from the log alone WHY a spec/quality review
+      // rejected (the reviewer's rejection text lived only in the live
+      // worker output, never in any persistent log). Now: full text is
+      // present on every turn, capped at 16 KB so a runaway implementer
+      // narrative doesn't bloat the JSONL log. 16 KB is comfortably
+      // larger than every reviewer/annotator response observed in
+      // production (typical ~500 bytes; 99th percentile <8 KB).
+      const ASSISTANT_TEXT_LOG_CAP = 16 * 1024;
+      const txt = turnResult.assistantText ?? '';
+      const truncated = txt.length > ASSISTANT_TEXT_LOG_CAP;
+      const assistantText = truncated ? txt.slice(0, ASSISTANT_TEXT_LOG_CAP) : txt;
       input.bus?.emit({
         event: 'runner_response_received',
         ts: new Date().toISOString(),
@@ -192,6 +206,8 @@ export class RunnerShell {
         turnIndex: turn,
         finishReason: turnResult.finishReason,
         assistantTextLen: turnResult.assistantText.length,
+        ...(assistantText.length > 0 && { assistantText }),
+        ...(truncated && { assistantTextTruncated: true }),
         toolCallCount: turnResult.toolCalls.length,
         ...(turnResult.responseShape?.stopReason !== undefined && { stopReason: turnResult.responseShape.stopReason }),
         ...(turnResult.responseShape?.contentBlocks !== undefined && { contentBlocks: turnResult.responseShape.contentBlocks }),
