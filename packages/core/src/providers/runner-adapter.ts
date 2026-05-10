@@ -14,6 +14,12 @@ export interface AdapterTurnInput {
   capabilities: AdapterCapabilities;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
+  /** When set, the adapter SHOULD attach a cache_control marker to the
+   *  last content block of the system prompt so the prefix is cacheable
+   *  by the upstream provider. Adapters that don't expose explicit cache
+   *  control accept this field but no-op (the auto-cache mechanisms on
+   *  OpenAI Sonnet+ tier still benefit on long shared prefixes). */
+  cacheControl?: { type: 'ephemeral' };
 }
 
 export interface AdapterTurnResult {

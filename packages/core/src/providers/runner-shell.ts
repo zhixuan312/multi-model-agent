@@ -160,6 +160,7 @@ export class RunnerShell {
         capabilities: input.capabilities ?? DEFAULT_CAPABILITIES,
         abortSignal: input.abortSignal,
         deadlineMs: input.deadlineMs,
+        ...(input.cacheControl && { cacheControl: input.cacheControl }),
       });
 
       usage.inputTokens += turnResult.usage.inputTokens;
@@ -308,6 +309,74 @@ export class RunnerShell {
       costUSD: computeCost(modelForCost, usage),
     };
   }
+
+  /**
+   * Cache-warmer call: sends one minimal turn with the cached prefix so the
+   * upstream provider's prompt cache writes the prefix. Subsequent fan-out
+   * sub-workers using the same prefix serve from cache.
+   *
+   * The user message is a single token ("ready") and the assistant response
+   * is discarded. For providers that don't honor `cache_control` (codex,
+   * future providers), this still runs but produces no measurable cache
+   * benefit. The caller decides whether the warmer pays off based on the
+   * provider in use.
+   */
+  async prime(systemPrompt: string, opts: PrimeOptions): Promise<PrimeResult> {
+    const startMs = Date.now();
+    const turnResult = await this.adapter.turn({
+      systemPrompt,
+      userMessage: 'ready',
+      priorTurns: [],
+      toolDefinitions: [],
+      capabilities: opts.capabilities ?? { ...DEFAULT_CAPABILITIES, thinking: false },
+      ...(opts.abortSignal && { abortSignal: opts.abortSignal }),
+      ...(opts.deadlineMs !== undefined && { deadlineMs: opts.deadlineMs }),
+      ...(opts.cacheControl && { cacheControl: opts.cacheControl }),
+    });
+    const durationMs = Date.now() - startMs;
+    // cacheNonReadTokens > 0 means the upstream wrote a fresh cache entry.
+    // For providers without cache reporting, this stays 0 (no false positives).
+    const cacheWritten = (turnResult.usage.cachedNonReadTokens ?? 0) > 0;
+    opts.bus?.emit({
+      event: 'criteria_fanout_warm_complete',
+      ts: new Date().toISOString(),
+      ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+      ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
+      ...(opts.tier !== undefined && { tier: opts.tier }),
+      ...(opts.stageLabel !== undefined && { stageLabel: opts.stageLabel }),
+      durationMs,
+      cacheWritten,
+    });
+    return {
+      cacheWritten,
+      durationMs,
+      usage: {
+        inputTokens: turnResult.usage.inputTokens,
+        outputTokens: turnResult.usage.outputTokens,
+        cachedReadTokens: turnResult.usage.cachedReadTokens ?? 0,
+        cachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
+      },
+    };
+  }
+}
+
+export interface PrimeOptions {
+  cwd: string;
+  cacheControl?: { type: 'ephemeral' };
+  abortSignal?: AbortSignal;
+  deadlineMs?: number;
+  capabilities?: AdapterCapabilities;
+  bus?: import('../events/event-emitter.js').EventEmitter;
+  batchId?: string;
+  taskIndex?: number;
+  tier?: string;
+  stageLabel?: string;
+}
+
+export interface PrimeResult {
+  cacheWritten: boolean;
+  durationMs: number;
+  usage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
 }
 
 function computeCost(model: string | undefined, usage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number }): number | null {
