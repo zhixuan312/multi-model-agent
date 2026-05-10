@@ -160,8 +160,13 @@ export function buildReadOnlyCriterionSuffix(
   semantics: RouteSemantics,
   criterion: CriterionEntry,
 ): string {
-  const minimumLine = semantics.mustEmitAtLeastOne
-    ? 'MINIMUM: emit AT LEAST ONE finding from this angle. Even a low-severity / low-confidence contribution is valuable — the merge annotator will dedup and rank against other angles. Silence is the worst outcome.'
+  const minimumBlock = semantics.mustEmitAtLeastOne
+    ? [
+        'HARD REQUIREMENT (this is non-negotiable):',
+        'Your response MUST contain at least one `## Finding N:` block. Empty / "no findings" / narrative-only / commentary-only responses are WORKFLOW ERRORS and will be discarded by the merge annotator.',
+        '',
+        'If you genuinely cannot construct a finding from this angle, you must STILL emit one finding with severity=low and Issue="Best partial contribution from this angle: <state what you DO know, even if uncertain>". Silence is never the right output — the merge annotator dedups and ranks; a low-confidence partial is far more valuable than nothing.',
+      ].join('\n')
     : semantics.emptyOutcomeLine;
   return [
     `Your assignment: criterion ${criterion.id} — "${criterion.title}".`,
@@ -170,7 +175,7 @@ export function buildReadOnlyCriterionSuffix(
     '',
     semantics.goalLine,
     '',
-    minimumLine,
+    minimumBlock,
     '',
     'Do NOT drift outside this angle; other parallel sub-workers cover the other angles.',
   ].join('\n');
