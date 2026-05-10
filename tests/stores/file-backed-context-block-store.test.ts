@@ -28,9 +28,9 @@ describe('FileBackedContextBlockStore (Gap 4)', () => {
     expect(store2.get(id)).toBe('hello world');
   });
 
-  it('roots under <homeDir>/.multi-model-agent/context-blocks/<sha256(projectCwd)>', () => {
+  it('roots under <homeDir>/.multi-model/context-blocks/<sha256(projectCwd)>', () => {
     const store = makeStore(tmpRoot);
-    const expectedPrefix = path.join(tmpRoot, '.multi-model-agent', 'context-blocks');
+    const expectedPrefix = path.join(tmpRoot, '.multi-model', 'context-blocks');
     expect(store.rootDir.startsWith(expectedPrefix + path.sep)).toBe(true);
     // Subdir is a 64-char hex hash.
     const subdir = path.relative(expectedPrefix, store.rootDir);

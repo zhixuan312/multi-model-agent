@@ -37,6 +37,11 @@ export interface RunResult {
    *  HTTP envelope. Optional so legacy consumers / mocks compile without
    *  setting the field. */
   filesWrittenRejected?: string[]
+  /** A4b §2b (4.2.2+): post-§2a paths that didn't pass `stat()` against
+   *  taskSpec.cwd at terminal time — the worker reported a path but no
+   *  artifact actually landed there. Surfaced on the public envelope so
+   *  callers can see "you said you wrote X but I can't find it." */
+  filesWrittenMissing?: string[]
   toolCalls: string[]
   outputIsDiagnostic: boolean
   escalationLog: AttemptRecord[]
