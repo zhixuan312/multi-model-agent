@@ -4,6 +4,7 @@ import {
   buildReadOnlyCriterionSuffix,
   type CachedPrefixTarget,
   type CachedPrefixBlocks,
+  type RouteSemantics,
 } from '../tools/parallel-criteria-prompt.js';
 import {
   AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_AUDIT, SCOPE_RULE_AUDIT, ANNOTATOR_AWARENESS_AUDIT, AUDIT_CRITERIA,
@@ -23,25 +24,84 @@ import {
 
 export type ReadOnlyRouteName = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
 
-/** Standard finding-format spec used by audit / review / verify / debug
- *  sub-workers. Investigate uses the same shape; downstream consumers
- *  parse `## Finding N:` blocks uniformly. */
+/** Standard finding-format spec — uniform `## Finding N:` shape across
+ *  all five read-only routes so the downstream parser/annotator only
+ *  reads one format. The label "Issue" is intentionally route-neutral
+ *  (interpreted as issue / candidate-answer / verdict / root-cause-
+ *  hypothesis depending on the route's semantics block). */
 const FINDING_FORMAT_SHARED = [
   'Per-finding output format (use exactly this shape — `## Finding N:` blocks):',
   '',
   '## Finding 1: <one-line title>',
   '- Severity: critical | high | medium | low',
   '- Location: file:line (when applicable)',
-  '- Issue: one-paragraph explanation',
-  '- Suggestion: one-line fix recommendation',
+  '- Issue: one-paragraph explanation (the issue OR the candidate-answer OR the verification verdict OR the root-cause hypothesis, per this route\'s "what a finding means")',
+  '- Suggestion: one-line follow-up (a fix / how to verify / where to look next)',
   '',
   '## Finding 2: ... (one block per finding)',
   '',
-  'If you found no issues for your assigned criterion, respond with the literal text:',
-  '"No findings for this criterion."',
-  '',
   'Number findings sequentially starting at 1. Severity / Location / Issue / Suggestion bullets are on their own lines with the labels exactly as shown.',
 ].join('\n');
+
+/** Per-route semantics. Findings shape and severity tiers are uniform;
+ *  only the *meaning* of each tier and the per-sub-worker goal differ. */
+const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
+  audit: {
+    goalLine: 'Find ALL issues of THIS specific kind in the artifact above.',
+    emptyOutcomeLine: 'If none exist, respond with the literal text "No findings for this criterion." — that is a fully valid outcome. Do NOT pad with low-signal observations to avoid returning empty.',
+    findingMeaningParagraph: 'A finding is an ISSUE in the artifact (a contradiction, missing recommendation, fix that violates a constraint, drift, structural inconsistency, etc.). Severity reflects how much the issue blocks the artifact\'s downstream use.',
+    severityMeanings: {
+      critical: 'a recommendation or claim that, if implemented as written, would fail or cause harm because the artifact is internally incoherent — e.g. a fix that depends on something the doc forbids.',
+      high: 'a substantive missing recommendation, an evidence chain that does not support a load-bearing conclusion, OR a fix that violates a stated principle/constraint of the doc.',
+      medium: 'argument-soundness gap, fix-actionability gap, drift between sections, structural inconsistency between similar items, scope-creep risk that needs a guardrail.',
+      low: 'stylistic / labeling / formatting issue; missing metadata; minor cross-reference fix.',
+    },
+  },
+  review: {
+    goalLine: 'Find ALL issues of THIS specific kind in the diff / source above.',
+    emptyOutcomeLine: 'If none exist, respond with the literal text "No findings for this criterion." — that is a fully valid outcome. Do NOT pad to avoid returning empty.',
+    findingMeaningParagraph: 'A finding is an ISSUE introduced or worsened by the change under review (correctness bug, missing test, race, security regression, contract break, etc.). Severity reflects how much the issue blocks merge / ships a regression.',
+    severityMeanings: {
+      critical: 'security regression / data corruption / build-breaking change — must NOT merge.',
+      high: 'real correctness bug, broken tests, race, missing edge case that ships a regression — blocks release.',
+      medium: 'contract violation, maintainability issue, doc gap, deprecated API, performance regression on a non-hot path — fix soon, not blocking.',
+      low: 'style, naming, comment nit, dead code — nice-to-fix.',
+    },
+  },
+  verify: {
+    goalLine: 'Apply THIS criterion to the work product against the user\'s checklist. Each finding is a verification verdict for one checklist item: PASS / FAIL / cannot-verify, with the evidence quoted.',
+    emptyOutcomeLine: 'If THIS criterion does not apply to any checklist item in the artifact, respond with "No findings for this criterion." — that is a valid outcome. Otherwise, ALWAYS emit a finding per applicable item (even PASS results — the user wants to see what passed).',
+    findingMeaningParagraph: 'A finding is a VERIFICATION VERDICT for one checklist item, evaluated through this criterion\'s lens. Title = checklist-item label + verdict (e.g. "Item 3: FAIL — assumed-pass on untested"). Severity reflects how decisive / load-bearing the verdict is.',
+    severityMeanings: {
+      critical: 'criterion definitively FAILED with concrete contradicting evidence — the user CANNOT trust the work as complete; e.g. claim-without-evidence on a load-bearing checklist item.',
+      high: 'important criterion failed but with some ambiguity in the evidence; OR a strong PASS on a load-bearing item with rock-solid evidence.',
+      medium: 'partial coverage — some sub-criteria pass, others ambiguous; OR a clear PASS on a non-load-bearing item.',
+      low: 'minor stylistic gap in the verification narrative; no impact on the verdict.',
+    },
+  },
+  debug: {
+    goalLine: 'Apply THIS failure mode as the lens. Each finding is a root-cause hypothesis (or contributing factor), framed against this lens; severity = strength of the evidence chain.',
+    emptyOutcomeLine: 'If THIS lens reveals nothing in the failure under investigation, respond with "No findings for this criterion." — valid outcome.',
+    findingMeaningParagraph: 'A finding is a ROOT-CAUSE HYPOTHESIS (or contributing factor) for the failure under investigation, viewed through this criterion\'s lens. Title = the proposed cause. Severity reflects how strong the trace from symptom to cause is.',
+    severityMeanings: {
+      critical: 'root cause definitively identified with reproducible evidence + a concrete fix is implied — the maintainer can act now.',
+      high: 'strong root-cause hypothesis with traced upstream evidence (file:line citations along the call/data path), fix path identified.',
+      medium: 'likely candidate cause, needs verification — the trace has 1-2 inferred steps, fix scope unclear.',
+      low: 'possible contributing factor, low confidence — speculation worth noting but not the primary lead.',
+    },
+  },
+  investigate: {
+    goalLine: 'Answer the user\'s question above. Each finding is a CANDIDATE ANSWER (or sub-answer / partial answer) to the question, presented through this criterion\'s lens. Pay extra care to AVOID this criterion\'s failure mode (it is a known way investigators go wrong on questions like this).',
+    emptyOutcomeLine: 'If you can produce no candidate answer at all under this lens, respond with "No findings for this criterion." — valid but rare outcome. In most cases you can produce at least one low-confidence candidate answer.',
+    findingMeaningParagraph: 'A finding is a CANDIDATE ANSWER to the user\'s question (or a sub-answer that contributes to the full answer). Title = the answer in one line. Issue = the answer with reasoning + citations. Severity = your confidence in this answer.',
+    severityMeanings: {
+      critical: 'THE answer — high-confidence, multiple grounded file:line citations, evidence chain has no inferred steps. The user can act on this without re-verification.',
+      high: 'strong answer — fully grounded with file:line citations, evidence chain has at most one inferred step, single-source. The user should sanity-check the inferred step.',
+      medium: 'likely answer / partial answer — inference from evidence, some gaps in chain. Mark "verify by reading <file>" so the user knows where to confirm.',
+      low: 'possible answer / candidate — weak evidence, presented as an alternative for the user to consider against other sub-workers\' candidates.',
+    },
+  },
+};
 
 const ROUTE_BLOCKS: Record<ReadOnlyRouteName, Omit<CachedPrefixBlocks, 'findingFormat'>> = {
   audit: {
@@ -94,11 +154,16 @@ export interface ReadOnlyRouteSpec {
  */
 export const READ_ONLY_ROUTES: Record<ReadOnlyRouteName, ReadOnlyRouteSpec> = Object.fromEntries(
   (['audit', 'review', 'verify', 'debug', 'investigate'] as const).map((route) => {
-    const blocks = { ...ROUTE_BLOCKS[route], findingFormat: FINDING_FORMAT_SHARED };
+    const semantics = ROUTE_SEMANTICS[route];
+    const blocks: CachedPrefixBlocks = {
+      ...ROUTE_BLOCKS[route],
+      findingFormat: FINDING_FORMAT_SHARED,
+      semantics,
+    };
     return [route, {
       criteria: ROUTE_BLOCKS[route].criteria,
       buildPrefix: (target: CachedPrefixTarget) => buildReadOnlyCachedPrefix(blocks, target),
-      buildSuffix: buildReadOnlyCriterionSuffix,
+      buildSuffix: (criterion: CriterionEntry) => buildReadOnlyCriterionSuffix(semantics, criterion),
     }];
   }),
 ) as Record<ReadOnlyRouteName, ReadOnlyRouteSpec>;

@@ -1,5 +1,36 @@
 import type { CriterionEntry } from './criteria-types.js';
-import { SEVERITY_LADDER } from '../review/templates/finding-criteria.js';
+
+/**
+ * Per-route semantics for findings. Same wire shape (`## Finding N:`) and
+ * same severity tiers (critical / high / medium / low) across all five
+ * read-only routes — only the *meaning* of each tier and the per-sub-worker
+ * goal differ.
+ *
+ * Audit / review / debug: each finding = an issue. severity = impact.
+ * Verify: each finding = a verification verdict. severity = how decisive
+ *   the FAIL signal is (or how strong the PASS evidence is).
+ * Investigate: each finding = a candidate answer (or sub-answer) to the
+ *   user's question. severity = confidence in the answer.
+ */
+export interface RouteSemantics {
+  /** One-line goal sentence injected at the top of the per-sub-worker
+   *  assignment block. e.g. "find issues of THIS specific kind" (audit). */
+  goalLine: string;
+  /** What "no findings" means for this route, when the sub-worker has
+   *  nothing to emit. Investigate's empty case is rare (we can almost
+   *  always produce SOME candidate answer, even low-confidence). */
+  emptyOutcomeLine: string;
+  /** Per-tier severity meaning for THIS route. Replaces the generic
+   *  SEVERITY_LADDER inside the cached prefix so the worker calibrates
+   *  to the right semantic. Order: critical, high, medium, low. */
+  severityMeanings: { critical: string; high: string; medium: string; low: string };
+  /** One-paragraph clarifier of what a "finding" represents on this
+   *  route. Written into the cached prefix above the format spec so
+   *  the worker doesn't default to "find a problem" when the route
+   *  semantic is "propose an answer" (investigate) or "report a
+   *  verification verdict" (verify). */
+  findingMeaningParagraph: string;
+}
 
 /**
  * Shared cached-prefix builder for parallel-criteria fan-out across the
@@ -32,12 +63,24 @@ export interface CachedPrefixBlocks {
   scopeRule: string;
   /** Route-specific ANNOTATOR_AWARENESS_*. */
   annotatorAwareness: string;
-  /** Per-route finding format text. Most routes share the `## Finding N:`
-   *  shape; investigate's is slightly different — pass the appropriate
-   *  block from the route's tool-config.ts. */
+  /** Per-route finding format text. */
   findingFormat: string;
   /** The full criterion taxonomy in structured form. */
   criteria: readonly CriterionEntry[];
+  /** Route-specific semantics for what a finding represents and what
+   *  each severity tier means. */
+  semantics: RouteSemantics;
+}
+
+function renderSeverityLadder(meanings: RouteSemantics['severityMeanings']): string {
+  return [
+    'Severity (your judgment, calibrated to the meanings below):',
+    `- critical: ${meanings.critical}`,
+    `- high:     ${meanings.high}`,
+    `- medium:   ${meanings.medium}`,
+    `- low:      ${meanings.low}`,
+    'Use the FULL ladder. Calibrate to actual signal strength, not how alarming or assertive the wording sounds.',
+  ].join('\n');
 }
 
 export interface CachedPrefixTarget {
@@ -57,9 +100,12 @@ export function buildReadOnlyCachedPrefix(
   const parts: string[] = [
     blocks.orientation,
     '',
+    'What a "finding" means on this route:',
+    blocks.semantics.findingMeaningParagraph,
+    '',
     blocks.findingFormat,
     '',
-    SEVERITY_LADDER,
+    renderSeverityLadder(blocks.semantics.severityMeanings),
     '',
     blocks.evidenceRule,
     '',
@@ -92,17 +138,26 @@ export function buildReadOnlyCachedPrefix(
   return parts.join('\n');
 }
 
-/** Per-sub-worker user message: assigns ONE criterion and forbids drift
- *  to other categories. Identical structure across the five read-only
- *  routes — the `criterion` arg is the only thing that varies per call. */
-export function buildReadOnlyCriterionSuffix(criterion: CriterionEntry): string {
+/** Per-sub-worker user message: assigns ONE criterion. The semantics
+ *  arg controls how the assignment is framed (find issues / answer
+ *  question / verify criterion / find root cause / find quality issues
+ *  in the prose).
+ *
+ *  Same shape across all routes; only `goalLine` and `emptyOutcomeLine`
+ *  differ per route. */
+export function buildReadOnlyCriterionSuffix(
+  semantics: RouteSemantics,
+  criterion: CriterionEntry,
+): string {
   return [
     `Your assignment: criterion ${criterion.id} — "${criterion.title}".`,
     '',
     criterion.description,
     '',
-    'Find ALL issues of THIS specific kind in the artifact above. If none exist, respond with the literal text "No findings for this criterion." — that is a fully valid outcome. Do NOT pad with low-signal observations to avoid returning empty.',
+    semantics.goalLine,
     '',
-    'Do NOT report findings outside this criterion; other parallel sub-workers cover the other categories.',
+    semantics.emptyOutcomeLine,
+    '',
+    'Do NOT drift outside this criterion; other parallel sub-workers cover the other categories.',
   ].join('\n');
 }
