@@ -1,6 +1,7 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import { makeToolDefinitions } from '../../providers/tool-definitions.js';
 import { CallCache } from '../../providers/call-cache.js';
+import { SAFETY_MAX_TURNS } from '../../bounded-execution/safety-max-turns.js';
 
 export class ExecutionContextBuilder {
   handler = (state: LifecycleState): void => {
@@ -9,7 +10,7 @@ export class ExecutionContextBuilder {
       systemPrompt: state.systemPrompt,
       userMessage: state.userMessage,
       toolDefinitions: makeToolDefinitions({ cwd }),
-      maxTurns: (state.maxTurns as number) ?? 50,
+      maxTurns: (state.maxTurns as number) ?? SAFETY_MAX_TURNS,
       cwd,
     };
     state.callCache = new CallCache();

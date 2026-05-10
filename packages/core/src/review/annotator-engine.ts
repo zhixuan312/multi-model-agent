@@ -6,6 +6,7 @@ import { annotatorReviewTemplate } from './templates/annotator-review.js';
 import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
 import { annotatorDebugTemplate } from './templates/annotator-debug.js';
 import { annotatorInvestigateTemplate } from './templates/annotator-investigate.js';
+import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 const DEFAULT_ANNOTATOR_TEMPLATES = {
   audit: annotatorAuditTemplate,
@@ -49,7 +50,7 @@ export class AnnotatorEngine {
       systemPrompt: prompt,
       userMessage: 'Annotate the findings above.',
       toolDefinitions: [],
-      maxTurns: 5, cwd: input.cwd,
+      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),

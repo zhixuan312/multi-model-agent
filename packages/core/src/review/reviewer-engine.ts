@@ -1,6 +1,7 @@
 import type { RunnerShell } from '../providers/runner-shell.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 import { ReviewerOutputParser, type ReviewerParseResult, type ReviewerDiffParseResult, ReviewerParseError } from './reviewer-output-parser.js';
+import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 // Re-exports for callers that previously imported templates and the builder
 // from this module. Spec C11 puts templates in review/templates/ and the
@@ -71,7 +72,7 @@ export class ReviewerEngine {
     const { systemPrompt, userPrompt } = this.builder.buildSpec({ ...input });
     const result = await shell.run({
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
-      maxTurns: 5, cwd: input.cwd,
+      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
@@ -87,7 +88,7 @@ export class ReviewerEngine {
     const { systemPrompt, userPrompt } = this.builder.buildQualityAP({ ...input });
     const result = await shell.run({
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
-      maxTurns: 5, cwd: input.cwd,
+      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),
@@ -103,7 +104,7 @@ export class ReviewerEngine {
     const { systemPrompt, userPrompt } = this.builder.buildDiff({ ...input });
     const result = await shell.run({
       systemPrompt, userMessage: userPrompt, toolDefinitions: [],
-      maxTurns: 5, cwd: input.cwd,
+      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
       abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
       ...(input.bus && { bus: input.bus }),
       ...(input.batchId !== undefined && { batchId: input.batchId }),

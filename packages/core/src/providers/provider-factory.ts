@@ -7,6 +7,7 @@ import { OpenAIResponsesAdapter } from './openai-responses-adapter.js';
 import { makeToolDefinitions } from './tool-definitions.js';
 import type { RunnerAdapter } from './runner-adapter.js';
 import { getCodexAuth } from '../identity/auth-token-store.js';
+import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 let coreTestProviderOverride: Provider | null = null;
 let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
@@ -119,7 +120,7 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
     try {
       const cwd = options.cwd ?? process.cwd();
       const toolMode = options.tools ?? defaults.tools ?? 'full';
-      const maxTurns = 50;
+      const maxTurns = SAFETY_MAX_TURNS;
 
       const toolDefinitions = toolMode !== 'none'
         ? makeToolDefinitions({ cwd })
