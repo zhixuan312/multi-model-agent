@@ -30,6 +30,22 @@ import { stageProgress } from '../lifecycle/stage-progression.js';
 
 interface PerTaskProgress {
   toolCounts: Record<string, number>;
+  /** A4b.0 (4.2.2+): cumulative raw tool-call count across every turn so
+   *  far. Bumped by `event.toolCallCount` per turn — independent of the
+   *  read/write path-Set semantics. The headline's "X tool calls" number
+   *  is the raw activity counter (every invocation including repeats);
+   *  read/write are unique-path counters. */
+  totalToolCalls: number;
+  /** A4b.0 (4.2.2+): per-task SET of unique paths read / written across
+   *  every turn so far. Replaces the old "increment by tool-name bucket
+   *  count" semantics — `5 calls to write_file('foo.ts')` was counted as
+   *  5 writes in the headline, but the spec reviewer reasoned about the
+   *  SET (1 file changed). Now both agree. The sink populates these from
+   *  the runner-shell's per-turn `pathsReadThisTurn` / `pathsWrittenThisTurn`
+   *  arrays. When those arrays aren't present (legacy fixtures that emit
+   *  bucket counts only), fall back to the bucket-count code path. */
+  readPaths: Set<string>;
+  writtenPaths: Set<string>;
   /** Gap 11 (4.0.3+): cumulative count of run_shell calls that wrote to
    *  the filesystem (sed -i, cat >, tee, etc.). Tracked separately from
    *  WRITE_TOOLS because run_shell isn't categorized by tool name; the
@@ -67,6 +83,12 @@ export class RunningHeadlineSink {
     const shellWritesDelta = typeof event['shellWrites'] === 'number' ? (event['shellWrites'] as number) : 0;
     const stageLabel = typeof event['stageLabel'] === 'string' ? event['stageLabel'] : undefined;
     const tier = typeof event['tier'] === 'string' ? event['tier'] : undefined;
+    const pathsReadThisTurn = Array.isArray(event['pathsReadThisTurn'])
+      ? (event['pathsReadThisTurn'] as unknown[]).filter((s): s is string => typeof s === 'string')
+      : undefined;
+    const pathsWrittenThisTurn = Array.isArray(event['pathsWrittenThisTurn'])
+      ? (event['pathsWrittenThisTurn'] as unknown[]).filter((s): s is string => typeof s === 'string')
+      : undefined;
 
     let perBatch = this.progress.get(batchId);
     if (!perBatch) {
@@ -78,8 +100,16 @@ export class RunningHeadlineSink {
     for (const [name, count] of Object.entries(toolCalls)) {
       nextCounts[name] = (nextCounts[name] ?? 0) + count;
     }
+    const readPaths = new Set(prior?.readPaths ?? []);
+    const writtenPaths = new Set(prior?.writtenPaths ?? []);
+    if (pathsReadThisTurn) for (const p of pathsReadThisTurn) readPaths.add(p);
+    if (pathsWrittenThisTurn) for (const p of pathsWrittenThisTurn) writtenPaths.add(p);
+    const toolCallCountDelta = typeof event['toolCallCount'] === 'number' ? (event['toolCallCount'] as number) : 0;
     const next: PerTaskProgress = {
       toolCounts: nextCounts,
+      totalToolCalls: (prior?.totalToolCalls ?? 0) + toolCallCountDelta,
+      readPaths,
+      writtenPaths,
       shellWrites: (prior?.shellWrites ?? 0) + shellWritesDelta,
       stageLabel: stageLabel ?? prior?.stageLabel,
       tier: tier ?? prior?.tier,
@@ -90,13 +120,32 @@ export class RunningHeadlineSink {
     const entry = this.batchRegistry.get(batchId);
     if (!entry) return;
 
+    // A4b.0 (4.2.2+): prefer path-Set sizes when the runner emitted
+    // pathsRead/pathsWritten arrays. Fall back to the bucket-count
+    // semantics for legacy events / test fixtures that send
+    // `toolCalls: { name: count }` only.
     let read = 0;
     let write = 0;
-    let total = 0;
-    for (const [name, count] of Object.entries(nextCounts)) {
-      total += count;
-      if (READ_TOOLS.has(name)) read += count;
-      else if (WRITE_TOOLS.has(name)) write += count;
+    // A4b.0: prefer the cumulative raw `toolCallCount` deltas (every
+    // invocation including repeats). Fall back to bucket sum for legacy
+    // events that send `toolCalls: { name: count }` only.
+    let total = next.totalToolCalls;
+    if (total === 0) {
+      for (const count of Object.values(nextCounts)) total += count;
+    }
+    if (next.readPaths.size > 0 || pathsReadThisTurn !== undefined) {
+      read = next.readPaths.size;
+    } else {
+      for (const [name, count] of Object.entries(nextCounts)) {
+        if (READ_TOOLS.has(name)) read += count;
+      }
+    }
+    if (next.writtenPaths.size > 0 || pathsWrittenThisTurn !== undefined) {
+      write = next.writtenPaths.size;
+    } else {
+      for (const [name, count] of Object.entries(nextCounts)) {
+        if (WRITE_TOOLS.has(name)) write += count;
+      }
     }
     // Gap 11 (4.0.3+): include run_shell calls that wrote to the FS so
     // the headline shows real activity instead of "0 write" while
