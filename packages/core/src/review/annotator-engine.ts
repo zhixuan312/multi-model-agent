@@ -64,22 +64,82 @@ export class AnnotatorEngine {
       ? usableOutputs
       : [{ criterion: 'all sub-workers reported no findings', narrative: '(all sub-worker narratives were "No findings for this criterion." — return [])' }];
     const prompt = this.builder.build(input.route, { workerOutputs: inputsForPrompt, brief: input.brief });
-    const result = await shell.run({
-      systemPrompt: prompt,
-      userMessage: 'Annotate the findings above.',
-      toolDefinitions: [],
-      maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
-      abortSignal: input.abortSignal, deadlineMs: input.deadlineMs,
-      ...(input.bus && { bus: input.bus }),
-      ...(input.batchId !== undefined && { batchId: input.batchId }),
-      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
-      ...(input.tier !== undefined && { tier: input.tier }),
-      ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
-    });
-    const parsed = this.parser.parse({ finalAssistantText: result.finalAssistantText, errorCode: result.errorCode });
-    return { ...parsed, finalAssistantText: result.finalAssistantText ?? '', cost: extractCost(result) };
+
+    // Per-annotator wall-clock guard. Same 10-min hard / 5-min soft pattern
+    // as the warmer + per-angle caps so the merge step can't hang the route.
+    // On hard cap, the abortSignal fires and the merge result returns with
+    // errorCode='aborted'; the parser then yields an empty findings list and
+    // the read-only route's soft-success path takes over (lifecycle returns
+    // implementer narratives even when annotator failed). Bounds total
+    // route wall: warmer (≤10) + max angle (≤10) + merge (≤10) + slack ≈ 32 min.
+    const annotatorAbort = new AbortController();
+    const combinedAbort = new AbortController();
+    if (input.abortSignal) {
+      if (input.abortSignal.aborted) combinedAbort.abort();
+      else input.abortSignal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+    }
+    annotatorAbort.signal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+    let capHit = false;
+    const softTimer = setTimeout(() => {
+      input.bus?.emit({
+        event: 'criteria_annotator_soft_warning',
+        ts: new Date().toISOString(),
+        ...(input.batchId !== undefined && { batchId: input.batchId }),
+        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+        elapsedMs: ANNOTATOR_SOFT_WARN_MS,
+        remainingMs: ANNOTATOR_HARD_CAP_MS - ANNOTATOR_SOFT_WARN_MS,
+      });
+    }, ANNOTATOR_SOFT_WARN_MS);
+    const hardTimer = setTimeout(() => {
+      capHit = true;
+      input.bus?.emit({
+        event: 'criteria_annotator_hard_cap',
+        ts: new Date().toISOString(),
+        ...(input.batchId !== undefined && { batchId: input.batchId }),
+        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+        elapsedMs: ANNOTATOR_HARD_CAP_MS,
+      });
+      annotatorAbort.abort();
+    }, ANNOTATOR_HARD_CAP_MS);
+
+    try {
+      const result = await shell.run({
+        systemPrompt: prompt,
+        userMessage: 'Annotate the findings above.',
+        toolDefinitions: [],
+        maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
+        abortSignal: combinedAbort.signal, deadlineMs: input.deadlineMs,
+        ...(input.bus && { bus: input.bus }),
+        ...(input.batchId !== undefined && { batchId: input.batchId }),
+        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+        ...(input.tier !== undefined && { tier: input.tier }),
+        ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
+      });
+      // Cap-hit: yield empty findings; the lifecycle's soft-success path
+      // (quality-chain-handlers.ts settle) returns implementer narratives.
+      if (capHit) {
+        return {
+          finalAssistantText: '',
+          verdict: 'error',
+          annotatedFindings: [],
+          concerns: [],
+          diagnostics: { extraSections: {} },
+          cost: extractCost(result),
+        } as unknown as AnnotatorCallResult;
+      }
+      const parsed = this.parser.parse({ finalAssistantText: result.finalAssistantText, errorCode: result.errorCode });
+      return { ...parsed, finalAssistantText: result.finalAssistantText ?? '', cost: extractCost(result) };
+    } finally {
+      clearTimeout(softTimer);
+      clearTimeout(hardTimer);
+    }
   }
 }
+
+/** Per-annotator wall-clock cap. Same constants as the warmer + per-angle
+ *  caps in providers/runner-shell.ts and lifecycle/parallel-criteria-dispatcher.ts. */
+const ANNOTATOR_HARD_CAP_MS = 10 * 60 * 1000;
+const ANNOTATOR_SOFT_WARN_MS = 5 * 60 * 1000;
 
 function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null }; costUSD?: number | null; durationMs?: number | null }): AnnotatorCallResult['cost'] {
   return {
