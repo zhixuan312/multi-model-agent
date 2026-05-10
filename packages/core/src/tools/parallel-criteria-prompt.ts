@@ -163,9 +163,17 @@ export function buildReadOnlyCriterionSuffix(
   const minimumBlock = semantics.mustEmitAtLeastOne
     ? [
         'HARD REQUIREMENT (this is non-negotiable):',
-        'Your response MUST contain at least one `## Finding N:` block. Empty / "no findings" / narrative-only / commentary-only responses are WORKFLOW ERRORS and will be discarded by the merge annotator.',
+        'Your response MUST contain at least one `## Finding N:` block. Empty / narrative-only / commentary-only responses are WORKFLOW ERRORS and will be discarded.',
         '',
-        'If you genuinely cannot construct a finding from this angle, you must STILL emit one finding with severity=low and Issue="Best partial contribution from this angle: <state what you DO know, even if uncertain>". Silence is never the right output — the merge annotator dedups and ranks; a low-confidence partial is far more valuable than nothing.',
+        'Three valid finding shapes — use whichever fits, in this order of preference:',
+        '',
+        '1. SUBSTANTIVE FINDING — your angle produced a real on-question signal. Emit at any severity (critical → low) per the calibration above. Multiple substantive findings from one angle are fine.',
+        '',
+        '2. PARTIAL FINDING — your angle produced a weak / inferred signal. Emit at severity=low with the partial information, marked "verify by reading <file>" or "cross-check against <another angle>".',
+        '',
+        '3. NOT-APPLICABLE FINDING — your angle is genuinely orthogonal to the question (e.g. CONCURRENCY angle on a pure-sync function; TEST-DRIVEN angle when no tests exist for the area). Emit ONE finding with severity=low, title prefixed with "[N/A]", and Issue="This perspective does not apply because <concrete reason>." The merge annotator drops these from the final report; they exist so the user can see ALL angles were attempted.',
+        '',
+        'DO NOT pad with speculation to satisfy the count. If you don\'t have a substantive or partial signal, the [N/A] finding is the right choice — the merge annotator treats N/A as completeness coverage, not as a real finding.',
       ].join('\n')
     : semantics.emptyOutcomeLine;
   return [
