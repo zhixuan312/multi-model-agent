@@ -448,6 +448,23 @@
         "ts",
         "elapsedMs"
       ]
+    },
+    {
+      "name": "criteria_annotator_soft_warning",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs",
+        "remainingMs"
+      ]
+    },
+    {
+      "name": "criteria_annotator_hard_cap",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs"
+      ]
     }
   ]
 }

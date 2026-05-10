@@ -323,6 +323,18 @@ export async function startServe(
     // if it does, skip the startup line rather than crash the server.
   }
 
+  // Per-tier model lines so operators can see which provider is wired to
+  // each agent slot. The complex tier handles read-only sub-workers + most
+  // implementer work; the standard tier handles annotator/reviewer + the
+  // explore route's internal half. When a tier is unconfigured, log it as
+  // "(not configured)" so a misconfigured slot is visible at boot time.
+  const fmtTier = (slot: 'standard' | 'complex'): string => {
+    const cfg = (config.agents as Record<string, { type?: string; model?: string }>)[slot];
+    if (!cfg || !cfg.model) return '(not configured)';
+    return `${cfg.model} [${cfg.type ?? 'unknown'}]`;
+  };
+  process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}\n`);
+
   process.stdout.write(`[mmagent] listening on ${host}:${running.port}\n`);
 
   return {
