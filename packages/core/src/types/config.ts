@@ -67,7 +67,7 @@ export interface MultiModelConfig {
     bind: string
     port: number
     auth: { tokenFile: string }
-    limits: { maxBodyBytes: number; batchTtlMs: number; idleProjectTimeoutMs: number; projectCap: number; maxBatchCacheSize: number; maxContextBlockBytes: number; maxContextBlocksPerProject: number; shutdownDrainMs: number }
+    limits: { maxBodyBytes: number; batchTtlMs: number; idleProjectTimeoutMs: number; projectCap: number; maxBatchCacheSize: number; maxContextBlockBytes: number; maxContextBlocksPerProject: number; maxProjects: number; shutdownDrainMs: number }
     autoUpdateSkills: boolean
   }
   research: ResearchConfig

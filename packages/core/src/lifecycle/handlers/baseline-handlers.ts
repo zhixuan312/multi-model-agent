@@ -30,6 +30,7 @@ import {
   recordTaskCompletedHandler,
   flushTelemetryHandler,
 } from './terminal-handlers.js';
+import { crossCheckFilesWritten } from './files-written-cross-check.js';
 
 export type RouteExecutor = (
   rawRequest: unknown,
@@ -182,6 +183,59 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           specReviewer: enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required' ? otherModel : null,
           qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' || enriched.qualityReviewStatus === 'annotated' ? otherModel : null,
         };
+      }
+
+      // A4b §2b — terminal cross-check + writes_unverifiable downgrade.
+      // Subordinate to chain-fail: when the spec/quality chain already
+      // rejected, that rejection IS the user-visible verdict; we don't
+      // double-stamp with writes_unverifiable. The downgrade only fires
+      // when:
+      //   - chain did NOT fail (no review_spec_rejected_terminal etc.)
+      //   - worker still said `done` AND had write capability AND
+      //     produced zero verifiable artifacts
+      // i.e. "worker claimed completion but no disk evidence" without a
+      // chain rejection masking it.
+      //
+      // Read-only routes (audit/review/debug/verify/investigate/research/
+      // explore) are EXPLICITLY exempt because their intake has
+      // toolsMode='full' even though the read-only contract is enforced
+      // at prompt + tool selection time. They legitimately don't write.
+      const cwd = (typeof state.cwd === 'string' && state.cwd.length > 0)
+        ? state.cwd
+        : (typeof ctx?.cwd === 'string' ? ctx.cwd : undefined);
+      const tr = (typeof last.terminationReason === 'object' && last.terminationReason !== null)
+        ? last.terminationReason
+        : undefined;
+      const workerSelfAssessment = tr && 'workerSelfAssessment' in tr
+        ? (tr as { workerSelfAssessment?: 'done' | 'in_progress' | 'no_op' | null }).workerSelfAssessment
+        : null;
+      const chainAlreadyFailed =
+        state.specReworkFailed === true ||
+        state.qualityReworkFailed === true ||
+        state.specChainPassed === false ||
+        state.qualityChainPassed === false;
+      const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'verify', 'investigate', 'research', 'explore']);
+      const route = typeof state.route === 'string' ? state.route : '';
+      const isReadOnlyRoute = readOnlyRoutes.has(route);
+      if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {
+        const xc = crossCheckFilesWritten({
+          cwd,
+          filesWritten: enriched.filesWritten,
+          workerSelfAssessment: workerSelfAssessment ?? null,
+          toolsMode: ctx?.implementerToolMode,
+          autoCommit: state.autoCommit,
+        });
+        enriched.filesWritten = xc.filesWritten;
+        // Only surface filesWrittenMissing when non-empty — keeps the
+        // common case unchanged on the public envelope.
+        if (xc.filesWrittenMissing.length > 0) {
+          (enriched as { filesWrittenMissing?: string[] }).filesWrittenMissing = xc.filesWrittenMissing;
+        }
+        if (xc.workerStatus === 'error') {
+          enriched.workerStatus = 'failed';
+          enriched.errorCode = xc.errorCode;
+          enriched.error = xc.errorMessage;
+        }
       }
 
       // Chain-failure status override: the implementer's lastRunResult.status

@@ -93,6 +93,19 @@ export function validateCwd(cwd: string | undefined): CwdValidationResult {
   if (!cwd) return { ok: false, error: 'missing_cwd', message: "required query param 'cwd' not provided" };
   if (!path.isAbsolute(cwd)) return { ok: false, error: 'invalid_cwd', message: `cwd must be absolute: ${cwd}` };
 
+  // A4a.1 §3a step 2: reject the stale-sibling pattern. Prior Claude Code
+  // test runs leave directories under /tmp/claude/G--<project>-<slug>;
+  // routing tasks at them produces confused write attribution (worker
+  // memory: feedback_mma_worker_sandbox_topic_tracker). Prefix-match only
+  // — `/home/user/projects/G--my-app` is legitimate.
+  if (cwd.startsWith('/tmp/claude/G--') || cwd.startsWith('/private/tmp/claude/G--')) {
+    return {
+      ok: false,
+      error: 'forbidden_cwd',
+      message: `cwd matches the stale-sibling pattern '/tmp/claude/G--*' (likely contamination from prior Claude Code test runs). Run 'rm -rf /tmp/claude/G--*' to clean up, or pass a real project cwd.`,
+    };
+  }
+
   let canonical: string;
   try {
     canonical = fs.realpathSync(cwd);

@@ -7,7 +7,7 @@
  * everything on `npm run serve` cycles, breaking the recipe. This store
  * persists to disk and reloads lazily on first access.
  *
- * Layout: `<homeDir>/.multi-model-agent/context-blocks/<sha256(projectCwd)>/<id>.txt`
+ * Layout: `<homeDir>/.multi-model/context-blocks/<sha256(projectCwd)>/<id>.txt`
  * (content) + `<id>.meta.json` ({ createdAt, ttlMs, lengthChars, sha256 }).
  * Storing in the user home (not the project tree) keeps repos clean —
  * no `.gitignore` entries needed — while the per-project hash subdir
@@ -87,7 +87,7 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
   constructor(projectCwd: string, opts: FileBackedContextBlockStoreOptions = {}) {
     const home = opts.homeDir ?? os.homedir();
     const projectHash = createHash('sha256').update(path.resolve(projectCwd)).digest('hex');
-    this.rootDir = path.join(home, '.multi-model-agent', 'context-blocks', projectHash);
+    this.rootDir = path.join(home, '.multi-model', 'context-blocks', projectHash);
     this._ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.gcCheckIntervalMs = opts.gcCheckIntervalMs ?? DEFAULT_GC_INTERVAL_MS;
     this.maxBlockBytes = opts.maxBlockBytes ?? DEFAULT_MAX_BLOCK_BYTES;

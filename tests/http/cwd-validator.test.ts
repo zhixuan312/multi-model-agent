@@ -72,4 +72,39 @@ describe('validateCwd', () => {
       expect(r.error).toBe('forbidden_cwd');
     }
   });
+
+  // A4a.1 §3a step 2: reject the stale-sibling pattern that prior Claude
+  // Code test runs leave behind under /tmp/claude/G--<project>-<slug>.
+  // These are real directories pointing to old, abandoned project state;
+  // routing tasks at them produces confused write attribution and the
+  // 'feedback_mma_worker_sandbox_topic_tracker' bug pattern.
+  describe('A4a.1 stale-sibling pattern rejection', () => {
+    it('rejects /tmp/claude/G--*  with forbidden_cwd', () => {
+      // Build a real directory matching the pattern. /tmp on macOS resolves
+      // to /private/tmp via realpath; either prefix is the stale-sibling
+      // pattern. Use os.tmpdir() to find the real /tmp prefix.
+      const tmpRoot = path.resolve('/tmp', 'claude');
+      const stalePath = path.join(tmpRoot, `G--mma-test-${Date.now()}`);
+      fs.mkdirSync(stalePath, { recursive: true });
+      try {
+        const r = validateCwd(stalePath);
+        expect(r.ok).toBe(false);
+        if (!r.ok) {
+          expect(r.error).toBe('forbidden_cwd');
+          expect(r.message).toMatch(/stale[- ]sibling|G--/i);
+        }
+      } finally {
+        fs.rmSync(stalePath, { recursive: true, force: true });
+      }
+    });
+
+    it('does NOT reject paths that merely contain G-- as a substring (only PREFIX matches)', () => {
+      // /home/user/G--projects is a legitimate path; only the
+      // /tmp/claude/G-- and /private/tmp/claude/G-- PREFIXES are stale.
+      const ok = path.join(tmp, 'project-G--something');
+      fs.mkdirSync(ok);
+      const r = validateCwd(ok);
+      expect(r.ok).toBe(true);
+    });
+  });
 });

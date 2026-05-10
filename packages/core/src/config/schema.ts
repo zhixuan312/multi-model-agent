@@ -246,7 +246,8 @@ const DEFAULT_SERVER_LIMITS = {
   projectCap: 200,
   maxBatchCacheSize: 500,
   maxContextBlockBytes: 524_288,
-  maxContextBlocksPerProject: 32,
+  maxContextBlocksPerProject: 500,
+  maxProjects: 500,
   shutdownDrainMs: 30_000,
 };
 
@@ -266,6 +267,7 @@ const serverLimitsSchema = z.object({
   maxBatchCacheSize: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxBatchCacheSize),
   maxContextBlockBytes: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlockBytes),
   maxContextBlocksPerProject: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxContextBlocksPerProject),
+  maxProjects: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.maxProjects),
   shutdownDrainMs: z.number().int().positive().default(DEFAULT_SERVER_LIMITS.shutdownDrainMs),
 }).default(() => DEFAULT_SERVER_LIMITS);
 

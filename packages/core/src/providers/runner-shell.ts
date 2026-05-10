@@ -14,6 +14,7 @@ const DEFAULT_CAPABILITIES: AdapterCapabilities = {
 // central set is for the polling headline's read activity counter,
 // which counts every read-class tool call regardless of args.
 import { WRITE_TOOL_NAMES, SHELL_TOOL_NAMES } from './tool-name-sets.js';
+import { filterValidWritePath } from './file-tracker.js';
 const READ_TOOL_NAMES = new Set(['readFile', 'read_file']);
 
 function extractPathFromToolInput(input: unknown): string | undefined {
@@ -101,8 +102,21 @@ export class RunnerShell {
     const ctx: ExecutionContext = { cwd: input.cwd, callCache: new Map() };
     const usage = { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 };
     const allToolCalls: ToolCall[] = [];
-    const filesRead: string[] = [];
-    const filesWritten: string[] = [];
+    // A4b.0 (4.2.2+): dedupe filesRead/filesWritten by unique path. Same
+    // path written N times within a task = 1 entry. Tool-call count (the
+    // raw activity counter via `allToolCalls`) is intentionally NOT
+    // deduped — every invocation is billable. Spec reviewers reason
+    // about file CHANGES, not tool ACTIVITY, so the per-path dedupe is
+    // what they want to see.
+    const filesReadSet = new Set<string>();
+    const filesWrittenSet = new Set<string>();
+    // A4b.1 (4.2.2+): entries the path-validity filter rejected — shell
+    // heredoc commands, absolute paths, paths with shell metacharacters.
+    // Kept separately so the lifecycle layer can drain them into its
+    // diagnostics field for the `writes_unverifiable` daemon-log message
+    // (see A4b.2). NOT included in the public filesWritten array — those
+    // entries are not real, verifiable disk artifacts.
+    const filesWrittenRejectedSet = new Set<string>();
     let turns = 0;
     const history: AdapterTurnRecord[] = [];
     let finalText = '';
@@ -130,8 +144,9 @@ export class RunnerShell {
           errorCode: 'aborted',
           turns,
           durationMs: Date.now() - startMs,
-          filesRead,
-          filesWritten,
+          filesRead: [...filesReadSet],
+          filesWritten: [...filesWrittenSet],
+          filesWrittenRejected: [...filesWrittenRejectedSet],
           costUSD: computeCost(modelForCost, usage),
         };
       }
@@ -214,20 +229,31 @@ export class RunnerShell {
           const succeeded = !(typeof result === 'object' && result !== null && 'error' in (result as Record<string, unknown>));
           if (succeeded) {
             const path = extractPathFromToolInput(call.input);
-            if (READ_TOOL_NAMES.has(call.name) && path) filesRead.push(path);
-            else if (WRITE_TOOL_NAMES.has(call.name) && path) filesWritten.push(path);
-            else if (SHELL_TOOL_NAMES.has(call.name)) {
-              // Gap 11 fix (4.0.3+): workers writing via run_shell
-              // (cat >, sed -i, tee, etc.) used to show "0 write" in
-              // polling for the entire run despite actively producing
-              // artifacts. Detect common write patterns in the command
-              // arg and attribute as a synthetic write entry tagged
-              // `shell:` so callers can distinguish it from explicit
-              // write_file calls. False positives acceptable; false
-              // negatives are not — the headline must reflect reality.
+            if (READ_TOOL_NAMES.has(call.name) && path) filesReadSet.add(path);
+            else if (WRITE_TOOL_NAMES.has(call.name) && path) {
+              // A4b.1: validate before adding to the public array. Any
+              // entry that fails the path-validity check (absolute
+              // paths, shell metacharacters) goes to the rejected pile —
+              // not silently dropped, but kept for the daemon-log
+              // diagnostic in A4b.2.
+              if (filterValidWritePath(path)) filesWrittenSet.add(path);
+              else filesWrittenRejectedSet.add(path);
+            } else if (SHELL_TOOL_NAMES.has(call.name)) {
+              // A4b.1 (4.2.2+) — supersedes Gap-11 (4.0.3+). Pre-fix,
+              // workers using run_shell heredocs (cat >, tee, etc.)
+              // had a synthetic `shell:<command>` entry added to
+              // filesWritten so the headline showed non-zero write
+              // activity. That conflated "shell tried to write" with
+              // "real artifact landed", which broke the spec
+              // reviewer's diff-against-baseline reasoning. Now: the
+              // shell entry goes ONLY to the rejected pile (used for
+              // diagnostics + the writes_unverifiable downgrade in
+              // A4b.2). The headline's `shellWrites` counter (separate,
+              // emitted to the bus and tracked by RunningHeadlineSink)
+              // continues to show the activity signal.
               const command = extractShellCommand(call.input);
               if (command && shellCommandWritesFs(command)) {
-                filesWritten.push(`shell:${command.slice(0, 80)}`);
+                filesWrittenRejectedSet.add(`shell:${command.slice(0, 80)}`);
               }
             }
           }
@@ -243,8 +269,19 @@ export class RunnerShell {
       // filesystem so the headline reflects worker-produced artifacts
       // even when the worker bypassed write_file/edit_file.
       let shellWritesThisTurn = 0;
+      // A4b.0 (4.2.2+): emit per-turn unique read/write PATHS so the
+      // headline sink can dedupe across turns. Without these, the sink
+      // counts every tool invocation as a separate read/write — a
+      // worker that writes to `foo.ts` 5 times shows "5 write" in the
+      // headline even though only 1 file changed. Empty arrays are
+      // valid and short-circuit at the sink.
+      const pathsReadThisTurn = new Set<string>();
+      const pathsWrittenThisTurn = new Set<string>();
       for (const tc of turnResult.toolCalls) {
         toolCallsByName[tc.name] = (toolCallsByName[tc.name] ?? 0) + 1;
+        const path = extractPathFromToolInput(tc.input);
+        if (READ_TOOL_NAMES.has(tc.name) && path) pathsReadThisTurn.add(path);
+        else if (WRITE_TOOL_NAMES.has(tc.name) && path) pathsWrittenThisTurn.add(path);
         if (SHELL_TOOL_NAMES.has(tc.name)) {
           const cmd = extractShellCommand(tc.input);
           if (cmd && shellCommandWritesFs(cmd)) shellWritesThisTurn += 1;
@@ -259,6 +296,8 @@ export class RunnerShell {
         terminated: willTerminate,
         toolCallCount: turnResult.toolCalls.length,
         ...(turnResult.toolCalls.length > 0 && { toolCalls: toolCallsByName }),
+        ...(pathsReadThisTurn.size > 0 && { pathsReadThisTurn: [...pathsReadThisTurn] }),
+        ...(pathsWrittenThisTurn.size > 0 && { pathsWrittenThisTurn: [...pathsWrittenThisTurn] }),
         ...(shellWritesThisTurn > 0 && { shellWrites: shellWritesThisTurn }),
       });
 
@@ -290,8 +329,9 @@ export class RunnerShell {
         errorCode: 'empty_output',
         turns,
         durationMs: Date.now() - startMs,
-        filesRead,
-        filesWritten,
+        filesRead: [...filesReadSet],
+        filesWritten: [...filesWrittenSet],
+        filesWrittenRejected: [...filesWrittenRejectedSet],
         costUSD: computeCost(modelForCost, usage),
       };
     }
@@ -304,8 +344,9 @@ export class RunnerShell {
       ...(stoppedByAdapter ? {} : { errorCode: 'max_turns_exhausted' }),
       turns,
       durationMs: Date.now() - startMs,
-      filesRead,
-      filesWritten,
+      filesRead: [...filesReadSet],
+      filesWritten: [...filesWrittenSet],
+      filesWrittenRejected: [...filesWrittenRejectedSet],
       costUSD: computeCost(modelForCost, usage),
     };
   }

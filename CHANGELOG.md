@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.2] - 2026-05-10
+
+First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (filesWritten accounting) + A4a (sandbox cwd hygiene). Remaining Group A items (A1.2+, A6, A9, A5, A7, A10, A11) ship in subsequent 4.2.x releases.
+
+### Added
+
+- **`server.limits.maxProjects: 500` config field (core).** New outer-cap on the number of project directories under `~/.multi-model-agent/context-blocks/`. Sets up the LRU sweep that lands in a future patch.
+- **`filesWrittenMissing: string[]` field on per-task envelopes (core).** Surfaces entries the worker reported but that didn't pass `stat()` against `taskSpec.cwd` at terminal time. Only emitted when non-empty (common case: `[]`, omitted from envelope).
+- **`writes_unverifiable` errorCode (core).** New terminal-stage downgrade for write-intent routes (`delegate`, `execute-plan`): when worker says `done` but produced zero verifiable filesystem artifacts, the envelope returns `workerStatus: failed` / `errorCode: writes_unverifiable` instead of a misleading clean `ok`. Read-only routes (audit/review/debug/verify/investigate/research/explore) are exempt; chain-fail rejection takes precedence when both apply.
+- **Stale-sibling cwd rejection (server).** `validateCwd()` now rejects `?cwd=` matching `/tmp/claude/G--*` or `/private/tmp/claude/G--*` with `403 forbidden_cwd`. These directories come from prior Claude Code test runs and produce confused write attribution; prefix-match only so legitimate paths containing `G--` mid-string still pass.
+- **Startup hygiene warning (server).** `mmagent serve` scans `/tmp/claude/G--*` and `/private/tmp/claude/G--*` at boot and prints a single `[mmagent] WARNING: N stale Claude Code project sibling(s) under <root>/G--*. ...` line when any are found. Pure log behavior; never blocks startup.
+
+### Fixed
+
+- **`filesWritten` and `filesRead` are now deduped by unique path (core).** Pre-fix: 5 calls to `write_file('foo.ts')` produced `filesWritten.length === 5` on the public envelope and `5 write` in the polling headline. Post-fix: both report `1 write` (one unique path). Spec/quality reviewers reasoning about file CHANGES (set semantics) now see the same count as the brief's "modify N files" requirement. Tool-call count (raw activity counter) is intentionally NOT deduped — every invocation is billable.
+- **Polling headline read/write counts source from path Sets, not tool-name buckets (core).** `RunningHeadlineSink` accumulates per-task `Set<string>` of unique read/written paths from per-turn `pathsReadThisTurn` / `pathsWrittenThisTurn` events emitted by `runner-shell`. Falls back to legacy bucket-count semantics for fixtures that don't emit paths.
+- **Path-validity filter rejects shell-channel synthetic writes (core).** `runner-shell` no longer adds `shell:<command>` synthetic entries to `filesWritten` (Gap-11's papering over the shell-bypass problem). They now go to a separate `filesWrittenRejected` field on the RunResult, used by the new cross-check downgrade for the daemon-log diagnostic. Five-rule path validator (`filterValidWritePath`): rejects `shell:` prefix, shell metacharacters (`< > | & ; ` `` $ ( )`` ), bad path shape, paths >4096 chars, absolute paths.
+- **Default `server.limits.maxContextBlocksPerProject` bumped 32 → 500 (core).** The 32-entry cap was producing `409 cap_exceeded` in normal multi-spec workflows. The 500 default matches the new outer `maxProjects` cap and the spec design's "two-level cap with LRU eviction" architecture.
+- **Context-block storage root moves from `~/.multi-model-agent/` to `~/.multi-model/context-blocks/` (core).** Consolidates the two-folder split into a single `~/.multi-model/` root that holds auth, config, identity, install-id, install-manifest, telemetry-queue, and now context-blocks. **BREAKING for callers reading the path directly** — daemon migration to land in a follow-up patch (A1.7); for now, fresh installs use the new path.
+
 ## [4.2.1] - 2026-05-10
 
 ### Fixed
@@ -17,7 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...HEAD
+[4.2.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...v4.2.1
 
 ## [4.2.0] - 2026-05-10
