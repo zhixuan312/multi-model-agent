@@ -5,6 +5,49 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.2.0] - 2026-05-10
+
+### Added
+
+- **Parallel-criteria fan-out for read-only routes (`audit`/`review`/`verify`/`debug`/`investigate`).** Each route's failure-mode taxonomy is now evaluated by N parallel sub-workers (one per criterion / angle / evidence source / perspective) instead of one monolithic implementer. Counts: audit 11, review 10, debug 5, verify 5, investigate 5. The merge annotator dedups across sub-workers and recalibrates severity globally.
+- **`RunnerShell.prime()` cache warmer (core).** Sends one minimal turn before fan-out so the upstream prompt cache writes the shared prefix; subsequent N sub-workers serve the prefix from cache. On Anthropic-compatible providers (deepseek/MiniMax claude-compat included), confirmed cache-hit ratio of 0.5–0.92 in smoke tests, with `cached_read_tokens` reported per sub-worker.
+- **Per-angle wall-clock cap (10 min hard, 5 min soft warning).** Bounds `max(angle wall)` so total route wall is predictable. Cap-hit angles synthesize a `[N/A]` finding the merge annotator drops gracefully via the three-shape contract; no retry, no failure record. Eliminates the previously-observed 30–80 min runaway angles.
+- **Per-warmer wall-clock cap (10 min hard, 5 min soft warning).** Mirrors the angle cap. On cap-hit, dispatcher proceeds to fan-out without cache priming (correctness > optimization). Closes the wall-clock gap where a hung warmer was bounded only by the 60-min task timeout.
+- **Three-shape finding contract for answer-finding routes (debug/verify/investigate).** Sub-workers explicitly emit one of: SUBSTANTIVE finding, PARTIAL finding, or NOT-APPLICABLE finding (`[N/A]`-prefixed title, dropped by merge annotator). Eliminates both silent-failure and weak-speculation padding observed in prior iterations.
+- **Per-route severity meanings + per-route assignment framing.** Wire shape (`## Finding N:` blocks, 4 severity tiers) is uniform across all 5 routes; *meaning* of each tier is route-specific. Audit/review: severity = problem impact. Verify: severity = decisiveness of pass/fail verdict. Debug: severity = strength of root-cause evidence chain. Investigate: severity = confidence in the candidate answer.
+- **Orchestrator stall watchdog (bounded-execution).** The `ctx.stall.controller` AbortController has been declared since v3.x but never armed; a polling timer now fires `.abort()` after `stallTimeoutMs` (20 min default) of no `runner_turn_started`/`runner_response_received`/`runner_turn_completed` events. Eliminates the failure shape where hung provider calls absorbed the full 60-min `timeoutMs` (the "31 min wall, 0 turns, 0 cost" pattern).
+- **`SAFETY_MAX_TURNS` constant (200) replacing 5 hardcoded `maxTurns` sites.** `maxTurns` is no longer a normal-budget knob; it is a runaway-loop safety net shared by every provider run (impl, sub-worker, reviewer, annotator) across every route. Real budgets remain `timeoutMs` / `maxCostUSD` / `stallTimeoutMs` (user-configurable).
+- **`TaskSpec.parallelTarget` field.** Per-route pure user request text (question / work / problem / document / code) bypassing the legacy monolithic format spec embedded in `task.prompt`. Without this, the dispatcher's cached prefix would inherit the legacy `## Summary / ## Citations` (investigate) or `FINDING_FORMAT_INSTRUCTIONS` blocks, competing with the new `## Finding N:` shape and confusing workers about output format.
+- **9 new observability events** for parallel-criteria + stall + cap diagnostics:
+  - `stall_watchdog_armed`, `stall_watchdog_fired`
+  - `criteria_fanout_warm_start`, `criteria_fanout_warm_complete` (with `cacheControlSent`, `capHit`, `warmerInputTokens`, `warmerCachedNonReadTokens`)
+  - `criteria_fanout_warm_soft_warning`, `criteria_fanout_warm_cap_hit`
+  - `criteria_subworker_started`, `criteria_subworker_completed` (with `findingsCount`, `cachedReadTokens`)
+  - `criteria_subworker_soft_warning`, `criteria_subworker_hard_cap`, `criteria_subworker_retry`
+  - `criteria_fanout_summary` (with `cacheHitConfirmed`, `cacheHitRatio`, `succeededCount`, `failedCount`, totals + longest sub-worker)
+  - `criteria_fanout_tools_unavailable`
+  All registered in `tests/contract/goldens/observability.json` (39 events total).
+
+### Changed
+
+- **`AnnotatorEngine.annotate()` accepts N narratives instead of one.** Signature changed from `workerOutput: string` to `workerOutputs: Array<{ criterion: string; narrative: string }>`. The merge prompt instructs the annotator to dedup by `(file, line, claim essence)`, recalibrate severity using the shared SEVERITY_LADDER, drop `[N/A]`-prefixed findings, and drop `"No findings for this criterion."` sentinels before merging. Single-narrative inputs (N=1) take the same path with no merge-instructions block.
+- **`audit`/`review`/`verify`/`debug`/`investigate` now branch on `state.toolCategory === 'read_only'` in `task-runner.ts`** to use the new dispatcher path. Artifact-producing routes (`delegate`, `execute-plan`) keep the existing single-implementer path.
+- **`THOROUGHNESS_REMINDER_*` constants removed from sub-worker prompts.** They were calibrated for monolithic single-worker calls and would push sub-workers to invent findings when their criterion legitimately had zero matches. Replaced by route-specific `mustEmitAtLeastOne` flag (true for debug/verify/investigate; false for audit/review).
+- **debug taxonomy: 9 anti-patterns → 5 root-cause angles.** Was: SYMPTOM-NOT-CAUSE, SCAPEGOAT FILE, INCOMPLETE TRACE, etc. (warnings to avoid). Now: SYMPTOM-LOCATION ANGLE, RECENT-CHANGE ANGLE, TEST-FAILURE ANGLE, REPRODUCTION ANGLE, CONCURRENCY/CONFIGURATION ANGLE (perspectives to investigate from).
+- **verify taxonomy: 7 anti-patterns → 5 evidence sources.** Was: CLAIM-WITHOUT-EVIDENCE, STALE EVIDENCE, etc. Now: TEST-SUITE EVIDENCE, SOURCE-CODE DIRECT-READ, DOCUMENTATION EVIDENCE, RUN-OUTPUT EVIDENCE, DIFF EVIDENCE.
+- **investigate taxonomy: 8 quality-warnings → 5 answering perspectives.** Was: WRONG FILE, STALE QUOTE, HALLUCINATED CITATION, etc. Now: DIRECT-SYMBOL-TRACE, CALLER-ANALYSIS, TEST-DRIVEN, CROSS-FILE DEPENDENCY-MAP, DOCUMENTATION/COMMENT-LENS. Citation discipline (no hallucinated `file:line`, always re-read) preserved as within-perspective rule.
+- **Anthropic adapter `cache_control` plumbing.** When `RunInput.cacheControl: { type: 'ephemeral' }` is set, the system prompt is sent as `[{ type: 'text', text, cache_control: { type: 'ephemeral' } }]` instead of a plain string. OpenAI/Codex adapters accept the field but no-op (auto-caching applies on long shared prefixes regardless).
+- **`RunResult` shape adds `workerOutputs`, `partialCriteriaCovered`, `partialCriteriaFailed` fields** (read-only routes only). The `terminationReason` is now always set on the synthesized RunResult so the wire envelope's `terminalStatus` correctly reports `"ok"` instead of defaulting to `"incomplete"` when sub-workers succeed.
+
+### Fixed
+
+- **`stall_watchdog` was declared but never fired.** `ctx.timing.stallTimeoutMs` was captured into the timing struct since v3.x and `ctx.stall.controller = new AbortController()` was created, but no timer ever called `.abort()`. JSDoc in `delegate-with-escalation.ts:38` and `task-runner.ts:230` described this watchdog as if it existed; it didn't. Now wired in `bounded-execution/stall-watchdog.ts` with proper timer cleanup in `runTaskViaDispatcher`'s `finally` block.
+- **Misleading `cache_written` field on warmer event.** Detection used `cachedNonReadTokens > 0` which doesn't fire on deepseek's claude-compatible endpoint (they don't break out cache-creation tokens distinctly). Renamed to `cacheControlSent` (true iff we sent the marker) and added `cacheHitConfirmed` to the post-fanout `criteria_fanout_summary` event (true iff sub-workers reported `cachedReadTokens > 0`).
+- **Telemetry `terminalStatus` reported `"incomplete"` even when status='ok' on read-only routes.** Wire envelope's `deriveTerminalStatus` reads `terminationReason.cause`; without one, defaults to `"incomplete"`. Now set in the dispatcher branch based on the ⌈N/2⌉ majority threshold.
+
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...HEAD
+[4.2.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.1.0...v4.2.0
+
 ## [4.1.0] - 2026-05-09
 
 ### Changed
@@ -1476,7 +1519,6 @@ Initial public release.
 #### Tests
 - 220 Vitest tests across 20 files covering config schema, routing eligibility and selection, provider dispatch, all three runners (with `vi.mock`'d SDKs and a regression test for the multi-turn replay bug fixed in this release), tool sandbox boundaries, MCP CLI config discovery, package export contracts, and the file-size guards.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.6...HEAD
 [4.0.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.3...v4.0.4
 [4.0.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.2...v4.0.3
 [4.0.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.0.1...v4.0.2
