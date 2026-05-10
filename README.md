@@ -100,7 +100,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.2.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.2.2",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -300,14 +300,14 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.2.0
+## What's new in 4.2.2
 
-- **Parallel-criteria fan-out for read-only routes.** `/audit`, `/review`, `/verify`, `/debug`, `/investigate` now fan out N parallel sub-workers (one per criterion / angle / evidence source / perspective) instead of one monolithic implementer. Per-route N: audit 11, review 10, debug 5, verify 5, investigate 5. The merge annotator dedups across sub-workers and recalibrates severity globally.
-- **Cache warmer + per-angle/per-warmer 10-min wall-clock caps.** Each fan-out begins with one cache-priming call so subsequent sub-workers serve the prefix from cache (0.5–0.92 hit ratio observed on Anthropic-compatible providers). Both warmer and angles get a 10-min hard cap (5-min soft warning); cap-hit angles emit a `[N/A]` finding the merge annotator drops gracefully. Total route wall is now bounded.
-- **Orchestrator stall watchdog wired.** The `ctx.stall.controller` AbortController has been declared since v3.x but never armed; now fires after `stallTimeoutMs` (20 min default) of no runner events. Eliminates the "31 min wall, 0 turns, 0 cost" failure shape on hung provider calls.
-- **`SAFETY_MAX_TURNS` (200) replaces 5 hardcoded `maxTurns` sites.** `maxTurns` is no longer a normal-budget knob — it's a runaway-loop safety net. Real budgets remain `timeoutMs` / `maxCostUSD` / `stallTimeoutMs` (user-configurable).
-- **Three-shape finding contract for answer-finding routes.** debug/verify/investigate sub-workers explicitly emit one of: SUBSTANTIVE / PARTIAL / NOT-APPLICABLE (`[N/A]`-prefixed, dropped by merge). Eliminates both silent-failure and weak-speculation padding.
-- **Per-route severity meanings.** Wire shape (`## Finding N:` blocks, 4 severity tiers) is uniform; meaning of each tier is route-specific. Audit/review = problem impact; verify = pass/fail decisiveness; debug = root-cause evidence strength; investigate = answer confidence.
+First wave of Group A platform reliability fixes:
+- **`filesWritten` / `filesRead` deduped by path.** Spec/quality reviewers now see "3 files modified" instead of "10 writes" when a worker iterated 5× on `foo.ts`. Tool-call count remains the raw activity counter.
+- **`writes_unverifiable` downgrade.** Workers that say `done` but produce zero verifiable disk artifacts on write-intent routes (delegate, execute-plan) now return `errorCode: writes_unverifiable` instead of a misleading clean envelope.
+- **Path-validity filter rejects shell heredoc + sandbox-escape entries** from `filesWritten`. `cat > foo.ts << EOF` no longer pollutes the array; absolute paths are rejected as sandbox-escape attempts.
+- **Stale-sibling cwd rejection** (`/tmp/claude/G--*`) at request time + startup hygiene warning. Prior Claude Code test runs leaving sibling project dirs no longer confuse routing.
+- **Storage root consolidated** under `~/.multi-model/` (auth + config + identity + context-blocks all share one root). BREAKING for callers reading the path directly; daemon migration lands in a follow-up patch.
 
 CHANGELOG has the full breakdown.
 
