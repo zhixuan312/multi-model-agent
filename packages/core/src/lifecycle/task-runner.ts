@@ -332,16 +332,21 @@ export async function runTaskViaDispatcher(
               // tolerated — sub-worker can read on demand via tools
             }
           }
-          // The route's existing prompt builder produced task.prompt with
-          // the brief, the inline document/code (if any), and the
-          // file-path list. Use it verbatim as the "target" content in the
-          // cached prefix so we don't lose route-specific framing. Our own
-          // prefix builder adds orientation, evidence/scope/severity rules,
-          // the criterion taxonomy reference, and the per-criterion finding
-          // format on top.
-          const targetContent = (taskWithFiles.document && taskWithFiles.document.trim().length > 0)
-            ? taskWithFiles.document
-            : task.prompt;
+          // Target content for the cached prefix. Preference order:
+          //   1. parallelTarget — pure user question/work/problem, no
+          //      legacy format spec (set by the route's buildTaskSpec).
+          //   2. document — inlined doc (audit's primary input shape).
+          //   3. task.prompt — last-resort fallback. AVOID: it embeds the
+          //      legacy monolithic format spec (## Summary / ## Citations
+          //      for investigate, etc.), which competes with our `## Finding
+          //      N:` shape and confuses the worker about output format.
+          const taskWithTarget = task as TaskSpec & { parallelTarget?: string; document?: string };
+          const targetContent =
+            (taskWithTarget.parallelTarget && taskWithTarget.parallelTarget.trim().length > 0)
+              ? taskWithTarget.parallelTarget
+              : (taskWithTarget.document && taskWithTarget.document.trim().length > 0)
+                ? taskWithTarget.document
+                : task.prompt;
           const cachedPrefix = routeSpec.buildPrefix({
             document: targetContent,
             preReadFiles,

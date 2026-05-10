@@ -153,8 +153,17 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
     const filePaths = brief.filePath
       ? [brief.filePath]
       : (brief.filePaths && brief.filePaths.length > 0 ? brief.filePaths : undefined);
+    const targetParts: string[] = ['Review this code:'];
+    if (brief.code) targetParts.push('```\n' + brief.code + '\n```');
+    if (filePaths && filePaths.length > 0) {
+      targetParts.push(`Target files:\n${filePaths.map(p => `- ${p}`).join('\n')}`);
+    }
+    if (brief.focus) targetParts.push(`Focus: ${Array.isArray(brief.focus) ? brief.focus.join(', ') : brief.focus}`);
     return {
       prompt,
+      // Pure user code/files for the parallel-criteria dispatcher's cached
+      // prefix; bypasses the legacy ## Finding format spec embedded in `prompt`.
+      parallelTarget: targetParts.join('\n\n'),
       agentType: 'complex',
       reviewPolicy: 'quality_only',
       briefQualityPolicy: 'off',

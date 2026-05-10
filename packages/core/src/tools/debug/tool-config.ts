@@ -97,8 +97,15 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
     parts.push(FINDING_FORMAT_INSTRUCTIONS);
     const prompt = parts.join('\n\n');
 
+    const targetParts: string[] = [`Problem to debug:\n\n${brief.problem}`];
+    if (brief.context) targetParts.push(`Context: ${brief.context}`);
+    if (brief.hypothesis) targetParts.push(`Initial hypothesis: ${brief.hypothesis}`);
     return {
       prompt,
+      // Pure user problem statement for the parallel-criteria dispatcher's
+      // cached prefix; bypasses the legacy ## Finding format spec from
+      // FINDING_FORMAT_INSTRUCTIONS that's already embedded in `prompt`.
+      parallelTarget: targetParts.join('\n\n'),
       agentType: 'complex',
       reviewPolicy: 'quality_only',
       briefQualityPolicy: 'off',

@@ -108,7 +108,7 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
   },
 };
 
-const ROUTE_BLOCKS: Record<ReadOnlyRouteName, Omit<CachedPrefixBlocks, 'findingFormat'>> = {
+const ROUTE_BLOCKS: Record<ReadOnlyRouteName, Omit<CachedPrefixBlocks, 'findingFormat' | 'semantics'>> = {
   audit: {
     orientation: AUDIT_PURPOSE_ORIENTATION,
     evidenceRule: EVIDENCE_RULE_AUDIT,
