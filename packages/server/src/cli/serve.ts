@@ -335,6 +335,25 @@ export async function startServe(
   };
   process.stdout.write(`[mmagent] tiers | complex=${fmtTier('complex')} | standard=${fmtTier('standard')}\n`);
 
+  // A4a.4 (4.2.2+): warn when stale Claude Code project siblings exist
+  // under /tmp/claude/G--*. These come from prior Claude Code test runs
+  // and confuse worker cwd resolution if a caller passes one as ?cwd=.
+  // The validator already rejects them at request time (A4a.1); this
+  // startup scan surfaces the contamination so operators clean it up.
+  // Pure log behavior — does NOT block startup.
+  for (const root of ['/tmp/claude', '/private/tmp/claude']) {
+    try {
+      if (!fs.existsSync(root)) continue;
+      const stale = fs.readdirSync(root).filter(e => e.startsWith('G--'));
+      if (stale.length > 0) {
+        process.stdout.write(
+          `[mmagent] WARNING: ${stale.length} stale Claude Code project sibling(s) under ${root}/G--*. ` +
+          `These can confuse cwd resolution; clean up with: rm -rf ${root}/G--*\n`
+        );
+      }
+    } catch { /* swallow — log-only */ }
+  }
+
   process.stdout.write(`[mmagent] listening on ${host}:${running.port}\n`);
 
   return {
