@@ -45,5 +45,41 @@ describe('RunnerShell.prime()', () => {
     const shell = new RunnerShell(adapter);
     const result = await shell.prime('SYSTEM PREFIX', { cwd: '/tmp' });
     expect(result.cacheControlSent).toBe(false);
+    expect(result.capHit).toBe(false);
+  });
+
+  it('warmer 10-minute hard cap aborts, returns capHit=true, dispatcher can proceed without cache', async () => {
+    vi.useFakeTimers({ toFake: ['Date', 'setTimeout', 'setInterval', 'clearTimeout', 'clearInterval', 'queueMicrotask'] });
+    try {
+      const events: any[] = [];
+      const bus = { on: vi.fn(), emit: (e: any) => events.push(e) } as any;
+      const adapter: RunnerAdapter = {
+        providerType: 'claude',
+        async turn(input) {
+          // Hang until aborted.
+          await new Promise<void>((resolve) => {
+            input.abortSignal!.addEventListener('abort', () => resolve(), { once: true });
+          });
+          return {
+            assistantText: '',
+            toolCalls: [],
+            finishReason: 'error',
+            usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+            errorCode: 'aborted',
+          };
+        },
+      };
+      const shell = new RunnerShell(adapter, 'test');
+      const primed = shell.prime('SYSTEM PREFIX', { cwd: '/tmp', cacheControl: { type: 'ephemeral' }, bus });
+      await vi.advanceTimersByTimeAsync(11 * 60 * 1000);
+      const result = await primed;
+      expect(result.capHit).toBe(true);
+      expect(result.cacheControlSent).toBe(false);
+      expect(events.find(e => e.event === 'criteria_fanout_warm_soft_warning')).toBeDefined();
+      expect(events.find(e => e.event === 'criteria_fanout_warm_cap_hit')).toBeDefined();
+      expect(events.find(e => e.event === 'criteria_fanout_warm_complete' && e.capHit === true)).toBeDefined();
+    } finally {
+      vi.useRealTimers();
+    }
   });
 });

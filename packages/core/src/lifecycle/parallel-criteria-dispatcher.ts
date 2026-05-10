@@ -360,6 +360,7 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     coveredIds: succeeded.map(s => s.criterionId),
     failedIds: finalFailures.map(f => f.id),
     warmCacheControlSent: warm.cacheControlSent,
+    warmCapHit: warm.capHit,
     cacheHitConfirmed,
     cacheHitRatio: Math.round(cacheHitRatio * 1000) / 1000,
     warmDurationMs: warm.durationMs,

@@ -318,55 +318,128 @@ export class RunnerShell {
    * The user message is a single token ("ready") and the assistant response
    * is discarded. For providers that don't honor `cache_control` (codex,
    * future providers), this still runs but produces no measurable cache
-   * benefit. The caller decides whether the warmer pays off based on the
-   * provider in use.
+   * benefit.
+   *
+   * Bounded by an internal 10-min hard cap (5-min soft warning) so a slow
+   * or hanging warmer cannot blow the route's overall wall-clock. On cap
+   * hit, the warmer returns with capHit=true and the dispatcher proceeds
+   * to fan-out WITHOUT cache priming — sub-workers will pay full input
+   * cost but the route still completes (correctness > optimization).
    */
   async prime(systemPrompt: string, opts: PrimeOptions): Promise<PrimeResult> {
     const startMs = Date.now();
-    const turnResult = await this.adapter.turn({
-      systemPrompt,
-      userMessage: 'ready',
-      priorTurns: [],
-      toolDefinitions: [],
-      capabilities: opts.capabilities ?? { ...DEFAULT_CAPABILITIES, thinking: false },
-      ...(opts.abortSignal && { abortSignal: opts.abortSignal }),
-      ...(opts.deadlineMs !== undefined && { deadlineMs: opts.deadlineMs }),
-      ...(opts.cacheControl && { cacheControl: opts.cacheControl }),
-    });
-    const durationMs = Date.now() - startMs;
-    // The warmer can't reliably tell whether the upstream actually wrote
-    // the cache — providers like deepseek's claude-compatible endpoint
-    // don't break out cache_creation_input_tokens, so cachedNonReadTokens
-    // can be 0 even when caching DID happen. The truth signal is
-    // downstream sub-workers' cachedReadTokens, surfaced in
-    // criteria_fanout_summary.totalCachedReadTokens. Here we just report
-    // whether we sent the cache_control marker — the actual hit/miss is
-    // computed after fan-out.
-    const cacheControlSent = opts.cacheControl !== undefined;
-    opts.bus?.emit({
-      event: 'criteria_fanout_warm_complete',
-      ts: new Date().toISOString(),
-      ...(opts.batchId !== undefined && { batchId: opts.batchId }),
-      ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
-      ...(opts.tier !== undefined && { tier: opts.tier }),
-      ...(opts.stageLabel !== undefined && { stageLabel: opts.stageLabel }),
-      durationMs,
-      cacheControlSent,
-      warmerInputTokens: turnResult.usage.inputTokens,
-      warmerCachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
-    });
-    return {
-      cacheControlSent,
-      durationMs,
-      usage: {
-        inputTokens: turnResult.usage.inputTokens,
-        outputTokens: turnResult.usage.outputTokens,
-        cachedReadTokens: turnResult.usage.cachedReadTokens ?? 0,
-        cachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
-      },
-    };
+
+    // Per-warmer wall-clock guard: own hard cap, independent of the
+    // task-level abortSignal. Combined into one signal that the adapter sees.
+    const warmerAbort = new AbortController();
+    const combinedAbort = new AbortController();
+    if (opts.abortSignal) {
+      if (opts.abortSignal.aborted) combinedAbort.abort();
+      else opts.abortSignal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+    }
+    warmerAbort.signal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+
+    let capHit = false;
+    const softTimer = setTimeout(() => {
+      opts.bus?.emit({
+        event: 'criteria_fanout_warm_soft_warning',
+        ts: new Date().toISOString(),
+        ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+        ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
+        elapsedMs: WARMER_SOFT_WARN_MS,
+        remainingMs: WARMER_HARD_CAP_MS - WARMER_SOFT_WARN_MS,
+      });
+    }, WARMER_SOFT_WARN_MS);
+    const hardTimer = setTimeout(() => {
+      capHit = true;
+      opts.bus?.emit({
+        event: 'criteria_fanout_warm_cap_hit',
+        ts: new Date().toISOString(),
+        ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+        ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
+        elapsedMs: WARMER_HARD_CAP_MS,
+      });
+      warmerAbort.abort();
+    }, WARMER_HARD_CAP_MS);
+
+    try {
+      const turnResult = await this.adapter.turn({
+        systemPrompt,
+        userMessage: 'ready',
+        priorTurns: [],
+        toolDefinitions: [],
+        capabilities: opts.capabilities ?? { ...DEFAULT_CAPABILITIES, thinking: false },
+        abortSignal: combinedAbort.signal,
+        ...(opts.deadlineMs !== undefined && { deadlineMs: opts.deadlineMs }),
+        ...(opts.cacheControl && { cacheControl: opts.cacheControl }),
+      });
+      const durationMs = Date.now() - startMs;
+      // The warmer can't reliably tell whether the upstream actually wrote
+      // the cache. cacheControlSent reports we ATTEMPTED to register;
+      // confirmation comes from sub-workers' cachedReadTokens.
+      const cacheControlSent = !capHit && opts.cacheControl !== undefined;
+      opts.bus?.emit({
+        event: 'criteria_fanout_warm_complete',
+        ts: new Date().toISOString(),
+        ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+        ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
+        ...(opts.tier !== undefined && { tier: opts.tier }),
+        ...(opts.stageLabel !== undefined && { stageLabel: opts.stageLabel }),
+        durationMs,
+        cacheControlSent,
+        capHit,
+        warmerInputTokens: turnResult.usage.inputTokens,
+        warmerCachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
+      });
+      return {
+        cacheControlSent,
+        capHit,
+        durationMs,
+        usage: {
+          inputTokens: turnResult.usage.inputTokens,
+          outputTokens: turnResult.usage.outputTokens,
+          cachedReadTokens: turnResult.usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
+        },
+      };
+    } catch (err) {
+      const durationMs = Date.now() - startMs;
+      // On cap-hit, swallow the abort and return a synthesized result so
+      // the dispatcher proceeds to fan-out without cache (correct, just
+      // slower). Real errors (transport, etc.) re-throw — the dispatcher
+      // currently doesn't catch warmer errors but a future caller might.
+      if (capHit) {
+        opts.bus?.emit({
+          event: 'criteria_fanout_warm_complete',
+          ts: new Date().toISOString(),
+          ...(opts.batchId !== undefined && { batchId: opts.batchId }),
+          ...(opts.taskIndex !== undefined && { taskIndex: opts.taskIndex }),
+          durationMs,
+          cacheControlSent: false,
+          capHit: true,
+          warmerInputTokens: 0,
+          warmerCachedNonReadTokens: 0,
+        });
+        return {
+          cacheControlSent: false,
+          capHit: true,
+          durationMs,
+          usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+        };
+      }
+      throw err;
+    } finally {
+      clearTimeout(softTimer);
+      clearTimeout(hardTimer);
+    }
   }
 }
+
+/** Per-warmer wall-clock guard. After this, the warmer's abortSignal
+ *  fires and prime() returns with capHit=true; the dispatcher proceeds
+ *  to fan-out without cache priming. */
+const WARMER_HARD_CAP_MS = 10 * 60 * 1000;
+const WARMER_SOFT_WARN_MS = 5 * 60 * 1000;
 
 export interface PrimeOptions {
   cwd: string;
@@ -388,6 +461,10 @@ export interface PrimeResult {
    *  cachedReadTokens, NOT here — see criteria_fanout_summary's
    *  totalCachedReadTokens / cacheHitConfirmed. */
   cacheControlSent: boolean;
+  /** True iff the warmer hit the 10-min hard cap and was force-aborted.
+   *  Dispatcher proceeds to fan-out anyway; sub-workers pay full input
+   *  cost since no cache was primed. */
+  capHit: boolean;
   durationMs: number;
   usage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
 }

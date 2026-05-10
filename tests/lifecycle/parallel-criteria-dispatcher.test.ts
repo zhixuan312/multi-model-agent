@@ -15,6 +15,7 @@ interface MockRunResp { status: 'ok' | 'error'; output: string; }
 function makeShellWithStaticResults(perCriterion: Record<string, MockRunResp>) {
   const prime = vi.fn(async () => ({
     cacheControlSent: true,
+    capHit: false,
     durationMs: 100,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
   }));

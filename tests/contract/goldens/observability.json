@@ -431,6 +431,23 @@
         "criterionTitle",
         "elapsedMs"
       ]
+    },
+    {
+      "name": "criteria_fanout_warm_soft_warning",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs",
+        "remainingMs"
+      ]
+    },
+    {
+      "name": "criteria_fanout_warm_cap_hit",
+      "requiredFields": [
+        "event",
+        "ts",
+        "elapsedMs"
+      ]
     }
   ]
 }
