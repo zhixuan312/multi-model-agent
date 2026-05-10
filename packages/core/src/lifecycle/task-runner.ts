@@ -383,11 +383,26 @@ export async function runTaskViaDispatcher(
            // post-dispatch invariant that means "the implementer stage
            // produced something the annotator can merge."
           const parsedReport = parseStructuredReport(synthesizedOutput) ?? { findings: [], structuredReportSchemaUsed: 'fallback' as unknown as never };
+          // terminationReason drives the wire envelope's terminalStatus
+          // (event-builder.ts:359 deriveTerminalStatus reads tr.cause). Without
+          // it, the rollup defaults to 'incomplete' even when status='ok'.
+          const totalTurns = dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0);
+          const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
+            ? 'error'
+            : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
+          const terminationReason = {
+            cause: terminationCause,
+            turnsUsed: totalTurns,
+            hasFileArtifacts: false,
+            usedShell: false,
+            workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
+            wasPromoted: false,
+          };
           state.lastRunResult = {
             output: synthesizedOutput,
             status,
             usage: dispatchResult.totalUsage,
-            turns: dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0),
+            turns: totalTurns,
             filesRead: filePaths,
             filesWritten: [],
             toolCalls: [],
@@ -395,6 +410,7 @@ export async function runTaskViaDispatcher(
             escalationLog: [],
             parsedFindings: null,
             workerStatus: succeededCount === 0 ? 'failed' : 'done',
+            terminationReason,
             workerOutputs: dispatchResult.workerOutputs.map(o => ({
               criterionId: o.criterionId,
               criterionTitle: o.criterionTitle,

@@ -14,7 +14,7 @@ interface MockRunResp { status: 'ok' | 'error'; output: string; }
 
 function makeShellWithStaticResults(perCriterion: Record<string, MockRunResp>) {
   const prime = vi.fn(async () => ({
-    cacheWritten: true,
+    cacheControlSent: true,
     durationMs: 100,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
   }));
@@ -59,13 +59,14 @@ describe('dispatchParallelCriteria', () => {
     expect(result.workerOutputs).toHaveLength(3);
     expect(result.totalUsage.inputTokens).toBe(300);
     expect(result.totalUsage.cachedReadTokens).toBe(240);
-    expect(result.warmCacheWritten).toBe(true);
+    expect(result.warmCacheControlSent).toBe(true);
+    expect(result.cacheHitConfirmed).toBe(true);
   });
 
   it('retries failed sub-workers exactly once on warm cache', async () => {
     let call2Count = 0;
     const prime = vi.fn(async () => ({
-      cacheWritten: true,
+      cacheControlSent: true,
       durationMs: 100,
       usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     }));

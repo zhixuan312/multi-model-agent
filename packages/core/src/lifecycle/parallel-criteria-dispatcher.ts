@@ -38,7 +38,12 @@ export interface DispatchResult {
   workerOutputs: SubWorkerOutput[];
   partialCriteriaCovered: string[];
   partialCriteriaFailed: PartialFailure[];
-  warmCacheWritten: boolean;
+  /** Whether the warmer sent a cacheable prefix marker. Does NOT mean the
+   *  upstream actually cached — see cacheHitConfirmed. */
+  warmCacheControlSent: boolean;
+  /** True iff at least one sub-worker reported cachedReadTokens > 0,
+   *  proving the upstream cache hit. Computed AFTER fan-out. */
+  cacheHitConfirmed: boolean;
   warmDurationMs: number;
   /** Aggregate usage across all sub-workers (sum). */
   totalUsage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
@@ -245,6 +250,16 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
   succeeded.sort((a, b) => Number(a.criterionId) - Number(b.criterionId));
   finalFailures.sort((a, b) => Number(a.id) - Number(b.id));
 
+  const totalInputTokens = succeeded.reduce((a, s) => a + s.usage.inputTokens, 0);
+  const totalCachedReadTokens = succeeded.reduce((a, s) => a + s.usage.cachedReadTokens, 0);
+  const cacheHitConfirmed = totalCachedReadTokens > 0;
+  // Cache hit ratio = cached_read / (cached_read + fresh_input). 1.0 means
+  // every sub-worker served the prefix from cache; 0.0 means the warmer
+  // didn't take effect.
+  const cacheHitRatio = (totalCachedReadTokens + totalInputTokens) > 0
+    ? totalCachedReadTokens / (totalCachedReadTokens + totalInputTokens)
+    : 0;
+
   input.bus?.emit({
     event: 'criteria_fanout_summary',
     ts: new Date().toISOString(),
@@ -256,10 +271,12 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     failedCount: finalFailures.length,
     coveredIds: succeeded.map(s => s.criterionId),
     failedIds: finalFailures.map(f => f.id),
-    warmCacheWritten: warm.cacheWritten,
+    warmCacheControlSent: warm.cacheControlSent,
+    cacheHitConfirmed,
+    cacheHitRatio: Math.round(cacheHitRatio * 1000) / 1000,
     warmDurationMs: warm.durationMs,
-    totalInputTokens: succeeded.reduce((a, s) => a + s.usage.inputTokens, 0),
-    totalCachedReadTokens: succeeded.reduce((a, s) => a + s.usage.cachedReadTokens, 0),
+    totalInputTokens,
+    totalCachedReadTokens,
     totalOutputTokens: succeeded.reduce((a, s) => a + s.usage.outputTokens, 0),
     totalCostUSD: succeeded.reduce((a, s) => a + (s.costUSD ?? 0), 0),
     longestSubWorkerMs: succeeded.reduce((a, s) => Math.max(a, s.durationMs), 0),
@@ -279,7 +296,8 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     workerOutputs: succeeded,
     partialCriteriaCovered: succeeded.map(s => s.criterionId),
     partialCriteriaFailed: finalFailures,
-    warmCacheWritten: warm.cacheWritten,
+    warmCacheControlSent: warm.cacheControlSent,
+    cacheHitConfirmed,
     warmDurationMs: warm.durationMs,
     totalUsage,
   };

@@ -361,7 +361,7 @@
         "event",
         "ts",
         "durationMs",
-        "cacheWritten"
+        "cacheControlSent"
       ]
     },
     {
@@ -398,7 +398,9 @@
         "ts",
         "parallelism",
         "succeededCount",
-        "failedCount"
+        "failedCount",
+        "cacheHitConfirmed",
+        "cacheHitRatio"
       ]
     },
     {

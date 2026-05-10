@@ -18,6 +18,14 @@
       "escalationLog": [],
       "parsedFindings": null,
       "workerStatus": "done",
+      "terminationReason": {
+        "cause": "finished",
+        "turnsUsed": 10,
+        "hasFileArtifacts": false,
+        "usedShell": false,
+        "workerSelfAssessment": "done",
+        "wasPromoted": false
+      },
       "workerOutputs": [
         {
           "criterionId": "1",

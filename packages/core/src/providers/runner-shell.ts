@@ -334,9 +334,15 @@ export class RunnerShell {
       ...(opts.cacheControl && { cacheControl: opts.cacheControl }),
     });
     const durationMs = Date.now() - startMs;
-    // cacheNonReadTokens > 0 means the upstream wrote a fresh cache entry.
-    // For providers without cache reporting, this stays 0 (no false positives).
-    const cacheWritten = (turnResult.usage.cachedNonReadTokens ?? 0) > 0;
+    // The warmer can't reliably tell whether the upstream actually wrote
+    // the cache — providers like deepseek's claude-compatible endpoint
+    // don't break out cache_creation_input_tokens, so cachedNonReadTokens
+    // can be 0 even when caching DID happen. The truth signal is
+    // downstream sub-workers' cachedReadTokens, surfaced in
+    // criteria_fanout_summary.totalCachedReadTokens. Here we just report
+    // whether we sent the cache_control marker — the actual hit/miss is
+    // computed after fan-out.
+    const cacheControlSent = opts.cacheControl !== undefined;
     opts.bus?.emit({
       event: 'criteria_fanout_warm_complete',
       ts: new Date().toISOString(),
@@ -345,10 +351,12 @@ export class RunnerShell {
       ...(opts.tier !== undefined && { tier: opts.tier }),
       ...(opts.stageLabel !== undefined && { stageLabel: opts.stageLabel }),
       durationMs,
-      cacheWritten,
+      cacheControlSent,
+      warmerInputTokens: turnResult.usage.inputTokens,
+      warmerCachedNonReadTokens: turnResult.usage.cachedNonReadTokens ?? 0,
     });
     return {
-      cacheWritten,
+      cacheControlSent,
       durationMs,
       usage: {
         inputTokens: turnResult.usage.inputTokens,
@@ -374,7 +382,12 @@ export interface PrimeOptions {
 }
 
 export interface PrimeResult {
-  cacheWritten: boolean;
+  /** Whether the warmer attempted to register a cacheable prefix
+   *  (i.e. opts.cacheControl was set and the call returned). The actual
+   *  cache effectiveness surfaces in subsequent sub-worker
+   *  cachedReadTokens, NOT here — see criteria_fanout_summary's
+   *  totalCachedReadTokens / cacheHitConfirmed. */
+  cacheControlSent: boolean;
   durationMs: number;
   usage: { inputTokens: number; outputTokens: number; cachedReadTokens: number; cachedNonReadTokens: number };
 }
