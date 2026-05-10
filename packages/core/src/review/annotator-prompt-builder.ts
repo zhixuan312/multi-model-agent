@@ -65,6 +65,19 @@ export function assembleAnnotatorPrompt(template: AnnotatorTemplate, ctx: Annota
   // duplicated by buildAnnotatorRubric below, so sending it again is
   // redundant + costly.
   const compactBrief = trimBriefForAnnotator(ctx.brief);
+
+  // Multi-narrative merge mode: each sub-worker covered ONE criterion.
+  // The annotator dedups overlapping findings and recalibrates severity
+  // against the shared SEVERITY_LADDER. Single-narrative inputs (e.g.
+  // a route that hasn't migrated to fan-out) take the same path with N=1.
+  const sections = ctx.workerOutputs.map(o =>
+    `--- Sub-worker for ${o.criterion} ---\n${o.narrative}`,
+  ).join('\n\n');
+
+  const mergeInstructions = ctx.workerOutputs.length > 1
+    ? `\n## Merge instructions\n\nThe worker output below is N narratives, each from a sub-worker that covered ONE criterion of the failure-mode taxonomy. Your job:\n1. Combine findings across all narratives into one list.\n2. Group findings by (file, line, claim essence). When two sub-workers reported the same underlying issue from different angles, KEEP ONE — pick the higher-severity wording and merge any non-redundant evidence.\n3. Recalibrate severity using the shared severity ladder so a sub-worker that inflated within its narrow scope is rebucketed against the global picture.\n4. Drop any narrative that contained no findings (these are valid empty results, not parse failures).\n\n`
+    : '';
+
   return `You are reviewing a ${template.role} produced by a worker.
 
 The user requested a ${template.role}. The brief was:
@@ -74,10 +87,10 @@ ${compactBrief}
 ## On-brief check (per finding)
 
 ${template.onBriefCheck}
-
+${mergeInstructions}
 ## Worker output to extract findings from
 
-${ctx.workerOutput}
+${sections}
 
 ${buildAnnotatorRubric(template)}`;
 }

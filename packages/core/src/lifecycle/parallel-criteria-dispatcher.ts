@@ -207,9 +207,14 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     });
     const retryResults = await Promise.allSettled(failedIndices.map(i => runOneSubWorker(input, input.criteria[i], toolDefs)));
     retryResults.forEach((r, k) => {
-      if (r.status === 'fulfilled' && r.value.ok) succeeded.push(r.value.output);
-      else if (r.status === 'fulfilled') finalFailures.push(r.value.failure);
-      else {
+      if (r.status === 'fulfilled') {
+        const value = r.value;
+        if (value.ok) {
+          succeeded.push(value.output);
+        } else {
+          finalFailures.push(value.failure);
+        }
+      } else {
         const c = input.criteria[failedIndices[k]];
         finalFailures.push({ id: c.id, title: c.title, reason: 'other', lastError: String(r.reason) });
       }

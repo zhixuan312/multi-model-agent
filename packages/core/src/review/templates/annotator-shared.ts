@@ -2,7 +2,11 @@
 // happens in review/annotator-prompt-builder.ts.
 
 export interface AnnotatorPromptContext {
-  workerOutput: string;
+  /** N parallel sub-worker narratives, one per criterion the dispatcher
+   *  fanned out. The empty-result narrative ("No findings for this
+   *  criterion.") is filtered out by the engine before this context is
+   *  built — entries here are non-empty narratives that need merging. */
+  workerOutputs: Array<{ criterion: string; narrative: string }>;
   brief: string;
 }
 

@@ -27,7 +27,7 @@ function shellStub(opts: ShellStubOptions): RunnerShell {
 }
 
 const defaultInput = {
-  workerOutput: 'F1: missing null check in handler.ts',
+  workerOutputs: [{ criterion: 'all criteria', narrative: 'F1: missing null check in handler.ts' }],
   brief: 'Review handler.ts for null safety',
   cwd: '/tmp/test',
 };
@@ -87,7 +87,7 @@ describe('AnnotatorEngine', () => {
 
         expect(capturedPrompt).toContain(routeRoleHints[route]);
         expect(capturedPrompt).toContain(defaultInput.brief);
-        expect(capturedPrompt).toContain(defaultInput.workerOutput);
+        expect(capturedPrompt).toContain(defaultInput.workerOutputs[0].narrative);
       });
 
       it('parses valid JSON and returns annotated verdict', async () => {
