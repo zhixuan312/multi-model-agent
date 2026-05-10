@@ -124,3 +124,8 @@ export const ANNOTATOR_AWARENESS_DEBUG = [
   '- Is severity calibrated to evidence strength (gaps in chain = lower severity, not the same severity with hand-waving)?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but partial-evidence hypotheses with explicit "the gap is here, verify by X" notes are FULLY VALID, do NOT downgrade them as "speculation". Debug is speculation narrowed by evidence; hand-waving is the failure mode, not careful gap-marking.',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. */
+export const DEBUG_CRITERIA: readonly CriterionEntry[] = parseCriteria(DEBUG_FAILURE_MODES);

@@ -126,3 +126,8 @@ export const ANNOTATOR_AWARENESS_INVESTIGATE = [
   '- Is the answer to the asked question, not a shifted version of it?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but negative findings ("searched, not found") and inference-with-citations ("I infer X from Y:42, Z:18") are FULLY VALID. Do NOT downgrade negative findings for lacking a code quote, and do NOT downgrade inference-with-citations as "speculation" if the cited links are real.',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. */
+export const INVESTIGATE_CRITERIA: readonly CriterionEntry[] = parseCriteria(INVESTIGATE_FAILURE_MODES);

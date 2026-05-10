@@ -141,3 +141,10 @@ export const ANNOTATOR_AWARENESS_AUDIT = [
   '- Is the finding within the document\'s scope, or is it speculation about untouched material?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but logical-coherence and argument-soundness findings backed by section references are FULLY VALID, do NOT downgrade them as "speculation."',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. Derived
+ *  from DOC_AUDIT_FAILURE_MODES so the prose in the cached prefix and the
+ *  per-sub-worker assignment stay in lockstep. */
+export const AUDIT_CRITERIA: readonly CriterionEntry[] = parseCriteria(DOC_AUDIT_FAILURE_MODES);

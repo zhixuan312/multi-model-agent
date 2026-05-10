@@ -127,3 +127,8 @@ export const ANNOTATOR_AWARENESS_VERIFY = [
   '- For FAIL items: is the FAIL backed by a specific shortfall (which sub-criterion missed, which test failed, which file does not implement what the criterion requires)?',
   'Self-check before emitting. Findings that fail any check are downgraded or dropped — but FAIL with NEGATIVE evidence ("cannot verify from this artifact") is FULLY VALID and the correct verdict when the artifact is insufficient. Do NOT downgrade NEGATIVE-evidence FAILs to "cannot determine" or assumed-PASS.',
 ].join('\n');
+
+import { parseCriteria, type CriterionEntry } from '../criteria-types.js';
+
+/** Structured per-criterion array for parallel-criteria fan-out. */
+export const VERIFY_CRITERIA: readonly CriterionEntry[] = parseCriteria(VERIFY_FAILURE_MODES);
