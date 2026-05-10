@@ -70,6 +70,17 @@ const TRANSPORT_FAILURE_CODES: ReadonlySet<string> = new Set([
   'transport_failure', 'provider_transport_failure', 'api_error', 'network_error',
 ]);
 
+/** Per-angle wall-clock cap. After this, the sub-worker's abortSignal fires
+ *  and runOneSubWorker synthesizes a [N/A] finding so the merge annotator
+ *  drops the angle gracefully. Bounds the worst-case max(angle wall) at
+ *  10 min — total route wall ≈ warmer + 10 min + merge ≈ 13 min ceiling. */
+const ANGLE_HARD_CAP_MS = 10 * 60 * 1000;
+
+/** Soft warning checkpoint. Emits a verbose event so operators can see
+ *  WHICH angles are slow before they hit the hard cap. No worker-side
+ *  behavior change. */
+const ANGLE_SOFT_WARN_MS = 5 * 60 * 1000;
+
 function classifyFailureReason(errorCode: string | undefined): PartialFailure['reason'] {
   if (!errorCode) return 'other';
   if (errorCode === 'timeout' || errorCode.includes('time')) return 'timeout';
@@ -82,7 +93,7 @@ async function runOneSubWorker(
   input: DispatchInput,
   criterion: CriterionEntry,
   toolDefs: ToolDefinition[],
-): Promise<{ ok: true; output: SubWorkerOutput } | { ok: false; failure: PartialFailure }> {
+): Promise<{ ok: true; output: SubWorkerOutput; capHit?: boolean } | { ok: false; failure: PartialFailure }> {
   input.bus?.emit({
     event: 'criteria_subworker_started',
     ts: new Date().toISOString(),
@@ -92,6 +103,45 @@ async function runOneSubWorker(
     criterionTitle: criterion.title,
   });
   const startMs = Date.now();
+
+  // Per-angle wall-clock guard: combine task-level abort with an
+  // angle-level abort that fires at ANGLE_HARD_CAP_MS. The soft-warning
+  // timer at ANGLE_SOFT_WARN_MS is observability-only.
+  const angleAbort = new AbortController();
+  const combinedAbort = new AbortController();
+  if (input.abortSignal) {
+    if (input.abortSignal.aborted) combinedAbort.abort();
+    else input.abortSignal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+  }
+  angleAbort.signal.addEventListener('abort', () => combinedAbort.abort(), { once: true });
+
+  let capHit = false;
+  const softTimer = setTimeout(() => {
+    input.bus?.emit({
+      event: 'criteria_subworker_soft_warning',
+      ts: new Date().toISOString(),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      criterionId: criterion.id,
+      criterionTitle: criterion.title,
+      elapsedMs: ANGLE_SOFT_WARN_MS,
+      remainingMs: ANGLE_HARD_CAP_MS - ANGLE_SOFT_WARN_MS,
+    });
+  }, ANGLE_SOFT_WARN_MS);
+  const hardTimer = setTimeout(() => {
+    capHit = true;
+    input.bus?.emit({
+      event: 'criteria_subworker_hard_cap',
+      ts: new Date().toISOString(),
+      ...(input.batchId !== undefined && { batchId: input.batchId }),
+      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+      criterionId: criterion.id,
+      criterionTitle: criterion.title,
+      elapsedMs: ANGLE_HARD_CAP_MS,
+    });
+    angleAbort.abort();
+  }, ANGLE_HARD_CAP_MS);
+
   try {
     const result = await input.shell.run({
       systemPrompt: input.cachedPrefix,
@@ -99,7 +149,7 @@ async function runOneSubWorker(
       toolDefinitions: toolDefs,
       maxTurns: SAFETY_MAX_TURNS,
       cwd: input.cwd,
-      ...(input.abortSignal && { abortSignal: input.abortSignal }),
+      abortSignal: combinedAbort.signal,
       ...(input.deadlineMs !== undefined && { deadlineMs: input.deadlineMs }),
       cacheControl: { type: 'ephemeral' },
       ...(input.bus && { bus: input.bus }),
@@ -110,6 +160,41 @@ async function runOneSubWorker(
     });
     const text = result.finalAssistantText ?? '';
     const errorCode = result.errorCode;
+    // Hard-cap hit: synthesize a [N/A] finding so the merge annotator
+    // drops it gracefully. Don't go through retry — the cap was deliberate.
+    if (capHit || errorCode === 'aborted') {
+      const synthetic = `## Finding 1: [N/A] Angle hit the ${Math.round(ANGLE_HARD_CAP_MS / 60000)}-minute per-angle wall-clock cap\n- Severity: low\n- Issue: This perspective was force-aborted to bound the route's overall wall-clock. Any partial findings collected before the cap have been discarded. The merge annotator drops this finding from the final report; it exists so you can see all angles were attempted.\n`;
+      input.bus?.emit({
+        event: 'criteria_subworker_completed',
+        ts: new Date().toISOString(),
+        ...(input.batchId !== undefined && { batchId: input.batchId }),
+        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
+        criterionId: criterion.id,
+        status: 'cap_hit',
+        findingsCount: 0,
+        durationMs: Date.now() - startMs,
+        cachedReadTokens: result.usage?.cachedReadTokens ?? 0,
+      });
+      return {
+        ok: true,
+        capHit: true,
+        output: {
+          criterionId: criterion.id,
+          criterionTitle: criterion.title,
+          narrative: synthetic,
+          usage: {
+            inputTokens: result.usage?.inputTokens ?? 0,
+            outputTokens: result.usage?.outputTokens ?? 0,
+            cachedReadTokens: result.usage?.cachedReadTokens ?? 0,
+            cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
+          },
+          turns: result.turns ?? 0,
+          toolCallCount: result.toolCalls?.length ?? 0,
+          durationMs: result.durationMs ?? Date.now() - startMs,
+          costUSD: result.costUSD ?? null,
+        },
+      };
+    }
     const isFailure =
       (errorCode !== undefined && TRANSPORT_FAILURE_CODES.has(errorCode)) ||
       (text.trim().length === 0 && result.workerStatus !== 'done');
@@ -167,6 +252,9 @@ async function runOneSubWorker(
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     return { ok: false, failure: { id: criterion.id, title: criterion.title, reason: 'other', lastError: message } };
+  } finally {
+    clearTimeout(softTimer);
+    clearTimeout(hardTimer);
   }
 }
 

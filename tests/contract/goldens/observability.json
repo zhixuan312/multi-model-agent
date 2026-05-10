@@ -410,6 +410,27 @@
         "ts",
         "reason"
       ]
+    },
+    {
+      "name": "criteria_subworker_soft_warning",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle",
+        "elapsedMs",
+        "remainingMs"
+      ]
+    },
+    {
+      "name": "criteria_subworker_hard_cap",
+      "requiredFields": [
+        "event",
+        "ts",
+        "criterionId",
+        "criterionTitle",
+        "elapsedMs"
+      ]
     }
   ]
 }

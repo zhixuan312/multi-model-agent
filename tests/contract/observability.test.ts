@@ -78,15 +78,11 @@ describe('observability contract — exhaustive', () => {
 });
 
 describe('golden does not drift', () => {
-  it('manifest covers all 35 events', () => {
-    // 26 base + 9 added by parallel-criteria/stall-watchdog (spec
-    // 2026-05-10-parallel-criteria-readonly-routes-design.md):
-    //   stall_watchdog_armed, stall_watchdog_fired,
-    //   criteria_fanout_warm_start, criteria_fanout_warm_complete,
-    //   criteria_subworker_started, criteria_subworker_completed,
-    //   criteria_subworker_retry, criteria_fanout_summary,
-    //   criteria_fanout_tools_unavailable
-    expect(manifest.events).toHaveLength(35);
+  it('manifest covers all 37 events', () => {
+    // 26 base + 9 parallel-criteria/stall + 2 per-angle wall-clock cap:
+    //   criteria_subworker_soft_warning (5-min checkpoint)
+    //   criteria_subworker_hard_cap     (10-min force-abort)
+    expect(manifest.events).toHaveLength(37);
   });
 
   it('every event has a unique name', () => {
