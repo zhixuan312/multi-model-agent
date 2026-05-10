@@ -2,15 +2,15 @@
   "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nneeds rework per review\n\n--- STALE EVIDENCE (criterion 2) ---\nneeds rework per review\n\n--- IMPLICIT-CRITERION GAP (criterion 3) ---\nneeds rework per review\n\n--- PARTIAL COVERAGE (criterion 4) ---\nneeds rework per review\n\n--- CONFLATED CRITERIA (criterion 5) ---\nneeds rework per review\n\n--- WRONG-ARTIFACT EVIDENCE (criterion 6) ---\nneeds rework per review\n\n--- ASSUMED-PASS-ON-UNTESTED (criterion 7) ---\nneeds rework per review",
+      "output": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review\n\n--- SOURCE-CODE DIRECT-READ (criterion 2) ---\nneeds rework per review\n\n--- DOCUMENTATION EVIDENCE (criterion 3) ---\nneeds rework per review\n\n--- RUN-OUTPUT EVIDENCE (criterion 4) ---\nneeds rework per review\n\n--- DIFF EVIDENCE (criterion 5) ---\nneeds rework per review",
       "status": "ok",
       "usage": {
-        "inputTokens": 70,
-        "outputTokens": 140,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 7,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 7,
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -29,37 +29,27 @@
       "workerOutputs": [
         {
           "criterionId": "1",
-          "criterionTitle": "CLAIM-WITHOUT-EVIDENCE",
+          "criterionTitle": "TEST-SUITE EVIDENCE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "STALE EVIDENCE",
+          "criterionTitle": "SOURCE-CODE DIRECT-READ",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "IMPLICIT-CRITERION GAP",
+          "criterionTitle": "DOCUMENTATION EVIDENCE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "PARTIAL COVERAGE",
+          "criterionTitle": "RUN-OUTPUT EVIDENCE",
           "narrative": "needs rework per review"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "CONFLATED CRITERIA",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "WRONG-ARTIFACT EVIDENCE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "ASSUMED-PASS-ON-UNTESTED",
+          "criterionTitle": "DIFF EVIDENCE",
           "narrative": "needs rework per review"
         }
       ],
@@ -68,13 +58,11 @@
         "2",
         "3",
         "4",
-        "5",
-        "6",
-        "7"
+        "5"
       ],
       "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nneeds rework per review",
+        "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -82,7 +70,7 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nneeds rework per review",
+        "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -101,11 +89,11 @@
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 70,
-          "outputTokens": 140,
+          "inputTokens": 50,
+          "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 7,
+          "turnCount": 5,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -171,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- CLAIM-WITHOUT-EVIDENCE (criterion 1) ---\nneeds rework per review",
+    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

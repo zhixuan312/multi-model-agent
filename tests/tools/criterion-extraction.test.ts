@@ -9,7 +9,7 @@ describe('per-route criterion arrays', () => {
   const cases = [
     { name: 'audit', arr: AUDIT_CRITERIA, expectedN: 11 },
     { name: 'review', arr: REVIEW_CRITERIA, expectedN: 10 },
-    { name: 'verify', arr: VERIFY_CRITERIA, expectedN: 7 },
+    { name: 'verify', arr: VERIFY_CRITERIA, expectedN: 5 },
     { name: 'debug', arr: DEBUG_CRITERIA, expectedN: 5 },
     { name: 'investigate', arr: INVESTIGATE_CRITERIA, expectedN: 8 },
   ];
