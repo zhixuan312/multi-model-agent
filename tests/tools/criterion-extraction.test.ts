@@ -11,7 +11,7 @@ describe('per-route criterion arrays', () => {
     { name: 'review', arr: REVIEW_CRITERIA, expectedN: 10 },
     { name: 'verify', arr: VERIFY_CRITERIA, expectedN: 5 },
     { name: 'debug', arr: DEBUG_CRITERIA, expectedN: 5 },
-    { name: 'investigate', arr: INVESTIGATE_CRITERIA, expectedN: 8 },
+    { name: 'investigate', arr: INVESTIGATE_CRITERIA, expectedN: 5 },
   ];
   it.each(cases)('$name has $expectedN well-formed criteria', ({ arr, expectedN }) => {
     expect(arr).toHaveLength(expectedN);
@@ -26,8 +26,8 @@ describe('per-route criterion arrays', () => {
     expect(AUDIT_CRITERIA[0].title).toContain('RECOMMENDATION-COHERENCE');
   });
 
-  it('investigate criteria #3 is HALLUCINATED CITATION (about file:line that does not exist)', () => {
-    expect(INVESTIGATE_CRITERIA[2].title).toContain('HALLUCINATED CITATION');
-    expect(INVESTIGATE_CRITERIA[2].description).toMatch(/file:line/i);
+  it('investigate criteria are 5 answering perspectives, not anti-patterns', () => {
+    expect(INVESTIGATE_CRITERIA[0].title).toContain('DIRECT-SYMBOL-TRACE');
+    expect(INVESTIGATE_CRITERIA[2].title).toContain('TEST-DRIVEN');
   });
 });

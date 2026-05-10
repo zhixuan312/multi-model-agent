@@ -45,15 +45,12 @@ describe('investigate prompt content', () => {
       contextBlockIds: [],
     } as any);
     const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-    // All 8 categories should each surface in the worker's prompt.
-    expect(spec.prompt).toContain('WRONG FILE');
-    expect(spec.prompt).toContain('STALE QUOTE');
-    expect(spec.prompt).toContain('HALLUCINATED CITATION');
-    expect(spec.prompt).toContain('CONFIDENCE OVERSTATEMENT');
-    expect(spec.prompt).toContain('CITATION GAP');
-    expect(spec.prompt).toContain('QUESTION SHIFT');
-    expect(spec.prompt).toContain('SYNTHESIS WITHOUT GROUNDING');
-    expect(spec.prompt).toContain('ASSUMED-CURRENT-STATE');
+    // 5 parallel answering perspectives; each sub-worker takes one.
+    expect(spec.prompt).toContain('DIRECT-SYMBOL-TRACE PERSPECTIVE');
+    expect(spec.prompt).toContain('CALLER-ANALYSIS PERSPECTIVE');
+    expect(spec.prompt).toContain('TEST-DRIVEN PERSPECTIVE');
+    expect(spec.prompt).toContain('CROSS-FILE DEPENDENCY-MAP PERSPECTIVE');
+    expect(spec.prompt).toContain('DOCUMENTATION/COMMENT-LENS PERSPECTIVE');
   });
 
   it('includes the citation-chain walk with worked example', () => {

@@ -2,15 +2,15 @@
   "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
-      "output": "--- WRONG FILE (criterion 1) ---\nmocked ok\n\n--- STALE QUOTE (criterion 2) ---\nmocked ok\n\n--- HALLUCINATED CITATION (criterion 3) ---\nmocked ok\n\n--- CONFIDENCE OVERSTATEMENT (criterion 4) ---\nmocked ok\n\n--- CITATION GAP (criterion 5) ---\nmocked ok\n\n--- QUESTION SHIFT (criterion 6) ---\nmocked ok\n\n--- SYNTHESIS WITHOUT GROUNDING (criterion 7) ---\nmocked ok\n\n--- ASSUMED-CURRENT-STATE (criterion 8) ---\nmocked ok",
+      "output": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok\n\n--- CALLER-ANALYSIS PERSPECTIVE (criterion 2) ---\nmocked ok\n\n--- TEST-DRIVEN PERSPECTIVE (criterion 3) ---\nmocked ok\n\n--- CROSS-FILE DEPENDENCY-MAP PERSPECTIVE (criterion 4) ---\nmocked ok\n\n--- DOCUMENTATION/COMMENT-LENS PERSPECTIVE (criterion 5) ---\nmocked ok",
       "status": "ok",
       "usage": {
-        "inputTokens": 80,
-        "outputTokens": 160,
+        "inputTokens": 50,
+        "outputTokens": 100,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 8,
+      "turns": 5,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 8,
+        "turnsUsed": 5,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -29,42 +29,27 @@
       "workerOutputs": [
         {
           "criterionId": "1",
-          "criterionTitle": "WRONG FILE",
+          "criterionTitle": "DIRECT-SYMBOL-TRACE PERSPECTIVE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "STALE QUOTE",
+          "criterionTitle": "CALLER-ANALYSIS PERSPECTIVE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "HALLUCINATED CITATION",
+          "criterionTitle": "TEST-DRIVEN PERSPECTIVE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "CONFIDENCE OVERSTATEMENT",
+          "criterionTitle": "CROSS-FILE DEPENDENCY-MAP PERSPECTIVE",
           "narrative": "mocked ok"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "CITATION GAP",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "QUESTION SHIFT",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "SYNTHESIS WITHOUT GROUNDING",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "ASSUMED-CURRENT-STATE",
+          "criterionTitle": "DOCUMENTATION/COMMENT-LENS PERSPECTIVE",
           "narrative": "mocked ok"
         }
       ],
@@ -73,14 +58,11 @@
         "2",
         "3",
         "4",
-        "5",
-        "6",
-        "7",
-        "8"
+        "5"
       ],
       "partialCriteriaFailed": [],
       "implementationReport": {
-        "summary": "--- WRONG FILE (criterion 1) ---\nmocked ok",
+        "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -88,7 +70,7 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- WRONG FILE (criterion 1) ---\nmocked ok",
+        "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -107,11 +89,11 @@
           "maxIdleMs": "<DETERMINISTIC>",
           "totalIdleMs": "<DETERMINISTIC>",
           "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 80,
-          "outputTokens": 160,
+          "inputTokens": 50,
+          "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 8,
+          "turnCount": 5,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
@@ -177,7 +159,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- WRONG FILE (criterion 1) ---\nmocked ok",
+    "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
