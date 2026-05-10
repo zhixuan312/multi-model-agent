@@ -21,6 +21,7 @@ import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { delegateWithEscalation } from '../escalation/delegate-with-escalation.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
+import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 export function errorResult(error: string): RunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -262,7 +263,15 @@ export async function runTaskViaDispatcher(
 
   void ATTEMPT_BUDGETS[toolCategory];
 
-  const out = await dispatcher.dispatch({
+  // Arm the orchestrator stall watchdog. Spec §4.7: the AbortController on
+  // ctx.stall has been declared since v3.x but never armed; this wires the
+  // timer that fires .abort() after stallTimeoutMs of no runner events.
+  // Disposed in finally{} below so it's torn down on the success path too.
+  const stopWatchdog = startStallWatchdog(executionContext);
+
+  let out;
+  try {
+    out = await dispatcher.dispatch({
     route,
     toolCategory,
     rawRequest: { tasks: [expandedTask] },
@@ -364,6 +373,9 @@ export async function runTaskViaDispatcher(
       return undefined;
     },
   });
+  } finally {
+    stopWatchdog();
+  }
 
   const body = out.body;
   if (body && typeof body === 'object' && 'output' in body) {
