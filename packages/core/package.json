@@ -323,6 +323,10 @@
     "./tool-surface/openapi-generator": {
       "types": "./dist/tool-surface/openapi-generator.d.ts",
       "import": "./dist/tool-surface/openapi-generator.js"
+    },
+    "./stores/context-block-project-cap": {
+      "types": "./dist/stores/context-block-project-cap.d.ts",
+      "import": "./dist/stores/context-block-project-cap.js"
     }
   },
   "scripts": {
