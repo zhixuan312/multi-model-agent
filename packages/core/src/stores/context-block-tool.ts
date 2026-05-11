@@ -23,7 +23,7 @@ export interface RegisteredBlock {
 export interface ContextBlockStore {
   /** Store `content` under an explicit id (idempotent replace) or a new
    *  UUID. Returns the id, length, and sha256 hash. */
-  register(content: string, opts?: { id?: string }): RegisteredBlock;
+  register(content: string, opts?: { id?: string; ttlMs?: number }): RegisteredBlock;
   /** Fetch content by id. Returns `undefined` if the id is unknown or
    *  the entry has expired. Touches the LRU access time on success. */
   get(id: string): string | undefined;
@@ -67,6 +67,12 @@ export class ContextBlockNotFoundError extends Error {
 interface Entry {
   content: string;
   addedAtMs: number;
+  /** Per-entry TTL (4.2.3+ — A1.4 dedupe). When the caller supplies
+   *  `opts.ttlMs` to register(), it is stored here and used by `get()`
+   *  for the freshness check. Falls back to the class-level default
+   *  (`_ttlMs`) when omitted, preserving prior behavior for callers
+   *  that don't pass per-call TTL. */
+  ttlMs: number;
   /** Monotonic access counter used for LRU ordering. Not wall-clock:
    *  `Date.now()` has millisecond resolution, which is too coarse for a
    *  sequence of synchronous register/get calls — multiple entries would
@@ -111,7 +117,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     this.maxEntries = opts.maxEntries ?? 500;
   }
 
-  register(content: string, opts: { id?: string } = {}): RegisteredBlock {
+  register(content: string, opts: { id?: string; ttlMs?: number } = {}): RegisteredBlock {
     const id = opts.id ?? randomUUID();
     const byteSize = Buffer.byteLength(content, 'utf8');
     const SIZE_WARN_BYTES = 10 * 1024 * 1024;
@@ -121,7 +127,8 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
       );
     }
     const now = Date.now();
-    this.entries.set(id, { content, addedAtMs: now, lastAccessTick: ++this.tick, pinCount: 0 });
+    const entryTtl = opts.ttlMs ?? this._ttlMs;
+    this.entries.set(id, { content, addedAtMs: now, ttlMs: entryTtl, lastAccessTick: ++this.tick, pinCount: 0 });
     this.evictIfOverBound();
     return {
       id,
@@ -134,7 +141,7 @@ export class InMemoryContextBlockStore implements ContextBlockStore {
     const entry = this.entries.get(id);
     if (!entry) return undefined;
     const now = Date.now();
-    if (now - entry.addedAtMs > this._ttlMs) {
+    if (now - entry.addedAtMs > entry.ttlMs) {
       // Expired — do not revive
       this.entries.delete(id);
       return undefined;

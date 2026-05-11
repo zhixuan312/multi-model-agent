@@ -104,7 +104,33 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
     this.ensureRoot();
   }
 
-  register(content: string, opts: { id?: string } = {}): RegisteredBlock {
+  register(content: string, opts: { ttlMs?: number; id?: string } = {}): RegisteredBlock {
+    const sha256 = createHash('sha256').update(content).digest('hex');
+    // 4.2.3+: fall back to the class-level _ttlMs default (configured at
+    // construction) rather than a hardcoded constant. Earlier draft of
+    // the plan literally said `?? 28_800_000` which broke the
+    // "lazy-deletes on get when entry is past TTL" pre-existing test —
+    // that test constructs the store with `ttlMs: 1` and then calls
+    // `register('x')` (no opts), expecting the per-call TTL to inherit
+    // the class default.
+    const ttlMs = opts.ttlMs ?? this._ttlMs;
+    
+    // DEDUPE: look for existing block in this project with matching content sha
+    if (!opts.id) {
+      const existing = this.findByContentSha(sha256);
+      if (existing) {
+        // Bump mtime + reset TTL on the existing block
+        const now = Date.now();
+        const metaContent = JSON.parse(fs.readFileSync(this.metaPath(existing), 'utf8'));
+        metaContent.ttlMs = ttlMs;
+        metaContent.createdAt = now;
+        fs.writeFileSync(this.metaPath(existing), JSON.stringify(metaContent), { mode: 0o600 });
+        fs.utimesSync(this.contentPath(existing), now / 1000, now / 1000);
+        fs.utimesSync(this.metaPath(existing), now / 1000, now / 1000);
+        return { id: existing, lengthChars: content.length, sha256 };
+      }
+    }
+
     const byteSize = Buffer.byteLength(content, 'utf8');
     if (byteSize > this.maxBlockBytes) {
       throw new Error(
@@ -114,10 +140,9 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
 
     const id = opts.id ?? randomUUID();
     const now = Date.now();
-    const sha256 = createHash('sha256').update(content).digest('hex');
     const meta: DiskMeta = {
       createdAt: now,
-      ttlMs: this._ttlMs,
+      ttlMs,
       lengthChars: content.length,
       sha256,
     };
@@ -327,5 +352,21 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
       this.deleteFiles(c.id);
       total -= c.bytes;
     }
+  }
+
+  /** Scan this project's meta files for one whose recorded sha256 matches `sha256`. Returns the id, or null. */
+  private findByContentSha(sha256: string): string | null {
+    if (!fs.existsSync(this.rootDir)) return null;
+    const files = fs.readdirSync(this.rootDir);
+    for (const file of files) {
+      if (!file.endsWith('.meta.json')) continue;
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(this.rootDir, file), 'utf8'));
+        if (meta.sha256 === sha256) return file.slice(0, -'.meta.json'.length);
+      } catch {
+        // Skip malformed meta files
+      }
+    }
+    return null;
   }
 }
