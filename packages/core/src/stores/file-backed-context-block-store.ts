@@ -72,7 +72,7 @@ export interface FileBackedContextBlockStoreOptions {
 }
 
 export class FileBackedContextBlockStore implements ContextBlockStore {
-  /** Absolute root: `<homeDir>/.multi-model-agent/context-blocks/<sha256(projectCwd)>`.
+  /** Absolute root: `<homeDir>/.multi-model/context-blocks/<sha256(projectCwd)>`.
    *  Public so tests can read meta files directly without re-deriving the path. */
   readonly rootDir: string;
   private _ttlMs: number;
