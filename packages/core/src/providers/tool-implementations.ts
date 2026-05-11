@@ -26,6 +26,19 @@ const execAsync = promisify(exec);
 //             within the rendered limit just because of buffer overflow.
 export const MAX_READ_FILE_BYTES = 50 * 1024 * 1024;
 export const MAX_WRITE_FILE_BYTES = 100 * 1024 * 1024;
+
+/**
+ * Read-budget guard threshold (4.3.0+ pipeline redesign).
+ *
+ * When a worker reads the SAME file this many times within a single
+ * stage, the readFile tool appends a hard warning to the returned
+ * content telling the worker to stop re-reading and edit instead.
+ * Calibrated from observed pathology: gpt-5.4 in spec_review_and_fix
+ * read pipeline.ts 28 times in one stage without editing. Threshold
+ * 5 is generous (legitimate workflows rarely re-read a file 5x) and
+ * still catches the loop early enough to be useful.
+ */
+export const READ_BUDGET_WARN_THRESHOLD = 5;
 export const MAX_GREP_OUTPUT_BYTES = 200 * 1024;
 export const GREP_CHILD_BUFFER_BYTES = 4 * 1024 * 1024;
 
@@ -101,6 +114,27 @@ export function createToolImplementations(
       }
       const content = await fs.readFile(resolved, 'utf-8');
       tracker.trackRead(resolved);
+      // Read-budget guard (4.3.0+ pipeline redesign). When a path is read
+      // repeatedly within the same stage, the worker is almost certainly
+      // in the "let me re-verify before I commit" pathology we observed
+      // on cheap workers AND on gpt-5.4 reviewers. Append a hard warning
+      // to the returned content. The worker sees it as part of the tool
+      // result and (hopefully) breaks out of the read-loop.
+      const reads = tracker.readCount(resolved);
+      if (reads >= READ_BUDGET_WARN_THRESHOLD) {
+        const banner = [
+          '',
+          '',
+          `============================================================`,
+          `READ-BUDGET WARNING: you have read \`${filePath}\` ${reads} times in this stage.`,
+          `STOP re-reading. The content above is the current on-disk state.`,
+          `EITHER edit the file using your editor tools and move on, OR`,
+          `accept the current state and write your final summary.`,
+          `Further reads of this path will keep failing this guard.`,
+          `============================================================`,
+        ].join('\n');
+        return content + banner;
+      }
       return content;
     },
 

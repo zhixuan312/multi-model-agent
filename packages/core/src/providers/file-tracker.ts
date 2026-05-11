@@ -51,6 +51,14 @@ export function filterValidWritePath(entry: string): boolean {
 
 export class FileTracker {
   private reads = new Set<string>();
+  /**
+   * Per-path read counter (4.3.0+, pipeline-redesign read-budget guard).
+   * trackRead increments on every read; `readCount(path)` exposes it so
+   * tool implementations can append a warning when a worker re-reads the
+   * same file too many times in a single stage. Counts reset with the
+   * tracker on `reset()`.
+   */
+  private readCounts = new Map<string, number>();
   private dirs: string[] = [];
   private writes = new Set<string>();
   private toolCalls: string[] = [];
@@ -68,6 +76,14 @@ export class FileTracker {
 
   trackRead(filePath: string): void {
     this.reads.add(filePath);
+    this.readCounts.set(filePath, (this.readCounts.get(filePath) ?? 0) + 1);
+  }
+
+  /** How many times `trackRead(filePath)` has been called for this path
+   *  in the current tracker lifetime. 0 if never. Used by the read-budget
+   *  guard in tool-implementations.ts to warn the worker after N re-reads. */
+  readCount(filePath: string): number {
+    return this.readCounts.get(filePath) ?? 0;
   }
 
   trackDirectoryList(dirPath: string): void {
@@ -107,6 +123,7 @@ export class FileTracker {
 
   reset(): void {
     this.reads.clear();
+    this.readCounts.clear();
     this.dirs = [];
     this.writes.clear();
     this.toolCalls = [];

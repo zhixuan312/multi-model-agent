@@ -4,10 +4,13 @@ import { qualityReviewAndFixTemplate } from '../../packages/core/src/review/temp
 import { annotateCompletionTemplate } from '../../packages/core/src/review/templates/annotate-completion.js';
 
 describe('spec-review-and-fix template', () => {
-  it('system prompt instructs to fix inline, not just report', () => {
+  it('system prompt enforces per-step evaluate→read-once→fix→move-on procedure', () => {
     const sys = specReviewAndFixTemplate.systemPrompt;
-    expect(sys).toMatch(/fix.*directly|apply.*patches|using.*editor tools/i);
-    expect(sys).toMatch(/do not just report/i);
+    expect(sys).toMatch(/FULL editor tools/);
+    expect(sys).toMatch(/single-pass/i);
+    expect(sys).toMatch(/Per-step procedure|EVALUATE.*READ.*APPLY/i);
+    expect(sys).toMatch(/at most once|just one read|never another read/i);
+    expect(sys).toMatch(/read-budget guard|warning when you re-read/i);
   });
 
   it('user prompt includes plan + diff + worker summary', () => {
@@ -24,10 +27,12 @@ describe('spec-review-and-fix template', () => {
 });
 
 describe('quality-review-and-fix template', () => {
-  it('system prompt covers safety + correctness lenses', () => {
+  it('system prompt covers safety + correctness lenses with per-concern procedure', () => {
     const sys = qualityReviewAndFixTemplate.systemPrompt;
-    expect(sys).toMatch(/safety|correctness|error handling|security/i);
-    expect(sys).toMatch(/fix.*directly|apply.*patches|fix any risk/i);
+    expect(sys).toMatch(/safety.*correctness|error handling|security/i);
+    expect(sys).toMatch(/Per-concern procedure|EVALUATE.*READ.*APPLY/i);
+    expect(sys).toMatch(/at most once|just one read/i);
+    expect(sys).toMatch(/read-budget guard|warning when you re-read/i);
   });
 
   it('reads spec reviewer summary from priorConcerns', () => {

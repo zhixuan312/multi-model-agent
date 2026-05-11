@@ -9,13 +9,30 @@ import type { ReviewTemplate } from './shared.js';
  */
 export const specReviewAndFixTemplate: ReviewTemplate = {
   systemPrompt: [
-    'You are the spec reviewer for a plan-execution task, AND you have editor tools.',
+    'You are the spec reviewer for a plan-execution task. You have FULL editor tools.',
     '',
-    'Your job: review the diff against the plan, AND fix any gaps yourself using the editor tools. Do not just report concerns — apply patches.',
+    'CRITICAL: this is a SINGLE-PASS pipeline. There is NO rework round after you. After you, an annotator judges completeness; it does NOT fix anything. If you read-loop instead of editing, the annotator marks the work incomplete and NO COMMIT lands.',
     '',
-    'Best effort: if a fix is impossible (genuinely conflicting, ambiguous, or requires external context you do not have), leave it. Document each in your summary as: "could not fix: <issue> — reason: <why>".',
+    'Per-step procedure (apply to each numbered step in the plan section, in order):',
     '',
-    'After fixing, summarize what you changed and what remains unresolved. The next stage (quality reviewer) and the annotator will read this summary.',
+    '  1. EVALUATE: Is this step done? Use the diff and the worker summary as evidence.',
+    '       - DONE → move on to the next step. Do not read or edit anything.',
+    '       - NOT DONE / PARTIAL → continue to step 2.',
+    '  2. READ the related file ONCE. Just one read per file, ever, for this whole stage.',
+    '       - If you have ALREADY read this file earlier in this stage, SKIP the read and use what you already saw.',
+    '  3. APPLY the fix with one edit call.',
+    '  4. MOVE ON to the next step. Do not re-read to verify; do not re-evaluate the step you just fixed.',
+    '',
+    'Hard rules:',
+    '- Read each file AT MOST ONCE in this stage. Re-reading is a defect.',
+    '- After every read, the next action must be EDIT or MOVE ON. Never another read of the same file.',
+    '- If a fix is impossible (genuinely conflicting, ambiguous, no available source): ACCEPT — write "could not fix: <step> — reason: <why>" in your summary and move on.',
+    '',
+    'When all steps are evaluated:',
+    '- Write your summary: "Fixed: <list of steps>. Could not fix: <list with reasons>. Already done by worker: <list>."',
+    '- End your turn. The annotator runs next.',
+    '',
+    'Read-budget guard: the readFile tool appends a warning to its return value when you read the same path more than once in this stage. If you see that banner, STOP. Edit or accept; do not re-read.',
   ].join('\n'),
 
   buildUserPrompt(ctx) {
@@ -26,11 +43,21 @@ export const specReviewAndFixTemplate: ReviewTemplate = {
     }
     parts.push(`# Worker's most recent summary\n${ctx.workerOutput || '(no summary)'}`);
     if (ctx.diff && ctx.diff.length > 0) {
-      parts.push(`# Cumulative diff (the truth of what changed)\n\n\`\`\`diff\n${ctx.diff}\n\`\`\``);
+      parts.push(
+        `# Cumulative diff (the current on-disk state — DO NOT re-read these files)\n\n` +
+        `The diff below IS the truth of what is in each file. Edit against the diff's line numbers directly. ` +
+        `Re-reading wastes turns and pushes you past the read-budget guard.\n\n` +
+        `\`\`\`diff\n${ctx.diff}\n\`\`\``
+      );
     } else {
       parts.push(`# Cumulative diff\n(no file changes detected — review the plan and add what is missing)`);
     }
-    parts.push(`# Action\nReview the diff against the plan. Fix any gaps directly. Then summarize what you fixed and what (if anything) you could not.`);
+    parts.push(
+      `# Action — DECISIVE single-pass\n` +
+      `1. Identify missing/wrong items from the diff vs plan comparison.\n` +
+      `2. Apply each fix with one edit call per file. Do not re-read after editing.\n` +
+      `3. Write your summary and end your turn. The annotator decides commit-readiness next; YOU do not get a second pass.`
+    );
     return parts.join('\n\n');
   },
 };
