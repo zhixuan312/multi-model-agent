@@ -43,6 +43,10 @@
 
 import * as fs from 'node:fs/promises';
 import * as path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execFileP = promisify(execFile);
 
 const MAX_DIFF_BYTES = 50 * 1024; // 50KB cap to protect reviewer context window
 const CONTEXT_LINES = 3;          // unified-diff convention
@@ -98,7 +102,23 @@ export class DiffTracker {
 
   /** Return the unified diff of every snapshotted path against its
    *  current on-disk content. Empty string when nothing changed.
-   *  Capped at MAX_DIFF_BYTES with a truncation marker. */
+   *  Capped at MAX_DIFF_BYTES with a truncation marker.
+   *
+   *  Snapshot-based diffs only cover the paths captured at task start
+   *  (typically `task.filePaths`). For dispatch routes where the worker
+   *  modifies files NOT pre-declared (notably `mma-execute-plan` —
+   *  filePaths is the plan markdown, but the worker edits source files
+   *  derived from the plan's own contents), the snapshot path returns
+   *  empty even when the worker did real work.
+   *
+   *  Fallback: when the snapshot diff is empty AND the cwd is inside a
+   *  git repository, use `git diff HEAD` for tracked changes plus
+   *  `git ls-files --others --exclude-standard` for new untracked files.
+   *  This recovers the actual on-disk delta in the common case (any
+   *  project under git) without false positives in test fixtures
+   *  (temp dirs aren't git repos → fallback returns null → snapshot
+   *  empty result preserved).
+   */
   async cumulativeDiff(): Promise<string> {
     const segments: string[] = [];
     for (const [rel, before] of this.baselines.entries()) {
@@ -114,7 +134,19 @@ export class DiffTracker {
       const seg = formatUnifiedDiff(rel, before, after);
       if (seg) segments.push(seg);
     }
-    return capWithMarker(segments.join('\n\n'));
+    let result = segments.join('\n\n');
+
+    // 4.2.3+ git fallback: snapshot diff is empty (no pre-declared paths
+    // changed) — try git for the on-disk delta. Cheap, idempotent, no
+    // mutation. Only fires when snapshot returned nothing, so projects
+    // that DO have proper filePaths snapshotting see no behavior change.
+    if (result === '') {
+      const gitDiff = await tryGitDiff(this.cwd);
+      if (gitDiff !== null && gitDiff.trim().length > 0) {
+        result = gitDiff;
+      }
+    }
+    return capWithMarker(result);
   }
 
   /** Test hook: how many baselines have been captured. */
@@ -310,4 +342,82 @@ function collectHunks(ops: LineOp[], context: number): Hunk[] {
     });
   }
   return hunks;
+}
+
+/**
+ * Git-based fallback for `cumulativeDiff()` (4.2.3+). Returns:
+ *   - null when cwd isn't inside a git repo, or git isn't on PATH, or
+ *     anything goes wrong (caller treats as "no fallback available")
+ *   - empty string when cwd IS in a git repo but the worktree is clean
+ *   - non-empty diff otherwise
+ *
+ * Combines `git diff HEAD` (tracked modifications + staged changes) with
+ * synthesized full-file diffs for untracked files (so newly-created files
+ * the worker added show up in the reviewer's diff just like modifications
+ * do — same `+++ b/path / @@ -0,0 +N,N @@` shape).
+ *
+ * Only called when snapshot-based diff is empty, so this never adds noise
+ * to runs where the operator declared filePaths properly. Adds zero cost
+ * for the common case (snapshot diff non-empty).
+ */
+async function tryGitDiff(cwd: string): Promise<string | null> {
+  try {
+    // Confirm we're in a git work tree. exitCode 0 + stdout 'true' = yes.
+    const { stdout: insideOut } = await execFileP('git', ['rev-parse', '--is-inside-work-tree'], {
+      cwd, encoding: 'utf-8', timeout: 5000,
+    });
+    if (insideOut.trim() !== 'true') return null;
+  } catch {
+    // Not a git repo, or git not on PATH, or rev-parse failed. No fallback.
+    return null;
+  }
+
+  let trackedDiff = '';
+  try {
+    const { stdout } = await execFileP('git', ['diff', 'HEAD'], {
+      cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4,
+    });
+    trackedDiff = stdout;
+  } catch {
+    // Worktree exists but `git diff HEAD` failed (e.g. no commits yet).
+    // Try plain `git diff` (working tree vs index) as a softer fallback.
+    try {
+      const { stdout } = await execFileP('git', ['diff'], {
+        cwd, encoding: 'utf-8', timeout: 10_000, maxBuffer: MAX_DIFF_BYTES * 4,
+      });
+      trackedDiff = stdout;
+    } catch {
+      trackedDiff = '';
+    }
+  }
+
+  // Untracked files — render each as a full new-file diff so reviewers see
+  // them with the same shape as modifications.
+  let untrackedDiff = '';
+  try {
+    const { stdout } = await execFileP('git', ['ls-files', '--others', '--exclude-standard'], {
+      cwd, encoding: 'utf-8', timeout: 5000,
+    });
+    const paths = stdout.split('\n').map(p => p.trim()).filter(p => p.length > 0);
+    for (const rel of paths) {
+      try {
+        const abs = path.resolve(cwd, rel);
+        const content = await fs.readFile(abs, 'utf-8');
+        const seg = formatUnifiedDiff(rel, null, content);
+        if (seg) {
+          if (untrackedDiff.length > 0) untrackedDiff += '\n\n';
+          untrackedDiff += seg;
+        }
+      } catch {
+        // Non-text file or unreadable — skip.
+      }
+    }
+  } catch {
+    untrackedDiff = '';
+  }
+
+  const parts: string[] = [];
+  if (trackedDiff.trim().length > 0) parts.push(trackedDiff);
+  if (untrackedDiff.trim().length > 0) parts.push(untrackedDiff);
+  return parts.join('\n\n');
 }
