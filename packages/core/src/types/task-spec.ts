@@ -38,6 +38,12 @@ export interface TaskSpec {
   autoCommit?: boolean
   planContext?: string
   /**
+   * Stage 5 commit-gate threshold (4.3.0+ pipeline redesign). Commit fires
+   * when `state.commitGatePercent >= completionThreshold`. Range 0..100.
+   * Default 80 when omitted. See pipeline-redesign spec §3.4.
+   */
+  completionThreshold?: number
+  /**
    * Optional task-specific tool injection. When present, runner adapters
    * merge these tools into the worker's tool surface ON TOP of whatever
    * `tools: ToolMode` would normally produce. Used by `/explore` for the
