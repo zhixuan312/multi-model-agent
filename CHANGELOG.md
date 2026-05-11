@@ -5,6 +5,21 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.1] - 2026-05-11
+
+Telemetry stage vocabulary collapse (schemaVersion 4 → 5, forward-only on mma side; backend will normalise legacy records on read) plus three identity / write-accounting fixes that landed after 4.3.0 shipped.
+
+### BREAKING
+
+- **Telemetry `schemaVersion` bumped 4 → 5; stage vocabulary collapsed (core).** Eight legacy stage names fold into five: `spec_review` + `quality_review` + `diff_review` → `review`; `spec_rework` + `quality_rework` → `rework`; `verifying` → `annotating`; `implementing` and `committing` unchanged. The Zod discriminated union + R-rule validation is rewritten to enforce the new vocabulary; R8/R10/R10b are removed (the single `review` name makes them moot); R9, R10c, R16 retained with renamed semantics. `HeartbeatStage`, `RawStageStats`, observability-events schemas, `StageStatsMap`, and the wire builder (`buildStages`, `buildReviewStage`, `buildReworkStage`, `buildAnnotatingStage`) all line up on the new names. Downstream telemetry backends must consume schemaVersion 5 or normalise on read.
+
+### Fixed
+
+- **`writes_unverifiable` no longer downgrades chat-only responses (core).** The A4b.2 downgrade was designed to catch workers that wrote via shell heredocs (bypassing the path-validity filter) but produced no verifiable artifacts. A worker that responds with chat-only text and never invokes any write tool was being misclassified as `failed`. New `writeAttempted` input gates the downgrade (default true for back-compat); the caller in `composeResponse` computes it from `filesWritten || filesWrittenRejected` being non-empty. Chat-only responses now report `workerStatus: done` cleanly on both HTTP envelope and wire telemetry. Reverts the earlier event-builder priority flip and baseline-handlers state mirror — both became unnecessary once the false-positive trigger was fixed at its source.
+- **Claude Code main-model resolver reads `message.model` (core).** The current Claude Code session jsonl records the assistant model under `message.model`, not at top level. The resolver was reading top-level `.model` and finding nothing, so fresh Claude Code sessions returned null — and when an older legacy session with top-level model sat alongside, it picked up the wrong file. Fix: check `message.model` first, fall back to top-level `model` for legacy session files.
+- **Claude Code placeholder model literals are skipped (core).** When the latest `~/.claude/projects/<slug>/*.jsonl` `model` field is a placeholder literal (`custom`, `default`, `inherit`, `unknown`), the resolver walks back to the previous real model id, then falls through to `defaults.mainModel` if none is found. Pre-fix, the literal string `custom` leaked into wire telemetry as `mainModel=custom`, which made `costDeltaVsMainUSD` / `mainEquivalentCostUSD` always null because no rate card matched.
+- **`writes_unverifiable` downgrade now mirrors onto `state.lastRunResult` (core).** A4b.2 downgrade also writes the post-downgrade `workerStatus` / `errorCode` / `error` onto `state.lastRunResult` so wire telemetry (`recordTaskCompleted` reads `last.workerStatus`) emits the same value the HTTP envelope shows. Pre-fix: HTTP envelope = `failed`, telemetry = `done`. Now: both = `failed`.
+
 ## [4.3.0] - 2026-05-11
 
 Major lifecycle redesign + Group A reliability completion. Replaces the experimental 4.2.3 work with a stable architecture; 4.2.3 was never published.
@@ -73,7 +88,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...HEAD
+[4.3.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...v4.3.0
 [4.2.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...v4.2.1
