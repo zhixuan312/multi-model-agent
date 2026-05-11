@@ -2,6 +2,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { TaskSpec, RunResult } from '../../types.js';
 import { runCommitStage, type CommitStageResult } from './commit-stage.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 import type { CommitFields } from '../../reporting/structured-report.js';
 
 /**
@@ -42,6 +43,7 @@ export async function gitCommitHandler(state: LifecycleState): Promise<void> {
     body: '',
   };
 
+  const startMs = Date.now();
   try {
     const result: CommitStageResult = await runCommitStage({
       cwd: ctx.cwd,
@@ -49,6 +51,17 @@ export async function gitCommitHandler(state: LifecycleState): Promise<void> {
       commit: commitFields,
     });
     state.commits = [result];
+    mergeStageStats(state, 'committing', {
+      inputTokens: 0,
+      outputTokens: 0,
+      cachedReadTokens: 0,
+      cachedNonReadTokens: 0,
+      turnCount: 0,
+      toolCallCount: 0,
+      costUSD: null,
+      durationMs: Date.now() - startMs,
+      filesWrittenCount: filesWritten.length,
+    }, { tier: null, model: null });
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     state.commitError = message;

@@ -70,14 +70,11 @@ const ZERO_COMMITTING = makeStageStats('committing', {
 
 function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
   const defaultStageStats: StageStatsMap = {
-    implementing:   makeStageStats('implementing', { agentTier: 'standard', costUSD: 0.01 }),
-    verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-    spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-    spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-    quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-    quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-    diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-    committing:     ZERO_COMMITTING,
+    implementing: makeStageStats('implementing', { agentTier: 'standard', costUSD: 0.01 }),
+    annotating:   makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+    review:       makeStageStats('review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+    rework:       makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
+    committing:   ZERO_COMMITTING,
   };
 
   return {
@@ -124,7 +121,7 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           cachedReadTokens: 200_000,
           cachedNonReadTokens: 50_000,
         }),
-        spec_review: makeStageStats('spec_review', {
+        review: makeStageStats('review', {
           agentTier: 'complex',
           model: 'gpt-5.5',
           costUSD: 5.0,
@@ -135,12 +132,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           verdict: 'approved',
           roundsUsed: 1,
         }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        committing:     ZERO_COMMITTING,
+        annotating: makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        rework:     makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
+        committing: ZERO_COMMITTING,
       },
     });
 
@@ -210,19 +204,16 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           cachedReadTokens: 100, cachedNonReadTokens: 50,
           costUSD: 0.10,
         }),
-        spec_review: makeStageStats('spec_review', {
+        review: makeStageStats('review', {
           agentTier: 'complex',
           inputTokens: 2000, outputTokens: 300,
           cachedReadTokens: 200, cachedNonReadTokens: 100,
           costUSD: 0.50,
           verdict: 'approved', roundsUsed: 1,
         }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        committing:     ZERO_COMMITTING,
+        annotating: makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        rework:     makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
+        committing: ZERO_COMMITTING,
       },
     });
 
@@ -253,12 +244,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     const rr = makeRunResult({
       stageStats: {
         implementing:   makeStageStats('implementing', { agentTier: 'standard', inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0, costUSD: 0.005 }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        annotating:      makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        review:    makeStageStats('review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        rework:    makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
         committing:     ZERO_COMMITTING,
       },
     });
@@ -281,12 +269,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     const rrExpensive = makeRunResult({
       stageStats: {
         implementing:   makeStageStats('implementing', { agentTier: 'complex', model: 'gpt-5.5', inputTokens: 500_000, outputTokens: 100_000, cachedReadTokens: 0, cachedNonReadTokens: 0, costUSD: 20.0 }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        annotating:      makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        review:    makeStageStats('review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        rework:    makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
         committing:     ZERO_COMMITTING,
       },
     });
@@ -305,12 +290,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
     const rrCheap = makeRunResult({
       stageStats: {
         implementing:   makeStageStats('implementing', { agentTier: 'standard', model: 'claude-haiku-4-6', inputTokens: 100_000, outputTokens: 10_000, cachedReadTokens: 0, cachedNonReadTokens: 0, costUSD: 0.001 }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        annotating:      makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        review:    makeStageStats('review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        rework:    makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
         committing:     ZERO_COMMITTING,
       },
     });
@@ -338,12 +320,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
           cachedReadTokens: 0, cachedNonReadTokens: 0,
           costUSD: null, // will become 0 in stage entry
         }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_review:    makeStageStats('spec_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        annotating:      makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        review:    makeStageStats('review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
+        rework:    makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
         committing:     ZERO_COMMITTING,
       },
     });
@@ -371,7 +350,9 @@ describe('cost attribution: mixed-tier task with rework round', () => {
 describe('multi-round stage entries', () => {
   it('stage entries include round and split cached fields', () => {
     const rr = makeRunResult({
-      specReviewStatus: 'changes_required', // verdict is read from rr.specReviewStatus
+      reviewVerdict: 'changes_required',
+      specReviewStatus: 'changes_required',
+      qualityReviewStatus: 'changes_required',
       reviewRounds: { spec: 2, quality: 1, metadata: 1, cap: 5 },
       stageStats: {
         implementing: makeStageStats('implementing', {
@@ -382,7 +363,7 @@ describe('multi-round stage entries', () => {
           round: 2,
           costUSD: 0.015,
         }),
-        spec_review: makeStageStats('spec_review', {
+        review: makeStageStats('review', {
           agentTier: 'complex',
           model: 'gpt-5.5',
           inputTokens: 300, outputTokens: 80,
@@ -392,12 +373,9 @@ describe('multi-round stage entries', () => {
           verdict: 'changes_required',
           roundsUsed: 2,
         }),
-        verifying:      makeStageStats('verifying', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
-        spec_rework:    makeStageStats('spec_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        quality_review: makeStageStats('quality_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        quality_rework: makeStageStats('quality_rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
-        diff_review:    makeStageStats('diff_review', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, verdict: 'not_applicable', roundsUsed: null }),
-        committing:     ZERO_COMMITTING,
+        annotating: makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
+        rework:     makeStageStats('rework', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null }),
+        committing: ZERO_COMMITTING,
       },
     });
 
@@ -415,7 +393,7 @@ describe('multi-round stage entries', () => {
     expect((impl as any).cachedReadTokens).toBe(100);
     expect((impl as any).cachedNonReadTokens).toBe(50);
 
-    const specReview = event.stages.find(s => s.name === 'spec_review')!;
+    const specReview = event.stages.find(s => s.name === 'review')!;
     expect(specReview).toBeDefined();
     expect((specReview as any).round).toBe(1);
     expect((specReview as any).cachedReadTokens).toBe(20);

@@ -9,25 +9,18 @@ export function formatElapsed(ms: number): string {
 }
 
 export type HeartbeatStage =
-  | 'implementing' | 'spec_review' | 'spec_rework'
-  | 'quality_review' | 'quality_rework'
-  | 'verifying' | 'diff_review' | 'committing' | 'terminal';
+  | 'implementing' | 'review' | 'rework' | 'annotating' | 'committing' | 'terminal';
 
 export const STAGE_LABELS: Record<HeartbeatStage, string> = {
-  implementing:   'Implementing',
-  spec_review:    'Spec review',
-  spec_rework:    'Spec rework',
-  quality_review: 'Quality review',
-  quality_rework: 'Quality rework',
-  verifying:      'Verifying',
-  diff_review:    'Diff review',
-  committing:     'Committing',
-  terminal:       'Done',
+  implementing: 'Implementing',
+  review:       'Review',
+  rework:       'Rework',
+  annotating:   'Annotating',
+  committing:   'Committing',
+  terminal:     'Done',
 };
 
-export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set([
-  'spec_review', 'spec_rework', 'quality_review', 'quality_rework', 'diff_review',
-]);
+export const REVIEW_STAGES: ReadonlySet<HeartbeatStage> = new Set(['review']);
 
 /**
  * Lightweight state snapshot passed to `recordHeartbeat` on every tick (including

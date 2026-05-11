@@ -1,7 +1,7 @@
 import { z } from 'zod';
 import { ModelFamilyEnum } from '../config/model-profile-registry.js';
 
-export const SCHEMA_VERSION = 4;
+export const SCHEMA_VERSION = 5;
 
 export const STRICT_ID_REGEX = /^[A-Za-z0-9][-A-Za-z0-9_.:+/@]{0,119}$/;
 
@@ -17,7 +17,7 @@ const VersionString = z
 export const Os = z.enum(['darwin', 'linux', 'win32', 'other']);
 
 export const BatchWrapperSchema = z.object({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   installId: z.string().uuid(),
   mmagentVersion: VersionString,
   os: Os,
@@ -65,12 +65,9 @@ export const TierUsageSchema = TokenUsageSchema.extend({
 
 const StageNameEnum = z.enum([
   'implementing',
-  'spec_review',
-  'spec_rework',
-  'quality_review',
-  'quality_rework',
-  'diff_review',
-  'verifying',
+  'review',
+  'rework',
+  'annotating',
   'committing',
 ]);
 
@@ -97,7 +94,7 @@ export const StageEntryBase = z.object({
 });
 
 export const ReviewStageEntrySchema = StageEntryBase.extend({
-  name: z.enum(['spec_review', 'quality_review', 'diff_review']),
+  name: z.literal('review'),
   verdict: z.enum(['approved', 'concerns', 'changes_required', 'error', 'skipped', 'annotated', 'not_applicable']),
   roundsUsed: z.number().int().min(1).max(10),
   concernCategories: z.array(_ConcernCategory).max(9),
@@ -105,12 +102,12 @@ export const ReviewStageEntrySchema = StageEntryBase.extend({
 }).strict();
 
 export const ReworkStageEntrySchema = StageEntryBase.extend({
-  name: z.enum(['spec_rework', 'quality_rework']),
+  name: z.literal('rework'),
   triggeringConcernCategories: z.array(_ConcernCategory).max(9),
 }).strict();
 
-export const VerifyStageEntrySchema = StageEntryBase.extend({
-  name: z.literal('verifying'),
+export const AnnotatingStageEntrySchema = StageEntryBase.extend({
+  name: z.literal('annotating'),
   outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable']),
   skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
 }).strict();
@@ -129,7 +126,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
   ImplementStageEntrySchema,
   ReviewStageEntrySchema,
   ReworkStageEntrySchema,
-  VerifyStageEntrySchema,
+  AnnotatingStageEntrySchema,
   CommitStageEntrySchema,
 ]);
 
@@ -201,7 +198,7 @@ export const TaskCompletedEventSchema = z.object({
 // ── Upload batch ─────────────────────────────────────────────────────────
 
 export const UploadBatchSchema = z.object({
-  schemaVersion: z.literal(4),
+  schemaVersion: z.literal(5),
   installId: z.string().uuid(),
   mmagentVersion: VersionString,
   os: Os,
@@ -214,8 +211,6 @@ export const UploadBatchSchema = z.object({
 
 const qualityOnlyRoutes = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
 const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'investigate']);
-const reworkStages = new Set(['spec_rework', 'quality_rework']);
-const reviewStages = new Set(['spec_review', 'quality_review', 'diff_review']);
 
 export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superRefine((event, ctx) => {
   // R1: ok terminalStatus implies non-failed worker outcome and no errorCode
@@ -286,33 +281,15 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
     }
   }
 
-  // R8: verification outcome only on delegate, execute-plan, verify routes
-  const verifyRoutes = new Set(['delegate', 'execute-plan', 'verify']);
+  // R9: review stage only on reviewed routes
   for (const st of event.stages) {
-    if (st.name === 'verifying' && !verifyRoutes.has(event.route)) {
-      ctx.addIssue({ code: 'custom', message: 'R8: verifying stage only allowed on delegate|execute-plan|verify routes' });
+    if (st.name === 'review' && !reviewedRoutes.has(event.route)) {
+      ctx.addIssue({ code: 'custom', message: 'R9: review stage only allowed on reviewed routes' });
     }
   }
 
-  // R9: review stages only on reviewed routes
-  for (const st of event.stages) {
-    if (reviewStages.has(st.name) && !reviewedRoutes.has(event.route)) {
-      ctx.addIssue({ code: 'custom', message: `R9: ${st.name} stage only allowed on reviewed routes` });
-    }
-  }
-
-  // R10: quality_only routes must not have spec_review, diff_review, or rework stages
-  // R10b: no rework on quality_only
   // R10c: annotated verdict only on quality_only routes
   for (const st of event.stages) {
-    if (qualityOnlyRoutes.has(event.route)) {
-      if (reviewStages.has(st.name) && st.name !== 'quality_review') {
-        ctx.addIssue({ code: 'custom', message: 'R10: non-quality review stage on quality_only route' });
-      }
-      if (reworkStages.has(st.name)) {
-        ctx.addIssue({ code: 'custom', message: 'R10b: rework stages not allowed on quality_only routes' });
-      }
-    }
     if ('verdict' in st && st.verdict === 'annotated' && !qualityOnlyRoutes.has(event.route)) {
       ctx.addIssue({ code: 'custom', message: 'R10c: annotated verdict only allowed on quality_only routes' });
     }
@@ -330,13 +307,10 @@ export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superR
   // R14: totalCostUSD in [0, 800] or null
   // (enforced by Zod schema bounds)
 
-  // R16: rework stages require their parent review stage in the same event
+  // R16: rework stage requires the review stage in the same event
   const stageNames = new Set((event.stages ?? []).map(s => s.name));
-  if (stageNames.has('spec_rework') && !stageNames.has('spec_review')) {
-    ctx.addIssue({ code: 'custom', message: 'R16: spec_rework requires spec_review in the same event' });
-  }
-  if (stageNames.has('quality_rework') && !stageNames.has('quality_review')) {
-    ctx.addIssue({ code: 'custom', message: 'R16: quality_rework requires quality_review in the same event' });
+  if (stageNames.has('rework') && !stageNames.has('review')) {
+    ctx.addIssue({ code: 'custom', message: 'R16: rework requires review in the same event' });
   }
 });
 

@@ -10,6 +10,7 @@ import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import { annotateCompletionTemplate } from '../../review/templates/annotate-completion.js';
 import { parseAnnotatorOutput } from '../../reporting/annotate-completion-parser.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 const VERIFY_TIMEOUT_MS = 60_000;
 const VERIFY_OUTPUT_CAP_BYTES = 4096;
@@ -119,6 +120,7 @@ export async function annotateCompletionHandler(state: LifecycleState): Promise<
 
   // 3. Up to 2 attempts (one retry on parse failure)
   let parsed: ReturnType<typeof parseAnnotatorOutput> | null = null;
+  const stageAcc = { input: 0, output: 0, cached: 0, nonRead: 0, turns: 0, tools: 0, costNumerator: 0, hadCost: false, duration: 0 };
   for (let attempt = 0; attempt < 2; attempt++) {
     const promptToSend = attempt === 0
       ? basePrompt
@@ -161,8 +163,32 @@ export async function annotateCompletionHandler(state: LifecycleState): Promise<
       state.commitGatePercent = 0;
       return;
     }
+    stageAcc.input  += result.usage?.inputTokens ?? 0;
+    stageAcc.output += result.usage?.outputTokens ?? 0;
+    stageAcc.cached += result.usage?.cachedReadTokens ?? 0;
+    stageAcc.nonRead += result.usage?.cachedNonReadTokens ?? 0;
+    stageAcc.turns  += result.turns ?? 1;
+    stageAcc.tools  += Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+    stageAcc.duration += (result as { durationMs?: number }).durationMs ?? 0;
+    const c = (result as { costUSD?: number | null }).costUSD;
+    if (c !== null && c !== undefined) { stageAcc.costNumerator += c; stageAcc.hadCost = true; }
     parsed = parseAnnotatorOutput(result.output);
     if (parsed.ok) break;
+  }
+  if (stageAcc.turns > 0) {
+    mergeStageStats(state, 'annotating', {
+      inputTokens: stageAcc.input,
+      outputTokens: stageAcc.output,
+      cachedReadTokens: stageAcc.cached,
+      cachedNonReadTokens: stageAcc.nonRead,
+      turnCount: stageAcc.turns,
+      toolCallCount: stageAcc.tools,
+      costUSD: stageAcc.hadCost ? stageAcc.costNumerator : null,
+      durationMs: stageAcc.duration || null,
+    }, {
+      tier: annotatorTier,
+      model: (ctx.providers[annotatorTier]?.config as { model?: string } | undefined)?.model ?? null,
+    });
   }
 
   if (!parsed || !parsed.ok) {

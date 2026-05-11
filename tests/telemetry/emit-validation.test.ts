@@ -16,16 +16,9 @@ describe('V3 cross-field validation (warn-only since 3.10.3)', () => {
   // at the stage level. See §3.4 for current rule set.
   it('R3 removal: review.tier === implementerTier no longer fails validation (v4)', () => {
     const rr = richRunResult();
-    rr.stageStats!.spec_review.agentTier = 'standard';
+    (rr.stageStats as { review?: { agentTier?: string } }).review!.agentTier = 'standard';
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(parsed.success).toBe(true);
-  });
-
-  it('R10b detection: rework stage on quality_only route produces a schema warning', () => {
-    const rr = richRunResult();
-    const ev = buildTaskCompletedEvent({ route: 'audit', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
-    const parsed = ValidatedTaskCompletedEventSchema.safeParse(ev);
-    expect(parsed.success).toBe(false);
   });
 });

@@ -13,6 +13,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import type { AnnotatorRoute } from '../../review/annotator-prompt-builder.js';
 import { makeRunnerShell } from '../../providers/make-runner-shell.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 /** Routes that go through the parallel-criteria + annotate pipeline. */
 const ANNOTATABLE_READONLY_ROUTES = new Set<string>([
@@ -72,13 +73,24 @@ export async function annotateCriteriaHandler(state: LifecycleState): Promise<vo
 
   // Attach annotated findings + verdict + raw assistant text to
   // lastRunResult so compose_response and the per-tool report parser
-  // can pick them up. Cost rolls into the dispatch's stage stats
-  // separately via runner-shell event accounting.
+  // can pick them up.
   (last as { annotatedFindings?: unknown[] }).annotatedFindings = result.annotatedFindings;
   (last as { qualityReviewVerdict?: string }).qualityReviewVerdict = result.verdict;
-  // Replace the synthesized output with the annotated narrative so per-tool
-  // parsers (auditReport, reviewReport, etc.) see the merged structured form.
   if (typeof result.finalAssistantText === 'string' && result.finalAssistantText.trim().length > 0) {
     last.output = result.finalAssistantText;
   }
+  const usage = (result as { usage?: { inputTokens?: number; outputTokens?: number; cachedReadTokens?: number; cachedNonReadTokens?: number } }).usage;
+  mergeStageStats(state, 'annotating', {
+    inputTokens: usage?.inputTokens ?? 0,
+    outputTokens: usage?.outputTokens ?? 0,
+    cachedReadTokens: usage?.cachedReadTokens ?? 0,
+    cachedNonReadTokens: usage?.cachedNonReadTokens ?? 0,
+    turnCount: (result as { turns?: number }).turns ?? 1,
+    toolCallCount: 0,
+    costUSD: (result as { costUSD?: number | null }).costUSD ?? null,
+    durationMs: (result as { durationMs?: number }).durationMs ?? null,
+  }, {
+    tier,
+    model: (provider?.config as { model?: string } | undefined)?.model ?? null,
+  });
 }

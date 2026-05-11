@@ -26,7 +26,7 @@ export interface ReviewedRunResultFields {
   workerStatus: 'done' | 'done_with_concerns' | 'review_loop_capped' | 'failed';
   terminationReason?: 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable';
   reviewRounds: { spec: number; quality: number; metadata: number; cap: number };
-  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>;
+  concerns?: Array<{ source: 'review' | 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>;
   error?: { code: 'validator_verify_command_failed' | 'validator_commit_metadata_invalid' | 'validator_commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'review_diff_rejected' | 'runner_crash'; message: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean };
 }
 

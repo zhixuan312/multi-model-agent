@@ -17,12 +17,9 @@ import type { RunResult } from '../types.js';
 
 export type StageName =
   | 'implementing'
-  | 'spec_review'
-  | 'spec_rework'
-  | 'quality_review'
-  | 'quality_rework'
-  | 'diff_review'
-  | 'verifying'
+  | 'review'
+  | 'rework'
+  | 'annotating'
   | 'committing';
 
 interface StageDelta {
@@ -42,10 +39,9 @@ interface StageOptions {
   tier: 'standard' | 'complex' | null;
   model: string | null;
   modelFamily?: string | null;
-  /** For spec_review / quality_review / diff_review only. */
+  /** For the `review` stage — combined verdict from parallel spec+quality sub-reviewers. */
   verdict?: string;
-  /** For spec_review / quality_review / diff_review only — defaults to +1
-   *  per call so multi-round chains accumulate naturally. */
+  /** Defaults to +1 per call so the wire's `roundsUsed` reflects rounds taken. */
   roundsDelta?: number;
 }
 
@@ -84,12 +80,12 @@ export function mergeStageStats(
     filesWrittenCount: ((existing?.['filesWrittenCount'] as number | null | undefined) ?? 0) + (delta.filesWrittenCount ?? 0),
   } as Record<string, unknown>;
 
-  if (stage === 'spec_review' || stage === 'quality_review' || stage === 'diff_review') {
+  if (stage === 'review') {
     accumulated['verdict'] = options.verdict ?? existing?.['verdict'] ?? null;
     accumulated['roundsUsed'] = ((existing?.['roundsUsed'] as number | undefined) ?? 0) + (options.roundsDelta ?? 1);
     accumulated['concernCategories'] = existing?.['concernCategories'] ?? [];
     accumulated['findingsBySeverity'] = existing?.['findingsBySeverity'] ?? { critical: 0, high: 0, medium: 0, low: 0 };
-  } else if (stage === 'spec_rework' || stage === 'quality_rework') {
+  } else if (stage === 'rework') {
     accumulated['triggeringConcernCategories'] = existing?.['triggeringConcernCategories'] ?? [];
   }
 
