@@ -16,6 +16,7 @@ import {
   EXECUTE_PLAN_SCOPE_RULE,
   EXECUTE_PLAN_FAILURE_MODES,
   PLAN_FIDELITY_REMINDER,
+  PLAN_VS_SOURCE_RECONCILIATION,
 } from './implementer-criteria.js';
 
 export const executePlanInputSchema = z.object({
@@ -94,6 +95,8 @@ function buildExecutePlanPrompt(
     EXECUTE_PLAN_FAILURE_MODES,
     '',
     PLAN_FIDELITY_REMINDER,
+    '',
+    PLAN_VS_SOURCE_RECONCILIATION,
     '',
     // Tool sweep #12: share spec + quality reviewer rubric so the
     // worker self-aligns on what each reviewer will judge against.

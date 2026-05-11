@@ -105,3 +105,62 @@ export const PLAN_FIDELITY_REMINDER = [
   '- Worked example. A plan section says: "Step 2: create `src/parser.ts` with content (verbatim): `export function parse(input: string): Token[] { ... }`". Naive worker writes `src/parser.ts` exporting `parseTokens` (renamed for clarity) with JSDoc added. Result: CODE SUBSTITUTION + ACCEPTANCE-CRITERIA OVERRUN. The downstream code that imports `parse` now breaks; the plan author reads the diff and says "I wrote `parse`, why is this `parseTokens`?". Correct worker creates `src/parser.ts` with exactly the named export `parse`, no JSDoc additions, no rename. If JSDoc would be valuable, mention it in the summary as a follow-up rather than adding it here.',
   '- Most workers miss findings of this shape on first pass because the renamed/reformatted version "feels right" and they trust their instincts. The faithfulness walk forces the verbatim check.',
 ].join('\n');
+
+/**
+ * Plan-vs-source reconciliation (4.2.3+).
+ *
+ * Distinct from PLAN_FIDELITY_REMINDER — that block stops workers from
+ * IMPROVING valid plans (renaming, restructuring, "while I'm here"
+ * additions). This block tells workers what to do when the plan
+ * literally CANNOT be applied because the codebase has drifted away
+ * from what the plan names (the `registerBlock` vs `register` class
+ * of bug — plan-author wrote against memory, not source).
+ *
+ * Without this block, workers either:
+ *   - Invent the missing symbol on the fly (introducing real bugs:
+ *     renaming `register` → `registerBlock` breaks the interface
+ *     contract), OR
+ *   - Freeze on "plan defect detected" and bail without making any
+ *     progress (review_loop_capped on round 1, 3 rework rounds all
+ *     repeat the same diagnosis, $0.30+ wasted).
+ *
+ * Neither is the right outcome. The right outcome: worker greps the
+ * codebase, finds the actual symbol/path, reconciles, applies, and
+ * notes the reconciliation in the summary so the reviewer can confirm
+ * the interpretation was correct.
+ *
+ * Distinguishing reconciliation from improvement: a fix is RECONCILIATION
+ * when the plan-as-written contains a name/path/signature that does
+ * not appear in source AND the source has a single obvious near-match
+ * (Levenshtein 1-5 chars, same kind of symbol). A fix is IMPROVEMENT
+ * when the plan's name DOES exist in source and the worker chose a
+ * different one. Reconciliation is required; improvement is forbidden.
+ */
+export const PLAN_VS_SOURCE_RECONCILIATION = [
+  'Plan-vs-source reconciliation (apply BEFORE the fidelity rules above when triggered):',
+  '',
+  'The plan you\'re executing may reference symbols / paths / signatures / config keys that drifted from current source after the plan was authored. When you detect drift:',
+  '',
+  '1. The SOURCE is canonical, not the plan. The plan author may have written against an older snapshot or against memory; the codebase is ground truth.',
+  '',
+  '2. Detection rule: drift exists when the plan-as-written calls / imports / references a symbol that grep against the named source files returns zero matches for, AND the source has a single obvious near-match (same kind of symbol — function vs function, type vs type — Levenshtein distance 1-5).',
+  '',
+  '   Examples:',
+  '   - Plan says `store.registerBlock(...)`; grep on the named file returns no `registerBlock` but finds `register` at line N. Drift: use `register`.',
+  '   - Plan says `config.defaults.contextBlocks.maxProjects`; grep on the config schema returns no `contextBlocks` but finds `server.limits.maxProjects`. Drift: use the actual config path.',
+  '   - Plan says `import { Foo } from "./bar.js"`; bar.ts exports `Bar` (not `Foo`). Drift: import the actual exported name.',
+  '',
+  '3. When drift is detected, reconcile and proceed:',
+  '   - Apply the work using the ACTUAL source symbol/path, not the plan\'s.',
+  '   - In your final summary, add a "Reconciliations" section listing each drift you resolved, one line per item: "Plan said X; source has Y; used Y."',
+  '   - Continue with the rest of the task. Do NOT stop on "plan defect detected" — that\'s the old behavior the new prompt overrides.',
+  '',
+  '4. Reconciliation is NOT improvement. The fidelity rules in PLAN_FIDELITY_REMINDER still apply for everything else:',
+  '   - If the plan\'s name DOES exist in source and you chose a different one because it "felt cleaner": that\'s CODE SUBSTITUTION, still forbidden.',
+  '   - If the plan asks for `foo()` and `foo()` exists in source: use `foo()` verbatim, no reconciliation needed.',
+  '   - Reconciliation is ONLY for the case where the plan names something that demonstrably does not exist in source AND a single obvious near-match does.',
+  '',
+  '5. When the plan task is CREATING a new symbol (function declaration, new module, new test file): the symbol won\'t exist in source yet — that\'s the deliverable, not drift. Don\'t reconcile; create as the plan specifies.',
+  '',
+  '6. When you genuinely can\'t reconcile (multiple plausible matches, semantic mismatch, no near-match at all): fall back to the existing fidelity rule — report the defect in your summary and stop. Reconciliation is best-effort; when it\'s ambiguous, the caller resolves.',
+].join('\n');
