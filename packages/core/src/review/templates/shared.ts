@@ -28,6 +28,26 @@ export interface ReviewTemplateContext {
    * routes (delegate, audit, review, verify, debug, investigate).
    */
   planContext?: string;
+
+  // ── Pipeline-redesign annotator-only fields (4.3.0+, spec §3.3) ──────
+  // Read by `annotate-completion.ts` only. Spec/quality review-and-fix
+  // templates ignore these.
+  /** Spec reviewer's free-text summary from Stage 2. */
+  specReviewerNotes?: string | null;
+  /** Quality reviewer's free-text summary from Stage 3. */
+  qualityReviewerNotes?: string | null;
+  /** Spec reviewer provider error (Stage 2 transport failure). */
+  specReviewError?: string | null;
+  /** Quality reviewer provider error (Stage 3 transport failure). */
+  qualityReviewError?: string | null;
+  /** Deterministic verify command result (Stage 4 pre-step). */
+  verifyResult?: {
+    ran: boolean;
+    passed: boolean | null;
+    exitCode: number | null;
+    command: string[];
+    tailOutput: string | null;
+  } | null;
 }
 
 export interface ReviewTemplate {
