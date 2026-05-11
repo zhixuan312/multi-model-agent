@@ -51,9 +51,14 @@ function extractPathFromToolInput(input: unknown): string | undefined {
  *     ambiguous; keeps false-positive rate low.
  */
 const SHELL_WRITE_PATTERNS: RegExp[] = [
-  /[^&|>]>>?\s*[^&|>\s]/,                // > file or >> file (excluding 2>&1, &> handled below)
-  /&>\s*[^&|>\s]/,                       // &> file
-  />\|\s*[^&|>\s]/,                      // >| file
+  // > file or >> file. The (?<![\d&|>]) lookbehind excludes file-descriptor
+  // redirects (2>file, 1>file, 2>>file) which only redirect stderr/stdout —
+  // they do NOT create file artifacts in the way "cat > file" or "tee" does.
+  // Without this, every command using "2>/dev/null" gets counted as a write,
+  // inflating the headline shellWrites counter with non-writes.
+  /(?<![\d&|>])>>?\s*[^&|>\s]/,
+  /&>\s*[^&|>\s]/,                       // &> file (combined redirect)
+  />\|\s*[^&|>\s]/,                      // >| file (force overwrite)
   /\bsed\s+(?:-[a-z]*i[a-z]*\b|--in-place\b)/i,  // sed -i / sed --in-place
   /\b(?:awk|gawk|nawk)\s+-i\s+inplace\b/i,
   /\btee\b/,
