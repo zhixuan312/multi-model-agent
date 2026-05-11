@@ -49,6 +49,7 @@ export interface HardError {
   taskIndex: number;
   error: string;
   errorCode: string;
+  details?: Record<string, unknown>;
 }
 
 export interface IntakeProgress {
