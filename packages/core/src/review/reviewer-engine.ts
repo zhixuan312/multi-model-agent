@@ -12,8 +12,9 @@ import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 // handlers (spec-chain, quality-chain, review-diff). New review-and-fix
 // templates replace them for the artifact-producing pipeline.
 export type { ReviewTemplate } from './templates/shared.js';
-export { specReviewAndFixTemplate } from './templates/spec-review-and-fix.js';
-export { qualityReviewAndFixTemplate } from './templates/quality-review-and-fix.js';
+export { specLintTemplate } from './templates/spec-review.js';
+export { qualityLintTemplate } from './templates/quality-review.js';
+export { reworkTemplate } from './templates/rework.js';
 export { annotateCompletionTemplate } from './templates/annotate-completion.js';
 export { qualityAuditTemplate } from './templates/quality-review-audit.js';
 export { qualityReviewTemplate } from './templates/quality-review-review.js';

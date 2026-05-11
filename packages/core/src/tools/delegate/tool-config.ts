@@ -6,7 +6,7 @@ import { delegateHeadlineTemplate } from '../../reporting/headline-templates/del
 import { delegateReportSchema } from '../../reporting/report-parser-slots/delegate-report.js';
 import { compileDelegatePrompt } from '../../intake/brief-compiler-slots/delegate.js';
 import type { ReviewPolicy } from '../../intake/brief-compiler-slots/delegate.js';
-import { specReviewAndFixTemplate, qualityReviewAndFixTemplate } from '../../review/reviewer-engine.js';
+import { specLintTemplate, qualityLintTemplate } from '../../review/reviewer-engine.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
 
 export function registerDelegate(registry: ToolSurfaceRegistry): void {
@@ -66,8 +66,8 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   reportSchema: delegateReportSchema,
   headlineTemplate: delegateHeadlineTemplate,
   reviewTemplates: {
-    spec: specReviewAndFixTemplate,
-    qualityAP: qualityReviewAndFixTemplate,
-    diff: specReviewAndFixTemplate,  // pipeline-redesign: diff path unused; field retained for type compat
+    spec: specLintTemplate,
+    qualityAP: qualityLintTemplate,
+    diff: specLintTemplate,  // pipeline-redesign: diff path unused; field retained for type compat
   },
 };

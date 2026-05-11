@@ -169,8 +169,8 @@ export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 export {
   ReviewerEngine,
   ReviewerPromptBuilder,
-  specReviewAndFixTemplate,
-  qualityReviewAndFixTemplate,
+  specLintTemplate,
+  qualityLintTemplate,
   annotateCompletionTemplate,
   qualityAuditTemplate,
   qualityReviewTemplate,

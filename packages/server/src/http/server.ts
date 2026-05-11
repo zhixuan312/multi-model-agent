@@ -76,7 +76,7 @@ async function registerToolHandlers(
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
   const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
-    specReviewAndFixTemplate, qualityReviewAndFixTemplate,
+    specLintTemplate, qualityLintTemplate,
     qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
   } =
     await import('@zhixuan92/multi-model-agent-core');
@@ -132,10 +132,10 @@ async function registerToolHandlers(
   const routeDispatcher = new LifecycleDispatcher();
 
   const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-    { spec: specReviewAndFixTemplate, qualityForAP: qualityReviewAndFixTemplate, diff: specReviewAndFixTemplate },
+    { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
     {
-      delegate: qualityReviewAndFixTemplate,
-      'execute-plan': qualityReviewAndFixTemplate,
+      delegate: qualityLintTemplate,
+      'execute-plan': qualityLintTemplate,
       audit: qualityAuditTemplate,
       review: qualityReviewTemplate,
       verify: qualityVerifyTemplate,
@@ -225,15 +225,15 @@ async function registerControlHandlers(
       ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
     const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
-      specReviewAndFixTemplate, qualityReviewAndFixTemplate,
+      specLintTemplate, qualityLintTemplate,
       qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
     } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();
     const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-      { spec: specReviewAndFixTemplate, qualityForAP: qualityReviewAndFixTemplate, diff: specReviewAndFixTemplate },
+      { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
       {
-        delegate: qualityReviewAndFixTemplate,
-        'execute-plan': qualityReviewAndFixTemplate,
+        delegate: qualityLintTemplate,
+        'execute-plan': qualityLintTemplate,
         audit: qualityAuditTemplate,
         review: qualityReviewTemplate,
         verify: qualityVerifyTemplate,

@@ -61,29 +61,21 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
       isRework: false, handlerKey: 'check_files_written',
     },
 
-    // ── Stage 4 — Pipeline-redesign review-and-fix + annotate (4.3.0+) ─────
-    // Replaces the old 11-stage spec/quality/diff/verify chain. See pipeline
-    // redesign spec §2 + §3.1. Three new rows:
-    //   4.1: spec_review_and_fix    — complex tier, full tools, fixes inline
-    //   4.2: quality_review_and_fix — complex tier, full tools, fixes inline
-    //   4.3: annotate_completion    — standard tier, readonly, structured JSON
-    // Single pass each (no rework rounds). Verify command runs inside 4.3.
-
-    // 4.1: spec review + fix — only for reviewPolicy='full'. Complex tier with
-    // full tools fixes plan-fidelity gaps directly. Read-only routes (which
-    // never have a "plan" to compare against) skip this entirely.
-    { rowId: '4.1', stageName: 'spec_review_and_fix', schemaStage: 'spec_review',
-      runCondition: (s) => isAP && s.reviewPolicy === 'full' && !s.terminal,
-      isRework: false, handlerKey: 'spec_review_and_fix' },
-
-    // 4.2: quality review + fix — for reviewPolicy in {full, quality_only}.
-    // Same complex tier with full tools; fixes safety / correctness / edge
-    // cases. Skipped for diff_only and none.
-    { rowId: '4.2', stageName: 'quality_review_and_fix', schemaStage: 'quality_review',
+    // ── Stage 4 — Lint-review + rework split (4.3.0+) ──────────────────────
+    // 4.1: review (parallel spec + quality, lint-only, readonly tools).
+    //      Emits state.reviewVerdict + state.reviewFindings.
+    // 4.2: rework (complex tier, full tools, single pass). Skipped when
+    //      reviewVerdict === 'approved'.
+    // 4.3 / 4.4: annotate_completion / annotate_criteria (unchanged).
+    { rowId: '4.1', stageName: 'review', schemaStage: 'review',
+      runCondition: (s) => isAP && s.reviewPolicy !== 'none' && !s.terminal,
+      isRework: false, handlerKey: 'review' },
+    { rowId: '4.2', stageName: 'rework', schemaStage: 'rework',
       runCondition: (s) => isAP
-        && (s.reviewPolicy === 'full' || s.reviewPolicy === 'quality_only')
+        && s.reviewPolicy !== 'none'
+        && s.reviewVerdict === 'changes_required'
         && !s.terminal,
-      isRework: false, handlerKey: 'quality_review_and_fix' },
+      isRework: true, handlerKey: 'rework' },
 
     // 4.3: annotate completion — artifact-producing routes only. Standard
     // tier with readonly tools. Runs verifyCommand deterministically first,

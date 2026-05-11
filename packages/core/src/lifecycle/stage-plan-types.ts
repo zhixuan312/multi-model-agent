@@ -143,15 +143,29 @@ export interface LifecycleState {
   currentStage?: string;
   errorCode?: string | null;
 
-  // ── Pipeline-redesign slots (4.3.0+) — see spec §3.6 ─────────────────
-  /** Stage 2 (spec_review_and_fix) reviewer's free-text summary. */
+  // ── Pipeline-redesign slots (4.3.0+) — review (lint-only) + rework split ───
+  /** Spec lint-reviewer raw report text. */
   specReviewerNotes?: string;
-  /** Stage 2 provider error (transport/timeout). Does NOT set state.terminal. */
-  specReviewError?: string;
-  /** Stage 3 (quality_review_and_fix) reviewer's free-text summary. */
+  /** Quality lint-reviewer raw report text. */
   qualityReviewerNotes?: string;
-  /** Stage 3 provider error. */
+  /** Spec reviewer parsed verdict. */
+  specReviewVerdict?: 'approved' | 'changes_required';
+  /** Quality reviewer parsed verdict. */
+  qualityReviewVerdict?: 'approved' | 'changes_required';
+  /** Spec lint-reviewer transport/return error (call failed). */
+  specReviewError?: string;
+  /** Quality lint-reviewer transport/return error. */
   qualityReviewError?: string;
+  /** Merged deviations from spec + quality reviewers. */
+  reviewFindings?: Array<{ source: 'spec' | 'quality'; text: string }>;
+  /** Review-stage overall error (used when neither reviewer returned a usable verdict). */
+  reviewError?: string;
+  /** Rework stage applied edits (true) or skipped (false). undefined = stage never ran. */
+  reworkApplied?: boolean;
+  /** Rework worker's raw summary. */
+  reworkOutput?: string;
+  /** Rework stage error (transport/return). */
+  reworkError?: string;
   /** Stage 4 (annotate_completion) structured output + verify overlay. */
   completionAnnotation?: {
     completionPercent: number;

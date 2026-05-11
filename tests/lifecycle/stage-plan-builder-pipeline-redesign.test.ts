@@ -2,11 +2,11 @@ import { describe, it, expect } from 'vitest';
 import { buildStagePlan } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
 
 describe('stage plan — pipeline redesign (artifact_producing)', () => {
-  it('includes new rows: spec_review_and_fix, quality_review_and_fix, annotate_completion', () => {
+  it('includes new rows: review, rework, annotate_completion', () => {
     const plan = buildStagePlan('artifact_producing');
     const names = plan.rows.map(r => r.stageName);
-    expect(names).toContain('spec_review_and_fix');
-    expect(names).toContain('quality_review_and_fix');
+    expect(names).toContain('review');
+    expect(names).toContain('rework');
     expect(names).toContain('annotate_completion');
   });
 
@@ -77,24 +77,24 @@ describe('stage plan — pipeline redesign (artifact_producing)', () => {
     } as never)).toBe(false);
   });
 
-  it('per-policy gates: stage 4.1 spec only for full; 4.2 quality for full/quality_only; 4.3 annotate for !none', () => {
+  it('per-policy gates: review runs for !none; rework only when changes_required; annotate for !none', () => {
     const plan = buildStagePlan('artifact_producing');
-    const spec = plan.rows.find(r => r.stageName === 'spec_review_and_fix')!;
-    const quality = plan.rows.find(r => r.stageName === 'quality_review_and_fix')!;
+    const review = plan.rows.find(r => r.stageName === 'review')!;
+    const rework = plan.rows.find(r => r.stageName === 'rework')!;
     const annotate = plan.rows.find(r => r.stageName === 'annotate_completion')!;
 
     const policies = ['full', 'quality_only', 'diff_only', 'none'] as const;
-    const expected = {
-      spec_review_and_fix: { full: true, quality_only: false, diff_only: false, none: false },
-      quality_review_and_fix: { full: true, quality_only: true, diff_only: false, none: false },
-      annotate_completion: { full: true, quality_only: true, diff_only: true, none: false },
-    } as const;
+    const expectedReview = { full: true, quality_only: true, diff_only: true, none: false } as const;
 
     for (const p of policies) {
       const baseState = { reviewPolicy: p, terminal: false } as never;
-      expect(spec.runCondition(baseState)).toBe(expected.spec_review_and_fix[p]);
-      expect(quality.runCondition(baseState)).toBe(expected.quality_review_and_fix[p]);
-      expect(annotate.runCondition(baseState)).toBe(expected.annotate_completion[p]);
+      expect(review.runCondition(baseState)).toBe(expectedReview[p]);
+      expect(annotate.runCondition(baseState)).toBe(expectedReview[p]);
     }
+
+    const reworkApproved = { reviewPolicy: 'full', reviewVerdict: 'approved', terminal: false } as never;
+    const reworkRequired = { reviewPolicy: 'full', reviewVerdict: 'changes_required', terminal: false } as never;
+    expect(rework.runCondition(reworkApproved)).toBe(false);
+    expect(rework.runCondition(reworkRequired)).toBe(true);
   });
 });

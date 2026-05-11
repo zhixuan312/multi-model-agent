@@ -6,8 +6,8 @@ import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 // were also removed. Read-only route templates remain — they power /audit, /review,
 // /verify, /debug, /investigate via the parallel-criteria + annotator path
 // (separate from the execute-plan / delegate pipeline this redesign affects).
-import { specReviewAndFixTemplate } from './templates/spec-review-and-fix.js';
-import { qualityReviewAndFixTemplate } from './templates/quality-review-and-fix.js';
+import { specLintTemplate } from './templates/spec-review.js';
+import { qualityLintTemplate } from './templates/quality-review.js';
 import { qualityAuditTemplate } from './templates/quality-review-audit.js';
 import { qualityReviewTemplate } from './templates/quality-review-review.js';
 import { qualityVerifyTemplate } from './templates/quality-review-verify.js';
@@ -17,7 +17,7 @@ import { qualityInvestigateTemplate } from './templates/quality-review-investiga
 export function createDefaultReviewerEngine(): ReviewerEngine {
   return new ReviewerEngine(
     new ReviewerPromptBuilder(
-      { spec: specReviewAndFixTemplate, qualityForAP: qualityReviewAndFixTemplate, diff: specReviewAndFixTemplate },
+      { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
       {
         audit: qualityAuditTemplate,
         review: qualityReviewTemplate,

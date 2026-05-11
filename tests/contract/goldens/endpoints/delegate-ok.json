@@ -38,6 +38,14 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
       "stageStats": {
         "implementing": {
           "stage": "implementing",
@@ -61,8 +69,8 @@
         }
       },
       "actualCostUSD": null,
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
+      "specReviewStatus": "changes_required",
+      "qualityReviewStatus": "changes_required",
       "diffReviewStatus": "skipped",
       "verification": {
         "ran": false,
@@ -75,20 +83,12 @@
       "agents": {
         "implementer": "standard",
         "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
+        "specReviewer": "complex",
+        "qualityReviewer": "complex"
       },
       "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "implementationReport": {
-        "summary": "mocked ok",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "specReviewReason": "",
+      "qualityReviewReason": "",
       "structuredReport": {
         "summary": "mocked ok",
         "filesChanged": [],
@@ -99,8 +99,8 @@
       },
       "models": {
         "implementer": "mock-model",
-        "specReviewer": null,
-        "qualityReviewer": null
+        "specReviewer": "mock-model",
+        "qualityReviewer": "mock-model"
       },
       "completionAnnotation": {
         "completionPercent": 0,
@@ -119,6 +119,9 @@
       "commitGatePercent": 0,
       "specReviewerNotes": "mocked ok",
       "qualityReviewerNotes": "mocked ok",
+      "reviewVerdict": "changes_required",
+      "reviewFindings": [],
+      "reworkApplied": false,
       "verifyResult": {
         "ran": false,
         "passed": null,
@@ -152,8 +155,8 @@
   "batchId": "<DETERMINISTIC>",
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
-  "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "not_applicable",
+  "specReviewVerdict": "changes_required",
+  "qualityReviewVerdict": "changes_required",
   "roundsUsed": 1,
   "contextBlockId": "<DETERMINISTIC>"
 }

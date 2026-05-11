@@ -98,6 +98,9 @@ export async function annotateCompletionHandler(state: LifecycleState): Promise<
     qualityReviewerNotes: state.qualityReviewerNotes ?? null,
     specReviewError: state.specReviewError ?? null,
     qualityReviewError: state.qualityReviewError ?? null,
+    reworkApplied: state.reworkApplied ?? null,
+    reworkOutput: state.reworkOutput ?? null,
+    reworkError: state.reworkError ?? null,
     verifyResult: state.verifyResult as VerifyResult,
   };
 

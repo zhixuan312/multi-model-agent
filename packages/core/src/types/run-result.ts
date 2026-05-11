@@ -58,10 +58,18 @@ export interface RunResult {
   };
   /** Stage 4 deterministic commit-gate %: min(backstop, annotatorPercent). */
   commitGatePercent?: number
-  /** Stage 2 spec reviewer free-text summary. */
+  /** Spec lint-reviewer raw report. */
   specReviewerNotes?: string
-  /** Stage 3 quality reviewer free-text summary. */
+  /** Quality lint-reviewer raw report. */
   qualityReviewerNotes?: string
+  /** Combined review verdict from both reviewers. */
+  reviewVerdict?: 'approved' | 'changes_required'
+  /** Merged deviations from both reviewers. */
+  reviewFindings?: Array<{ source: 'spec' | 'quality'; text: string }>
+  /** Rework worker free-text summary (set when rework stage fired). */
+  reworkOutput?: string
+  /** True if rework stage applied edits; false if reviewers approved so it skipped; undefined if stage didn't fire. */
+  reworkApplied?: boolean
   /** Stage 4 deterministic verify-command result (run inside annotate handler). */
   verifyResult?: {
     ran: boolean;

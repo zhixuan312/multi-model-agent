@@ -153,19 +153,19 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_and_fix",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_and_fix"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "quality_review_and_fix",
-        "schemaStage": "quality_review",
-        "isRework": false,
+        "stageName": "rework",
+        "schemaStage": "rework",
+        "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "quality_review_and_fix"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",
@@ -336,19 +336,19 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_and_fix",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_and_fix"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "quality_review_and_fix",
-        "schemaStage": "quality_review",
-        "isRework": false,
+        "stageName": "rework",
+        "schemaStage": "rework",
+        "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "quality_review_and_fix"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",
@@ -519,19 +519,19 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_and_fix",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_and_fix"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "quality_review_and_fix",
-        "schemaStage": "quality_review",
-        "isRework": false,
+        "stageName": "rework",
+        "schemaStage": "rework",
+        "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "quality_review_and_fix"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",

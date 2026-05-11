@@ -1,8 +1,8 @@
 import { z } from 'zod';
 import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js';
 import {
-  specReviewAndFixTemplate,
-  qualityReviewAndFixTemplate,
+  specLintTemplate,
+  qualityLintTemplate,
 } from '../../review/reviewer-engine.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
 import { toolExecutePlanBriefSlot, type ToolExecutePlanBrief } from '../../intake/brief-compiler-slots/execute-plan.js';
@@ -145,8 +145,8 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
   reportSchema: executePlanReportSchema,
   headlineTemplate: executePlanHeadlineTemplate,
   reviewTemplates: {
-    spec: specReviewAndFixTemplate,
-    qualityAP: qualityReviewAndFixTemplate,
-    diff: specReviewAndFixTemplate,  // diff path retained for type-shape only; not used post-redesign
+    spec: specLintTemplate,
+    qualityAP: qualityLintTemplate,
+    diff: specLintTemplate,  // diff path retained for type-shape only; not used post-redesign
   },
 };

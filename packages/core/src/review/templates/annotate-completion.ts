@@ -43,16 +43,24 @@ export const annotateCompletionTemplate: ReviewTemplate = {
       parts.push(`# Final cumulative diff\n(no file changes detected)`);
     }
     if (ctx.specReviewerNotes) {
-      parts.push(`# Spec reviewer's summary\n${ctx.specReviewerNotes}`);
+      parts.push(`# Spec lint report\n${ctx.specReviewerNotes}`);
     }
     if (ctx.specReviewError) {
-      parts.push(`# Spec reviewer ERROR (call failed)\n${ctx.specReviewError}\n\nThe spec stage's fixes did not land. Mark any plan-fidelity gaps accordingly.`);
+      parts.push(`# Spec reviewer ERROR (call failed)\n${ctx.specReviewError}`);
     }
     if (ctx.qualityReviewerNotes) {
-      parts.push(`# Quality reviewer's summary\n${ctx.qualityReviewerNotes}`);
+      parts.push(`# Quality lint report\n${ctx.qualityReviewerNotes}`);
     }
     if (ctx.qualityReviewError) {
       parts.push(`# Quality reviewer ERROR (call failed)\n${ctx.qualityReviewError}`);
+    }
+    if (ctx.reworkApplied === true && ctx.reworkOutput) {
+      parts.push(`# Rework worker's summary (applied fixes)\n${ctx.reworkOutput}`);
+    } else if (ctx.reworkApplied === false) {
+      parts.push(`# Rework stage\n(skipped — both reviewers approved)`);
+    }
+    if (ctx.reworkError) {
+      parts.push(`# Rework ERROR\n${ctx.reworkError}`);
     }
     if (ctx.verifyResult && ctx.verifyResult.ran) {
       const status = ctx.verifyResult.passed ? 'PASSED' : 'FAILED';

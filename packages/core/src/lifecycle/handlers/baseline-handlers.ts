@@ -7,8 +7,8 @@ import { gitCommitHandler } from './git-commit-handler.js';
 // Pipeline-redesign (4.3.0+) review-and-fix + annotate handlers replace the
 // old 11-stage spec/quality/diff/verify chain. See pipeline-redesign spec
 // §3.1 / §3.2.
-import { specReviewAndFixHandler } from './spec-review-and-fix-handler.js';
-import { qualityReviewAndFixHandler } from './quality-review-and-fix-handler.js';
+import { reviewHandler } from './review-handler.js';
+import { reworkHandler } from './rework-handler.js';
 import { annotateCompletionHandler } from './annotate-completion-handler.js';
 import { annotateCriteriaHandler } from './annotate-criteria-handler.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
@@ -73,26 +73,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         enriched.actualCostUSD = sumStageCosts(stageStats);
       }
 
-      const specVerdicts = [state.specReviewRound1Verdict, state.specReviewRound2Verdict, state.specReviewRound3Verdict];
-      if (specVerdicts.some((v) => v === 'approved')) {
-        enriched.specReviewStatus = 'approved';
-      } else if (specVerdicts.some((v) => v === 'error')) {
+      if (state.specReviewError !== undefined) {
         enriched.specReviewStatus = 'error';
-      } else if (specVerdicts.some((v) => v === 'changes_required')) {
-        enriched.specReviewStatus = 'changes_required';
+      } else if (state.specReviewVerdict !== undefined) {
+        enriched.specReviewStatus = state.specReviewVerdict;
       } else {
         enriched.specReviewStatus = 'not_applicable';
       }
 
-      const qualVerdicts = [state.qualityReviewRound1Verdict, state.qualityReviewRound2Verdict, state.qualityReviewRound3Verdict];
-      if (qualVerdicts.some((v) => v === 'annotated')) {
-        enriched.qualityReviewStatus = 'annotated';
-      } else if (qualVerdicts.some((v) => v === 'approved')) {
-        enriched.qualityReviewStatus = 'approved';
-      } else if (qualVerdicts.some((v) => v === 'error')) {
+      if (state.qualityReviewError !== undefined) {
         enriched.qualityReviewStatus = 'error';
-      } else if (qualVerdicts.some((v) => v === 'changes_required')) {
-        enriched.qualityReviewStatus = 'changes_required';
+      } else if (state.qualityReviewVerdict !== undefined) {
+        enriched.qualityReviewStatus = state.qualityReviewVerdict;
       } else {
         enriched.qualityReviewStatus = 'not_applicable';
       }
@@ -126,7 +118,6 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         const qualityReviewerTier =
           enriched.qualityReviewStatus === 'approved'
             || enriched.qualityReviewStatus === 'changes_required'
-            || enriched.qualityReviewStatus === 'annotated'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
             : (enriched.qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
         enriched.agents = {
@@ -183,7 +174,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         enriched.models = {
           implementer: implModel,
           specReviewer: enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required' ? otherModel : null,
-          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' || enriched.qualityReviewStatus === 'annotated' ? otherModel : null,
+          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' ? otherModel : null,
         };
       }
 
@@ -268,6 +259,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (state.qualityReviewerNotes !== undefined) {
         (enriched as { qualityReviewerNotes?: string }).qualityReviewerNotes = state.qualityReviewerNotes;
       }
+      if (state.reviewVerdict !== undefined) {
+        (enriched as { reviewVerdict?: string }).reviewVerdict = state.reviewVerdict;
+      }
+      if (state.reviewFindings !== undefined) {
+        (enriched as { reviewFindings?: unknown }).reviewFindings = state.reviewFindings;
+      }
+      if (state.reworkOutput !== undefined) {
+        (enriched as { reworkOutput?: string }).reworkOutput = state.reworkOutput;
+      }
+      if (state.reworkApplied !== undefined) {
+        (enriched as { reworkApplied?: boolean }).reworkApplied = state.reworkApplied;
+      }
       if (state.verifyResult !== undefined) {
         (enriched as { verifyResult?: unknown }).verifyResult = state.verifyResult;
       }
@@ -326,8 +329,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     check_files_written: noop,
 
-    spec_review_and_fix: specReviewAndFixHandler,
-    quality_review_and_fix: qualityReviewAndFixHandler,
+    review: reviewHandler,
+    rework: reworkHandler,
     annotate_completion: annotateCompletionHandler,
     annotate_criteria: annotateCriteriaHandler,
 

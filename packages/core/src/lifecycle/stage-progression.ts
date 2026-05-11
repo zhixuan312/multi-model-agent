@@ -32,22 +32,18 @@ import { buildStagePlan } from './stage-plan-builder.js';
 /** Canonical schemaStage → human-readable label used in `stageLabel` events
  *  emitted by handlers + shown in the polling headline.
  *
- *  Pipeline-redesign (4.3.0+) stage list (in order):
- *    Implementing → Spec review → Quality review → Annotating → Committing → Finalizing
+ *  Pipeline (4.3.0+, lint+rework split):
+ *    Implementing → Review → Rework → Annotating → Committing → Finalizing
  *
  *  Per-route which stages fire:
- *    Read-only (audit, review, verify, debug, investigate): Implementing → Annotating → Finalizing
- *    Research (research, explore):                          Implementing → Finalizing
- *    Write (delegate, execute-plan, retry):                 all stages; Committing conditional on commit-gate threshold
- *
- *  Some entries below (spec_rework, quality_rework, diff_review, verifying)
- *  are deprecated — the old chain handlers that emitted them were removed in
- *  the pipeline redesign. Kept in the map so any orphan event carrying these
- *  names still resolves to a human label without crashing the headline. */
+ *    Read-only:  Implementing → Annotating → Finalizing
+ *    Research:   Implementing → Finalizing
+ *    Write:      all stages; Rework only when review verdict is changes_required;
+ *                Committing conditional on commit-gate threshold. */
 const SCHEMA_STAGE_LABELS: Record<string, string> = {
   implementing: 'Implementing',
-  spec_review: 'Spec review',
-  quality_review: 'Quality review',
+  review: 'Review',
+  rework: 'Rework',
   annotating: 'Annotating',
   committing: 'Committing',
   finalizing: 'Finalizing',
@@ -183,8 +179,6 @@ export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy
  *  (because spec_rework / quality_rework are distinct schemaStages), so
  *  the bracket advances correctly when a rework fires. */
 export function normalizeStageLabel(label: string): string {
-  if (/^Spec rework/i.test(label)) return 'Spec rework';
-  if (/^Quality rework/i.test(label)) return 'Quality rework';
   return label;
 }
 

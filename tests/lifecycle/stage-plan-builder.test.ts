@@ -26,16 +26,14 @@ describe('buildStagePlan (4.3.0 pipeline-redesign)', () => {
 
   it('read_only plan: pipeline rows are gated off (artifact-producing only)', () => {
     const plan = buildStagePlan('read_only');
-    const spec = plan.rows.find(r => r.stageName === 'spec_review_and_fix');
-    const quality = plan.rows.find(r => r.stageName === 'quality_review_and_fix');
+    const review = plan.rows.find(r => r.stageName === 'review');
+    const rework = plan.rows.find(r => r.stageName === 'rework');
     const annotate = plan.rows.find(r => r.stageName === 'annotate_completion');
-    // Rows exist in the plan (they're shared with AP)…
-    expect(spec).toBeDefined();
-    expect(quality).toBeDefined();
+    expect(review).toBeDefined();
+    expect(rework).toBeDefined();
     expect(annotate).toBeDefined();
-    // …but gated off via isAP check for read-only routes.
-    expect(spec!.runCondition({ terminal: false, reviewPolicy: 'full' } as never)).toBe(false);
-    expect(quality!.runCondition({ terminal: false, reviewPolicy: 'full' } as never)).toBe(false);
+    expect(review!.runCondition({ terminal: false, reviewPolicy: 'full' } as never)).toBe(false);
+    expect(rework!.runCondition({ terminal: false, reviewPolicy: 'full', reviewVerdict: 'changes_required' } as never)).toBe(false);
     expect(annotate!.runCondition({ terminal: false, reviewPolicy: 'full' } as never)).toBe(false);
   });
 

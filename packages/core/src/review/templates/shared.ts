@@ -29,17 +29,21 @@ export interface ReviewTemplateContext {
    */
   planContext?: string;
 
-  // ── Pipeline-redesign annotator-only fields (4.3.0+, spec §3.3) ──────
-  // Read by `annotate-completion.ts` only. Spec/quality review-and-fix
-  // templates ignore these.
-  /** Spec reviewer's free-text summary from Stage 2. */
+  // ── Annotator-only fields (read by annotate-completion template) ────
+  /** Spec lint-reviewer raw report. */
   specReviewerNotes?: string | null;
-  /** Quality reviewer's free-text summary from Stage 3. */
+  /** Quality lint-reviewer raw report. */
   qualityReviewerNotes?: string | null;
-  /** Spec reviewer provider error (Stage 2 transport failure). */
+  /** Spec lint-reviewer transport/return error. */
   specReviewError?: string | null;
-  /** Quality reviewer provider error (Stage 3 transport failure). */
+  /** Quality lint-reviewer transport/return error. */
   qualityReviewError?: string | null;
+  /** True if rework stage ran and applied edits. */
+  reworkApplied?: boolean | null;
+  /** Rework worker's free-text summary. */
+  reworkOutput?: string | null;
+  /** Rework transport/return error. */
+  reworkError?: string | null;
   /** Deterministic verify command result (Stage 4 pre-step). */
   verifyResult?: {
     ran: boolean;
