@@ -1,6 +1,6 @@
 # Privacy & Telemetry Policy
 
-**Schema version: 4** · **Last revised:** 2026-05-03 — 3.12.2 (cost-attribution revamp)
+**Schema version: 5** · **Last revised:** 2026-05-11 — 4.3.1 (stage vocabulary collapse)
 
 multi-model-agent collects anonymous operational measurements to help improve the product. This page documents every field that crosses the wire, every field we refuse to collect, and how to opt out.
 
@@ -98,11 +98,11 @@ A keyed record `{ standard?, complex?, main? }` where each present tier carries 
 
 #### Stages array (0–16 entries)
 
-Each stage is a discriminated-union entry on `(name, round)`. As of 3.12.2 (schema v4), multi-round review/rework loops emit one entry per round (so `spec_review × 3` produces three entries with `round: 0, 1, 2`). The array max raised from 8 to 16 to accommodate worst-case multi-round runs. Base fields common to all stage types:
+Each stage is a discriminated-union entry on `(name, round)`. As of 4.3.1 (schema v5), the stage vocabulary collapses to five names: `implementing`, `review` (combined spec + quality sub-reviewers, one entry per round), `rework` (single combined pass), `annotating`, `committing`. The `round` field still distinguishes per-round entries; the array max remains 16. Base fields common to all stage types:
 
 | Field | Type |
 |-------|------|
-| `name` | enum: `implementing`, `spec_review`, `spec_rework`, `quality_review`, `quality_rework`, `diff_review`, `verifying`, `committing` |
+| `name` | enum: `implementing`, `review`, `rework`, `annotating`, `committing` |
 | `round` | integer (≥0) — 0-indexed round counter; 0 for single-invocation stages. Added in 3.12.2 schema v4. |
 | `model` | string — the model used for this stage (cost-accounting label) |
 | `tier` | enum: `standard`, `complex`, `main` — agent tier slot. Replaces the prior `agentTier` field as of 3.12.1; reviewer-separation now gates on tier, not model. |
@@ -121,16 +121,16 @@ Each stage is a discriminated-union entry on `(name, round)`. As of 3.12.2 (sche
 
 Stage-type-specific extras:
 
-- **Review stages** (`spec_review`, `quality_review`, `diff_review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier).
-- **Rework stages** (`spec_rework`, `quality_rework`): `triggeringConcernCategories` (string array).
-- **Verifying stage**: `outcome` (enum), `skipReason` (string or null).
-- **Committing stage**: `filesCommittedCount` (integer), `branchCreated` (boolean).
+- **Review stage** (`review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier). Combines spec + quality sub-reviewers under one entry per round.
+- **Rework stage** (`rework`): `triggeringConcernCategories` (string array). Single combined pass replacing the prior `spec_rework` / `quality_rework` split.
+- **Annotating stage** (`annotating`): `outcome` (enum), `skipReason` (string or null). Renamed from `verifying`.
+- **Committing stage** (`committing`): `filesCommittedCount` (integer), `branchCreated` (boolean).
 
 ### Batch wrapper (per-upload)
 
 | Field | Type |
 |-------|------|
-| `schemaVersion` | integer literal `4` (was `3` pre-3.12.2). Backend dual-accepts `3` and `4` during the migration window. |
+| `schemaVersion` | integer literal `5` (was `4` pre-4.3.1). mma is forward-only on the new vocabulary; the backend normalises legacy v4 records on read. |
 | `installId` | UUIDv4 — pseudonymous, generated locally, rotates every 365 days |
 | `mmagentVersion` | SemVer string |
 | `os` | enum: `darwin`, `linux`, `win32`, `other` |
@@ -142,7 +142,7 @@ No `language`, `tzOffsetBucket`, or `tzOffsetBucket` fields — these are no lon
 
 Cost is a token-times-pricing estimate from the daemon's pricing tables (`model-profiles.json`). It is NOT an invoice — actual charges may differ from the estimate.
 
-As of 3.12.2 (schema v4), cost is computed via a single pure function `priceTokens(tokens, rateCard)` at every site (per-stage, per-turn meter, per-tier rollup, parent-equivalent). Each token class is multiplied by its own rate independently — there is no `(input − cached)` subtraction anywhere, so the prior subset-vs-sibling-semantics bug class is structurally impossible. The formula is:
+Since 3.12.2 (schema v4), cost is computed via a single pure function `priceTokens(tokens, rateCard)` at every site (per-stage, per-turn meter, per-tier rollup, parent-equivalent). Each token class is multiplied by its own rate independently — there is no `(input − cached)` subtraction anywhere, so the prior subset-vs-sibling-semantics bug class is structurally impossible. The formula is:
 
 ```
 cost =   inputTokens          × inputRate          (non-cached new input only)
@@ -199,11 +199,7 @@ Delete the `.mma/` directory at any time to wipe local context blocks.
 
 ## How to opt out
 
-Telemetry is **disabled by default**. If you previously opted in to V2 telemetry:
-
-- On upgrade to 3.10.0+, your V2 opt-in is cleared. You must explicitly opt in to V3 telemetry.
-- Run `mmagent telemetry enable` to opt in. This writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 4` atomically.
-- If you opted in to V3 and want to opt out:
+Telemetry is **disabled by default**. Run `mmagent telemetry enable` to opt in — this writes both `telemetry.enabled = true` and `telemetryConsent.schemaVersion = 5` atomically. To opt out:
 
 ```bash
 # Option 1: CLI (immediate)
@@ -235,6 +231,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-11 | 5 | V5 schema (stage vocabulary collapse): eight legacy stage names fold into five — `spec_review` + `quality_review` + `diff_review` → `review`; `spec_rework` + `quality_rework` → `rework`; `verifying` → `annotating`; `implementing` and `committing` unchanged. Stage-specific extras unchanged (review keeps `verdict` / `roundsUsed` / `concernCategories` / `findingsBySeverity`; rework keeps `triggeringConcernCategories`; annotating keeps `outcome` / `skipReason`). No new fields, no new collection — pure rename. mma emits v5 only; backend normalises legacy v4 records on read. |
 | 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `mainModel` (specific identity alongside `mainModelFamily`), and `mainEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
 | 2026-04-29 | 3 | V3 schema: single `task.completed` event type; exact integer/numeric fields replace bucketed approximations; stages array replaces fixed-key stage map; `session.started`, `install.changed`, `skill.installed` event types removed; `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted` removed; `language`, `tzOffsetBucket` removed from batch wrapper; cost formula uses 4-term cached/reasoning rates; consent re-confirmation required on V2→V3 upgrade. |
 | 2026-04-26 | 1 | Initial privacy policy. Document all `task.completed`, `session.started`, `install.changed`, and `skill.installed` fields. Enum-only, bucketed values only, no free-form text, no content capture. Telemetry off by default. |
