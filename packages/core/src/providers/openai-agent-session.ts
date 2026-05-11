@@ -47,6 +47,10 @@ export class OpenAIAgentSession implements Session {
       model: args.model,
       instructions: SUB_AGENT_INSTRUCTIONS,
       tools,
+      // Codex subscription backend (chatgpt.com/backend-api/codex) does NOT
+      // support response storage. api.openai.com tolerates store:false too.
+      // Setting this universally keeps the wrapper provider-agnostic.
+      modelSettings: { store: false },
     });
     this.runner = new Runner({ modelProvider: this.modelProvider });
   }
