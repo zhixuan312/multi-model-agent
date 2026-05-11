@@ -2,8 +2,8 @@
   {
     "provider": "anthropic",
     "naming": "claude-{tier}-{major}-{minor} | claude-{major}-{tier}-{date} (3.x legacy)",
-    "rateSource": "https://docs.anthropic.com/en/docs/about-claude/models",
-    "rateLookupDate": "2026-04-17",
+    "rateSource": "https://platform.claude.com/docs/en/about-claude/pricing",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "claude",
       "supportsEffort": true,
@@ -45,12 +45,12 @@
         "input": 15,
         "output": 75,
         "cachedNonRead": 18.75,
-        "bestFor": "deprecated, retiring 2026-06-15"
+        "bestFor": "active; tentative retirement not sooner than 2026-08-05"
       },
       {
         "prefix": "claude-3",
         "supportsEffort": false,
-        "bestFor": "legacy 3.x (deprecated)"
+        "bestFor": "legacy 3.x (retired)"
       },
       {
         "prefix": "claude-3-opus",
@@ -59,7 +59,7 @@
         "input": 15,
         "output": 75,
         "cachedNonRead": 18.75,
-        "bestFor": "legacy Claude 3 Opus (deprecated)"
+        "bestFor": "RETIRED 2026-01-05 — calls will fail; rates retained for historical cost accounting"
       },
       {
         "prefix": "claude-3-haiku",
@@ -67,7 +67,7 @@
         "input": 0.25,
         "output": 1.25,
         "cachedNonRead": 0.3125,
-        "bestFor": "legacy Claude 3 Haiku (deprecated, retiring 2026-04-19)"
+        "bestFor": "RETIRED 2026-04-20 — calls will fail; rates retained for historical cost accounting"
       }
     ]
   },
@@ -75,7 +75,7 @@
     "provider": "openai",
     "naming": "gpt-{major}.{minor}[-{size}] — sizes: pro, mini, nano (no suffix = base)",
     "rateSource": "https://developers.openai.com/api/docs/pricing",
-    "rateLookupDate": "2026-04-25",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "openai",
       "supportsEffort": true,
@@ -88,6 +88,7 @@
         "cost": "medium",
         "input": 2.5,
         "output": 15,
+        "cachedRead": 0.25,
         "bestFor": "general GPT family tasks (catch-all)"
       },
       {
@@ -100,6 +101,7 @@
         "prefix": "gpt-5.5",
         "input": 5,
         "output": 30,
+        "cachedRead": 0.5,
         "bestFor": "latest GPT-5 flagship"
       },
       {
@@ -111,6 +113,7 @@
       },
       {
         "prefix": "gpt-5.4",
+        "cachedRead": 0.25,
         "bestFor": "prior GPT-5 flagship"
       },
       {
@@ -126,6 +129,7 @@
         "cost": "low",
         "input": 0.75,
         "output": 4.5,
+        "cachedRead": 0.075,
         "bestFor": "fast cost-effective tasks and extraction"
       },
       {
@@ -134,6 +138,7 @@
         "cost": "low",
         "input": 0.2,
         "output": 1.25,
+        "cachedRead": 0.02,
         "bestFor": "cheapest GPT for high-throughput batch work"
       },
       {
@@ -153,8 +158,8 @@
   {
     "provider": "google",
     "naming": "gemini-{major}[.{minor}]-{tier}-{suffix} — tiers: pro ($2/$12), flash ($0.50/$3)",
-    "rateSource": "https://cloud.google.com/vertex-ai/generative-ai/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateSource": "https://ai.google.dev/pricing",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "gemini",
       "supportsEffort": false,
@@ -170,11 +175,28 @@
         "bestFor": "general Gemini tasks (catch-all, Flash rates)"
       },
       {
+        "prefix": "gemini-3-flash",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.5,
+        "output": 3,
+        "bestFor": "fast cost-effective Gemini 3 Flash"
+      },
+      {
+        "prefix": "gemini-3.1-flash-lite",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.25,
+        "output": 1.5,
+        "bestFor": "cheapest Gemini tier for high-throughput tasks"
+      },
+      {
         "prefix": "gemini-3.1-pro",
         "tier": "reasoning",
         "cost": "medium",
         "input": 2,
         "output": 12,
+        "notes": "tiered: $2/$12 ≤200k input tokens, $4/$18 above. Cost meter assumes ≤200k tier — long-context calls may underestimate.",
         "bestFor": "long-context reasoning with large documents"
       },
       {
@@ -183,23 +205,33 @@
         "cost": "medium",
         "input": 2,
         "output": 12,
+        "notes": "tiered: $2/$12 ≤200k input tokens, $4/$18 above.",
         "bestFor": "Gemini 3.0 Pro variants"
       },
       {
         "prefix": "gemini-2.5-pro",
         "tier": "reasoning",
         "cost": "medium",
-        "input": 2,
-        "output": 12,
+        "input": 1.25,
+        "output": 10,
+        "notes": "tiered: $1.25/$10 ≤200k input tokens, $2.50/$15 above.",
         "bestFor": "reasoning and coding with extended thinking"
+      },
+      {
+        "prefix": "gemini-2.5-flash",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.3,
+        "output": 2.5,
+        "bestFor": "Gemini 2.5 Flash (legacy generation)"
       }
     ]
   },
   {
     "provider": "xai",
-    "naming": "grok-{major}[.{minor}]-{variant} — fast variant is ~15x cheaper than base",
+    "naming": "grok-{major}[.{minor}][-{variant}] — Grok 4.3 is current flagship; grok-4 / grok-4-1-fast / grok-4-fast retired 2026-05-15",
     "rateSource": "https://docs.x.ai/developers/models",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "grok",
       "supportsEffort": false,
@@ -208,27 +240,36 @@
     "profiles": [
       {
         "prefix": "grok",
-        "tier": "standard",
+        "tier": "reasoning",
         "cost": "low",
-        "input": 0.2,
-        "output": 0.5,
-        "bestFor": "general Grok tasks (catch-all, fast-tier rates)"
+        "input": 1.25,
+        "output": 2.5,
+        "bestFor": "general Grok tasks (catch-all, Grok 4.3 rates)"
       },
       {
-        "prefix": "grok-4",
+        "prefix": "grok-4-3",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 1.25,
+        "output": 2.5,
+        "bestFor": "current Grok flagship; successor to retired grok-4 / grok-4-1-fast"
+      },
+      {
+        "prefix": "grok-4.20",
         "tier": "reasoning",
         "cost": "medium",
-        "input": 3,
-        "output": 15,
-        "bestFor": "reasoning and analysis tasks"
+        "input": 2,
+        "output": 6,
+        "bestFor": "long-context Grok variant"
       },
       {
-        "prefix": "grok-4-1-fast",
-        "tier": "standard",
-        "cost": "low",
-        "input": 0.2,
-        "output": 0.5,
-        "bestFor": "fast cost-effective coding and chat"
+        "prefix": "grok-4-heavy",
+        "tier": "reasoning",
+        "cost": "high",
+        "input": 15,
+        "output": 75,
+        "bestFor": "multi-agent reasoning, 256k context",
+        "inputTokenSoftLimit": 256000
       }
     ]
   },
@@ -236,7 +277,7 @@
     "provider": "mistral",
     "naming": "mistral-{tier}-{version} — tiers: large ($0.50/$1.50), small ($0.10/$0.30)",
     "rateSource": "https://mistral.ai/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "mistral",
       "supportsEffort": false,
@@ -249,17 +290,32 @@
         "cost": "low",
         "input": 0.5,
         "output": 1.5,
-        "bestFor": "general Mistral tasks (catch-all, Large rates)"
+        "bestFor": "general Mistral tasks (catch-all, Large 3 rates)"
       },
       {
         "prefix": "mistral-large",
-        "bestFor": "cost-effective frontier-class coding"
+        "bestFor": "cost-effective frontier-class coding (Large 3)"
+      },
+      {
+        "prefix": "mistral-medium",
+        "input": 0.4,
+        "output": 2,
+        "bestFor": "mid-tier Mistral (Medium 3 / 3.1)"
       },
       {
         "prefix": "mistral-small",
-        "input": 0.1,
-        "output": 0.3,
-        "bestFor": "fast lightweight tasks and classification"
+        "input": 0.075,
+        "output": 0.2,
+        "bestFor": "fast lightweight tasks and classification (Small 3.2)"
+      },
+      {
+        "prefix": "codestral",
+        "family": "mistral",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.3,
+        "output": 0.9,
+        "bestFor": "coding-tuned Mistral"
       }
     ]
   },
@@ -267,7 +323,7 @@
     "provider": "deepseek",
     "naming": "deepseek-{variant}[-{size}] — V4 sizes: flash, pro; legacy variants are flat-priced",
     "rateSource": "https://api-docs.deepseek.com/quick_start/pricing",
-    "rateLookupDate": "2026-04-27",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "deepseek",
       "supportsEffort": false,
@@ -278,14 +334,15 @@
         "prefix": "deepseek",
         "tier": "standard",
         "cost": "low",
-        "input": 0.3,
-        "output": 0.5,
-        "bestFor": "cost-effective coding and reasoning"
+        "input": 0.14,
+        "output": 0.28,
+        "bestFor": "cost-effective coding and reasoning (catch-all, v4-flash rates)"
       },
       {
         "prefix": "deepseek-v4-flash",
         "input": 0.14,
         "output": 0.28,
+        "cachedRead": 0.0028,
         "bestFor": "cheapest DeepSeek V4 with 1M context",
         "inputTokenSoftLimit": 1000000
       },
@@ -295,7 +352,8 @@
         "cost": "medium",
         "input": 0.435,
         "output": 0.87,
-        "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context (limited-time 75% off until 2026-05-05 15:59 UTC; full price input=1.74 output=3.48)",
+        "cachedRead": 0.003625,
+        "bestFor": "DeepSeek V4 thinking-mode reasoning with 1M context (limited-time 75% off until 2026-05-31 15:59 UTC; full price input=1.74 output=3.48)",
         "inputTokenSoftLimit": 1000000
       }
     ]
@@ -336,8 +394,8 @@
   {
     "provider": "alibaba",
     "naming": "qwen{major}[.{minor}]-{tier} — no separator after 'qwen'",
-    "rateSource": "https://openrouter.ai/qwen/qwen3.5-plus-02-15",
-    "rateLookupDate": "2026-04-17",
+    "rateSource": "https://www.alibabacloud.com/help/en/model-studio/model-pricing",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "qwen",
       "supportsEffort": false,
@@ -348,9 +406,27 @@
         "prefix": "qwen",
         "tier": "standard",
         "cost": "low",
-        "input": 0.26,
-        "output": 1.56,
-        "bestFor": "cost-effective coding and multilingual tasks"
+        "input": 0.4,
+        "output": 2.4,
+        "bestFor": "cost-effective coding and multilingual tasks (catch-all, Qwen3.5-Plus DashScope rates)"
+      },
+      {
+        "prefix": "qwen3.6-plus",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 0.33,
+        "output": 1.95,
+        "bestFor": "current Qwen flagship with 1M context",
+        "inputTokenSoftLimit": 1000000
+      },
+      {
+        "prefix": "qwen3.5-plus",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.4,
+        "output": 2.4,
+        "notes": "tiered: $0.40/$2.40 ≤256k, $1.20/$3.60 above.",
+        "bestFor": "Qwen3.5-Plus, tiered by context length"
       }
     ]
   },
@@ -358,7 +434,7 @@
     "provider": "zhipu",
     "naming": "glm-{major}[.{minor}] — GLM-5 is ~30% more expensive than GLM-4",
     "rateSource": "https://docs.z.ai/guides/overview/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "glm",
       "supportsEffort": false,
@@ -371,18 +447,31 @@
         "cost": "medium",
         "input": 1,
         "output": 3.2,
-        "bestFor": "general GLM/Zhipu family tasks"
+        "bestFor": "general GLM/Zhipu family tasks (catch-all, GLM-5 rates)"
       },
       {
         "prefix": "glm-5",
-        "bestFor": "bilingual Chinese/English coding"
+        "bestFor": "bilingual Chinese/English coding (GLM-5)"
+      },
+      {
+        "prefix": "glm-5.1",
+        "input": 1.4,
+        "output": 4.4,
+        "bestFor": "current top-tier GLM-5 variant"
       },
       {
         "prefix": "glm-4",
         "cost": "low",
         "input": 0.6,
-        "output": 2.4,
+        "output": 2.2,
         "bestFor": "bilingual tasks at lower cost than GLM-5"
+      },
+      {
+        "prefix": "glm-4.7",
+        "cost": "low",
+        "input": 0.6,
+        "output": 2.2,
+        "bestFor": "current GLM-4-series flagship"
       }
     ]
   },
@@ -390,7 +479,7 @@
     "provider": "moonshot",
     "naming": "kimi-k{generation}[.{minor}] | kimi-k{generation}-{variant}",
     "rateSource": "https://platform.kimi.ai/docs/pricing/chat",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "kimi",
       "supportsEffort": false,
@@ -402,8 +491,18 @@
         "tier": "standard",
         "cost": "low",
         "input": 0.6,
-        "output": 3,
-        "bestFor": "long-context tasks and coding"
+        "output": 2.5,
+        "cachedRead": 0.15,
+        "bestFor": "long-context tasks and coding (catch-all, K2 rates)"
+      },
+      {
+        "prefix": "kimi-k2.6",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 0.95,
+        "output": 4,
+        "cachedRead": 0.16,
+        "bestFor": "current Kimi flagship"
       }
     ]
   },
@@ -411,7 +510,7 @@
     "provider": "cohere",
     "naming": "command-r[-plus] — plus variant is flagship",
     "rateSource": "https://cohere.com/pricing",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "cohere",
       "supportsEffort": false,
@@ -419,12 +518,44 @@
     },
     "profiles": [
       {
+        "prefix": "command",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.15,
+        "output": 0.6,
+        "bestFor": "general Cohere tasks (catch-all, Command R rates)"
+      },
+      {
         "prefix": "command-r",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.15,
+        "output": 0.6,
+        "bestFor": "RAG workflows and grounded generation (current Command R)"
+      },
+      {
+        "prefix": "command-r-plus",
         "tier": "standard",
         "cost": "medium",
         "input": 2.5,
         "output": 10,
-        "bestFor": "RAG workflows and grounded generation"
+        "bestFor": "higher-quality RAG and tool use (Command R+)"
+      },
+      {
+        "prefix": "command-r7b",
+        "tier": "standard",
+        "cost": "low",
+        "input": 0.037,
+        "output": 0.15,
+        "bestFor": "cheapest Cohere tier for high-throughput tasks"
+      },
+      {
+        "prefix": "command-a",
+        "tier": "reasoning",
+        "cost": "medium",
+        "input": 2.5,
+        "output": 10,
+        "bestFor": "Cohere flagship reasoning model"
       }
     ]
   },
@@ -432,7 +563,7 @@
     "provider": "minimax",
     "naming": "MiniMax-M{major}.{minor}[-highspeed] — case-sensitive prefix",
     "rateSource": "https://platform.minimax.io/docs/guides/pricing-paygo",
-    "rateLookupDate": "2026-04-17",
+    "rateLookupDate": "2026-05-11",
     "defaults": {
       "family": "minimax",
       "supportsEffort": true,
@@ -447,6 +578,14 @@
         "output": 1.2,
         "bestFor": "well-scoped coding and agent loops where cost matters",
         "avoidFor": "highest-stakes ambiguous work that needs top-tier judgment"
+      },
+      {
+        "prefix": "MiniMax-M2.7",
+        "tier": "reasoning",
+        "cost": "low",
+        "input": 0.3,
+        "output": 1.2,
+        "bestFor": "current MiniMax flagship; same rates as M2 with stronger reasoning"
       }
     ]
   },

@@ -24,7 +24,7 @@ describe('resolveRateCard', () => {
   });
 
   it('cachedReadCostPerMTok defaults to input × 0.10 when profile omits it', () => {
-    const card = resolveRateCard('deepseek-v4-pro');
+    const card = resolveRateCard('mistral-large');
     expect(card).not.toBeNull();
     expect(card!.cachedReadCostPerMTok).toBeCloseTo(card!.inputCostPerMTok * 0.10, 10);
   });
