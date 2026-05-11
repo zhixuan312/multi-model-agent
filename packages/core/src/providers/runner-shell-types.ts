@@ -36,6 +36,10 @@ export interface RunInput {
    *  Honored by adapters that expose explicit cache control (Anthropic);
    *  no-op on adapters that auto-cache (OpenAI) or don't cache (codex). */
   cacheControl?: { type: 'ephemeral' };
+  /** Wall-clock guard threaded from LifecycleContext. When present, the
+   *  runner-shell calls guard.checkOrThrow() before each tool execution so
+   *  long-running shell/network calls can't drift past the per-task budget. */
+  wallClockGuard?: { checkOrThrow(): void };
 }
 
 export interface RunResult {

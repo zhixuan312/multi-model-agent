@@ -244,6 +244,13 @@ export class RunnerShell {
           const enriched = { name: call.name, input: call.input, result };
           allToolCalls.push(enriched);
           turnRecord.toolCalls.push(enriched);
+          if (input.wallClockGuard) {
+            try { input.wallClockGuard.checkOrThrow(); }
+            catch (err) {
+              process.stderr.write(`[runner-shell] wall-clock guard fired: ${err instanceof Error ? err.message : String(err)}\n`);
+              throw err;
+            }
+          }
           const succeeded = !(typeof result === 'object' && result !== null && 'error' in (result as Record<string, unknown>));
           if (!succeeded) {
             const errMsg = (result as { error?: string }).error ?? '(no error message)';

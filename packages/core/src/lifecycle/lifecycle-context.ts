@@ -6,6 +6,7 @@ import type {
 } from '../types.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
+import type { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import type { CanonicalIdentity } from '../config/canonical-model-identity.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { ProjectContext } from '../stores/project-context-registry.js';
@@ -53,6 +54,10 @@ export interface ExecutionContext {
   budgets: {
     maxCostUSD: number | undefined;
   };
+
+  /** Wall-clock budget guard. Throws GuardError once budgetMs since task start
+   *  is exceeded. Stage entries + tool-call boundaries call checkOrThrow(). */
+  wallClockGuard: WallClockGuard;
 
   // ── Stall watchdog ──
   stall: {

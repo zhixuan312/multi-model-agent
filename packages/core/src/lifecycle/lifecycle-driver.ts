@@ -1,4 +1,5 @@
 import type { StagePlan, LifecycleState } from './stage-plan-types.js';
+import type { ExecutionContext } from './lifecycle-context.js';
 
 export type StageHandler = (state: LifecycleState) => Promise<void> | void;
 
@@ -8,17 +9,20 @@ export class LifecycleDriver {
   async run(initialState: LifecycleState): Promise<LifecycleState> {
     const state = initialState;
     for (const row of this.plan.rows) {
-      // Rows marked runOnTerminal still evaluate their runCondition even
-      // after a prior row set state.terminal=true. This is how settle_*_chain,
-      // compose_response, register_terminal_block, emit_task_terminal,
-      // persist_to_batch_registry, and flush_telemetry continue to fire on
-      // hard-fail paths so chain-pass slots, response envelopes, and
-      // telemetry stay authoritative. Non-runOnTerminal rows are skipped
-      // (continue, not break) so later runOnTerminal rows still fire.
       if (state.terminal && !row.runOnTerminal) continue;
       if (!row.runCondition(state)) continue;
       const handler = this.handlers[row.handlerKey];
       if (!handler) throw new Error(`no handler registered for key '${row.handlerKey}'`);
+      const ctx = state.executionContext as ExecutionContext | undefined;
+      if (ctx && !row.runOnTerminal) {
+        try { ctx.wallClockGuard.checkOrThrow(); }
+        catch (err) {
+          state.terminal = true;
+          (state as { errorCode?: string }).errorCode = (err as { errorCode?: string }).errorCode ?? 'guard_wall_clock';
+          (state as { error?: string }).error = err instanceof Error ? err.message : String(err);
+          continue;
+        }
+      }
       await handler(state);
     }
     return state;

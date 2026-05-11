@@ -14,6 +14,7 @@ import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
+import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { pickEscalation } from '../escalation/policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
@@ -232,6 +233,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     implementerIdentity: undefined,
     timing: { startMs, timeoutMs, deadlineMs: startMs + timeoutMs, stallTimeoutMs },
     budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
+    wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: new AbortController(), lastEventAtMs: startMs, fired: false },
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
