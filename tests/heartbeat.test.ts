@@ -61,14 +61,14 @@ describe('ActivityTracker', () => {
     timer.start(3);
 
     timer.transition({
-      stage: 'spec_review',
+      stage: 'review',
       stageIndex: 2,
       reviewRound: 1,
       attemptCap: 2,
     });
 
     expect(events).toHaveLength(1);
-    expect(events[0].stage).toBe('spec_review');
+    expect(events[0].stage).toBe('review');
     expect(events[0].stageIndex).toBe(2);
     expect(events[0].reviewRound).toBe(1);
     expect(events[0].attemptCap).toBe(2);
@@ -83,7 +83,7 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     timer.transition({ stage: 'implementing', stageIndex: 3 });
@@ -101,7 +101,7 @@ describe('ActivityTracker', () => {
     timer.start(3);
 
     expect(() => {
-      timer.transition({ stage: 'spec_review', stageIndex: 2 });
+      timer.transition({ stage: 'review', stageIndex: 2 });
     }).toThrow();
     timer.stop();
   });
@@ -113,12 +113,12 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
-    timer.transition({ stage: 'spec_rework', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'rework', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     // Back to position 2 — allowed for review re-entry
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 2, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 2, attemptCap: 2 });
     expect(events[0].stageIndex).toBe(2);
     expect(events[0].reviewRound).toBe(2);
     timer.stop();
@@ -131,7 +131,7 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
 
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     expect(events).toHaveLength(0);
     timer.stop();
   });
@@ -219,7 +219,7 @@ describe('ActivityTracker', () => {
     const countAfterStop = events.length;
 
     timer.updateProgress(10, 10, 10);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     timer.setProvider('new-provider');
     expect(events.length).toBe(countAfterStop);
   });
@@ -279,12 +279,12 @@ describe('ActivityTracker', () => {
       batchId: 'b-1',
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 3, reviewRound: 1, attemptCap: 2 });
     timer.updateProgress(2, 1, 7);
     timer.updateCost(0.03, -0.12);
 
     const tick = timer.getHeartbeatTickInfo();
-    expect(tick.headline).toContain('[3/5] Spec review');
+    expect(tick.headline).toContain('[3/5] Review');
     expect(tick.headline).toContain('(round 1/2)');
     expect(tick.headline).toContain('(gpt-5.4)');
     expect(tick.headline).toContain('2 read');
@@ -301,7 +301,7 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'spec_review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 2, reviewRound: 1, attemptCap: 2 });
     events.length = 0;
 
     timer.updateStageCount(4);
@@ -332,7 +332,7 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(5);
-    timer.transition({ stage: 'quality_review', stageIndex: 4, reviewRound: 1, attemptCap: 2 });
+    timer.transition({ stage: 'review', stageIndex: 4, reviewRound: 1, attemptCap: 2 });
     expect(() => timer.updateStageCount(3)).toThrow();
     timer.stop();
   });
@@ -348,10 +348,10 @@ describe('ActivityTracker', () => {
       intervalMs: 10_000,
     });
     timer.start(1); // reviewPolicy='none' starts the pipeline at 1
-    timer.setStage('verifying', 4); // autoCommit=true path advances past cap
+    timer.setStage('annotating', 4); // autoCommit=true path advances past cap
     timer.stop();
     const final = events.find(e => e.final)!;
-    expect(final.stage).toBe('verifying');
+    expect(final.stage).toBe('annotating');
     expect(final.stageIndex).toBe(4);
     expect(final.stageCount).toBe(4); // auto-grown, must not be shrunk back to 1
   });

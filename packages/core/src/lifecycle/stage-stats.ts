@@ -12,14 +12,11 @@ const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens:
 
 export function emptyStats(): StageStatsMap {
   return {
-    implementing:   { stage: 'implementing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
-    spec_rework:    { stage: 'spec_rework',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
-    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
-    committing:     { stage: 'committing',     entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
-    verifying:      { stage: 'verifying',      entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, outcome: null, skipReason: null, ..._emptyMetrics },
-    spec_review:    { stage: 'spec_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, verdict: null, roundsUsed: null, ..._emptyMetrics },
-    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, verdict: null, roundsUsed: null, ..._emptyMetrics },
-    diff_review:    { stage: 'diff_review',    entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, verdict: null, roundsUsed: null, ..._emptyMetrics },
+    implementing: { stage: 'implementing', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
+    rework:       { stage: 'rework',       entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
+    committing:   { stage: 'committing',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, ..._emptyMetrics },
+    annotating:   { stage: 'annotating',   entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, outcome: null, skipReason: null, ..._emptyMetrics },
+    review:       { stage: 'review',       entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, maxIdleMs: 0, totalIdleMs: 0, activityEvents: 0, verdict: null, roundsUsed: null, ..._emptyMetrics },
   };
 }
 
@@ -29,7 +26,7 @@ export function modelFamily(model: string): string {
 
 export function endBaseStage(
   stats: StageStatsMap,
-  name: 'implementing' | 'spec_rework' | 'quality_rework' | 'committing',
+  name: 'implementing' | 'rework' | 'committing',
   t0: number,
   c0: number | null,
   agent: { tier: 'standard' | 'complex'; model: string },
@@ -62,7 +59,7 @@ export function endBaseStage(
 
 export function endReviewStage(
   stats: StageStatsMap,
-  name: 'spec_review' | 'quality_review' | 'diff_review',
+  name: 'review',
   t0: number,
   c0: number | null,
   agent: { tier: 'standard' | 'complex'; model: string },
@@ -164,7 +161,7 @@ export function accumulateReworkIteration(
 
 export function commitReworkStage(
   stats: StageStatsMap,
-  name: 'spec_rework' | 'quality_rework',
+  name: 'rework',
   acc: ReworkAccumulator,
   agent: { tier: 'standard' | 'complex'; model: string },
 ): void {
@@ -201,8 +198,8 @@ export function endVerifyStage(
   outcome: VerifyOutcome,
   skipReason: VerifySkipReason | null,
 ): void {
-  stats.verifying = {
-    stage: 'verifying',
+  stats.annotating = {
+    stage: 'annotating',
     entered: true,
     durationMs: Date.now() - t0,
     costUSD: finalCostUSD !== null && c0 !== null ? finalCostUSD - c0 : null,
@@ -222,5 +219,5 @@ export function endVerifyStage(
     filesWrittenCount: null,
     outcome,
     skipReason,
-  } as StageStatsMap['verifying'];
+  } as StageStatsMap['annotating'];
 }

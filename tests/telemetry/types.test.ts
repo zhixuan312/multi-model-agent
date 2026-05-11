@@ -68,7 +68,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}): Recor
 
   if (name === 'implementing') return { ...base, ...overrides };
 
-  if (name === 'spec_review' || name === 'quality_review' || name === 'diff_review') {
+  if (name === 'review' || name === 'review' || name === 'review') {
     return {
       ...base,
       ...{
@@ -81,11 +81,11 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}): Recor
     };
   }
 
-  if (name === 'spec_rework' || name === 'quality_rework') {
+  if (name === 'rework' || name === 'rework') {
     return { ...base, ...{ triggeringConcernCategories: [] }, ...overrides };
   }
 
-  if (name === 'verifying') {
+  if (name === 'annotating') {
     return {
       ...base,
       ...{ outcome: 'passed', skipReason: null },
@@ -103,9 +103,9 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}): Recor
 function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string, unknown> {
   const stages = (overrides.stages as Record<string, unknown>[]) ?? [
     makeStage('implementing'),
-    makeStage('spec_review'),
-    makeStage('quality_review'),
-    makeStage('verifying'),
+    makeStage('review'),
+    makeStage('rework'),
+    makeStage('annotating'),
     makeStage('committing'),
   ];
 
@@ -149,7 +149,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
 
 describe('V4 telemetry types', () => {
   it('SCHEMA_VERSION is 4', () => {
-    expect(SCHEMA_VERSION).toBe(4);
+    expect(SCHEMA_VERSION).toBe(5);
   });
 
   it('accepts a well-formed task.completed event', () => {
@@ -293,64 +293,12 @@ describe('V4 telemetry types', () => {
     expect(result.success).toBe(true);
   });
 
-  // ── R8: verifying stage only on delegate, execute-plan, verify routes ──
-  it('R8 — rejects verifying on audit route', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        route: 'audit',
-        reviewPolicy: 'quality_only',
-        stages: [
-          makeStage('implementing'),
-          makeStage('quality_review'),
-          makeStage('verifying'),
-        ],
-      }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  it('R8 — accepts verifying on delegate route', () => {
-    const result = Schema.safeParse(makeValidEvent({ route: 'delegate' }));
-    expect(result.success).toBe(true);
-  });
-
-  // ── R9: review stages only on reviewed routes ──
-  it('R9 — rejects quality_review on retry route', () => {
+  // ── R9: review stage only on reviewed routes ──
+  it('R9 — rejects review on retry route', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         route: 'retry',
-        stages: [makeStage('implementing'), makeStage('quality_review')],
-      }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  // ── R10: quality_only routes only allow quality_review ──
-  it('R10 — rejects spec_review on audit (quality_only) route', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        route: 'audit',
-        reviewPolicy: 'quality_only',
-        stages: [
-          makeStage('implementing'),
-          makeStage('spec_review'),
-        ],
-      }),
-    );
-    expect(result.success).toBe(false);
-  });
-
-  // ── R10b: no rework on quality_only ──
-  it('R10b — rejects quality_rework on audit route', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        route: 'audit',
-        reviewPolicy: 'quality_only',
-        stages: [
-          makeStage('implementing'),
-          makeStage('quality_review'),
-          makeStage('quality_rework'),
-        ],
+        stages: [makeStage('implementing'), makeStage('review')],
       }),
     );
     expect(result.success).toBe(false);
@@ -364,8 +312,8 @@ describe('V4 telemetry types', () => {
         reviewPolicy: 'full',
         stages: [
           makeStage('implementing'),
-          makeStage('quality_review', { verdict: 'annotated' }),
-          makeStage('verifying'),
+          makeStage('review', { verdict: 'annotated' }),
+          makeStage('annotating'),
           makeStage('committing'),
         ],
       }),
@@ -380,7 +328,7 @@ describe('V4 telemetry types', () => {
         reviewPolicy: 'quality_only',
         stages: [
           makeStage('implementing'),
-          makeStage('quality_review', { verdict: 'annotated' }),
+          makeStage('review', { verdict: 'annotated' }),
           makeStage('committing'),
         ],
       }),
@@ -414,14 +362,14 @@ describe('V4 telemetry types', () => {
     expect(result.success).toBe(true);
   });
 
-  // ── R16: rework stages require their parent review stage in the same event ──
-  it('R16 — rejects spec_rework without spec_review', () => {
+  // ── R16: rework requires review in the same event ──
+  it('R16 — rejects rework without review', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
           makeStage('implementing'),
-          makeStage('spec_rework'),
-          makeStage('verifying'),
+          makeStage('rework'),
+          makeStage('annotating'),
         ],
       }),
     );
@@ -429,28 +377,14 @@ describe('V4 telemetry types', () => {
     expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
   });
 
-  it('R16 — rejects quality_rework without quality_review', () => {
+  it('R16 — accepts rework when review is present', () => {
     const result = Schema.safeParse(
       makeValidEvent({
         stages: [
           makeStage('implementing'),
-          makeStage('quality_rework'),
-          makeStage('verifying'),
-        ],
-      }),
-    );
-    expect(result.success).toBe(false);
-    expect(result.error?.issues.some(i => i.message.startsWith('R16:'))).toBe(true);
-  });
-
-  it('R16 — accepts spec_rework when spec_review is present', () => {
-    const result = Schema.safeParse(
-      makeValidEvent({
-        stages: [
-          makeStage('implementing'),
-          makeStage('spec_review'),
-          makeStage('spec_rework'),
-          makeStage('verifying'),
+          makeStage('review'),
+          makeStage('rework'),
+          makeStage('annotating'),
         ],
       }),
     );
@@ -462,9 +396,9 @@ describe('V4 telemetry types', () => {
       makeValidEvent({
         stages: [
           makeStage('implementing'),
-          makeStage('quality_review'),
-          makeStage('quality_rework'),
-          makeStage('verifying'),
+          makeStage('review'),
+          makeStage('rework'),
+          makeStage('annotating'),
         ],
       }),
     );
@@ -477,7 +411,7 @@ describe('V4 telemetry types', () => {
 describe('BatchWrapperSchema', () => {
   it('accepts valid V4 batch wrapper', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -486,7 +420,7 @@ describe('BatchWrapperSchema', () => {
     expect(result.success).toBe(true);
   });
 
-  it('rejects schemaVersion !== 4', () => {
+  it('rejects schemaVersion !== 5', () => {
     const result = BatchWrapperSchema.safeParse({
       schemaVersion: 3,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
@@ -499,7 +433,7 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects invalid UUID installId', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'not-a-uuid',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -510,7 +444,7 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects nodeMajor < 22', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -521,7 +455,7 @@ describe('BatchWrapperSchema', () => {
 
   it('rejects nodeMajor > 99', () => {
     const result = BatchWrapperSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -537,7 +471,7 @@ describe('UploadBatchSchema', () => {
   it('accepts a valid upload batch', () => {
     const event = Schema.parse(makeValidEvent());
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -549,7 +483,7 @@ describe('UploadBatchSchema', () => {
 
   it('rejects empty events array', () => {
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'b9a5f4c2-1234-4abc-9def-0123456789ab',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -598,7 +532,7 @@ describe('StageEntrySchema', () => {
 
   it('accepts review stage with findingsBySeverity', () => {
     const result = StageEntrySchema.safeParse(
-      makeStage('quality_review', {
+      makeStage('review', {
         findingsBySeverity: { critical: 2, high: 2, medium: 5, low: 3 },
       }),
     );
@@ -607,21 +541,21 @@ describe('StageEntrySchema', () => {
 
   it('accepts verifying stage with outcome=passed', () => {
     const result = StageEntrySchema.safeParse(
-      makeStage('verifying', { outcome: 'passed' }),
+      makeStage('annotating', { outcome: 'passed' }),
     );
     expect(result.success).toBe(true);
   });
 
   it('accepts verifying with outcome=skipped and skipReason set', () => {
     const result = StageEntrySchema.safeParse(
-      makeStage('verifying', { outcome: 'skipped', skipReason: 'no_command' }),
+      makeStage('annotating', { outcome: 'skipped', skipReason: 'no_command' }),
     );
     expect(result.success).toBe(true);
   });
 
   it('rejects rework stage without triggeringConcernCategories', () => {
     const result = StageEntrySchema.safeParse({
-      name: 'quality_rework',
+      name: 'rework',
       round: 0,
       model: 'claude-sonnet',
       tier: 'standard',
@@ -669,9 +603,9 @@ describe('nullable cachedReadTokens and cachedNonReadTokens', () => {
       cachedNonReadTokens: null,
       stages: [
         makeStage('implementing', { cachedReadTokens: null, cachedNonReadTokens: null }),
-        makeStage('spec_review', { cachedReadTokens: null, cachedNonReadTokens: null }),
-        makeStage('quality_review', { cachedReadTokens: null, cachedNonReadTokens: null }),
-        makeStage('verifying', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('review', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('rework', { cachedReadTokens: null, cachedNonReadTokens: null }),
+        makeStage('annotating', { cachedReadTokens: null, cachedNonReadTokens: null }),
         makeStage('committing', { cachedReadTokens: null, cachedNonReadTokens: null }),
       ],
     });
@@ -717,8 +651,8 @@ describe('schema v4: round on stages and R7 uniqueness', () => {
 
   it('R7 fires when (name, round) collides', () => {
     const ev = makeValidEvent({ stages: [
-      makeStage('spec_review', { round: 0 }),
-      makeStage('spec_review', { round: 0 }),
+      makeStage('review', { round: 0 }),
+      makeStage('review', { round: 0 }),
     ]});
     const r = ValidatedTaskCompletedEventSchema.safeParse(ev);
     expect(r.success).toBe(false);
@@ -727,8 +661,8 @@ describe('schema v4: round on stages and R7 uniqueness', () => {
 
   it('R7 does NOT fire when (name, round) is unique', () => {
     const ev = makeValidEvent({ stages: [
-      makeStage('spec_review', { round: 0 }),
-      makeStage('spec_review', { round: 1 }),
+      makeStage('review', { round: 0 }),
+      makeStage('review', { round: 1 }),
     ]});
     expect(ValidatedTaskCompletedEventSchema.safeParse(ev).success).toBe(true);
   });

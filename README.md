@@ -104,7 +104,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.3.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.3.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -304,15 +304,13 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.3.0
+## What's new in 4.3.1
 
-Major lifecycle redesign + Group A reliability completion:
-- **Pipeline rewrite: review (parallel lint) + rework (complex tier, conditional).** Replaces the prior fix-inline reviewer stages. Spec + quality reviewers run in parallel with readonly tools, emit verdicts + deviations; a single rework stage applies fixes when changes are required, skipped when both approve.
-- **`X-MMA-Main-Model` header is no longer required.** Resolved automatically per request (header → per-client jsonl/toml → config fallback → sentinel). `X-MMA-Client` remains required.
-- **WallClockGuard wired end-to-end.** Per-task budget enforced at every stage entry and tool-call boundary; failures surface as `errorCode: 'guard_wall_clock'` with a well-formed envelope.
-- **Context-overflow pre-flight estimator.** Intake refuses dispatches whose estimated tokens exceed the model cap, emitting `context_overflow_predicted` with biggest-contributors + recovery hints before any worker spawns.
-- **Plan-audit per-task verdicts.** `auditType: 'plan'` now synthesises EXECUTABLE / PARTIAL / BLOCKED per task and surfaces a "Plan-Audit Summary" with the next blocker.
-- **`cwd-validator` ENOENT fix.** Previously every `write_file` to a non-existent path failed silently. Workers can now create new files.
+Patch on top of 4.3.0's lifecycle redesign:
+- **Telemetry `schemaVersion` 4 → 5; stage vocabulary collapsed.** Eight legacy stage names fold into five (`review`, `rework`, `annotating`, `implementing`, `committing`). Forward-only on the mma side; backends consume v5 or normalise on read.
+- **`writes_unverifiable` no longer false-positives on chat-only responses.** A worker that responds with text and never invokes a write tool now reports `workerStatus: done` cleanly on both HTTP envelope and wire telemetry.
+- **Claude Code main-model resolver fixed.** Reads `message.model` (current Claude Code schema), falls back to top-level `model` for legacy session files, and skips placeholder literals (`custom`, `default`, `inherit`, `unknown`) so they no longer leak into wire telemetry as `mainModel`.
+- **`writes_unverifiable` downgrade now mirrors onto state**, so wire telemetry and the HTTP envelope agree on `workerStatus` / `errorCode` after a downgrade.
 
 CHANGELOG has the full breakdown.
 

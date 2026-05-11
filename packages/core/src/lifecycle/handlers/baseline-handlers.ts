@@ -220,12 +220,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         const ctxToolMode = ctx?.implementerToolMode;
         const toolsMode: 'full' | 'readonly' | 'none' | undefined =
           ctxToolMode === 'no-shell' ? 'full' : ctxToolMode;
+        const rejected = (last as { filesWrittenRejected?: string[] } | undefined)?.filesWrittenRejected ?? [];
+        const writeAttempted =
+          (enriched.filesWritten?.length ?? 0) > 0 ||
+          rejected.length > 0;
         const xc = crossCheckFilesWritten({
           cwd,
           filesWritten: enriched.filesWritten,
           workerSelfAssessment: workerSelfAssessment ?? null,
           toolsMode,
           autoCommit: state.autoCommit,
+          writeAttempted,
         });
         enriched.filesWritten = xc.filesWritten;
         // Only surface filesWrittenMissing when non-empty — keeps the

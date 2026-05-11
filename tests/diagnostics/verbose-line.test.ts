@@ -89,7 +89,7 @@ describe('toVerboseFields', () => {
 
   it('produces composeVerboseLine-compatible keys for a stage_change rework event', () => {
     const fields = toVerboseFields({
-      from: 'spec_review', to: 'spec_rework', attempt: 1, attemptCap: 3,
+      from: 'review', to: 'rework', attempt: 1, attemptCap: 3,
       implTier: 'complex', reviewerTier: 'standard', escalated: true,
     });
     expect(() => composeVerboseLine({

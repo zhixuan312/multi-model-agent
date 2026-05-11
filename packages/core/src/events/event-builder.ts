@@ -33,7 +33,6 @@ export interface BuildContext {
 
 const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'investigate']);
 const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
-const VERIFY_ROUTES = new Set(['delegate', 'execute-plan', 'verify']);
 
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;
@@ -167,50 +166,25 @@ export function buildWirePayload(internalRecord: Record<string, unknown>): WireT
 function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {
   const result: StageEntryType[] = [];
 
-  // implementing — always present
   const impl = buildImplStage(rr);
   if (impl) result.push(impl);
 
-  // spec_review — only on reviewed routes with full review
-  if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const sr = buildReviewStage('spec_review', rr, rr.specReviewStatus ?? null, rr.reviewRounds?.spec ?? null);
-    if (sr) result.push(sr);
-  }
-
-  // spec_rework — only on full review routes
-  if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const sw = buildReworkStage('spec_rework', rr);
-    if (sw) result.push(sw);
-  }
-
-  // quality_review — on all reviewed routes
   if (REVIEWED_ROUTES.has(route)) {
-    const qr = buildReviewStage('quality_review', rr, rr.qualityReviewStatus ?? null, rr.reviewRounds?.quality ?? null);
-    if (qr) result.push(qr);
+    const status = (rr.reviewVerdict as string | undefined) ?? rr.qualityReviewStatus ?? rr.specReviewStatus ?? null;
+    const stageRounds = (rr.stageStats?.review as { roundsUsed?: number } | undefined)?.roundsUsed;
+    const rounds = stageRounds ?? (Math.max(rr.reviewRounds?.spec ?? 0, rr.reviewRounds?.quality ?? 0) || null);
+    const rev = buildReviewStage(rr, status, rounds);
+    if (rev) result.push(rev);
   }
 
-  // quality_rework — on all reviewed routes
-  if (REVIEWED_ROUTES.has(route)) {
-    const qw = buildReworkStage('quality_rework', rr);
-    if (qw) result.push(qw);
-  }
-
-  // diff_review — only on full review routes. Diff review is a single-pass
-  // gate (no rework loop), so use one valid round when the stage was entered;
-  // reviewRounds.metadata tracks commit metadata repair attempts, not diff
-  // review rounds.
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const dr = buildReviewStage('diff_review', rr, rr.diffReviewStatus ?? null, 1);
-    if (dr) result.push(dr);
+    const rw = buildReworkStage(rr);
+    if (rw) result.push(rw);
   }
 
-  // verifying — only on delegate, execute-plan, verify routes
-  if (VERIFY_ROUTES.has(route)) {
-    const vs = buildVerifyStage(rr);
-    if (vs) result.push(vs);
-  }
+  const an = buildAnnotatingStage(rr);
+  if (an) result.push(an);
 
-  // committing — always present
   const cm = buildCommitStage(rr);
   if (cm) result.push(cm);
 
@@ -250,17 +224,17 @@ function buildImplStage(rr: RunResult): StageEntryType | null {
 }
 
 function buildReviewStage(
-  name: 'spec_review' | 'quality_review' | 'diff_review',
   rr: RunResult,
   status: string | null,
   rounds: number | null,
 ): StageEntryType | null {
-  const ss = rr.stageStats?.[name] as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, name);
+  const ss = rr.stageStats?.review as RawStageStats | undefined;
+  const base = extractStageData(ss, rr, 'review');
   if (!base) return null;
 
-  const concernSource = name;
-  const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
+  const stageConcerns = (rr.concerns ?? []).filter(
+    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review',
+  );
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
   // 4.0.3+ Gap 2 round-2 F1: use shared bucketFindingsBySeverity helper
   // (separate from headline's countHighOrCritical) so the wire's exact
@@ -288,7 +262,7 @@ function buildReviewStage(
   }
 
   return {
-    name,
+    name: 'review',
     ...base,
     verdict,
     roundsUsed: Math.min(rounds ?? 1, 10),
@@ -297,35 +271,33 @@ function buildReviewStage(
   } as StageEntryType;
 }
 
-function buildReworkStage(
-  name: 'spec_rework' | 'quality_rework',
-  rr: RunResult,
-): StageEntryType | null {
-  const ss = rr.stageStats?.[name] as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, name);
+function buildReworkStage(rr: RunResult): StageEntryType | null {
+  const ss = rr.stageStats?.rework as RawStageStats | undefined;
+  const base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
 
-  const concernSource = name === 'spec_rework' ? 'spec_review' : 'quality_review';
-  const stageConcerns = (rr.concerns ?? []).filter(c => c.source === concernSource);
+  const stageConcerns = (rr.concerns ?? []).filter(
+    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review',
+  );
   const triggeringCategories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
 
   return {
-    name,
+    name: 'rework',
     ...base,
     triggeringConcernCategories: triggeringCategories.slice(0, 9),
   } as StageEntryType;
 }
 
-function buildVerifyStage(rr: RunResult): StageEntryType | null {
-  const ss = rr.stageStats?.verifying as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
-  const base = extractStageData(ss, rr, 'verifying');
+function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
+  const ss = rr.stageStats?.annotating as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
+  const base = extractStageData(ss, rr, 'annotating');
   if (!base) return null;
 
   return {
-    name: 'verifying',
+    name: 'annotating',
     ...base,
-    outcome: (ss?.outcome as any) ?? 'not_applicable',
-    skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as any) ?? 'other') : null,
+    outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | undefined) ?? 'not_applicable',
+    skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other' | undefined) ?? 'other') : null,
   } as StageEntryType;
 }
 

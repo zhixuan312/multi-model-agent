@@ -11,16 +11,32 @@ describe('resolveMainModel', () => {
     expect(r.source).toBe('header');
   });
 
-  it('claude-code: reads model from latest jsonl', () => {
+  it('claude-code: reads message.model (nested) from latest jsonl', () => {
     const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
     const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
     mkdirSync(projectsDir, { recursive: true });
     writeFileSync(join(projectsDir, 'a1.jsonl'),
-      JSON.stringify({ type: 'message', model: 'claude-opus-4-7' }) + '\n'
+      JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-7' } }) + '\n'
     );
     try {
       const r = resolveMainModel({ headerValue: undefined, client: 'claude-code', cwd: '/tmp/myapp', configDefaultMainModel: undefined, homeDir: home });
       expect(r.model).toBe('claude-opus-4-7');
+      expect(r.source).toBe('auto:claude-code');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('claude-code: still reads top-level model for legacy session files', () => {
+    const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
+    const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
+    mkdirSync(projectsDir, { recursive: true });
+    writeFileSync(join(projectsDir, 'a1.jsonl'),
+      JSON.stringify({ type: 'message', model: 'claude-sonnet-4-6' }) + '\n'
+    );
+    try {
+      const r = resolveMainModel({ headerValue: undefined, client: 'claude-code', cwd: '/tmp/myapp', configDefaultMainModel: undefined, homeDir: home });
+      expect(r.model).toBe('claude-sonnet-4-6');
       expect(r.source).toBe('auto:claude-code');
     } finally {
       rmSync(home, { recursive: true, force: true });

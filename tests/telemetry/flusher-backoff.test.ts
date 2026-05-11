@@ -13,8 +13,8 @@ const INITIAL_BACKOFF_MS = 5 * 60 * 1000; // 5 minutes
 
 function makeRecord(overrides: Partial<QueueRecord> & { installId: string }): QueueRecord {
   return {
-    schemaVersion: 4,
-    mmagentVersion: '3.11.1',
+    schemaVersion: 5,
+    mmagentVersion: '4.3.0',
     os: 'darwin',
     nodeMajor: 22,
     generation: 0,
@@ -201,7 +201,7 @@ describe('flusher head-truncation', () => {
 
       expect(calls).toHaveLength(1);
       const sentJson = JSON.parse(gunzipSync(calls[0].body).toString('utf8'));
-      expect(sentJson.schemaVersion).toBe(4);
+      expect(sentJson.schemaVersion).toBe(5);
       expect(sentJson.events).toHaveLength(1);
 
       const remaining = await queue.readBatch(50);

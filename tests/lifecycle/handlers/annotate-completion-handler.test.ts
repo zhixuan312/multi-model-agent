@@ -165,13 +165,13 @@ describe('annotateCompletionHandler', () => {
 
   it('captures verify command output in state.verifyResult', async () => {
     mockAnnotatorReturns(JSON.stringify({ completionPercent: 50, perStep: [], concerns: [] }));
-    const state = baseState(['echo', 'verifying']);
+    const state = baseState(['echo', 'annotating']);
     await annotateCompletionHandler(state);
     expect(state.verifyResult).toBeDefined();
     const verify = state.verifyResult as { ran: boolean; passed: boolean; tailOutput: string };
     expect(verify.ran).toBe(true);
     expect(verify.passed).toBe(true);
-    expect(verify.tailOutput).toMatch(/verifying/);
+    expect(verify.tailOutput).toMatch(/annotating/);
   });
 
   it('handles missing verify command (ran=false)', async () => {

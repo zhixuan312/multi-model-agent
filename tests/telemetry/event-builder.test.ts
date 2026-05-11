@@ -67,7 +67,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     const rr = makeFixtureRunResult({
       stageStats: {
         implementing:   { stage: 'implementing', entered: true, durationMs: 1000, costUSD: 0.01, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', inputTokens: 100, outputTokens: 50, cachedReadTokens: 10, cachedNonReadTokens: 5, reasoningTokens: 20, round: 0 } as any,
-        quality_review: { stage: 'quality_review', entered: true, durationMs: 500, costUSD: 0.10, agentTier: 'complex', modelFamily: 'openai', model: 'gpt-5', inputTokens: 200, outputTokens: 30, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 10, round: 0, verdict: 'approved' as const, roundsUsed: 1 } as any,
+        review: { stage: 'review', entered: true, durationMs: 500, costUSD: 0.10, agentTier: 'complex', modelFamily: 'openai', model: 'gpt-5', inputTokens: 200, outputTokens: 30, cachedReadTokens: 0, cachedNonReadTokens: 0, reasoningTokens: 10, round: 0, verdict: 'approved' as const, roundsUsed: 1 } as any,
         committing:     { stage: 'committing', entered: true, durationMs: 100, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', round: 0 } as any,
       },
     });
@@ -161,7 +161,7 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     const rr = makeFixtureRunResult({
       stageStats: {
         implementing:   { stage: 'implementing', entered: true, durationMs: 1000, costUSD: 0.01, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', inputTokens: 100, outputTokens: 50, cachedReadTokens: 10, cachedNonReadTokens: 5, reasoningTokens: 15, round: 0 } as any,
-        quality_review: { stage: 'quality_review', entered: true, durationMs: 500, costUSD: 0.005, agentTier: 'complex', modelFamily: 'openai', model: 'gpt-5', inputTokens: 200, outputTokens: 30, cachedReadTokens: 20, cachedNonReadTokens: 10, reasoningTokens: 5, round: 0, verdict: 'approved' as const, roundsUsed: 1 } as any,
+        review: { stage: 'review', entered: true, durationMs: 500, costUSD: 0.005, agentTier: 'complex', modelFamily: 'openai', model: 'gpt-5', inputTokens: 200, outputTokens: 30, cachedReadTokens: 20, cachedNonReadTokens: 10, reasoningTokens: 5, round: 0, verdict: 'approved' as const, roundsUsed: 1 } as any,
         committing:     { stage: 'committing', entered: true, durationMs: 100, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', round: 0 } as any,
       },
     });

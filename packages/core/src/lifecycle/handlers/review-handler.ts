@@ -5,6 +5,7 @@ import { delegateWithEscalation } from '../../escalation/delegate-with-escalatio
 import { specLintTemplate } from '../../review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { parseReviewReport } from '../../review/parse-review-report.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 
 interface SubReview {
   source: 'spec' | 'quality';
@@ -159,4 +160,36 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
     return;
   }
   state.reviewVerdict = anyChangesRequired ? 'changes_required' : 'approved';
+
+  let combinedInput = 0, combinedOutput = 0, combinedCached = 0, combinedNonRead = 0;
+  let combinedTurns = 0, combinedTools = 0;
+  let combinedCost: number | null = null;
+  let combinedDuration = 0;
+  for (const { result } of settled) {
+    if ('transportError' in result || result.status !== 'ok') continue;
+    combinedInput  += result.usage?.inputTokens ?? 0;
+    combinedOutput += result.usage?.outputTokens ?? 0;
+    combinedCached += result.usage?.cachedReadTokens ?? 0;
+    combinedNonRead += result.usage?.cachedNonReadTokens ?? 0;
+    combinedTurns  += result.turns ?? 1;
+    combinedTools  += Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
+    combinedDuration = Math.max(combinedDuration, result.durationMs ?? 0);
+    const c = (result as { costUSD?: number | null }).costUSD;
+    if (c !== null && c !== undefined) combinedCost = (combinedCost ?? 0) + c;
+  }
+  const reviewerTier = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
+  mergeStageStats(state, 'review', {
+    inputTokens: combinedInput,
+    outputTokens: combinedOutput,
+    cachedReadTokens: combinedCached,
+    cachedNonReadTokens: combinedNonRead,
+    turnCount: combinedTurns,
+    toolCallCount: combinedTools,
+    costUSD: combinedCost,
+    durationMs: combinedDuration || null,
+  }, {
+    tier: reviewerTier,
+    model: (ctx.providers[reviewerTier]?.config as { model?: string } | undefined)?.model ?? null,
+    verdict: state.reviewVerdict,
+  });
 }

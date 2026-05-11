@@ -38,6 +38,12 @@ export interface CrossCheckInputs {
   workerSelfAssessment: 'done' | 'in_progress' | 'no_op' | null | undefined;
   toolsMode: 'full' | 'readonly' | 'none' | undefined;
   autoCommit: boolean | undefined;
+  /** True iff the worker actually attempted any filesystem write — either a
+   *  real path landed in `filesWritten`, the path-validity filter pushed at
+   *  least one entry to `filesWrittenRejected`, or a shell heredoc fired.
+   *  When false, the worker never tried to write — `writes_unverifiable` is
+   *  a false positive (e.g., a chat-only response that didn't need a file). */
+  writeAttempted?: boolean;
 }
 
 export interface CrossCheckResult {
@@ -87,10 +93,16 @@ export function crossCheckFilesWritten(inputs: CrossCheckInputs): CrossCheckResu
   let workerStatus: 'error' | undefined;
   let errorCode: 'writes_unverifiable' | undefined;
   let errorMessage: string | undefined;
+  // When the caller can prove the worker never tried to write (no rejected
+  // paths, no successful writes, no shell heredocs), skip the downgrade —
+  // it's a false positive for chat-only responses. Default = true (preserve
+  // pre-existing callers that don't pass the flag).
+  const attempted = inputs.writeAttempted ?? true;
   if (
     real.length === 0 &&
     inputs.workerSelfAssessment === 'done' &&
-    inputs.toolsMode === 'full'
+    inputs.toolsMode === 'full' &&
+    attempted
   ) {
     workerStatus = 'error';
     errorCode = 'writes_unverifiable';

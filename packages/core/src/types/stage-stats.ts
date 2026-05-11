@@ -19,8 +19,7 @@ export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable
  * stage in the future, exclude it from `StageName` for the same reason.
  */
 export type StageName =
-  | 'implementing' | 'verifying' | 'spec_review' | 'spec_rework'
-  | 'quality_review' | 'quality_rework' | 'diff_review' | 'committing';
+  | 'implementing' | 'review' | 'rework' | 'annotating' | 'committing';
 
 interface BaseStageStats {
   entered:       boolean;
@@ -52,37 +51,23 @@ interface BaseStageStats {
 // `stage` field doesn't extend any one literal.)
 export type RawStageStats =
   | (BaseStageStats & { stage: 'implementing' })
-  | (BaseStageStats & { stage: 'spec_rework' })
-  | (BaseStageStats & { stage: 'quality_rework' })
+  | (BaseStageStats & { stage: 'rework' })
   | (BaseStageStats & { stage: 'committing' })
   | (BaseStageStats & {
-      stage:      'verifying';
+      stage:      'annotating';
       outcome:    VerifyOutcome   | null;
       skipReason: VerifySkipReason | null;
     })
   | (BaseStageStats & {
-      stage:      'spec_review';
-      verdict:    ReviewVerdict | null;
-      roundsUsed: number        | null;
-    })
-  | (BaseStageStats & {
-      stage:      'quality_review';
-      verdict:    ReviewVerdict | null;
-      roundsUsed: number        | null;
-    })
-  | (BaseStageStats & {
-      stage:      'diff_review';
+      stage:      'review';
       verdict:    ReviewVerdict | null;
       roundsUsed: number        | null;
     });
 
 export type StageStatsMap = {
-  implementing:   Extract<RawStageStats, { stage: 'implementing' }>;
-  verifying:      Extract<RawStageStats, { stage: 'verifying' }>;
-  spec_review:    Extract<RawStageStats, { stage: 'spec_review' }>;
-  spec_rework:    Extract<RawStageStats, { stage: 'spec_rework' }>;
-  quality_review: Extract<RawStageStats, { stage: 'quality_review' }>;
-  quality_rework: Extract<RawStageStats, { stage: 'quality_rework' }>;
-  diff_review:    Extract<RawStageStats, { stage: 'diff_review' }>;
-  committing:     Extract<RawStageStats, { stage: 'committing' }>;
+  implementing: Extract<RawStageStats, { stage: 'implementing' }>;
+  review:       Extract<RawStageStats, { stage: 'review' }>;
+  rework:       Extract<RawStageStats, { stage: 'rework' }>;
+  annotating:   Extract<RawStageStats, { stage: 'annotating' }>;
+  committing:   Extract<RawStageStats, { stage: 'committing' }>;
 };

@@ -198,24 +198,18 @@ const RoundsUsedNullable = z.number().int().min(0).nullable();
 const VerifyOutcomeNullable = VerifyOutcomeEnum.nullable();
 const VerifySkipReasonNullable = VerifySkipReasonEnum.nullable();
 
-const ImplementingStageStatsSchema   = BaseStageStatsSchema.extend({ stage: z.literal('implementing') });
-const SpecReworkStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('spec_rework') });
-const QualityReworkStageStatsSchema  = BaseStageStatsSchema.extend({ stage: z.literal('quality_rework') });
-const CommittingStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('committing') });
-const VerifyingStageStatsSchema      = BaseStageStatsSchema.extend({ stage: z.literal('verifying'), outcome: VerifyOutcomeNullable, skipReason: VerifySkipReasonNullable });
-const SpecReviewStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('spec_review'),    verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
-const QualityReviewStageStatsSchema  = BaseStageStatsSchema.extend({ stage: z.literal('quality_review'), verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
-const DiffReviewStageStatsSchema     = BaseStageStatsSchema.extend({ stage: z.literal('diff_review'),    verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
+const ImplementingStageStatsSchema = BaseStageStatsSchema.extend({ stage: z.literal('implementing') });
+const ReworkStageStatsSchema       = BaseStageStatsSchema.extend({ stage: z.literal('rework') });
+const CommittingStageStatsSchema   = BaseStageStatsSchema.extend({ stage: z.literal('committing') });
+const AnnotatingStageStatsSchema   = BaseStageStatsSchema.extend({ stage: z.literal('annotating'), outcome: VerifyOutcomeNullable, skipReason: VerifySkipReasonNullable });
+const ReviewStageStatsSchema       = BaseStageStatsSchema.extend({ stage: z.literal('review'), verdict: ReviewVerdictNullable, roundsUsed: RoundsUsedNullable });
 
 export const StageStatsMapSchema = z.object({
-  implementing:   ImplementingStageStatsSchema,
-  spec_rework:    SpecReworkStageStatsSchema,
-  quality_rework: QualityReworkStageStatsSchema,
-  committing:     CommittingStageStatsSchema,
-  verifying:      VerifyingStageStatsSchema,
-  spec_review:    SpecReviewStageStatsSchema,
-  quality_review: QualityReviewStageStatsSchema,
-  diff_review:    DiffReviewStageStatsSchema,
+  implementing: ImplementingStageStatsSchema,
+  review:       ReviewStageStatsSchema,
+  rework:       ReworkStageStatsSchema,
+  annotating:   AnnotatingStageStatsSchema,
+  committing:   CommittingStageStatsSchema,
 });
 
 export const TaskCompletedLocalEvent = TaskBase.extend({

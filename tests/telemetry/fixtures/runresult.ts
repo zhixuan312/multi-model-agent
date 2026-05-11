@@ -26,12 +26,12 @@ const BASE_RUN_RESULT: RunResult = {
   terminationReason: { cause: 'finished', turnsUsed: 3, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
   stageStats: {
     implementing:   { stage: 'implementing', entered: true, durationMs: 20_000, costUSD: 0.004, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
-    verifying:      { stage: 'verifying', entered: true, durationMs: 2_000, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', outcome: 'passed', skipReason: null },
-    spec_review:    { stage: 'spec_review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
-    spec_rework:    { stage: 'spec_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    quality_review: { stage: 'quality_review', entered: true, durationMs: 1_000, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
-    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    diff_review:    { stage: 'diff_review', entered: true, durationMs: 500, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    verifying:      { stage: 'annotating', entered: true, durationMs: 2_000, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet', outcome: 'passed', skipReason: null },
+    spec_review:    { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    spec_rework:    { stage: 'rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    quality_review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
+    quality_rework: { stage: 'rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    diff_review:    { stage: 'review', entered: true, durationMs: 500, costUSD: 0, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'approved', roundsUsed: 1 },
     committing:     { stage: 'committing', entered: true, durationMs: 500, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
   },
 };
@@ -99,7 +99,7 @@ export const WITH_CONCERNS: RunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   specReviewStatus: 'approved',
   concerns: [
-    { source: 'spec_review', severity: 'minor' as const, message: 'no test for the new function' },
+    { source: 'review', severity: 'minor' as const, message: 'no test for the new function' },
   ],
 };
 
@@ -107,12 +107,12 @@ export const AUDIT_ROUTE_HAPPY: RunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   stageStats: {
     implementing: { stage: 'implementing', entered: true, durationMs: 20_000, costUSD: 0.004, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
-    verifying:    { stage: 'verifying', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' },
-    spec_review:  { stage: 'spec_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
-    spec_rework:  { stage: 'spec_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    quality_review: { stage: 'quality_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
-    quality_rework: { stage: 'quality_rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
-    diff_review:  { stage: 'diff_review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
+    verifying:    { stage: 'annotating', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' },
+    spec_review:  { stage: 'review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
+    spec_rework:  { stage: 'rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    quality_review: { stage: 'review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
+    quality_rework: { stage: 'rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
+    diff_review:  { stage: 'review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
     committing:   { stage: 'committing', entered: true, durationMs: 500, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
   } as RunResult['stageStats'],
 };

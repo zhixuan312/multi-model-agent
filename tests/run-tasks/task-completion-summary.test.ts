@@ -6,10 +6,9 @@ describe('TaskCompletionSummary', () => {
   it('computes the same numbers buildTaskCompletedEvent uses for top-level totals', () => {
     const rr = richRunResult();
     const sum = computeTaskCompletionSummary({ runResult: rr, taskIndexZero: 0, totalTasks: 1, batchId: '94fc50cc-...' });
-    // Stage costs in fixture: impl 0.03 + spec_review 0.005 + quality_review 0.005
-    // + spec_rework 0.003 + quality_rework 0.003 + diff_review 0.001
-    // + verifying 0.001 + committing 0.001 = 0.049
-    expect(sum.totalCostUSD).toBeCloseTo(0.049, 6);
+    // 4.3.0 vocab: impl 0.03 + review 0.010 + rework 0.006
+    //              + annotating 0.001 + committing 0.001 = 0.048
+    expect(sum.totalCostUSD).toBeCloseTo(0.048, 6);
     expect(sum.totalInputTokens).toBeGreaterThan(0);
     expect(sum.terminalStatus).toBe('ok');
   });

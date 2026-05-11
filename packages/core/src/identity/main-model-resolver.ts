@@ -35,6 +35,23 @@ export function resolveMainModel(inputs: ResolveInputs): ResolveResult {
   return { model: SENTINEL, source: 'unknown' };
 }
 
+function extractModelFromEntry(parsed: unknown): string | null {
+  if (!parsed || typeof parsed !== 'object') return null;
+  const obj = parsed as Record<string, unknown>;
+  // Claude Code schema: model is nested under `message.model`. Some older
+  // session files put it at top level; check both.
+  const candidates: unknown[] = [
+    (obj.message as { model?: unknown } | undefined)?.model,
+    obj.model,
+  ];
+  for (const c of candidates) {
+    if (typeof c === 'string' && c.trim().length > 0) {
+      return c.trim();
+    }
+  }
+  return null;
+}
+
 function resolveClaudeCode(cwd: string, homeDir: string): string | null {
   const slug = cwd.replace(/\//g, '-');
   const projectsDir = path.join(homeDir, '.claude', 'projects', slug);
@@ -57,9 +74,8 @@ function resolveClaudeCode(cwd: string, homeDir: string): string | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
       const parsed = JSON.parse(lines[i]!);
-      if (parsed && typeof parsed.model === 'string' && parsed.model.trim().length > 0) {
-        return parsed.model.trim();
-      }
+      const model = extractModelFromEntry(parsed);
+      if (model) return model;
     } catch { /* skip malformed */ }
   }
   return null;

@@ -2,7 +2,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
-import { replaceLastRunResultPreservingTrackers } from '../merge-stage-stats.js';
+import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
 
 export async function reworkHandler(state: LifecycleState): Promise<void> {
@@ -80,4 +80,19 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
   state.reworkApplied = true;
   state.reworkOutput = result.output;
   replaceLastRunResultPreservingTrackers(state, result);
+  mergeStageStats(state, 'rework', {
+    inputTokens: result.usage?.inputTokens ?? 0,
+    outputTokens: result.usage?.outputTokens ?? 0,
+    cachedReadTokens: result.usage?.cachedReadTokens ?? 0,
+    cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
+    turnCount: result.turns ?? 1,
+    toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
+    costUSD: (result as { costUSD?: number | null }).costUSD ?? null,
+    durationMs: (result as { durationMs?: number }).durationMs ?? null,
+    filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
+    filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
+  }, {
+    tier: reworkTier,
+    model: (ctx.providers[reworkTier]?.config as { model?: string } | undefined)?.model ?? null,
+  });
 }

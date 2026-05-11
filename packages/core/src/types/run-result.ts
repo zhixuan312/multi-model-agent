@@ -104,7 +104,7 @@ export interface RunResult {
   retryable?: boolean
   terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
-  concerns?: Array<{ source: 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
+  concerns?: Array<{ source: 'review' | 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
   structuredError?: { code: 'validator_verify_command_failed' | 'validator_commit_metadata_invalid' | 'validator_commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'review_diff_rejected' | 'runner_crash' | 'provider_rate_limited' | 'provider_api_error' | 'provider_transport_failure' | 'provider_timeout' | 'provider_api_aborted' | 'validator_silent_incomplete' | 'config_main_agent_pricing_unresolvable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'

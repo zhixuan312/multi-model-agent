@@ -35,9 +35,9 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
         ...overrides,
         name,
       } as const;
-    case 'spec_review':
-    case 'quality_review':
-    case 'diff_review':
+    case 'review':
+    case 'review':
+    case 'review':
       return {
         ...base,
         verdict: 'approved' as const,
@@ -47,15 +47,15 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
         ...overrides,
         name,
       } as const;
-    case 'spec_rework':
-    case 'quality_rework':
+    case 'rework':
+    case 'rework':
       return {
         ...base,
         triggeringConcernCategories: [] as string[],
         ...overrides,
         name,
       } as const;
-    case 'verifying':
+    case 'annotating':
       return {
         ...base,
         outcome: 'passed' as const,
@@ -111,11 +111,11 @@ function getDefaultStages(route: string) {
   const stages = [makeStage('implementing')];
 
   if (route === 'delegate' || route === 'execute-plan') {
-    stages.push(makeStage('spec_review'));
-    stages.push(makeStage('quality_review'));
-    stages.push(makeStage('verifying'));
+    stages.push(makeStage('review'));
+    stages.push(makeStage('rework'));
+    stages.push(makeStage('annotating'));
   } else if (['audit', 'review', 'verify', 'debug', 'investigate'].includes(route)) {
-    stages.push(makeStage('quality_review', { verdict: 'annotated' }));
+    stages.push(makeStage('review', { verdict: 'annotated' }));
   }
 
   stages.push(makeStage('committing'));
@@ -131,25 +131,24 @@ describe('V4 envelope contract', () => {
     expect(parsed.terminalStatus).toBe('ok');
   });
 
-  it('delegate no rework (all approved round 1)', () => {
+  it('delegate no rework (review approved round 1)', () => {
     const event = makeEvent('delegate', {
       stages: [
         makeStage('implementing'),
-        makeStage('spec_review', { verdict: 'approved', roundsUsed: 1 }),
-        makeStage('quality_review', { verdict: 'approved', roundsUsed: 1 }),
-        makeStage('verifying', { outcome: 'passed' }),
+        makeStage('review', { verdict: 'approved', roundsUsed: 1 }),
+        makeStage('annotating', { outcome: 'passed' }),
         makeStage('committing'),
       ],
     });
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
-    expect(parsed.stages).toHaveLength(5);
+    expect(parsed.stages).toHaveLength(4);
   });
 
   it('audit happy path (quality_only, annotated verdict)', () => {
     const event = makeEvent('audit');
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
     expect(parsed.route).toBe('audit');
-    const qr = parsed.stages.find(s => s.name === 'quality_review');
+    const qr = parsed.stages.find(s => s.name === 'review');
     expect(qr).toBeDefined();
     if (qr && 'verdict' in qr) expect(qr.verdict).toBe('annotated');
   });
@@ -158,8 +157,7 @@ describe('V4 envelope contract', () => {
     const event = makeEvent('review');
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
     expect(parsed.route).toBe('review');
-    expect(parsed.stages.some(s => s.name === 'quality_review')).toBe(true);
-    expect(parsed.stages.some(s => s.name === 'spec_review')).toBe(false);
+    expect(parsed.stages.some(s => s.name === 'review')).toBe(true);
   });
 
   it('verify happy path (verifying outcome=passed)', () => {
@@ -168,13 +166,13 @@ describe('V4 envelope contract', () => {
       reviewPolicy: 'quality_only',
       stages: [
         makeStage('implementing'),
-        makeStage('quality_review', { verdict: 'annotated' }),
-        makeStage('verifying', { outcome: 'passed' }),
+        makeStage('review', { verdict: 'annotated' }),
+        makeStage('annotating', { outcome: 'passed' }),
         makeStage('committing'),
       ],
     });
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
-    const vs = parsed.stages.find(s => s.name === 'verifying');
+    const vs = parsed.stages.find(s => s.name === 'annotating');
     expect(vs).toBeDefined();
     if (vs && 'outcome' in vs) expect(vs.outcome).toBe('passed');
   });
@@ -185,13 +183,13 @@ describe('V4 envelope contract', () => {
       reviewPolicy: 'quality_only',
       stages: [
         makeStage('implementing'),
-        makeStage('quality_review', { verdict: 'annotated' }),
-        makeStage('verifying', { outcome: 'skipped', skipReason: 'no_command' }),
+        makeStage('review', { verdict: 'annotated' }),
+        makeStage('annotating', { outcome: 'skipped', skipReason: 'no_command' }),
         makeStage('committing'),
       ],
     });
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
-    const vs = parsed.stages.find(s => s.name === 'verifying');
+    const vs = parsed.stages.find(s => s.name === 'annotating');
     expect(vs).toBeDefined();
     if (vs && 'outcome' in vs) expect(vs.outcome).toBe('skipped');
   });
@@ -222,7 +220,7 @@ describe('V4 envelope contract', () => {
     });
     const parsed = ValidatedTaskCompletedEventSchema.parse(event);
     expect(parsed.route).toBe('retry');
-    expect(parsed.stages.filter(s => s.name === 'quality_review')).toHaveLength(0);
+    expect(parsed.stages.filter(s => s.name === 'review')).toHaveLength(0);
   });
 
   it('terminal error', () => {
@@ -270,7 +268,7 @@ describe('V4 envelope contract', () => {
   it('batch wrapper round-trip', () => {
     const event = ValidatedTaskCompletedEventSchema.parse(makeEvent('delegate'));
     const batch = UploadBatchSchema.parse({
-      schemaVersion: 4,
+      schemaVersion: 5,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
       mmagentVersion: '4.0.0',
       os: 'darwin',
@@ -278,12 +276,12 @@ describe('V4 envelope contract', () => {
       events: [event],
     });
     expect(batch.events).toHaveLength(1);
-    expect(batch.schemaVersion).toBe(4);
+    expect(batch.schemaVersion).toBe(5);
   });
 
-  it('rejects pre-v4 schema versions in batch', () => {
+  it('rejects pre-v5 schema versions in batch', () => {
     const result = UploadBatchSchema.safeParse({
-      schemaVersion: 3,
+      schemaVersion: 4,
       installId: 'aaaaaaaa-1111-4aaa-9999-111111111111',
       mmagentVersion: '4.0.0',
       os: 'darwin',
