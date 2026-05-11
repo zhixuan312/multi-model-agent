@@ -1,16 +1,21 @@
-import type { AgentType, Provider, RunResult, MultiModelConfig, ProviderConfig } from '../types.js';
+// v4.4 provider-factory. Constructs the v4.4 Provider via the per-provider
+// factories (makeClaudeProvider, makeOpenAIProvider, makeCodexProvider) and
+// also attaches a legacy `run` shim that routes through openSession+send
+// so handlers that haven't migrated yet (PR steps 4–6) keep working until
+// Task 24 deletes the shim along with `runner-shell.ts`.
+
+import type {
+  AgentType, Provider, RunResult, MultiModelConfig,
+} from '../types.js';
 import type { RunOptions } from './runner-types.js';
-import { RunnerShell } from './runner-shell.js';
-import { AnthropicMessagesAdapter } from './anthropic-messages-adapter.js';
-import { OpenAIChatAdapter } from './openai-chat-adapter.js';
-import { OpenAIResponsesAdapter } from './openai-responses-adapter.js';
-import { makeToolDefinitions } from './tool-definitions.js';
-import type { RunnerAdapter } from './runner-adapter.js';
-import { getCodexAuth, getClaudeOAuth } from '../identity/auth-token-store.js';
-import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
+import type { Session } from '../types/run-result.js';
+import { makeClaudeProvider, type ClaudeProviderConfig } from './claude.js';
+import { makeOpenAIProvider, type OpenAIProviderConfig } from './openai.js';
+import { makeCodexProvider, type CodexProviderConfig } from './codex.js';
+import { assembleRunResult } from './assemble-run-result.js';
 
 let coreTestProviderOverride: Provider | null = null;
-let coreTestProviderOverrideMap: Map<string, Provider> | null = null;
+let coreTestProviderOverrideMap: Map<AgentType, Provider> | null = null;
 
 function assertTestProviderEnabled(): void {
   if (process.env.MMAGENT_TEST_PROVIDER_OVERRIDE !== '1') {
@@ -23,111 +28,17 @@ export function __setCoreTestProviderOverride(provider: Provider | null): void {
   coreTestProviderOverride = provider;
 }
 
-export function __setCoreTestProviderOverrideMap(map: Map<string, Provider> | null): void {
+export function __setCoreTestProviderOverrideMap(map: Map<AgentType, Provider> | null): void {
   assertTestProviderEnabled();
   coreTestProviderOverrideMap = map;
 }
 
-// No output-token caps anywhere — the only worker bounds are the
-// task-level wall-clock deadline and (when set) the per-task cost
-// ceiling. OpenAI Chat + Responses adapters omit max_tokens entirely
-// so the model uses its full output budget. Anthropic Messages
-// **requires** max_tokens per API spec, so we pass a value high
-// enough to never bite in practice (matches the largest documented
-// ceiling across the Claude family). If a model accepts less, the
-// API rejects loudly — easier to triage than a silent truncation,
-// which is the failure mode 4.0.x hit at the 4096 default when
-// deepseek-v4-pro burned its budget on a thinking block.
-const ANTHROPIC_MAX_TOKENS_REQUIRED = 64000;
-
-export function buildAdapter(agentConfig: {
-  type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex';
-  model: string;
-  baseUrl?: string;
-  apiKey?: string;
-  apiKeyEnv?: string;
-}): RunnerAdapter {
-  const apiKey = agentConfig.apiKey
-    ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
-
-  switch (agentConfig.type) {
-    case 'claude': {
-      // A13 (4.2.3+): Claude Max subscription support. When the user has
-      // no explicit apiKey/apiKeyEnv and no baseUrl, fall back to the
-      // OAuth token stored by Claude Code in the macOS Keychain. This
-      // mirrors the Codex path below (`getCodexAuth()` reads
-      // ~/.codex/auth.json). Restores the auth flow that was implicit
-      // in 3.x via @anthropic-ai/claude-agent-sdk before the HTTP-client
-      // refactor.
-      const oauth = (!apiKey && !agentConfig.baseUrl) ? getClaudeOAuth() : null;
-      if (oauth) {
-        return new AnthropicMessagesAdapter({
-          apiKey: '',
-          oauthAccessToken: oauth.accessToken,
-          model: agentConfig.model,
-          maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
-          providerType: 'claude',
-        });
-      }
-      return new AnthropicMessagesAdapter({
-        apiKey: apiKey || 'not-needed',
-        baseURL: agentConfig.baseUrl,
-        model: agentConfig.model,
-        maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
-        providerType: 'claude',
-      });
-    }
-    case 'claude-compatible':
-      return new AnthropicMessagesAdapter({
-        apiKey: apiKey || 'not-needed',
-        baseURL: agentConfig.baseUrl,
-        model: agentConfig.model,
-        maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
-        providerType: agentConfig.type,
-      });
-    case 'openai-compatible':
-      return new OpenAIChatAdapter({
-        apiKey: apiKey || 'not-needed',
-        baseURL: agentConfig.baseUrl,
-        model: agentConfig.model,
-        providerType: 'openai-compatible',
-      });
-    case 'codex': {
-      // Prefer ChatGPT/Codex OAuth (~/.codex/auth.json) — this is how
-      // users who logged in via `codex` CLI authenticate. Without it, the
-      // request hits api.openai.com with a placeholder key and 401s. If
-      // OAuth is missing, fall back to whatever apiKey the user supplied
-      // (so the codex type can also be pointed at api.openai.com with a
-      // real key, or any other OpenAI-Responses-compatible endpoint).
-      const oauth = getCodexAuth();
-      if (oauth && !apiKey && !agentConfig.baseUrl) {
-        return new OpenAIResponsesAdapter({
-          apiKey: oauth.accessToken,
-          baseURL: 'https://chatgpt.com/backend-api/codex',
-          model: agentConfig.model,
-          defaultHeaders: { 'chatgpt-account-id': oauth.accountId },
-        });
-      }
-      return new OpenAIResponsesAdapter({
-        apiKey: apiKey || 'not-needed',
-        baseURL: agentConfig.baseUrl,
-        model: agentConfig.model,
-      });
-    }
-  }
+/** @deprecated v4.4 transitional shim. Throws — no longer constructs adapters;
+ *  the runner-shell/adapter layer is replaced by openSession-based providers.
+ *  Kept only so `make-runner-shell.ts` compiles until Task 24 deletes it. */
+export function buildAdapter(_agentConfig: unknown): never {
+  throw new Error('buildAdapter is removed in v4.4. Use Provider.openSession() instead.');
 }
-
-const SYSTEM_PROMPT = [
-  'You are a software engineering agent with access to file-system and shell tools.',
-  'Work step-by-step. Read files before editing them.',
-  // Tool sweep #6: the spec / quality / diff reviewer stages now see the
-  // cumulative diff against the pre-task baseline. The implementer no
-  // longer needs to verify its own edits — the reviewers will check the
-  // actual change. Skipping post-edit re-reads typically saves 4-6
-  // minutes per task on slow models.
-  'Trust edit_file/write_file: if the tool returns without an error, the edit applied. Do NOT re-read a file just to verify your own successful edit.',
-  'When you have completed the task, produce a final answer summarizing what you did.',
-].join('\n');
 
 export function createProvider(slot: AgentType, config: MultiModelConfig): Provider {
   if (coreTestProviderOverrideMap?.has(slot)) return coreTestProviderOverrideMap.get(slot)!;
@@ -138,82 +49,70 @@ export function createProvider(slot: AgentType, config: MultiModelConfig): Provi
     throw new Error(`Unknown agent slot: "${slot}". Config must have "standard" and "complex".`);
   }
 
-  const providerConfig = agentConfig as unknown as ProviderConfig;
-  const defaults = config.defaults;
+  const apiKey = (agentConfig as { apiKey?: string }).apiKey
+    ?? ((agentConfig as { apiKeyEnv?: string }).apiKeyEnv
+        ? process.env[(agentConfig as { apiKeyEnv: string }).apiKeyEnv]
+        : undefined);
 
-  const run = async (prompt: string, options: RunOptions = {}): Promise<RunResult> => {
+  let provider: Provider;
+  switch (agentConfig.type) {
+    case 'claude':
+    case 'claude-compatible':
+      provider = makeClaudeProvider({
+        type: agentConfig.type,
+        model: agentConfig.model,
+        ...(apiKey && { apiKey }),
+        ...((agentConfig as { baseUrl?: string }).baseUrl && { baseUrl: (agentConfig as { baseUrl: string }).baseUrl }),
+      } as ClaudeProviderConfig);
+      break;
+    case 'openai-compatible':
+      provider = makeOpenAIProvider({
+        type: 'openai-compatible',
+        model: agentConfig.model,
+        apiKey: apiKey ?? 'not-needed',
+        ...((agentConfig as { baseUrl?: string }).baseUrl && { baseUrl: (agentConfig as { baseUrl: string }).baseUrl }),
+      } as OpenAIProviderConfig);
+      break;
+    case 'codex':
+      provider = makeCodexProvider({
+        type: 'codex',
+        model: agentConfig.model,
+        ...(apiKey && { apiKey }),
+        ...((agentConfig as { baseUrl?: string }).baseUrl && { baseUrl: (agentConfig as { baseUrl: string }).baseUrl }),
+      } as CodexProviderConfig);
+      break;
+    default:
+      throw new Error(`Unknown agent type for slot "${slot}": ${(agentConfig as { type: string }).type}`);
+  }
+
+  // Legacy `run` shim — routes through openSession + send + close so
+  // handlers that still call `provider.run(prompt, options)` work during
+  // the migration window. Removed in Task 24 along with runner-shell.
+  const legacyRun = async (prompt: string, options: RunOptions = {}): Promise<RunResult> => {
+    const cwd = options.cwd ?? process.cwd();
+    const wallClockDeadline = Date.now() + 60 * 60 * 1000;   // 1h default
+    const idleStallTimeoutMs = 20 * 60 * 1000;
+    const abortCtrl = new AbortController();
+    if (options.abortSignal) {
+      if (options.abortSignal.aborted) abortCtrl.abort();
+      else options.abortSignal.addEventListener('abort', () => abortCtrl.abort(), { once: true });
+    }
+    const session: Session = provider.openSession({
+      cwd,
+      wallClockDeadline,
+      idleStallTimeoutMs,
+      abortSignal: abortCtrl.signal,
+      ...(options.bus && { bus: options.bus as unknown as undefined }),
+    });
     try {
-      const cwd = options.cwd ?? process.cwd();
-      const toolMode = options.tools ?? defaults.tools ?? 'full';
-      const maxTurns = SAFETY_MAX_TURNS;
-
-      const toolDefinitions = toolMode !== 'none'
-        ? makeToolDefinitions({ cwd })
-        : [];
-
-      const effectiveSystemPrompt = options.instructionsSuffix
-        ? `${SYSTEM_PROMPT}\n\n${options.instructionsSuffix}`
-        : SYSTEM_PROMPT;
-
-      const adapter = buildAdapter(agentConfig);
-      const shell = new RunnerShell(adapter, providerConfig.model);
-
-      const result = await shell.run({
-        systemPrompt: effectiveSystemPrompt,
-        userMessage: prompt,
-        toolDefinitions,
-        maxTurns,
-        cwd,
-        ...(options.abortSignal && { abortSignal: options.abortSignal }),
-        ...(options.bus && { bus: options.bus }),
-        ...(options.batchId !== undefined && { batchId: options.batchId }),
-        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
-        ...(options.tier !== undefined && { tier: options.tier }),
-        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
-        model: providerConfig.model,
-      });
-
-      const toolCallSummaries = result.toolCalls.map(tc => {
-        const inputPreview = typeof tc.input === 'object' && tc.input !== null
-          ? JSON.stringify(tc.input).slice(0, 120)
-          : String(tc.input ?? '').slice(0, 120);
-        return `${tc.name}(${inputPreview})`;
-      });
-
-      return {
-        output: result.finalAssistantText,
-        status: result.workerStatus === 'done' ? 'ok' : 'incomplete',
-        usage: result.usage,
-        turns: result.turns,
-        durationMs: result.durationMs,
-        filesRead: result.filesRead,
-        filesWritten: result.filesWritten,
-        toolCalls: toolCallSummaries,
-        outputIsDiagnostic: false,
-        escalationLog: [],
-        parsedFindings: null,
-        workerStatus: result.workerStatus,
-        errorCode: result.errorCode,
-        ...(result.costUSD !== null && {
-          cost: { costUSD: result.costUSD, costDeltaVsMainUSD: null },
-        }),
-      };
-    } catch (err) {
-      return {
-        output: `Sub-agent error: ${err instanceof Error ? err.message : String(err)}`,
-        status: 'error',
-        usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-        turns: 0,
-        filesRead: [],
-        filesWritten: [],
-        toolCalls: [],
-        outputIsDiagnostic: true,
-        escalationLog: [],
-        parsedFindings: null,
-        error: err instanceof Error ? err.message : String(err),
-      };
+      const turn = await session.send(prompt, { stageLabel: options.stageLabel ?? 'sub-agent' });
+      return assembleRunResult(turn);
+    } finally {
+      await session.close();
     }
   };
 
-  return { name: slot, config: providerConfig, run };
+  // Preserve the legacy convention: `name = slot` (not `<provider>:<model>`)
+  // so existing call sites (e.g., `p.name === 'standard'`) keep working.
+  return { ...provider, name: slot, run: legacyRun };
 }

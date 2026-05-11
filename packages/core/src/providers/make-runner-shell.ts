@@ -21,7 +21,7 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
       providerType: 'mock' as unknown as RunnerAdapter['providerType'],
       async turn(input): Promise<AdapterTurnResult> {
         const prompt = `${input.systemPrompt}\n\n${input.userMessage}`;
-        const result = await provider.run(prompt);
+        const result = await provider.run!(prompt);
         return {
           assistantText: result.output ?? '',
           toolCalls: [],
@@ -59,7 +59,7 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
       providerType: 'mock' as unknown as RunnerAdapter['providerType'],
       async turn(input): Promise<AdapterTurnResult> {
         const prompt = `${input.systemPrompt}\n\n${input.userMessage}`;
-        const result = await provider.run(prompt);
+        const result = await provider.run!(prompt);
         return {
           assistantText: result.output ?? '',
           toolCalls: [],
@@ -76,5 +76,5 @@ export function makeRunnerShell(provider: Provider): RunnerShell {
     return new RunnerShell(bridgeAdapter, cfgModel);
   }
 
-  return new RunnerShell(adapter as RunnerAdapter, cfgModel);
+  return new RunnerShell(adapter as unknown as RunnerAdapter, cfgModel);
 }

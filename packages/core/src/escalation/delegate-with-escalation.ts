@@ -158,7 +158,7 @@ export async function delegateWithEscalation(
         tier: options.assignedTier ?? 'standard',
       });
 
-      result = await provider.run(task.prompt, {
+      result = await provider.run!(task.prompt, {
         tools: task.tools,
         timeoutMs: effectiveTimeoutMs,
         abortSignal: options.abortSignal,
