@@ -101,6 +101,7 @@ async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCall
           route: (state.route ?? ctx.route) as ReviewRoute,
           diff: cumulativeDiff,
           priorConcerns,
+          ...(task.planContext ? { planContext: task.planContext } : {}),
           abortSignal: ctx.stall.controller.signal,
           deadlineMs: ctx.timing.deadlineMs,
           ...(ctx.bus && { bus: ctx.bus }),

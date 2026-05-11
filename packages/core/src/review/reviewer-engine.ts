@@ -43,6 +43,14 @@ export interface ReviewerInput {
    * without re-deriving them.
    */
   priorConcerns?: string[];
+  /**
+   * Verbatim plan section for execute-plan routes. Set by the
+   * spec-chain handler from `task.planContext`; threaded into the
+   * spec reviewer's user prompt as the authoritative source-of-truth
+   * for verbatim-code-block comparison. Unset for non-execute-plan
+   * routes — those routes have no "plan" to compare against.
+   */
+  planContext?: string;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
   /** Forwarded to RunInput so the running-headline sink + verbose stderr

@@ -132,12 +132,20 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
         && s.reviewPolicy !== 'none'
         && !s.terminal,
       isRework: false, handlerKey: 'run_verify_command' },
-    // 5.2: git_commit — fires when autoCommit + filesChanged + !readOnlyTask AND
+    // 5.2: git_commit — fires when autoCommit + worker wrote files + !readOnlyTask AND
     // reviews actually ran (reviewPolicy !== 'none').
+    //
+    // 4.2.3 fix: the gate previously checked `state.filesChanged`, but no
+    // production handler ever populates that slot — only the
+    // stage-progression test fixture does. Real artifact-producing
+    // lifecycles never satisfied the gate, so autoCommit silently no-op'd
+    // (commits: [] on the public envelope despite filesWritten being
+    // populated). The handler itself reads `lastRunResult.filesWritten`,
+    // so the gate now does the same — single source of truth.
     { rowId: '5.2', stageName: 'git_commit', schemaStage: 'committing',
       runCondition: (s) => s.autoCommit === true
-        && Array.isArray(s.filesChanged)
-        && s.filesChanged.length > 0
+        && Array.isArray(s.lastRunResult?.filesWritten)
+        && (s.lastRunResult.filesWritten?.length ?? 0) > 0
         && !s.readOnlyTask
         && s.reviewPolicy !== 'none'
         && !s.terminal,

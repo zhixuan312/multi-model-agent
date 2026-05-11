@@ -206,3 +206,44 @@ export const PROGRESS_BIAS = [
   '',
   'Why this matters: bailing without writing files when the section is non-empty wastes 2-3 review/rework rounds (each round costs ~$0.50-$2.00 and 60-300 seconds). The cost of attempting + documenting wrongly is one extra review round. The cost of bailing wrongly is the entire review/rework cycle plus a re-dispatch from scratch. Prefer attempting.',
 ].join('\n');
+
+/**
+ * Self-verification (4.2.3+).
+ *
+ * Workers were declaring "done" without running the verification commands
+ * the plan literally lists, then having tests fail downstream. Observed
+ * 2026-05-11, A11.1: plan section explicitly listed "Step 5: Run the
+ * test to verify it passes" with `npx vitest run tests/...`. The worker
+ * wrote the test file (with its own different test cases), wrote the
+ * implementation, declared "done", and submitted to review. One of its
+ * own tests failed when run downstream.
+ *
+ * The reviewer does NOT run the worker's tests; the reviewer reads code.
+ * The worker has shell access; the worker IS supposed to run them. This
+ * block makes the requirement explicit.
+ */
+export const SELF_VERIFICATION = [
+  'Self-verification before declaring done (REQUIRED for any task whose plan section lists a verification command):',
+  '',
+  '1. Scan the matched plan section for verification commands. Common shapes:',
+  '   - "Run: <cmd>" / "Run the test: <cmd>" / "Run the tests:"',
+  '   - "Expected: PASS" (implies the preceding command must have been run)',
+  '   - "verify: <cmd>" / "Verify: <cmd>"',
+  '   - A code block under a heading containing "Run" or "Verify"',
+  '',
+  '2. For each verification command found in the plan section: you MUST execute it via your shell tool BEFORE writing your final summary.',
+  '',
+  '3. Include the command and its output in your summary under a "Self-verification" section. Format:',
+  '   ```',
+  '   Self-verification:',
+  '   - $ <command>',
+  '     PASS / FAIL (<N> tests, <duration>)',
+  '     <relevant tail of output if FAIL>',
+  '   ```',
+  '',
+  '4. If any verification command FAILS: do NOT declare "done". Investigate, fix the underlying issue, and re-run. A failing test is your output, not the reviewer\'s problem to discover.',
+  '',
+  '5. If you genuinely cannot run a command (shell not available, command not in cwd, dependency missing): say so explicitly in the Self-verification section ("could not run X because Y") AND treat the task as INCOMPLETE — your summary must say so. Declaring "done" with skipped verification is a defect.',
+  '',
+  '6. Reviewers do NOT execute your code; they read it. Your test passing in the reviewer\'s mind is not the same as your test passing in the actual test runner. The plan asked you to run the test BECAUSE the test-runner is the source of truth.',
+].join('\n');

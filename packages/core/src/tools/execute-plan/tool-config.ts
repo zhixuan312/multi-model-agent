@@ -18,6 +18,7 @@ import {
   PLAN_FIDELITY_REMINDER,
   PLAN_VS_SOURCE_RECONCILIATION,
   PROGRESS_BIAS,
+  SELF_VERIFICATION,
 } from './implementer-criteria.js';
 
 export const executePlanInputSchema = z.object({
@@ -121,6 +122,8 @@ function buildExecutePlanPrompt(
     PLAN_VS_SOURCE_RECONCILIATION,
     '',
     PROGRESS_BIAS,
+    '',
+    SELF_VERIFICATION,
     '',
     // Tool sweep #12: share spec + quality reviewer rubric so the
     // worker self-aligns on what each reviewer will judge against.

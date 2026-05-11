@@ -18,6 +18,16 @@ export interface ReviewTemplateContext {
    * so it can verify "did the rework address X" rather than re-deriving.
    */
   priorConcerns?: string[];
+  /**
+   * For execute-plan tasks: the verbatim plan section the worker was
+   * asked to execute, separate from `brief` (which contains the worker's
+   * full prompt with orientation, fidelity rules, etc.). When set, the
+   * spec reviewer compares the diff against this section's verbatim code
+   * blocks character-for-character — semantically-equivalent rewrites
+   * are CODE SUBSTITUTION, not approval. Unset for non-execute-plan
+   * routes (delegate, audit, review, verify, debug, investigate).
+   */
+  planContext?: string;
 }
 
 export interface ReviewTemplate {
