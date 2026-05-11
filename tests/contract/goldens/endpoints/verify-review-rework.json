@@ -2,7 +2,7 @@
   "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review\n\n--- SOURCE-CODE DIRECT-READ (criterion 2) ---\nneeds rework per review\n\n--- DOCUMENTATION EVIDENCE (criterion 3) ---\nneeds rework per review\n\n--- RUN-OUTPUT EVIDENCE (criterion 4) ---\nneeds rework per review\n\n--- DIFF EVIDENCE (criterion 5) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

@@ -2,7 +2,7 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock incomplete\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nmock incomplete\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nmock incomplete\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nmock incomplete\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nmock incomplete\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nmock incomplete\n\n--- FIX ACTIONABILITY (criterion 7) ---\nmock incomplete\n\n--- DRIFT / STALENESS (criterion 8) ---\nmock incomplete\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nmock incomplete\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nmock incomplete\n\n--- METADATA COMPLETENESS (criterion 11) ---\nmock incomplete",
+      "output": "mock incomplete",
       "status": "ok",
       "usage": {
         "inputTokens": 110,
@@ -135,6 +135,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -167,7 +169,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock incomplete",
+    "summary": "mock incomplete",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

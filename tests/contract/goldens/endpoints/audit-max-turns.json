@@ -2,7 +2,7 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nmock max turns\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nmock max turns\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nmock max turns\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nmock max turns\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nmock max turns\n\n--- FIX ACTIONABILITY (criterion 7) ---\nmock max turns\n\n--- DRIFT / STALENESS (criterion 8) ---\nmock max turns\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nmock max turns\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nmock max turns\n\n--- METADATA COMPLETENESS (criterion 11) ---\nmock max turns",
+      "output": "mock max turns",
       "status": "ok",
       "usage": {
         "inputTokens": 110,
@@ -135,6 +135,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -167,7 +169,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns",
+    "summary": "mock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

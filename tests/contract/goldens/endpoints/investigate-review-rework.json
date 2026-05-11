@@ -2,7 +2,7 @@
   "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
-      "output": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nneeds rework per review\n\n--- CALLER-ANALYSIS PERSPECTIVE (criterion 2) ---\nneeds rework per review\n\n--- TEST-DRIVEN PERSPECTIVE (criterion 3) ---\nneeds rework per review\n\n--- CROSS-FILE DEPENDENCY-MAP PERSPECTIVE (criterion 4) ---\nneeds rework per review\n\n--- DOCUMENTATION/COMMENT-LENS PERSPECTIVE (criterion 5) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

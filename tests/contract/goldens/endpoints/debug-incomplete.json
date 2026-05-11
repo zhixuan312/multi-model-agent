@@ -2,7 +2,7 @@
   "headline": "[ok] debug completed",
   "results": [
     {
-      "output": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock incomplete\n\n--- RECENT-CHANGE ANGLE (criterion 2) ---\nmock incomplete\n\n--- TEST-FAILURE ANGLE (criterion 3) ---\nmock incomplete\n\n--- REPRODUCTION ANGLE (criterion 4) ---\nmock incomplete\n\n--- CONCURRENCY / CONFIGURATION ANGLE (criterion 5) ---\nmock incomplete",
+      "output": "mock incomplete",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nmock incomplete",
+    "summary": "mock incomplete",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

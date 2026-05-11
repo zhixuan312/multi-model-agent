@@ -2,7 +2,7 @@
   "headline": "[ok] review completed",
   "results": [
     {
-      "output": "--- TEST GAP (criterion 1) ---\nmock incomplete\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nmock incomplete\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nmock incomplete\n\n--- MISSING EDGE CASE (criterion 4) ---\nmock incomplete\n\n--- RACE / CONCURRENCY (criterion 5) ---\nmock incomplete\n\n--- RESOURCE LEAK (criterion 6) ---\nmock incomplete\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nmock incomplete\n\n--- SECURITY REGRESSION (criterion 8) ---\nmock incomplete\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nmock incomplete\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nmock incomplete",
+      "output": "mock incomplete",
       "status": "ok",
       "usage": {
         "inputTokens": 100,
@@ -129,6 +129,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -161,7 +163,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST GAP (criterion 1) ---\nmock incomplete",
+    "summary": "mock incomplete",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

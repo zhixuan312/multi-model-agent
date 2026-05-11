@@ -2,7 +2,7 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nneeds rework per review\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nneeds rework per review\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nneeds rework per review\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nneeds rework per review\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nneeds rework per review\n\n--- FIX ACTIONABILITY (criterion 7) ---\nneeds rework per review\n\n--- DRIFT / STALENESS (criterion 8) ---\nneeds rework per review\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nneeds rework per review\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nneeds rework per review\n\n--- METADATA COMPLETENESS (criterion 11) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 110,
@@ -135,6 +135,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -167,7 +169,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

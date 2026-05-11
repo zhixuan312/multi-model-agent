@@ -2,7 +2,7 @@
   "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns\n\n--- SOURCE-CODE DIRECT-READ (criterion 2) ---\nmock max turns\n\n--- DOCUMENTATION EVIDENCE (criterion 3) ---\nmock max turns\n\n--- RUN-OUTPUT EVIDENCE (criterion 4) ---\nmock max turns\n\n--- DIFF EVIDENCE (criterion 5) ---\nmock max turns",
+      "output": "mock max turns",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
+    "summary": "mock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

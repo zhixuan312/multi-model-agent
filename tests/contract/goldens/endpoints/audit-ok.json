@@ -2,7 +2,7 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nmocked ok\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nmocked ok\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nmocked ok\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nmocked ok\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nmocked ok\n\n--- FIX ACTIONABILITY (criterion 7) ---\nmocked ok\n\n--- DRIFT / STALENESS (criterion 8) ---\nmocked ok\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nmocked ok\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nmocked ok\n\n--- METADATA COMPLETENESS (criterion 11) ---\nmocked ok",
+      "output": "mocked ok",
       "status": "ok",
       "usage": {
         "inputTokens": 110,
@@ -135,6 +135,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -167,7 +169,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmocked ok",
+    "summary": "mocked ok",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

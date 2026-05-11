@@ -85,16 +85,24 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
         && !s.terminal,
       isRework: false, handlerKey: 'quality_review_and_fix' },
 
-    // 4.3: annotate completion — for any reviewPolicy except 'none'. Standard
+    // 4.3: annotate completion — artifact-producing routes only. Standard
     // tier with readonly tools. Runs verifyCommand deterministically first,
     // then invokes annotator LLM. Sets state.completionAnnotation and
-    // state.commitGatePercent. Read-only routes use the existing parallel-
-    // criteria + annotator path (separate dispatcher), so they also skip 4.3.
+    // state.commitGatePercent.
     { rowId: '4.3', stageName: 'annotate_completion', schemaStage: 'annotating',
       runCondition: (s) => isAP
         && s.reviewPolicy !== 'none'
         && !s.terminal,
       isRework: false, handlerKey: 'annotate_completion' },
+    // 4.4: annotate criteria — read-only routes. Merges per-criterion
+    // workerOutputs (from dispatchParallelCriteria in run_initial_impl)
+    // via AnnotatorEngine.annotate. Surfaces "Annotating" as a distinct
+    // user-facing stage matching the artifact-producing Annotating stage.
+    { rowId: '4.4', stageName: 'annotate_criteria', schemaStage: 'annotating',
+      runCondition: (s) => isRO
+        && s.reviewPolicy !== 'none'
+        && !s.terminal,
+      isRework: false, handlerKey: 'annotate_criteria' },
     // 5.2: git_commit — fires when autoCommit + worker wrote files +
     // !readOnlyTask + !terminal AND commitGatePercent ≥ completionThreshold.
     //

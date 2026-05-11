@@ -2,7 +2,7 @@
   "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
-      "output": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok\n\n--- CALLER-ANALYSIS PERSPECTIVE (criterion 2) ---\nmocked ok\n\n--- TEST-DRIVEN PERSPECTIVE (criterion 3) ---\nmocked ok\n\n--- CROSS-FILE DEPENDENCY-MAP PERSPECTIVE (criterion 4) ---\nmocked ok\n\n--- DOCUMENTATION/COMMENT-LENS PERSPECTIVE (criterion 5) ---\nmocked ok",
+      "output": "mocked ok",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok",
+    "summary": "mocked ok",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

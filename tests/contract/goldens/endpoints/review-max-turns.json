@@ -2,7 +2,7 @@
   "headline": "[ok] review completed",
   "results": [
     {
-      "output": "--- TEST GAP (criterion 1) ---\nmock max turns\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nmock max turns\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nmock max turns\n\n--- MISSING EDGE CASE (criterion 4) ---\nmock max turns\n\n--- RACE / CONCURRENCY (criterion 5) ---\nmock max turns\n\n--- RESOURCE LEAK (criterion 6) ---\nmock max turns\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nmock max turns\n\n--- SECURITY REGRESSION (criterion 8) ---\nmock max turns\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nmock max turns\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nmock max turns",
+      "output": "mock max turns",
       "status": "ok",
       "usage": {
         "inputTokens": 100,
@@ -129,6 +129,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -161,7 +163,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST GAP (criterion 1) ---\nmock max turns",
+    "summary": "mock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

@@ -2,7 +2,7 @@
   "headline": "[ok] review completed",
   "results": [
     {
-      "output": "--- TEST GAP (criterion 1) ---\nneeds rework per review\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nneeds rework per review\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nneeds rework per review\n\n--- MISSING EDGE CASE (criterion 4) ---\nneeds rework per review\n\n--- RACE / CONCURRENCY (criterion 5) ---\nneeds rework per review\n\n--- RESOURCE LEAK (criterion 6) ---\nneeds rework per review\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nneeds rework per review\n\n--- SECURITY REGRESSION (criterion 8) ---\nneeds rework per review\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nneeds rework per review\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 100,
@@ -129,6 +129,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -161,7 +163,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

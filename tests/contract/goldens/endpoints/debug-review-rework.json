@@ -2,7 +2,7 @@
   "headline": "[ok] debug completed",
   "results": [
     {
-      "output": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review\n\n--- RECENT-CHANGE ANGLE (criterion 2) ---\nneeds rework per review\n\n--- TEST-FAILURE ANGLE (criterion 3) ---\nneeds rework per review\n\n--- REPRODUCTION ANGLE (criterion 4) ---\nneeds rework per review\n\n--- CONCURRENCY / CONFIGURATION ANGLE (criterion 5) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -99,6 +99,8 @@
           "filesWrittenCount": 0
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -131,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- SYMPTOM-LOCATION ANGLE (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

@@ -10,6 +10,7 @@ import { gitCommitHandler } from './git-commit-handler.js';
 import { specReviewAndFixHandler } from './spec-review-and-fix-handler.js';
 import { qualityReviewAndFixHandler } from './quality-review-and-fix-handler.js';
 import { annotateCompletionHandler } from './annotate-completion-handler.js';
+import { annotateCriteriaHandler } from './annotate-criteria-handler.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './register-context-block-handlers.js';
 import {
@@ -328,6 +329,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     spec_review_and_fix: specReviewAndFixHandler,
     quality_review_and_fix: qualityReviewAndFixHandler,
     annotate_completion: annotateCompletionHandler,
+    annotate_criteria: annotateCriteriaHandler,
 
     register_to_block_store: registerToBlockStoreHandler,
     git_commit: gitCommitHandler,
