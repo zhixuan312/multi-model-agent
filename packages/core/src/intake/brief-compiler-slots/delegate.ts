@@ -1,4 +1,3 @@
-import { REVIEWER_AWARENESS_AP } from '../../review/templates/finding-criteria.js';
 import {
   DELEGATE_PURPOSE_ORIENTATION,
   DELEGATE_SCOPE_RULE,
@@ -9,22 +8,21 @@ import {
 export type ReviewPolicy = 'full' | 'quality_only' | 'diff_only' | 'none';
 
 /**
- * Compile a delegate worker prompt.
+ * Compile a delegate worker prompt — slimmed in 4.2.3 from ~9 KB to
+ * ~3 KB. Cheap workers respond to long layered prompts by spinning on
+ * discovery; this slim version keeps only load-bearing rules. The spec
+ * reviewer (complex tier) catches scope creep / partial fixes and emits
+ * targeted instructions for rework; the rework round applies them
+ * mechanically. The worker no longer needs to anticipate the reviewer's
+ * full rubric — that was REVIEWER_AWARENESS_AP, dropped.
  *
  * Structure (top-down):
- *   1. Orientation (why this exists, success criterion)
+ *   1. Orientation (smallest complete change)
  *   2. The caller's brief (`prompt`)
  *   3. File constraint (when filePaths is set)
  *   4. Scope rule
- *   5. Failure-mode taxonomy
- *   6. Completeness reminder + brief-vs-diff walk + worked example
- *   7. Reviewer awareness (spec + quality self-check)
- *
- * Without (1), (4)-(6), workers calibrated on "implement something
- * good" tend to over-deliver (scope creep) or under-deliver (silent
- * partial fix). The orientation + taxonomy + completeness reminder
- * shifts the calibration to "smallest complete change" — minimal AND
- * complete simultaneously.
+ *   5. Top-4 failure-mode taxonomy
+ *   6. Brief-vs-diff walk
  */
 export function compileDelegatePrompt(input: { prompt: string; filePaths?: string[] }): string {
   const filePathsClause = input.filePaths && input.filePaths.length > 0
@@ -43,7 +41,5 @@ export function compileDelegatePrompt(input: { prompt: string; filePaths?: strin
     DELEGATE_FAILURE_MODES,
     '',
     COMPLETENESS_REMINDER_DELEGATE,
-    '',
-    REVIEWER_AWARENESS_AP,
   ].join('\n');
 }
