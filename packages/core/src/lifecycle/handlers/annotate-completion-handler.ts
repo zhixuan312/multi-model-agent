@@ -129,6 +129,10 @@ export async function annotateCompletionHandler(state: LifecycleState): Promise<
           agentType: annotatorTier,
           briefQualityPolicy: 'off',
           timeoutMs: ctx.timing.timeoutMs,
+          // Pipeline-redesign §3.2.3: annotator is read-only. Explicit
+          // here so the runner doesn't expose editor tools to a stage
+          // whose job is to JUDGE the diff, not modify it.
+          tools: 'readonly',
         },
         [provider],
         {

@@ -49,6 +49,8 @@ export async function qualityReviewAndFixHandler(state: LifecycleState): Promise
         agentType: reviewerTier,
         briefQualityPolicy: 'off',
         timeoutMs: ctx.timing.timeoutMs,
+        // Pipeline-redesign §3.2.2: full editor tools (same as spec stage).
+        tools: 'full',
       },
       [provider],
       {

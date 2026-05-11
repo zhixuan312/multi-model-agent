@@ -51,6 +51,11 @@ export async function specReviewAndFixHandler(state: LifecycleState): Promise<vo
         agentType: reviewerTier,
         briefQualityPolicy: 'off',
         timeoutMs: ctx.timing.timeoutMs,
+        // Pipeline-redesign §3.2.1: reviewer has FULL editor tools so it
+        // can fix gaps inline. Without this, the reviewer is read-only and
+        // can only diagnose (which is what the OLD reviewer did — exactly
+        // the failure mode this redesign was meant to fix).
+        tools: 'full',
       },
       [provider],
       {
