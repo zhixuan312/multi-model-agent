@@ -38,7 +38,7 @@ mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-c
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
-### 2. Choose your main model — intentionally (4.0.3+)
+### 2. Choose your main model — intentionally (4.3.0+)
 
 Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
@@ -46,11 +46,10 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Starting in 4.0.3, the main model is set **per request** via the required `X-MMA-Main-Model` header. The shipped skills do this for you (read from `MMAGENT_MAIN_MODEL` env, default `claude-opus-4-7`). Custom callers MUST send both `X-MMA-Main-Model` and `X-MMA-Client` on every tool route — server returns `400 main_model_required` / `400 client_required` otherwise.
+Starting in 4.3.0, the main model is resolved automatically per request — header → per-client auto-detect (Claude Code reads `~/.claude/projects/*.jsonl`, Codex CLI reads `~/.codex/config.toml`) → `defaults.mainModel` in config → `unknown_main_model` sentinel. Only `X-MMA-Client` remains required on tool routes (the resolver's discriminator).
 
 ```bash
-export MMAGENT_MAIN_MODEL=claude-opus-4-7
-export MMAGENT_CLIENT=claude-code
+export MMAGENT_CLIENT=claude-code           # or codex-cli, gemini-cli, cursor
 ```
 
 ### 3. Write the config
@@ -76,7 +75,7 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-> **Removed in 4.0.3:** `defaults.parentModel` is no longer accepted. Main model now comes from the per-request `X-MMA-Main-Model` header.
+> **4.3.0 update:** `X-MMA-Main-Model` is no longer required — see resolver chain above. `defaults.mainModel` is the explicit operator fallback.
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 

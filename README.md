@@ -54,14 +54,18 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Starting in 4.0.3, the main model is set **per request** via the required `X-MMA-Main-Model` header (and `X-MMA-Client` for the calling-client identity). The shipped skills do this for you automatically — they read `MMAGENT_MAIN_MODEL` from your environment, defaulting to `claude-opus-4-7` if unset. Export it once in your shell rc to pick on purpose:
+Starting in 4.3.0 the main model is resolved automatically per request:
+
+1. `X-MMA-Main-Model` header (override) — highest priority.
+2. Per-client auto-detect — Claude Code reads the latest `~/.claude/projects/<slug>/*.jsonl`; Codex CLI reads `~/.codex/config.toml`.
+3. `defaults.mainModel` from `~/.multi-model/config.json` — explicit operator fallback.
+4. `unknown_main_model` sentinel — only when nothing above resolves.
+
+Only `X-MMA-Client` remains required on tool routes (the resolver's discriminator). Export it once if you're calling the API directly:
 
 ```bash
-export MMAGENT_MAIN_MODEL=claude-opus-4-7   # or gpt-5.5, gemini-3.1-pro, etc.
 export MMAGENT_CLIENT=claude-code           # or codex-cli, gemini-cli, cursor
 ```
-
-Custom callers (not using the shipped skills) MUST send both headers; the daemon returns `400 main_model_required` / `400 client_required` if missing.
 
 ### 3. Write the config
 
@@ -88,7 +92,7 @@ EOF
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
-> **Removed in 4.0.3:** `defaults.parentModel` is no longer accepted. The main model now comes from the per-request `X-MMA-Main-Model` header (one daemon serves multiple parents — Claude Code + Cursor sessions concurrently — so a daemon-wide config can't disambiguate).
+> **4.3.0 update:** `X-MMA-Main-Model` is no longer required — see the resolver chain above. `defaults.mainModel` is the explicit operator fallback when neither the header nor per-client auto-detect resolves.
 
 ### 4. Start the daemon + verify
 
@@ -100,7 +104,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.2.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.3.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -300,14 +304,15 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.2.2
+## What's new in 4.3.0
 
-First wave of Group A platform reliability fixes:
-- **`filesWritten` / `filesRead` deduped by path.** Spec/quality reviewers now see "3 files modified" instead of "10 writes" when a worker iterated 5× on `foo.ts`. Tool-call count remains the raw activity counter.
-- **`writes_unverifiable` downgrade.** Workers that say `done` but produce zero verifiable disk artifacts on write-intent routes (delegate, execute-plan) now return `errorCode: writes_unverifiable` instead of a misleading clean envelope.
-- **Path-validity filter rejects shell heredoc + sandbox-escape entries** from `filesWritten`. `cat > foo.ts << EOF` no longer pollutes the array; absolute paths are rejected as sandbox-escape attempts.
-- **Stale-sibling cwd rejection** (`/tmp/claude/G--*`) at request time + startup hygiene warning. Prior Claude Code test runs leaving sibling project dirs no longer confuse routing.
-- **Storage root consolidated** under `~/.multi-model/` (auth + config + identity + context-blocks all share one root). BREAKING for callers reading the path directly; daemon migration lands in a follow-up patch.
+Major lifecycle redesign + Group A reliability completion:
+- **Pipeline rewrite: review (parallel lint) + rework (complex tier, conditional).** Replaces the prior fix-inline reviewer stages. Spec + quality reviewers run in parallel with readonly tools, emit verdicts + deviations; a single rework stage applies fixes when changes are required, skipped when both approve.
+- **`X-MMA-Main-Model` header is no longer required.** Resolved automatically per request (header → per-client jsonl/toml → config fallback → sentinel). `X-MMA-Client` remains required.
+- **WallClockGuard wired end-to-end.** Per-task budget enforced at every stage entry and tool-call boundary; failures surface as `errorCode: 'guard_wall_clock'` with a well-formed envelope.
+- **Context-overflow pre-flight estimator.** Intake refuses dispatches whose estimated tokens exceed the model cap, emitting `context_overflow_predicted` with biggest-contributors + recovery hints before any worker spawns.
+- **Plan-audit per-task verdicts.** `auditType: 'plan'` now synthesises EXECUTABLE / PARTIAL / BLOCKED per task and surfaces a "Plan-Audit Summary" with the next blocker.
+- **`cwd-validator` ENOENT fix.** Previously every `write_file` to a non-existent path failed silently. Workers can now create new files.
 
 CHANGELOG has the full breakdown.
 

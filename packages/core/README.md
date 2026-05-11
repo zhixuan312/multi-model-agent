@@ -39,7 +39,7 @@ for (const r of results) {
 - **Provider runners** — Claude, Codex, and any OpenAI-compatible endpoint
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
-- **Reviewed lifecycle** — spec review + quality review by a different agent, auto-commit of file changes, file artifact verification
+- **Reviewed lifecycle** — parallel spec + quality lint review by a different tier, conditional rework when verdicts demand changes, annotator-scored commit gate, file artifact verification
 - **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate, research (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
