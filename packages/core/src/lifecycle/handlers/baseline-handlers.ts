@@ -210,11 +210,13 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const workerSelfAssessment = tr && 'workerSelfAssessment' in tr
         ? (tr as { workerSelfAssessment?: 'done' | 'in_progress' | 'no_op' | null }).workerSelfAssessment
         : null;
-      const chainAlreadyFailed =
-        state.specReworkFailed === true ||
-        state.qualityReworkFailed === true ||
-        state.specChainPassed === false ||
-        state.qualityChainPassed === false;
+      // 4.3.0 pipeline redesign: no more chain-failure state. The
+      // writes_unverifiable downgrade now triggers when:
+      //   - reviewPolicy is not 'none' AND
+      //   - annotator marked the work below threshold (commitGatePercent < threshold)
+      // Below-threshold work shouldn't be double-stamped with writes_unverifiable.
+      const belowThreshold = (state.commitGatePercent ?? 100) < (state.completionThreshold ?? 80);
+      const chainAlreadyFailed = belowThreshold;
       const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'verify', 'investigate', 'research', 'explore']);
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
@@ -246,45 +248,43 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         }
       }
 
-      // Chain-failure status override: the implementer's lastRunResult.status
-      // is 'ok' when its turn finished cleanly, but if the spec/quality chain
-      // (or its rework) ultimately rejected the work, the wire envelope must
-      // reflect that — otherwise task_completed reports status=ok despite
-      // spec_chain_passed=false. Mutate state.lastRunResult so emit_task_terminal
-      // (which reads lastRunResult.status directly) picks up the corrected
-      // shape.
-      const chainFailed =
-        state.specReworkFailed === true ||
-        state.qualityReworkFailed === true ||
-        state.specChainPassed === false ||
-        state.qualityChainPassed === false;
-      // 4.2.3+: review chain verdicts are ADVISORY when a commit landed.
-      // If autoCommit fired and there's a real commit in state.commits, the
-      // task DID produce a real disk artifact — the reviewer's flagged
-      // concerns surface on the envelope (via persistSpecReviewConcerns)
-      // as findings the main agent can act on inline, but they don't
-      // downgrade the envelope to "incomplete". Pre-4.2.3 behaviour
-      // (downgrade to incomplete on any chain failure) was a hard gate
-      // that hid successful work behind reviewer pickiness, especially on
-      // cheap workers that couldn't satisfy strict verbatim enforcement.
+      // Pipeline-redesign envelope assembly (4.3.0+, spec §3.5).
+      // Surface annotator output + reviewer notes + verify result as
+      // additive envelope fields. Status derivation:
+      //   - last.status === 'error' (Stage 1 worker crashed) → 'error'
+      //   - commits.length > 0 → 'ok' (commit landed → success)
+      //   - commitGatePercent ≥ threshold but no commit (rare; autoCommit=false) → 'ok'
+      //   - else → 'incomplete' with errorCode 'completion_below_threshold'
+      if (state.completionAnnotation !== undefined) {
+        (enriched as { completionAnnotation?: unknown }).completionAnnotation = state.completionAnnotation;
+      }
+      if (state.commitGatePercent !== undefined) {
+        (enriched as { commitGatePercent?: number }).commitGatePercent = state.commitGatePercent;
+      }
+      if (state.specReviewerNotes !== undefined) {
+        (enriched as { specReviewerNotes?: string }).specReviewerNotes = state.specReviewerNotes;
+      }
+      if (state.qualityReviewerNotes !== undefined) {
+        (enriched as { qualityReviewerNotes?: string }).qualityReviewerNotes = state.qualityReviewerNotes;
+      }
+      if (state.verifyResult !== undefined) {
+        (enriched as { verifyResult?: unknown }).verifyResult = state.verifyResult;
+      }
+
       const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
-      if (chainFailed && !commitsExist) {
+      const gatePercent = state.commitGatePercent ?? 0;
+      const threshold = state.completionThreshold ?? 80;
+
+      if (last.status === 'error') {
+        enriched.status = 'error';
+      } else if (commitsExist) {
+        enriched.status = 'ok';
+      } else if (gatePercent >= threshold) {
+        enriched.status = 'ok';  // gate passed but commit didn't fire (e.g., autoCommit=false)
+      } else if ((last.filesWritten as string[] | undefined)?.length) {
+        // Files written but below threshold → incomplete; surface annotation
         enriched.status = 'incomplete';
-        enriched.workerStatus = 'review_loop_capped';
-        if (state.specReworkFailed === true || state.qualityReworkFailed === true) {
-          enriched.errorCode = 'lifecycle_review_loop_capped';
-        } else if (state.specChainPassed === false) {
-          enriched.errorCode = 'review_spec_rejected_terminal';
-        } else {
-          enriched.errorCode = 'review_quality_findings_unresolved';
-        }
-        // The wire event derives terminalStatus + workerStatus from
-        // RunResult.terminationReason. The implementer's RunResult has
-        // cause='finished' + workerSelfAssessment='done', which produces
-        // terminalStatus='ok' regardless of our status/errorCode overrides
-        // — yielding the R1 invariant violation (terminalStatus=ok with
-        // non-null errorCode). Override terminationReason so the chain-fail
-        // path produces a clean terminalStatus='incomplete' on the wire.
+        enriched.errorCode = 'completion_below_threshold';
         const priorTr = (typeof enriched.terminationReason === 'object' && enriched.terminationReason !== null)
           ? enriched.terminationReason
           : undefined;
@@ -293,10 +293,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           turnsUsed: priorTr?.turnsUsed ?? last.turns ?? 0,
           hasFileArtifacts: priorTr?.hasFileArtifacts ?? (Array.isArray(last.filesWritten) && last.filesWritten.length > 0),
           usedShell: priorTr?.usedShell ?? false,
-          workerSelfAssessment: 'review_loop_capped',
+          workerSelfAssessment: 'done_with_concerns',
           wasPromoted: false,
         };
       }
+      // else: no files, no commit → leave status as worker reported (ok/incomplete/error)
 
       state.responseEnvelope = enriched;
       // emit_task_terminal reads state.lastRunResult, not state.responseEnvelope,
