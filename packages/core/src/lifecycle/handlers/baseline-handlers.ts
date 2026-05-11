@@ -3,25 +3,13 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { RunResult } from '../../types.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
 import { sumStageCosts } from '../shared-compute.js';
-import { runVerifyCommandHandler } from './run-verify-command-handler.js';
 import { gitCommitHandler } from './git-commit-handler.js';
-import {
-  specReviewRound1Handler,
-  specReviewRound2Handler,
-  specReviewRound3Handler,
-  specReworkRound1Handler,
-  specReworkRound2Handler,
-  settleSpecChainHandler,
-} from './spec-chain-handlers.js';
-import {
-  qualityReviewRound1Handler,
-  qualityReviewRound2Handler,
-  qualityReviewRound3Handler,
-  qualityReworkRound1Handler,
-  qualityReworkRound2Handler,
-  settleQualityChainHandler,
-} from './quality-chain-handlers.js';
-import { reviewDiffHandler } from './review-diff-handler.js';
+// Pipeline-redesign (4.3.0+) review-and-fix + annotate handlers replace the
+// old 11-stage spec/quality/diff/verify chain. See pipeline-redesign spec
+// §3.1 / §3.2.
+import { specReviewAndFixHandler } from './spec-review-and-fix-handler.js';
+import { qualityReviewAndFixHandler } from './quality-review-and-fix-handler.js';
+import { annotateCompletionHandler } from './annotate-completion-handler.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './register-context-block-handlers.js';
 import {
@@ -336,22 +324,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     check_files_written: noop,
 
-    spec_review_round_1: specReviewRound1Handler,
-    rework_for_spec_round_1: specReworkRound1Handler,
-    spec_review_round_2: specReviewRound2Handler,
-    rework_for_spec_round_2: specReworkRound2Handler,
-    spec_review_round_3: specReviewRound3Handler,
-    settle_spec_chain: settleSpecChainHandler,
-    quality_review_round_1: qualityReviewRound1Handler,
-    rework_for_quality_round_1: qualityReworkRound1Handler,
-    quality_review_round_2: qualityReviewRound2Handler,
-    rework_for_quality_round_2: qualityReworkRound2Handler,
-    quality_review_round_3: qualityReviewRound3Handler,
-    settle_quality_chain: settleQualityChainHandler,
-    review_diff: reviewDiffHandler,
+    spec_review_and_fix: specReviewAndFixHandler,
+    quality_review_and_fix: qualityReviewAndFixHandler,
+    annotate_completion: annotateCompletionHandler,
 
     register_to_block_store: registerToBlockStoreHandler,
-    run_verify_command: runVerifyCommandHandler,
     git_commit: gitCommitHandler,
     compose_response: composeResponse,
     register_terminal_block: registerTerminalBlockHandler,
