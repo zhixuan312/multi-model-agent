@@ -170,7 +170,7 @@
       {
         "rowId": "4.3",
         "stageName": "annotate_completion",
-        "schemaStage": "quality_review",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "annotate_completion"
@@ -345,7 +345,7 @@
       {
         "rowId": "4.3",
         "stageName": "annotate_completion",
-        "schemaStage": "quality_review",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "annotate_completion"
@@ -520,7 +520,7 @@
       {
         "rowId": "4.3",
         "stageName": "annotate_completion",
-        "schemaStage": "quality_review",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "annotate_completion"

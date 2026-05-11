@@ -61,7 +61,7 @@ export async function qualityReviewAndFixHandler(state: LifecycleState): Promise
         ...(ctx.bus && { bus: ctx.bus }),
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
         ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        stageLabel: 'Quality review + fix',
+        stageLabel: 'Quality review',
       },
     );
   } catch (err) {

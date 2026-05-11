@@ -66,7 +66,7 @@ export async function specReviewAndFixHandler(state: LifecycleState): Promise<vo
         ...(ctx.bus && { bus: ctx.bus }),
         ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
         ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        stageLabel: 'Spec review + fix',
+        stageLabel: 'Spec review',
       },
     );
   } catch (err) {

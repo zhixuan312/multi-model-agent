@@ -90,7 +90,7 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
     // then invokes annotator LLM. Sets state.completionAnnotation and
     // state.commitGatePercent. Read-only routes use the existing parallel-
     // criteria + annotator path (separate dispatcher), so they also skip 4.3.
-    { rowId: '4.3', stageName: 'annotate_completion', schemaStage: 'quality_review',
+    { rowId: '4.3', stageName: 'annotate_completion', schemaStage: 'annotating',
       runCondition: (s) => isAP
         && s.reviewPolicy !== 'none'
         && !s.terminal,
