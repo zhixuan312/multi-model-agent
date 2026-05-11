@@ -10,14 +10,11 @@ import { toolExecutePlanBriefSlot, type ToolExecutePlanBrief } from '../../intak
 import { executePlanHeadlineTemplate } from '../../reporting/headline-templates/execute-plan.js';
 import { executePlanReportSchema } from '../../reporting/report-parser-slots/execute-plan-report.js';
 import { DEFAULT_TASK_TIMEOUT_MS } from '../../config/schema.js';
-import { REVIEWER_AWARENESS_AP } from '../../review/templates/finding-criteria.js';
 import {
   EXECUTE_PLAN_PURPOSE_ORIENTATION,
   EXECUTE_PLAN_SCOPE_RULE,
   EXECUTE_PLAN_FAILURE_MODES,
-  PLAN_FIDELITY_REMINDER,
   PLAN_VS_SOURCE_RECONCILIATION,
-  PROGRESS_BIAS,
   SELF_VERIFICATION,
 } from './implementer-criteria.js';
 
@@ -108,26 +105,16 @@ function buildExecutePlanPrompt(
     );
   }
   parts.push(
-    'Implement the task fully. Follow any acceptance criteria, file paths, and',
-    'constraints in the plan section above. If you cannot find or understand',
-    'the task, report that explicitly — but see PROGRESS_BIAS below before',
-    'choosing to bail without writing any files.',
+    'Implement the task fully. Follow acceptance criteria, file paths, and',
+    'constraints in the plan section above.',
     '',
     EXECUTE_PLAN_SCOPE_RULE,
     '',
     EXECUTE_PLAN_FAILURE_MODES,
     '',
-    PLAN_FIDELITY_REMINDER,
-    '',
     PLAN_VS_SOURCE_RECONCILIATION,
     '',
-    PROGRESS_BIAS,
-    '',
     SELF_VERIFICATION,
-    '',
-    // Tool sweep #12: share spec + quality reviewer rubric so the
-    // worker self-aligns on what each reviewer will judge against.
-    REVIEWER_AWARENESS_AP,
   );
   return parts.join('\n');
 }

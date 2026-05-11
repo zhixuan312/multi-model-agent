@@ -25,84 +25,74 @@ function makePlan(tmp: string): string {
   return planPath;
 }
 
-describe('execute-plan prompt content', () => {
-  it('opens with the fidelity-first orientation block', () => {
+function buildPrompt(tmp: string): string {
+  const planPath = makePlan(tmp);
+  const briefs = toolConfig.briefSlot({
+    filePaths: [planPath],
+    taskDescriptors: ['Step 1: create util'],
+    cwd: tmp,
+  } as any);
+  const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
+  return spec.prompt;
+}
+
+describe('execute-plan prompt content (4.2.3 slim)', () => {
+  it('opens with the mechanical-executor orientation', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
-      const planPath = makePlan(tmp);
-      const briefs = toolConfig.briefSlot({
-        filePaths: [planPath],
-        taskDescriptors: ['Step 1: create util'],
-        cwd: tmp,
-      } as any);
-      const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-      expect(spec.prompt).toContain('Why this execution exists');
-      expect(spec.prompt).toContain('Your job is execution, not improvement');
-      expect(spec.prompt).toContain('Follow the plan EXACTLY as written');
-      expect(spec.prompt).toContain('use them VERBATIM');
+      const prompt = buildPrompt(tmp);
+      expect(prompt).toContain('mechanical executor');
+      expect(prompt).toContain('higher-capability model');
+      expect(prompt).toContain('VERBATIM contracts');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('includes the execute-plan failure-mode taxonomy', () => {
+  it('includes the slim 4-failure-mode taxonomy', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
-      const planPath = makePlan(tmp);
-      const briefs = toolConfig.briefSlot({
-        filePaths: [planPath],
-        taskDescriptors: ['Step 1: create util'],
-        cwd: tmp,
-      } as any);
-      const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-      // All 9 categories.
-      expect(spec.prompt).toContain('PLAN REWRITE');
-      expect(spec.prompt).toContain('STEP SKIP');
-      expect(spec.prompt).toContain('STEP REORDER');
-      expect(spec.prompt).toContain('CODE SUBSTITUTION');
-      expect(spec.prompt).toContain('ACCEPTANCE-CRITERIA OVERRUN');
-      expect(spec.prompt).toContain('ACCEPTANCE-CRITERIA UNDERRUN');
-      expect(spec.prompt).toContain('WRONG-TASK MATCH');
-      expect(spec.prompt).toContain('CROSS-TASK CONTAMINATION');
-      expect(spec.prompt).toContain('PROBLEM-NOT-FLAGGED');
+      const prompt = buildPrompt(tmp);
+      // 4.2.3 slim — top 4 modes calibrated from observed failures.
+      expect(prompt).toContain('CODE SUBSTITUTION');
+      expect(prompt).toContain('STEP SKIP');
+      expect(prompt).toContain('PLAN REWRITE');
+      expect(prompt).toContain('PROBLEM-NOT-FLAGGED');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('restores the dropped fidelity lines (verbatim, no redesign, no substitution)', () => {
+  it('includes plan-vs-source reconciliation rule', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
-      const planPath = makePlan(tmp);
-      const briefs = toolConfig.briefSlot({
-        filePaths: [planPath],
-        taskDescriptors: ['Step 1: create util'],
-        cwd: tmp,
-      } as any);
-      const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-      // These lines were in the older compileExecutePlan and dropped by the
-      // slot-style refactor. 4.1.0 restores them inside the orientation.
-      expect(spec.prompt).toContain('Do NOT redesign');
-      expect(spec.prompt).toContain('Do NOT substitute your own approach');
-      expect(spec.prompt).toContain('written by a higher-capability model');
+      const prompt = buildPrompt(tmp);
+      expect(prompt).toContain('Plan-vs-source reconciliation');
+      expect(prompt).toContain('Reconciliations');
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }
   });
 
-  it('includes the code-block faithfulness walk with worked example', () => {
+  it('includes self-verification requirement', () => {
     const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
     try {
-      const planPath = makePlan(tmp);
-      const briefs = toolConfig.briefSlot({
-        filePaths: [planPath],
-        taskDescriptors: ['Step 1: create util'],
-        cwd: tmp,
-      } as any);
-      const spec = toolConfig.buildTaskSpec(briefs[0], ctx);
-      expect(spec.prompt).toContain('Code-block faithfulness walk');
-      expect(spec.prompt).toContain('Worked example');
-      expect(spec.prompt).toContain('parseTokens');
+      const prompt = buildPrompt(tmp);
+      expect(prompt).toContain('Self-verification');
+      expect(prompt).toContain('PASS / FAIL');
+    } finally {
+      rmSync(tmp, { recursive: true, force: true });
+    }
+  });
+
+  it('is significantly slimmer than the pre-4.2.3 prompt (under 8 KB)', () => {
+    const tmp = mkdtempSync(join(tmpdir(), 'mma-execplan-prompt-'));
+    try {
+      const prompt = buildPrompt(tmp);
+      // Pre-4.2.3 framing was ~16 KB before the section body.
+      // Slim target: ~3 KB framing + section body.
+      const bytes = Buffer.byteLength(prompt, 'utf8');
+      expect(bytes).toBeLessThan(8 * 1024);
     } finally {
       rmSync(tmp, { recursive: true, force: true });
     }

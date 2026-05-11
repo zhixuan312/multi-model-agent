@@ -55,6 +55,49 @@ interface ReviewRoundInput {
   round: 1 | 2 | 3;
 }
 
+/**
+ * Build a surgical rework prompt — frames this round as "apply the
+ * reviewer's targeted instructions to your prior work", not "redo the
+ * task from scratch".
+ *
+ * Cheap workers respond to "redo with these concerns in mind" by
+ * re-reading every file and paraphrasing again (observed 2026-05-11
+ * MiniMax-M2.7 dispatch: 28 minutes, 100 tool calls, 2 writes). They
+ * respond much better to "here are mechanical patches to apply".
+ *
+ * The reviewer (per the new spec-review template) writes concerns as
+ * concrete instructions — "in <file> line N, replace X with Y verbatim
+ * from plan step M". This builder makes those instructions the prompt's
+ * focal content. The original task prompt stays at the top for context,
+ * but the mental model is "apply the patch list", not "re-implement".
+ */
+function buildSpecReworkPrompt(originalPrompt: string, priorConcerns: string[], round: number): string {
+  const concernsList = priorConcerns.length > 0
+    ? priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n')
+    : '(no specific concerns recorded — re-read your prior diff and the plan section above; ensure verbatim match.)';
+
+  return [
+    originalPrompt,
+    '',
+    `# Rework round ${round} — apply the reviewer's targeted instructions`,
+    '',
+    'You implemented a previous attempt. The reviewer compared your diff against the plan section and produced the targeted fix list below. Apply each item mechanically to your prior work.',
+    '',
+    'How to think about this round (different from the initial implementation):',
+    '- This is NOT "re-implement the task from scratch". You already wrote files; they\'re mostly right.',
+    '- Each concern below is a concrete instruction: where to apply, what verbatim text to use, what action (replace / add / remove / copy from plan step N).',
+    '- Apply each instruction as written. Do NOT redesign. Do NOT rewrite parts the reviewer did not flag.',
+    '- After applying every instruction, run the verification commands the plan listed and report PASS/FAIL in your summary.',
+    '- If an instruction is genuinely ambiguous or you cannot find the location it references: note that specific item in your summary as "could not apply: <reason>" — do NOT bail on the whole task.',
+    '',
+    "# Reviewer's targeted instructions (apply each)",
+    concernsList,
+    '',
+    '# Action',
+    'Edit the files to apply the instructions above. Do not redesign. Do not rewrite untouched code. After editing, run the plan-listed verification commands and include their output under "Self-verification" in your summary. Then report briefly: which instructions you applied, which (if any) you could not, and the verification results.',
+  ].join('\n');
+}
+
 async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCallResult | null> {
   const { state, ctx, round } = input;
   const last = state.lastRunResult as RunResult | undefined;
@@ -138,7 +181,15 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
   state.specUnavailable ??= new Map() as UnavailableMap;
   const specUnavailable: UnavailableMap = state.specUnavailable;
 
-  const reworkPrompt = (task.prompt ?? '') + '\n\n[spec rework — address the prior reviewer feedback]';
+  // Surgical rework prompt — frame this round as "apply the reviewer's
+  // targeted instructions to your prior work", not "redo the task".
+  // Cheap workers respond to "redo" by re-reading every file and
+  // paraphrasing again; they respond to "apply these patches" by editing.
+  // Reviewer concerns (per the new spec-review template) are written as
+  // concrete instructions: "in <file> line N, replace X with Y verbatim
+  // from plan step M". The reworker just applies them.
+  const priorConcerns = (state.priorSpecConcerns as string[] | undefined) ?? [];
+  const reworkPrompt = buildSpecReworkPrompt(task.prompt ?? '', priorConcerns, round);
   const reworkTask: TaskSpec = { ...task, prompt: reworkPrompt };
 
   const reworkCall = await runWithFallback<RunResult>({
