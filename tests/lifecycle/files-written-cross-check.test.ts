@@ -146,4 +146,40 @@ describe('A4b.2 crossCheckFilesWritten', () => {
       rmSync(cwd, { recursive: true, force: true });
     }
   });
+
+  it('writeAttempted=false + done + 0 writes → no downgrade (chat-only response)', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'mma-xc-'));
+    try {
+      const result = crossCheckFilesWritten({
+        cwd,
+        filesWritten: [],
+        workerSelfAssessment: 'done',
+        toolsMode: 'full',
+        autoCommit: false,
+        writeAttempted: false,
+      });
+      expect(result.workerStatus).toBeUndefined();
+      expect(result.errorCode).toBeUndefined();
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
+
+  it('writeAttempted=true + done + 0 writes → downgrade fires (shell-heredoc bypass)', () => {
+    const cwd = mkdtempSync(join(tmpdir(), 'mma-xc-'));
+    try {
+      const result = crossCheckFilesWritten({
+        cwd,
+        filesWritten: [],
+        workerSelfAssessment: 'done',
+        toolsMode: 'full',
+        autoCommit: false,
+        writeAttempted: true,
+      });
+      expect(result.workerStatus).toBe('error');
+      expect(result.errorCode).toBe('writes_unverifiable');
+    } finally {
+      rmSync(cwd, { recursive: true, force: true });
+    }
+  });
 });

@@ -220,12 +220,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         const ctxToolMode = ctx?.implementerToolMode;
         const toolsMode: 'full' | 'readonly' | 'none' | undefined =
           ctxToolMode === 'no-shell' ? 'full' : ctxToolMode;
+        const rejected = (last as { filesWrittenRejected?: string[] } | undefined)?.filesWrittenRejected ?? [];
+        const writeAttempted =
+          (enriched.filesWritten?.length ?? 0) > 0 ||
+          rejected.length > 0;
         const xc = crossCheckFilesWritten({
           cwd,
           filesWritten: enriched.filesWritten,
           workerSelfAssessment: workerSelfAssessment ?? null,
           toolsMode,
           autoCommit: state.autoCommit,
+          writeAttempted,
         });
         enriched.filesWritten = xc.filesWritten;
         // Only surface filesWrittenMissing when non-empty — keeps the
@@ -237,15 +242,6 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           enriched.workerStatus = 'failed';
           enriched.errorCode = xc.errorCode;
           enriched.error = xc.errorMessage;
-          // Mirror the downgrade onto state.lastRunResult so the terminal-
-          // handler telemetry (recordTaskCompleted) emits the post-downgrade
-          // workerStatus, not the pre-downgrade 'done'. Without this, wire
-          // telemetry shows 'done' while the HTTP envelope shows 'failed'.
-          if (last) {
-            (last as { workerStatus?: string }).workerStatus = 'failed';
-            (last as { errorCode?: string }).errorCode = xc.errorCode;
-            (last as { error?: string }).error = xc.errorMessage;
-          }
         }
       }
 
