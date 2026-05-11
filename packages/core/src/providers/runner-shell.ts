@@ -239,10 +239,12 @@ export class RunnerShell {
           const enriched = { name: call.name, input: call.input, result };
           allToolCalls.push(enriched);
           turnRecord.toolCalls.push(enriched);
-          // Track file ops so the wire telemetry's filesReadCount /
-          // filesWrittenCount aren't perpetually 0. Only count successful
-          // calls (a tool that threw produced { error: ... } as result).
           const succeeded = !(typeof result === 'object' && result !== null && 'error' in (result as Record<string, unknown>));
+          if (!succeeded) {
+            const errMsg = (result as { error?: string }).error ?? '(no error message)';
+            const inputPreview = JSON.stringify(call.input).slice(0, 200);
+            process.stderr.write(`[runner-shell] tool ${call.name} FAILED — err=${errMsg} input=${inputPreview}\n`);
+          }
           if (succeeded) {
             const path = extractPathFromToolInput(call.input);
             if (READ_TOOL_NAMES.has(call.name) && path) filesReadSet.add(path);
