@@ -35,6 +35,15 @@ export function resolveMainModel(inputs: ResolveInputs): ResolveResult {
   return { model: SENTINEL, source: 'unknown' };
 }
 
+const CLAUDE_CODE_PLACEHOLDERS = new Set(['custom', 'default', 'inherit', 'unknown']);
+
+function isResolvedModelId(value: string): boolean {
+  const v = value.trim().toLowerCase();
+  if (v.length === 0) return false;
+  if (CLAUDE_CODE_PLACEHOLDERS.has(v)) return false;
+  return true;
+}
+
 function resolveClaudeCode(cwd: string, homeDir: string): string | null {
   const slug = cwd.replace(/\//g, '-');
   const projectsDir = path.join(homeDir, '.claude', 'projects', slug);
@@ -57,7 +66,7 @@ function resolveClaudeCode(cwd: string, homeDir: string): string | null {
   for (let i = lines.length - 1; i >= 0; i--) {
     try {
       const parsed = JSON.parse(lines[i]!);
-      if (parsed && typeof parsed.model === 'string' && parsed.model.trim().length > 0) {
+      if (parsed && typeof parsed.model === 'string' && isResolvedModelId(parsed.model)) {
         return parsed.model.trim();
       }
     } catch { /* skip malformed */ }

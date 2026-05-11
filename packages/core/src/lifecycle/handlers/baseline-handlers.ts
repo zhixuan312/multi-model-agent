@@ -237,6 +237,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           enriched.workerStatus = 'failed';
           enriched.errorCode = xc.errorCode;
           enriched.error = xc.errorMessage;
+          // Mirror the downgrade onto state.lastRunResult so the terminal-
+          // handler telemetry (recordTaskCompleted) emits the post-downgrade
+          // workerStatus, not the pre-downgrade 'done'. Without this, wire
+          // telemetry shows 'done' while the HTTP envelope shows 'failed'.
+          if (last) {
+            (last as { workerStatus?: string }).workerStatus = 'failed';
+            (last as { errorCode?: string }).errorCode = xc.errorCode;
+            (last as { error?: string }).error = xc.errorMessage;
+          }
         }
       }
 

@@ -62,6 +62,39 @@ describe('resolveMainModel', () => {
     }
   });
 
+  it('claude-code: skips placeholder model values like "custom" and falls through', () => {
+    const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
+    const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
+    mkdirSync(projectsDir, { recursive: true });
+    writeFileSync(join(projectsDir, 'a1.jsonl'),
+      JSON.stringify({ type: 'message', model: 'custom' }) + '\n'
+    );
+    try {
+      const r = resolveMainModel({ headerValue: undefined, client: 'claude-code', cwd: '/tmp/myapp', configDefaultMainModel: 'fallback-model', homeDir: home });
+      expect(r.model).toBe('fallback-model');
+      expect(r.source).toBe('config');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
+  it('claude-code: prefers the last real model id, skipping later placeholders', () => {
+    const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
+    const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
+    mkdirSync(projectsDir, { recursive: true });
+    writeFileSync(join(projectsDir, 'a1.jsonl'),
+      JSON.stringify({ type: 'message', model: 'claude-opus-4-7' }) + '\n' +
+      JSON.stringify({ type: 'message', model: 'custom' }) + '\n'
+    );
+    try {
+      const r = resolveMainModel({ headerValue: undefined, client: 'claude-code', cwd: '/tmp/myapp', configDefaultMainModel: undefined, homeDir: home });
+      expect(r.model).toBe('claude-opus-4-7');
+      expect(r.source).toBe('auto:claude-code');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('claude-code: jsonl without model field falls through to config', () => {
     const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
     const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
