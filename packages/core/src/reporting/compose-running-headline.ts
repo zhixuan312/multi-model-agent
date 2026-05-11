@@ -14,9 +14,31 @@ export interface RunningState {
   heartbeatIntervalMs?: number;
 }
 
+interface RunningTaskProgress {
+  state: 'implementing' | 'reviewing' | 'done' | 'error' | string;
+  stageInfo?: string;
+  filesRead?: number;
+  filesWritten?: number;
+  toolCalls?: number;
+  errorMessage?: string;
+  files?: string[];
+}
+
+interface RunningHeadlineBatchState {
+  tasks: RunningTaskProgress[];
+  elapsedMs: number;
+}
+
 const DEFAULT_HEARTBEAT_INTERVAL_MS = 15_000;
 
-export function composeRunningHeadline(s: RunningState): string {
+function formatElapsedFromMs(ms: number): string {
+  const elapsedS = Math.max(0, Math.floor(ms / 1000));
+  const elapsedM = Math.floor(elapsedS / 60);
+  const sec = elapsedS % 60;
+  return `${elapsedM}m ${sec}s`;
+}
+
+function formatLegacyHeadline(s: RunningState): string {
   const tasksTotal = Math.max(0, s.tasksTotal);
   const tasksStarted = Math.min(tasksTotal, Math.max(0, s.tasksStarted));
   const tasksCompleted = Math.min(tasksStarted, Math.max(0, s.tasksCompleted));
@@ -45,4 +67,86 @@ export function composeRunningHeadline(s: RunningState): string {
 
   const nRunning = Math.max(0, tasksStarted - tasksCompleted);
   return `${tasksCompleted}/${tasksTotal} complete, ${nRunning} running, ${elapsedS}s elapsed${stallStr}`;
+}
+
+function capitalizeState(state: string): string {
+  if (!state) {
+    return '';
+  }
+  return state.charAt(0).toUpperCase() + state.slice(1);
+}
+
+function formatDoneTaskLine(task: RunningTaskProgress): string {
+  const reads = Math.max(0, task.filesRead ?? 0);
+  const toolCalls = Math.max(0, task.toolCalls ?? 0);
+  const files = Array.isArray(task.files) ? task.files : [];
+
+  if (files.length === 0) {
+    return `done — ${reads} read, ${toolCalls} tool calls`;
+  }
+
+  const shownFiles = files.slice(0, 3);
+  const fileSuffix = files.length > 3 ? `, ... +${files.length - 3} more` : '';
+  return `done — ${reads} read, ${toolCalls} tool calls — files: ${shownFiles.join(', ')}${fileSuffix}`;
+}
+
+function formatActiveTaskLine(task: RunningTaskProgress): string {
+  const verb = capitalizeState(task.state);
+  const reads = Math.max(0, task.filesRead ?? 0);
+  const writes = Math.max(0, task.filesWritten ?? 0);
+  const calls = Math.max(0, task.toolCalls ?? 0);
+  const worker = task.stageInfo ?? 'worker';
+  return `${verb} by ${worker} - ${reads} read, ${writes} write, ${calls} tool calls`;
+}
+
+function formatTaskLine(task: RunningTaskProgress): string {
+  if (task.state === 'done') {
+    return formatDoneTaskLine(task);
+  }
+  if (task.state === 'error') {
+    return `error: ${task.errorMessage ?? ''}`;
+  }
+  return formatActiveTaskLine(task);
+}
+
+function composeBatchHeadline(state: RunningHeadlineBatchState): string {
+  const tasks = state.tasks;
+  const elapsedMs = Math.max(0, state.elapsedMs);
+  const total = tasks.length;
+
+  if (total === 0) {
+    return `no tasks`;
+  }
+
+  if (total === 1) {
+    const task = tasks[0];
+    const elapsed = formatElapsedFromMs(elapsedMs);
+    if (task.state === 'done') {
+      return `[1/1] ${formatDoneTaskLine(task)}`;
+    }
+    if (task.state === 'error') {
+      return `[1/1] ${formatTaskLine(task)}`;
+    }
+    const stateLine = formatActiveTaskLine(task);
+    return `[1/1] ${stateLine.replace(' - ', ` - ${elapsed}, `)}`;
+  }
+
+  const doneCount = tasks.filter((task) => task.state === 'done').length;
+  const header = (doneCount > 0)
+    ? `[${doneCount}/${total} done] running ${formatElapsedFromMs(elapsedMs)}`
+    : `[${total}/${total}] running ${formatElapsedFromMs(elapsedMs)}`;
+
+  const taskLines = tasks.map((task, index) => `  [${index + 1}] ${formatTaskLine(task)}`);
+  return [header, ...taskLines].join('\n');
+}
+
+function hasBatchShape(state: RunningState | RunningHeadlineBatchState): state is RunningHeadlineBatchState {
+  return Array.isArray((state as RunningHeadlineBatchState).tasks);
+}
+
+export function composeRunningHeadline(s: RunningState | RunningHeadlineBatchState): string {
+  if (hasBatchShape(s)) {
+    return composeBatchHeadline(s);
+  }
+  return formatLegacyHeadline(s);
 }
