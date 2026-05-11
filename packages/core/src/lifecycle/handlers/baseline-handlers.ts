@@ -265,6 +265,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (state.reviewFindings !== undefined) {
         (enriched as { reviewFindings?: unknown }).reviewFindings = state.reviewFindings;
       }
+      if (state.specReviewError !== undefined) {
+        (enriched as { specReviewError?: string }).specReviewError = state.specReviewError;
+      }
+      if (state.qualityReviewError !== undefined) {
+        (enriched as { qualityReviewError?: string }).qualityReviewError = state.qualityReviewError;
+      }
+      if (state.reviewError !== undefined) {
+        (enriched as { reviewError?: string }).reviewError = state.reviewError;
+      }
+      if (state.reworkError !== undefined) {
+        (enriched as { reworkError?: string }).reworkError = state.reworkError;
+      }
       if (state.reworkOutput !== undefined) {
         (enriched as { reworkOutput?: string }).reworkOutput = state.reworkOutput;
       }

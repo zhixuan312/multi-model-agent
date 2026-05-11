@@ -108,13 +108,16 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
       if (source === 'spec') state.specReviewError = result.transportError;
       else state.qualityReviewError = result.transportError;
       errors.push(`${source}: ${result.transportError}`);
+      process.stderr.write(`[review-handler] ${source} transportError: ${result.transportError}\n`);
       continue;
     }
     if (result.status !== 'ok') {
-      const msg = `reviewer returned status: ${result.status}`;
+      const errDetail = (result as { error?: string }).error ?? '(no error field)';
+      const msg = `reviewer status=${result.status}; error=${errDetail}`;
       if (source === 'spec') state.specReviewError = msg;
       else state.qualityReviewError = msg;
       errors.push(`${source}: ${msg}`);
+      process.stderr.write(`[review-handler] ${source} ${msg}\n`);
       continue;
     }
     anySuccess = true;
