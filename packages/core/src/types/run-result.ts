@@ -8,6 +8,7 @@ import type {
   TerminationReason,
   TokenUsage,
 } from '../providers/runner-types.js';
+export type { TokenUsage } from '../providers/runner-types.js';
 import type { VerifyStageResult, VerifyStepStatus } from '../lifecycle/handlers/verify-stage.js';
 import type { AgentType } from './task-spec.js';
 import type { ProviderConfig, FallbackOverride } from './config.js';

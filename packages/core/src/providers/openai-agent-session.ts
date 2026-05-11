@@ -5,11 +5,22 @@
 // `OpenAIProvider({ openAIClient })` and passes it as the `Runner`'s
 // `modelProvider`. No global state.
 
-import { Agent, Runner, applyPatchTool, shellTool, OpenAIProvider } from '@openai/agents';
-import type OpenAI from 'openai';
+import { Agent, Runner, OpenAIProvider } from '@openai/agents';
+import OpenAI from 'openai';
 import type { Session, SessionOpts, TurnOpts, TurnResult } from '../types/run-result.js';
 import { normalizeOpenAIAgentsRun } from './normalize-openai-agents.js';
 import { resolveRateCard, priceTokens } from '../bounded-execution/cost-compute.js';
+import { createToolImplementations } from './tool-impls.js';
+import { createOpenAITools } from './openai-tools.js';
+import { COMMIT_BLOCK_GUIDANCE } from './brief-preamble.js';
+
+const SUB_AGENT_INSTRUCTIONS = [
+  'You are a sub-agent completing a single task end-to-end. Your final assistant message is what gets returned to the caller.',
+  'Plan before you act. State a brief plan in your first message. Read files before editing. Trust edit_file/write_file — do not re-read after a successful edit.',
+  'When you have completed the task, produce a final answer summarizing what you did.',
+  '',
+  COMMIT_BLOCK_GUIDANCE,
+].join('\n');
 
 export class OpenAIAgentSession implements Session {
   private readonly modelProvider: OpenAIProvider;
@@ -19,8 +30,24 @@ export class OpenAIAgentSession implements Session {
   private closed = false;
 
   constructor(private readonly args: { client: OpenAI; model: string; opts: SessionOpts }) {
-    this.modelProvider = new OpenAIProvider({ openAIClient: args.client, useResponses: true });
-    this.agent = new Agent({ model: args.model, tools: [applyPatchTool, shellTool] });
+    // OpenAI client identity passes between the openai package's import-mode
+    // resolution variants — the OpenAIProvider option is structurally
+    // compatible. Cast through `unknown` to bypass the nominal-type drift.
+    this.modelProvider = new OpenAIProvider({
+      openAIClient: args.client as unknown as never,
+      useResponses: true,
+    });
+    const impl = createToolImplementations({
+      cwd: args.opts.cwd,
+      signal: args.opts.abortSignal,
+    });
+    const tools = createOpenAITools(impl);
+    this.agent = new Agent({
+      name: 'sub-agent',
+      model: args.model,
+      instructions: SUB_AGENT_INSTRUCTIONS,
+      tools,
+    });
     this.runner = new Runner({ modelProvider: this.modelProvider });
   }
 

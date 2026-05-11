@@ -32,7 +32,7 @@ export function normalizeClaudeTurn(
 
   for (const ev of events) {
     if (ev.type === 'assistant') {
-      const blocks = (ev.message as { content?: Array<{ type: string; [k: string]: unknown }> } | undefined)?.content ?? [];
+      const blocks = ((ev.message as unknown) as { content?: Array<{ type: string; [k: string]: unknown }> } | undefined)?.content ?? [];
       for (const b of blocks) {
         if (b.type === 'text') outputText += (b as { text?: string }).text ?? '';
         if (b.type === 'tool_use') {
