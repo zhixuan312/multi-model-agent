@@ -53,7 +53,7 @@ function extractModelFromEntry(parsed: unknown): string | null {
 }
 
 function resolveClaudeCode(cwd: string, homeDir: string): string | null {
-  const slug = cwd.replace(/\//g, '-');
+  const slug = cwd.replace(/[\\/:]/g, '-');
   const projectsDir = path.join(homeDir, '.claude', 'projects', slug);
   let entries: string[];
   try { entries = fs.readdirSync(projectsDir); } catch { return null; }

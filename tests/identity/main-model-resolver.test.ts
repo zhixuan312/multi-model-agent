@@ -78,6 +78,22 @@ describe('resolveMainModel', () => {
     }
   });
 
+  it('claude-code: slugifies Windows-style cwd (backslashes + drive colon)', () => {
+    const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
+    const projectsDir = join(home, '.claude', 'projects', 'C--Users-foo-project');
+    mkdirSync(projectsDir, { recursive: true });
+    writeFileSync(join(projectsDir, 'a1.jsonl'),
+      JSON.stringify({ type: 'assistant', message: { model: 'claude-opus-4-7' } }) + '\n'
+    );
+    try {
+      const r = resolveMainModel({ headerValue: undefined, client: 'claude-code', cwd: 'C:\\Users\\foo\\project', configDefaultMainModel: undefined, homeDir: home });
+      expect(r.model).toBe('claude-opus-4-7');
+      expect(r.source).toBe('auto:claude-code');
+    } finally {
+      rmSync(home, { recursive: true, force: true });
+    }
+  });
+
   it('claude-code: jsonl without model field falls through to config', () => {
     const home = mkdtempSync(join(tmpdir(), 'mma-resolver-home-'));
     const projectsDir = join(home, '.claude', 'projects', '-tmp-myapp');
