@@ -1,9 +1,9 @@
 {
-  "headline": "[incomplete] delegate: mocked ok (0 files)",
+  "headline": "[ok] delegate: mocked ok (0 files)",
   "results": [
     {
       "output": "mocked ok",
-      "status": "incomplete",
+      "status": "ok",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
@@ -29,14 +29,22 @@
       ],
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
-      "workerStatus": "review_loop_capped",
+      "workerStatus": "done",
       "terminationReason": {
-        "cause": "incomplete",
+        "cause": "finished",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "review_loop_capped",
+        "workerSelfAssessment": "done",
         "wasPromoted": false
+      },
+      "implementationReport": {
+        "summary": "mocked ok",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "stageStats": {
         "implementing": {
@@ -58,92 +66,29 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "spec_review": {
-          "stage": "spec_review",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "standard",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 30,
-          "outputTokens": 60,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 3,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0,
-          "verdict": "changes_required",
-          "roundsUsed": 3,
-          "concernCategories": [],
-          "findingsBySeverity": {
-            "critical": 0,
-            "high": 0,
-            "medium": 0,
-            "low": 0
-          }
-        },
-        "spec_rework": {
-          "stage": "spec_rework",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 20,
-          "outputTokens": 40,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 2,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0,
-          "triggeringConcernCategories": []
         }
       },
-      "concerns": [
-        {
-          "source": "spec_review",
-          "severity": "medium",
-          "message": "reviewer output missing structured verdict (no JSON block, no `## Summary` section) — defaulting to changes_required"
-        }
-      ],
+      "actualCostUSD": null,
       "specReviewStatus": "changes_required",
-      "qualityReviewStatus": "not_applicable",
+      "qualityReviewStatus": "changes_required",
       "diffReviewStatus": "skipped",
       "verification": {
-        "status": "skipped",
-        "steps": [],
-        "totalDurationMs": 0,
-        "skipReason": "no_command"
+        "ran": false,
+        "passed": null,
+        "exitCode": null,
+        "command": [],
+        "tailOutput": null
       },
       "commits": [],
       "agents": {
         "implementer": "standard",
         "implementerToolMode": "full",
         "specReviewer": "complex",
-        "qualityReviewer": "not_applicable"
+        "qualityReviewer": "complex"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "",
-      "qualityReviewReason": "task produced no file artifacts to review",
-      "implementationReport": {
-        "summary": "mocked ok",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "qualityReviewReason": "",
       "structuredReport": {
         "summary": "mocked ok",
         "filesChanged": [],
@@ -155,9 +100,35 @@
       "models": {
         "implementer": "mock-model",
         "specReviewer": "mock-model",
-        "qualityReviewer": null
+        "qualityReviewer": "mock-model"
       },
-      "errorCode": "review_spec_rejected_terminal"
+      "completionAnnotation": {
+        "completionPercent": 0,
+        "perStep": [],
+        "verify": {
+          "ran": false,
+          "passed": null,
+          "exitCode": null,
+          "command": [],
+          "tailOutput": null
+        },
+        "concerns": [
+          "annotator failed to produce structured output; check state.completionAnnotationError"
+        ]
+      },
+      "commitGatePercent": 0,
+      "specReviewerNotes": "mocked ok",
+      "qualityReviewerNotes": "mocked ok",
+      "reviewVerdict": "changes_required",
+      "reviewFindings": [],
+      "reworkApplied": false,
+      "verifyResult": {
+        "ran": false,
+        "passed": null,
+        "exitCode": null,
+        "command": [],
+        "tailOutput": null
+      }
     }
   ],
   "batchTimings": {
@@ -185,7 +156,7 @@
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "changes_required",
-  "qualityReviewVerdict": "not_applicable",
+  "qualityReviewVerdict": "changes_required",
   "roundsUsed": 1,
   "contextBlockId": "<DETERMINISTIC>"
 }

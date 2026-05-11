@@ -25,7 +25,59 @@ export interface RunResult {
   output: string
   status: RunStatus
   usage: TokenUsage
+  /**
+   * Existing per-task cost surface — `{ costUSD, costDeltaVsMainUSD }`.
+   * Kept for back-compat. New readers should prefer `actualCostUSD`
+   * which is populated by composeResponse from `sumStageCosts` and
+   * matches the batch roll-up's per-task contribution.
+   */
   cost?: CostBreakdown
+  /**
+   * A11.2 (4.2.3+): canonical per-task total cost on the public envelope,
+   * computed as the sum of `stageStats[*].costUSD` across entered stages
+   * (same logic as the batch-level `costSummary.totalActualCostUSD`).
+   * Equal to `cost.costUSD` for runs where stage-level pricing is
+   * registered; null when no stage carried a finite cost (e.g. mock
+   * provider runs). Populated by composeResponse — workers and runners
+   * may leave this undefined.
+   */
+  actualCostUSD?: number | null
+  // ── Pipeline-redesign envelope fields (4.3.0+, spec §3.5) ────────────
+  /** Stage 4 structured annotation: completionPercent, perStep, verify, concerns. */
+  completionAnnotation?: {
+    completionPercent: number;
+    perStep: Array<{ step: string; status: 'done' | 'partial' | 'missing'; note: string | null }>;
+    verify: {
+      ran: boolean;
+      passed: boolean | null;
+      exitCode: number | null;
+      command: string[];
+      tailOutput: string | null;
+    };
+    concerns: string[];
+  };
+  /** Stage 4 deterministic commit-gate %: min(backstop, annotatorPercent). */
+  commitGatePercent?: number
+  /** Spec lint-reviewer raw report. */
+  specReviewerNotes?: string
+  /** Quality lint-reviewer raw report. */
+  qualityReviewerNotes?: string
+  /** Combined review verdict from both reviewers. */
+  reviewVerdict?: 'approved' | 'changes_required'
+  /** Merged deviations from both reviewers. */
+  reviewFindings?: Array<{ source: 'spec' | 'quality'; text: string }>
+  /** Rework worker free-text summary (set when rework stage fired). */
+  reworkOutput?: string
+  /** True if rework stage applied edits; false if reviewers approved so it skipped; undefined if stage didn't fire. */
+  reworkApplied?: boolean
+  /** Stage 4 deterministic verify-command result (run inside annotate handler). */
+  verifyResult?: {
+    ran: boolean;
+    passed: boolean | null;
+    exitCode: number | null;
+    command: string[];
+    tailOutput: string | null;
+  }
   turns: number
   filesRead: string[]
   filesWritten: string[]

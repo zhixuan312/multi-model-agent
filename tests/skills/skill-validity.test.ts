@@ -25,9 +25,13 @@ describe('skill validity', () => {
       }
     });
 
-    it(`${dir}/SKILL.md is within line budget (≤200 lines)`, () => {
+    it(`${dir}/SKILL.md is within line budget (≤220 lines)`, () => {
       const content = readFileSync(join(skillRoot, dir, 'SKILL.md'), 'utf8');
-      expect(content.split('\n').length).toBeLessThanOrEqual(200);
+      // Budget bumped 200 → 220 in 4.2.3 to accommodate mma-audit's
+      // auditType=plan documentation (the new mode is structurally
+      // distinct from default/security/performance and needs its own
+      // when-to-use guidance + example).
+      expect(content.split('\n').length).toBeLessThanOrEqual(220);
     });
 
     it(`${dir}/SKILL.md has version: "0.0.0-unreleased" in source frontmatter`, () => {

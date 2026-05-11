@@ -1,6 +1,20 @@
 import type { StagePlan, StageRow, LifecycleState } from './stage-plan-types.js';
 import type { ToolCategory } from '../escalation/escalation-policy.js';
 
+/**
+ * Helper for the `reviewPolicy === 'none'` commit path (pipeline-redesign §2.5).
+ * When reviewPolicy is 'none', stages 2–4 are skipped, so state.commitGatePercent
+ * is undefined when the commit gate runs. This helper returns 100 if files were
+ * written (so the gate trivially passes) or 0 otherwise. Same code path as the
+ * LLM-mediated case — just emits a deterministic value when annotation didn't run.
+ */
+function deriveBypassCommitPercent(s: LifecycleState): number {
+  if (s.reviewPolicy !== 'none') return 0;
+  const last = s.lastRunResult as { filesWritten?: unknown } | undefined;
+  const writes = last?.filesWritten;
+  return Array.isArray(writes) && writes.length > 0 ? 100 : 0;
+}
+
 export function buildStagePlan(category: ToolCategory): StagePlan {
   const isAP = category === 'artifact_producing';
   const isRO = category === 'read_only';
@@ -47,100 +61,60 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
       isRework: false, handlerKey: 'check_files_written',
     },
 
-    // Stage 4 — Spec chain (rows 4.1–4.5; artifact-producing + reviewPolicy='full' only)
-    // 4.1: spec_review_round_1 — fires when reviewPolicy='full'
-    { rowId: '4.1', stageName: 'spec_review_round_1', schemaStage: 'spec_review',
-      runCondition: (s) => isAP && s.reviewPolicy === 'full' && !s.terminal,
-      isRework: false, handlerKey: 'spec_review_round_1' },
-    // 4.2: rework_for_spec_round_1 — fires when round_1 verdict=changes_required
-    { rowId: '4.2', stageName: 'rework_for_spec_round_1', schemaStage: 'spec_rework',
-      runCondition: (s) => isAP && s.specReviewRound1Verdict === 'changes_required' && !s.terminal,
-      isRework: true, handlerKey: 'rework_for_spec_round_1' },
-    // 4.3: spec_review_round_2 — fires when round_1 verdict=changes_required (cascade)
-    { rowId: '4.3', stageName: 'spec_review_round_2', schemaStage: 'spec_review',
-      runCondition: (s) => isAP && s.specReviewRound1Verdict === 'changes_required' && !s.terminal,
-      isRework: false, handlerKey: 'spec_review_round_2' },
-    // 4.4: rework_for_spec_round_2 (rotates tier per C9) — fires when round_2 verdict=changes_required
-    { rowId: '4.4', stageName: 'rework_for_spec_round_2', schemaStage: 'spec_rework',
-      runCondition: (s) => isAP && s.specReviewRound2Verdict === 'changes_required' && !s.terminal,
-      isRework: true, handlerKey: 'rework_for_spec_round_2' },
-    // 4.5: spec_review_round_3 — final spec attempt
-    { rowId: '4.5', stageName: 'spec_review_round_3', schemaStage: 'spec_review',
-      runCondition: (s) => isAP && s.specReviewRound2Verdict === 'changes_required' && !s.terminal,
-      isRework: false, handlerKey: 'spec_review_round_3' },
-    // 4.5.x: settle_spec_chain — sets state.specChainPassed per spec § C10.
-    // runOnTerminal: settle still fires after a hard-fail in the chain so
-    // chain-pass slots get authoritative values for compose_response.
-    { rowId: '4.5.x', stageName: 'settle_spec_chain',
-      runCondition: (s) => isAP && s.reviewPolicy === 'full',
-      isRework: false, handlerKey: 'settle_spec_chain', runOnTerminal: true },
-
-    // Stage 4 — Quality chain (rows 4.6–4.10; artifact-producing OR read-only annotator path)
-    // 4.6: quality_review_round_1 — fires when reviewPolicy in {full, quality_only} AND
-    //      (artifact_producing AND spec passed OR n/a) OR read_only (no spec chain to gate on).
-    //      For read-only tools this is the AnnotatorEngine pass; verdict will be 'annotated'.
-    { rowId: '4.6', stageName: 'quality_review_round_1', schemaStage: 'quality_review',
-      runCondition: (s) => (isAP || isRO)
-        && (s.reviewPolicy === 'full' || s.reviewPolicy === 'quality_only')
-        && (isRO || s.reviewPolicy !== 'full' || s.specChainPassed === true)
-        && !s.terminal,
-      isRework: false, handlerKey: 'quality_review_round_1' },
-    // 4.7: rework_for_quality_round_1 — gated on changes_required only.
-    // ReviewVerdictEnum still permits 'concerns' but the v4 reviewer prompts
-    // never emit it (the binary contract is approved | changes_required); both
-    // 'concerns' and 'approved' fall through. Annotator output 'annotated'
-    // naturally fails this gate as well.
-    { rowId: '4.7', stageName: 'rework_for_quality_round_1', schemaStage: 'quality_rework',
-      runCondition: (s) => isAP && s.qualityReviewRound1Verdict === 'changes_required' && !s.terminal,
-      isRework: true, handlerKey: 'rework_for_quality_round_1' },
-    // 4.8: quality_review_round_2
-    { rowId: '4.8', stageName: 'quality_review_round_2', schemaStage: 'quality_review',
-      runCondition: (s) => isAP && s.qualityReviewRound1Verdict === 'changes_required' && !s.terminal,
-      isRework: false, handlerKey: 'quality_review_round_2' },
-    // 4.9: rework_for_quality_round_2 (rotates tier)
-    { rowId: '4.9', stageName: 'rework_for_quality_round_2', schemaStage: 'quality_rework',
-      runCondition: (s) => isAP && s.qualityReviewRound2Verdict === 'changes_required' && !s.terminal,
-      isRework: true, handlerKey: 'rework_for_quality_round_2' },
-    // 4.10: quality_review_round_3 — final quality attempt
-    { rowId: '4.10', stageName: 'quality_review_round_3', schemaStage: 'quality_review',
-      runCondition: (s) => isAP && s.qualityReviewRound2Verdict === 'changes_required' && !s.terminal,
-      isRework: false, handlerKey: 'quality_review_round_3' },
-    // 4.10.x: settle_quality_chain — mirrors quality_review_round_1's gate so we
-    // only settle when at least one quality round was supposed to fire.
-    // runOnTerminal: same rationale as settle_spec_chain.
-    { rowId: '4.10.x', stageName: 'settle_quality_chain',
-      runCondition: (s) => (isAP || isRO)
-        && (s.reviewPolicy === 'full' || s.reviewPolicy === 'quality_only')
-        && (isRO || s.reviewPolicy !== 'full' || s.specChainPassed === true),
-      isRework: false, handlerKey: 'settle_quality_chain', runOnTerminal: true },
-
-    // 4.11: review_diff — fires when reviewPolicy in {full, diff_only} AND, for 'full', prior chains passed
-    { rowId: '4.11', stageName: 'review_diff', schemaStage: 'diff_review',
+    // ── Stage 4 — Lint-review + rework split (4.3.0+) ──────────────────────
+    // 4.1: review (parallel spec + quality, lint-only, readonly tools).
+    //      Emits state.reviewVerdict + state.reviewFindings.
+    // 4.2: rework (complex tier, full tools, single pass). Skipped when
+    //      reviewVerdict === 'approved'.
+    // 4.3 / 4.4: annotate_completion / annotate_criteria (unchanged).
+    { rowId: '4.1', stageName: 'review', schemaStage: 'review',
+      runCondition: (s) => isAP && s.reviewPolicy !== 'none' && !s.terminal,
+      isRework: false, handlerKey: 'review' },
+    { rowId: '4.2', stageName: 'rework', schemaStage: 'rework',
       runCondition: (s) => isAP
-        && (s.reviewPolicy === 'full' || s.reviewPolicy === 'diff_only')
-        && (s.reviewPolicy !== 'full' || (s.specChainPassed === true && s.qualityChainPassed === true))
+        && s.reviewPolicy !== 'none'
+        && s.reviewVerdict === 'changes_required'
         && !s.terminal,
-      isRework: false, handlerKey: 'review_diff' },
+      isRework: true, handlerKey: 'rework' },
 
-    // Stage 5 — finalize (rows 5.1–5.5)
-    // 5.1: run_verify_command — fires for artifact-producing tools only when
-    // reviews actually ran (reviewPolicy !== 'none'). The verify route's own
-    // verify_work IS the verification, so /verify itself skips this row.
-    { rowId: '5.1', stageName: 'run_verify_command', schemaStage: 'verifying',
-      runCondition: (s) => s.toolCategory === 'artifact_producing'
-        && s.route !== 'verify'
+    // 4.3: annotate completion — artifact-producing routes only. Standard
+    // tier with readonly tools. Runs verifyCommand deterministically first,
+    // then invokes annotator LLM. Sets state.completionAnnotation and
+    // state.commitGatePercent.
+    { rowId: '4.3', stageName: 'annotate_completion', schemaStage: 'annotating',
+      runCondition: (s) => isAP
         && s.reviewPolicy !== 'none'
         && !s.terminal,
-      isRework: false, handlerKey: 'run_verify_command' },
-    // 5.2: git_commit — fires when autoCommit + filesChanged + !readOnlyTask AND
-    // reviews actually ran (reviewPolicy !== 'none').
+      isRework: false, handlerKey: 'annotate_completion' },
+    // 4.4: annotate criteria — read-only routes. Merges per-criterion
+    // workerOutputs (from dispatchParallelCriteria in run_initial_impl)
+    // via AnnotatorEngine.annotate. Surfaces "Annotating" as a distinct
+    // user-facing stage matching the artifact-producing Annotating stage.
+    { rowId: '4.4', stageName: 'annotate_criteria', schemaStage: 'annotating',
+      runCondition: (s) => isRO
+        && s.reviewPolicy !== 'none'
+        && !s.terminal,
+      isRework: false, handlerKey: 'annotate_criteria' },
+    // 5.2: git_commit — fires when autoCommit + worker wrote files +
+    // !readOnlyTask + !terminal AND commitGatePercent ≥ completionThreshold.
+    //
+    // 4.3.0 (pipeline redesign §2.5, §3.1): replaces the binary "reviews
+    // passed" gate with a threshold check. state.commitGatePercent is set by
+    // annotate_completion (row 4.3) for reviewPolicy in {full, quality_only,
+    // diff_only}. For reviewPolicy='none', stages 4.1/4.2/4.3 are skipped, so
+    // commitGatePercent is undefined; deriveBypassCommitPercent returns 100
+    // when files were written (else 0) — uniform code path, single threshold.
     { rowId: '5.2', stageName: 'git_commit', schemaStage: 'committing',
-      runCondition: (s) => s.autoCommit === true
-        && Array.isArray(s.filesChanged)
-        && s.filesChanged.length > 0
-        && !s.readOnlyTask
-        && s.reviewPolicy !== 'none'
-        && !s.terminal,
+      runCondition: (s) => {
+        if (s.autoCommit !== true) return false;
+        const last = s.lastRunResult as { filesWritten?: unknown } | undefined;
+        const writes = last?.filesWritten;
+        if (!Array.isArray(writes) || writes.length === 0) return false;
+        if (s.readOnlyTask) return false;
+        if (s.terminal) return false;
+        const percent = s.commitGatePercent ?? deriveBypassCommitPercent(s);
+        return percent >= (s.completionThreshold ?? 80);
+      },
       isRework: false, handlerKey: 'git_commit' },
     // 5.3.rcb: register_to_block_store — fires for register-context-block
     // route only, before compose_response. Sets state.blockRegistration

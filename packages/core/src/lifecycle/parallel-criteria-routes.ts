@@ -10,6 +10,9 @@ import {
   AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_AUDIT, SCOPE_RULE_AUDIT, ANNOTATOR_AWARENESS_AUDIT, AUDIT_CRITERIA,
 } from '../tools/audit/implementer-criteria.js';
 import {
+  PLAN_AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_PLAN_AUDIT, SCOPE_RULE_PLAN_AUDIT, ANNOTATOR_AWARENESS_PLAN_AUDIT, PLAN_AUDIT_CRITERIA,
+} from '../tools/audit/plan-audit-criteria.js';
+import {
   REVIEW_PURPOSE_ORIENTATION, EVIDENCE_RULE_REVIEW, SCOPE_RULE_REVIEW, ANNOTATOR_AWARENESS_REVIEW, REVIEW_CRITERIA,
 } from '../tools/review/implementer-criteria.js';
 import {
@@ -22,7 +25,7 @@ import {
   INVESTIGATE_PURPOSE_ORIENTATION, EVIDENCE_RULE_INVESTIGATE, SCOPE_RULE_INVESTIGATE, ANNOTATOR_AWARENESS_INVESTIGATE, INVESTIGATE_CRITERIA,
 } from '../tools/investigate/implementer-criteria.js';
 
-export type ReadOnlyRouteName = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
+export type ReadOnlyRouteName = 'audit' | 'audit_plan' | 'review' | 'verify' | 'debug' | 'investigate';
 
 /** Standard finding-format spec — uniform `## Finding N:` shape across
  *  all five read-only routes so the downstream parser/annotator only
@@ -55,6 +58,18 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
       high: 'a substantive missing recommendation, an evidence chain that does not support a load-bearing conclusion, OR a fix that violates a stated principle/constraint of the doc.',
       medium: 'argument-soundness gap, fix-actionability gap, drift between sections, structural inconsistency between similar items, scope-creep risk that needs a guardrail.',
       low: 'stylistic / labeling / formatting issue; missing metadata; minor cross-reference fix.',
+    },
+    mustEmitAtLeastOne: false,
+  },
+  audit_plan: {
+    goalLine: 'Apply THIS verification perspective to every task in the plan above. Each finding is a plan-vs-codebase coherence issue grounded in real file:line evidence. Verify before flagging — use read_file / grep to inspect the source files the plan names.',
+    emptyOutcomeLine: 'If your perspective finds no plan-vs-codebase drift after grounding in the actual source files, respond with the literal text "No findings for this criterion." — that is the EXPECTED outcome on a clean plan. Do NOT pad with prose-quality observations (those belong in auditType=default, not here).',
+    findingMeaningParagraph: 'A finding is a CONCRETE PLAN-VS-CODEBASE DRIFT viewed through this perspective: the plan names a symbol / path / signature / import / test helper / verify command / cross-task dependency that the actual codebase does not match. Title = "<task ID>: <one-line drift>". Severity reflects whether the task can dispatch.',
+    severityMeanings: {
+      critical: 'plan would BLOCK dispatch — e.g. wrong method name (perspective 2), missing modify-target file (perspective 1), wrong signature (perspective 3), missing module export (perspective 4), out-of-order task dependency (perspective 7), wrong tooling (perspective 8). A literal worker freezes on this.',
+      high: 'load-bearing ambiguity — multiple matching symbols and the plan does not disambiguate, OR test harness missing in claimed shape, OR step depends on later step recoverably. Task may execute but produces an ambiguous artifact.',
+      medium: 'step ordering inferable but undeclared, cross-task dependency unstated, verify command vague but recoverable, missing parent dirs for create-targets. Fixable by reordering or adding a sentence; doesn\'t block dispatch.',
+      low: 'cosmetic — naming preference, missing metadata, minor cross-reference. Does not affect executability.',
     },
     mustEmitAtLeastOne: false,
   },
@@ -116,6 +131,13 @@ const ROUTE_BLOCKS: Record<ReadOnlyRouteName, Omit<CachedPrefixBlocks, 'findingF
     annotatorAwareness: ANNOTATOR_AWARENESS_AUDIT,
     criteria: AUDIT_CRITERIA,
   },
+  audit_plan: {
+    orientation: PLAN_AUDIT_PURPOSE_ORIENTATION,
+    evidenceRule: EVIDENCE_RULE_PLAN_AUDIT,
+    scopeRule: SCOPE_RULE_PLAN_AUDIT,
+    annotatorAwareness: ANNOTATOR_AWARENESS_PLAN_AUDIT,
+    criteria: PLAN_AUDIT_CRITERIA,
+  },
   review: {
     orientation: REVIEW_PURPOSE_ORIENTATION,
     evidenceRule: EVIDENCE_RULE_REVIEW,
@@ -158,7 +180,7 @@ export interface ReadOnlyRouteSpec {
  * without route-specific branching code.
  */
 export const READ_ONLY_ROUTES: Record<ReadOnlyRouteName, ReadOnlyRouteSpec> = Object.fromEntries(
-  (['audit', 'review', 'verify', 'debug', 'investigate'] as const).map((route) => {
+  (['audit', 'audit_plan', 'review', 'verify', 'debug', 'investigate'] as const).map((route) => {
     const semantics = ROUTE_SEMANTICS[route];
     const blocks: CachedPrefixBlocks = {
       ...ROUTE_BLOCKS[route],

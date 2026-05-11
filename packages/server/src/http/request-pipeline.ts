@@ -10,6 +10,8 @@ import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
 import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
+import { resolveMainModel, type SupportedClient } from '@zhixuan92/multi-model-agent-core';
+import * as os from 'node:os';
 import type { RequestContext, RawHandler } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -129,24 +131,27 @@ export async function handleRequest(
   const identity = resolveCallerIdentity(req);
 
   if (pipelineCfg.mainModelRequiredPaths.has(pathname)) {
-    if (identity.mainModel === null) {
-      sendError(
-        res,
-        400,
-        'main_model_required',
-        'X-MMA-Main-Model header is required on tool routes (4.0.3+). Set it to your model id, e.g. claude-opus-4-7. Telemetry attribution depends on it; the server refuses billed runs without one.',
-      );
-      return;
-    }
     if (identity.callerClient === 'other') {
       sendError(
         res,
         400,
         'client_required',
-        'X-MMA-Client header is required on tool routes (4.0.3+). Set it to one of: claude-code, cursor, codex-cli, gemini-cli. Telemetry attribution depends on it; the server refuses billed runs without one.',
+        'X-MMA-Client header is required on tool routes. Set it to one of: claude-code, cursor, codex-cli, gemini-cli.',
       );
       return;
     }
+    // A6.2 (4.3.0+): X-MMA-Main-Model is no longer required. Resolve from
+    // header → per-client auto-detect → config defaults.mainModel →
+    // 'unknown_main_model' sentinel.
+    const cwdForResolver = cwdValue ?? process.cwd();
+    const resolved = resolveMainModel({
+      headerValue: identity.mainModel ?? undefined,
+      client: identity.callerClient as SupportedClient,
+      cwd: cwdForResolver,
+      configDefaultMainModel: (cfg as unknown as { defaults?: { mainModel?: string } }).defaults?.mainModel,
+      homeDir: os.homedir(),
+    });
+    identity.mainModel = resolved.model;
   }
 
   // ── Step 9: Hand off to matched handler ────────────────────────────────────

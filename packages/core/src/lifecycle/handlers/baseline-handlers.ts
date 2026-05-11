@@ -2,25 +2,15 @@ import type { StageHandler } from '../lifecycle-driver.js';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { RunResult } from '../../types.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
-import { runVerifyCommandHandler } from './run-verify-command-handler.js';
+import { sumStageCosts } from '../shared-compute.js';
 import { gitCommitHandler } from './git-commit-handler.js';
-import {
-  specReviewRound1Handler,
-  specReviewRound2Handler,
-  specReviewRound3Handler,
-  specReworkRound1Handler,
-  specReworkRound2Handler,
-  settleSpecChainHandler,
-} from './spec-chain-handlers.js';
-import {
-  qualityReviewRound1Handler,
-  qualityReviewRound2Handler,
-  qualityReviewRound3Handler,
-  qualityReworkRound1Handler,
-  qualityReworkRound2Handler,
-  settleQualityChainHandler,
-} from './quality-chain-handlers.js';
-import { reviewDiffHandler } from './review-diff-handler.js';
+// Pipeline-redesign (4.3.0+) review-and-fix + annotate handlers replace the
+// old 11-stage spec/quality/diff/verify chain. See pipeline-redesign spec
+// §3.1 / §3.2.
+import { reviewHandler } from './review-handler.js';
+import { reworkHandler } from './rework-handler.js';
+import { annotateCompletionHandler } from './annotate-completion-handler.js';
+import { annotateCriteriaHandler } from './annotate-criteria-handler.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './register-context-block-handlers.js';
 import {
@@ -71,26 +61,30 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const last = state.lastRunResult as RunResult;
       const enriched: RunResult = { ...last };
 
-      const specVerdicts = [state.specReviewRound1Verdict, state.specReviewRound2Verdict, state.specReviewRound3Verdict];
-      if (specVerdicts.some((v) => v === 'approved')) {
-        enriched.specReviewStatus = 'approved';
-      } else if (specVerdicts.some((v) => v === 'error')) {
+      // A11.2 — surface canonical per-task cost on the public envelope as
+      // `actualCostUSD`, computed from stageStats[*].costUSD across entered
+      // stages. Mirrors the batch-level `costSummary.totalActualCostUSD`
+      // logic so per-task and batch-level cost views are consistent. The
+      // existing `cost: { costUSD, costDeltaVsMainUSD }` field is preserved
+      // for back-compat; existing callers continue to work, new callers
+      // read `actualCostUSD` directly.
+      if (enriched.actualCostUSD === undefined) {
+        const stageStats = (last.stageStats ?? undefined) as Record<string, { entered?: boolean; costUSD?: number | null } | undefined> | undefined;
+        enriched.actualCostUSD = sumStageCosts(stageStats);
+      }
+
+      if (state.specReviewError !== undefined) {
         enriched.specReviewStatus = 'error';
-      } else if (specVerdicts.some((v) => v === 'changes_required')) {
-        enriched.specReviewStatus = 'changes_required';
+      } else if (state.specReviewVerdict !== undefined) {
+        enriched.specReviewStatus = state.specReviewVerdict;
       } else {
         enriched.specReviewStatus = 'not_applicable';
       }
 
-      const qualVerdicts = [state.qualityReviewRound1Verdict, state.qualityReviewRound2Verdict, state.qualityReviewRound3Verdict];
-      if (qualVerdicts.some((v) => v === 'annotated')) {
-        enriched.qualityReviewStatus = 'annotated';
-      } else if (qualVerdicts.some((v) => v === 'approved')) {
-        enriched.qualityReviewStatus = 'approved';
-      } else if (qualVerdicts.some((v) => v === 'error')) {
+      if (state.qualityReviewError !== undefined) {
         enriched.qualityReviewStatus = 'error';
-      } else if (qualVerdicts.some((v) => v === 'changes_required')) {
-        enriched.qualityReviewStatus = 'changes_required';
+      } else if (state.qualityReviewVerdict !== undefined) {
+        enriched.qualityReviewStatus = state.qualityReviewVerdict;
       } else {
         enriched.qualityReviewStatus = 'not_applicable';
       }
@@ -124,7 +118,6 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         const qualityReviewerTier =
           enriched.qualityReviewStatus === 'approved'
             || enriched.qualityReviewStatus === 'changes_required'
-            || enriched.qualityReviewStatus === 'annotated'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
             : (enriched.qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
         enriched.agents = {
@@ -181,7 +174,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         enriched.models = {
           implementer: implModel,
           specReviewer: enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required' ? otherModel : null,
-          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' || enriched.qualityReviewStatus === 'annotated' ? otherModel : null,
+          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' ? otherModel : null,
         };
       }
 
@@ -209,20 +202,29 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const workerSelfAssessment = tr && 'workerSelfAssessment' in tr
         ? (tr as { workerSelfAssessment?: 'done' | 'in_progress' | 'no_op' | null }).workerSelfAssessment
         : null;
-      const chainAlreadyFailed =
-        state.specReworkFailed === true ||
-        state.qualityReworkFailed === true ||
-        state.specChainPassed === false ||
-        state.qualityChainPassed === false;
+      // 4.3.0 pipeline redesign: no more chain-failure state. The
+      // writes_unverifiable downgrade now triggers when:
+      //   - reviewPolicy is not 'none' AND
+      //   - annotator marked the work below threshold (commitGatePercent < threshold)
+      // Below-threshold work shouldn't be double-stamped with writes_unverifiable.
+      const belowThreshold = (state.commitGatePercent ?? 100) < (state.completionThreshold ?? 80);
+      const chainAlreadyFailed = belowThreshold;
       const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'verify', 'investigate', 'research', 'explore']);
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
       if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {
+        // Narrow ToolMode to the subset crossCheckFilesWritten accepts.
+        // `'no-shell'` was added to ToolMode but isn't part of A4b's contract;
+        // for cross-check purposes treat it as `'full'` (worker has write
+        // capability via the non-shell tools).
+        const ctxToolMode = ctx?.implementerToolMode;
+        const toolsMode: 'full' | 'readonly' | 'none' | undefined =
+          ctxToolMode === 'no-shell' ? 'full' : ctxToolMode;
         const xc = crossCheckFilesWritten({
           cwd,
           filesWritten: enriched.filesWritten,
           workerSelfAssessment: workerSelfAssessment ?? null,
-          toolsMode: ctx?.implementerToolMode,
+          toolsMode,
           autoCommit: state.autoCommit,
         });
         enriched.filesWritten = xc.filesWritten;
@@ -238,35 +240,67 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         }
       }
 
-      // Chain-failure status override: the implementer's lastRunResult.status
-      // is 'ok' when its turn finished cleanly, but if the spec/quality chain
-      // (or its rework) ultimately rejected the work, the wire envelope must
-      // reflect that — otherwise task_completed reports status=ok despite
-      // spec_chain_passed=false. Mutate state.lastRunResult so emit_task_terminal
-      // (which reads lastRunResult.status directly) picks up the corrected
-      // shape.
-      const chainFailed =
-        state.specReworkFailed === true ||
-        state.qualityReworkFailed === true ||
-        state.specChainPassed === false ||
-        state.qualityChainPassed === false;
-      if (chainFailed) {
+      // Pipeline-redesign envelope assembly (4.3.0+, spec §3.5).
+      // Surface annotator output + reviewer notes + verify result as
+      // additive envelope fields. Status derivation:
+      //   - last.status === 'error' (Stage 1 worker crashed) → 'error'
+      //   - commits.length > 0 → 'ok' (commit landed → success)
+      //   - commitGatePercent ≥ threshold but no commit (rare; autoCommit=false) → 'ok'
+      //   - else → 'incomplete' with errorCode 'completion_below_threshold'
+      if (state.completionAnnotation !== undefined) {
+        (enriched as { completionAnnotation?: unknown }).completionAnnotation = state.completionAnnotation;
+      }
+      if (state.commitGatePercent !== undefined) {
+        (enriched as { commitGatePercent?: number }).commitGatePercent = state.commitGatePercent;
+      }
+      if (state.specReviewerNotes !== undefined) {
+        (enriched as { specReviewerNotes?: string }).specReviewerNotes = state.specReviewerNotes;
+      }
+      if (state.qualityReviewerNotes !== undefined) {
+        (enriched as { qualityReviewerNotes?: string }).qualityReviewerNotes = state.qualityReviewerNotes;
+      }
+      if (state.reviewVerdict !== undefined) {
+        (enriched as { reviewVerdict?: string }).reviewVerdict = state.reviewVerdict;
+      }
+      if (state.reviewFindings !== undefined) {
+        (enriched as { reviewFindings?: unknown }).reviewFindings = state.reviewFindings;
+      }
+      if (state.specReviewError !== undefined) {
+        (enriched as { specReviewError?: string }).specReviewError = state.specReviewError;
+      }
+      if (state.qualityReviewError !== undefined) {
+        (enriched as { qualityReviewError?: string }).qualityReviewError = state.qualityReviewError;
+      }
+      if (state.reviewError !== undefined) {
+        (enriched as { reviewError?: string }).reviewError = state.reviewError;
+      }
+      if (state.reworkError !== undefined) {
+        (enriched as { reworkError?: string }).reworkError = state.reworkError;
+      }
+      if (state.reworkOutput !== undefined) {
+        (enriched as { reworkOutput?: string }).reworkOutput = state.reworkOutput;
+      }
+      if (state.reworkApplied !== undefined) {
+        (enriched as { reworkApplied?: boolean }).reworkApplied = state.reworkApplied;
+      }
+      if (state.verifyResult !== undefined) {
+        (enriched as { verifyResult?: unknown }).verifyResult = state.verifyResult;
+      }
+
+      const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
+      const gatePercent = state.commitGatePercent ?? 0;
+      const threshold = state.completionThreshold ?? 80;
+
+      if (last.status === 'error') {
+        enriched.status = 'error';
+      } else if (commitsExist) {
+        enriched.status = 'ok';
+      } else if (gatePercent >= threshold) {
+        enriched.status = 'ok';  // gate passed but commit didn't fire (e.g., autoCommit=false)
+      } else if ((last.filesWritten as string[] | undefined)?.length) {
+        // Files written but below threshold → incomplete; surface annotation
         enriched.status = 'incomplete';
-        enriched.workerStatus = 'review_loop_capped';
-        if (state.specReworkFailed === true || state.qualityReworkFailed === true) {
-          enriched.errorCode = 'lifecycle_review_loop_capped';
-        } else if (state.specChainPassed === false) {
-          enriched.errorCode = 'review_spec_rejected_terminal';
-        } else {
-          enriched.errorCode = 'review_quality_findings_unresolved';
-        }
-        // The wire event derives terminalStatus + workerStatus from
-        // RunResult.terminationReason. The implementer's RunResult has
-        // cause='finished' + workerSelfAssessment='done', which produces
-        // terminalStatus='ok' regardless of our status/errorCode overrides
-        // — yielding the R1 invariant violation (terminalStatus=ok with
-        // non-null errorCode). Override terminationReason so the chain-fail
-        // path produces a clean terminalStatus='incomplete' on the wire.
+        enriched.errorCode = 'completion_below_threshold';
         const priorTr = (typeof enriched.terminationReason === 'object' && enriched.terminationReason !== null)
           ? enriched.terminationReason
           : undefined;
@@ -275,10 +309,11 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           turnsUsed: priorTr?.turnsUsed ?? last.turns ?? 0,
           hasFileArtifacts: priorTr?.hasFileArtifacts ?? (Array.isArray(last.filesWritten) && last.filesWritten.length > 0),
           usedShell: priorTr?.usedShell ?? false,
-          workerSelfAssessment: 'review_loop_capped',
+          workerSelfAssessment: 'done_with_concerns',
           wasPromoted: false,
         };
       }
+      // else: no files, no commit → leave status as worker reported (ok/incomplete/error)
 
       state.responseEnvelope = enriched;
       // emit_task_terminal reads state.lastRunResult, not state.responseEnvelope,
@@ -306,22 +341,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     check_files_written: noop,
 
-    spec_review_round_1: specReviewRound1Handler,
-    rework_for_spec_round_1: specReworkRound1Handler,
-    spec_review_round_2: specReviewRound2Handler,
-    rework_for_spec_round_2: specReworkRound2Handler,
-    spec_review_round_3: specReviewRound3Handler,
-    settle_spec_chain: settleSpecChainHandler,
-    quality_review_round_1: qualityReviewRound1Handler,
-    rework_for_quality_round_1: qualityReworkRound1Handler,
-    quality_review_round_2: qualityReviewRound2Handler,
-    rework_for_quality_round_2: qualityReworkRound2Handler,
-    quality_review_round_3: qualityReviewRound3Handler,
-    settle_quality_chain: settleQualityChainHandler,
-    review_diff: reviewDiffHandler,
+    review: reviewHandler,
+    rework: reworkHandler,
+    annotate_completion: annotateCompletionHandler,
+    annotate_criteria: annotateCriteriaHandler,
 
     register_to_block_store: registerToBlockStoreHandler,
-    run_verify_command: runVerifyCommandHandler,
     git_commit: gitCommitHandler,
     compose_response: composeResponse,
     register_terminal_block: registerTerminalBlockHandler,

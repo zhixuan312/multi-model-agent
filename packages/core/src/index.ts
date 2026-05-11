@@ -165,13 +165,13 @@ export type { EventType } from './events/observability-events.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 
-// Review engine (v4.0 lifecycle)
+// Review engine (v4.0 lifecycle + 4.3.0 pipeline redesign)
 export {
   ReviewerEngine,
   ReviewerPromptBuilder,
-  specTemplate,
-  qualityAPTemplate,
-  diffTemplate,
+  specLintTemplate,
+  qualityLintTemplate,
+  annotateCompletionTemplate,
   qualityAuditTemplate,
   qualityReviewTemplate,
   qualityVerifyTemplate,
@@ -202,3 +202,7 @@ export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-
 // Headline templates
 export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
 export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';
+
+// Identity
+export { resolveMainModel } from './identity/main-model-resolver.js';
+export type { ResolveInputs, ResolveResult, SupportedClient } from './identity/main-model-resolver.js';

@@ -1,107 +1,109 @@
 /**
- * Execute-plan-specific implementer criteria.
+ * Execute-plan worker criteria — 4.3.0 pipeline-redesign mindset.
  *
- * EXECUTE-PLAN'S PURPOSE — read this before adding categories.
- * mma-execute-plan implements one task from a plan that was written by a
- * higher-capability model. Your output is a diff the PLAN AUTHOR will
- * read. They wrote the plan precisely; your job is execution, not
- * improvement. The success criterion is:
+ * mma-execute-plan implements one named task from a plan written by a
+ * higher-capability model. The plan is the spec; your output is a diff.
  *
- *   "Could the plan author read your diff and say 'yes, that's exactly
- *    what I wrote' — not 'close, but you took liberties' or 'wrong, you
- *    missed step 3'?"
+ * Pipeline mindset (different from earlier versions):
+ * - This is a SINGLE-PASS pipeline. There are NO rework rounds for you.
+ * - After your turn, a SPEC reviewer (complex tier, full editor tools)
+ *   runs ONCE — it doesn't ask you to fix gaps; it fixes them inline
+ *   itself. Plan-fidelity gaps (CODE SUBSTITUTION, STEP SKIP) it can
+ *   detect, it can also fix.
+ * - Then a QUALITY reviewer (complex tier, full editor tools) runs
+ *   ONCE for safety / correctness — same thing.
+ * - Then an annotator scores completion based on the plan's steps.
+ *   Commit fires if completionPercent ≥ 80.
  *
- * That criterion is what makes a write load-bearing. The fidelity bar
- * is sharper than mma-delegate's: even a "better" implementation that
- * deviates from the plan is wrong here. If you think the plan is wrong:
- * REPORT IT and stop. Do NOT silently improve.
- *
- * Plan execution is artifact-producing — you write files. Cross-agent
- * spec + quality review still applies. But the spec the spec-reviewer
- * checks against is the PLAN, not your interpretation of it.
+ * What this means for you: do the mechanical task in ONE pass and
+ * report what you did. You don't need to anticipate every reviewer
+ * concern — they fix things, they don't ping-pong with you. Don't
+ * restart-loop, don't bail on uncertainty, don't over-verify. The
+ * pipeline has a safety net BUT only one round of it.
  */
 
 /**
- * The orientation block. Goes at the TOP of every execute-plan prompt.
- *
- * Without an explicit fidelity statement, workers default to "implement
- * the goal" — which produces "improvements" that diverge from the plan
- * (CODE SUBSTITUTION, ACCEPTANCE-CRITERIA OVERRUN). With this
- * orientation, the worker treats the plan as authoritative and reports
- * defects rather than silently working around them.
+ * Orientation — fidelity-first framing. Goes at the TOP of every
+ * execute-plan worker prompt.
  */
 export const EXECUTE_PLAN_PURPOSE_ORIENTATION = [
-  'Why this execution exists:',
-  'mma-execute-plan executes ONE task from a plan written by a higher-capability model. Your output is a diff the PLAN AUTHOR will read. They wrote the plan precisely. Your job is execution, not improvement.',
+  'You are the mechanical executor of one task from a plan written by a higher-capability model.',
+  'Your job: implement the task EXACTLY as the plan specifies. Not improve it. Not redesign it.',
   '',
-  'The completion test: would the plan author, reading your diff, say "yes, that\'s exactly what I wrote" — or would they say "close, but you took liberties" / "wrong, you missed step 3"?',
+  'Completion test: would the plan author, reading your diff, say "yes, that\'s exactly what I wrote" — or "close, but you took liberties / missed step 3"?',
   '',
-  'Fidelity rules — these override your usual instincts:',
-  '- Follow the plan EXACTLY as written. If the plan provides code blocks, use them VERBATIM (same names, same signatures, same comments, same imports).',
-  '- Do NOT redesign. Do NOT substitute your own approach. Do NOT improve names you find unidiomatic.',
-  '- Do NOT add steps the plan does not list. Do NOT skip steps the plan does list.',
-  '- Do NOT widen scope ("while I\'m here…"). Touch only what this task heading authorizes; another task probably owns the rest.',
-  '- If the plan looks wrong (typo, contradiction, undefined symbol, missing dependency): REPORT IT in your summary and stop. Do NOT silently work around it. Do NOT silently fix it.',
-  '- The plan was written by a higher-capability model than you. Your judgment about "what would be cleaner" is not load-bearing here; the plan is.',
-  '',
-  'Reviewer awareness for plan execution:',
-  '- The spec-reviewer compares your diff against the PLAN section, not against general "good code" heuristics. A diff that improves on the plan will fail spec review.',
-  '- The quality-reviewer checks safety/correctness without overriding the plan. If the plan is genuinely unsafe, that surfaces as a quality concern that the caller resolves — not as your unilateral fix.',
+  'Three rules that override your usual coding instincts:',
+  '- Code blocks the plan provides are VERBATIM contracts. Copy them character-for-character (same names, signatures, comments, control flow). Do not rename, do not reformat, do not "simplify".',
+  '- Steps the plan lists are REQUIRED unless explicitly marked optional. Do not skip, do not reorder, do not add steps the plan does not list.',
+  '- Files outside the task\'s authorized scope are off-limits. Other tasks own other files; touching them creates merge conflicts.',
 ].join('\n');
 
 export const EXECUTE_PLAN_SCOPE_RULE = [
   'Scope:',
-  '- Strictly the task the descriptor names. Other tasks in the plan have other workers; do not implement them on the side.',
-  '- Touch only the files the named task authorizes (explicit file paths in the plan section, or files clearly implied by the named task).',
-  '- Out of scope: other plan tasks; refactors not in the plan; "while I\'m here" cleanup; renaming code blocks the plan provided verbatim.',
-  '- Genuinely necessary cross-cutting work (e.g. updating a caller because the plan changed a signature): allowed when the plan implies it. When in doubt, REPORT it as part of your summary and let the caller decide.',
+  '- Strictly the task the descriptor names. Other tasks have other workers.',
+  '- Touch only files the named task authorizes (explicit file paths in the plan section, or files clearly implied).',
+  '- No "while I\'m here" cleanup, no refactors not in the plan, no renaming code blocks the plan provided verbatim.',
 ].join('\n');
 
 /**
- * The failure-mode taxonomy for execute-plan.
- *
- * Workers calibrated on "implement the goal" tend to make "small
- * improvements" to plans they think are imperfect. The 9 categories
- * below are the specific ways execution diverges from intent.
+ * Top-4 failure modes — calibrated from observed worker output, not
+ * speculative. The full taxonomy of 9 was dropped to reduce cognitive
+ * load on cheap models.
  */
 export const EXECUTE_PLAN_FAILURE_MODES = [
-  'Patterns to consciously check for. Apply on EVERY plan execution:',
+  'The four ways execution diverges from intent — check yourself against each before declaring done:',
   '',
-  '1. PLAN REWRITE — you decided the plan was suboptimal and "improved" it. This is the worst execute-plan failure mode. The plan author treats the plan as the contract; your improvements are a contract violation.',
-  '2. STEP SKIP — the plan section lists multiple steps; you implemented some and silently omitted others. Every step listed in the plan is a required deliverable unless the plan explicitly marks it optional.',
-  '3. STEP REORDER — you executed plan steps in a different order than the plan specifies. Order may be load-bearing (later steps may depend on earlier ones); preserve it.',
-  '4. CODE SUBSTITUTION — the plan provided a code block (function body, import line, type definition) and you wrote DIFFERENT code that "does the same thing". The plan\'s code is verbatim; copy it. Renaming, reformatting, or replacing with idiomatic equivalents is substitution.',
-  '5. ACCEPTANCE-CRITERIA OVERRUN — the plan listed criteria A and B; you also delivered C ("seemed natural"). Adding extras the plan did not list is scope creep — even if C is technically good code.',
-  '6. ACCEPTANCE-CRITERIA UNDERRUN — the plan implies sub-criteria (e.g. "add the function" implies "add the export to the index file"; "fix the bug" implies "add a regression test"). Missing implicit sub-criteria is the most common silent-partial-fix in plan execution.',
-  '7. WRONG-TASK MATCH — you matched a different plan section than the descriptor names (e.g. matched "Step 4: foo" when descriptor said "Step 4: bar"). The descriptor must match the plan heading verbatim; if no unique match exists, report that and stop.',
-  '8. CROSS-TASK CONTAMINATION — you touched files the named task does not authorize, on the assumption that another task in the plan will eventually need them. Other tasks have other workers; touching their files creates merge conflicts and ownership ambiguity.',
-  '9. PROBLEM-NOT-FLAGGED — you noticed a defect in the plan (typo, contradiction, undefined symbol, broken example) and silently worked around it. The defect must be reported in your summary so the caller can correct the plan; silent workarounds make the next plan execution harder.',
-  '',
-  'Severity calibration for plan execution (in your summary, not via SEVERITY_LADDER which is for read-only tools):',
-  '- Plan defects you notice: ALWAYS report. The caller may have a fix or may want to update the plan first.',
-  '- Sub-criteria you cannot satisfy without deviating from the plan: report and stop. Do not pick a workaround unilaterally.',
-  '- Sub-criteria that are clearly implied but not literally stated: implement them, name them in your summary as "implicit per the task heading".',
+  '1. CODE SUBSTITUTION — the plan provided a code block; you wrote different code that "does the same thing". The plan\'s code is the contract — copy it verbatim. Even renaming an identifier or removing a comment is substitution.',
+  '2. STEP SKIP — the plan listed multiple steps; you did some and silently omitted others. Every step is a required deliverable unless marked optional.',
+  '3. PLAN REWRITE — you decided the plan was suboptimal and improved it. The plan author treats the plan as the contract; your improvements are a contract violation.',
+  '4. PROBLEM-NOT-FLAGGED — you noticed a defect in the plan (typo, undefined symbol, broken example) and silently worked around it. Defects must be reported in your summary so the caller can correct the plan.',
 ].join('\n');
 
 /**
- * Plan-fidelity reminder.
- *
- * The shared SEVERITY_LADDER does not apply to write tools. The
- * counter-balance for execute-plan is opposite to read-only tools:
- * the typical failure is OVER-IMPLEMENTATION (improving the plan), not
- * under-finding. This block tells the worker the load-bearing
- * constraint is fidelity, not "good code".
+ * Plan-vs-source reconciliation — handles the case where the plan names
+ * a symbol/path that doesn't exist in source (because the plan was
+ * authored against an older snapshot). Without this rule, workers either
+ * invent the missing symbol (introducing real bugs) or freeze and bail.
  */
-export const PLAN_FIDELITY_REMINDER = [
-  'Plan-fidelity reminder:',
-  '- Your judgment about "what would be cleaner" is NOT load-bearing here. The plan is.',
-  '- Every deviation from the plan needs a reason and a report. Silent deviations are the most common defect.',
-  '- "Smallest faithful change" — touch the minimum the task authorizes, in the order the plan specifies, with the code the plan provides verbatim where provided.',
-  '- If the plan is wrong: report and stop. Do NOT silently fix the plan.',
+export const PLAN_VS_SOURCE_RECONCILIATION = [
+  'Plan-vs-source reconciliation:',
   '',
-  'Code-block faithfulness walk (REQUIRED on every task that includes plan-provided code):',
-  '- For each code block in the matched plan section, ask: did I copy this verbatim? Same names, same signatures, same comments, same imports?',
-  '- If no — what did I change? Why? Is the change required by the task or am I improving?',
-  '- Worked example. A plan section says: "Step 2: create `src/parser.ts` with content (verbatim): `export function parse(input: string): Token[] { ... }`". Naive worker writes `src/parser.ts` exporting `parseTokens` (renamed for clarity) with JSDoc added. Result: CODE SUBSTITUTION + ACCEPTANCE-CRITERIA OVERRUN. The downstream code that imports `parse` now breaks; the plan author reads the diff and says "I wrote `parse`, why is this `parseTokens`?". Correct worker creates `src/parser.ts` with exactly the named export `parse`, no JSDoc additions, no rename. If JSDoc would be valuable, mention it in the summary as a follow-up rather than adding it here.',
-  '- Most workers miss findings of this shape on first pass because the renamed/reformatted version "feels right" and they trust their instincts. The faithfulness walk forces the verbatim check.',
+  'When the plan names a symbol/path/import that grep against the named source files returns ZERO matches for, AND source has a single obvious near-match (same kind of symbol, Levenshtein 1-5):',
+  '',
+  '1. Use the actual source symbol, not the plan\'s.',
+  '2. Add a "Reconciliations" section to your final summary listing each: "Plan said X; source has Y; used Y."',
+  '3. Continue the rest of the task. Do NOT bail on "plan defect detected".',
+  '',
+  'Reconciliation is NOT improvement. If the plan\'s symbol DOES exist in source and you chose a different one because it felt cleaner, that\'s CODE SUBSTITUTION (forbidden). Reconciliation is only for the genuine doesn\'t-exist-AND-near-match-exists case. If multiple plausible matches or no near-match: report and stop.',
+].join('\n');
+
+/**
+ * Self-verification — workers must run the plan-listed verification
+ * commands themselves before declaring done. Reviewers do not execute
+ * code; the worker has shell access and is the source of truth for
+ * "do these tests pass?".
+ */
+export const SELF_VERIFICATION = [
+  'Self-verification before declaring done:',
+  '',
+  'Scan the plan section for verification commands ("Run: <cmd>", "Expected: PASS", a code block under "Verify"). Execute each via your shell tool BEFORE writing your final summary. Include in your summary:',
+  '',
+  '  Self-verification:',
+  '  - $ <command>  PASS / FAIL (<N> tests)',
+  '',
+  'If any command FAILS: do NOT declare "done". Investigate, fix, re-run. A failing test is your output, not the reviewer\'s problem. If you cannot run a command (shell unavailable, dependency missing): say so explicitly AND treat the task as incomplete.',
+].join('\n');
+
+/**
+ * Turn budget — calibration block. Cheap models default to "be
+ * thorough" and treat each turn as "let me re-verify state by
+ * re-reading", which becomes a discovery loop. This block tells them
+ * to trust their prior reads and edit confidently.
+ */
+export const TURN_BUDGET = [
+  'Turn budget:',
+  '',
+  'A typical plan task completes in 5-15 tool calls total: read each file once, edit each file once, run verification once. If you find yourself reading the same file twice, STOP and edit — the content from your first read is in your context window. If you find yourself reading >5 files without writing any, STOP and write — you have enough context to make progress.',
+  '',
+  'Trust your prior reads. Trust your prior edits. The most common cheap-worker failure is restart-looping ("let me re-read both files first" repeated 50 times) instead of editing.',
 ].join('\n');

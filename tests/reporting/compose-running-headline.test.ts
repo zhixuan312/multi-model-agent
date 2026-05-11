@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { composeRunningHeadline } from '@zhixuan92/multi-model-agent-core';
+import { composeRunningHeadline } from '../../packages/core/src/reporting/compose-running-headline.js';
 
 describe('composeRunningHeadline', () => {
   it('1 task queued', () => {
@@ -39,5 +39,51 @@ describe('composeRunningHeadline', () => {
     });
     expect(out).toMatch(/stalled: no heartbeat for 3[2-3]s/);
     expect(out).toMatch(/1\/1 running/);
+  });
+});
+
+describe('composeRunningHeadline N>1 multi-line format (A7)', () => {
+  it('N=1 unchanged: keeps single-line format with timing on the same line', () => {
+    const out = composeRunningHeadline({
+      tasks: [{ state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 9, filesWritten: 0, toolCalls: 9 }],
+      elapsedMs: 254_000,
+    });
+    expect(out).toMatch(/^\[1\/1\] Implementing by Complex worker \(1\/3\) - 4m 14s, 9 read, 0 write, 9 tool calls/);
+  });
+
+  it('N=4 all running: uses [N/N] running <elapsed> top line + 4 indented per-task lines, 1-indexed', () => {
+    const out = composeRunningHeadline({
+      tasks: [
+        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 12, filesWritten: 8, toolCalls: 20 },
+        { state: 'implementing', stageInfo: 'Complex worker (1/3)', filesRead: 9, filesWritten: 0, toolCalls: 9 },
+        { state: 'reviewing',    stageInfo: 'Complex worker (1/3)', filesRead: 5, filesWritten: 0, toolCalls: 5 },
+        { state: 'error',        errorMessage: 'provider_transport_failure' },
+      ],
+      elapsedMs: 254_000,
+    });
+    const lines = out.split('\n');
+    expect(lines[0]).toBe('[4/4] running 4m 14s');
+    expect(lines[1]).toMatch(/^  \[1\] Implementing by Complex worker \(1\/3\) - 12 read, 8 write, 20 tool calls$/);
+    expect(lines[2]).toMatch(/^  \[2\] Implementing by Complex worker \(1\/3\) - 9 read, 0 write, 9 tool calls$/);
+    expect(lines[3]).toMatch(/^  \[3\] Reviewing by Complex worker \(1\/3\) - 5 read, 0 write, 5 tool calls$/);
+    expect(lines[4]).toMatch(/^  \[4\] error: provider_transport_failure$/);
+  });
+
+  it('N=4 mixed (some done, some running): top line uses [<doneCount>/N done] running <elapsed>', () => {
+    const out = composeRunningHeadline({
+      tasks: [
+        { state: 'done', filesWritten: 2, files: ['src/foo.ts', 'src/bar.ts'], filesRead: 12, toolCalls: 20 },
+        { state: 'done', filesWritten: 1, files: ['src/baz.ts'], filesRead: 9, toolCalls: 9 },
+        { state: 'implementing', stageInfo: 'Complex worker (2/3)', filesRead: 22, filesWritten: 0, toolCalls: 22 },
+        { state: 'error', errorMessage: 'provider_transport_failure' },
+      ],
+      elapsedMs: 482_000,
+    });
+    const lines = out.split('\n');
+    expect(lines[0]).toBe('[2/4 done] running 8m 2s');
+    expect(lines[1]).toMatch(/^  \[1\] done — 12 read, 20 tool calls — files: src\/foo\.ts, src\/bar\.ts$/);
+    expect(lines[2]).toMatch(/^  \[2\] done — 9 read, 9 tool calls — files: src\/baz\.ts$/);
+    expect(lines[3]).toMatch(/^  \[3\] Implementing by Complex worker \(2\/3\) - 22 read, 0 write, 22 tool calls$/);
+    expect(lines[4]).toMatch(/^  \[4\] error: provider_transport_failure$/);
   });
 });

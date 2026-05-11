@@ -1,7 +1,16 @@
 import { readFileSync, realpathSync } from 'node:fs';
 import { resolve, sep } from 'node:path';
 
-const SLICE_CAP_BYTES = 10 * 1024;   // 10 KB per spec line 2075
+// 30 KB cap (4.3.0+ pipeline redesign).
+//
+// Smaller caps forced workers to read the full plan file for any task
+// section >10 KB. The plan file is often 150+ KB and pushes the worker
+// past the model's context window. 30 KB fits every plan section in the
+// 2026-05-10 plan whole, while staying well under any modern model's
+// context budget. Observed 2026-05-11: A9.1 section is 15 KB → truncated
+// at 10 KB mid-Step-5a → reviewers reported "plan incomplete after Step
+// 4" and bailed. With 30 KB cap, the section fits whole.
+const SLICE_CAP_BYTES = 30 * 1024;
 
 export class PlanExtractionError extends Error {
   constructor(public descriptor: string, public reason: string) {

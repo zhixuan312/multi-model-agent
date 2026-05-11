@@ -153,113 +153,35 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_round_1",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_1"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "rework_for_spec_round_1",
-        "schemaStage": "spec_rework",
+        "stageName": "rework",
+        "schemaStage": "rework",
         "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_1"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",
-        "stageName": "spec_review_round_2",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_completion",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_2"
+        "handlerKey": "annotate_completion"
       },
       {
         "rowId": "4.4",
-        "stageName": "rework_for_spec_round_2",
-        "schemaStage": "spec_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_2"
-      },
-      {
-        "rowId": "4.5",
-        "stageName": "spec_review_round_3",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_criteria",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_3"
-      },
-      {
-        "rowId": "4.5.x",
-        "stageName": "settle_spec_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_spec_chain"
-      },
-      {
-        "rowId": "4.6",
-        "stageName": "quality_review_round_1",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_1"
-      },
-      {
-        "rowId": "4.7",
-        "stageName": "rework_for_quality_round_1",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_1"
-      },
-      {
-        "rowId": "4.8",
-        "stageName": "quality_review_round_2",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_2"
-      },
-      {
-        "rowId": "4.9",
-        "stageName": "rework_for_quality_round_2",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_2"
-      },
-      {
-        "rowId": "4.10",
-        "stageName": "quality_review_round_3",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_3"
-      },
-      {
-        "rowId": "4.10.x",
-        "stageName": "settle_quality_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_quality_chain"
-      },
-      {
-        "rowId": "4.11",
-        "stageName": "review_diff",
-        "schemaStage": "diff_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "review_diff"
-      },
-      {
-        "rowId": "5.1",
-        "stageName": "run_verify_command",
-        "schemaStage": "verifying",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "run_verify_command"
+        "handlerKey": "annotate_criteria"
       },
       {
         "rowId": "5.2",
@@ -414,113 +336,35 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_round_1",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_1"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "rework_for_spec_round_1",
-        "schemaStage": "spec_rework",
+        "stageName": "rework",
+        "schemaStage": "rework",
         "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_1"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",
-        "stageName": "spec_review_round_2",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_completion",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_2"
+        "handlerKey": "annotate_completion"
       },
       {
         "rowId": "4.4",
-        "stageName": "rework_for_spec_round_2",
-        "schemaStage": "spec_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_2"
-      },
-      {
-        "rowId": "4.5",
-        "stageName": "spec_review_round_3",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_criteria",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_3"
-      },
-      {
-        "rowId": "4.5.x",
-        "stageName": "settle_spec_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_spec_chain"
-      },
-      {
-        "rowId": "4.6",
-        "stageName": "quality_review_round_1",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_1"
-      },
-      {
-        "rowId": "4.7",
-        "stageName": "rework_for_quality_round_1",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_1"
-      },
-      {
-        "rowId": "4.8",
-        "stageName": "quality_review_round_2",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_2"
-      },
-      {
-        "rowId": "4.9",
-        "stageName": "rework_for_quality_round_2",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_2"
-      },
-      {
-        "rowId": "4.10",
-        "stageName": "quality_review_round_3",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_3"
-      },
-      {
-        "rowId": "4.10.x",
-        "stageName": "settle_quality_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_quality_chain"
-      },
-      {
-        "rowId": "4.11",
-        "stageName": "review_diff",
-        "schemaStage": "diff_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "review_diff"
-      },
-      {
-        "rowId": "5.1",
-        "stageName": "run_verify_command",
-        "schemaStage": "verifying",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "run_verify_command"
+        "handlerKey": "annotate_criteria"
       },
       {
         "rowId": "5.2",
@@ -675,113 +519,35 @@
       },
       {
         "rowId": "4.1",
-        "stageName": "spec_review_round_1",
-        "schemaStage": "spec_review",
+        "stageName": "review",
+        "schemaStage": "review",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_1"
+        "handlerKey": "review"
       },
       {
         "rowId": "4.2",
-        "stageName": "rework_for_spec_round_1",
-        "schemaStage": "spec_rework",
+        "stageName": "rework",
+        "schemaStage": "rework",
         "isRework": true,
         "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_1"
+        "handlerKey": "rework"
       },
       {
         "rowId": "4.3",
-        "stageName": "spec_review_round_2",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_completion",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_2"
+        "handlerKey": "annotate_completion"
       },
       {
         "rowId": "4.4",
-        "stageName": "rework_for_spec_round_2",
-        "schemaStage": "spec_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_spec_round_2"
-      },
-      {
-        "rowId": "4.5",
-        "stageName": "spec_review_round_3",
-        "schemaStage": "spec_review",
+        "stageName": "annotate_criteria",
+        "schemaStage": "annotating",
         "isRework": false,
         "runOnTerminal": false,
-        "handlerKey": "spec_review_round_3"
-      },
-      {
-        "rowId": "4.5.x",
-        "stageName": "settle_spec_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_spec_chain"
-      },
-      {
-        "rowId": "4.6",
-        "stageName": "quality_review_round_1",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_1"
-      },
-      {
-        "rowId": "4.7",
-        "stageName": "rework_for_quality_round_1",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_1"
-      },
-      {
-        "rowId": "4.8",
-        "stageName": "quality_review_round_2",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_2"
-      },
-      {
-        "rowId": "4.9",
-        "stageName": "rework_for_quality_round_2",
-        "schemaStage": "quality_rework",
-        "isRework": true,
-        "runOnTerminal": false,
-        "handlerKey": "rework_for_quality_round_2"
-      },
-      {
-        "rowId": "4.10",
-        "stageName": "quality_review_round_3",
-        "schemaStage": "quality_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "quality_review_round_3"
-      },
-      {
-        "rowId": "4.10.x",
-        "stageName": "settle_quality_chain",
-        "isRework": false,
-        "runOnTerminal": true,
-        "handlerKey": "settle_quality_chain"
-      },
-      {
-        "rowId": "4.11",
-        "stageName": "review_diff",
-        "schemaStage": "diff_review",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "review_diff"
-      },
-      {
-        "rowId": "5.1",
-        "stageName": "run_verify_command",
-        "schemaStage": "verifying",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "run_verify_command"
+        "handlerKey": "annotate_criteria"
       },
       {
         "rowId": "5.2",

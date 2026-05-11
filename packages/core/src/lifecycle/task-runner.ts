@@ -14,6 +14,7 @@ import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
 import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
+import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { pickEscalation } from '../escalation/policy.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
@@ -23,7 +24,7 @@ import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
-import { READ_ONLY_ROUTES, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
 import { makeRunnerShell } from '../providers/make-runner-shell.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
@@ -232,6 +233,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     implementerIdentity: undefined,
     timing: { startMs, timeoutMs, deadlineMs: startMs + timeoutMs, stallTimeoutMs },
     budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
+    wallClockGuard: new WallClockGuard(timeoutMs),
     stall: { controller: new AbortController(), lastEventAtMs: startMs, fired: false },
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
@@ -321,7 +323,17 @@ export async function runTaskViaDispatcher(
       // synthesize a RunResult with workerOutputs[] for the merge annotator.
       if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
         try {
-          const routeSpec = READ_ONLY_ROUTES[route];
+          // A12: when the audit task carries auditType='plan', use the
+          // plan-audit route spec (different criteria + orientation +
+          // semantics) instead of the default audit spec. Other audit
+          // types (default/security/performance) and other read-only
+          // routes use their static route spec unchanged.
+          const taskWithAuditType = task as TaskSpec & { auditType?: string };
+          const lookupKey: ReadOnlyRouteName =
+            (route === 'audit' && taskWithAuditType.auditType === 'plan')
+              ? 'audit_plan'
+              : route;
+          const routeSpec = READ_ONLY_ROUTES[lookupKey];
           const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
           const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
           const preReadFiles: Record<string, string> = {};

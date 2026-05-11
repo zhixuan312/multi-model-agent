@@ -51,9 +51,14 @@ function extractPathFromToolInput(input: unknown): string | undefined {
  *     ambiguous; keeps false-positive rate low.
  */
 const SHELL_WRITE_PATTERNS: RegExp[] = [
-  /[^&|>]>>?\s*[^&|>\s]/,                // > file or >> file (excluding 2>&1, &> handled below)
-  /&>\s*[^&|>\s]/,                       // &> file
-  />\|\s*[^&|>\s]/,                      // >| file
+  // > file or >> file. The (?<![\d&|>]) lookbehind excludes file-descriptor
+  // redirects (2>file, 1>file, 2>>file) which only redirect stderr/stdout —
+  // they do NOT create file artifacts in the way "cat > file" or "tee" does.
+  // Without this, every command using "2>/dev/null" gets counted as a write,
+  // inflating the headline shellWrites counter with non-writes.
+  /(?<![\d&|>])>>?\s*[^&|>\s]/,
+  /&>\s*[^&|>\s]/,                       // &> file (combined redirect)
+  />\|\s*[^&|>\s]/,                      // >| file (force overwrite)
   /\bsed\s+(?:-[a-z]*i[a-z]*\b|--in-place\b)/i,  // sed -i / sed --in-place
   /\b(?:awk|gawk|nawk)\s+-i\s+inplace\b/i,
   /\btee\b/,
@@ -185,6 +190,20 @@ export class RunnerShell {
 
       finalText = turnResult.assistantText;
 
+      // Diagnostic visibility (4.2.3+): include the assistant text on
+      // `runner_response_received` when verbose logging is meaningful.
+      // Pre-fix, only `assistantTextLen` was emitted, which made it
+      // impossible to tell from the log alone WHY a spec/quality review
+      // rejected (the reviewer's rejection text lived only in the live
+      // worker output, never in any persistent log). Now: full text is
+      // present on every turn, capped at 16 KB so a runaway implementer
+      // narrative doesn't bloat the JSONL log. 16 KB is comfortably
+      // larger than every reviewer/annotator response observed in
+      // production (typical ~500 bytes; 99th percentile <8 KB).
+      const ASSISTANT_TEXT_LOG_CAP = 16 * 1024;
+      const txt = turnResult.assistantText ?? '';
+      const truncated = txt.length > ASSISTANT_TEXT_LOG_CAP;
+      const assistantText = truncated ? txt.slice(0, ASSISTANT_TEXT_LOG_CAP) : txt;
       input.bus?.emit({
         event: 'runner_response_received',
         ts: new Date().toISOString(),
@@ -192,6 +211,8 @@ export class RunnerShell {
         turnIndex: turn,
         finishReason: turnResult.finishReason,
         assistantTextLen: turnResult.assistantText.length,
+        ...(assistantText.length > 0 && { assistantText }),
+        ...(truncated && { assistantTextTruncated: true }),
         toolCallCount: turnResult.toolCalls.length,
         ...(turnResult.responseShape?.stopReason !== undefined && { stopReason: turnResult.responseShape.stopReason }),
         ...(turnResult.responseShape?.contentBlocks !== undefined && { contentBlocks: turnResult.responseShape.contentBlocks }),
@@ -223,10 +244,19 @@ export class RunnerShell {
           const enriched = { name: call.name, input: call.input, result };
           allToolCalls.push(enriched);
           turnRecord.toolCalls.push(enriched);
-          // Track file ops so the wire telemetry's filesReadCount /
-          // filesWrittenCount aren't perpetually 0. Only count successful
-          // calls (a tool that threw produced { error: ... } as result).
+          if (input.wallClockGuard) {
+            try { input.wallClockGuard.checkOrThrow(); }
+            catch (err) {
+              process.stderr.write(`[runner-shell] wall-clock guard fired: ${err instanceof Error ? err.message : String(err)}\n`);
+              throw err;
+            }
+          }
           const succeeded = !(typeof result === 'object' && result !== null && 'error' in (result as Record<string, unknown>));
+          if (!succeeded) {
+            const errMsg = (result as { error?: string }).error ?? '(no error message)';
+            const inputPreview = JSON.stringify(call.input).slice(0, 200);
+            process.stderr.write(`[runner-shell] tool ${call.name} FAILED — err=${errMsg} input=${inputPreview}\n`);
+          }
           if (succeeded) {
             const path = extractPathFromToolInput(call.input);
             if (READ_TOOL_NAMES.has(call.name) && path) filesReadSet.add(path);

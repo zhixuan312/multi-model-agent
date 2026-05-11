@@ -30,16 +30,21 @@ import type { LifecycleState } from './stage-plan-types.js';
 import { buildStagePlan } from './stage-plan-builder.js';
 
 /** Canonical schemaStage → human-readable label used in `stageLabel` events
- *  emitted by handlers + shown in the polling headline. */
+ *  emitted by handlers + shown in the polling headline.
+ *
+ *  Pipeline (4.3.0+, lint+rework split):
+ *    Implementing → Review → Rework → Annotating → Committing → Finalizing
+ *
+ *  Per-route which stages fire:
+ *    Read-only:  Implementing → Annotating → Finalizing
+ *    Research:   Implementing → Finalizing
+ *    Write:      all stages; Rework only when review verdict is changes_required;
+ *                Committing conditional on commit-gate threshold. */
 const SCHEMA_STAGE_LABELS: Record<string, string> = {
   implementing: 'Implementing',
-  annotating: 'Annotating',           // quality_review on read-only routes (audit/review/verify/debug/investigate)
-  spec_review: 'Spec review',
-  spec_rework: 'Spec rework',
-  quality_review: 'Quality review',
-  quality_rework: 'Quality rework',
-  diff_review: 'Diff review',
-  verifying: 'Verifying',
+  review: 'Review',
+  rework: 'Rework',
+  annotating: 'Annotating',
   committing: 'Committing',
   finalizing: 'Finalizing',
 };
@@ -62,18 +67,10 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   'register-context-block': { category: 'assist',             reviewPolicy: 'none' },
 };
 
-/** Route-specific overrides for stages that the StagePlan doesn't model
- *  but the user-facing progression should still surface. Read-only routes
- *  produce annotations rather than spec/quality reviews; the stage plan
- *  reuses the quality_review schemaStage but the agent-facing label is
- *  "Annotating" — surface it that way. */
-const ROUTE_LABEL_OVERRIDES: Record<string, Record<string, string>> = {
-  audit:       { quality_review: 'Annotating' },
-  review:      { quality_review: 'Annotating' },
-  verify:      { quality_review: 'Annotating' },
-  debug:       { quality_review: 'Annotating' },
-  investigate: { quality_review: 'Annotating' },
-};
+/** Route-specific label overrides — empty post-redesign because each
+ *  route's StagePlan row uses the right schemaStage directly. Kept as a
+ *  stub so the lookup in stageOrderForRoute() doesn't need a special case. */
+const ROUTE_LABEL_OVERRIDES: Record<string, Record<string, string>> = {};
 
 /** Routes where the StagePlan doesn't include a coarse "Finalizing" row
  *  but we want one in the polling progression so the agent sees a clean
@@ -182,8 +179,6 @@ export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy
  *  (because spec_rework / quality_rework are distinct schemaStages), so
  *  the bracket advances correctly when a rework fires. */
 export function normalizeStageLabel(label: string): string {
-  if (/^Spec rework/i.test(label)) return 'Spec rework';
-  if (/^Quality rework/i.test(label)) return 'Quality rework';
   return label;
 }
 

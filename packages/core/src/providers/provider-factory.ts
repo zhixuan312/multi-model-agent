@@ -6,7 +6,7 @@ import { OpenAIChatAdapter } from './openai-chat-adapter.js';
 import { OpenAIResponsesAdapter } from './openai-responses-adapter.js';
 import { makeToolDefinitions } from './tool-definitions.js';
 import type { RunnerAdapter } from './runner-adapter.js';
-import { getCodexAuth } from '../identity/auth-token-store.js';
+import { getCodexAuth, getClaudeOAuth } from '../identity/auth-token-store.js';
 import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 let coreTestProviderOverride: Provider | null = null;
@@ -51,7 +51,32 @@ export function buildAdapter(agentConfig: {
     ?? (agentConfig.apiKeyEnv ? process.env[agentConfig.apiKeyEnv] : undefined);
 
   switch (agentConfig.type) {
-    case 'claude':
+    case 'claude': {
+      // A13 (4.2.3+): Claude Max subscription support. When the user has
+      // no explicit apiKey/apiKeyEnv and no baseUrl, fall back to the
+      // OAuth token stored by Claude Code in the macOS Keychain. This
+      // mirrors the Codex path below (`getCodexAuth()` reads
+      // ~/.codex/auth.json). Restores the auth flow that was implicit
+      // in 3.x via @anthropic-ai/claude-agent-sdk before the HTTP-client
+      // refactor.
+      const oauth = (!apiKey && !agentConfig.baseUrl) ? getClaudeOAuth() : null;
+      if (oauth) {
+        return new AnthropicMessagesAdapter({
+          apiKey: '',
+          oauthAccessToken: oauth.accessToken,
+          model: agentConfig.model,
+          maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
+          providerType: 'claude',
+        });
+      }
+      return new AnthropicMessagesAdapter({
+        apiKey: apiKey || 'not-needed',
+        baseURL: agentConfig.baseUrl,
+        model: agentConfig.model,
+        maxOutputTokens: ANTHROPIC_MAX_TOKENS_REQUIRED,
+        providerType: 'claude',
+      });
+    }
     case 'claude-compatible':
       return new AnthropicMessagesAdapter({
         apiKey: apiKey || 'not-needed',

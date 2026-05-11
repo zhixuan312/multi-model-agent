@@ -38,6 +38,12 @@ export interface TaskSpec {
   autoCommit?: boolean
   planContext?: string
   /**
+   * Stage 5 commit-gate threshold (4.3.0+ pipeline redesign). Commit fires
+   * when `state.commitGatePercent >= completionThreshold`. Range 0..100.
+   * Default 80 when omitted. See pipeline-redesign spec §3.4.
+   */
+  completionThreshold?: number
+  /**
    * Optional task-specific tool injection. When present, runner adapters
    * merge these tools into the worker's tool surface ON TOP of whatever
    * `tools: ToolMode` would normally produce. Used by `/explore` for the
@@ -56,4 +62,12 @@ export interface TaskSpec {
    * statement. Investigate: question.
    */
   parallelTarget?: string
+  /**
+   * Audit-specific. Set by tools/audit/tool-config.ts buildTaskSpec when
+   * input.auditType is 'plan'. The lifecycle's parallel-criteria
+   * dispatcher reads this to route plan-audit tasks to the `audit_plan`
+   * route spec (different orientation / criteria / semantics) instead
+   * of the default audit spec. Other tools leave this undefined.
+   */
+  auditType?: 'default' | 'security' | 'performance' | 'plan'
 }

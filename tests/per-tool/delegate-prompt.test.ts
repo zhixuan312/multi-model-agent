@@ -1,33 +1,26 @@
 import { describe, it, expect } from 'vitest';
 import { compileDelegatePrompt } from '../../packages/core/src/intake/brief-compiler-slots/delegate.js';
 
-describe('delegate prompt content', () => {
-  it('opens with the smallest-complete-change orientation block', () => {
+describe('delegate prompt content (4.2.3 slim)', () => {
+  it('opens with the smallest-complete-change orientation', () => {
     const out = compileDelegatePrompt({ prompt: 'add util.clamp(x,min,max)' });
-    expect(out).toContain('Why this delegation exists');
     expect(out).toContain('SMALLEST COMPLETE CHANGE');
-    expect(out).toContain('minimal AND complete simultaneously');
+    expect(out).toContain('minimal AND complete');
   });
 
-  it('includes the delegate failure-mode taxonomy', () => {
+  it('includes the slim 4-failure-mode taxonomy', () => {
     const out = compileDelegatePrompt({ prompt: 'add util.clamp' });
-    // All 9 categories.
+    // 4.2.3 slim — top 4 modes calibrated from observed reviewer rejections.
     expect(out).toContain('SCOPE CREEP');
     expect(out).toContain('SILENT PARTIAL FIX');
-    expect(out).toContain('WRONG FILE TARGET');
     expect(out).toContain('PHANTOM TEST PASS');
-    expect(out).toContain('CROSS-CUTTING DAMAGE');
-    expect(out).toContain('CONVENTION DRIFT');
     expect(out).toContain('INCOMPLETE REFACTOR');
-    expect(out).toContain('SPEC OVERREACH');
-    expect(out).toContain('UNDOCUMENTED ASSUMPTION');
   });
 
-  it('includes the brief-vs-diff walk with worked example', () => {
+  it('includes the brief-vs-diff walk', () => {
     const out = compileDelegatePrompt({ prompt: 'add util.clamp' });
     expect(out).toContain('Brief-vs-diff walk');
-    expect(out).toContain('Worked example');
-    expect(out).toContain('paginate');
+    expect(out).toContain('"Smallest" means no extras. "Complete" means no gaps');
   });
 
   it('strengthens the file constraint when filePaths is set', () => {
@@ -52,15 +45,17 @@ describe('delegate prompt content', () => {
     const out = compileDelegatePrompt({ prompt: 'add util.clamp(x,min,max) to src/util.ts' });
     expect(out).toContain('Brief from the caller');
     expect(out).toContain('add util.clamp(x,min,max) to src/util.ts');
-    // Brief should appear after the orientation but before the failure-modes block.
-    // The failure-modes block opens with a unique sentinel ("Patterns to
-    // consciously check for. Apply on EVERY delegated task:") — using the
-    // bare phrase "SCOPE CREEP" would pick up the earlier mention inside
-    // the orientation block.
-    const orientationIdx = out.indexOf('Why this delegation exists');
+    const orientationIdx = out.indexOf('SMALLEST COMPLETE CHANGE');
     const briefIdx = out.indexOf('add util.clamp(x,min,max) to src/util.ts');
-    const failureBlockIdx = out.indexOf('Patterns to consciously check for. Apply on EVERY delegated task');
+    const scopeIdx = out.indexOf('Scope:');
     expect(orientationIdx).toBeLessThan(briefIdx);
-    expect(briefIdx).toBeLessThan(failureBlockIdx);
+    expect(briefIdx).toBeLessThan(scopeIdx);
+  });
+
+  it('is significantly slimmer than the pre-4.2.3 prompt (under 6 KB)', () => {
+    const out = compileDelegatePrompt({ prompt: 'add util.clamp' });
+    // Pre-4.2.3 framing was ~9 KB. Slim target: ~3 KB framing.
+    const bytes = Buffer.byteLength(out, 'utf8');
+    expect(bytes).toBeLessThan(6 * 1024);
   });
 });

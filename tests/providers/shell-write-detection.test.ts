@@ -16,6 +16,15 @@ describe('shellCommandWritesFs (Gap 11)', () => {
     expect(shellCommandWritesFs('npm test 2>&1 | grep PASS')).toBe(false);
   });
 
+  it('does NOT detect file-descriptor redirects to /dev/null or other dummies', () => {
+    // 2>/dev/null and 1>file are stream redirects to existing dummies, not
+    // file-creating writes. Tightening this kept Discovery commands from
+    // inflating the shellWrites counter.
+    expect(shellCommandWritesFs('grep -rn pattern . 2>/dev/null')).toBe(false);
+    expect(shellCommandWritesFs('find . -name "*.ts" 2>/dev/null | head')).toBe(false);
+    expect(shellCommandWritesFs('cmd 1>/dev/null 2>&1')).toBe(false);
+  });
+
   it('detects sed -i variants', () => {
     expect(shellCommandWritesFs("sed -i 's/old/new/' file.txt")).toBe(true);
     expect(shellCommandWritesFs("sed -i '' 's/old/new/' file.txt")).toBe(true); // BSD sed

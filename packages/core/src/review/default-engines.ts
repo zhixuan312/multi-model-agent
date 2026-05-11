@@ -1,9 +1,13 @@
 import { ReviewerEngine } from './reviewer-engine.js';
 import { AnnotatorEngine } from './annotator-engine.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
-import { specTemplate } from './templates/spec-review.js';
-import { qualityAPTemplate } from './templates/quality-review-artifact.js';
-import { diffTemplate } from './templates/diff-review.js';
+// Pipeline-redesign (4.3.0+): spec/quality-AP/diff templates removed.
+// Their callers (spec-chain-handlers, quality-chain-handlers, review-diff-handler)
+// were also removed. Read-only route templates remain — they power /audit, /review,
+// /verify, /debug, /investigate via the parallel-criteria + annotator path
+// (separate from the execute-plan / delegate pipeline this redesign affects).
+import { specLintTemplate } from './templates/spec-review.js';
+import { qualityLintTemplate } from './templates/quality-review.js';
 import { qualityAuditTemplate } from './templates/quality-review-audit.js';
 import { qualityReviewTemplate } from './templates/quality-review-review.js';
 import { qualityVerifyTemplate } from './templates/quality-review-verify.js';
@@ -13,7 +17,7 @@ import { qualityInvestigateTemplate } from './templates/quality-review-investiga
 export function createDefaultReviewerEngine(): ReviewerEngine {
   return new ReviewerEngine(
     new ReviewerPromptBuilder(
-      { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+      { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
       {
         audit: qualityAuditTemplate,
         review: qualityReviewTemplate,

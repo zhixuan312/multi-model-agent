@@ -68,10 +68,11 @@ export interface FileBackedContextBlockStoreOptions {
   maxTotalBytes?: number;
   /** Override `os.homedir()` — used by tests for filesystem isolation. */
   homeDir?: string;
+  maxBlocksPerProject?: number;
 }
 
 export class FileBackedContextBlockStore implements ContextBlockStore {
-  /** Absolute root: `<homeDir>/.multi-model-agent/context-blocks/<sha256(projectCwd)>`.
+  /** Absolute root: `<homeDir>/.multi-model/context-blocks/<sha256(projectCwd)>`.
    *  Public so tests can read meta files directly without re-deriving the path. */
   readonly rootDir: string;
   private _ttlMs: number;
@@ -83,19 +84,56 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
    *  protection signal, not a persistence concern. Lost on restart;
    *  TTL-based GC handles the recovery side. */
   private pinCounts = new Map<string, number>();
+  private readonly maxBlocksPerProject: number;
 
   constructor(projectCwd: string, opts: FileBackedContextBlockStoreOptions = {}) {
     const home = opts.homeDir ?? os.homedir();
-    const projectHash = createHash('sha256').update(path.resolve(projectCwd)).digest('hex');
+    let canonical: string;
+    try {
+      canonical = fs.realpathSync(path.resolve(projectCwd));
+    } catch {
+      // Path doesn't exist on disk yet — fall back to absolute. The store is
+      // still usable for callers who pass a future cwd; symlink-collapse
+      // semantics only kick in once the path exists.
+      canonical = path.resolve(projectCwd);
+    }
+    const projectHash = createHash('sha256').update(canonical).digest('hex');
     this.rootDir = path.join(home, '.multi-model', 'context-blocks', projectHash);
     this._ttlMs = opts.ttlMs ?? DEFAULT_TTL_MS;
     this.gcCheckIntervalMs = opts.gcCheckIntervalMs ?? DEFAULT_GC_INTERVAL_MS;
     this.maxBlockBytes = opts.maxBlockBytes ?? DEFAULT_MAX_BLOCK_BYTES;
     this.maxTotalBytes = opts.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
+    this.maxBlocksPerProject = opts.maxBlocksPerProject ?? 500;
     this.ensureRoot();
   }
 
-  register(content: string, opts: { id?: string } = {}): RegisteredBlock {
+  register(content: string, opts: { ttlMs?: number; id?: string } = {}): RegisteredBlock {
+    const sha256 = createHash('sha256').update(content).digest('hex');
+    // 4.2.3+: fall back to the class-level _ttlMs default (configured at
+    // construction) rather than a hardcoded constant. Earlier draft of
+    // the plan literally said `?? 28_800_000` which broke the
+    // "lazy-deletes on get when entry is past TTL" pre-existing test —
+    // that test constructs the store with `ttlMs: 1` and then calls
+    // `register('x')` (no opts), expecting the per-call TTL to inherit
+    // the class default.
+    const ttlMs = opts.ttlMs ?? this._ttlMs;
+    
+    // DEDUPE: look for existing block in this project with matching content sha
+    if (!opts.id) {
+      const existing = this.findByContentSha(sha256);
+      if (existing) {
+        // Bump mtime + reset TTL on the existing block
+        const now = Date.now();
+        const metaContent = JSON.parse(fs.readFileSync(this.metaPath(existing), 'utf8'));
+        metaContent.ttlMs = ttlMs;
+        metaContent.createdAt = now;
+        fs.writeFileSync(this.metaPath(existing), JSON.stringify(metaContent), { mode: 0o600 });
+        fs.utimesSync(this.contentPath(existing), now / 1000, now / 1000);
+        fs.utimesSync(this.metaPath(existing), now / 1000, now / 1000);
+        return { id: existing, lengthChars: content.length, sha256 };
+      }
+    }
+
     const byteSize = Buffer.byteLength(content, 'utf8');
     if (byteSize > this.maxBlockBytes) {
       throw new Error(
@@ -105,10 +143,9 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
 
     const id = opts.id ?? randomUUID();
     const now = Date.now();
-    const sha256 = createHash('sha256').update(content).digest('hex');
     const meta: DiskMeta = {
       createdAt: now,
-      ttlMs: this._ttlMs,
+      ttlMs,
       lengthChars: content.length,
       sha256,
     };
@@ -119,6 +156,8 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
       this.lastSweepMs = now;
     }
     this.evictUntilFits(byteSize);
+
+    this.sweepInnerLruIfNeeded();
 
     this.atomicWrite(this.contentPath(id), content);
     this.atomicWrite(this.metaPath(id), JSON.stringify(meta) + '\n');
@@ -290,6 +329,44 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
     fs.renameSync(tmpPath, targetPath);
   }
 
+  /** TTL pass first; if still at or above maxBlocksPerProject, evict oldest-mtime block(s) until under cap. */
+  private sweepInnerLruIfNeeded(): void {
+    if (!fs.existsSync(this.rootDir)) return;
+    // TTL pass
+    const now = Date.now();
+    const files = fs.readdirSync(this.rootDir);
+    for (const file of files) {
+      if (!file.endsWith('.meta.json')) continue;
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(this.rootDir, file), 'utf8'));
+        if (typeof meta.createdAt === 'number' && typeof meta.ttlMs === 'number' && now > meta.createdAt + meta.ttlMs) {
+          const id = file.slice(0, -'.meta.json'.length);
+          try { fs.unlinkSync(path.join(this.rootDir, `${id}.txt`)); } catch {}
+          try { fs.unlinkSync(path.join(this.rootDir, `${id}.meta.json`)); } catch {}
+        }
+      } catch { /* skip malformed */ }
+    }
+    // LRU pass
+    let blockIds = fs.readdirSync(this.rootDir)
+      .filter(f => f.endsWith('.txt'))
+      .map(f => f.slice(0, -'.txt'.length));
+    while (blockIds.length >= this.maxBlocksPerProject) {
+      // Find oldest-mtime block
+      let oldestId: string | null = null;
+      let oldestMtime = Infinity;
+      for (const id of blockIds) {
+        try {
+          const m = fs.statSync(path.join(this.rootDir, `${id}.txt`)).mtimeMs;
+          if (m < oldestMtime) { oldestMtime = m; oldestId = id; }
+        } catch { /* skip */ }
+      }
+      if (!oldestId) break;
+      try { fs.unlinkSync(path.join(this.rootDir, `${oldestId}.txt`)); } catch {}
+      try { fs.unlinkSync(path.join(this.rootDir, `${oldestId}.meta.json`)); } catch {}
+      blockIds = blockIds.filter(i => i !== oldestId);
+    }
+  }
+
   /**
    * Oldest-first eviction loop until total disk usage + incoming bytes
    * fits under maxTotalBytes. Pinned entries are skipped (matches
@@ -318,5 +395,21 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
       this.deleteFiles(c.id);
       total -= c.bytes;
     }
+  }
+
+  /** Scan this project's meta files for one whose recorded sha256 matches `sha256`. Returns the id, or null. */
+  private findByContentSha(sha256: string): string | null {
+    if (!fs.existsSync(this.rootDir)) return null;
+    const files = fs.readdirSync(this.rootDir);
+    for (const file of files) {
+      if (!file.endsWith('.meta.json')) continue;
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(this.rootDir, file), 'utf8'));
+        if (meta.sha256 === sha256) return file.slice(0, -'.meta.json'.length);
+      } catch {
+        // Skip malformed meta files
+      }
+    }
+    return null;
   }
 }

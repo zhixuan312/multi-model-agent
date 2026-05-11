@@ -32,6 +32,8 @@ export const ErrorCodeSchema = z.enum([
   'review_diff_rejected',
   'review_spec_rejected_terminal',
   'review_quality_findings_unresolved',
+  // completion_* — pipeline-redesign commit-gate outcomes (4.3.0+)
+  'completion_below_threshold',
   // validator_* — post-execution validators
   'validator_no_artifacts',
   'validator_silent_incomplete',

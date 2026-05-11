@@ -1,56 +1,41 @@
 import type { ReviewTemplate } from './shared.js';
 
-/**
- * Spec compliance reviewer.
- *
- * Tool sweep #6 rewrite: pre-fix this template gave the LLM only
- * `Task: <brief>` + `Worker output: <text>`. The reviewer was
- * reviewing the worker's CLAIM, not the worker's WORK — it had no
- * way to verify whether the claim was true. Result: skeptical
- * reviewers defaulted to "changes_required" and triggered endless
- * rework spirals on already-correct edits.
- *
- * Post-fix: the reviewer also sees the cumulative diff (the truth)
- * and any prior reviewer concerns it should verify are addressed.
- * With evidence in hand, "changes_required" must point to a
- * specific diff line — no more vague rejections.
- */
-export const specTemplate: ReviewTemplate = {
+export const specLintTemplate: ReviewTemplate = {
   systemPrompt: [
-    'You are a spec compliance reviewer. Your job is to decide whether the cumulative diff fulfills the task brief — nothing else.',
+    'You are the SPEC reviewer for a plan-execution task. You are LINT-ONLY — do NOT edit files.',
+    'Your sole job: compare the on-disk state against the plan and emit a structured report.',
+    'Read files as needed to verify. A separate REWORK stage will apply your findings.',
     '',
-    'Reply with a JSON block: {"verdict":"approved"|"changes_required","concerns":["..."]}.',
+    'Output format (mandatory):',
     '',
-    'Verdict rules:',
-    '- "approved": the diff implements the brief, with no missing or wrong elements. The "concerns" list MUST be empty.',
-    '- "changes_required": cite at least one concrete concern, each tied to a specific diff line or a specific missing element from the brief. Do NOT use this verdict for stylistic preferences not in the brief.',
-    '- An empty diff (no files changed) is "changes_required" UNLESS the brief explicitly requested a no-op or "no change needed".',
-    '- A diff that fully satisfies the brief is "approved" even if you would have written it differently.',
+    '## Verdict',
+    'approved | changes_required',
     '',
-    'You do not see future rework rounds. Decide on this evidence alone.',
+    '## Deviations',
+    '- <one short line per gap, naming the file and what is missing/wrong>',
+    '- ...',
+    '',
+    'Rules:',
+    '- "approved" means the diff fully implements the plan section. Trivial wording differences are OK.',
+    '- "changes_required" when any plan step is missing, partial, or wrong on disk.',
+    '- Each deviation must be specific enough that a rework worker can act on it without re-deriving.',
+    '- If approved, write "## Deviations\\n(none)".',
+    '- Do NOT use editor tools. Read-only investigation only. Editing is the rework stage\'s job.',
   ].join('\n'),
 
   buildUserPrompt(ctx) {
     const parts: string[] = [];
     parts.push(`# Task brief\n${ctx.brief}`);
-
-    if (ctx.priorConcerns && ctx.priorConcerns.length > 0) {
-      parts.push(
-        `# Prior reviewer concerns from earlier rounds in this chain\nVerify the rework has addressed each one:\n` +
-        ctx.priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n'),
-      );
+    if (ctx.planContext && ctx.planContext.trim().length > 0) {
+      parts.push(`# Plan section (the contract to compare against)\n\n\`\`\`markdown\n${ctx.planContext.trim()}\n\`\`\``);
     }
-
-    parts.push(`# Worker's most recent summary\n${ctx.workerOutput || '(no summary)'}`);
-
+    parts.push(`# Worker's summary\n${ctx.workerOutput || '(no summary)'}`);
     if (ctx.diff && ctx.diff.length > 0) {
-      parts.push(`# Cumulative diff (the truth of what changed)\n\n\`\`\`diff\n${ctx.diff}\n\`\`\``);
+      parts.push(`# Cumulative diff (current on-disk state)\n\n\`\`\`diff\n${ctx.diff}\n\`\`\``);
     } else {
-      parts.push(`# Cumulative diff\n(no file changes detected)`);
+      parts.push('# Cumulative diff\n(no file changes detected)');
     }
-
-    parts.push(`# Decide\nDoes the cumulative diff fulfill the task brief? Reply with the JSON block specified in the system prompt.`);
-
+    parts.push('# Action\nCompare diff vs plan. Emit the report. Do not edit.');
     return parts.join('\n\n');
   },
 };

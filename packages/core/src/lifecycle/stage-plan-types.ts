@@ -143,6 +143,49 @@ export interface LifecycleState {
   currentStage?: string;
   errorCode?: string | null;
 
+  // ── Pipeline-redesign slots (4.3.0+) — review (lint-only) + rework split ───
+  /** Spec lint-reviewer raw report text. */
+  specReviewerNotes?: string;
+  /** Quality lint-reviewer raw report text. */
+  qualityReviewerNotes?: string;
+  /** Spec reviewer parsed verdict. */
+  specReviewVerdict?: 'approved' | 'changes_required';
+  /** Quality reviewer parsed verdict. */
+  qualityReviewVerdict?: 'approved' | 'changes_required';
+  /** Spec lint-reviewer transport/return error (call failed). */
+  specReviewError?: string;
+  /** Quality lint-reviewer transport/return error. */
+  qualityReviewError?: string;
+  /** Merged deviations from spec + quality reviewers. */
+  reviewFindings?: Array<{ source: 'spec' | 'quality'; text: string }>;
+  /** Review-stage overall error (used when neither reviewer returned a usable verdict). */
+  reviewError?: string;
+  /** Rework stage applied edits (true) or skipped (false). undefined = stage never ran. */
+  reworkApplied?: boolean;
+  /** Rework worker's raw summary. */
+  reworkOutput?: string;
+  /** Rework stage error (transport/return). */
+  reworkError?: string;
+  /** Stage 4 (annotate_completion) structured output + verify overlay. */
+  completionAnnotation?: {
+    completionPercent: number;
+    perStep: Array<{ step: string; status: 'done' | 'partial' | 'missing'; note: string | null }>;
+    verify: {
+      ran: boolean;
+      passed: boolean | null;
+      exitCode: number | null;
+      command: string[];
+      tailOutput: string | null;
+    };
+    concerns: string[];
+  };
+  /** Annotator provider/parse error (fallback case). */
+  completionAnnotationError?: string;
+  /** Deterministic commit-gate percentage: min(backstop, annotatorPercent). */
+  commitGatePercent?: number;
+  /** Override the default commit threshold (default 80, from taskSpec). */
+  completionThreshold?: number;
+
   // Terminal-handler idempotency slots. Each terminal handler skips when
   // its slot is set, so re-runs (e.g. retry) and inter-handler ordering
   // remain idempotent without duplicate work.

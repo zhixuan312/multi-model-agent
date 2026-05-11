@@ -2,7 +2,7 @@
   "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
-      "output": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nneeds rework per review\n\n--- CALLER-ANALYSIS PERSPECTIVE (criterion 2) ---\nneeds rework per review\n\n--- TEST-DRIVEN PERSPECTIVE (criterion 3) ---\nneeds rework per review\n\n--- CROSS-FILE DEPENDENCY-MAP PERSPECTIVE (criterion 4) ---\nneeds rework per review\n\n--- DOCUMENTATION/COMMENT-LENS PERSPECTIVE (criterion 5) ---\nneeds rework per review",
+      "output": "needs rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -97,50 +97,24 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "quality_review": {
-          "stage": "quality_review",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "standard",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 10,
-          "outputTokens": 20,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0,
-          "verdict": "error",
-          "roundsUsed": 1,
-          "concernCategories": [],
-          "findingsBySeverity": {
-            "critical": 0,
-            "high": 0,
-            "medium": 0,
-            "low": 0
-          }
         }
       },
+      "annotatedFindings": [],
+      "qualityReviewVerdict": "error",
+      "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "error",
+      "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
       "commits": [],
       "agents": {
         "implementer": "complex",
         "implementerToolMode": "full",
         "specReviewer": "not_applicable",
-        "qualityReviewer": "skipped"
+        "qualityReviewer": "not_applicable"
       },
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -159,7 +133,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nneeds rework per review",
+    "summary": "needs rework per review",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -174,7 +148,7 @@
   "wallClockMs": "<DETERMINISTIC>",
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
-  "qualityReviewVerdict": "error",
+  "qualityReviewVerdict": "not_applicable",
   "roundsUsed": 1,
   "contextBlockId": "<DETERMINISTIC>"
 }

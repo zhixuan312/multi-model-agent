@@ -9,7 +9,7 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Dispatch named tasks from a plan file to workers. Each `tasks` string must match a heading in the plan verbatim (e.g. `"1. Setup database schema"`). All tasks run in parallel; duplicate descriptors are rejected.
+Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string must match a heading in the plan verbatim (e.g. `"1. Setup database schema"`). All tasks run in parallel; duplicate descriptors are rejected.
 
 **Core principle:** The plan IS the prompt. Workers re-read the plan file in-process and find their named task — you don't need to inline the task body.
 
@@ -35,14 +35,12 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 
 ```json
 {
-  "tasks": [
+  "taskDescriptors": [
     "1. Add input validation to login handler",
     "2. Write unit tests for the auth module"
   ],
-  "context": "Tasks 1-5 are complete; auth module already exists at src/auth/",
   "filePaths": [
-    "/project/docs/plan.md",
-    "/project/src/auth/login.ts"
+    "/project/docs/plan.md"
   ],
   "contextBlockIds": []
 }
@@ -50,13 +48,13 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 
 | Field | Type | Required | Notes |
 |---|---|---|---|
-| `tasks` | string[] \| `{task, reviewPolicy}[]` | yes | At least one; must be unique; each string matches a plan heading |
-| `context` | string | no | Short additional context not in the plan |
-| `filePaths` | string[] | no | Plan file + relevant source files. Required: the plan file itself. |
-| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
-| `maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted. |
+| `taskDescriptors` | string[] | yes | At least one; must be unique; each string matches a plan heading verbatim |
+| `filePaths` | string[] | yes | EXACTLY one entry: the plan markdown file. Source files belong in `contextBlockIds` (registered via `mma-context-blocks`) so workers can grep them on demand without re-inlining into every worker prompt |
+| `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — the right place for source files referenced by the plan |
+| `maxCostUSD` | number | no | Per-task cost cap in USD (positive finite). Default 10 when omitted |
 | `verifyCommand` | string[] | no | See verify-and-review snippet below |
-| `tasks[].reviewPolicy` | `"full"` / `"quality_only"` / `"diff_only"` / `"none"` | no | See verify-and-review snippet below. Default `"full"`. |
+| `perTaskReviewPolicy` | `Record<string, 'full'\|'quality_only'\|'diff_only'\|'none'>` | no | Per-task-index review policy override. Key = task index as string (`"0"`, `"1"`, ...). Default per task: `"full"` |
+| `cwd` | string | no | Override the `?cwd=` query param value at the body level (rare; usually pass via query) |
 
 @include _shared/verify-and-review.md
 
@@ -66,11 +64,10 @@ Dispatch named tasks from a plan file to workers. Each `tasks` string must match
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Main-Model: $MAIN_MODEL" \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{"tasks":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
+  -d '{"taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \
   "http://localhost:$PORT/execute-plan?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
@@ -93,7 +90,7 @@ Anti-pattern alert: **`full-batch-redispatch`** (AP4). When the batch returns mi
 ## Common pitfalls
 
 ❌ **Task descriptor doesn't match plan heading verbatim**
-> tasks: ["Migrate db schema"]    ← plan heading is "3. Migrate database schema"
+> taskDescriptors: ["Migrate db schema"]    ← plan heading is "3. Migrate database schema"
 
 Worker rejects with "no matching task" or matches the wrong one. **Fix:** copy the heading from the plan, including the leading number.
 

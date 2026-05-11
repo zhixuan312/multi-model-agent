@@ -3,14 +3,19 @@ import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 import { ReviewerOutputParser, type ReviewerParseResult, type ReviewerDiffParseResult, ReviewerParseError } from './reviewer-output-parser.js';
 import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
-// Re-exports for callers that previously imported templates and the builder
-// from this module. Spec C11 puts templates in review/templates/ and the
-// builder in review/reviewer-prompt-builder.ts; the re-exports keep one
+// Re-exports for callers. Spec C11 puts templates in review/templates/ and
+// the builder in review/reviewer-prompt-builder.ts; the re-exports keep one
 // import surface for the engine + its collaborators.
+//
+// Pipeline-redesign (4.3.0+): the AP-only templates (specTemplate,
+// qualityAPTemplate, diffTemplate) were removed along with their consumer
+// handlers (spec-chain, quality-chain, review-diff). New review-and-fix
+// templates replace them for the artifact-producing pipeline.
 export type { ReviewTemplate } from './templates/shared.js';
-export { specTemplate } from './templates/spec-review.js';
-export { qualityAPTemplate } from './templates/quality-review-artifact.js';
-export { diffTemplate } from './templates/diff-review.js';
+export { specLintTemplate } from './templates/spec-review.js';
+export { qualityLintTemplate } from './templates/quality-review.js';
+export { reworkTemplate } from './templates/rework.js';
+export { annotateCompletionTemplate } from './templates/annotate-completion.js';
 export { qualityAuditTemplate } from './templates/quality-review-audit.js';
 export { qualityReviewTemplate } from './templates/quality-review-review.js';
 export { qualityVerifyTemplate } from './templates/quality-review-verify.js';
@@ -43,6 +48,14 @@ export interface ReviewerInput {
    * without re-deriving them.
    */
   priorConcerns?: string[];
+  /**
+   * Verbatim plan section for execute-plan routes. Set by the
+   * spec-chain handler from `task.planContext`; threaded into the
+   * spec reviewer's user prompt as the authoritative source-of-truth
+   * for verbatim-code-block comparison. Unset for non-execute-plan
+   * routes — those routes have no "plan" to compare against.
+   */
+  planContext?: string;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
   /** Forwarded to RunInput so the running-headline sink + verbose stderr

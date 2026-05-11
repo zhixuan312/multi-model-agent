@@ -40,6 +40,9 @@ export interface ToolAuditBrief {
   hasContextBlocks: boolean;
   contextBlockIds?: string[];
   perFilePath?: string;
+  /** A12: pass-through of input.auditType so buildTaskSpec can stamp it
+   *  onto the TaskSpec for the dispatcher to read. */
+  auditType?: 'default' | 'security' | 'performance' | 'plan';
 }
 
 /**
@@ -62,6 +65,8 @@ const AUDIT_DONE_CONDITIONS: Record<string, string> = {
     'Narrow lens: security ONLY. Use this only when the caller specifically wants security findings and not general audit findings. For prose artifacts (threat models, security designs, auth specs): identify missing controls, ambiguous trust boundaries, undeclared attack surfaces, leaked-secret patterns in examples, recommendations that introduce new attack surface without mitigation, and threat-model gaps. For source code: injection, auth bypass, data exposure, OWASP top 10. Apply the full failure-mode taxonomy through the security lens. Skip non-security findings. Each finding has severity, location, and remediation.',
   performance:
     'Narrow lens: performance ONLY. Use this only when the caller specifically wants performance findings and not general audit findings. For prose artifacts (designs, scaling plans, latency-sensitive specs): identify unstated complexity, missing hot-path consideration, unbounded loops in proposed designs, omitted scaling story, recommendations that mandate work that does not scale, and missing latency/throughput targets. For source code: O(n²) loops, unnecessary allocations, missing caching, blocking I/O. Apply the full failure-mode taxonomy through the performance lens. Skip non-performance findings. Each finding has impact level, location, and fix recommendation.',
+  plan:
+    'PLAN-VS-CODEBASE EXECUTABILITY AUDIT. The single filePath you receive is a code-execution plan; the source files you verify against live under cwd and you discover them yourself by reading the plan\'s "Files: Modify:" / "Test:" / "Create:" blocks and `import` statements in code blocks. Apply the 8 verification perspectives (PATH EXISTENCE, SYMBOL EXISTENCE, SIGNATURE MATCH, IMPORT GRAPH, TEST HARNESS AVAILABILITY, STEP SEQUENCE WITHIN TASK, CROSS-TASK DEPENDENCIES, VERIFICATION COMMAND VALIDITY). For each task in the plan, the merge annotator computes a verdict: EXECUTABLE / PARTIAL / BLOCKED. Use read_file / grep / glob / list_files to ground every finding in real file:line evidence. Findings without source-side citations are speculation — drop them. Zero findings on a perspective is the EXPECTED outcome on a clean plan; do not invent findings to fill quota.',
 };
 
 const DELTA_AUDIT_SUFFIX = ' Perform a full audit (do not reduce thoroughness). Verify each prior finding as fixed or unfixed. Omit fixed prior findings from the main report. Include unfixed prior findings and new findings. End with a summary of which prior findings were resolved.';
@@ -100,6 +105,7 @@ export function auditBriefSlot(input: Input): ToolAuditBrief[] {
       hasContextBlocks,
       contextBlockIds: input.contextBlockIds,
       perFilePath: fp,
+      auditType: input.auditType,
     }));
   }
 
@@ -110,6 +116,7 @@ export function auditBriefSlot(input: Input): ToolAuditBrief[] {
     filePaths: validPaths,
     hasContextBlocks,
     contextBlockIds: input.contextBlockIds,
+    auditType: input.auditType,
   }];
 }
 
@@ -221,6 +228,11 @@ export const toolConfig: ToolConfig<Input, ToolAuditBrief, AuditReport> = {
       contextBlockIds: brief.contextBlockIds,
       filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
       mainModel: ctx.mainModel,
+      // A12 (4.2.3+): plumb auditType to the dispatcher. The
+      // parallel-criteria router branches on `task.auditType === 'plan'`
+      // to use the plan-audit route spec instead of the default audit
+      // spec (different criteria, orientation, severity semantics).
+      auditType: brief.auditType,
     } as TaskSpec;
   },
   reportSchema: auditReportSchema,

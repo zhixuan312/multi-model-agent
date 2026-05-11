@@ -1,7 +1,7 @@
 ---
 name: mma-audit
-description: Use when the user asks to audit a spec, plan, design doc, recommendation doc, or config — the audit checks whether a literal-following worker could execute the artifact without ambiguity, contradiction, or missing context. Default is the comprehensive sweep; narrow lenses (security/performance) exist for cases that want only one dimension.
-when_to_use: User asks for a doc/spec/plan/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code.
+description: Use when the user asks to audit a spec / plan / design doc / recommendation doc / config. Four `auditType` modes pick the lens. `default` (prose-coherence) is right for specs and requirements. `plan` (NEW 4.2.3+) verifies a code-execution plan against the actual codebase — use this before any `mma-execute-plan` dispatch. `security` / `performance` are narrow lenses for threat models / scaling specs.
+when_to_use: User asks for a doc/spec/plan/config audit OR a methodology skill (superpowers:dispatching-parallel-agents, /security-review) points at one AND mmagent is running. Audit on PROSE/SPEC docs — use mma-review for source code. Audit a CODE-EXECUTION PLAN against the codebase — use auditType=plan.
 version: "0.0.0-unreleased"
 ---
 
@@ -9,21 +9,40 @@ version: "0.0.0-unreleased"
 
 ## Overview
 
-Send a spec, plan, design doc, or recommendation doc to a worker for structured auditing. The audit's purpose is to make the artifact **executable by a low-judgment worker** — meaning a sub-agent that follows instructions literally and cannot disambiguate. Findings target executability blockers: ambiguity, internal contradictions, unspecified branches, missing verification, overloaded terms, out-of-order steps.
+`mma-audit` sends a prose artifact to workers for structured auditing — and (4.2.3+) can also audit a code-execution plan against a real codebase via `auditType: 'plan'`.
 
-**Core principle:** One worker per file = no cross-file context pollution. The aggregator (you) decides what to do with the findings.
+**Two distinct uses, picked by `auditType`:**
+
+| You're auditing… | Use… | What it checks |
+|---|---|---|
+| A spec, design doc, recommendation doc, post-mortem, or any **requirements / "what we want" prose** | `auditType: 'default'` | Prose-internal coherence — would a literal-following worker produce the right outcome from this prose alone? Catches ambiguity, contradictions, missing branches, drift, scope-creep. **Does NOT verify against any codebase.** |
+| A **code-execution PLAN** (`docs/superpowers/plans/*.md` or similar) before running it via `mma-execute-plan` | `auditType: 'plan'` (4.2.3+) | Plan-vs-codebase coherence — for every method / type / file path / signature / import / verify command the plan names, the codebase actually contains it as described. 8 verification perspectives running in parallel. Catches the bug class the prose-coherence audit cannot see (e.g. plan says `registerBlock` but actual interface is `register`). |
+| A threat model / auth spec | `auditType: 'security'` | Narrow security lens — only emits security findings. |
+| A scaling design / latency-sensitive spec | `auditType: 'performance'` | Narrow performance lens — only emits perf findings. |
+
+**Core principle (default mode):** One worker per file = no cross-file context pollution.
+**Core principle (plan mode):** One worker per verification perspective (8 in parallel) = each dimension grounds independently in the codebase.
 
 ## When to Use
 
-**Use when:**
-- A spec, plan, design doc, recommendation doc, or post-mortem needs a critical read
-- The artifact will subsequently be executed by a worker (or any reader who follows it literally)
-- 2+ files would benefit from parallel audit
+**Use `auditType: 'default'` when:**
+- A spec / design doc / recommendation doc / post-mortem needs a critical prose read
+- The artifact will subsequently be executed by a worker reading the prose alone
+- You want to know: "Is this prose internally executable?"
 
-**Don't use when:**
+**Use `auditType: 'plan'` when:**
+- You have a written code-execution plan on disk and you're about to dispatch tasks from it via `mma-execute-plan`
+- You want to know: "Will this plan actually dispatch successfully against the codebase as it exists today?"
+- This is the ONLY audit mode that grounds findings against real source files
+
+**Don't use mma-audit when:**
 - The thing being audited is source code → `mma-review` (knows about types, call sites, test coverage)
 - You want a quick look ("does this look right?") → just `Read` and use your judgment
-- The doc references many other files the auditor must cross-reference → consider `mma-review` instead (it pulls in source context)
+- You need to verify a plan dispatches but you haven't written it yet → write the plan first, then run plan-audit on it
+
+## Endpoint
+
+`POST /audit?cwd=<abs-path>`
 
 ## Endpoint
 
@@ -45,7 +64,7 @@ Send a spec, plan, design doc, or recommendation doc to a worker for structured 
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `document` | string | no | Inline document content |
-| `auditType` | `'default' \| 'security' \| 'performance'` | no (defaults to `'default'`) | See "Picking auditType" below — `default` is right for ~90% of audits |
+| `auditType` | `'default' \| 'security' \| 'performance' \| 'plan'` | no (defaults to `'default'`) | See "Picking auditType" below. `default` for spec / requirement prose. `plan` (4.2.3+) for code-execution plans audited against the codebase. |
 | `filePaths` | string[] | no | Files to audit (one worker per file, parallel) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
@@ -57,17 +76,35 @@ Either `document` or `filePaths` (or both) must be provided.
 
 | Value | When to use |
 |---|---|
-| `default` (or omit the field) | **Right answer for ~90% of audits.** Spec, plan, design doc, recommendation doc, post-mortem, audit, brief, README — any prose artifact. Sweeps the full executability + correctness + clarity taxonomy with security and performance lenses applied. |
+| `default` (or omit the field) | **Spec / requirement / "what we want" prose.** Recommended for design docs, recommendation docs, post-mortems, audits, briefs, READMEs — any prose artifact where the question is "is this internally executable by reading the prose alone?". Does NOT verify against any codebase. |
+| `plan` (4.2.3+) | **Code-execution plans being audited against a real codebase.** Single-file input (the plan markdown). Workers grep / read source files under `cwd` to verify every named symbol / path / signature / import / verify command. Per-task verdicts: `EXECUTABLE` / `PARTIAL` / `BLOCKED`. Use this BEFORE every `mma-execute-plan` dispatch — catches the bug class where the plan names a method/file that doesn't actually exist (the prose-coherence audit cannot see this). |
 | `security` | Narrow opt-in. Use ONLY when you specifically want security findings and not general audit findings (e.g., a threat model where stylistic noise is unwanted). |
 | `performance` | Narrow opt-in. Use ONLY when you specifically want performance findings (e.g., a scaling design where you want hot-path / latency / unbounded-loop findings only). |
 
+**Plan vs Default — which to pick:** The artifact's NATURE decides:
+- **Spec / requirements** (what we want, why) → `default`. Reviewing the prose alone is the goal.
+- **Plan** (concrete tasks with code blocks, file paths, methods to call) → `plan`. The plan only matters if the codebase agrees with it.
+
+You can run BOTH on a plan: first `default` (prose quality of the plan), then `plan` (does the plan match the codebase?). They cover orthogonal failure modes.
+
 The legacy values `correctness`, `style`, and `general` no longer exist — they were a false dichotomy. Sending any of them returns `400 invalid_request` with a hint to use `default`.
+
+### Plan-audit specifics
+
+When `auditType: 'plan'`:
+
+- `filePaths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
+- `document` (inline content) is not used in plan mode — the plan must be on disk so workers can reference it by `?cwd=`-relative path.
+- 8 sub-workers run in parallel, one per verification perspective: PATH EXISTENCE, SYMBOL EXISTENCE, SIGNATURE MATCH, IMPORT GRAPH, TEST HARNESS AVAILABILITY, STEP SEQUENCE WITHIN TASK, CROSS-TASK DEPENDENCIES, VERIFICATION COMMAND VALIDITY. Each can return zero findings ("this dimension passes") or N findings.
+- The merge annotator computes a per-task verdict (`EXECUTABLE` / `PARTIAL` / `BLOCKED`) and a "Plan-Audit Summary" block at the end of the report.
+- Only DISPATCH tasks that audit as `EXECUTABLE`. Fix the plan and re-audit if any task is `BLOCKED` or `PARTIAL`.
 
 ## Full example
 
+### Default audit (spec / requirements prose)
+
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Main-Model: $MAIN_MODEL" \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
@@ -75,6 +112,20 @@ BATCH=$(curl -f --show-error -s -X POST \
   "http://localhost:$PORT/audit?cwd=/project")
 BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```
+
+### Plan audit (4.2.3+ — verify a code-execution plan against the codebase)
+
+```bash
+BATCH=$(curl -f --show-error -s -X POST \
+  -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "Authorization: Bearer $TOKEN" \
+  -H "Content-Type: application/json" \
+  -d '{"auditType":"plan","filePaths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}' \
+  "http://localhost:$PORT/audit?cwd=/project")
+BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
+```
+
+The terminal envelope carries per-task findings + a "Plan-Audit Summary" block at the end of `structuredReport` showing how many tasks are `EXECUTABLE` / `PARTIAL` / `BLOCKED` and the lowest-numbered blocker.
 
 @include _shared/polling.md
 
@@ -123,6 +174,8 @@ Every finding has the same shape:
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-audit`:
 
 - **Recipe A — Audit-iterate-clean.** `mma-audit` → fix → `mma-audit` again. Sequential rounds. Register the doc via `mma-context-blocks` before round 1 and reuse the same ID across all rounds — avoids re-inlining the same content into every audit call.
+
+- **Recipe E — Plan-validate-execute (4.2.3+).** Before any `mma-execute-plan` batch, run `mma-audit` with `auditType: 'plan'` on the plan file. Read the "Plan-Audit Summary" block. If any task is `BLOCKED`, fix the plan; re-audit. Only dispatch tasks that audit as `EXECUTABLE`. Cost: comparable to a single `default` audit; saves the per-dispatch cost of workers re-discovering the same plan-vs-codebase drift. This catches the bug class where the plan's named methods/files don't actually exist in the codebase — symbols a prose-coherence audit cannot see.
 
 Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel audits on the same document re-flag the same issues without seeing each other's fixes. Run rounds sequentially with a fix between each.
 

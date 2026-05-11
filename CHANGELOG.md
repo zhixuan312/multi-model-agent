@@ -5,6 +5,42 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.3.0] - 2026-05-11
+
+Major lifecycle redesign + Group A reliability completion. Replaces the experimental 4.2.3 work with a stable architecture; 4.2.3 was never published.
+
+### BREAKING
+
+- **Lifecycle pipeline rewrite (core).** The `spec_review_and_fix` + `quality_review_and_fix` review stages are removed and replaced with a `review` stage (spec + quality reviewers running in parallel, lint-only, readonly tools) followed by a conditional `rework` stage (complex tier, full tools, runs only when at least one reviewer's verdict is `changes_required`). Schema stages: `implementing → review → rework → annotating → committing → finalizing`. Headlines now show `Review` / `Rework`; `Spec review` / `Quality review` labels are retired.
+- **`X-MMA-Main-Model` header is no longer required (server).** The 400 `main_model_required` rejection is dropped. A resolver chain (header → per-client auto-detect → `defaults.mainModel` → `unknown_main_model` sentinel) fills in the calling agent's model id. `X-MMA-Client` remains required.
+
+### Added
+
+- **`resolveMainModel` (core, A6.1).** New `packages/core/src/identity/main-model-resolver.ts`. Claude Code clients are auto-detected from `~/.claude/projects/<slug>/*.jsonl` (most recent file's last `model` field); Codex CLI from `~/.codex/config.toml`. Header still overrides; `defaults.mainModel` is the explicit operator fallback.
+- **`defaults.mainModel` config field (core).** Reintroduced as the lowest-priority fallback in the resolver chain. Optional.
+- **`WallClockGuard` wired end-to-end (core, A10.1-A10.4).** Per-task guard instantiated at task start, threaded through `LifecycleContext.wallClockGuard`. `checkOrThrow()` fires before every non-terminal stage handler and after every tool execution. Guard error sets `state.terminal = true` with `errorCode: 'guard_wall_clock'`; `runOnTerminal` rows still execute so the failure envelope is well-formed.
+- **Context-overflow pre-flight estimator (core, A9.1).** New `packages/core/src/intake/context-overflow-estimator.ts` exports `estimateContextSize` + `checkOverflow`. Sums file bytes + context-block lengths + base instructions + reserved completion tokens; emits `context_overflow_predicted` with biggest-contributors + recovery hints when over the model cap. Wired into `runIntakePipeline` so overflow becomes a `HardError` on intake.
+- **`HardError.details` field (core).** Optional structured payload on intake hard errors. Used by the overflow check to surface `{ estimatedTokens, modelCap, biggestContributors, recoveryHints }`.
+- **`auditType: 'plan'` per-task verdicts (core, A12.4).** New `packages/core/src/tools/audit/plan-audit-verdict.ts` exports `derivePlanTaskVerdicts` + `composePlanAuditSummary`. Verdict rules: `BLOCKED` (≥1 critical), `PARTIAL` (≥1 high, 0 critical), `EXECUTABLE` (no high or critical). Summary block lists 3-bucket counts + "Next blocker" line.
+- **Plan-audit end-to-end contract test (tests, A12.6).** New `tests/contract/http/audit-plan-mode.test.ts` + `tests/contract/fixtures/plan-with-symbol-drift.md` verify the `auditType: 'plan'` dispatch shape and the `filePaths.length !== 1` rejection.
+- **Stderr diagnostics on tool failure + review error (core).** `runner-shell` logs `[runner-shell] tool X FAILED — err=... input=...` on every tool execution that returns an error result. `review-handler` logs sub-reviewer transport/return errors. Critical for diagnosing silent reviewer no-ops (the bug that revealed itself as `429 rate_limit_error`).
+- **Review + rework error fields on the response envelope (core).** New `specReviewError` / `qualityReviewError` / `reviewError` / `reworkError` slots surface transport-layer failures so callers can distinguish "reviewer disagreed" from "reviewer couldn't reach the model".
+- **`reviewVerdict` / `reviewFindings` / `reworkOutput` / `reworkApplied` on the public envelope (core).** Each per-task result reports the merged review verdict, the union of spec + quality deviations, and whether rework actually ran.
+
+### Changed
+
+- **Review reviewers retry once on failure (core).** Mirrors `parallel-criteria-dispatcher`: any spec or quality reviewer returning transport error or non-ok status is retried once before the handler gives up. Transient 429 rate-limit errors now self-heal.
+- **`shellCommandWritesFs` regex tightened to exclude file-descriptor redirects (core).** Previously `2>/dev/null` (and any `<digit>>` redirect) matched as a filesystem write, inflating the `shellWrites` headline with read-only Discovery commands. Lookbehind `(?<![\d&|>])` excludes fd redirects; the headline `<X> write` count is now accurate.
+- **All `mma-*` SKILL.md files swept to drop the hardcoded `X-MMA-Main-Model` header line + curl flag (A6.3).** `_shared/auth.md` documents the header as optional, with the resolver chain.
+- **Stage labels in `stage-progression.SCHEMA_STAGE_LABELS` updated (core).** `spec_review` / `quality_review` removed; `review` / `rework` added.
+
+### Fixed
+
+- **`CWDValidator.validate()` no longer throws ENOENT for paths that don't yet exist (core).** `realpathSync(target)` was called unconditionally — for `write_file` on a new path, the file doesn't exist yet, so every `write_file` call failed silently with ENOENT before any byte was written. Workers logged 30+ write attempts with zero files landing on disk. Fix: when the target is missing, resolve the parent's realpath and join the basename. Symlink confinement still applies (parent realpath checked against cwd).
+- **Plan-section cap raised 10 KB → 30 KB (core).** A9.1's plan section is 15 KB; the prior cap truncated mid-task, which the worker misread as "task done at Step 4" — root cause of the worker's persistent give-up-at-Step-5b pathology.
+
+Full Group A status: A1.1-A1.7, A4a.1-A4a.4, A4b.0-A4b.2, A6.1-A6.3, A7.1, A9.1, A10.1-A10.4, A11.1-A11.2, A12.1-A12.6 closed. A9.2 deferred per plan.
+
 ## [4.2.2] - 2026-05-10
 
 First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (filesWritten accounting) + A4a (sandbox cwd hygiene). Remaining Group A items (A1.2+, A6, A9, A5, A7, A10, A11) ship in subsequent 4.2.x releases.
@@ -37,7 +73,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...HEAD
+[4.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...v4.3.0
 [4.2.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...v4.2.2
 [4.2.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.0...v4.2.1
 
