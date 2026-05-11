@@ -88,16 +88,33 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
     return;
   }
 
-  const promises: Array<Promise<{ source: 'spec' | 'quality'; result: RunResult | { transportError: string } }>> = [];
-  if (runSpec) {
-    promises.push(runOneReviewer(state, ctx, task, 'spec', cumulativeDiff, workerOutput)
-      .then((r) => ({ source: 'spec' as const, result: r })));
+  type ReviewOutcome = { source: 'spec' | 'quality'; result: RunResult | { transportError: string } };
+  const sources: Array<'spec' | 'quality'> = [];
+  if (runSpec) sources.push('spec');
+  if (runQuality) sources.push('quality');
+
+  const isOk = (r: RunResult | { transportError: string }): r is RunResult =>
+    !('transportError' in r) && r.status === 'ok';
+
+  const settled: ReviewOutcome[] = await Promise.all(
+    sources.map(async (source) => ({
+      source,
+      result: await runOneReviewer(state, ctx, task, source, cumulativeDiff, workerOutput),
+    })),
+  );
+  const retryNeeded = settled
+    .map((o, i) => ({ o, i }))
+    .filter(({ o }) => !isOk(o.result))
+    .map(({ i }) => i);
+  if (retryNeeded.length > 0) {
+    const retried = await Promise.all(
+      retryNeeded.map(async (i) => ({
+        source: settled[i].source,
+        result: await runOneReviewer(state, ctx, task, settled[i].source, cumulativeDiff, workerOutput),
+      })),
+    );
+    retried.forEach((o, k) => { settled[retryNeeded[k]] = o; });
   }
-  if (runQuality) {
-    promises.push(runOneReviewer(state, ctx, task, 'quality', cumulativeDiff, workerOutput)
-      .then((r) => ({ source: 'quality' as const, result: r })));
-  }
-  const settled = await Promise.all(promises);
 
   const findings: SubReview[] = [];
   const errors: string[] = [];
