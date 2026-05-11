@@ -3,6 +3,7 @@ import {
   DELEGATE_SCOPE_RULE,
   DELEGATE_FAILURE_MODES,
   COMPLETENESS_REMINDER_DELEGATE,
+  TURN_BUDGET_DELEGATE,
 } from '../../tools/delegate/implementer-criteria.js';
 
 export type ReviewPolicy = 'full' | 'quality_only' | 'diff_only' | 'none';
@@ -41,5 +42,7 @@ export function compileDelegatePrompt(input: { prompt: string; filePaths?: strin
     DELEGATE_FAILURE_MODES,
     '',
     COMPLETENESS_REMINDER_DELEGATE,
+    '',
+    TURN_BUDGET_DELEGATE,
   ].join('\n');
 }

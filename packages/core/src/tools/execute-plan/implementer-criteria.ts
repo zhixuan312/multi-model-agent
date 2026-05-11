@@ -87,3 +87,17 @@ export const SELF_VERIFICATION = [
   '',
   'If any command FAILS: do NOT declare "done". Investigate, fix, re-run. A failing test is your output, not the reviewer\'s problem. If you cannot run a command (shell unavailable, dependency missing): say so explicitly AND treat the task as incomplete.',
 ].join('\n');
+
+/**
+ * Turn budget — calibration block. Cheap models default to "be
+ * thorough" and treat each turn as "let me re-verify state by
+ * re-reading", which becomes a discovery loop. This block tells them
+ * to trust their prior reads and edit confidently.
+ */
+export const TURN_BUDGET = [
+  'Turn budget:',
+  '',
+  'A typical plan task completes in 5-15 tool calls total: read each file once, edit each file once, run verification once. If you find yourself reading the same file twice, STOP and edit — the content from your first read is in your context window. If you find yourself reading >5 files without writing any, STOP and write — you have enough context to make progress.',
+  '',
+  'Trust your prior reads. Trust your prior edits. The most common cheap-worker failure is restart-looping ("let me re-read both files first" repeated 50 times) instead of editing.',
+].join('\n');

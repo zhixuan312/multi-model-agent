@@ -16,6 +16,7 @@ import {
   EXECUTE_PLAN_FAILURE_MODES,
   PLAN_VS_SOURCE_RECONCILIATION,
   SELF_VERIFICATION,
+  TURN_BUDGET,
 } from './implementer-criteria.js';
 
 export const executePlanInputSchema = z.object({
@@ -115,6 +116,8 @@ function buildExecutePlanPrompt(
     PLAN_VS_SOURCE_RECONCILIATION,
     '',
     SELF_VERIFICATION,
+    '',
+    TURN_BUDGET,
   );
   return parts.join('\n');
 }
