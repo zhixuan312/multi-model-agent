@@ -202,3 +202,7 @@ export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-
 // Headline templates
 export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
 export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';
+
+// Identity
+export { resolveMainModel } from './identity/main-model-resolver.js';
+export type { ResolveInputs, ResolveResult, SupportedClient } from './identity/main-model-resolver.js';

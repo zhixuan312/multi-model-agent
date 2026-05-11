@@ -22,7 +22,6 @@ describe('mma-research SKILL.md', () => {
 
   it('documents auth + identity headers', () => {
     expect(content).toContain('Authorization: Bearer');
-    expect(content).toContain('X-MMA-Main-Model');
     expect(content).toContain('X-MMA-Client');
   });
 

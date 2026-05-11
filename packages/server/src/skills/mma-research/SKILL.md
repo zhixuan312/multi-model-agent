@@ -62,7 +62,6 @@ mean and which directions to pursue.
 ```bash
 BATCH=$(curl -f -sS -X POST \
   -H "Authorization: Bearer $TOKEN" \
-  -H "X-MMA-Main-Model: $MAIN_MODEL" \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Content-Type: application/json" \
   -d '{

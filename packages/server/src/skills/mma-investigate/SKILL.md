@@ -82,7 +82,6 @@ digraph when_to_use {
 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
-  -H "X-MMA-Main-Model: $MAIN_MODEL" \
   -H "X-MMA-Client: $MMA_CLIENT" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
