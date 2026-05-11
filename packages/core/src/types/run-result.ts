@@ -187,4 +187,59 @@ export interface CacheHints {
 
 export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
 
-export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult>; runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult> }
+// v4.4 — Session-based provider boundary. `run` and `runReview` remain
+// optional during the migration window (PR steps 1–6); `openSession` is
+// the canonical entry point. The legacy methods are deleted in PR step 7
+// (Task 24).
+export interface Provider {
+  name: string;
+  config: ProviderConfig;
+  /** @deprecated — use openSession instead. Removed in v4.4 Task 24. */
+  run?(prompt: string, options?: RunOptions): Promise<RunResult>;
+  /** @deprecated — use openSession instead. Removed in v4.4 Task 24. */
+  runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult>;
+  openSession(opts: SessionOpts): Session;
+}
+
+/** Stage-tagging payload for a single session.send() call. */
+export interface TurnOpts {
+  /** e.g. 'implementing', 'review', 'rework', 'annotating', 'committing'. */
+  stageLabel: string;
+}
+
+export interface SessionOpts {
+  cwd: string;
+  allowedHosts?: ReadonlySet<string>;
+  /** Hard wall-clock deadline (epoch ms). External guard aborts at this time. */
+  wallClockDeadline: number;
+  /** Idle threshold (ms): no SDK event for this long → abort. */
+  idleStallTimeoutMs: number;
+  /** Advisory only. Authoritative enforcement = mma-side CostMeter (task-wide). */
+  maxCostUSD?: number;
+  /** Wired through to the SDK's own cancellation parameter. */
+  abortSignal: AbortSignal;
+  /** Telemetry sink. Optional. Untyped to avoid a circular import with
+   *  channels/event-bus; concrete shape verified at the bind site. */
+  bus?: unknown;
+  /** Initial stage label so telemetry has one before the first TurnOpts lands. */
+  initialStageLabel?: string;
+}
+
+export interface TurnResult {
+  output: string;
+  usage: TokenUsage;
+  filesRead: string[];
+  filesWritten: string[];
+  toolCallsByName: Record<string, number>;
+  turns: number;
+  durationMs: number;
+  costUSD: number;
+  terminationReason: 'ok' | 'cost_exceeded' | 'time_exceeded' | 'aborted' | 'error';
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+export interface Session {
+  send(instruction: string, opts?: TurnOpts): Promise<TurnResult>;
+  close(): Promise<void>;
+}
