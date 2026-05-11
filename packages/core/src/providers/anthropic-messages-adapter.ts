@@ -13,8 +13,30 @@ export class AnthropicMessagesAdapter implements RunnerAdapter {
     model: string;
     maxOutputTokens: number;
     providerType?: 'claude' | 'claude-compatible';
+    /** Claude Code subscription OAuth token (4.2.3+). When provided, the
+     *  adapter sends `Authorization: Bearer <token>` + the OAuth beta
+     *  header instead of the `x-api-key: <apiKey>` header — letting users
+     *  with a Claude Max subscription dispatch via mma without an
+     *  Anthropic API key. Pulled from macOS Keychain (`security
+     *  find-generic-password -s "Claude Code-credentials"`) by
+     *  `getClaudeOAuth()` in identity/auth-token-store.ts. */
+    oauthAccessToken?: string;
   }) {
-    this.client = new Anthropic({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+    if (opts.oauthAccessToken) {
+      // OAuth path: pass an empty apiKey so the SDK doesn't send x-api-key,
+      // and override defaultHeaders with the bearer + OAuth beta header
+      // that Claude's API requires for Max-subscription dispatch.
+      this.client = new Anthropic({
+        apiKey: '',
+        baseURL: opts.baseURL,
+        authToken: opts.oauthAccessToken,
+        defaultHeaders: {
+          'anthropic-beta': 'oauth-2025-04-20',
+        },
+      });
+    } else {
+      this.client = new Anthropic({ apiKey: opts.apiKey, baseURL: opts.baseURL });
+    }
     this.providerType = opts.providerType ?? 'claude';
     this.model = opts.model;
     this.maxOutputTokens = opts.maxOutputTokens;
