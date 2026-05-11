@@ -270,7 +270,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         state.qualityReworkFailed === true ||
         state.specChainPassed === false ||
         state.qualityChainPassed === false;
-      if (chainFailed) {
+      // 4.2.3+: review chain verdicts are ADVISORY when a commit landed.
+      // If autoCommit fired and there's a real commit in state.commits, the
+      // task DID produce a real disk artifact — the reviewer's flagged
+      // concerns surface on the envelope (via persistSpecReviewConcerns)
+      // as findings the main agent can act on inline, but they don't
+      // downgrade the envelope to "incomplete". Pre-4.2.3 behaviour
+      // (downgrade to incomplete on any chain failure) was a hard gate
+      // that hid successful work behind reviewer pickiness, especially on
+      // cheap workers that couldn't satisfy strict verbatim enforcement.
+      const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
+      if (chainFailed && !commitsExist) {
         enriched.status = 'incomplete';
         enriched.workerStatus = 'review_loop_capped';
         if (state.specReworkFailed === true || state.qualityReworkFailed === true) {

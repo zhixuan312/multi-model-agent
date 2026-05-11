@@ -1,89 +1,43 @@
 import type { ReviewTemplate } from './shared.js';
 
 /**
- * Spec compliance reviewer — reframed in 4.2.3 for targeted-advice
- * output (instead of diagnostic complaints).
+ * Spec compliance reviewer — lenient mode (4.2.3+, rolled back from
+ * strict verbatim enforcement).
  *
- * The reviewer's job is split:
- *   1. Approve when the diff matches the plan, OR
- *   2. Tell the implementer EXACTLY WHAT TO CHANGE — with concrete
- *      "replace X with Y", "add this verbatim", "remove this line"
- *      instructions. NOT free-text descriptions of problems.
+ * Earlier 4.2.3 iterations made the reviewer demand character-for-character
+ * verbatim match against the plan's code blocks. This produced a chain of
+ * pathologies on cheap workers (Haiku, MiniMax): reviewer correctly
+ * flagged drift → worker couldn't mechanically apply the fix → rework
+ * restart-looped on "let me re-read both files first" → 100+ tool calls
+ * with zero edits → review_loop_capped.
  *
- * Why this matters: when concerns are diagnostic ("the function omits
- * the entered filter"), the rework round re-implements from scratch
- * and paraphrases again. When concerns are mechanical instructions
- * ("Add `if (!stage?.entered) continue;` after line 22"), the rework
- * round applies them with low cognitive overhead.
+ * The 3.12.7 reviewer was completion-biased: "only flag changes_required
+ * when there is positive evidence of omission". Workers always finished,
+ * sometimes with paraphrased code that the reviewer accepted. The fidelity
+ * gate moves to the main agent: it reads the terminal envelope, sees the
+ * reviewer's advisory concerns (still emitted, just non-blocking), and
+ * decides whether to patch inline.
  *
- * The reviewer is the COMPLEX tier (gpt-5.4) — it's capable of producing
- * actionable patch instructions. The reworker (also complex on round 2+)
- * is the MECHANICAL applier of those instructions.
- *
- * Same JSON output shape as before — `{verdict, concerns: string[]}` —
- * just with stricter expectations on what each concern string contains.
+ * What changed vs the strict mode (now restored to lenient):
+ * - "Only flag changes_required when there is positive evidence of
+ *   omission" — no more verbatim-block enforcement
+ * - Reviewer sees full file content via the diff, not just patches
+ * - Concerns are diagnostic (what's wrong), not surgical patch
+ *   instructions
  */
 export const specTemplate: ReviewTemplate = {
   systemPrompt: [
-    'You are a spec compliance reviewer for plan execution. Your job is one of two things:',
-    '',
-    '  (a) APPROVE the diff when it matches the plan, OR',
-    '  (b) Emit TARGETED INSTRUCTIONS the implementer can apply mechanically to align the diff with the plan.',
-    '',
-    'You are NOT here to describe problems. You are here to either approve, or to tell the implementer exactly what to do next.',
+    'You are a spec compliance reviewer. Your job is to decide whether the cumulative diff fulfills the task brief.',
     '',
     'Reply with a JSON block: {"verdict":"approved"|"changes_required","concerns":["..."]}.',
     '',
     'Verdict rules:',
-    '- "approved": the diff matches the plan section\'s code blocks character-for-character AND covers every step the plan listed. The "concerns" list MUST be empty.',
-    '- "changes_required": at least one targeted instruction. An empty diff = changes_required (unless the brief explicitly requested a no-op).',
+    '- "approved": the diff implements the brief, with no obvious missing or wrong elements. The "concerns" list MUST be empty. A diff that fully satisfies the brief is "approved" even if you would have written it differently.',
+    '- "changes_required": cite at least one concrete concern, each tied to a specific diff line or a specific missing element from the brief. Do NOT use this verdict for stylistic preferences not in the brief.',
     '',
-    'How to write each concern (this is the part that determines whether the rework will succeed):',
+    'Completeness check: if the brief or plan section describes multiple files, sections, or components to modify, check whether each required target was adequately addressed. A target may be addressed by direct edit, by a shared-code change that covers it, or by already being correct. Only flag "changes_required" when there is POSITIVE EVIDENCE of omission — e.g., the plan names targets A, B, and C, but only A and B appear in the modified files with no indication that C was addressed. Do not flag "changes_required" merely because the worker chose a slightly different but functionally-equivalent implementation than the plan suggested.',
     '',
-    'Concerns must be FINAL-STATE BLOCKS, not patches. Cheap models handle "make this whole region look exactly like this" far better than "add a line at position N" — sloppy line-positioning is the #1 cause of broken rework edits.',
-    '',
-    '  Bad concern (diagnostic complaint — DO NOT WRITE):',
-    '    "The function omits the entered filter."',
-    '    "The test file has 4 tests but the plan prescribes 6."',
-    '    "The implementation paraphrases the plan\'s code."',
-    '',
-    '  Bad concern (line-position patch — also DO NOT WRITE):',
-    '    "In packages/core/src/lifecycle/shared-compute.ts, between lines 21-22, add `if (!stage?.entered) continue;`."',
-    '',
-    '  Good concern (final-state block — WRITE LIKE THIS):',
-    '    "Replace the entire body of the `computeAggregateCost` function in packages/core/src/lifecycle/shared-compute.ts so the function reads exactly:',
-    '    ```typescript',
-    '    export function computeAggregateCost(results: RunResult[]): BatchAggregateCost {',
-    '      let totalActualCostUSD = 0;',
-    '      let totalCostDeltaVsMainUSD = 0;',
-    '      let anyCostFinite = false;',
-    '      for (const r of results) {',
-    '        const stageStats = (r.stageStats ?? {}) as Record<string, { entered?: boolean; costUSD?: number | null } | undefined>;',
-    '        for (const stage of Object.values(stageStats)) {',
-    '          if (!stage?.entered) continue;',
-    '          const c = stage.costUSD;',
-    '          if (typeof c === \'number\' && Number.isFinite(c)) {',
-    '            totalActualCostUSD += c;',
-    '            anyCostFinite = true;',
-    '          }',
-    '        }',
-    '        if (r.cost?.costDeltaVsMainUSD !== null && r.cost?.costDeltaVsMainUSD !== undefined) {',
-    '          totalCostDeltaVsMainUSD += r.cost.costDeltaVsMainUSD;',
-    '        }',
-    '      }',
-    '      return { totalActualCostUSD: anyCostFinite ? totalActualCostUSD : 0, totalCostDeltaVsMainUSD };',
-    '    }',
-    '    ```',
-    '    Do not edit other functions in the file."',
-    '',
-    'Each concern must include: WHICH file + WHICH symbol/region the worker should overwrite, and WHAT the final-state contents should be (verbatim code block). The worker can then do ONE write — no line counting, no boundary sniffing.',
-    '',
-    'Verbatim plan-code enforcement (when the user prompt contains a "Plan section" block):',
-    '- For every triple-backtick code block inside the plan section: the worker\'s diff MUST contain that block character-for-character (same names, signatures, comments, imports, control flow, return shape).',
-    '- A "semantically equivalent" rewrite is NOT approval — it is CODE SUBSTITUTION; emit a targeted instruction to replace with the plan\'s verbatim code.',
-    '- Distinguish from reconciliation: when the worker substituted because the plan named a symbol that does NOT exist in source AND used the actual source symbol, that\'s reconciliation — APPROVED, provided the worker noted it in their summary.',
-    '',
-    'You do not see future rework rounds. Decide on this evidence alone. The implementer reads your concerns as instructions to apply — write them so they can be applied.',
+    'You do not see future rework rounds. Decide on this evidence alone.',
   ].join('\n'),
 
   buildUserPrompt(ctx) {
@@ -92,7 +46,7 @@ export const specTemplate: ReviewTemplate = {
 
     if (ctx.planContext && ctx.planContext.trim().length > 0) {
       parts.push(
-        `# Plan section (verbatim source of truth)\n\nThis is what the plan author wrote — character-for-character. The diff below MUST match every code block in this section verbatim, and must show evidence of every numbered step. When emitting concerns, quote the verbatim plan code the implementer should apply.\n\n\`\`\`markdown\n${ctx.planContext.trim()}\n\`\`\``,
+        `# Plan section (for reference)\n\nThis is the plan section the worker was executing. Use it as context for what "complete" looks like — but the brief above is the contract, and functional equivalents to plan-prescribed code are acceptable.\n\n\`\`\`markdown\n${ctx.planContext.trim()}\n\`\`\``,
       );
     }
 
@@ -111,7 +65,7 @@ export const specTemplate: ReviewTemplate = {
       parts.push(`# Cumulative diff\n(no file changes detected)`);
     }
 
-    parts.push(`# Decide\nApprove if the diff matches the plan section verbatim AND covers every step. Otherwise emit targeted instructions (where + what verbatim text + action) the implementer can apply mechanically. Reply with the JSON block specified in the system prompt.`);
+    parts.push(`# Decide\nDoes the cumulative diff fulfill the task brief? Reply with the JSON block specified in the system prompt.`);
 
     return parts.join('\n\n');
   },

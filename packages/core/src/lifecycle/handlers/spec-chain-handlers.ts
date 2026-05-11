@@ -56,73 +56,24 @@ interface ReviewRoundInput {
 }
 
 /**
- * Build a surgical rework prompt — frames this round as "apply the
- * reviewer's targeted instructions to your prior work", not "redo the
- * task from scratch".
+ * Build a rework prompt — 3.12.7-style simple "(original) [address
+ * feedback]" form (4.2.3+, rolled back from surgical-rework variant).
  *
- * Cheap workers respond to "redo with these concerns in mind" by
- * re-reading every file and paraphrasing again (observed 2026-05-11
- * MiniMax-M2.7 dispatch: 28 minutes, 100 tool calls, 2 writes). They
- * respond much better to "here are mechanical patches to apply".
- *
- * The reviewer (per the new spec-review template) writes concerns as
- * concrete instructions — "in <file> line N, replace X with Y verbatim
- * from plan step M". This builder makes those instructions the prompt's
- * focal content. The original task prompt stays at the top for context,
- * but the mental model is "apply the patch list", not "re-implement".
+ * Earlier 4.2.3 iterations embedded the prior cumulative diff inline
+ * plus targeted patch-application rules. With cheap workers (Haiku,
+ * MiniMax) and a strict reviewer, this produced restart-loops: the
+ * worker kept re-stating the targeted instructions and re-running
+ * shell commands without converging. With the lenient reviewer
+ * (companion change in spec-review.ts), the original simple form is
+ * sufficient — the reviewer's concerns are diagnostic, the worker
+ * adjusts based on them, and the loop usually converges in 1-2 rounds.
  */
-function buildSpecReworkPrompt(originalPrompt: string, priorConcerns: string[], priorDiff: string, round: number): string {
-  const concernsList = priorConcerns.length > 0
-    ? priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n')
-    : '(no specific concerns recorded — re-read your prior diff above and the plan section in the original task; ensure verbatim match.)';
-
-  // Cap the prior diff at 30 KB to keep prompt size bounded. Real
-  // execute-plan tasks rarely exceed this; if they do, the worker can
-  // still read the files for the missing context.
-  const DIFF_CAP_BYTES = 30 * 1024;
-  let diffBlock = '';
-  if (priorDiff.length > 0) {
-    const truncated = Buffer.byteLength(priorDiff, 'utf8') > DIFF_CAP_BYTES;
-    const diff = truncated
-      ? Buffer.from(priorDiff, 'utf8').subarray(0, DIFF_CAP_BYTES).toString('utf8') + '\n[... diff truncated at 30KB; read affected files for the missing tail ...]'
-      : priorDiff;
-    diffBlock = [
-      '# Your prior work (cumulative diff from your previous attempts)',
-      '',
-      'This is what you wrote. The files on disk match this diff exactly — you do NOT need to re-read them. Edit them directly using the targeted instructions below.',
-      '',
-      '```diff',
-      diff,
-      '```',
-      '',
-    ].join('\n');
-  }
-
-  return [
-    originalPrompt,
-    '',
-    `# Rework round ${round} — apply the reviewer's targeted instructions`,
-    '',
-    'You implemented a previous attempt. The reviewer compared your diff against the plan section and produced the targeted fix list below. Apply each item mechanically to your prior work.',
-    '',
-    diffBlock,
-    'How to think about this round (different from the initial implementation):',
-    '- This is NOT "re-implement the task from scratch". You already wrote files; the diff above shows what you produced.',
-    '- DO NOT re-read files first. Your prior diff above shows the current on-disk state; trust it and edit directly.',
-    '- Each concern below is a concrete instruction: where to apply, what verbatim text to use, what action (replace / add / remove / copy from plan step N).',
-    '- Apply each instruction as written. Do NOT redesign. Do NOT rewrite parts the reviewer did not flag.',
-    '- After applying every instruction, run the verification commands the plan listed and report PASS/FAIL in your summary.',
-    '- If an instruction is genuinely ambiguous or you cannot find the location it references: note that specific item in your summary as "could not apply: <reason>" — do NOT bail on the whole task.',
-    '',
-    "# Reviewer's targeted instructions (apply each)",
-    concernsList,
-    '',
-    '# Turn budget',
-    'Complete this rework in 3-5 tool calls: one edit per file the reviewer asked you to change, plus the verify command. If you find yourself reading the same file twice, STOP and edit — you already have the content from your prior diff above.',
-    '',
-    '# Action',
-    'Edit the files to apply the instructions above. Do not redesign. Do not rewrite untouched code. After editing, run the plan-listed verification commands and include their output under "Self-verification" in your summary. Then report briefly: which instructions you applied, which (if any) you could not, and the verification results.',
-  ].join('\n');
+function buildSpecReworkPrompt(originalPrompt: string, priorConcerns: string[], round: number): string {
+  void round;
+  const concernsBlock = priorConcerns.length > 0
+    ? '\n\n[reviewer concerns to address]\n' + priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n')
+    : '';
+  return originalPrompt + '\n\n[spec rework — address the prior reviewer feedback]' + concernsBlock;
 }
 
 async function runSpecReviewRound(input: ReviewRoundInput): Promise<ReviewerCallResult | null> {
@@ -208,30 +159,11 @@ async function runSpecRework(input: ReviewRoundInput): Promise<RunResult | null>
   state.specUnavailable ??= new Map() as UnavailableMap;
   const specUnavailable: UnavailableMap = state.specUnavailable;
 
-  // Surgical rework prompt — frame this round as "apply the reviewer's
-  // targeted instructions to your prior work", not "redo the task".
-  // Cheap workers respond to "redo" by re-reading every file and
-  // paraphrasing again; they respond to "apply these patches" by editing.
-  // Reviewer concerns (per the new spec-review template) are written as
-  // concrete instructions: "in <file> line N, replace X with Y verbatim
-  // from plan step M". The reworker just applies them.
-  //
-  // 4.2.3+: also include the worker's prior cumulative diff inline.
-  // Without it, cheap models restart-loop on "let me read both files
-  // first" turn after turn (observed 2026-05-11 MiniMax-M2.7 A7.1
-  // dispatch: 100+ tool calls in rework round 1, zero edits). With the
-  // diff inline, the worker sees its prior state directly and can edit
-  // without re-reading.
+  // 3.12.7-style simple rework prompt: "(original task)[address
+  // feedback]". The lenient spec reviewer produces diagnostic concerns
+  // the worker can absorb without surgical-patch instructions.
   const priorConcerns = (state.priorSpecConcerns as string[] | undefined) ?? [];
-  let priorDiff = '';
-  if (state.diffTracker) {
-    try {
-      priorDiff = await state.diffTracker.cumulativeDiff();
-    } catch {
-      // Diff failures shouldn't block rework; fall back to no inline diff.
-    }
-  }
-  const reworkPrompt = buildSpecReworkPrompt(task.prompt ?? '', priorConcerns, priorDiff, round);
+  const reworkPrompt = buildSpecReworkPrompt(task.prompt ?? '', priorConcerns, round);
   const reworkTask: TaskSpec = { ...task, prompt: reworkPrompt };
 
   const reworkCall = await runWithFallback<RunResult>({
