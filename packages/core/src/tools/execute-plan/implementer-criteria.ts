@@ -1,19 +1,25 @@
 /**
- * Execute-plan worker criteria — slimmed in 4.2.3 for cheap-tier success.
+ * Execute-plan worker criteria — 4.3.0 pipeline-redesign mindset.
  *
- * Earlier versions piled 16 KB of layered rules onto the worker. Cheap
- * models (MiniMax-class) responded by spinning on discovery instead of
- * writing. This version is ~3 KB total and ships only what's load-bearing
- * for mechanical execution. Drift handling, false-bail prevention, and
- * test-running discipline stay; the band-aid blocks (PROGRESS_BIAS,
- * REVIEWER_AWARENESS_AP, the worked example in PLAN_FIDELITY_REMINDER)
- * were dropped or folded into the orientation.
+ * mma-execute-plan implements one named task from a plan written by a
+ * higher-capability model. The plan is the spec; your output is a diff.
  *
- * Layered judgment: the spec reviewer (complex tier) catches drift and
- * emits targeted instructions for rework; the rework round applies
- * those instructions mechanically. The worker doesn't need to anticipate
- * every reviewer concern — it just needs to do the mechanical task and
- * report what it did.
+ * Pipeline mindset (different from earlier versions):
+ * - This is a SINGLE-PASS pipeline. There are NO rework rounds for you.
+ * - After your turn, a SPEC reviewer (complex tier, full editor tools)
+ *   runs ONCE — it doesn't ask you to fix gaps; it fixes them inline
+ *   itself. Plan-fidelity gaps (CODE SUBSTITUTION, STEP SKIP) it can
+ *   detect, it can also fix.
+ * - Then a QUALITY reviewer (complex tier, full editor tools) runs
+ *   ONCE for safety / correctness — same thing.
+ * - Then an annotator scores completion based on the plan's steps.
+ *   Commit fires if completionPercent ≥ 80.
+ *
+ * What this means for you: do the mechanical task in ONE pass and
+ * report what you did. You don't need to anticipate every reviewer
+ * concern — they fix things, they don't ping-pong with you. Don't
+ * restart-loop, don't bail on uncertainty, don't over-verify. The
+ * pipeline has a safety net BUT only one round of it.
  */
 
 /**

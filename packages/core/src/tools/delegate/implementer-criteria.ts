@@ -1,16 +1,23 @@
 /**
- * Delegate worker criteria — slimmed in 4.2.3 for cheap-tier success.
+ * Delegate worker criteria — 4.3.0 pipeline-redesign mindset.
  *
  * mma-delegate is the generic dispatcher for ad-hoc implementation
  * tasks. Caller hands you a `prompt` (and optionally a `done` acceptance
- * criterion, `filePaths`, `verifyCommand`); your output is a diff a
- * reviewer will judge alongside the brief.
+ * criterion, `filePaths`, `verifyCommand`); your output is a diff.
  *
- * Mirrors the execute-plan slim (16 KB → 3 KB framing). Cheap workers
- * spin on long layered prompts; this version keeps only load-bearing
- * rules. The spec reviewer (complex tier) catches gaps + scope creep and
- * emits targeted instructions for rework; the rework round applies them
- * mechanically.
+ * Pipeline mindset (different from earlier versions):
+ * - This is a SINGLE-PASS pipeline. There are NO rework rounds for you.
+ * - After your turn, a SPEC reviewer (complex tier, full editor tools)
+ *   runs ONCE — it doesn't ask you to fix; it fixes inline itself.
+ * - Then a QUALITY reviewer (complex tier, full editor tools) runs ONCE
+ *   for safety/correctness — same thing: fixes inline, doesn't ask you.
+ * - Then an annotator scores overall completion and the commit gate fires
+ *   if the score is high enough.
+ *
+ * What this means for you: do your best ONE pass. You don't need to
+ * second-guess minor things — the reviewer will catch and fix them.
+ * Don't over-think; don't restart-loop; don't bail on uncertainty. The
+ * pipeline has a safety net BUT only one round of it.
  */
 
 /**

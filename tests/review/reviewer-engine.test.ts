@@ -4,15 +4,15 @@ import {
   ReviewerParseError,
 } from '../../packages/core/src/review/reviewer-engine.js';
 import { ReviewerPromptBuilder } from '../../packages/core/src/review/reviewer-prompt-builder.js';
-import { specTemplate } from '../../packages/core/src/review/templates/spec-review.js';
-import { qualityAPTemplate } from '../../packages/core/src/review/templates/quality-review-artifact.js';
-import { diffTemplate } from '../../packages/core/src/review/templates/diff-review.js';
+import { specReviewAndFixTemplate } from '../../packages/core/src/review/templates/spec-review-and-fix.js';
+import { qualityReviewAndFixTemplate } from '../../packages/core/src/review/templates/quality-review-and-fix.js';
+import { annotateCompletionTemplate } from '../../packages/core/src/review/templates/annotate-completion.js';
 import type { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
 import type { RunResult } from '../../packages/core/src/providers/runner-shell-types.js';
 
 function makeEngine() {
   const builder = new ReviewerPromptBuilder(
-    { spec: specTemplate, qualityForAP: qualityAPTemplate, diff: diffTemplate },
+    { spec: specReviewAndFixTemplate, qualityForAP: qualityReviewAndFixTemplate, diff: annotateCompletionTemplate },
     {},
   );
   return new ReviewerEngine(builder);

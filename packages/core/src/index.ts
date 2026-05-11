@@ -165,13 +165,13 @@ export type { EventType } from './events/observability-events.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 
-// Review engine (v4.0 lifecycle)
+// Review engine (v4.0 lifecycle + 4.3.0 pipeline redesign)
 export {
   ReviewerEngine,
   ReviewerPromptBuilder,
-  specTemplate,
-  qualityAPTemplate,
-  diffTemplate,
+  specReviewAndFixTemplate,
+  qualityReviewAndFixTemplate,
+  annotateCompletionTemplate,
   qualityAuditTemplate,
   qualityReviewTemplate,
   qualityVerifyTemplate,
