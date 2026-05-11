@@ -47,7 +47,10 @@ export function makeToolDefinitions(opts: {
   return [
     {
       name: 'read_file',
-      description: 'Read a UTF-8 file (cwd-only)',
+      description:
+        'Read a UTF-8 file (cwd-only). PREFERRED tool for inspecting file content. ' +
+        'Use this INSTEAD OF run_shell with cat, head, tail, less, more, or sed -n. ' +
+        'Returns the full file as a string.',
       schema: {
         type: 'object',
         properties: { path: { type: 'string' } },
@@ -64,7 +67,10 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'write_file',
-      description: 'Write a UTF-8 file (cwd-only)',
+      description:
+        'Write a UTF-8 file (cwd-only). Use for CREATING NEW FILES or COMPLETE REWRITES only. ' +
+        'For partial changes to an existing file, use edit_file instead. ' +
+        'NEVER use run_shell with cat-heredoc, tee, or > redirection to write files.',
       schema: {
         type: 'object',
         properties: {
@@ -85,7 +91,12 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'edit_file',
-      description: 'Replace a unique string in an existing file (cwd-only)',
+      description:
+        'Replace a unique string in an existing file (cwd-only). ' +
+        'PREFERRED tool for ANY partial modification to an existing file. ' +
+        'NEVER use run_shell with sed, awk, perl -i, or similar — those are not ' +
+        'tracked by the harness and will fail review. ' +
+        'Provide enough surrounding context in oldContent to match exactly one location.',
       schema: {
         type: 'object',
         properties: {
@@ -121,7 +132,10 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'glob',
-      description: 'Find files matching a glob pattern (cwd-only)',
+      description:
+        'Find files matching a glob pattern (cwd-only). ' +
+        'PREFERRED tool for finding files by name. ' +
+        'Use this INSTEAD OF run_shell with find, ls, fd.',
       schema: {
         type: 'object',
         properties: { pattern: { type: 'string' } },
@@ -146,7 +160,10 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'grep',
-      description: 'Search for a regex pattern in a file or directory (cwd-only)',
+      description:
+        'Search for a regex pattern in a file or directory (cwd-only). ' +
+        'PREFERRED tool for searching content. ' +
+        'Use this INSTEAD OF run_shell with grep, rg, ack, ag.',
       schema: {
         type: 'object',
         properties: {
@@ -184,7 +201,10 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'list_files',
-      description: 'List files and directories at the given path (cwd-only)',
+      description:
+        'List files and directories at the given path (cwd-only). ' +
+        'PREFERRED tool for directory listing. ' +
+        'Use this INSTEAD OF run_shell with ls.',
       schema: {
         type: 'object',
         properties: { path: { type: 'string' } },
@@ -201,7 +221,15 @@ export function makeToolDefinitions(opts: {
     },
     {
       name: 'run_shell',
-      description: 'Execute a shell command (cwd-confined)',
+      description:
+        'Execute a shell command (cwd-confined). ' +
+        'Use ONLY for: running tests (npm test, vitest, pytest), running builds ' +
+        '(npm run build, tsc, cargo build), running linters/type-checks, or other ' +
+        'commands that produce side effects (git operations the harness does not own). ' +
+        'NEVER use for: inspecting files (use read_file, grep, glob, list_files instead), ' +
+        'editing files (use edit_file, write_file instead), or listing directories ' +
+        '(use list_files instead). sed/awk/perl -i edits are NOT tracked by the harness ' +
+        'and will fail review.',
       schema: {
         type: 'object',
         properties: { command: { type: 'string' } },

@@ -15,6 +15,7 @@ const DEFAULT_CAPABILITIES: AdapterCapabilities = {
 // which counts every read-class tool call regardless of args.
 import { WRITE_TOOL_NAMES, SHELL_TOOL_NAMES } from './tool-name-sets.js';
 import { filterValidWritePath } from './file-tracker.js';
+import { detectToolCallLoop, hasNewFileActivity, STALL_DETECTION_TURNS } from './stall-detector.js';
 const READ_TOOL_NAMES = new Set(['readFile', 'read_file']);
 
 function extractPathFromToolInput(input: unknown): string | undefined {
@@ -126,6 +127,16 @@ export class RunnerShell {
     const history: AdapterTurnRecord[] = [];
     let finalText = '';
     let stoppedByAdapter = false;
+    // Per-turn supervision state (regression-fix for v4.0+ unwired loop/stall
+    // detection). 3.12.7's codex-runner.ts called detectToolCallLoop +
+    // hasNewFileActivity every turn; the 4.0 runner-shell rewrite dropped
+    // those calls while leaving the helpers in place. Restore them so
+    // codex-style run_shell thrashing (192+ identical-name turns with zero
+    // new file activity) terminates within ~10 turns instead of running to
+    // the wall-clock / cost ceiling.
+    let prevFilesReadCount = 0;
+    let prevFilesWrittenCount = 0;
+    let consecutiveStallTurns = 0;
 
     // Common fields stamped on every emitted bus event so VerboseLogChannel
     // surfaces enough context for an operator to see which run a line belongs
@@ -332,6 +343,61 @@ export class RunnerShell {
       });
 
       if (willTerminate) break;
+
+      // Per-turn loop + stall guard. Fires only when BOTH conditions hold:
+      //   1. detectToolCallLoop sees an ABAB-style tool-name repetition in
+      //      the last 6 calls (e.g. all run_shell, or run_shell/read_file
+      //      alternating).
+      //   2. consecutiveStallTurns has reached STALL_DETECTION_TURNS (5) —
+      //      meaning the worker hasn't read or written a new file across
+      //      that many consecutive turns.
+      // The AND gate is intentional: loop alone false-positives on legit
+      // refactors (writeFile, writeFile, ...); stall alone false-positives
+      // on long thinking before the first edit. Together they tightly
+      // bracket the codex-style "explore via run_shell forever" pathology.
+      const newActivity = hasNewFileActivity(
+        prevFilesReadCount,
+        prevFilesWrittenCount,
+        filesReadSet.size,
+        filesWrittenSet.size,
+      );
+      prevFilesReadCount = filesReadSet.size;
+      prevFilesWrittenCount = filesWrittenSet.size;
+      if (newActivity) consecutiveStallTurns = 0;
+      else consecutiveStallTurns += 1;
+
+      const recentToolNames = allToolCalls.slice(-6).map(c => c.name);
+      if (
+        recentToolNames.length >= 6 &&
+        detectToolCallLoop(recentToolNames) &&
+        consecutiveStallTurns >= STALL_DETECTION_TURNS
+      ) {
+        process.stderr.write(
+          `[runner-shell] tool-call loop detected — recent=${recentToolNames.join('|')} ` +
+            `stallTurns=${consecutiveStallTurns} — aborting at turn ${turn + 1}\n`,
+        );
+        input.bus?.emit({
+          event: 'runner_tool_loop_detected',
+          ts: new Date().toISOString(),
+          ...baseEventFields,
+          turnIndex: turn,
+          recentToolNames,
+          stallTurns: consecutiveStallTurns,
+        });
+        return {
+          workerStatus: 'failed',
+          finalAssistantText: finalText,
+          toolCalls: allToolCalls,
+          usage,
+          errorCode: 'tool_loop',
+          turns,
+          durationMs: Date.now() - startMs,
+          filesRead: [...filesReadSet],
+          filesWritten: [...filesWrittenSet],
+          filesWrittenRejected: [...filesWrittenRejectedSet],
+          costUSD: computeCost(modelForCost, usage),
+        };
+      }
     }
 
     // Empty-output regression guard (4.0.3). The 4.0.x runner-shell
