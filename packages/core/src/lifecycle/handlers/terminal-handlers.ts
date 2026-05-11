@@ -75,12 +75,18 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   let outputTokens = 0;
   let cachedReadTokens = 0;
   let cachedNonReadTokens = 0;
-  let totalCostUSD: number | null = null;
   let toolCallsTotal = 0;
   let turnsTotal = 0;
   let filesReadTotal = 0;
   let filesWrittenTotal = 0;
   const ss = (last as { stageStats?: Record<string, Record<string, unknown>> } | undefined)?.stageStats;
+
+  // A11.2: compute actualCostUSD as the sum of every stage's costUSD.
+  // costUSD and totalCostUSD are back-compat aliases for the same value.
+  // costDeltaVsMainUSD comes from the top-level cost field on RunResult.
+  let actualCostUSD: number | null = null;
+  let costDeltaVsMainUSD: number | null = null;
+
   if (ss) {
     for (const stage of Object.values(ss)) {
       if (!stage || !(stage['entered'] as boolean | undefined)) continue;
@@ -94,9 +100,10 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
       filesWrittenTotal += (stage['filesWrittenCount'] as number | null | undefined) ?? 0;
       const stageCost = stage['costUSD'] as number | null | undefined;
       if (stageCost !== null && stageCost !== undefined) {
-        totalCostUSD = (totalCostUSD ?? 0) + stageCost;
+        actualCostUSD = (actualCostUSD ?? 0) + stageCost;
       }
     }
+    costDeltaVsMainUSD = (last as { cost?: { costDeltaVsMainUSD?: number | null } })?.cost?.costDeltaVsMainUSD ?? null;
   }
   // Fallback to last.usage when stageStats wasn't populated (legacy paths).
   if (inputTokens === 0 && outputTokens === 0 && last?.usage) {
@@ -152,7 +159,15 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     outputTokens,
     cachedReadTokens,
     cachedNonReadTokens,
-    costUSD: totalCostUSD,
+    // A11.2 — populate the full cost surface on the task_completed envelope.
+    // actualCostUSD is the new canonical field (sum of every stage's costUSD).
+    // costUSD and totalCostUSD are back-compat aliases — emit all three so
+    // existing callers and new callers both get the value they expect.
+    // costDeltaVsMainUSD: delta vs estimated main-tier cost (from CostBreakdown).
+    actualCostUSD,
+    costUSD: actualCostUSD,
+    totalCostUSD: actualCostUSD,
+    costDeltaVsMainUSD,
     taskMaxIdleMs: null,
     stallTriggered: false,
     stages,

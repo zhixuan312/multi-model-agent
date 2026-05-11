@@ -119,6 +119,7 @@
           "message": "reviewer output missing structured verdict (no JSON block, no `## Summary` section) — defaulting to changes_required"
         }
       ],
+      "actualCostUSD": null,
       "diffReviewStatus": "skipped",
       "verification": {
         "status": "skipped",

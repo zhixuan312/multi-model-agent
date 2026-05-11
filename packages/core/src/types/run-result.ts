@@ -25,7 +25,23 @@ export interface RunResult {
   output: string
   status: RunStatus
   usage: TokenUsage
+  /**
+   * Existing per-task cost surface — `{ costUSD, costDeltaVsMainUSD }`.
+   * Kept for back-compat. New readers should prefer `actualCostUSD`
+   * which is populated by composeResponse from `sumStageCosts` and
+   * matches the batch roll-up's per-task contribution.
+   */
   cost?: CostBreakdown
+  /**
+   * A11.2 (4.2.3+): canonical per-task total cost on the public envelope,
+   * computed as the sum of `stageStats[*].costUSD` across entered stages
+   * (same logic as the batch-level `costSummary.totalActualCostUSD`).
+   * Equal to `cost.costUSD` for runs where stage-level pricing is
+   * registered; null when no stage carried a finite cost (e.g. mock
+   * provider runs). Populated by composeResponse — workers and runners
+   * may leave this undefined.
+   */
+  actualCostUSD?: number | null
   turns: number
   filesRead: string[]
   filesWritten: string[]

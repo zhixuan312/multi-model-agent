@@ -70,6 +70,7 @@
           "filesWrittenCount": 0
         }
       },
+      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "skipped",

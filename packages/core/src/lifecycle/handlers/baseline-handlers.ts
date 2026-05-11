@@ -2,6 +2,7 @@ import type { StageHandler } from '../lifecycle-driver.js';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { RunResult } from '../../types.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
+import { sumStageCosts } from '../shared-compute.js';
 import { runVerifyCommandHandler } from './run-verify-command-handler.js';
 import { gitCommitHandler } from './git-commit-handler.js';
 import {
@@ -70,6 +71,18 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
     if (state.lastRunResult !== undefined) {
       const last = state.lastRunResult as RunResult;
       const enriched: RunResult = { ...last };
+
+      // A11.2 — surface canonical per-task cost on the public envelope as
+      // `actualCostUSD`, computed from stageStats[*].costUSD across entered
+      // stages. Mirrors the batch-level `costSummary.totalActualCostUSD`
+      // logic so per-task and batch-level cost views are consistent. The
+      // existing `cost: { costUSD, costDeltaVsMainUSD }` field is preserved
+      // for back-compat; existing callers continue to work, new callers
+      // read `actualCostUSD` directly.
+      if (enriched.actualCostUSD === undefined) {
+        const stageStats = (last.stageStats ?? undefined) as Record<string, { entered?: boolean; costUSD?: number | null } | undefined> | undefined;
+        enriched.actualCostUSD = sumStageCosts(stageStats);
+      }
 
       const specVerdicts = [state.specReviewRound1Verdict, state.specReviewRound2Verdict, state.specReviewRound3Verdict];
       if (specVerdicts.some((v) => v === 'approved')) {
