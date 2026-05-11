@@ -41,7 +41,7 @@ export const EXECUTE_PLAN_PURPOSE_ORIENTATION = [
   '- Do NOT redesign. Do NOT substitute your own approach. Do NOT improve names you find unidiomatic.',
   '- Do NOT add steps the plan does not list. Do NOT skip steps the plan does list.',
   '- Do NOT widen scope ("while I\'m here…"). Touch only what this task heading authorizes; another task probably owns the rest.',
-  '- If the plan looks wrong (typo, contradiction, undefined symbol, missing dependency): REPORT IT in your summary and stop. Do NOT silently work around it. Do NOT silently fix it.',
+  '- If the plan looks wrong (typo, contradiction, undefined symbol, missing dependency): REPORT IT in your summary. For typos and undefined-symbol cases, also reconcile per the reconciliation rules below and continue working. Stop without writing files ONLY when the section is literally empty or contains an irreconcilable contradiction (no way to choose between two interpretations). See the progress-bias rules below — bailing on impression is itself a defect.',
   '- The plan was written by a higher-capability model than you. Your judgment about "what would be cleaner" is not load-bearing here; the plan is.',
   '',
   'Reviewer awareness for plan execution:',
@@ -97,7 +97,7 @@ export const PLAN_FIDELITY_REMINDER = [
   '- Your judgment about "what would be cleaner" is NOT load-bearing here. The plan is.',
   '- Every deviation from the plan needs a reason and a report. Silent deviations are the most common defect.',
   '- "Smallest faithful change" — touch the minimum the task authorizes, in the order the plan specifies, with the code the plan provides verbatim where provided.',
-  '- If the plan is wrong: report and stop. Do NOT silently fix the plan.',
+  '- If the plan is wrong: report it AND attempt the work using either the verbatim plan code (if it parses) or the reconciled equivalent (if a near-match exists per the reconciliation rules). Stopping without writing files is a last resort, not the default.',
   '',
   'Code-block faithfulness walk (REQUIRED on every task that includes plan-provided code):',
   '- For each code block in the matched plan section, ask: did I copy this verbatim? Same names, same signatures, same comments, same imports?',
@@ -163,4 +163,46 @@ export const PLAN_VS_SOURCE_RECONCILIATION = [
   '5. When the plan task is CREATING a new symbol (function declaration, new module, new test file): the symbol won\'t exist in source yet — that\'s the deliverable, not drift. Don\'t reconcile; create as the plan specifies.',
   '',
   '6. When you genuinely can\'t reconcile (multiple plausible matches, semantic mismatch, no near-match at all): fall back to the existing fidelity rule — report the defect in your summary and stop. Reconciliation is best-effort; when it\'s ambiguous, the caller resolves.',
+].join('\n');
+
+/**
+ * Progress bias (4.2.3+).
+ *
+ * Counter-balance to the "report and stop" escape hatch in the rules
+ * above. Workers — particularly when escalated to the complex tier on
+ * round-2 rework — sometimes bail on the IMPRESSION that the prompt or
+ * plan section is incomplete, without verifying. The cost: 2-3 review
+ * rounds wasted plus all earlier writes rolled back, even when the
+ * plan section is fully complete and the worker just misread.
+ *
+ * Observed failure (2026-05-11, A11.1 dispatch): complex-tier worker
+ * received a complete 6358-byte plan section ending at the next `### Task`
+ * heading, claimed "the plan section is truncated, ends with an opening
+ * ```bash fence with no contents", and bailed without writing any files.
+ * The section was complete; the worker mistook a closing code-fence at
+ * the boundary for a mid-stream cut. Total run cost: $2.26 for zero
+ * deliverables.
+ *
+ * This block tells the worker: when in doubt, attempt + document; bail
+ * only when the section is literally empty or irreconcilably
+ * contradictory. Bailing on impression is itself a defect.
+ */
+export const PROGRESS_BIAS = [
+  'Progress bias (when in doubt, attempt + document — don\'t bail):',
+  '',
+  'The "report and stop" escape hatch above is for situations where the plan is LITERALLY UNEXECUTABLE — empty section, internal contradiction with no way to choose, or no near-match for any named symbol/file. It is NOT for any of these:',
+  '',
+  '- "The section LOOKS truncated to me." → First check before bailing: does the section end at a logical heading boundary (next heading at the same level, or end of file)? Does the visible content actually contain the steps the plan author would have written for a task of this scope? If yes to either, the section is complete and your impression is wrong. Workers commonly mistake a closing code-fence near the boundary for a mid-stream cut; do a literal byte-by-byte re-read before claiming "section is truncated".',
+  '- "I\'m not 100% sure what step N means." → Make your best interpretation, implement, add an "Assumptions" line in your summary stating what you assumed. The reviewer or plan author will correct it on the next round if the interpretation was wrong. Cost: one review round. Cost of bailing: full review/rework cycle plus re-dispatch.',
+  '- "The plan provides a code block but I think it has a bug." → Copy the block verbatim AND note the suspected bug in your summary. The plan author may have written it intentionally; if it\'s a real bug, the spec-reviewer catches it on the next round. Do NOT substitute your "fixed" version (CODE SUBSTITUTION).',
+  '- "The plan doesn\'t mention error handling for X." → Implement only what the plan explicitly authorizes; note the gap in the summary. Don\'t freeze on the gap; don\'t add the missing handling unilaterally.',
+  '- "I cannot read additional reference files (sandbox blocked, file outside cwd)." → If the plan section is non-empty, the section IS the truth. Do NOT bail because you can\'t cross-reference; the section was sized to be self-contained. Proceed using the section as authoritative.',
+  '',
+  'When you DO bail (legitimately): your final summary MUST include all three:',
+  '  (a) the byte length of the section you saw (count it),',
+  '  (b) the exact heading where you stopped reading and what immediately followed,',
+  '  (c) what specifically you attempted to do BEFORE bailing (e.g. "tried to grep for the symbol — zero matches AND zero near-matches").',
+  'Vague reasons like "the plan looks incomplete" or "the section appears truncated" are NOT sufficient grounds to bail; they indicate impression, not verification.',
+  '',
+  'Why this matters: bailing without writing files when the section is non-empty wastes 2-3 review/rework rounds (each round costs ~$0.50-$2.00 and 60-300 seconds). The cost of attempting + documenting wrongly is one extra review round. The cost of bailing wrongly is the entire review/rework cycle plus a re-dispatch from scratch. Prefer attempting.',
 ].join('\n');

@@ -17,6 +17,7 @@ import {
   EXECUTE_PLAN_FAILURE_MODES,
   PLAN_FIDELITY_REMINDER,
   PLAN_VS_SOURCE_RECONCILIATION,
+  PROGRESS_BIAS,
 } from './implementer-criteria.js';
 
 export const executePlanInputSchema = z.object({
@@ -60,6 +61,7 @@ function buildExecutePlanPrompt(
   filePaths: string[],
   task: string,
   taskSection: string | undefined,
+  sectionTruncated: boolean,
 ): string {
   const parts: string[] = [
     // Orientation goes FIRST — fidelity-first framing before the
@@ -71,7 +73,19 @@ function buildExecutePlanPrompt(
     '',
   ];
   if (taskSection) {
+    const sectionBytes = Buffer.byteLength(taskSection, 'utf8');
     parts.push('Relevant plan section:', '', '---', taskSection.trim(), '---', '');
+    if (sectionTruncated) {
+      parts.push(
+        `⚠ Section TRUNCATED — visible above is the first ~${sectionBytes} bytes; the tail was cut at the size cap. The visible portion is correct up to the cut. If you need the missing tail, read the full plan file (path below). If the visible portion is sufficient to execute the task, proceed.`,
+        '',
+      );
+    } else {
+      parts.push(
+        `✓ Section is COMPLETE (${sectionBytes} bytes, heading-to-heading). No truncation. If you find yourself thinking "this section looks truncated" or "this seems to end mid-step", you are misreading the boundary — re-read carefully before bailing. The most common misread: a closing \`\`\` code-fence near the section boundary looks like a mid-stream cut. It is not.`,
+        '',
+      );
+    }
   } else {
     parts.push(
       'No unique plan section matched that task heading. The full plan file is at:',
@@ -80,15 +94,23 @@ function buildExecutePlanPrompt(
       '',
     );
   }
-  parts.push(
-    'Plan files for reference (read on demand if you need adjacent context — but do not enlarge scope into other tasks):',
-    ...filePaths.map((p) => `  - ${p}`),
-    '',
-  );
+  // Only mention "plan files for reference" when section is missing or
+  // truncated — when the section is complete, the worker should rely on
+  // it as authoritative. Telling the worker to "re-read for adjacent
+  // context" when not needed encourages second-guessing and fails when
+  // the plan path is outside cwd (sandbox blocks the read).
+  if (!taskSection || sectionTruncated) {
+    parts.push(
+      'Plan files for reference (read on demand if you need adjacent context — but do not enlarge scope into other tasks):',
+      ...filePaths.map((p) => `  - ${p}`),
+      '',
+    );
+  }
   parts.push(
     'Implement the task fully. Follow any acceptance criteria, file paths, and',
     'constraints in the plan section above. If you cannot find or understand',
-    'the task, report that explicitly and do not implement anything.',
+    'the task, report that explicitly — but see PROGRESS_BIAS below before',
+    'choosing to bail without writing any files.',
     '',
     EXECUTE_PLAN_SCOPE_RULE,
     '',
@@ -97,6 +119,8 @@ function buildExecutePlanPrompt(
     PLAN_FIDELITY_REMINDER,
     '',
     PLAN_VS_SOURCE_RECONCILIATION,
+    '',
+    PROGRESS_BIAS,
     '',
     // Tool sweep #12: share spec + quality reviewer rubric so the
     // worker self-aligns on what each reviewer will judge against.
@@ -111,7 +135,7 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
   agentType: 'standard',
   briefSlot: toolExecutePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
-    prompt: buildExecutePlanPrompt(brief.filePaths, brief.taskDescriptor, brief.sectionBody),
+    prompt: buildExecutePlanPrompt(brief.filePaths, brief.taskDescriptor, brief.sectionBody, brief.sectionTruncated),
     agentType: 'standard',
     reviewPolicy: brief.reviewPolicy,
     done: 'Implement the task fully. Report: which task heading you matched, what files were created or modified, and any issues encountered. If no unique matching task was found, report that explicitly and do not implement anything.',
