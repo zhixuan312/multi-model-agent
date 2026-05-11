@@ -68,6 +68,7 @@ export interface FileBackedContextBlockStoreOptions {
   maxTotalBytes?: number;
   /** Override `os.homedir()` — used by tests for filesystem isolation. */
   homeDir?: string;
+  maxBlocksPerProject?: number;
 }
 
 export class FileBackedContextBlockStore implements ContextBlockStore {
@@ -83,6 +84,7 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
    *  protection signal, not a persistence concern. Lost on restart;
    *  TTL-based GC handles the recovery side. */
   private pinCounts = new Map<string, number>();
+  private readonly maxBlocksPerProject: number;
 
   constructor(projectCwd: string, opts: FileBackedContextBlockStoreOptions = {}) {
     const home = opts.homeDir ?? os.homedir();
@@ -101,6 +103,7 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
     this.gcCheckIntervalMs = opts.gcCheckIntervalMs ?? DEFAULT_GC_INTERVAL_MS;
     this.maxBlockBytes = opts.maxBlockBytes ?? DEFAULT_MAX_BLOCK_BYTES;
     this.maxTotalBytes = opts.maxTotalBytes ?? DEFAULT_MAX_TOTAL_BYTES;
+    this.maxBlocksPerProject = opts.maxBlocksPerProject ?? 500;
     this.ensureRoot();
   }
 
@@ -153,6 +156,8 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
       this.lastSweepMs = now;
     }
     this.evictUntilFits(byteSize);
+
+    this.sweepInnerLruIfNeeded();
 
     this.atomicWrite(this.contentPath(id), content);
     this.atomicWrite(this.metaPath(id), JSON.stringify(meta) + '\n');
@@ -322,6 +327,44 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
       fs.closeSync(fd);
     }
     fs.renameSync(tmpPath, targetPath);
+  }
+
+  /** TTL pass first; if still at or above maxBlocksPerProject, evict oldest-mtime block(s) until under cap. */
+  private sweepInnerLruIfNeeded(): void {
+    if (!fs.existsSync(this.rootDir)) return;
+    // TTL pass
+    const now = Date.now();
+    const files = fs.readdirSync(this.rootDir);
+    for (const file of files) {
+      if (!file.endsWith('.meta.json')) continue;
+      try {
+        const meta = JSON.parse(fs.readFileSync(path.join(this.rootDir, file), 'utf8'));
+        if (typeof meta.createdAt === 'number' && typeof meta.ttlMs === 'number' && now > meta.createdAt + meta.ttlMs) {
+          const id = file.slice(0, -'.meta.json'.length);
+          try { fs.unlinkSync(path.join(this.rootDir, `${id}.txt`)); } catch {}
+          try { fs.unlinkSync(path.join(this.rootDir, `${id}.meta.json`)); } catch {}
+        }
+      } catch { /* skip malformed */ }
+    }
+    // LRU pass
+    let blockIds = fs.readdirSync(this.rootDir)
+      .filter(f => f.endsWith('.txt'))
+      .map(f => f.slice(0, -'.txt'.length));
+    while (blockIds.length >= this.maxBlocksPerProject) {
+      // Find oldest-mtime block
+      let oldestId: string | null = null;
+      let oldestMtime = Infinity;
+      for (const id of blockIds) {
+        try {
+          const m = fs.statSync(path.join(this.rootDir, `${id}.txt`)).mtimeMs;
+          if (m < oldestMtime) { oldestMtime = m; oldestId = id; }
+        } catch { /* skip */ }
+      }
+      if (!oldestId) break;
+      try { fs.unlinkSync(path.join(this.rootDir, `${oldestId}.txt`)); } catch {}
+      try { fs.unlinkSync(path.join(this.rootDir, `${oldestId}.meta.json`)); } catch {}
+      blockIds = blockIds.filter(i => i !== oldestId);
+    }
   }
 
   /**
