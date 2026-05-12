@@ -1,0 +1,55 @@
+// v4.4.x — unified Annotating stage.
+//
+// Pure transform: builds the canonical StructuredReport from
+// state.lastRunResult, the Review stage's verdict + concerns, the
+// Rework flag, and the Committing stage's outcome. Same handler for
+// read and write routes — route-specific fields hold empty arrays /
+// nulls on the other side so the orchestrator parses one shape.
+
+import type { LifecycleState } from '../stage-plan-types.js';
+
+const READ_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
+
+export interface StructuredReport {
+  summary: string;
+  workerStatus: 'done' | 'done_with_concerns' | 'blocked' | 'failed';
+  unresolved: string[];
+  filesChanged: string[];
+  reviewVerdict: 'approved' | 'changes_required' | null;
+  reviewConcerns: string[];
+  reworkApplied: boolean;
+  validationsRun: { name: string; passed: boolean; output: string }[];
+  commitSha: string | null;
+  commitMessage: string | null;
+  commitSkipReason: string | null;
+  findings: { severity: string; category: string; claim: string; evidence?: string; suggestion?: string }[];
+  criteriaErrors: { criterionId: string; error: string }[];
+}
+
+export async function annotator(state: LifecycleState): Promise<void> {
+  const last = ((state.lastRunResult as Record<string, unknown> | undefined) ?? {});
+  const route = (state as { route?: string }).route;
+  const isRead = !!route && READ_ROUTES.has(route);
+
+  const findings = (last.findings as StructuredReport['findings'] | undefined) ?? [];
+  const summary = (last.summary as string | undefined)
+    ?? (isRead ? `produced ${findings.length} findings` : ((last.output as string | undefined) ?? '').slice(0, 200));
+
+  const report: StructuredReport = {
+    summary,
+    workerStatus: (last.workerStatus as StructuredReport['workerStatus'] | undefined) ?? (isRead ? 'done' : 'failed'),
+    unresolved: (last.unresolved as string[] | undefined) ?? [],
+    filesChanged: isRead ? [] : ((last.filesChanged as string[] | undefined) ?? []),
+    reviewVerdict: isRead ? null : (((state as { reviewVerdict?: StructuredReport['reviewVerdict'] }).reviewVerdict) ?? null),
+    reviewConcerns: isRead ? [] : (((state as { reviewConcerns?: string[] }).reviewConcerns) ?? []),
+    reworkApplied: isRead ? false : Boolean((state as { reworkApplied?: boolean }).reworkApplied),
+    validationsRun: isRead ? [] : ((last.validationsRun as StructuredReport['validationsRun'] | undefined) ?? []),
+    commitSha: isRead ? null : ((last.commitSha as string | null | undefined) ?? null),
+    commitMessage: isRead ? null : ((last.commitMessage as string | null | undefined) ?? null),
+    commitSkipReason: isRead ? null : ((last.commitSkipReason as string | null | undefined) ?? null),
+    findings: isRead ? findings : [],
+    criteriaErrors: isRead ? ((last.criteriaErrors as StructuredReport['criteriaErrors'] | undefined) ?? []) : [],
+  };
+
+  (state as { structuredReport?: unknown }).structuredReport = report;
+}
