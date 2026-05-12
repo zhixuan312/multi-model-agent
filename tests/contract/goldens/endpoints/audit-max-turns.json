@@ -1,9 +1,9 @@
 {
-  "headline": "[ok] audit : 0 findings (0 high)",
+  "headline": "[error] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nmock max turns\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nmock max turns\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nmock max turns\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nmock max turns\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nmock max turns\n\n--- FIX ACTIONABILITY (criterion 7) ---\nmock max turns\n\n--- DRIFT / STALENESS (criterion 8) ---\nmock max turns\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nmock max turns\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nmock max turns\n\n--- METADATA COMPLETENESS (criterion 11) ---\nmock max turns",
-      "status": "ok",
+      "output": "",
+      "status": "error",
       "usage": {
         "inputTokens": 110,
         "outputTokens": 220,
@@ -17,17 +17,62 @@
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "parsedFindings": null,
-      "workerStatus": "done",
+      "workerStatus": "failed",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "error",
         "turnsUsed": 1089,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "failed",
         "wasPromoted": false
       },
       "findings": [],
-      "criteriaErrors": [],
+      "criteriaErrors": [
+        {
+          "criterionId": "1",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "2",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "3",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "4",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "5",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "6",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "7",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "8",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "9",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "10",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "11",
+          "error": "turn ended with cap_exhausted"
+        }
+      ],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
@@ -65,7 +110,7 @@
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
-        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns",
+        "summary": "",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -73,19 +118,12 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "produced 0 findings",
-        "workerStatus": "done",
-        "unresolved": [],
+        "summary": "",
         "filesChanged": [],
-        "reviewVerdict": null,
-        "reviewConcerns": [],
-        "reworkApplied": false,
         "validationsRun": [],
-        "commitSha": null,
-        "commitMessage": null,
-        "commitSkipReason": null,
-        "findings": [],
-        "criteriaErrors": []
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "models": {
         "implementer": "mock-model",
@@ -105,19 +143,12 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "produced 0 findings",
-    "workerStatus": "done",
-    "unresolved": [],
+    "summary": "",
     "filesChanged": [],
-    "reviewVerdict": null,
-    "reviewConcerns": [],
-    "reworkApplied": false,
     "validationsRun": [],
-    "commitSha": null,
-    "commitMessage": null,
-    "commitSkipReason": null,
-    "findings": [],
-    "criteriaErrors": []
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -128,6 +159,5 @@
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
-  "contextBlockId": "<DETERMINISTIC>"
+  "roundsUsed": 1
 }

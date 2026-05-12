@@ -1,9 +1,9 @@
 {
-  "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
+  "headline": "Investigation: \"golden investigate test prompt — echo findings\" — blocked.",
   "results": [
     {
-      "output": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmock max turns\n\n--- CALLER-ANALYSIS PERSPECTIVE (criterion 2) ---\nmock max turns\n\n--- TEST-DRIVEN PERSPECTIVE (criterion 3) ---\nmock max turns\n\n--- CROSS-FILE DEPENDENCY-MAP PERSPECTIVE (criterion 4) ---\nmock max turns\n\n--- DOCUMENTATION/COMMENT-LENS PERSPECTIVE (criterion 5) ---\nmock max turns",
-      "status": "ok",
+      "output": "",
+      "status": "error",
       "usage": {
         "inputTokens": 50,
         "outputTokens": 100,
@@ -17,17 +17,38 @@
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "parsedFindings": null,
-      "workerStatus": "done",
+      "workerStatus": "failed",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "error",
         "turnsUsed": 495,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "failed",
         "wasPromoted": false
       },
       "findings": [],
-      "criteriaErrors": [],
+      "criteriaErrors": [
+        {
+          "criterionId": "1",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "2",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "3",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "4",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "5",
+          "error": "turn ended with cap_exhausted"
+        }
+      ],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
@@ -65,7 +86,7 @@
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
-        "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmock max turns",
+        "summary": "",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -73,19 +94,12 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "produced 0 findings",
-        "workerStatus": "done",
-        "unresolved": [],
+        "summary": "",
         "filesChanged": [],
-        "reviewVerdict": null,
-        "reviewConcerns": [],
-        "reworkApplied": false,
         "validationsRun": [],
-        "commitSha": null,
-        "commitMessage": null,
-        "commitSkipReason": null,
-        "findings": [],
-        "criteriaErrors": []
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "models": {
         "implementer": "mock-model",
@@ -105,19 +119,12 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "produced 0 findings",
-    "workerStatus": "done",
-    "unresolved": [],
+    "summary": "",
     "filesChanged": [],
-    "reviewVerdict": null,
-    "reviewConcerns": [],
-    "reworkApplied": false,
     "validationsRun": [],
-    "commitSha": null,
-    "commitMessage": null,
-    "commitSkipReason": null,
-    "findings": [],
-    "criteriaErrors": []
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -128,6 +135,5 @@
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
-  "contextBlockId": "<DETERMINISTIC>"
+  "roundsUsed": 1
 }

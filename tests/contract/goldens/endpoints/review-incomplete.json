@@ -1,9 +1,9 @@
 {
-  "headline": "[ok] review completed",
+  "headline": "[error] review completed",
   "results": [
     {
-      "output": "--- TEST GAP (criterion 1) ---\nmock incomplete\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nmock incomplete\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nmock incomplete\n\n--- MISSING EDGE CASE (criterion 4) ---\nmock incomplete\n\n--- RACE / CONCURRENCY (criterion 5) ---\nmock incomplete\n\n--- RESOURCE LEAK (criterion 6) ---\nmock incomplete\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nmock incomplete\n\n--- SECURITY REGRESSION (criterion 8) ---\nmock incomplete\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nmock incomplete\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nmock incomplete",
-      "status": "ok",
+      "output": "",
+      "status": "error",
       "usage": {
         "inputTokens": 100,
         "outputTokens": 200,
@@ -17,17 +17,58 @@
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "parsedFindings": null,
-      "workerStatus": "done",
+      "workerStatus": "failed",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "error",
         "turnsUsed": 10,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "failed",
         "wasPromoted": false
       },
       "findings": [],
-      "criteriaErrors": [],
+      "criteriaErrors": [
+        {
+          "criterionId": "1",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "2",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "3",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "4",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "5",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "6",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "7",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "8",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "9",
+          "error": "turn ended with cap_exhausted"
+        },
+        {
+          "criterionId": "10",
+          "error": "turn ended with cap_exhausted"
+        }
+      ],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
@@ -65,7 +106,7 @@
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
-        "summary": "--- TEST GAP (criterion 1) ---\nmock incomplete",
+        "summary": "",
         "filesChanged": [],
         "validationsRun": [],
         "deviationsFromBrief": [],
@@ -73,19 +114,12 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "produced 0 findings",
-        "workerStatus": "done",
-        "unresolved": [],
+        "summary": "",
         "filesChanged": [],
-        "reviewVerdict": null,
-        "reviewConcerns": [],
-        "reworkApplied": false,
         "validationsRun": [],
-        "commitSha": null,
-        "commitMessage": null,
-        "commitSkipReason": null,
-        "findings": [],
-        "criteriaErrors": []
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
       },
       "models": {
         "implementer": "mock-model",
@@ -105,19 +139,12 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "produced 0 findings",
-    "workerStatus": "done",
-    "unresolved": [],
+    "summary": "",
     "filesChanged": [],
-    "reviewVerdict": null,
-    "reviewConcerns": [],
-    "reworkApplied": false,
     "validationsRun": [],
-    "commitSha": null,
-    "commitMessage": null,
-    "commitSkipReason": null,
-    "findings": [],
-    "criteriaErrors": []
+    "deviationsFromBrief": [],
+    "unresolved": [],
+    "extraSections": {}
   },
   "error": {
     "kind": "not_applicable",
@@ -128,6 +155,5 @@
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
-  "contextBlockId": "<DETERMINISTIC>"
+  "roundsUsed": 1
 }

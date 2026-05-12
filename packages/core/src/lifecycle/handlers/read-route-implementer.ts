@@ -63,8 +63,6 @@ export async function runReadRouteImplementer(
       : input.buildSuffix(c);
     try {
       const turn = await input.session.send(prompt, { stageLabel: HUMAN_LABEL.implementing });
-      findings.push(...parseFindings(turn.output, c.id));
-      perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
       totalInput += turn.usage?.inputTokens ?? 0;
       totalOutput += turn.usage?.outputTokens ?? 0;
       totalCachedRead += turn.usage?.cachedReadTokens ?? 0;
@@ -74,6 +72,18 @@ export async function runReadRouteImplementer(
       if (turn.costUSD !== null && turn.costUSD !== undefined) {
         totalCost = (totalCost ?? 0) + turn.costUSD;
       }
+      if (turn.terminationReason !== 'ok') {
+        // Cap hit, stall, error, etc. — the turn produced no usable findings
+        // even though it did not throw. Record as a criterion error so the
+        // route's headline + status correctly reflect partial completion.
+        criteriaErrors.push({
+          criterionId: c.id,
+          error: turn.errorMessage ?? `turn ended with ${turn.terminationReason}`,
+        });
+        continue;
+      }
+      findings.push(...parseFindings(turn.output, c.id));
+      perCriterionOutputs.push(`--- ${c.title} (criterion ${c.id}) ---\n${turn.output}`);
     } catch (err) {
       criteriaErrors.push({
         criterionId: c.id,
