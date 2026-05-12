@@ -374,9 +374,28 @@ class TurnTracker {
   }
 
   private absorbUsage(u: CodexUsage): void {
-    this.cumulative.inputTokens += u.input_tokens ?? 0;
+    // OpenAI / codex CLI emits `input_tokens` as GROSS (it INCLUDES
+    // `cached_input_tokens` as a subset — confirmed by codex's own Rust
+    // protocol: `non_cached_input = input_tokens - cached_input()`).
+    // Anthropic's API emits `input_tokens` as NET (post-breakpoint only,
+    // disjoint from cache fields). Our cross-provider TokenUsage contract
+    // expects Anthropic's disjoint shape so that `priceTokens` can apply
+    // separate rates to each bucket without double-billing.
+    //
+    // Normalize here: subtract cached out of gross BEFORE storing, so
+    // `inputTokens` on the wire is the non-cached prompt-token count and
+    // `cachedReadTokens` is the disjoint cached subset. priceTokens then
+    // computes (input × inputRate) + (cached × cachedRate) correctly.
+    //
+    // reasoning_output_tokens IS disjoint from output_tokens in codex's
+    // protocol (per Rust source) — adding them together gives the correct
+    // total billable-output count. gpt-5.x charges reasoning at the same
+    // per-token rate as output, so a single rate applies to the sum.
+    const cached = u.cached_input_tokens ?? 0;
+    const gross = u.input_tokens ?? 0;
+    this.cumulative.inputTokens += Math.max(0, gross - cached);
     this.cumulative.outputTokens += (u.output_tokens ?? 0) + (u.reasoning_output_tokens ?? 0);
-    this.cumulative.cachedReadTokens += u.cached_input_tokens ?? 0;
+    this.cumulative.cachedReadTokens += cached;
   }
 
   flushUsageDelta(): TokenUsage {

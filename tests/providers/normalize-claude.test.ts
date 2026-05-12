@@ -52,3 +52,45 @@ describe('normalizeClaudeTurn', () => {
     expect(r.terminationReason).toBe('time_exceeded');
   });
 });
+
+// Cross-provider TokenUsage contract pin (anthropic side).
+// Anthropic's Messages API emits input_tokens / cache_read_input_tokens /
+// cache_creation_input_tokens as THREE DISJOINT BUCKETS — each prompt
+// token counted in exactly one. Our adapter is pass-through; this test
+// pins the disjoint semantics so a future "normalize" or "sum together"
+// regression would fail.
+describe('normalizeClaudeTurn — TokenUsage disjoint-partition contract', () => {
+  it('treats input_tokens / cache_read_input_tokens / cache_creation_input_tokens as disjoint buckets', () => {
+    const r = normalizeClaudeTurn(
+      [result('success', {
+        input_tokens: 100,           // ← NET (post-breakpoint) per Anthropic docs
+        output_tokens: 50,
+        cache_read_input_tokens: 700,
+        cache_creation_input_tokens: 200,
+      })],
+      { durationMs: 1, costUSD: 0 },
+    );
+    expect(r.usage.inputTokens).toBe(100);
+    expect(r.usage.outputTokens).toBe(50);
+    expect(r.usage.cachedReadTokens).toBe(700);
+    expect(r.usage.cachedNonReadTokens).toBe(200);
+    // The four fields should NOT have been merged or double-counted.
+    // Total prompt = 100 + 700 + 200 = 1000 if we add them; our adapter
+    // stores them disjoint and `priceTokens` applies separate rates.
+  });
+
+  it('handles a turn with cache writes but no reads (first-time cache fill)', () => {
+    const r = normalizeClaudeTurn(
+      [result('success', {
+        input_tokens: 50,
+        output_tokens: 25,
+        cache_creation_input_tokens: 900,
+        // cache_read_input_tokens omitted (first request, nothing to read)
+      })],
+      { durationMs: 1, costUSD: 0 },
+    );
+    expect(r.usage.inputTokens).toBe(50);
+    expect(r.usage.cachedReadTokens).toBe(0);
+    expect(r.usage.cachedNonReadTokens).toBe(900);
+  });
+});
