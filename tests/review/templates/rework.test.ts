@@ -38,6 +38,24 @@ describe('reworkTemplate.buildUserPrompt — warm-followup body', () => {
   });
 });
 
+describe('reworkTemplate — workerStatus calibration (anti-pessimism guard)', () => {
+  it('systemPrompt explicitly maps "fixed every deviation" → workerStatus "done"', () => {
+    // Rework workers have historically self-rated as 'failed' or
+    // 'done_with_concerns' even after successfully fixing every reviewer
+    // deviation, conflating "the reviewer flagged concerns originally"
+    // with "I failed." This guard pins the prompt language that disambiguates.
+    expect(reworkTemplate.systemPrompt).toMatch(/workerStatus calibration/i);
+    expect(reworkTemplate.systemPrompt).toContain('workerStatus MUST be "done"');
+    expect(reworkTemplate.systemPrompt).toMatch(/not, by itself, a "?concern"?/i);
+  });
+
+  it('buildUserPrompt Action step 4 ties Could-not-fix=empty → workerStatus="done"', () => {
+    const out = reworkTemplate.buildUserPrompt(ctx);
+    expect(out).toMatch(/workerStatus to "done" if your "Could not fix" line is empty/);
+    expect(out).toMatch(/Reserve "failed" \/ "blocked" for deviations you could not address/);
+  });
+});
+
 describe('reworkTemplate.buildUserPrompt — edge cases', () => {
   it('handles the (none) priorConcerns case without including banned fields', () => {
     const out = reworkTemplate.buildUserPrompt({
