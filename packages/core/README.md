@@ -40,7 +40,7 @@ for (const r of results) {
 - **Routing engine** — capability filter → agent type → cheapest qualifier
 - **`runTasks`** — parallel dispatch, returns per-task results with usage, cost, files touched, status, and escalation log
 - **Reviewed lifecycle** — parallel spec + quality lint review by a different tier, conditional rework when verdicts demand changes, annotator-scored commit gate, file artifact verification
-- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, verify, debug, execute-plan, retry, investigate, research (used by the HTTP server package)
+- **Executors** — pure `execute<Tool>(ctx, input)` functions for delegate, audit, review, debug, execute-plan, retry, investigate, research (used by the HTTP server package)
 - **Tool schemas** — Zod-validated input shapes for each tool, exportable via `./tool-schemas/*`
 - **BatchRegistry** — server-wide state machine for pending / awaiting_clarification / complete / failed / expired batches with context-block refcount pinning
 - **Sandboxed tools** — `readFile`, `writeFile`, `grep`, `glob`, `listFiles`, `runShell` with `cwd-only` confinement
@@ -91,13 +91,13 @@ const engine = createDefaultReviewerEngine();
 
 ### AnnotatorEngine
 
-Read-only annotation pass for **non-artifact-producing** tools (`audit`, `review`, `verify`, `debug`, `investigate`). Verdict is always `'annotated'` (success) or `'error'` (transport failure); never gates rework.
+Read-only annotation pass for **non-artifact-producing** tools (`audit`, `review`, `debug`, `investigate`, `research`, `explore`). Verdict is always `'annotated'` (success) or `'error'` (transport failure); never gates rework.
 
 | Method | Description |
 |---|---|
-| `annotate(shell, input)` | Runs an annotation pass, re-judging severity and scoring confidence per finding |
+| `annotate(session, input)` | Runs an annotation pass, re-judging severity and scoring confidence per finding |
 
-Accepts a `RunnerShell` and an `AnnotatorInput` (`{ workerOutput, brief, cwd, route, abortSignal?, deadlineMs? }`). Returns `AnnotatorCallResult` with parsed findings, raw assistant text, and cost breakdown.
+Accepts a `Session` (opened via the v4.4 provider boundary) and an `AnnotatorInput` (`{ workerOutput, brief, cwd, route, abortSignal?, deadlineMs? }`). Returns `AnnotatorCallResult` with parsed findings, raw assistant text, and cost breakdown.
 
 ```ts
 import { AnnotatorEngine } from '@zhixuan92/multi-model-agent-core/review';
@@ -160,7 +160,6 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | delegate | `./tools/delegate/tool-config` |
 | review | `./tools/review/tool-config` |
 | audit | `./tools/audit/tool-config` |
-| verify | `./tools/verify/tool-config` |
 | debug | `./tools/debug/tool-config` |
 | investigate | `./tools/investigate/tool-config` |
 | research | `./tools/research/tool-config` |
@@ -187,7 +186,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./intake/classify` | `classifyDraft` — deterministic classification heuristic |
 | `./intake/confirm` | `processConfirmations` — clarification resume processing |
 | `./intake/clarification-store` | `ClarificationStore` — TTL/LRU state for clarification sets |
-| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `verify`, `audit`, `execute-plan`, `investigate`, `research` |
+| `./intake/compilers/*` | Route compilers: `delegate`, `review`, `debug`, `audit`, `execute-plan`, `investigate`, `research` |
 | `./reporting/parse-investigation-report` | `parseInvestigationReport`, `parseCitations`, `parseConfidence` (3.4.0) |
 | `./auto-commit` | `autoCommitFiles` — git commit helper for worker file changes |
 | `./file-artifact-check` | `partitionFilePaths`, `checkOutputTargets` — output target verification |
@@ -197,7 +196,7 @@ Each tool's config lives at `@zhixuan92/multi-model-agent-core/tools/<tool>/tool
 | `./review` | `ReviewerEngine`, `AnnotatorEngine` — v4 review surface (see Engine API below) |
 | `./lifecycle/task-executor` | `executeTask` — generic per-tool orchestrator driven by a `ToolConfig` |
 | `./lifecycle/executor-output-types` | `ExecutorOutput`, `BatchTimings`, `BatchAggregateCost` |
-| `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, verify, debug, investigate, research, execute-plan, retry, register-context-block) |
+| `./tools/<tool>/tool-config` | Per-tool `ToolConfig` objects (delegate, review, audit, debug, investigate, research, execute-plan, retry, register-context-block) |
 
 ## Diagnostic logging
 
