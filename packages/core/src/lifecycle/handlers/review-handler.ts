@@ -1,44 +1,41 @@
+// v4.4.x — Review stage.
+//
+// One complex session, two sequential turns: spec review, then quality
+// review. Same session = same cached prefix on the 2nd turn. Combined
+// verdict is `approved` only if BOTH reviewers approve; otherwise
+// `changes_required`. Combined `reviewConcerns` is the concat of both
+// reviewers' concerns.
+
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
+import type { AgentType, TaskSpec } from '../../types.js';
 import { specLintTemplate } from '../../review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { parseReviewReport } from '../../review/parse-review-report.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
-import { assembleRunResult } from '../../providers/assemble-run-result.js';
+import { HUMAN_LABEL } from '../stage-labels.js';
+import type { Session, TurnResult } from '../../types/run-result.js';
 
-interface SubReview {
-  source: 'spec' | 'quality';
-  text: string;
-}
+interface SubReview { source: 'spec' | 'quality'; text: string }
 
 async function runOneReviewer(
-  _state: LifecycleState,
-  ctx: ExecutionContext,
+  session: Session,
   task: TaskSpec,
   source: 'spec' | 'quality',
   diff: string,
   workerOutput: string,
-): Promise<RunResult | { transportError: string }> {
+): Promise<{ turn: TurnResult } | { transportError: string }> {
   const template = source === 'spec' ? specLintTemplate : qualityLintTemplate;
-  const reviewerTier: AgentType = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
-  if (!ctx.providers[reviewerTier]) {
-    return { transportError: `no provider available for tier ${reviewerTier}` };
-  }
-
   const promptCtx = {
     brief: task.prompt ?? '',
     workerOutput,
     diff,
     planContext: (task as { planContext?: string }).planContext,
   };
-  const fullPrompt =
-    template.systemPrompt + '\n\n' + template.buildUserPrompt(promptCtx);
-
+  const fullPrompt = template.systemPrompt + '\n\n' + template.buildUserPrompt(promptCtx);
   try {
-    const session = ctx.getSession(reviewerTier);
-    const turn = await session.send(fullPrompt, { stageLabel: 'Review' });
-    return assembleRunResult(turn);
+    const turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.review });
+    return { turn };
   } catch (err) {
     return { transportError: err instanceof Error ? err.message : String(err) };
   }
@@ -50,91 +47,96 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
 
   const ctx = state.executionContext as ExecutionContext | undefined;
   const task = state.task as TaskSpec | undefined;
-  const last = state.lastRunResult as RunResult | undefined;
+  const last = state.lastRunResult as { output?: string } | undefined;
   if (!ctx || !task || !last) return;
 
-  let cumulativeDiff = '';
-  if (state.diffTracker) {
-    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); }
-    catch { cumulativeDiff = ''; }
-  }
-  const workerOutput = last.output ?? '';
-
-  const runSpec = state.reviewPolicy === 'full';
-  const runQuality = state.reviewPolicy === 'full'
-    || state.reviewPolicy === 'quality_only'
-    || state.reviewPolicy === 'diff_only';
-  if (!runSpec && !runQuality) {
+  if (state.reviewPolicy === 'none') {
     state.reviewVerdict = 'approved';
     state.reviewFindings = [];
     return;
   }
 
-  type ReviewOutcome = { source: 'spec' | 'quality'; result: RunResult | { transportError: string } };
+  let cumulativeDiff = '';
+  if (state.diffTracker) {
+    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
+  }
+  const workerOutput = last.output ?? '';
+
+  // v4.4.x: spec and quality run sequentially on the SAME complex
+  // session so the second call benefits from the cached prefix.
+  const reviewerTier: AgentType = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
+  if (!ctx.providers[reviewerTier]) {
+    state.reviewVerdict = 'changes_required';
+    state.reviewError = `no provider available for tier ${reviewerTier}`;
+    state.reviewFindings = [];
+    return;
+  }
+  const session = ctx.getSession(reviewerTier);
+
+  // Which sub-reviews to run, per reviewPolicy.
+  const runSpec = state.reviewPolicy === 'full';
+  const runQuality = state.reviewPolicy === 'full'
+    || state.reviewPolicy === 'quality_only'
+    || state.reviewPolicy === 'diff_only';
   const sources: Array<'spec' | 'quality'> = [];
   if (runSpec) sources.push('spec');
   if (runQuality) sources.push('quality');
-
-  const isOk = (r: RunResult | { transportError: string }): r is RunResult =>
-    !('transportError' in r) && r.status === 'ok';
-
-  const settled: ReviewOutcome[] = await Promise.all(
-    sources.map(async (source) => ({
-      source,
-      result: await runOneReviewer(state, ctx, task, source, cumulativeDiff, workerOutput),
-    })),
-  );
-  const retryNeeded = settled
-    .map((o, i) => ({ o, i }))
-    .filter(({ o }) => !isOk(o.result))
-    .map(({ i }) => i);
-  if (retryNeeded.length > 0) {
-    const retried = await Promise.all(
-      retryNeeded.map(async (i) => ({
-        source: settled[i].source,
-        result: await runOneReviewer(state, ctx, task, settled[i].source, cumulativeDiff, workerOutput),
-      })),
-    );
-    retried.forEach((o, k) => { settled[retryNeeded[k]] = o; });
+  if (sources.length === 0) {
+    state.reviewVerdict = 'approved';
+    state.reviewFindings = [];
+    return;
   }
 
   const findings: SubReview[] = [];
   const errors: string[] = [];
   let anyChangesRequired = false;
   let anySuccess = false;
-  for (const { source, result } of settled) {
-    if ('transportError' in result) {
-      if (source === 'spec') state.specReviewError = result.transportError;
-      else state.qualityReviewError = result.transportError;
-      errors.push(`${source}: ${result.transportError}`);
-      process.stderr.write(`[review-handler] ${source} transportError: ${result.transportError}\n`);
-      continue;
-    }
-    if (result.status !== 'ok') {
-      const errDetail = (result as { error?: string }).error ?? '(no error field)';
-      const msg = `reviewer status=${result.status}; error=${errDetail}`;
-      if (source === 'spec') state.specReviewError = msg;
-      else state.qualityReviewError = msg;
-      errors.push(`${source}: ${msg}`);
-      process.stderr.write(`[review-handler] ${source} ${msg}\n`);
+
+  // Sequential — second turn hits the cached prefix on the same session.
+  const settled: Array<{ source: 'spec' | 'quality'; outcome: { turn: TurnResult } | { transportError: string } }> = [];
+  for (const source of sources) {
+    const outcome = await runOneReviewer(session, task, source, cumulativeDiff, workerOutput);
+    settled.push({ source, outcome });
+  }
+
+  let combinedInput = 0, combinedOutput = 0, combinedCached = 0, combinedNonRead = 0;
+  let combinedTurns = 0;
+  let combinedCost: number | null = null;
+  let combinedDuration = 0;
+
+  for (const { source, outcome } of settled) {
+    if ('transportError' in outcome) {
+      if (source === 'spec') state.specReviewError = outcome.transportError;
+      else state.qualityReviewError = outcome.transportError;
+      errors.push(`${source}: ${outcome.transportError}`);
+      process.stderr.write(`[review-handler] ${source} transportError: ${outcome.transportError}\n`);
       continue;
     }
     anySuccess = true;
-    const parsed = parseReviewReport(result.output ?? '');
+    const parsed = parseReviewReport(outcome.turn.output ?? '');
     if (source === 'spec') {
-      state.specReviewerNotes = result.output;
+      state.specReviewerNotes = outcome.turn.output;
       state.specReviewVerdict = parsed.verdict;
     } else {
-      state.qualityReviewerNotes = result.output;
+      state.qualityReviewerNotes = outcome.turn.output;
       state.qualityReviewVerdict = parsed.verdict;
     }
     if (parsed.verdict === 'changes_required') anyChangesRequired = true;
-    for (const dev of parsed.deviations) {
-      findings.push({ source, text: dev });
-    }
+    for (const dev of parsed.deviations) findings.push({ source, text: dev });
+
+    combinedInput += outcome.turn.usage?.inputTokens ?? 0;
+    combinedOutput += outcome.turn.usage?.outputTokens ?? 0;
+    combinedCached += outcome.turn.usage?.cachedReadTokens ?? 0;
+    combinedNonRead += outcome.turn.usage?.cachedNonReadTokens ?? 0;
+    combinedTurns += outcome.turn.turns ?? 1;
+    combinedDuration += outcome.turn.durationMs ?? 0;
+    const c = outcome.turn.costUSD;
+    if (c !== null && c !== undefined) combinedCost = (combinedCost ?? 0) + c;
   }
 
   state.reviewFindings = findings;
+  (state as { reviewConcerns?: string[] }).reviewConcerns = findings.map((f) => f.text);
+
   if (!anySuccess) {
     state.reviewVerdict = 'changes_required';
     state.reviewError = errors.join(' | ');
@@ -142,30 +144,13 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
   }
   state.reviewVerdict = anyChangesRequired ? 'changes_required' : 'approved';
 
-  let combinedInput = 0, combinedOutput = 0, combinedCached = 0, combinedNonRead = 0;
-  let combinedTurns = 0, combinedTools = 0;
-  let combinedCost: number | null = null;
-  let combinedDuration = 0;
-  for (const { result } of settled) {
-    if ('transportError' in result || result.status !== 'ok') continue;
-    combinedInput  += result.usage?.inputTokens ?? 0;
-    combinedOutput += result.usage?.outputTokens ?? 0;
-    combinedCached += result.usage?.cachedReadTokens ?? 0;
-    combinedNonRead += result.usage?.cachedNonReadTokens ?? 0;
-    combinedTurns  += result.turns ?? 1;
-    combinedTools  += Array.isArray(result.toolCalls) ? result.toolCalls.length : 0;
-    combinedDuration = Math.max(combinedDuration, result.durationMs ?? 0);
-    const c = (result as { costUSD?: number | null }).costUSD;
-    if (c !== null && c !== undefined) combinedCost = (combinedCost ?? 0) + c;
-  }
-  const reviewerTier = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
   mergeStageStats(state, 'review', {
     inputTokens: combinedInput,
     outputTokens: combinedOutput,
     cachedReadTokens: combinedCached,
     cachedNonReadTokens: combinedNonRead,
     turnCount: combinedTurns,
-    toolCallCount: combinedTools,
+    toolCallCount: 0,
     costUSD: combinedCost,
     durationMs: combinedDuration || null,
   }, {
