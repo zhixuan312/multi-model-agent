@@ -26,77 +26,44 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "workerOutputs": [
-        {
-          "criterionId": "1",
-          "criterionTitle": "RECOMMENDATION-COHERENCE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "2",
-          "criterionTitle": "INTERNAL CONTRADICTION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "3",
-          "criterionTitle": "CROSS-ITEM DUPLICATION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "4",
-          "criterionTitle": "INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "5",
-          "criterionTitle": "ARGUMENT SOUNDNESS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "COMPLETENESS AGAINST CONSTRAINTS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "FIX ACTIONABILITY",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "DRIFT / STALENESS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "SCOPE-CREEP / FRAMING",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "10",
-          "criterionTitle": "STRUCTURAL CONSISTENCY",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "11",
-          "criterionTitle": "METADATA COMPLETENESS",
-          "narrative": "needs rework per review"
+      "findings": [],
+      "criteriaErrors": [],
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 110,
+          "outputTokens": 220,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 11,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
         }
-      ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-        "11"
-      ],
-      "partialCriteriaFailed": [],
+      },
+      "actualCostUSD": null,
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "full",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
         "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review",
         "filesChanged": [],
@@ -120,42 +87,6 @@
         "findings": [],
         "criteriaErrors": []
       },
-      "stageStats": {
-        "implementing": {
-          "stage": "implementing",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 110,
-          "outputTokens": 220,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 11,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
-        }
-      },
-      "actualCostUSD": 0,
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "diffReviewStatus": "not_applicable",
-      "commits": [],
-      "agents": {
-        "implementer": "complex",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,

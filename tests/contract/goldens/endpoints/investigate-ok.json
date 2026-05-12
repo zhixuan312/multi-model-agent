@@ -26,41 +26,44 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "workerOutputs": [
-        {
-          "criterionId": "1",
-          "criterionTitle": "DIRECT-SYMBOL-TRACE PERSPECTIVE",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "2",
-          "criterionTitle": "CALLER-ANALYSIS PERSPECTIVE",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "3",
-          "criterionTitle": "TEST-DRIVEN PERSPECTIVE",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "4",
-          "criterionTitle": "CROSS-FILE DEPENDENCY-MAP PERSPECTIVE",
-          "narrative": "mocked ok"
-        },
-        {
-          "criterionId": "5",
-          "criterionTitle": "DOCUMENTATION/COMMENT-LENS PERSPECTIVE",
-          "narrative": "mocked ok"
+      "findings": [],
+      "criteriaErrors": [],
+      "stageStats": {
+        "implementing": {
+          "stage": "implementing",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": null,
+          "agentTier": "complex",
+          "modelFamily": null,
+          "model": "mock-model",
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 50,
+          "outputTokens": 100,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 5,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0
         }
-      ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5"
-      ],
-      "partialCriteriaFailed": [],
+      },
+      "actualCostUSD": null,
+      "specReviewStatus": "not_applicable",
+      "qualityReviewStatus": "not_applicable",
+      "diffReviewStatus": "not_applicable",
+      "commits": [],
+      "agents": {
+        "implementer": "complex",
+        "implementerToolMode": "full",
+        "specReviewer": "not_applicable",
+        "qualityReviewer": "not_applicable"
+      },
+      "fileArtifactsMissing": false,
+      "specReviewReason": "task produced no file artifacts to review",
+      "qualityReviewReason": "task produced no file artifacts to review",
       "implementationReport": {
         "summary": "--- DIRECT-SYMBOL-TRACE PERSPECTIVE (criterion 1) ---\nmocked ok",
         "filesChanged": [],
@@ -84,42 +87,6 @@
         "findings": [],
         "criteriaErrors": []
       },
-      "stageStats": {
-        "implementing": {
-          "stage": "implementing",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 50,
-          "outputTokens": 100,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 5,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
-        }
-      },
-      "actualCostUSD": 0,
-      "specReviewStatus": "not_applicable",
-      "qualityReviewStatus": "not_applicable",
-      "diffReviewStatus": "not_applicable",
-      "commits": [],
-      "agents": {
-        "implementer": "complex",
-        "implementerToolMode": "full",
-        "specReviewer": "not_applicable",
-        "qualityReviewer": "not_applicable"
-      },
-      "fileArtifactsMissing": false,
-      "specReviewReason": "task produced no file artifacts to review",
-      "qualityReviewReason": "task produced no file artifacts to review",
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,

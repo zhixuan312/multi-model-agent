@@ -24,8 +24,8 @@ import { delegateWithEscalation } from '../escalation/delegate-with-escalation.j
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
-import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
 import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
+import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
   return {
@@ -399,23 +399,20 @@ export async function runTaskViaDispatcher(
             preReadFiles,
             filePaths,
           });
-          const dispatchResult = await dispatchParallelCriteria({
-            openSession: (opts) => provider.openSession(opts),
+          // v4.4.x: single complex session per task, sequential for-loop over
+          // criteria. Earlier criteria's tool results stay in the session
+          // context so later criteria don't re-discover the same files.
+          const session = ctx.getSession(decision.impl);
+          const dispatchResult = await runReadRouteImplementer({
+            session,
             cachedPrefix,
             criteria: routeSpec.criteria,
             buildSuffix: routeSpec.buildSuffix,
-            cwd: ctx.cwd,
-            ...(ctx.stall.controller.signal && { abortSignal: ctx.stall.controller.signal }),
-            deadlineMs: ctx.timing.deadlineMs,
-            ...(ctx.bus && { bus: ctx.bus }),
-            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-            tier: decision.impl,
-            route,
           });
 
           const totalCriteria = routeSpec.criteria.length;
-          const succeededCount = dispatchResult.workerOutputs.length;
+          const failedCount = dispatchResult.criteriaErrors.length;
+          const succeededCount = totalCriteria - failedCount;
           const majorityThreshold = Math.ceil(totalCriteria / 2);
           const status: RunStatus = succeededCount === 0
             ? 'error'
@@ -423,37 +420,23 @@ export async function runTaskViaDispatcher(
           const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
             ? ('missing_sections' as const)
             : undefined;
-          const synthesizedOutput = dispatchResult.workerOutputs
-            .map(o => `--- ${o.criterionTitle} (criterion ${o.criterionId}) ---\n${o.narrative}`)
-            .join('\n\n');
 
-          // Always set implementationReport so quality_review_round_1
-           // (which gates on `last.implementationReport ?? last.structuredReport`)
-           // fires even when the synthesized output contains no parseable
-           // structured-report blocks. Non-empty workerOutputs is the
-           // post-dispatch invariant that means "the implementer stage
-           // produced something the annotator can merge."
-          const parsedReport = parseStructuredReport(synthesizedOutput) ?? { findings: [], structuredReportSchemaUsed: 'fallback' as unknown as never };
-          // terminationReason drives the wire envelope's terminalStatus
-          // (event-builder.ts:359 deriveTerminalStatus reads tr.cause). Without
-          // it, the rollup defaults to 'incomplete' even when status='ok'.
-          const totalTurns = dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0);
           const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
             ? 'error'
             : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
           const terminationReason = {
             cause: terminationCause,
-            turnsUsed: totalTurns,
+            turnsUsed: dispatchResult.turns,
             hasFileArtifacts: false,
             usedShell: false,
             workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
             wasPromoted: false,
           };
           state.lastRunResult = {
-            output: synthesizedOutput,
+            output: dispatchResult.synthesizedOutput,
             status,
-            usage: dispatchResult.totalUsage,
-            turns: totalTurns,
+            usage: dispatchResult.usage,
+            turns: dispatchResult.turns,
             filesRead: filePaths,
             filesWritten: [],
             toolCalls: [],
@@ -462,27 +445,20 @@ export async function runTaskViaDispatcher(
             parsedFindings: null,
             workerStatus: succeededCount === 0 ? 'failed' : 'done',
             terminationReason,
-            workerOutputs: dispatchResult.workerOutputs.map(o => ({
-              criterionId: o.criterionId,
-              criterionTitle: o.criterionTitle,
-              narrative: o.narrative,
-            })),
-            partialCriteriaCovered: dispatchResult.partialCriteriaCovered,
-            partialCriteriaFailed: dispatchResult.partialCriteriaFailed,
+            findings: dispatchResult.findings,
+            criteriaErrors: dispatchResult.criteriaErrors,
             ...(incompleteReason && { incompleteReason }),
-            implementationReport: parsedReport,
-            structuredReport: parsedReport,
           } as unknown as RunResult;
 
           mergeStageStats(state, 'implementing', {
-            inputTokens: dispatchResult.totalUsage.inputTokens,
-            outputTokens: dispatchResult.totalUsage.outputTokens,
-            cachedReadTokens: dispatchResult.totalUsage.cachedReadTokens,
-            cachedNonReadTokens: dispatchResult.totalUsage.cachedNonReadTokens,
-            turnCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0),
-            toolCallCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.toolCallCount, 0),
-            costUSD: dispatchResult.workerOutputs.reduce((a, o) => a + (o.costUSD ?? 0), 0),
-            durationMs: Math.max(0, ...dispatchResult.workerOutputs.map(o => o.durationMs)),
+            inputTokens: dispatchResult.usage.inputTokens,
+            outputTokens: dispatchResult.usage.outputTokens,
+            cachedReadTokens: dispatchResult.usage.cachedReadTokens,
+            cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
+            turnCount: dispatchResult.turns,
+            toolCallCount: 0,
+            costUSD: dispatchResult.costUSD,
+            durationMs: dispatchResult.durationMs,
           }, {
             tier: ctx.assignedTier,
             model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
