@@ -60,6 +60,10 @@
       "types": "./dist/lifecycle/stage-progression.d.ts",
       "import": "./dist/lifecycle/stage-progression.js"
     },
+    "./lifecycle/stage-labels": {
+      "types": "./dist/lifecycle/stage-labels.d.ts",
+      "import": "./dist/lifecycle/stage-labels.js"
+    },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",
       "import": "./dist/events/verbose-line.js"
