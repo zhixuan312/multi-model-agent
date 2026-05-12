@@ -80,11 +80,11 @@ export const StageEntryBase = z.object({
   model: z.string().regex(STRICT_ID_REGEX),
   tier: z.enum(['standard', 'complex']),
   durationMs: z.number().int().min(0).max(3_600_000),
-  costUSD: z.number().min(0).max(100).nullable(),
-  inputTokens: z.number().int().min(0).max(5_000_000),
-  outputTokens: z.number().int().min(0).max(500_000),
-  cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  cachedNonReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  costUSD: z.number().min(0).max(500).nullable(),
+  inputTokens: z.number().int().min(0).max(100_000_000),
+  outputTokens: z.number().int().min(0).max(2_000_000),
+  cachedReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
+  cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
   toolCallCount: z.number().int().min(0).max(5000),
   filesReadCount: z.number().int().min(0).max(5000),
   filesWrittenCount: z.number().int().min(0).max(5000),
@@ -162,14 +162,14 @@ export const TaskCompletedEventSchema = z.object({
   errorCode: ErrorCode.nullable(),
 
   // Token economics
-  inputTokens: z.number().int().min(0).max(5_000_000),
-  outputTokens: z.number().int().min(0).max(500_000),
-  cachedReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
-  cachedNonReadTokens: z.number().int().min(0).max(5_000_000).nullable(),
+  inputTokens: z.number().int().min(0).max(100_000_000),
+  outputTokens: z.number().int().min(0).max(2_000_000),
+  cachedReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
+  cachedNonReadTokens: z.number().int().min(0).max(100_000_000).nullable(),
 
   // Run totals
   totalDurationMs: z.number().int().min(0).max(86_400_000),
-  totalCostUSD: z.number().min(0).max(800).nullable(),
+  totalCostUSD: z.number().min(0).max(5_000).nullable(),
   mainEquivalentCostUSD: z.number().nullable(),
   costDeltaVsMainUSD: z.number().nullable(),
 
