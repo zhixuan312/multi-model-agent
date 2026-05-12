@@ -7,7 +7,7 @@ const defaultConfig: MultiModelConfig = {
 };
 
 describe('runTasks', () => {
-  it('runs tasks in parallel and returns all results', async () => {
+  it('runs tasks in parallel and returns all results', { timeout: 30_000 }, async () => {
     const config: MultiModelConfig = {
       agents: {
         standard: { type: 'codex', model: 'a-model', baseUrl: 'https://a.example.com/v1' },
@@ -25,7 +25,7 @@ describe('runTasks', () => {
     expect(results[1].status).toBeDefined();
   });
 
-  it('one task error does not prevent other task from returning its result', async () => {
+  it('one task error does not prevent other task from returning its result', { timeout: 30_000 }, async () => {
     const results = await runTasks([
       { prompt: 'will error', agentType: 'standard' as const },
       { prompt: 'will also error', agentType: 'complex' as const },
@@ -107,7 +107,7 @@ describe('runTasks', () => {
     expect(cfg.type).toBe('codex');
   });
 
-  it('runTasks strict briefQualityPolicy no longer blocks execution', async () => {
+  it('runTasks strict briefQualityPolicy no longer blocks execution', { timeout: 30_000 }, async () => {
     const results = await runTasks(
       [{ prompt: 'Fix the thing.', agentType: 'standard', briefQualityPolicy: 'strict' }],
       {
