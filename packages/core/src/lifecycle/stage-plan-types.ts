@@ -166,25 +166,6 @@ export interface LifecycleState {
   reworkOutput?: string;
   /** Rework stage error (transport/return). */
   reworkError?: string;
-  /** Stage 4 (annotate_completion) structured output + verify overlay. */
-  completionAnnotation?: {
-    completionPercent: number;
-    perStep: Array<{ step: string; status: 'done' | 'partial' | 'missing'; note: string | null }>;
-    verify: {
-      ran: boolean;
-      passed: boolean | null;
-      exitCode: number | null;
-      command: string[];
-      tailOutput: string | null;
-    };
-    concerns: string[];
-  };
-  /** Annotator provider/parse error (fallback case). */
-  completionAnnotationError?: string;
-  /** Deterministic commit-gate percentage: min(backstop, annotatorPercent). */
-  commitGatePercent?: number;
-  /** Override the default commit threshold (default 80, from taskSpec). */
-  completionThreshold?: number;
 
   // Terminal-handler idempotency slots. Each terminal handler skips when
   // its slot is set, so re-runs (e.g. retry) and inter-handler ordering

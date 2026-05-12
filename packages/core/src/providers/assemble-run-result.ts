@@ -19,8 +19,6 @@ export interface ParsedReportFields {
   qualityReviewerNotes?: string;
   reworkOutput?: string;
   reworkApplied?: boolean;
-  completionAnnotation?: NonNullable<RunResult['completionAnnotation']>;
-  commitGatePercent?: number;
   verifyResult?: NonNullable<RunResult['verifyResult']>;
 }
 

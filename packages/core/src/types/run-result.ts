@@ -43,22 +43,7 @@ export interface RunResult {
    * may leave this undefined.
    */
   actualCostUSD?: number | null
-  // ── Pipeline-redesign envelope fields (4.3.0+, spec §3.5) ────────────
-  /** Stage 4 structured annotation: completionPercent, perStep, verify, concerns. */
-  completionAnnotation?: {
-    completionPercent: number;
-    perStep: Array<{ step: string; status: 'done' | 'partial' | 'missing'; note: string | null }>;
-    verify: {
-      ran: boolean;
-      passed: boolean | null;
-      exitCode: number | null;
-      command: string[];
-      tailOutput: string | null;
-    };
-    concerns: string[];
-  };
-  /** Stage 4 deterministic commit-gate %: min(backstop, annotatorPercent). */
-  commitGatePercent?: number
+  // ── v4.4.x envelope fields ───────────────────────────────────────────
   /** Spec lint-reviewer raw report. */
   specReviewerNotes?: string
   /** Quality lint-reviewer raw report. */
