@@ -1,6 +1,7 @@
 import type { Session } from '../types/run-result.js';
 import { AnnotatorPromptBuilder, type AnnotatorRoute } from './annotator-prompt-builder.js';
 import { AnnotatorOutputParser, type AnnotatorParseResult } from './annotator-output-parser.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 import { annotatorAuditTemplate } from './templates/annotator-audit.js';
 import { annotatorReviewTemplate } from './templates/annotator-review.js';
 import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
@@ -104,7 +105,7 @@ export class AnnotatorEngine {
     try {
       const turn = await session.send(
         `${prompt}\n\nAnnotate the findings above.`,
-        { stageLabel: input.stageLabel ?? 'Annotating' },
+        { stageLabel: input.stageLabel ?? HUMAN_LABEL.annotating },
       );
       // Adapt TurnResult → the shape this engine's parser + cost
       // extractor uses.

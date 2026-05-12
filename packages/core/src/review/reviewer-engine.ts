@@ -1,6 +1,7 @@
 import type { Session } from '../types/run-result.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 import { ReviewerOutputParser, type ReviewerParseResult, ReviewerParseError } from './reviewer-output-parser.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 
 // Re-exports for callers. Spec C11 puts templates in review/templates/ and
 // the builder in review/reviewer-prompt-builder.ts; the re-exports keep one
@@ -56,7 +57,7 @@ export class ReviewerEngine {
   async runSpec(session: Session, input: ReviewerInput): Promise<ReviewerCallResult> {
     const { systemPrompt, userPrompt } = this.builder.buildSpec({ ...input });
     const turn = await session.send(`${systemPrompt}\n\n${userPrompt}`, {
-      stageLabel: input.stageLabel ?? 'Spec review',
+      stageLabel: input.stageLabel ?? HUMAN_LABEL.review,
     });
     const parsed = this.parser.parse(turn.output ?? '');
     return { ...parsed, cost: extractCost(turn) };
@@ -65,7 +66,7 @@ export class ReviewerEngine {
   async runQualityAP(session: Session, input: ReviewerInput): Promise<ReviewerCallResult> {
     const { systemPrompt, userPrompt } = this.builder.buildQualityAP({ ...input });
     const turn = await session.send(`${systemPrompt}\n\n${userPrompt}`, {
-      stageLabel: input.stageLabel ?? 'Quality review',
+      stageLabel: input.stageLabel ?? HUMAN_LABEL.review,
     });
     const parsed = this.parser.parse(turn.output ?? '');
     return { ...parsed, cost: extractCost(turn) };

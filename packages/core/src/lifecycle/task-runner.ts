@@ -26,6 +26,7 @@ import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
+import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
   return {
@@ -503,7 +504,7 @@ export async function runTaskViaDispatcher(
             taskDeadlineMs: ctx.timing.deadlineMs,
             abortSignal: ctx.stall.controller.signal,
             assignedTier: decision.impl,
-            stageLabel: 'Implementing',
+            stageLabel: HUMAN_LABEL.implementing,
             ...(ctx.bus && { bus: ctx.bus }),
             ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
             taskIndex: ctx.taskIndex,

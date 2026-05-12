@@ -16,6 +16,7 @@ import type { Session } from '../types/run-result.js';
 import { retryableFor } from '../error-codes.js';
 import { hasCompletedWork, extractToolName } from '../providers/stall-detector.js';
 import { assembleRunResult } from '../providers/assemble-run-result.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 
 function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';
@@ -167,7 +168,7 @@ export async function delegateWithEscalation(
       });
       try {
         const turn = await session.send(task.prompt, {
-          stageLabel: options.stageLabel ?? 'Implementing',
+          stageLabel: options.stageLabel ?? HUMAN_LABEL.implementing,
         });
         result = assembleRunResult(turn);
       } finally {
