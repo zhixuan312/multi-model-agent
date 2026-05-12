@@ -11,6 +11,12 @@
  * which is stable from creation; they typically rank lower than active
  * projects and fall off first.
  *
+ * Active-aware: when `protectedHashes` is supplied, no entry in that set
+ * is evicted regardless of mtime rank. Callers pass it for projects that
+ * are currently registered in the in-memory `ProjectContextRegistry`, so
+ * a startup sweep cannot wipe a directory the running daemon is about to
+ * write to. Startup-only callers may pass an empty set safely.
+ *
  * No-op when the count is at or under cap. Synchronous (called once at
  * daemon startup, low expected cost).
  */
@@ -43,18 +49,28 @@ export function computeProjectRecencyMs(projectDir: string): number {
   return mtimeMs;
 }
 
-export function sweepProjectCap(contextBlocksRoot: string, maxProjects: number): { kept: number; evicted: number } {
+export function sweepProjectCap(
+  contextBlocksRoot: string,
+  maxProjects: number,
+  protectedHashes: ReadonlySet<string> = new Set(),
+): { kept: number; evicted: number } {
   if (!fs.existsSync(contextBlocksRoot)) return { kept: 0, evicted: 0 };
   const entries = fs.readdirSync(contextBlocksRoot, { withFileTypes: true });
   const projects = entries
     .filter(e => e.isDirectory())
     .map(e => ({ name: e.name, mtimeMs: computeProjectRecencyMs(path.join(contextBlocksRoot, e.name)) }));
   if (projects.length <= maxProjects) return { kept: projects.length, evicted: 0 };
-  projects.sort((a, b) => b.mtimeMs - a.mtimeMs);
-  const keep = projects.slice(0, maxProjects);
-  const drop = projects.slice(maxProjects);
+  // Pin protected (active) projects to the keep set unconditionally —
+  // they count against `maxProjects` but cannot be selected for eviction.
+  // The remaining slots are filled by mtime-LRU over the rest.
+  const protectedProjects = projects.filter(p => protectedHashes.has(p.name));
+  const others = projects.filter(p => !protectedHashes.has(p.name));
+  others.sort((a, b) => b.mtimeMs - a.mtimeMs);
+  const remainingSlots = Math.max(0, maxProjects - protectedProjects.length);
+  const keepOthers = others.slice(0, remainingSlots);
+  const drop = others.slice(remainingSlots);
   for (const p of drop) {
     try { fs.rmSync(path.join(contextBlocksRoot, p.name), { recursive: true, force: true }); } catch { /* skip */ }
   }
-  return { kept: keep.length, evicted: drop.length };
+  return { kept: protectedProjects.length + keepOthers.length, evicted: drop.length };
 }

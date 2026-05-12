@@ -177,4 +177,28 @@ describe('FileBackedContextBlockStore (Gap 4)', () => {
     store.register('second', { id });
     expect(store.get(id)).toBe('second');
   });
+
+  it('register recreates rootDir if it was removed externally after construction', () => {
+    // Scenario: store is constructed (ensureRoot mkdirs the dir), then an
+    // external process (manual cleanup, sweep on another instance, etc.)
+    // rm -rf's the project bucket. The next register() must succeed
+    // instead of crashing the batch with ENOENT.
+    const cwd = path.join(tmpRoot, 'project-a');
+    fs.mkdirSync(cwd, { recursive: true });
+    const store = makeStore(cwd);
+    // Sanity: store works before the external nuke.
+    const { id: idBefore } = store.register('before');
+    expect(store.get(idBefore)).toBe('before');
+
+    // Simulate the rm -rf of the project's bucket.
+    const home = path.join(tmpRoot, '.multi-model', 'context-blocks');
+    for (const sub of fs.readdirSync(home)) {
+      fs.rmSync(path.join(home, sub), { recursive: true, force: true });
+    }
+    // After this, the rootDir does not exist on disk.
+
+    // The next register() must succeed — atomicWrite's mkdir-p recovers.
+    const { id: idAfter } = store.register('after');
+    expect(store.get(idAfter)).toBe('after');
+  });
 });
