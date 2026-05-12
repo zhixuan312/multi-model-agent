@@ -64,6 +64,10 @@
       "types": "./dist/lifecycle/stage-labels.d.ts",
       "import": "./dist/lifecycle/stage-labels.js"
     },
+    "./intake/verify-command-validator": {
+      "types": "./dist/intake/verify-command-validator.d.ts",
+      "import": "./dist/intake/verify-command-validator.js"
+    },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",
       "import": "./dist/events/verbose-line.js"
