@@ -181,24 +181,26 @@ export async function executeTask<Input, Brief, Report>(
   const batchTimings = computeTimings(wallClockMs, results);
   const costSummary = computeAggregateCost(results);
 
-  // ── Step 7: Parse structured report ──
-  // First try the per-tool schema. Five of the ten tools (audit, review,
-  // verify, debug, investigate) instruct workers to emit narrative
-  // `## Finding N: ...` rather than JSON; for those, the per-tool schema
-  // always throws. Fall back to the generic narrative parser so the
-  // envelope's structuredReport carries the parsed sections instead of a
-  // "parse failed" sentinel. The narrative parser never throws — empty
-  // input yields an empty ParsedStructuredReport.
+  // ── Step 7: Resolve structured report ──
+  // v4.4.x: the Annotating handler builds the canonical unified StructuredReport
+  // and compose_response attaches it onto results[N].structuredReport. Prefer
+  // that. Fall back to legacy per-tool schema / narrative parser only when the
+  // annotator did not run (terminal short-circuit, register-block route).
   let structuredReport: Record<string, unknown> | NotApplicable;
-  const primaryOutput = results[0]?.output;
-  if (primaryOutput && primaryOutput.trim().length > 0) {
-    try {
-      structuredReport = config.reportSchema.parse(primaryOutput) as Record<string, unknown>;
-    } catch {
-      structuredReport = parseStructuredReport(primaryOutput) as unknown as Record<string, unknown>;
-    }
+  const annotatorReport = results[0] && (results[0] as { structuredReport?: unknown }).structuredReport;
+  if (annotatorReport && typeof annotatorReport === 'object') {
+    structuredReport = annotatorReport as Record<string, unknown>;
   } else {
-    structuredReport = notApplicable('no task output to parse');
+    const primaryOutput = results[0]?.output;
+    if (primaryOutput && primaryOutput.trim().length > 0) {
+      try {
+        structuredReport = config.reportSchema.parse(primaryOutput) as Record<string, unknown>;
+      } catch {
+        structuredReport = parseStructuredReport(primaryOutput) as unknown as Record<string, unknown>;
+      }
+    } else {
+      structuredReport = notApplicable('no task output to parse');
+    }
   }
 
   // ── Step 8: Compose headline ──

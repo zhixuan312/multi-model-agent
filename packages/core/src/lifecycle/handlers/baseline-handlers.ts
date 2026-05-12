@@ -149,8 +149,16 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (enriched.implementationReport === undefined) {
         enriched.implementationReport = fallbackReport;
       }
-      if (enriched.structuredReport === undefined) {
-        enriched.structuredReport = fallbackReport;
+      // v4.4.x: the Annotating handler is the canonical source for the
+      // unified StructuredReport — when it ran, its output wins over any
+      // earlier text-parsed shape set by the executor. Fall back to the
+      // legacy parser only when the annotator did not run (e.g. terminal
+      // short-circuit, register-block route).
+      const annotatorReport = (state as { structuredReport?: unknown }).structuredReport;
+      if (annotatorReport && typeof annotatorReport === 'object') {
+        enriched.structuredReport = annotatorReport as RunResult['structuredReport'];
+      } else if (enriched.structuredReport === undefined) {
+        enriched.structuredReport = fallbackReport as RunResult['structuredReport'];
       }
       if (enriched.workerStatus === undefined) {
         const summary = (fallbackReport?.summary ?? '').toLowerCase();

@@ -70,12 +70,19 @@
         "extraSections": {}
       },
       "structuredReport": {
-        "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
+        "summary": "produced 0 findings",
+        "workerStatus": "done",
         "unresolved": [],
-        "extraSections": {}
+        "filesChanged": [],
+        "reviewVerdict": null,
+        "reviewConcerns": [],
+        "reworkApplied": false,
+        "validationsRun": [],
+        "commitSha": null,
+        "commitMessage": null,
+        "commitSkipReason": null,
+        "findings": [],
+        "criteriaErrors": []
       },
       "stageStats": {
         "implementing": {
@@ -131,12 +138,19 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
-    "filesChanged": [],
-    "validationsRun": [],
-    "deviationsFromBrief": [],
+    "summary": "produced 0 findings",
+    "workerStatus": "done",
     "unresolved": [],
-    "extraSections": {}
+    "filesChanged": [],
+    "reviewVerdict": null,
+    "reviewConcerns": [],
+    "reworkApplied": false,
+    "validationsRun": [],
+    "commitSha": null,
+    "commitMessage": null,
+    "commitSkipReason": null,
+    "findings": [],
+    "criteriaErrors": []
   },
   "error": {
     "kind": "not_applicable",

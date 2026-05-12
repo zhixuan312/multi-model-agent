@@ -113,11 +113,18 @@
       "qualityReviewReason": "",
       "structuredReport": {
         "summary": "needs rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
+        "workerStatus": "done",
         "unresolved": [],
-        "extraSections": {}
+        "filesChanged": [],
+        "reviewVerdict": "changes_required",
+        "reviewConcerns": [],
+        "reworkApplied": false,
+        "validationsRun": [],
+        "commitSha": null,
+        "commitMessage": null,
+        "commitSkipReason": null,
+        "findings": [],
+        "criteriaErrors": []
       },
       "models": {
         "implementer": "mock-model",
@@ -142,11 +149,18 @@
   },
   "structuredReport": {
     "summary": "needs rework per review",
-    "filesChanged": [],
-    "validationsRun": [],
-    "deviationsFromBrief": [],
+    "workerStatus": "done",
     "unresolved": [],
-    "extraSections": {}
+    "filesChanged": [],
+    "reviewVerdict": "changes_required",
+    "reviewConcerns": [],
+    "reworkApplied": false,
+    "validationsRun": [],
+    "commitSha": null,
+    "commitMessage": null,
+    "commitSkipReason": null,
+    "findings": [],
+    "criteriaErrors": []
   },
   "error": {
     "kind": "not_applicable",
