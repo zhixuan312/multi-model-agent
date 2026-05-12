@@ -4,7 +4,7 @@ const Trimmed = (min: number, max: number) =>
   z.string().trim().min(min, `min length ${min}`).max(max, `max length ${max}`);
 
 const ALLOWED_KEYS = new Set([
-  'researchQuestion', 'background', 'contextBlockIds',
+  'researchQuestion', 'background', 'contextBlockIds', 'subtype',
 ]);
 const BLOCKED_KEYS_TO_CODE: Record<string, string> = {
   agentType: 'tier_not_overridable',
@@ -15,6 +15,7 @@ const ResearchInputBase = z.object({
   researchQuestion: Trimmed(20, 8000),
   background: Trimmed(20, 8000),
   contextBlockIds: z.array(z.string().min(1)).max(16).default([]),
+  subtype: z.enum(['default']).default('default'),
 });
 
 // Single-pass deterministic key-shape validator. Mirrors tools/explore/schema.ts

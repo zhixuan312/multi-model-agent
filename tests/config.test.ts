@@ -8,12 +8,12 @@ import os from 'os';
 
 const minimalAgentConfig = {
   standard: {
-    type: 'openai-compatible' as const,
+    type: 'codex' as const,
     model: 'test-model',
     baseUrl: 'https://test.example.com/v1',
   },
   complex: {
-    type: 'openai-compatible' as const,
+    type: 'codex' as const,
     model: 'test-model-complex',
     baseUrl: 'https://test2.example.com/v1',
   },
@@ -35,13 +35,13 @@ describe('loadConfigFromFile', () => {
     fs.writeFileSync(configPath, JSON.stringify({
       agents: {
         standard: {
-          type: 'openai-compatible',
+          type: 'codex',
           model: 'deepseek-r1',
           baseUrl: 'https://api.deepseek.com/v1',
           apiKeyEnv: 'DEEPSEEK_API_KEY',
         },
         complex: {
-          type: 'openai-compatible',
+          type: 'codex',
           model: 'claude-opus-4-6',
           baseUrl: 'https://api.claude.ai/v1',
         },
@@ -50,7 +50,7 @@ describe('loadConfigFromFile', () => {
 
     const config = await loadConfigFromFile(configPath);
 
-    expect(config.agents.standard.type).toBe('openai-compatible');
+    expect(config.agents.standard.type).toBe('codex');
     expect(config.agents.standard.model).toBe('deepseek-r1');
     expect(config.defaults.timeoutMs).toBe(3_600_000);
     expect(config.defaults.tools).toBe('full');
@@ -148,24 +148,24 @@ describe('loadConfigFromFile', () => {
     expect(config.agents.standard.effort).toBe('none');
   });
 
-  it('rejects openai-compatible without baseUrl', async () => {
+  it('accepts codex without baseUrl (defaults to ChatGPT subscription via codex CLI)', async () => {
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       agents: {
-        standard: { type: 'openai-compatible', model: 'test' } as any,
+        standard: { type: 'codex', model: 'gpt-5.5' },
         complex: minimalAgentConfig.complex,
       },
     }));
-    await expect(loadConfigFromFile(configPath)).rejects.toThrow(/baseUrl/);
+    await expect(loadConfigFromFile(configPath)).resolves.toBeDefined();
   });
 
-  it('collectInlineApiKeyOffenders surfaces openai-compatible agents with inline apiKey', async () => {
+  it('collectInlineApiKeyOffenders surfaces agents with inline apiKey', async () => {
     const { collectInlineApiKeyOffenders } = await import('@zhixuan92/multi-model-agent-core');
     const configPath = path.join(tmpDir, 'config.json');
     fs.writeFileSync(configPath, JSON.stringify({
       agents: {
         standard: {
-          type: 'openai-compatible',
+          type: 'codex',
           model: 'test',
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-inline-key',
@@ -183,7 +183,7 @@ describe('loadConfigFromFile', () => {
     fs.writeFileSync(configPath, JSON.stringify({
       agents: {
         standard: {
-          type: 'openai-compatible',
+          type: 'codex',
           model: 'test',
           baseUrl: 'https://api.example.com/v1',
           apiKey: 'sk-inline-key',
@@ -217,11 +217,11 @@ describe('1.0.0 agents config schema', () => {
     expect(config.agents.complex.type).toBe('claude');
   });
 
-  it('accepts openai-compatible with baseUrl + apiKeyEnv', () => {
+  it('accepts codex with baseUrl + apiKeyEnv (OpenAI-compatible backend)', () => {
     const raw = {
       agents: {
         standard: {
-          type: 'openai-compatible',
+          type: 'codex',
           model: 'deepseek-r1',
           baseUrl: 'https://api.deepseek.com/v1',
           apiKeyEnv: 'DEEPSEEK_API_KEY',
@@ -232,42 +232,43 @@ describe('1.0.0 agents config schema', () => {
     expect(() => parseConfig(raw)).not.toThrow();
   });
 
-  it('rejects openai-compatible without baseUrl', () => {
+  it('accepts codex without baseUrl (defaults to ChatGPT subscription)', () => {
     const raw = {
       agents: {
-        standard: { type: 'openai-compatible', model: 'x' },
+        standard: { type: 'codex', model: 'gpt-5.5' },
         complex: { type: 'claude', model: 'claude-opus-4-6' },
       },
     };
-    expect(() => parseConfig(raw)).toThrow(/baseUrl/);
+    expect(() => parseConfig(raw)).not.toThrow();
   });
 
-  it('rejects claude with baseUrl (wrong auth block pasted)', () => {
+  it('accepts claude with baseUrl (Anthropic-compatible backend)', () => {
     const raw = {
       agents: {
-        standard: { type: 'codex', model: 'gpt-5-codex' },
+        standard: { type: 'codex', model: 'gpt-5.5' },
         complex: {
           type: 'claude',
           model: 'claude-opus-4-6',
-          baseUrl: 'https://wrong.example.com',
+          baseUrl: 'https://api.anthropic-proxy.example.com',
+          apiKeyEnv: 'ANTHROPIC_PROXY_KEY',
         },
       },
     };
-    expect(() => parseConfig(raw)).toThrow();
+    expect(() => parseConfig(raw)).not.toThrow();
   });
 
-  it('rejects codex with apiKey (wrong auth block pasted)', () => {
+  it('accepts codex with inline apiKey (warned about via collectInlineApiKeyOffenders, not rejected)', () => {
     const raw = {
       agents: {
         standard: {
           type: 'codex',
-          model: 'gpt-5-codex',
-          apiKey: 'sk-wrong',
+          model: 'gpt-5.5',
+          apiKey: 'sk-inline',
         },
         complex: { type: 'claude', model: 'claude-opus-4-6' },
       },
     };
-    expect(() => parseConfig(raw)).toThrow();
+    expect(() => parseConfig(raw)).not.toThrow();
   });
 
   it('rejects config missing the complex slot', () => {

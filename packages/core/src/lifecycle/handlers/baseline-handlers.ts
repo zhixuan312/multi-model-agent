@@ -9,8 +9,7 @@ import { gitCommitHandler } from './git-commit-handler.js';
 // §3.1 / §3.2.
 import { reviewHandler } from './review-handler.js';
 import { reworkHandler } from './rework-handler.js';
-import { annotateCompletionHandler } from './annotate-completion-handler.js';
-import { annotateCriteriaHandler } from './annotate-criteria-handler.js';
+import { annotator } from './annotator.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './register-context-block-handlers.js';
 import {
@@ -150,8 +149,16 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       if (enriched.implementationReport === undefined) {
         enriched.implementationReport = fallbackReport;
       }
-      if (enriched.structuredReport === undefined) {
-        enriched.structuredReport = fallbackReport;
+      // v4.4.x: the Annotating handler is the canonical source for the
+      // unified StructuredReport — when it ran, its output wins over any
+      // earlier text-parsed shape set by the executor. Fall back to the
+      // legacy parser only when the annotator did not run (e.g. terminal
+      // short-circuit, register-block route).
+      const annotatorReport = (state as { structuredReport?: unknown }).structuredReport;
+      if (annotatorReport && typeof annotatorReport === 'object') {
+        enriched.structuredReport = annotatorReport as RunResult['structuredReport'];
+      } else if (enriched.structuredReport === undefined) {
+        enriched.structuredReport = fallbackReport as RunResult['structuredReport'];
       }
       if (enriched.workerStatus === undefined) {
         const summary = (fallbackReport?.summary ?? '').toLowerCase();
@@ -202,14 +209,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const workerSelfAssessment = tr && 'workerSelfAssessment' in tr
         ? (tr as { workerSelfAssessment?: 'done' | 'in_progress' | 'no_op' | null }).workerSelfAssessment
         : null;
-      // 4.3.0 pipeline redesign: no more chain-failure state. The
-      // writes_unverifiable downgrade now triggers when:
+      // v4.4.x: the writes_unverifiable downgrade now triggers when:
       //   - reviewPolicy is not 'none' AND
-      //   - annotator marked the work below threshold (commitGatePercent < threshold)
-      // Below-threshold work shouldn't be double-stamped with writes_unverifiable.
-      const belowThreshold = (state.commitGatePercent ?? 100) < (state.completionThreshold ?? 80);
-      const chainAlreadyFailed = belowThreshold;
-      const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'verify', 'investigate', 'research', 'explore']);
+      //   - reviewer returned 'changes_required' (review rejected the work)
+      // Rejected work shouldn't be double-stamped with writes_unverifiable.
+      const chainAlreadyFailed = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
+      const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
       if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {
@@ -245,19 +250,12 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         }
       }
 
-      // Pipeline-redesign envelope assembly (4.3.0+, spec §3.5).
-      // Surface annotator output + reviewer notes + verify result as
-      // additive envelope fields. Status derivation:
-      //   - last.status === 'error' (Stage 1 worker crashed) → 'error'
-      //   - commits.length > 0 → 'ok' (commit landed → success)
-      //   - commitGatePercent ≥ threshold but no commit (rare; autoCommit=false) → 'ok'
-      //   - else → 'incomplete' with errorCode 'completion_below_threshold'
-      if (state.completionAnnotation !== undefined) {
-        (enriched as { completionAnnotation?: unknown }).completionAnnotation = state.completionAnnotation;
-      }
-      if (state.commitGatePercent !== undefined) {
-        (enriched as { commitGatePercent?: number }).commitGatePercent = state.commitGatePercent;
-      }
+      // v4.4.x envelope assembly. Surface reviewer notes + verify result
+      // as additive envelope fields. Status derivation:
+      //   - last.status === 'error' (worker crashed) → 'error'
+      //   - reviewVerdict === 'changes_required' → 'incomplete'
+      //   - commits.length > 0 (write task) → 'ok' (commit landed)
+      //   - otherwise → 'ok'
       if (state.specReviewerNotes !== undefined) {
         (enriched as { specReviewerNotes?: string }).specReviewerNotes = state.specReviewerNotes;
       }
@@ -293,19 +291,13 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       }
 
       const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
-      const gatePercent = state.commitGatePercent ?? 0;
-      const threshold = state.completionThreshold ?? 80;
+      const reviewRejected = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
 
       if (last.status === 'error') {
         enriched.status = 'error';
-      } else if (commitsExist) {
-        enriched.status = 'ok';
-      } else if (gatePercent >= threshold) {
-        enriched.status = 'ok';  // gate passed but commit didn't fire (e.g., autoCommit=false)
-      } else if ((last.filesWritten as string[] | undefined)?.length) {
-        // Files written but below threshold → incomplete; surface annotation
+      } else if (reviewRejected) {
         enriched.status = 'incomplete';
-        enriched.errorCode = 'completion_below_threshold';
+        enriched.errorCode = 'review_rejected';
         const priorTr = (typeof enriched.terminationReason === 'object' && enriched.terminationReason !== null)
           ? enriched.terminationReason
           : undefined;
@@ -317,8 +309,10 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           workerSelfAssessment: 'done_with_concerns',
           wasPromoted: false,
         };
+      } else if (commitsExist) {
+        enriched.status = 'ok';
       }
-      // else: no files, no commit → leave status as worker reported (ok/incomplete/error)
+      // else: leave status as worker reported (ok/incomplete/error)
 
       state.responseEnvelope = enriched;
       // emit_task_terminal reads state.lastRunResult, not state.responseEnvelope,
@@ -348,8 +342,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     review: reviewHandler,
     rework: reworkHandler,
-    annotate_completion: annotateCompletionHandler,
-    annotate_criteria: annotateCriteriaHandler,
+    annotating: annotator,
 
     register_to_block_store: registerToBlockStoreHandler,
     git_commit: gitCommitHandler,

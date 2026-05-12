@@ -2,7 +2,6 @@ import { describe, it, expect } from 'vitest';
 import * as delegate from '../../packages/core/src/tools/delegate/schema.js';
 import * as audit from '../../packages/core/src/tools/audit/schema.js';
 import * as review from '../../packages/core/src/tools/review/schema.js';
-import * as verify from '../../packages/core/src/tools/verify/schema.js';
 import * as debug from '../../packages/core/src/tools/debug/schema.js';
 import * as executePlan from '../../packages/core/src/tools/execute-plan/schema.js';
 import * as retry from '../../packages/core/src/tools/retry/schema.js';
@@ -12,7 +11,6 @@ const allSchemas = [
   ['delegate', delegate.outputSchema],
   ['audit', audit.outputSchema],
   ['review', review.outputSchema],
-  ['verify', verify.outputSchema],
   ['debug', debug.outputSchema],
   ['executePlan', executePlan.outputSchema],
   ['retry', retry.outputSchema],

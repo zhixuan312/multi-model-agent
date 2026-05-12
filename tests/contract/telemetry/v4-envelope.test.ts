@@ -79,7 +79,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     agentType: 'standard' as const,
     toolMode: 'full' as const,
     reviewPolicy: route === 'delegate' ? 'full' as const : 'quality_only' as const,
-    verifyCommandPresent: route === 'verify',
+    verifyCommandPresent: route === 'delegate' || route === 'execute-plan',
     implementerModel: 'claude-sonnet',
     implementerTier: 'standard' as const,
     terminalStatus: 'ok' as const,
@@ -114,7 +114,7 @@ function getDefaultStages(route: string) {
     stages.push(makeStage('review'));
     stages.push(makeStage('rework'));
     stages.push(makeStage('annotating'));
-  } else if (['audit', 'review', 'verify', 'debug', 'investigate'].includes(route)) {
+  } else if (['audit', 'review', 'debug', 'investigate'].includes(route)) {
     stages.push(makeStage('review', { verdict: 'annotated' }));
   }
 
@@ -160,13 +160,13 @@ describe('V4 envelope contract', () => {
     expect(parsed.stages.some(s => s.name === 'review')).toBe(true);
   });
 
-  it('verify happy path (verifying outcome=passed)', () => {
-    const event = makeEvent('verify', {
+  it('delegate with verifyCommand happy path (annotating outcome=passed)', () => {
+    const event = makeEvent('delegate', {
       verifyCommandPresent: true,
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'full',
       stages: [
         makeStage('implementing'),
-        makeStage('review', { verdict: 'annotated' }),
+        makeStage('review', { verdict: 'approved', roundsUsed: 1 }),
         makeStage('annotating', { outcome: 'passed' }),
         makeStage('committing'),
       ],
@@ -177,13 +177,13 @@ describe('V4 envelope contract', () => {
     if (vs && 'outcome' in vs) expect(vs.outcome).toBe('passed');
   });
 
-  it('verify skipped (no command)', () => {
-    const event = makeEvent('verify', {
+  it('delegate without verifyCommand (skipped, no_command)', () => {
+    const event = makeEvent('delegate', {
       verifyCommandPresent: false,
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'full',
       stages: [
         makeStage('implementing'),
-        makeStage('review', { verdict: 'annotated' }),
+        makeStage('review', { verdict: 'approved', roundsUsed: 1 }),
         makeStage('annotating', { outcome: 'skipped', skipReason: 'no_command' }),
         makeStage('committing'),
       ],

@@ -38,17 +38,12 @@ export interface TaskSpec {
   autoCommit?: boolean
   planContext?: string
   /**
-   * Stage 5 commit-gate threshold (4.3.0+ pipeline redesign). Commit fires
-   * when `state.commitGatePercent >= completionThreshold`. Range 0..100.
-   * Default 80 when omitted. See pipeline-redesign spec §3.4.
-   */
-  completionThreshold?: number
-  /**
    * Optional task-specific tool injection. When present, runner adapters
    * merge these tools into the worker's tool surface ON TOP of whatever
-   * `tools: ToolMode` would normally produce. Used by `/explore` for the
-   * external researcher (taskIndex=1) only; all other executors leave this
-   * undefined. Runners MUST treat `undefined` as a no-op.
+   * `tools: ToolMode` would normally produce. Used by `/research` (and the
+   * `mma-explore` skill that orchestrates it) for the external researcher
+   * worker only; all other executors leave this undefined. Runners MUST
+   * treat `undefined` as a no-op.
    */
   customToolset?: ResearchToolDefinition[]
   /**
@@ -63,11 +58,18 @@ export interface TaskSpec {
    */
   parallelTarget?: string
   /**
-   * Audit-specific. Set by tools/audit/tool-config.ts buildTaskSpec when
-   * input.auditType is 'plan'. The lifecycle's parallel-criteria
-   * dispatcher reads this to route plan-audit tasks to the `audit_plan`
-   * route spec (different orientation / criteria / semantics) instead
-   * of the default audit spec. Other tools leave this undefined.
+   * v4.4.x: subtype field for read-only tools. Set by each tool's
+   * buildTaskSpec from the input schema's `subtype` field. The lifecycle's
+   * parallel-criteria dispatcher reads this to look up the per-tool
+   * SUBTYPES map and select the matching criteria / orientation /
+   * semantics block. Defaults to 'default' when undefined.
+   *
+   * Per-tool enums today:
+   *   audit:       'default' | 'plan' | 'spec' | 'skill'
+   *   review:      'default'
+   *   debug:       'default'
+   *   investigate: 'default'
+   *   research:    'default'
    */
-  auditType?: 'default' | 'security' | 'performance' | 'plan'
+  subtype?: string
 }

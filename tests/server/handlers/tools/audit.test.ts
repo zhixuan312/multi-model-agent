@@ -16,7 +16,7 @@ describe('POST /audit handler', () => {
     try {
       const body = {
         document: 'function foo() { return 1; }',
-        auditType: 'default',
+        subtype: 'default',
       };
       const res = await fetch(`${s.url}/audit?cwd=${encodeURIComponent(cwd)}`, {
         method: 'POST',
@@ -38,7 +38,7 @@ describe('POST /audit handler', () => {
     }
   });
 
-  it('accepts request with auditType omitted (Zod default fires to `default`)', async () => {
+  it('accepts request with subtype omitted (Zod default fires to `default`)', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
@@ -60,11 +60,11 @@ describe('POST /audit handler', () => {
     }
   });
 
-  it('returns 400 invalid_request on legacy auditType values (correctness/style/general)', async () => {
+  it('returns 400 invalid_request when the legacy auditType field is sent', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
-      for (const legacy of ['correctness', 'style', 'general']) {
+      for (const legacy of ['default', 'plan', 'security', 'performance', 'correctness', 'style', 'general']) {
         const res = await fetch(`${s.url}/audit?cwd=${encodeURIComponent(cwd)}`, {
           method: 'POST',
           headers: {
@@ -74,7 +74,7 @@ describe('POST /audit handler', () => {
           },
           body: JSON.stringify({ document: 'code', auditType: legacy }),
         });
-        expect(res.status, `legacy '${legacy}' should be rejected`).toBe(400);
+        expect(res.status, `legacy auditType='${legacy}' should be rejected (renamed to subtype)`).toBe(400);
         const json = await res.json() as { error: { code: string } };
         expect(json.error.code).toBe('invalid_request');
       }
@@ -83,7 +83,7 @@ describe('POST /audit handler', () => {
     }
   });
 
-  it('returns 400 invalid_request when auditType is an invalid value', async () => {
+  it('returns 400 invalid_request when subtype is an invalid value', async () => {
     const s = await startTestServerWithAgents();
     const cwd = makeTmpCwd();
     try {
@@ -91,11 +91,10 @@ describe('POST /audit handler', () => {
         method: 'POST',
         headers: {
           "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-          "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
           Authorization: `Bearer ${s.token}`,
           'content-type': 'application/json',
         },
-        body: JSON.stringify({ document: 'code', auditType: 'unknown-type' }),
+        body: JSON.stringify({ document: 'code', subtype: 'unknown-type' }),
       });
 
       expect(res.status).toBe(400);

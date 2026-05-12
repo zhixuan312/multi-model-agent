@@ -1,9 +1,9 @@
 {
-  "headline": "[ok] review completed",
+  "headline": "[error] review completed",
   "results": [
     {
-      "output": "mock incomplete",
-      "status": "ok",
+      "output": "",
+      "status": "error",
       "usage": {
         "inputTokens": 100,
         "outputTokens": 200,
@@ -17,102 +17,64 @@
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "parsedFindings": null,
-      "workerStatus": "done",
+      "workerStatus": "failed",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "error",
         "turnsUsed": 10,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "failed",
         "wasPromoted": false
       },
-      "workerOutputs": [
+      "findings": [],
+      "criteriaErrors": [
         {
           "criterionId": "1",
-          "criterionTitle": "TEST GAP",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "CROSS-FILE RIPPLE",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "PRE-EXISTING-BUG-VS-NEW-REGRESSION",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "MISSING EDGE CASE",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "RACE / CONCURRENCY",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "6",
-          "criterionTitle": "RESOURCE LEAK",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "7",
-          "criterionTitle": "BACKWARD-COMPAT BREAK",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "8",
-          "criterionTitle": "SECURITY REGRESSION",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "9",
-          "criterionTitle": "PERFORMANCE REGRESSION",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "10",
-          "criterionTitle": "IMPLICIT-CONTRACT ASSUMPTION",
-          "narrative": "mock incomplete"
+          "error": "turn ended with cap_exhausted"
         }
       ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10"
-      ],
-      "partialCriteriaFailed": [],
-      "implementationReport": {
-        "summary": "--- TEST GAP (criterion 1) ---\nmock incomplete",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "structuredReport": {
-        "summary": "--- TEST GAP (criterion 1) ---\nmock incomplete",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
       "stageStats": {
         "implementing": {
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
+          "costUSD": null,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
@@ -127,31 +89,9 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "annotatedFindings": [],
-      "qualityReviewVerdict": "error",
-      "actualCostUSD": 0,
+      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -165,6 +105,22 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -183,7 +139,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock incomplete",
+    "summary": "",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -199,6 +155,5 @@
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
-  "contextBlockId": "<DETERMINISTIC>"
+  "roundsUsed": 1
 }

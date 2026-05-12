@@ -12,8 +12,11 @@ import type {
   TerminationReason,
 } from '../providers/runner-types.js';
 import type { EventEmitter } from '../events/event-emitter.js';
+import type { Session } from '../types/run-result.js';
 import { retryableFor } from '../error-codes.js';
 import { hasCompletedWork, extractToolName } from '../providers/stall-detector.js';
+import { assembleRunResult } from '../providers/assemble-run-result.js';
+import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 
 function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['cause'] {
   if (errorCode === 'degenerate_exhausted') return 'degenerate_exhausted';
@@ -119,20 +122,14 @@ export async function delegateWithEscalation(
       });
     }
 
-    let initialPromptLengthChars = 0;
-    let initialPromptHash = '';
+    const initialPromptLengthChars = 0;
+    const initialPromptHash = '';
 
     let result: RunResult;
     let cumulativeCostUSD = 0;
 
     for (let attempt = 0; ; attempt++) {
-      const adjustedMaxCostUSD =
-        task.maxCostUSD !== undefined ? Math.max(0, task.maxCostUSD - cumulativeCostUSD) : undefined;
-
-      // Cap per-call timeout at the remaining task-level budget. When the
-      // deadline is in the past, force a 1ms timeout so the runner returns
-      // immediately with whatever salvage it has — synthesized into a
-      // task_wall_clock outcome below.
+      // Cap per-call timeout at the remaining task-level budget.
       let effectiveTimeoutMs = task.timeoutMs;
       if (options.taskDeadlineMs !== undefined) {
         const remaining = options.taskDeadlineMs - Date.now();
@@ -143,14 +140,10 @@ export async function delegateWithEscalation(
             : remainingClamped;
       }
 
-      // ProviderConfig.type is one of: 'claude' | 'claude-compatible' | 'openai-compatible' | 'codex'.
-      // InternalRunnerEvent.providerType only allows the three runner families;
-      // map 'claude-compatible' onto 'claude' (same runner backend).
+      // v4.4: ProviderConfig.type is one of: 'claude' | 'codex'.
       const cfgType = provider.config.type;
-      const providerTypeName: 'claude' | 'openai-compatible' | 'codex' =
-        cfgType === 'claude' || cfgType === 'claude-compatible' ? 'claude' :
-        cfgType === 'codex' ? 'codex' :
-        'openai-compatible';
+      const providerTypeName: 'claude' | 'codex' =
+        cfgType === 'claude' ? 'claude' : 'codex';
       safeSink?.({
         kind: 'worker_start',
         model: provider.config.model,
@@ -158,40 +151,37 @@ export async function delegateWithEscalation(
         tier: options.assignedTier ?? 'standard',
       });
 
-      result = await provider.run(task.prompt, {
-        tools: task.tools,
-        timeoutMs: effectiveTimeoutMs,
-        abortSignal: options.abortSignal,
-        cwd: task.cwd,
-        effort: task.effort,
-        sandboxPolicy: task.sandboxPolicy,
-        expectedCoverage: task.expectedCoverage,
-        skipCompletionHeuristic: task.skipCompletionHeuristic,
-        mainModel: task.mainModel,
-        maxCostUSD: adjustedMaxCostUSD,
-        formatConstraints: task.formatConstraints,
-        customToolset: task.customToolset,
-        onProgress: safeSink,
-        onInitialRequest: (meta) => {
-          initialPromptLengthChars = meta.lengthChars;
-          initialPromptHash = meta.sha256;
-        },
-        ...(options.bus && { bus: options.bus }),
-        ...(options.batchId !== undefined && { batchId: options.batchId }),
-        ...(options.taskIndex !== undefined && { taskIndex: options.taskIndex }),
-        ...(options.assignedTier !== undefined && { tier: options.assignedTier }),
-        ...(options.stageLabel !== undefined && { stageLabel: options.stageLabel }),
+      const cwd = task.cwd ?? process.cwd();
+      const wallClockDeadline = options.taskDeadlineMs ?? (Date.now() + (effectiveTimeoutMs ?? 60 * 60 * 1000));
+      const idleStallTimeoutMs = 20 * 60 * 1000;
+      const abortCtrl = new AbortController();
+      if (options.abortSignal) {
+        if (options.abortSignal.aborted) abortCtrl.abort();
+        else options.abortSignal.addEventListener('abort', () => abortCtrl.abort(), { once: true });
+      }
+      const session: Session = provider.openSession({
+        cwd,
+        wallClockDeadline,
+        idleStallTimeoutMs,
+        abortSignal: abortCtrl.signal,
+        ...(options.bus && { bus: options.bus as unknown as object }),
       });
+      try {
+        const turn = await session.send(task.prompt, {
+          stageLabel: options.stageLabel ?? HUMAN_LABEL.implementing,
+        });
+        result = assembleRunResult(turn);
+      } finally {
+        try { await session.close(); } catch { /* idempotent */ }
+      }
 
       const maxRetries = maxRetriesForStatus(result.status);
       if (result.status === 'ok' || maxRetries === 0 || attempt >= maxRetries) break;
 
-      const attemptCost = result.cost?.costUSD ?? 0;
+      const attemptCost = result.cost?.costUSD ?? result.actualCostUSD ?? 0;
       cumulativeCostUSD += attemptCost;
       if (task.maxCostUSD !== undefined && cumulativeCostUSD >= task.maxCostUSD) break;
 
-      // Don't burn the retry budget on a doomed call: if the task-level
-      // deadline is already past or the stall watchdog aborted, stop trying.
       if (options.taskDeadlineMs !== undefined && Date.now() >= options.taskDeadlineMs) break;
       if (options.abortSignal?.aborted) break;
 

@@ -316,8 +316,16 @@ export class FileBackedContextBlockStore implements ContextBlockStore {
    * daemon SIGKILL mid-write — readers either see the old content or
    * the new content, never a partial write. The .tmp suffix uses a
    * random nonce so concurrent writers don't collide.
+   *
+   * Defensive: `ensureRoot()` runs once at construction, but the
+   * rootDir can disappear between construction and write — e.g. an
+   * external rm, a maintenance script, or (historically) a startup-time
+   * project-cap sweep that ran in a different process. Re-creating the
+   * dir here is idempotent and cheap; the alternative is an ENOENT that
+   * crashes the entire batch and burns its findings.
    */
   private atomicWrite(targetPath: string, content: string): void {
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true, mode: 0o700 });
     const tmpPath = `${targetPath}.tmp.${process.pid}.${randomUUID()}`;
     const fd = fs.openSync(tmpPath, 'w', 0o600);
     try {

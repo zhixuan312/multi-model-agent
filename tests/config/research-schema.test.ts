@@ -90,8 +90,8 @@ describe('ResearchConfigSchema', () => {
 
 describe('ResearchConfigSchema inside multiModelConfigSchema', () => {
   const minimalAgents = {
-    standard: { type: 'openai-compatible' as const, model: 'test', baseUrl: 'https://example.com' },
-    complex: { type: 'openai-compatible' as const, model: 'test', baseUrl: 'https://example.com' },
+    standard: { type: 'codex' as const, model: 'test', baseUrl: 'https://example.com' },
+    complex: { type: 'codex' as const, model: 'test', baseUrl: 'https://example.com' },
   };
 
   it('defaults research when omitted from full config', () => {

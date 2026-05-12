@@ -27,7 +27,7 @@ function buildMatrix(): MatrixGolden {
     }))
     .sort((a, b) => a.routeName.localeCompare(b.routeName));
 
-  const categories = ['artifact_producing', 'read_only', 'research'] as const;
+  const categories = ['artifact_producing', 'read_only'] as const;
   const stagePlans: MatrixGolden['stagePlans'] = {};
   for (const cat of categories) {
     const plan = buildStagePlan(cat);

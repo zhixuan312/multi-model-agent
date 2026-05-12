@@ -8,6 +8,7 @@ import type {
   TerminationReason,
   TokenUsage,
 } from '../providers/runner-types.js';
+export type { TokenUsage } from '../providers/runner-types.js';
 import type { VerifyStageResult, VerifyStepStatus } from '../lifecycle/handlers/verify-stage.js';
 import type { AgentType } from './task-spec.js';
 import type { ProviderConfig, FallbackOverride } from './config.js';
@@ -42,22 +43,7 @@ export interface RunResult {
    * may leave this undefined.
    */
   actualCostUSD?: number | null
-  // ── Pipeline-redesign envelope fields (4.3.0+, spec §3.5) ────────────
-  /** Stage 4 structured annotation: completionPercent, perStep, verify, concerns. */
-  completionAnnotation?: {
-    completionPercent: number;
-    perStep: Array<{ step: string; status: 'done' | 'partial' | 'missing'; note: string | null }>;
-    verify: {
-      ran: boolean;
-      passed: boolean | null;
-      exitCode: number | null;
-      command: string[];
-      tailOutput: string | null;
-    };
-    concerns: string[];
-  };
-  /** Stage 4 deterministic commit-gate %: min(backstop, annotatorPercent). */
-  commitGatePercent?: number
+  // ── v4.4.x envelope fields ───────────────────────────────────────────
   /** Spec lint-reviewer raw report. */
   specReviewerNotes?: string
   /** Quality lint-reviewer raw report. */
@@ -187,4 +173,69 @@ export interface CacheHints {
 
 export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
 
-export interface Provider { name: string; config: ProviderConfig; run(prompt: string, options?: RunOptions): Promise<RunResult>; runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult> }
+// v4.4 — Session-based provider boundary. `openSession` is the single
+// entry point; every call lasts one Session, which represents a thread
+// the underlying SDK can resume across turns.
+export interface Provider {
+  name: string;
+  config: ProviderConfig;
+  openSession(opts: SessionOpts): Session;
+}
+
+/** Stage-tagging payload for a single session.send() call. */
+export interface TurnOpts {
+  /** e.g. 'implementing', 'review', 'rework', 'annotating', 'committing'. */
+  stageLabel: string;
+}
+
+export interface SessionOpts {
+  cwd: string;
+  allowedHosts?: ReadonlySet<string>;
+  /** Hard wall-clock deadline (epoch ms). External guard aborts at this time. */
+  wallClockDeadline: number;
+  /** Idle threshold (ms): no SDK event for this long → abort. */
+  idleStallTimeoutMs: number;
+  /** Advisory only. Authoritative enforcement = mma-side CostMeter (task-wide). */
+  maxCostUSD?: number;
+  /** Wired through to the SDK's own cancellation parameter. */
+  abortSignal: AbortSignal;
+  /** Telemetry sink. Optional. Untyped to avoid a circular import with
+   *  channels/event-bus; concrete shape verified at the bind site. */
+  bus?: unknown;
+  /** Initial stage label so telemetry has one before the first TurnOpts lands. */
+  initialStageLabel?: string;
+}
+
+export interface TurnResult {
+  output: string;
+  usage: TokenUsage;
+  filesRead: string[];
+  filesWritten: string[];
+  toolCallsByName: Record<string, number>;
+  turns: number;
+  durationMs: number;
+  /** USD cost when known (>= 0). `null` means cost couldn't be determined
+   *  (e.g. mock providers, missing rate-card entry). Distinct from `0`,
+   *  which means a real zero charge — important for downstream telemetry
+   *  that treats null as "no data". */
+  costUSD: number | null;
+  terminationReason: 'ok' | 'cost_exceeded' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted' | 'error';
+  errorCode?: string;
+  errorMessage?: string;
+  /** Worker's self-assessment as written into its structured report.
+   *  Optional — populated by adapters that parse the SDK output (or by
+   *  test mocks). assembleRunResult prefers this over its termination-
+   *  reason-derived default so the "incomplete + worker self-assessed
+   *  done" promotion path can fire. */
+  workerSelfAssessment?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped';
+  /** True when the assistantText is a diagnostic shell (e.g.
+   *  "Sub-agent error: …" or scratchpad-only fallback) rather than real
+   *  worker content. Lets delegateWithEscalation's selection prefer any
+   *  real-content attempt over a longer diagnostic-only attempt. */
+  outputIsDiagnostic?: boolean;
+}
+
+export interface Session {
+  send(instruction: string, opts?: TurnOpts): Promise<TurnResult>;
+  close(): Promise<void>;
+}

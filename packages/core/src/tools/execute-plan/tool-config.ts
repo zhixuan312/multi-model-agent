@@ -135,7 +135,11 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
     timeoutMs: ctx.config.defaults?.timeoutMs ?? DEFAULT_TASK_TIMEOUT_MS,
     maxCostUSD: ctx.config.defaults?.maxCostUSD ?? 10,
     sandboxPolicy: ctx.config.defaults?.sandboxPolicy ?? 'cwd-only',
-    cwd: brief.cwd,
+    // ctx.cwd is the HTTP `?cwd=` query param (set in execution-context.ts
+    // from projectContext.cwd). Always prefer it over brief.cwd because the
+    // brief slot's `input.cwd` is undefined unless the caller put it in the
+    // body — most callers (codex-cli, claude-code) put it in the URL.
+    cwd: ctx.cwd ?? brief.cwd,
     filePaths: brief.filePaths,
     contextBlockIds: brief.contextBlockIds,
     autoCommit: true,
@@ -147,6 +151,5 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
   reviewTemplates: {
     spec: specLintTemplate,
     qualityAP: qualityLintTemplate,
-    diff: specLintTemplate,  // diff path retained for type-shape only; not used post-redesign
   },
 };

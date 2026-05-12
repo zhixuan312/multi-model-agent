@@ -6,6 +6,7 @@ import type {
   AgentType,
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime, RunStatus } from '../providers/runner-types.js';
+import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
@@ -23,9 +24,9 @@ import { delegateWithEscalation } from '../escalation/delegate-with-escalation.j
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
-import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
-import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
-import { makeRunnerShell } from '../providers/make-runner-shell.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
+import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
+import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
   return {
@@ -186,8 +187,7 @@ export interface DispatchTaskInput {
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
-  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'verify') return 'read_only';
-  if (route === 'research') return 'research';
+  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'research') return 'read_only';
   if (route === 'register-context-block') return 'assist';
   return 'artifact_producing';
 }
@@ -216,6 +216,39 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     /* other tier not configured — leave undefined */
   }
 
+  const startMsAt = startMs;
+  const deadlineAt = startMs + timeoutMs;
+  const stallController = new AbortController();
+
+  // Lazy session cache keyed by tier. Construction is deferred until the
+  // first getSession(tier) call so a task that only uses one tier doesn't
+  // open a session on the other (and thus doesn't spawn a codex CLI or
+  // initialize a claude SDK query). Cleanup happens via closeSessions(),
+  // invoked by runTaskViaDispatcher's finally block.
+  const sessions = new Map<AgentType, Session>();
+  const getSession = (tier: AgentType): Session => {
+    const existing = sessions.get(tier);
+    if (existing) return existing;
+    const provider = providers[tier];
+    if (!provider) {
+      throw new Error(`getSession: no provider configured for tier "${tier}"`);
+    }
+    const session = provider.openSession({
+      cwd,
+      wallClockDeadline: deadlineAt,
+      idleStallTimeoutMs: stallTimeoutMs,
+      abortSignal: stallController.signal,
+      ...(input.bus && { bus: input.bus as unknown as object }),
+    });
+    sessions.set(tier, session);
+    return session;
+  };
+  const closeSessions = async (): Promise<void> => {
+    const entries = Array.from(sessions.entries());
+    sessions.clear();
+    await Promise.allSettled(entries.map(([, s]) => s.close()));
+  };
+
   return {
     task,
     taskIndex: input.taskIndex,
@@ -231,10 +264,12 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
     providers,
     implementerIdentity: undefined,
-    timing: { startMs, timeoutMs, deadlineMs: startMs + timeoutMs, stallTimeoutMs },
+    getSession,
+    closeSessions,
+    timing: { startMs: startMsAt, timeoutMs, deadlineMs: deadlineAt, stallTimeoutMs },
     budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
     wallClockGuard: new WallClockGuard(timeoutMs),
-    stall: { controller: new AbortController(), lastEventAtMs: startMs, fired: false },
+    stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
@@ -316,24 +351,15 @@ export async function runTaskViaDispatcher(
         state.terminal = true;
         return undefined;
       }
-      // Read-only routes (audit/review/verify/debug/investigate) fan out
-      // one sub-worker per criterion via the parallel-criteria dispatcher.
-      // Spec §4.6: prime the prompt cache once, dispatch N sub-workers in
-      // parallel, retry failed sub-workers once on the warm cache,
-      // synthesize a RunResult with workerOutputs[] for the merge annotator.
+      // Read-only routes (audit / review / debug / investigate / research)
+      // run the sequential criteria loop on one complex session. The
+      // (route, subtype) pair resolves to a per-subtype spec from the
+      // tool's SUBTYPES map; the dispatcher uses that to build the cached
+      // prefix + per-criterion suffix.
       if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
         try {
-          // A12: when the audit task carries auditType='plan', use the
-          // plan-audit route spec (different criteria + orientation +
-          // semantics) instead of the default audit spec. Other audit
-          // types (default/security/performance) and other read-only
-          // routes use their static route spec unchanged.
-          const taskWithAuditType = task as TaskSpec & { auditType?: string };
-          const lookupKey: ReadOnlyRouteName =
-            (route === 'audit' && taskWithAuditType.auditType === 'plan')
-              ? 'audit_plan'
-              : route;
-          const routeSpec = READ_ONLY_ROUTES[lookupKey];
+          const taskWithSubtype = task as TaskSpec & { subtype?: string };
+          const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
           const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
           const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
           const preReadFiles: Record<string, string> = {};
@@ -364,24 +390,20 @@ export async function runTaskViaDispatcher(
             preReadFiles,
             filePaths,
           });
-          const shell = makeRunnerShell(provider);
-          const dispatchResult = await dispatchParallelCriteria({
-            shell,
+          // v4.4.x: single complex session per task, sequential for-loop over
+          // criteria. Earlier criteria's tool results stay in the session
+          // context so later criteria don't re-discover the same files.
+          const session = ctx.getSession(decision.impl);
+          const dispatchResult = await runReadRouteImplementer({
+            session,
             cachedPrefix,
             criteria: routeSpec.criteria,
             buildSuffix: routeSpec.buildSuffix,
-            cwd: ctx.cwd,
-            ...(ctx.stall.controller.signal && { abortSignal: ctx.stall.controller.signal }),
-            deadlineMs: ctx.timing.deadlineMs,
-            ...(ctx.bus && { bus: ctx.bus }),
-            ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-            ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-            tier: decision.impl,
-            route,
           });
 
           const totalCriteria = routeSpec.criteria.length;
-          const succeededCount = dispatchResult.workerOutputs.length;
+          const failedCount = dispatchResult.criteriaErrors.length;
+          const succeededCount = totalCriteria - failedCount;
           const majorityThreshold = Math.ceil(totalCriteria / 2);
           const status: RunStatus = succeededCount === 0
             ? 'error'
@@ -389,37 +411,23 @@ export async function runTaskViaDispatcher(
           const incompleteReason = succeededCount > 0 && succeededCount < majorityThreshold
             ? ('missing_sections' as const)
             : undefined;
-          const synthesizedOutput = dispatchResult.workerOutputs
-            .map(o => `--- ${o.criterionTitle} (criterion ${o.criterionId}) ---\n${o.narrative}`)
-            .join('\n\n');
 
-          // Always set implementationReport so quality_review_round_1
-           // (which gates on `last.implementationReport ?? last.structuredReport`)
-           // fires even when the synthesized output contains no parseable
-           // structured-report blocks. Non-empty workerOutputs is the
-           // post-dispatch invariant that means "the implementer stage
-           // produced something the annotator can merge."
-          const parsedReport = parseStructuredReport(synthesizedOutput) ?? { findings: [], structuredReportSchemaUsed: 'fallback' as unknown as never };
-          // terminationReason drives the wire envelope's terminalStatus
-          // (event-builder.ts:359 deriveTerminalStatus reads tr.cause). Without
-          // it, the rollup defaults to 'incomplete' even when status='ok'.
-          const totalTurns = dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0);
           const terminationCause: 'finished' | 'incomplete' | 'error' = succeededCount === 0
             ? 'error'
             : succeededCount >= majorityThreshold ? 'finished' : 'incomplete';
           const terminationReason = {
             cause: terminationCause,
-            turnsUsed: totalTurns,
+            turnsUsed: dispatchResult.turns,
             hasFileArtifacts: false,
             usedShell: false,
             workerSelfAssessment: succeededCount === 0 ? 'failed' as const : 'done' as const,
             wasPromoted: false,
           };
           state.lastRunResult = {
-            output: synthesizedOutput,
+            output: dispatchResult.synthesizedOutput,
             status,
-            usage: dispatchResult.totalUsage,
-            turns: totalTurns,
+            usage: dispatchResult.usage,
+            turns: dispatchResult.turns,
             filesRead: filePaths,
             filesWritten: [],
             toolCalls: [],
@@ -428,27 +436,20 @@ export async function runTaskViaDispatcher(
             parsedFindings: null,
             workerStatus: succeededCount === 0 ? 'failed' : 'done',
             terminationReason,
-            workerOutputs: dispatchResult.workerOutputs.map(o => ({
-              criterionId: o.criterionId,
-              criterionTitle: o.criterionTitle,
-              narrative: o.narrative,
-            })),
-            partialCriteriaCovered: dispatchResult.partialCriteriaCovered,
-            partialCriteriaFailed: dispatchResult.partialCriteriaFailed,
+            findings: dispatchResult.findings,
+            criteriaErrors: dispatchResult.criteriaErrors,
             ...(incompleteReason && { incompleteReason }),
-            implementationReport: parsedReport,
-            structuredReport: parsedReport,
           } as unknown as RunResult;
 
           mergeStageStats(state, 'implementing', {
-            inputTokens: dispatchResult.totalUsage.inputTokens,
-            outputTokens: dispatchResult.totalUsage.outputTokens,
-            cachedReadTokens: dispatchResult.totalUsage.cachedReadTokens,
-            cachedNonReadTokens: dispatchResult.totalUsage.cachedNonReadTokens,
-            turnCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.turns, 0),
-            toolCallCount: dispatchResult.workerOutputs.reduce((a, o) => a + o.toolCallCount, 0),
-            costUSD: dispatchResult.workerOutputs.reduce((a, o) => a + (o.costUSD ?? 0), 0),
-            durationMs: Math.max(0, ...dispatchResult.workerOutputs.map(o => o.durationMs)),
+            inputTokens: dispatchResult.usage.inputTokens,
+            outputTokens: dispatchResult.usage.outputTokens,
+            cachedReadTokens: dispatchResult.usage.cachedReadTokens,
+            cachedNonReadTokens: dispatchResult.usage.cachedNonReadTokens,
+            turnCount: dispatchResult.turns,
+            toolCallCount: 0,
+            costUSD: dispatchResult.costUSD,
+            durationMs: dispatchResult.durationMs,
           }, {
             tier: ctx.assignedTier,
             model: (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? null,
@@ -493,7 +494,7 @@ export async function runTaskViaDispatcher(
             taskDeadlineMs: ctx.timing.deadlineMs,
             abortSignal: ctx.stall.controller.signal,
             assignedTier: decision.impl,
-            stageLabel: 'Implementing',
+            stageLabel: HUMAN_LABEL.implementing,
             ...(ctx.bus && { bus: ctx.bus }),
             ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
             taskIndex: ctx.taskIndex,
@@ -506,6 +507,12 @@ export async function runTaskViaDispatcher(
         state.lastRunResult = enrichedResult;
         // Record the implementer's per-stage cost so emit_task_terminal +
         // wire task.completed include it in the totals + per-stage breakdown.
+        // Cost field lookup matches the canonical-then-legacy fallback used
+        // in delegate-with-escalation: `cost.costUSD` was the original field
+        // before assembleRunResult moved the value to top-level
+        // `actualCostUSD` (the current source of truth from claude/codex
+        // turns). Without the actualCostUSD fallback every claude-tier
+        // implementing stage records cost=null and telemetry under-reports.
         mergeStageStats(state, 'implementing', {
           inputTokens: result.usage.inputTokens ?? 0,
           outputTokens: result.usage.outputTokens ?? 0,
@@ -513,7 +520,7 @@ export async function runTaskViaDispatcher(
           cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
           turnCount: result.turns ?? 0,
           toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-          costUSD: result.cost?.costUSD ?? null,
+          costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
           durationMs: result.durationMs ?? null,
           filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
           filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,
@@ -548,6 +555,12 @@ export async function runTaskViaDispatcher(
   });
   } finally {
     stopWatchdog();
+    // v4.4 session reuse: ExecutionContext owns the per-tier Session
+    // cache that handlers populate via ctx.getSession(tier). Close them
+    // here at task end so codex CLI subprocesses + claude-agent-sdk
+    // query handles release. Errors swallowed so disposal can't mask
+    // the task's real result.
+    await executionContext.closeSessions().catch(() => { /* idempotent */ });
   }
 
   const body = out.body;

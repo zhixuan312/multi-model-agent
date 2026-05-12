@@ -1,13 +1,12 @@
 import type { ReviewTemplate, ReviewTemplateContext } from './templates/shared.js';
 
-export type QualityReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'verify' | 'investigate' | 'debug' | 'research';
+export type QualityReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'investigate' | 'debug' | 'research';
 
 export class ReviewerPromptBuilder {
   constructor(
     private templates: {
       spec: ReviewTemplate;
       qualityForAP: ReviewTemplate;
-      diff: ReviewTemplate;
     },
     private qualityTemplates: Partial<Record<QualityReviewRoute, ReviewTemplate>> = {},
   ) {}
@@ -24,13 +23,6 @@ export class ReviewerPromptBuilder {
     return {
       systemPrompt: template.systemPrompt,
       userPrompt: template.buildUserPrompt(ctx),
-    };
-  }
-
-  buildDiff(ctx: ReviewTemplateContext): { systemPrompt: string; userPrompt: string } {
-    return {
-      systemPrompt: this.templates.diff.systemPrompt,
-      userPrompt: this.templates.diff.buildUserPrompt(ctx),
     };
   }
 }

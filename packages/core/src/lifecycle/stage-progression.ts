@@ -28,12 +28,14 @@
 import type { ToolCategory } from '../escalation/escalation-policy.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import { buildStagePlan } from './stage-plan-builder.js';
+import { HUMAN_LABEL } from './stage-labels.js';
 
 /** Canonical schemaStage → human-readable label used in `stageLabel` events
  *  emitted by handlers + shown in the polling headline.
  *
- *  Pipeline (4.3.0+, lint+rework split):
- *    Implementing → Review → Rework → Annotating → Committing → Finalizing
+ *  v4.4.x pipeline (5 canonical stages):
+ *    Implementing → Review → Rework → Committing → Annotating
+ *  Plus a tail "Finalizing" slot for the cleanup/emit phase.
  *
  *  Per-route which stages fire:
  *    Read-only:  Implementing → Annotating → Finalizing
@@ -41,11 +43,11 @@ import { buildStagePlan } from './stage-plan-builder.js';
  *    Write:      all stages; Rework only when review verdict is changes_required;
  *                Committing conditional on commit-gate threshold. */
 const SCHEMA_STAGE_LABELS: Record<string, string> = {
-  implementing: 'Implementing',
-  review: 'Review',
-  rework: 'Rework',
-  annotating: 'Annotating',
-  committing: 'Committing',
+  implementing: HUMAN_LABEL.implementing,
+  review: HUMAN_LABEL.review,
+  rework: HUMAN_LABEL.rework,
+  committing: HUMAN_LABEL.committing,
+  annotating: HUMAN_LABEL.annotating,
   finalizing: 'Finalizing',
 };
 
@@ -59,11 +61,9 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   retry:                    { category: 'artifact_producing', reviewPolicy: 'full' },
   audit:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
   review:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
-  verify:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
   debug:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
   investigate:              { category: 'read_only',          reviewPolicy: 'quality_only' },
-  explore:                  { category: 'research',           reviewPolicy: 'none' },
-  research:                 { category: 'research',           reviewPolicy: 'none' },
+  research:                 { category: 'read_only',         reviewPolicy: 'none' },
   'register-context-block': { category: 'assist',             reviewPolicy: 'none' },
 };
 

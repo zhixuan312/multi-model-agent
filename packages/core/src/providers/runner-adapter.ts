@@ -1,5 +1,11 @@
+// v4.4 — Test-bridge adapter type. Production code no longer uses
+// adapters; provider.openSession() returns a Session directly. The
+// `RunnerAdapter` type survives only so legacy test fixtures
+// (tests/contract/fixtures/mock-providers.ts → mockAdapter) can keep
+// emitting one canned turn at a time through bootstrap's
+// `adapterToFakeSession` bridge. New tests should mock Session directly.
+
 import type { TokenUsage } from '../providers/runner-types.js';
-import type { ToolDefinition } from './runner-shell-types.js';
 
 export interface AdapterTurnRecord {
   assistantText: string;
@@ -10,16 +16,12 @@ export interface AdapterTurnInput {
   systemPrompt: string;
   userMessage: string;
   priorTurns: AdapterTurnRecord[];
-  toolDefinitions: ToolDefinition[];
+  toolDefinitions: unknown[];
   capabilities: AdapterCapabilities;
   abortSignal?: AbortSignal;
   deadlineMs?: number;
-  /** When set, the adapter SHOULD attach a cache_control marker to the
-   *  last content block of the system prompt so the prefix is cacheable
-   *  by the upstream provider. Adapters that don't expose explicit cache
-   *  control accept this field but no-op (the auto-cache mechanisms on
-   *  OpenAI Sonnet+ tier still benefit on long shared prefixes). */
-  cacheControl?: { type: 'ephemeral' };
+  bus?: { emit: (event: Record<string, unknown>) => void };
+  cwd?: string;
 }
 
 export interface AdapterTurnResult {
@@ -28,12 +30,6 @@ export interface AdapterTurnResult {
   usage: TokenUsage;
   finishReason: 'stop' | 'tool_use' | 'max_tokens' | 'error';
   errorCode?: string;
-  /** Provider-side response shape for verbose diagnostics. Adapters report
-   *  the raw stop_reason and a count of each content block type so the
-   *  runner-shell can emit a `runner_response_received` event when the
-   *  bus is wired. Lets operators see e.g. `{ text: 0, thinking: 1 }`
-   *  when a provider returns reasoning-only and no narrative — the
-   *  signature failure mode that produced silent empty output in 4.0.x. */
   responseShape?: {
     stopReason?: string;
     contentBlocks?: Record<string, number>;
@@ -50,6 +46,6 @@ export interface AdapterCapabilities {
 }
 
 export interface RunnerAdapter {
-  readonly providerType: 'claude' | 'claude-compatible' | 'openai' | 'openai-compatible' | 'codex';
+  readonly providerType: 'claude' | 'codex' | 'mock';
   turn(input: AdapterTurnInput): Promise<AdapterTurnResult>;
 }

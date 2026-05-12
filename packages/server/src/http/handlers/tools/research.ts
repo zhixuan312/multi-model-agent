@@ -66,7 +66,7 @@ export function buildResearchHandler(deps: HandlerDeps): RawHandler {
         if (deps.routeDispatcher) {
           const result = await deps.routeDispatcher.dispatch({
             route: 'research',
-            toolCategory: 'research',
+            toolCategory: 'read_only',
             rawRequest: enrichedInput,
             executor: () => callExecutor(),
           });

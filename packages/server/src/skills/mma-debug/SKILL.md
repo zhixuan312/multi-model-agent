@@ -39,6 +39,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
   "problem": "POST /login returns 500 when password contains special characters",
   "context": "Regression introduced in commit abc123; only affects production config",
   "hypothesis": "The bcrypt binding fails on non-ASCII input in the Docker image",
+  "subtype": "default",
   "filePaths": [
     "/project/src/auth/login.ts",
     "/project/src/auth/password.ts"
@@ -52,6 +53,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 | `problem` | string | yes | What is broken (one sentence; concrete symptom) |
 | `context` | string | no | Background — what changed recently, what works, what doesn't |
 | `hypothesis` | string | no | Your initial theory; worker tests it first, then explores |
+| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 
@@ -62,6 +64,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"problem":"Tests fail on CI only","hypothesis":"Missing env var","filePaths":["/project/src/config.ts"]}' \
@@ -115,7 +118,7 @@ Every finding has the same shape:
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-debug`:
 
-- **Recipe B — Debug-fix-verify.** `mma-debug` → `mma-delegate` (apply fix) → `mma-verify`. Strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse on verify.
+- **Recipe B — Debug-fix-review.** `mma-debug` → `mma-delegate` (apply fix) → `mma-review` with the acceptance criteria in the brief. Strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse it on the review call.
 
 Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're about to read 3+ files in main context to "understand the bug," that's the labor we delegate — call `mma-debug` with the hypothesis instead.
 
@@ -144,8 +147,8 @@ Every completed task automatically registers a terminal markdown context block c
 
 **Use cases:**
 - Pass debug findings to a downstream `mma-delegate` fix step
-- Feed the root-cause analysis into `mma-verify` for acceptance checking
-- Carry debug context forward through the debug → fix → verify chain
+- Feed the root-cause analysis into a follow-up `mma-review` with acceptance criteria in the brief
+- Carry debug context forward through the debug → fix → review chain
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 

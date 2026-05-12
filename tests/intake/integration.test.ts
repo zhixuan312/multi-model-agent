@@ -4,7 +4,7 @@ import type { DraftTask, DelegateSource } from '../../packages/core/src/intake/t
 import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const CONFIG: MultiModelConfig = {
-  agents: { standard: { type: 'openai-compatible', model: 'std', baseUrl: 'http://localhost' }, complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'http://localhost' } },
+  agents: { standard: { type: 'codex', model: 'std', baseUrl: 'http://localhost' }, complex: { type: 'codex', model: 'cpx', baseUrl: 'http://localhost' } },
   defaults: { timeoutMs: 600_000, tools: 'full', sandboxPolicy: 'cwd-only' },
 };
 

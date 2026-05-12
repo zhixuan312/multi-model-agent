@@ -54,17 +54,11 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Starting in 4.3.0 the main model is resolved automatically per request:
-
-1. `X-MMA-Main-Model` header (override) — highest priority.
-2. Per-client auto-detect — Claude Code reads the latest `~/.claude/projects/<slug>/*.jsonl`; Codex CLI reads `~/.codex/config.toml`.
-3. `defaults.mainModel` from `~/.multi-model/config.json` — explicit operator fallback.
-4. `unknown_main_model` sentinel — only when nothing above resolves.
-
-Only `X-MMA-Client` remains required on tool routes (the resolver's discriminator). Export it once if you're calling the API directly:
+Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (server returns `400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers writes JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return the *worker's* model as the calling agent's "main" model. The calling client is the only reliable source. Export both once if you're calling the API directly:
 
 ```bash
-export MMAGENT_CLIENT=claude-code           # or codex-cli, gemini-cli, cursor
+export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
+export MMAGENT_MAIN_MODEL=claude-opus-4-7      # whatever your calling agent runs on
 ```
 
 ### 3. Write the config
@@ -92,8 +86,6 @@ EOF
 
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference) for the override table and per-provider auth notes.
 
-> **4.3.0 update:** `X-MMA-Main-Model` is no longer required — see the resolver chain above. `defaults.mainModel` is the explicit operator fallback when neither the header nor per-client auto-detect resolves.
-
 ### 4. Start the daemon + verify
 
 Two ways — pick one:
@@ -104,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.3.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.4.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -136,7 +128,6 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes the tab
 | `mma-debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
-| `mma-verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
 
 ### Plumbing skills
 
@@ -176,13 +167,9 @@ Step 2 — mma-debug
 ↓
 Step 3 — mma-delegate
   Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
-  fix, runs the failing test 20× to confirm the race is gone.
+  fix, runs the failing test 20× to confirm the race is gone via `verifyCommand`.
 ↓
-Step 4 — mma-verify
-  One worker per acceptance criterion: (a) failing test now passes, (b) no other
-  auth tests regressed, (c) refresh path still emits the expected telemetry.
-↓
-Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
+Total cost: ~$0.06. Main-context tokens consumed: just the hypothesis and the verdict.
 ```
 
 ## Configuration reference
@@ -284,7 +271,7 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 
 ## Architecture
 
-`mmagent serve` runs a loopback HTTP server exposing 16 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
+`mmagent serve` runs a loopback HTTP server exposing 15 REST endpoints. Each tool call dispatches to a labor agent (standard or complex), runs a cross-agent review cycle, and returns a structured report. Tasks run in parallel; each has a cost ceiling and wall-clock timeout. Tool endpoints are async — they return `202 { batchId, statusUrl }` immediately, and you poll `GET /batch/:id` for the terminal envelope.
 
 - [docs/ARCHITECTURE.md](./docs/ARCHITECTURE.md) — layer map, request lifecycle, maintainer migration appendix
 - [packages/server/README.md](./packages/server/README.md#rest-api) — full REST endpoint table + request/response shapes (for custom integrators)
@@ -304,13 +291,17 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.3.1
+## What's new in 4.4.0
 
-Patch on top of 4.3.0's lifecycle redesign:
-- **Telemetry `schemaVersion` 4 → 5; stage vocabulary collapsed.** Eight legacy stage names fold into five (`review`, `rework`, `annotating`, `implementing`, `committing`). Forward-only on the mma side; backends consume v5 or normalise on read.
-- **`writes_unverifiable` no longer false-positives on chat-only responses.** A worker that responds with text and never invokes a write tool now reports `workerStatus: done` cleanly on both HTTP envelope and wire telemetry.
-- **Claude Code main-model resolver fixed.** Reads `message.model` (current Claude Code schema), falls back to top-level `model` for legacy session files, and skips placeholder literals (`custom`, `default`, `inherit`, `unknown`) so they no longer leak into wire telemetry as `mainModel`.
-- **`writes_unverifiable` downgrade now mirrors onto state**, so wire telemetry and the HTTP envelope agree on `workerStatus` / `errorCode` after a downgrade.
+Architectural release. The big shifts:
+
+- **Session-based provider boundary.** `Provider.openSession() → Session.send() → TurnResult` replaces the 1,559-line `RunnerShell` + RunnerAdapter chain. All three production providers (claude-agent-sdk, codex CLI, `@openai/agents`) now expose only `openSession`; orchestrators assemble `RunResult` via a shared `assembleRunResult` helper. Cost / termination-reason mapping cannot diverge across providers.
+- **Five-stage lifecycle.** Stages collapse to `implementing → review → rework → annotating → committing`. The pure-transform `annotating` stage doesn't write `stageStats` (read the top-level `structuredReport` for its output). Single `HUMAN_LABEL` source of truth means headline labels can't drift again.
+- **Codex token accounting fixed (≈4× cost over-report on cached turns).** Codex emits `input_tokens` as the GROSS count *including* `cached_input_tokens`; Anthropic emits NET (3 disjoint buckets). Pre-fix we passed gross through, so `priceTokens` double-billed the cached subset. A smoke task previously reporting $21.60 now reports $4.93 (matches predicted $4.95).
+- **`X-MMA-Main-Model` required again.** Auto-detect was reading JSONL files written by our own claude-tier workers (entrypoint `sdk-ts`) and returning the worker's model as the calling agent's "main." Server now returns `400 main_model_required` if the header is missing.
+- **Telemetry clamp ceilings raised for 2026-era usage.** Per-stage input/cached `5M → 100M`, output `500K → 2M`, per-stage cost `$100 → $500`, per-task cost `$800 → $5000`.
+- **Read-only route consolidation.** `research` ToolCategory removed; all 5 read-only routes (audit, review, debug, investigate, explore) share `read_only` and carry a `subtype` field.
+- **LLM `verify` tool removed.** Verification is `verifyCommand` only.
 
 CHANGELOG has the full breakdown.
 

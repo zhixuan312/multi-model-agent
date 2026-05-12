@@ -38,4 +38,33 @@ export const qualityLintTemplate: ReviewTemplate = {
     parts.push('# Action\nReview for safety/correctness/edge-cases. Emit the report. Do not edit.');
     return parts.join('\n\n');
   },
+
+  buildWarmFollowup(_ctx) {
+    // Warm follow-up: spec review already loaded the brief, diff, and
+    // planContext into this reviewer session's history on turn 1.
+    // Emit only the NEW instruction — switch lens to safety/correctness
+    // and emit the verdict + deviations report.
+    return [
+      '# Action — second pass: quality lens',
+      '',
+      'Now re-evaluate the SAME work in this thread through the QUALITY lens:',
+      'safety, correctness, error handling, edge cases, security, maintainability.',
+      '',
+      'Output format (mandatory):',
+      '',
+      '## Verdict',
+      'approved | changes_required',
+      '',
+      '## Deviations',
+      '- <one short line per concern, naming the file and the risk>',
+      '- ...',
+      '',
+      'Rules:',
+      '- "approved" when the code is safe and correct enough to ship. Style nits do NOT block.',
+      '- "changes_required" only for substantive risks.',
+      '- Each deviation must be specific enough that a rework worker can act on it without re-deriving.',
+      '- If approved, write "## Deviations\\n(none)".',
+      '- Do NOT use editor tools. Read-only investigation only.',
+    ].join('\n');
+  },
 };

@@ -17,13 +17,13 @@ function buildConfig(tokenPath: string, diagnostics: MultiModelConfig['diagnosti
   return {
     agents: {
       standard: {
-        type: 'openai-compatible',
+        type: 'codex',
         baseUrl: 'http://mock.local',
         apiKey: 'stub',
         model: 'mock',
       },
       complex: {
-        type: 'openai-compatible',
+        type: 'codex',
         baseUrl: 'http://mock.local',
         apiKey: 'stub',
         model: 'mock',

@@ -4,6 +4,7 @@ import type {
   MultiModelConfig,
   AgentType,
 } from '../types.js';
+import type { Session } from '../types/run-result.js';
 import type { EventEmitter } from '../events/event-emitter.js';
 import type { ActivityTracker, HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
@@ -43,6 +44,19 @@ export interface ExecutionContext {
   /** Map of available tier → provider. Built from {assignedTier, escalationProvider}. */
   providers: Partial<Record<AgentType, Provider>>;
   implementerIdentity: CanonicalIdentity | undefined;
+
+  /**
+   * v4.4 session source-of-truth. Each call returns the (lazy-created)
+   * Session for the given tier — the SAME instance across stages within
+   * one task, so codex CLI's `codex exec resume` and claude-agent-sdk's
+   * `resume: sessionId` both reload the prior conversation. Throws if
+   * the tier has no configured provider.
+   *
+   * Cleanup: `closeSessions()` is invoked by task-runner.ts's finally
+   * block; handlers MUST NOT call session.close() themselves.
+   */
+  getSession(tier: AgentType): Session;
+  closeSessions(): Promise<void>;
 
   // ── Per-task budgets ──
   timing: {

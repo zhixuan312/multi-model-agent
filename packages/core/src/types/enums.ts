@@ -35,13 +35,13 @@ import { z } from 'zod';
 export const TierEnum = z.enum(['standard', 'complex']);
 
 export const RouteEnum = z.enum([
-  'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
-  'investigate', 'explore',
+  'delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry',
+  'investigate',
   'register-context-block',
   'research',
 ]);
 
-export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai', 'openai-compatible', 'codex']);
+export const ProviderTypeEnum = z.enum(['claude', 'codex']);
 
 // ── §3 Verdicts & status ──────────────────────────────────────────────────
 

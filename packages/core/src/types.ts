@@ -28,8 +28,6 @@ export type {
   FallbackOverride,
   CodexProviderConfig,
   ClaudeProviderConfig,
-  ClaudeCompatibleProviderConfig,
-  OpenAICompatibleProviderConfig,
   ProviderConfig,
   ResearchConfig,
   MultiModelConfig,

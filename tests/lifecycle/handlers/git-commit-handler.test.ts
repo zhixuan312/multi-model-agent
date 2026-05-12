@@ -1,139 +1,129 @@
-import { describe, it, expect, beforeEach, afterEach } from 'vitest';
-import * as os from 'node:os';
-import * as fs from 'node:fs';
-import * as path from 'node:path';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { mkdtempSync, writeFileSync, rmSync } from 'node:fs';
+import { execSync } from 'node:child_process';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { gitCommitHandler } from '../../../packages/core/src/lifecycle/handlers/git-commit-handler.js';
-import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
-import type { ExecutionContext } from '../../../packages/core/src/lifecycle/lifecycle-context.js';
-import type { CommitStageResult } from '../../../packages/core/src/lifecycle/handlers/commit-stage.js';
-import type { TaskSpec, RunResult } from '../../../packages/core/src/types.js';
 
-const exec = promisify(execFile);
-
-function makeState(overrides: Partial<LifecycleState> = {}): LifecycleState {
-  return {
-    terminal: false,
-    attemptIndex: 0,
-    attemptBudget: 1,
-    reviewPolicy: 'full',
-    shutdownInProgress: false,
-    ...overrides,
-  };
-}
-
-function makeCtx(cwd: string, overrides: Partial<ExecutionContext> = {}): ExecutionContext {
-  const base = {
-    task: { prompt: 'x', tools: 'full', timeoutMs: 60_000 } as TaskSpec,
-    taskIndex: 0,
-    config: {} as ExecutionContext['config'],
-    cwd,
-    route: 'delegate',
-    client: 'test',
-    mainModel: null,
-    assignedTier: 'standard' as const,
-    implementerProvider: {} as ExecutionContext['implementerProvider'],
-    escalationProvider: undefined,
-    providers: {},
-    implementerIdentity: undefined,
-    timing: { startMs: Date.now(), timeoutMs: 60_000, deadlineMs: Date.now() + 60_000, stallTimeoutMs: 60_000 },
-    budgets: { maxCostUSD: undefined },
-    stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
-    implementerToolMode: 'full' as const,
-    bus: undefined,
-    heartbeat: undefined,
-    logger: undefined,
-    verboseStream: () => {},
-    verbose: false,
-    outputTargets: [],
-  };
-  return { ...base, ...overrides };
-}
-
-describe('gitCommitHandler', () => {
-  let repoDir: string;
-
-  beforeEach(async () => {
-    repoDir = fs.mkdtempSync(path.join(os.tmpdir(), 'git-commit-handler-'));
-    await exec('git', ['init', '-q', '-b', 'main'], { cwd: repoDir });
-    await exec('git', ['config', 'user.email', 'test@example.com'], { cwd: repoDir });
-    await exec('git', ['config', 'user.name', 'test'], { cwd: repoDir });
-    await exec('git', ['commit', '-q', '--allow-empty', '-m', 'init'], { cwd: repoDir });
+describe('gitCommitHandler (v4.4.x)', () => {
+  let cwd: string;
+  beforeEach(() => {
+    cwd = mkdtempSync(join(tmpdir(), 'mma-commit-'));
+    execSync('git init -q && git config user.email a@b && git config user.name x', { cwd });
+    writeFileSync(join(cwd, '.gitkeep'), '');
+    execSync('git add . && git commit -qm initial', { cwd });
   });
-
   afterEach(() => {
-    fs.rmSync(repoDir, { recursive: true, force: true });
+    rmSync(cwd, { recursive: true, force: true });
   });
 
-  it('skips when state.commits is already populated (idempotency)', async () => {
-    const prior: CommitStageResult = {
-      sha: 'abc',
-      subject: 'prior',
-      body: '',
-      filesChanged: [],
-      authoredAt: new Date().toISOString(),
+  function preSha(): string {
+    return execSync('git rev-parse HEAD', { cwd }).toString().trim();
+  }
+
+  it('skips with no_repo when cwd is not a git repo', async () => {
+    const noRepo = mkdtempSync(join(tmpdir(), 'mma-noggit-'));
+    writeFileSync(join(noRepo, 'x.txt'), 'x');
+    const state: any = {
+      cwd: noRepo,
+      lastRunResult: { summary: 'x', filesChanged: ['x.txt'], validationsRun: [] },
+      executionContext: { getSession: () => null },
     };
-    const state = makeState({ commits: [prior] });
     await gitCommitHandler(state);
-    expect(state.commits).toEqual([prior]);
+    expect(state.lastRunResult.commitSkipReason).toBe('no_repo');
+    rmSync(noRepo, { recursive: true, force: true });
   });
 
-  it('skips when state.commitError is already set', async () => {
-    const state = makeState({ commitError: 'prior failure' });
+  it('skips with no_diff when nothing changed', async () => {
+    const state: any = {
+      cwd,
+      lastRunResult: { summary: 'x', filesChanged: [], validationsRun: [] },
+      executionContext: { getSession: () => null },
+      preTaskHeadSha: preSha(),
+    };
     await gitCommitHandler(state);
-    expect(state.commits).toBeUndefined();
-    expect(state.commitError).toBe('prior failure');
+    expect(state.lastRunResult.commitSkipReason).toBe('no_diff');
   });
 
-  it('no-ops when state.task is undefined (data flow not ready)', async () => {
-    const state = makeState({ executionContext: makeCtx(repoDir) });
+  it('skips with validation_failed when a validation has passed:false', async () => {
+    writeFileSync(join(cwd, 'new.txt'), 'hello');
+    const state: any = {
+      cwd,
+      lastRunResult: {
+        summary: 'x', filesChanged: ['new.txt'],
+        validationsRun: [{ name: 'npm test', passed: false, output: 'failed' }],
+      },
+      executionContext: { getSession: () => null },
+      preTaskHeadSha: preSha(),
+    };
     await gitCommitHandler(state);
-    expect(state.commits).toBeUndefined();
+    expect(state.lastRunResult.commitSkipReason).toBe('validation_failed');
   });
 
-  it('no-ops when state.executionContext is undefined', async () => {
-    const state = makeState({ task: { prompt: 'x' } as TaskSpec });
+  it('skips with validation_stale when Rework ran but validationsRun is empty', async () => {
+    writeFileSync(join(cwd, 'a.txt'), 'a');
+    const state: any = {
+      cwd,
+      lastRunResult: { summary: 'x', filesChanged: ['a.txt'], validationsRun: [] },
+      executionContext: { getSession: () => null },
+      preTaskHeadSha: preSha(),
+      reworkApplied: true,
+    };
     await gitCommitHandler(state);
-    expect(state.commits).toBeUndefined();
+    expect(state.lastRunResult.commitSkipReason).toBe('validation_stale');
   });
 
-  it('no-ops when filesWritten is empty', async () => {
-    const task = { prompt: 'x' } as TaskSpec;
-    const last = { filesWritten: [] } as unknown as RunResult;
-    const state = makeState({ task, executionContext: makeCtx(repoDir), lastRunResult: last });
+  it('skips with worker_committed_out_of_band when HEAD moved', async () => {
+    const before = preSha();
+    writeFileSync(join(cwd, 'a.txt'), 'a');
+    execSync('git add . && git commit -qm "worker did it"', { cwd });
+    const state: any = {
+      cwd,
+      lastRunResult: { summary: 'x', filesChanged: ['a.txt'], validationsRun: [] },
+      executionContext: { getSession: () => null },
+      preTaskHeadSha: before,
+    };
     await gitCommitHandler(state);
-    expect(state.commits).toBeUndefined();
+    expect(state.lastRunResult.commitSkipReason).toBe('worker_committed_out_of_band');
+    expect(state.lastRunResult.detectedHeadSha).toMatch(/^[0-9a-f]{40}$/);
   });
 
-  it('commits files when filesWritten present and writes state.commits', async () => {
-    fs.writeFileSync(path.join(repoDir, 'a.txt'), 'hello');
-    const task = { prompt: 'x' } as TaskSpec;
-    const last = {
-      filesWritten: ['a.txt'],
-      parsedFindings: { commit: { type: 'feat', subject: 'add a.txt', body: '' } },
-    } as unknown as RunResult;
-    const state = makeState({ task, executionContext: makeCtx(repoDir), lastRunResult: last });
-
+  it('commits with worker-supplied commitMessage (no model call)', async () => {
+    writeFileSync(join(cwd, 'b.txt'), 'b');
+    const send = vi.fn(() => { throw new Error('must not call'); });
+    const state: any = {
+      cwd,
+      lastRunResult: {
+        summary: 'x', filesChanged: ['b.txt'], validationsRun: [],
+        commitMessage: 'feat: add b',
+      },
+      executionContext: { getSession: () => ({ send, close: vi.fn() }) },
+      preTaskHeadSha: preSha(),
+    };
     await gitCommitHandler(state);
-
-    expect(state.commitError).toBeUndefined();
-    expect(state.commits).toBeDefined();
-    expect(state.commits).toHaveLength(1);
-    expect(state.commits![0].subject).toContain('add a.txt');
-    expect(state.commits![0].filesChanged).toContain('a.txt');
+    expect(state.lastRunResult.committed).toBe(true);
+    expect(state.lastRunResult.commitMessage).toBe('feat: add b');
+    expect(state.lastRunResult.commitSha).toMatch(/^[0-9a-f]{40}$/);
+    expect(send).not.toHaveBeenCalled();
   });
 
-  it('records state.commitError when commit fails', async () => {
-    const task = { prompt: 'x' } as TaskSpec;
-    const last = {
-      filesWritten: ['nonexistent.txt'],
-    } as unknown as RunResult;
-    const state = makeState({ task, executionContext: makeCtx(repoDir), lastRunResult: last });
-
+  it('generates commit message via standard session when worker did not supply one', async () => {
+    writeFileSync(join(cwd, 'c.txt'), 'c');
+    const send = vi.fn().mockResolvedValue({
+      output: 'fix(parser): handle empty input',
+      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      filesRead: [], filesWritten: [], toolCallsByName: {},
+      turns: 1, durationMs: 0, costUSD: null, terminationReason: 'ok',
+    });
+    const state: any = {
+      cwd,
+      lastRunResult: { summary: 'made a fix', filesChanged: ['c.txt'], validationsRun: [] },
+      executionContext: { getSession: () => ({ send, close: vi.fn() }) },
+      preTaskHeadSha: preSha(),
+    };
     await gitCommitHandler(state);
-
-    expect(state.commits).toBeUndefined();
-    expect(typeof state.commitError).toBe('string');
+    expect(state.lastRunResult.committed).toBe(true);
+    expect(state.lastRunResult.commitMessage).toBe('fix(parser): handle empty input');
+    expect(send).toHaveBeenCalledTimes(1);
   });
 });

@@ -10,7 +10,6 @@ import { z } from 'zod';
 import { inputSchema as auditSchema } from '@zhixuan92/multi-model-agent-core/tools/audit/schema';
 import { inputSchema as reviewSchema } from '@zhixuan92/multi-model-agent-core/tools/review/schema';
 import { inputSchema as debugSchema } from '@zhixuan92/multi-model-agent-core/tools/debug/schema';
-import { inputSchema as verifySchema } from '@zhixuan92/multi-model-agent-core/tools/verify/schema';
 import { inputSchema as investigateSchema } from '@zhixuan92/multi-model-agent-core/tools/investigate/schema';
 import { inputSchema as delegateSchema } from '@zhixuan92/multi-model-agent-core/tools/delegate/schema';
 import { executePlanInputSchema } from '@zhixuan92/multi-model-agent-core/tools/execute-plan/tool-config';
@@ -22,7 +21,6 @@ const ROUTE_TO_SCHEMA: Record<string, z.ZodTypeAny> = {
   '/audit': auditSchema,
   '/review': reviewSchema,
   '/debug': debugSchema,
-  '/verify': verifySchema,
   '/investigate': investigateSchema,
   '/delegate': delegateSchema,
   '/execute-plan': executePlanInputSchema,

@@ -131,7 +131,7 @@ export const ROUND_CAP: RunResult = {
 
 export interface FixtureEntry {
   name: string;
-  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry';
+  route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry';
   terminal: string;
   input: RunResult;
 }

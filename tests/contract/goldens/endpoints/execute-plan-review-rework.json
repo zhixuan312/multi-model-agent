@@ -1,15 +1,16 @@
 {
-  "headline": "[ok] execute-plan: needs rework per review",
+  "headline": "[incomplete] execute-plan: needs rework per review",
   "results": [
     {
       "output": "needs rework per review",
-      "status": "ok",
+      "status": "incomplete",
       "usage": {
         "inputTokens": 10,
         "outputTokens": 20,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
+      "actualCostUSD": null,
       "turns": 1,
       "filesRead": [],
       "filesWritten": [],
@@ -30,14 +31,12 @@
       "durationMs": "<DETERMINISTIC>",
       "directoriesListed": [],
       "workerStatus": "done",
-      "specReviewStatus": "changes_required",
-      "qualityReviewStatus": "changes_required",
       "terminationReason": {
-        "cause": "finished",
+        "cause": "incomplete",
         "turnsUsed": 1,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "done_with_concerns",
         "wasPromoted": false
       },
       "implementationReport": {
@@ -97,37 +96,11 @@
             "medium": 0,
             "low": 0
           }
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "standard",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 20,
-          "outputTokens": 40,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 2,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "actualCostUSD": null,
+      "specReviewStatus": "changes_required",
+      "qualityReviewStatus": "changes_required",
       "diffReviewStatus": "skipped",
-      "verification": {
-        "ran": false,
-        "passed": null,
-        "exitCode": null,
-        "command": [],
-        "tailOutput": null
-      },
       "commits": [],
       "agents": {
         "implementer": "standard",
@@ -140,44 +113,30 @@
       "qualityReviewReason": "",
       "structuredReport": {
         "summary": "needs rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
+        "workerStatus": "done",
         "unresolved": [],
-        "extraSections": {}
+        "filesChanged": [],
+        "reviewVerdict": "changes_required",
+        "reviewConcerns": [],
+        "reworkApplied": false,
+        "validationsRun": [],
+        "commitSha": null,
+        "commitMessage": null,
+        "commitSkipReason": null,
+        "findings": [],
+        "criteriaErrors": []
       },
       "models": {
         "implementer": "mock-model",
         "specReviewer": "mock-model",
         "qualityReviewer": "mock-model"
       },
-      "completionAnnotation": {
-        "completionPercent": 0,
-        "perStep": [],
-        "verify": {
-          "ran": false,
-          "passed": null,
-          "exitCode": null,
-          "command": [],
-          "tailOutput": null
-        },
-        "concerns": [
-          "annotator failed to produce structured output; check state.completionAnnotationError"
-        ]
-      },
-      "commitGatePercent": 0,
       "specReviewerNotes": "needs rework per review",
       "qualityReviewerNotes": "needs rework per review",
       "reviewVerdict": "changes_required",
       "reviewFindings": [],
       "reworkApplied": false,
-      "verifyResult": {
-        "ran": false,
-        "passed": null,
-        "exitCode": null,
-        "command": [],
-        "tailOutput": null
-      }
+      "errorCode": "review_rejected"
     }
   ],
   "batchTimings": {
@@ -191,11 +150,18 @@
   },
   "structuredReport": {
     "summary": "needs rework per review",
-    "filesChanged": [],
-    "validationsRun": [],
-    "deviationsFromBrief": [],
+    "workerStatus": "done",
     "unresolved": [],
-    "extraSections": {}
+    "filesChanged": [],
+    "reviewVerdict": "changes_required",
+    "reviewConcerns": [],
+    "reworkApplied": false,
+    "validationsRun": [],
+    "commitSha": null,
+    "commitMessage": null,
+    "commitSkipReason": null,
+    "findings": [],
+    "criteriaErrors": []
   },
   "error": {
     "kind": "not_applicable",

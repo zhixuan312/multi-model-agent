@@ -11,7 +11,6 @@ export async function registerAllHandlers(registry: ToolSurfaceRegistry): Promis
   const { buildDelegateHandler } = await import('../handlers/tools/delegate.js');
   const { buildAuditHandler } = await import('../handlers/tools/audit.js');
   const { buildReviewHandler } = await import('../handlers/tools/review.js');
-  const { buildVerifyHandler } = await import('../handlers/tools/verify.js');
   const { buildDebugHandler } = await import('../handlers/tools/debug.js');
   const { buildExecutePlanHandler } = await import('../handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('../handlers/tools/retry.js');
@@ -21,7 +20,6 @@ export async function registerAllHandlers(registry: ToolSurfaceRegistry): Promis
   registry.setHandler('delegate', (deps) => buildDelegateHandler(deps as unknown as HandlerDeps));
   registry.setHandler('audit', (deps) => buildAuditHandler(deps as unknown as HandlerDeps));
   registry.setHandler('review', (deps) => buildReviewHandler(deps as unknown as HandlerDeps));
-  registry.setHandler('verify', (deps) => buildVerifyHandler(deps as unknown as HandlerDeps));
   registry.setHandler('debug', (deps) => buildDebugHandler(deps as unknown as HandlerDeps));
   registry.setHandler('execute_plan', (deps) => buildExecutePlanHandler(deps as unknown as HandlerDeps));
   registry.setHandler('retry_tasks', (deps) => buildRetryHandler(deps as unknown as HandlerDeps));

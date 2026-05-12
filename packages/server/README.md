@@ -38,7 +38,7 @@ mmagent sync-skills --target=claude-code    # claude-code | gemini-cli | codex-c
 | Codex CLI | `~/.codex/skills/` | next session |
 | Cursor | Cursor extension manifest | restart Cursor |
 
-### 2. Choose your main model — intentionally (4.3.0+)
+### 2. Choose your main model — intentionally
 
 Your **main model** is **the model you'd use without mmagent** — the cost baseline for every per-task headline (`$X actual / $Y saved vs <mainModel> (Z× ROI)`).
 
@@ -46,10 +46,11 @@ Your **main model** is **the model you'd use without mmagent** — the cost base
 - ChatGPT-led workflow → `gpt-5.5`
 - Gemini-led workflow → `gemini-3.1-pro`
 
-Starting in 4.3.0, the main model is resolved automatically per request — header → per-client auto-detect (Claude Code reads `~/.claude/projects/*.jsonl`, Codex CLI reads `~/.codex/config.toml`) → `defaults.mainModel` in config → `unknown_main_model` sentinel. Only `X-MMA-Client` remains required on tool routes (the resolver's discriminator).
+Both `X-MMA-Client` and `X-MMA-Main-Model` are required on tool routes (`400 client_required` / `400 main_model_required` if missing). The 4.3.0 auto-detect chain was reverted in 4.4.0 — the claude-agent-sdk used by claude-tier workers wrote JSONL files into the same `~/.claude/projects/<slug>/` the resolver was reading, so auto-detect could return a worker's model as the calling agent's "main". The calling client is the only reliable source.
 
 ```bash
-export MMAGENT_CLIENT=claude-code           # or codex-cli, gemini-cli, cursor
+export MMAGENT_CLIENT=claude-code              # or codex-cli, gemini-cli, cursor
+export MMAGENT_MAIN_MODEL=claude-opus-4-7      # whatever your calling agent runs on
 ```
 
 ### 3. Write the config
@@ -75,8 +76,6 @@ mkdir -p ~/.multi-model && cat > ~/.multi-model/config.json <<'EOF'
 EOF
 ```
 
-> **4.3.0 update:** `X-MMA-Main-Model` is no longer required — see resolver chain above. `defaults.mainModel` is the explicit operator fallback.
-
 That's the whole minimum-viable file. All other knobs (`server.*`, `defaults.timeoutMs`, `defaults.maxCostUSD`, `defaults.tools`, …) have sane built-in defaults — see [Configuration reference](#configuration-reference).
 
 ### 4. Start the daemon + verify
@@ -89,7 +88,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.3.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.4.0",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -121,7 +120,6 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
-| `mma-verify` | `POST /verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
 
 ### Plumbing skills
 
@@ -165,9 +163,10 @@ Step 3 — mma-delegate
   Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
   fix, runs the failing test 20× to confirm the race is gone.
 ↓
-Step 4 — mma-verify
-  One worker per acceptance criterion: (a) failing test now passes, (b) no other
-  auth tests regressed, (c) refresh path still emits the expected telemetry.
+Step 4 — mma-review (with the acceptance checklist in the brief)
+  Reviewer worker checks the diff against the acceptance criteria: (a) failing
+  test now passes, (b) no other auth tests regressed, (c) refresh path still
+  emits the expected telemetry.
 ↓
 Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
 ```
@@ -233,14 +232,13 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 
 ## REST API
 
-16 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
+14 endpoints. All tool endpoints are async: they return `202 { batchId, statusUrl }` immediately and the executor runs in the background. Poll `GET /batch/:id` for the terminal envelope.
 
 | Endpoint | Purpose |
 |---|---|
 | `POST /delegate?cwd=<abs>` | Fan out ad-hoc tasks to sub-agents |
-| `POST /audit?cwd=<abs>` | Audit a document |
-| `POST /review?cwd=<abs>` | Review code |
-| `POST /verify?cwd=<abs>` | Verify work against a checklist |
+| `POST /audit?cwd=<abs>` | Audit a document (or a code-execution plan via `subtype: 'plan'`) |
+| `POST /review?cwd=<abs>` | Review code (pass acceptance checklists in the brief for verification-style checks) |
 | `POST /debug?cwd=<abs>` | Debug a failure with a hypothesis |
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |
@@ -249,7 +247,6 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 | `GET /batch/:id[?taskIndex=N]` | Poll a batch: `202 text/plain` (pending) or `200 application/json` (terminal). `?taskIndex=N` slices on complete state |
 | `POST /context-blocks?cwd=<abs>` | Register a reusable context block |
 | `DELETE /context-blocks/:id?cwd=<abs>` | Delete a context block |
-| `POST /clarifications/confirm` | Confirm / override a clarification proposal |
 | `GET /health` | Liveness probe (unauthenticated, loopback-only) |
 | `GET /status` | Server status (authenticated, loopback-only) |
 | `GET /tools` | OpenAPI 3 doc for all endpoints (authenticated) |
@@ -290,14 +287,14 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.0.5
+## What's new in 4.4.0
 
-- **`/research` — single-task external research.** New `POST /research` endpoint runs a single read-only worker against arxiv, semantic_scholar, github_search, rss, and Brave `web_search` with `site:` filters. Replaces the 3-worker `/explore` orchestrator.
-- **`mma-research` — thin 1:1 skill** wrapping `/research`. Pairs with `mma-investigate` under the rewritten `mma-explore` skill for divergent landscape scans.
-- **`mma-explore` skill rewritten** as a main-agent playbook. Fans out `mma-investigate` + `mma-research` in parallel; synthesis is now your judgment work, not delegated to a worker. Mandates 3–5 threads, internal + external citations (or sentinels), and a recommended next step.
-- **`/explore` HTTP route removed.** Migration: use `/investigate` + `/research` directly, or the `mma-explore` orchestration skill. 8 explore-specific telemetry events removed.
-
-**Migration from 4.0.4:** callers using `/explore` must now dispatch `/investigate` (for the internal half) and `/research` (for the external half) themselves and synthesise the results. Skill consumers using `mma-explore` get the new parallel-fan-out playbook automatically after `mmagent sync-skills`.
+- **Session-based provider boundary.** `Provider.openSession() → Session.send() → TurnResult` replaces the 1,559-line `RunnerShell` chain. All providers (claude-agent-sdk, codex CLI, `@openai/agents`) now expose only `openSession`; cost / termination-reason mapping cannot diverge.
+- **Five-stage lifecycle.** Stages collapse to `implementing → review → rework → annotating → committing`. Single `HUMAN_LABEL` source of truth for headline labels.
+- **Codex token accounting fixed (≈4× cost over-report on cached turns).** OpenAI/codex emit `input_tokens` as GROSS including `cached_input_tokens`; Anthropic emits NET. The codex adapter now subtracts the cached subset before pricing.
+- **`X-MMA-Main-Model` required again.** Auto-detect was reading JSONL files written by our own claude-tier workers and returning the worker's model as "main". The calling client is the only reliable source. Returns `400 main_model_required` if missing.
+- **LLM `verify` tool removed.** Verification is `verifyCommand` only (deterministic shell command run after the worker).
+- **Telemetry clamp ceilings raised** for 2026-era usage: per-stage input/cached `5M → 100M`, output `500K → 2M`, per-stage cost `$100 → $500`, per-task cost `$800 → $5000`.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

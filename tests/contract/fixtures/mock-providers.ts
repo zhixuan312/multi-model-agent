@@ -18,7 +18,71 @@ import type {
   AttemptRecord,
   WorkerStatus,
 } from '@zhixuan92/multi-model-agent-core';
+import type { Session, SessionOpts, TurnResult } from '../../../packages/core/src/types/run-result.js';
 import type { RunnerAdapter } from '../../../packages/core/src/providers/runner-adapter.js';
+
+/** v4.4: build a Session whose `send()` invokes the same RunResult-producing
+ *  runner the legacy `provider.run()` path uses. Lets every mock provider
+ *  satisfy both APIs from a single source of truth — until Task 24 drops
+ *  the legacy run shim entirely. */
+function runResultToTurnResult(rr: RunResult): TurnResult {
+  // Each session.send() represents one model session whose internal turn
+  // count (claude-agent-sdk reports num_turns, codex CLI reports turns)
+  // is what TurnResult.turns carries. The mock simply forwards rr.turns.
+  const toolCallsByName: Record<string, number> = {};
+  const toolCalls = Array.isArray(rr.toolCalls) ? rr.toolCalls : [];
+  for (const entry of toolCalls) {
+    const raw = typeof entry === 'string' ? entry : '';
+    const parenIdx = raw.indexOf('(');
+    const name = parenIdx === -1 ? raw : raw.slice(0, parenIdx);
+    if (name) toolCallsByName[name] = (toolCallsByName[name] ?? 0) + 1;
+  }
+  return {
+    output: rr.output ?? '',
+    usage: rr.usage,
+    filesRead: rr.filesRead ?? [],
+    filesWritten: rr.filesWritten ?? [],
+    toolCallsByName,
+    turns: rr.turns ?? 1,
+    durationMs: rr.durationMs ?? 0,
+    costUSD: rr.actualCostUSD ?? rr.cost?.costUSD ?? null,
+    terminationReason: statusToTermination(rr.status, rr.incompleteReason),
+    ...(rr.errorCode && { errorCode: rr.errorCode }),
+    ...(rr.error && { errorMessage: rr.error }),
+    ...(rr.workerStatus && { workerSelfAssessment: rr.workerStatus }),
+    ...(rr.outputIsDiagnostic !== undefined && { outputIsDiagnostic: rr.outputIsDiagnostic }),
+  };
+}
+
+function statusToTermination(
+  status: RunResult['status'],
+  incompleteReason?: RunResult['incompleteReason'],
+): TurnResult['terminationReason'] {
+  switch (status) {
+    case 'ok': return 'ok';
+    case 'cost_exceeded': return 'cost_exceeded';
+    case 'timeout': return 'time_exceeded';
+    case 'incomplete':
+      if (incompleteReason === 'stall') return 'stalled';
+      return 'cap_exhausted';
+    case 'error':
+    case 'api_error':
+    case 'auth_error':
+    case 'rate_limited':
+    default:
+      return 'error';
+  }
+}
+
+function makeSessionFactory(runner: (prompt: string) => Promise<RunResult>): (opts: SessionOpts) => Session {
+  return (_opts: SessionOpts): Session => ({
+    async send(instruction: string): Promise<TurnResult> {
+      const rr = await runner(instruction);
+      return runResultToTurnResult(rr);
+    },
+    async close(): Promise<void> { /* no-op */ },
+  });
+}
 
 export type Stage =
   | 'ok'
@@ -46,7 +110,7 @@ export interface MockProviderOptions {
 }
 
 const STUB_CONFIG: ProviderConfig = {
-  type: 'openai-compatible',
+  type: 'codex',
   baseUrl: 'http://mock.local',
   apiKey: 'mock',
   model: 'mock-model',
@@ -236,75 +300,82 @@ export function mockProvider(opts: MockProviderOptions): Provider {
       case 'slow': return buildSlow(opts as MockProviderOptions & { stage: Stage; suppressProgress?: boolean });
     }
   };
+  const runOnce = async (prompt: string): Promise<RunResult> => {
+    opts.onPrompt?.(prompt);
+    if (opts.delayMs) {
+      await new Promise((resolve) => setTimeout(resolve, opts.delayMs));
+    }
+    if (opts.sequence) {
+      const item = opts.sequence[seqIdx] ?? opts.sequence[opts.sequence.length - 1];
+      seqIdx++;
+      return buildFromSequenceItem(item);
+    }
+    return runner();
+  };
   return {
     name: 'mock',
     config: STUB_CONFIG,
-    async run(prompt: string): Promise<RunResult> {
-      opts.onPrompt?.(prompt);
-      if (opts.delayMs) {
-        await new Promise((resolve) => setTimeout(resolve, opts.delayMs));
-      }
-      if (opts.sequence) {
-        const item = opts.sequence[seqIdx] ?? opts.sequence[opts.sequence.length - 1];
-        seqIdx++;
-        return buildFromSequenceItem(item);
-      }
-      return runner();
-    },
+    run: runOnce,
+    openSession: makeSessionFactory(runOnce),
   };
 }
 
 export function capExhaustingProvider(opts: { kind: 'turn' | 'cost' | 'wall_clock'; partialOutput?: string }): Provider {
+  const run = async (): Promise<RunResult> => {
+    const output = opts.partialOutput ?? 'mock cap output';
+    if (opts.kind === 'cost') {
+      return {
+        ...buildIncomplete({ stage: 'incomplete', output }),
+        status: 'cost_exceeded',
+        incompleteReason: 'cost_cap',
+        terminationReason: {
+          cause: 'cost_exceeded',
+          turnsUsed: 1,
+          hasFileArtifacts: false,
+          usedShell: false,
+          workerSelfAssessment: null,
+          wasPromoted: false,
+        },
+      };
+    }
+    if (opts.kind === 'wall_clock') {
+      return {
+        ...buildIncomplete({ stage: 'incomplete', output }),
+        status: 'timeout',
+        incompleteReason: 'timeout',
+        terminationReason: {
+          cause: 'timeout',
+          turnsUsed: 1,
+          hasFileArtifacts: false,
+          usedShell: false,
+          workerSelfAssessment: null,
+          wasPromoted: false,
+        },
+      };
+    }
+    return {
+      ...buildMaxTurns({ stage: 'max-turns', output }),
+      incompleteReason: 'turn_cap',
+    };
+  };
   return {
     name: `mock-${opts.kind}-cap`,
     config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
-      const output = opts.partialOutput ?? 'mock cap output';
-      if (opts.kind === 'cost') {
-        return {
-          ...buildIncomplete({ stage: 'incomplete', output }),
-          status: 'cost_exceeded',
-          incompleteReason: 'cost_cap',
-          terminationReason: {
-            cause: 'cost_exceeded',
-            turnsUsed: 1,
-            hasFileArtifacts: false,
-            usedShell: false,
-            workerSelfAssessment: null,
-            wasPromoted: false,
-          },
-        };
-      }
-      if (opts.kind === 'wall_clock') {
-        return {
-          ...buildIncomplete({ stage: 'incomplete', output }),
-          status: 'timeout',
-          incompleteReason: 'timeout',
-          terminationReason: {
-            cause: 'timeout',
-            turnsUsed: 1,
-            hasFileArtifacts: false,
-            usedShell: false,
-            workerSelfAssessment: null,
-            wasPromoted: false,
-          },
-        };
-      }
-      return {
-        ...buildMaxTurns({ stage: 'max-turns', output }),
-        incompleteReason: 'turn_cap',
-      };
-    },
+    run,
+    openSession: makeSessionFactory(run),
   };
 }
 
 export function throwingProvider(err: Error): Provider {
+  const run = async (): Promise<RunResult> => { throw err; };
   return {
     name: 'mock-throw',
     config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
-      throw err;
-    },
+    run,
+    openSession: (_opts: SessionOpts): Session => ({
+      async send(): Promise<TurnResult> { throw err; },
+      async close(): Promise<void> { /* no-op */ },
+    }),
   };
 }
 
@@ -318,42 +389,47 @@ export function failProvider(messageOrOpts: string | FailProviderOptions = 'mock
     ? { status: 'api_error', errorCode: messageOrOpts }
     : messageOrOpts;
   if (opts.status && opts.status !== 'ok') {
+    const statusFinal: RunStatus = opts.status;
+    const run = async (): Promise<RunResult> => ({
+      output: `failure: ${opts.errorCode ?? statusFinal}`,
+      status: statusFinal,
+      usage: usage(null),
+      turns: 1,
+      filesRead: [],
+      filesWritten: [],
+      toolCalls: [],
+      outputIsDiagnostic: true,
+      escalationLog: [attempt(statusFinal, 1, null)],
+      durationMs: 0,
+      directoriesListed: [],
+      workerStatus: 'failed',
+      terminationReason: {
+        cause: statusFinal,
+        turnsUsed: 1,
+        hasFileArtifacts: false,
+        usedShell: false,
+        workerSelfAssessment: 'failed',
+        wasPromoted: false,
+      },
+      structuredError: { code: opts.errorCode ?? 'api_error', message: opts.errorCode ?? statusFinal },
+    });
     return {
       name: 'mock-fail',
       config: STUB_CONFIG,
-      async run(): Promise<RunResult> {
-        return {
-          output: `failure: ${opts.errorCode ?? opts.status}`,
-          status: opts.status,
-          usage: usage(null),
-          turns: 1,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: true,
-          escalationLog: [attempt(opts.status, 1, null)],
-          durationMs: 0,
-          directoriesListed: [],
-          workerStatus: 'failed',
-          terminationReason: {
-            cause: opts.status,
-            turnsUsed: 1,
-            hasFileArtifacts: false,
-            usedShell: false,
-            workerSelfAssessment: 'failed',
-            wasPromoted: false,
-          },
-          structuredError: { code: opts.errorCode ?? 'api_error', message: opts.errorCode ?? opts.status },
-        };
-      },
+      run,
+      openSession: makeSessionFactory(run),
     };
   }
+  const err = new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
+  const run = async (): Promise<RunResult> => { throw err; };
   return {
     name: 'mock-throw',
     config: STUB_CONFIG,
-    async run(): Promise<RunResult> {
-      throw new Error(typeof messageOrOpts === 'string' ? messageOrOpts : 'mocked failure');
-    },
+    run,
+    openSession: (_opts: SessionOpts): Session => ({
+      async send(): Promise<TurnResult> { throw err; },
+      async close(): Promise<void> { /* no-op */ },
+    }),
   };
 }
 

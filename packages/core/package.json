@@ -1,6 +1,6 @@
 {
   "name": "@zhixuan92/multi-model-agent-core",
-  "version": "4.3.1",
+  "version": "4.4.0",
   "type": "module",
   "license": "MIT",
   "description": "Core library for multi-model-agent: provider runners (Claude, Codex, OpenAI-compatible), routing logic, config schema, and tool/sandbox primitives.",
@@ -59,6 +59,14 @@
     "./lifecycle/stage-progression": {
       "types": "./dist/lifecycle/stage-progression.d.ts",
       "import": "./dist/lifecycle/stage-progression.js"
+    },
+    "./lifecycle/stage-labels": {
+      "types": "./dist/lifecycle/stage-labels.d.ts",
+      "import": "./dist/lifecycle/stage-labels.js"
+    },
+    "./intake/verify-command-validator": {
+      "types": "./dist/intake/verify-command-validator.d.ts",
+      "import": "./dist/intake/verify-command-validator.js"
     },
     "./events/verbose-line": {
       "types": "./dist/events/verbose-line.d.ts",
@@ -339,10 +347,8 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@mozilla/readability": "^0.6.0",
-    "@openai/agents": "^0.8.0",
     "fast-xml-parser": "^5.7.2",
     "jsdom": "^29.1.1",
-    "openai": "^6.0.0",
     "undici": "^8.2.0",
     "zod": "^4.0.0"
   },

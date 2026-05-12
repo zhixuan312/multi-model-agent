@@ -6,7 +6,15 @@ import type { RunStatus } from '../providers/runner-types.js';
 import type { AgentType, SandboxPolicy, ToolMode, Effort, CostTier } from './task-spec.js';
 
 export interface AgentConfig {
-  type: 'openai-compatible' | 'claude' | 'claude-compatible' | 'codex'
+  /**
+   * v4.4: two runtimes, period.
+   *   - `claude`: in-process via @anthropic-ai/claude-agent-sdk. Reaches
+   *     Anthropic API by default; set `baseUrl` for any Anthropic-compatible proxy.
+   *   - `codex`:  subprocess via `codex exec --json`. Reaches ChatGPT
+   *     subscription by default; set `baseUrl` + `apiKeyEnv` for OpenAI
+   *     proper or any OpenAI-compatible endpoint (Groq, DeepSeek, etc.).
+   */
+  type: 'claude' | 'codex'
   model: string
   baseUrl?: string
   apiKey?: string
@@ -29,11 +37,9 @@ export interface FallbackOverride {
   bothUnavailable: boolean;
 }
 
-export interface CodexProviderConfig { type: 'codex'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface ClaudeProviderConfig { type: 'claude'; model: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface ClaudeCompatibleProviderConfig { type: 'claude-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export interface OpenAICompatibleProviderConfig { type: 'openai-compatible'; model: string; baseUrl: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
-export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig | ClaudeCompatibleProviderConfig | OpenAICompatibleProviderConfig
+export interface CodexProviderConfig { type: 'codex'; model: string; baseUrl?: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export interface ClaudeProviderConfig { type: 'claude'; model: string; baseUrl?: string; apiKey?: string; apiKeyEnv?: string; effort?: Effort; timeoutMs?: number; sandboxPolicy?: SandboxPolicy; costTier?: CostTier; inputCostPerMTok?: number; outputCostPerMTok?: number; inputTokenSoftLimit?: number }
+export type ProviderConfig = CodexProviderConfig | ClaudeProviderConfig
 
 export interface ResearchConfig {
   brave: {

@@ -16,8 +16,8 @@ describe('single batchId namespace (T4)', () => {
   beforeAll(async () => {
     server = await startTestServer({
       agents: {
-        standard: { type: 'openai-compatible', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
-        complex: { type: 'openai-compatible', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
+        standard: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
+        complex: { type: 'codex', baseUrl: 'http://mock.local', apiKey: 'stub', model: 'mock' },
       },
       defaults: { tools: 'none', timeoutMs: 30_000, maxCostUSD: 1, sandboxPolicy: 'cwd-only' },
     } as never);

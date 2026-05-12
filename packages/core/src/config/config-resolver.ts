@@ -19,18 +19,17 @@ export type MainAgentModelResolution =
   | { kind: 'fail'; reason: string };
 
 /**
- * Return the names of openai-compatible agents carrying an inline `apiKey`
- * instead of using `apiKeyEnv`. The schema permits both, but plaintext API
- * keys in a config file are a backup/dotfile/git footgun — serve surfaces
- * this once at startup so the operator can react.
+ * Return the names of agents carrying an inline `apiKey` instead of using
+ * `apiKeyEnv`. The schema permits both, but plaintext API keys in a config
+ * file are a backup/dotfile/git footgun — serve surfaces this once at
+ * startup so the operator can react. Applies to any agent (claude/codex)
+ * that has been configured against a non-default backend (`baseUrl` set)
+ * and chosen to inline the key.
  */
 export function collectInlineApiKeyOffenders(config: MultiModelConfig): string[] {
   const offenders: string[] = [];
   for (const [name, agent] of Object.entries(config.agents)) {
-    if (
-      (agent.type === 'openai-compatible' || agent.type === 'claude-compatible') &&
-      typeof (agent as { apiKey?: unknown }).apiKey === 'string'
-    ) {
+    if (typeof (agent as { apiKey?: unknown }).apiKey === 'string') {
       offenders.push(name);
     }
   }

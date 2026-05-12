@@ -69,4 +69,21 @@ describe('contract: POST /delegate', () => {
       }
     }, 60_000);
   }
+
+  it('returns 400 invalid_request when verifyCommand contains git commit', async () => {
+    const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
+    try {
+      const res = await fetch(`${h.baseUrl}/delegate?cwd=${encodeURIComponent(process.cwd())}`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
+        body: JSON.stringify({ tasks: [{ prompt: 'x', verifyCommand: ['npm test && git commit -am no'] }] }),
+      });
+      expect(res.status).toBe(400);
+      const json = await res.json() as { error: { code: string; message: string } };
+      expect(json.error.code).toBe('invalid_request');
+      expect(json.error.message).toMatch(/git commit/);
+    } finally {
+      await h.close();
+    }
+  });
 });

@@ -48,7 +48,7 @@ describe('install writers emit correct X-MMA-Client header on outbound requests'
 
   it('gemini writer sends X-MMA-Client: gemini-cli', async () => {
     const fake = fakeFetch();
-    notifySkillInstalled({ skillId: 'mma-verify', client: 'gemini', fetch: fake.fetch });
+    notifySkillInstalled({ skillId: 'mma-review', client: 'gemini', fetch: fake.fetch });
     await new Promise((r) => setTimeout(r, 10));
     const h = fake.headers();
     expect(h).toBeTruthy();

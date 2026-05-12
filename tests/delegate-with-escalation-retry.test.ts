@@ -4,283 +4,209 @@ import type {
   TaskSpec,
   RunResult,
   Provider,
-  ProgressEvent,
 } from '../packages/core/src/types.js';
+import type { Session, SessionOpts, TurnResult } from '../packages/core/src/types/run-result.js';
 
-function makeMockResult(
+function makeTurn(
   status: RunResult['status'],
   output = '',
-  costUSD = 0,
-): RunResult {
+  costUSD: number | null = 0,
+): TurnResult {
+  const terminationReason =
+    status === 'ok' ? 'ok'
+    : status === 'cost_exceeded' ? 'cost_exceeded'
+    : status === 'timeout' ? 'time_exceeded'
+    : status === 'incomplete' ? 'cap_exhausted'
+    : 'error';
   return {
     output,
-    status,
     usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    cost: { costUSD, costDeltaVsMainUSD: null },
-    turns: 5,
     filesRead: [],
     filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [],
-  } as RunResult;
+    toolCallsByName: {},
+    turns: 5,
+    durationMs: 0,
+    costUSD,
+    terminationReason: terminationReason as TurnResult['terminationReason'],
+    ...(status !== 'ok' && status !== 'incomplete' && { errorCode: status }),
+  };
 }
 
-/** Helper: returns different results on successive calls. */
-function sequenceProvider(results: RunResult[]): Provider {
+/** Provider whose Session.send returns different TurnResults on successive calls. */
+function sequenceProvider(turns: TurnResult[]): Provider & { sendSpy: ReturnType<typeof vi.fn> } {
   let callIndex = 0;
+  const sendSpy = vi.fn().mockImplementation(() => {
+    if (callIndex >= turns.length) {
+      return Promise.reject(new Error('sequenceProvider: out of predefined results'));
+    }
+    return Promise.resolve(turns[callIndex++]);
+  });
   return {
     name: 'sequence',
     config: { type: 'codex', model: 'gpt-5-codex' },
-    run: vi.fn().mockImplementation(() => {
-      if (callIndex >= results.length) {
-        throw new Error('sequenceProvider: out of predefined results');
-      }
-      return Promise.resolve(results[callIndex++]);
-    }),
+    openSession(_opts: SessionOpts): Session {
+      return {
+        send: sendSpy,
+        close: async () => undefined,
+      };
+    },
+    sendSpy,
   };
 }
 
 describe('delegateWithEscalation retry', () => {
   it('retries api_error and succeeds on 2nd attempt', async () => {
     const provider = sequenceProvider([
-      makeMockResult('api_error', 'error 1'),
-      makeMockResult('ok', 'success'),
+      makeTurn('api_error', 'error 1'),
+      makeTurn('ok', 'success'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('ok');
     expect(result.output).toBe('success');
-    expect(provider.run).toHaveBeenCalledTimes(2);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(2);
   });
 
   it('retries provider_transport_failure up to 2 times (3 total attempts)', async () => {
     const provider = sequenceProvider([
-      makeMockResult('provider_transport_failure', 'net fail 1'),
-      makeMockResult('provider_transport_failure', 'net fail 2'),
-      makeMockResult('ok', 'success'),
+      makeTurn('provider_transport_failure' as RunResult['status'], 'net fail 1'),
+      makeTurn('provider_transport_failure' as RunResult['status'], 'net fail 2'),
+      makeTurn('ok', 'success'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('ok');
     expect(result.output).toBe('success');
-    expect(provider.run).toHaveBeenCalledTimes(3);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(3);
   });
 
   it('gives up after MAX_RETRIES for persistent api_error', async () => {
     const provider = sequenceProvider([
-      makeMockResult('api_error', 'persistent error'),
-      makeMockResult('api_error', 'persistent error'),
-      makeMockResult('api_error', 'persistent error'), // should not be called
+      makeTurn('api_error', 'fail 1'),
+      makeTurn('api_error', 'fail 2'),
+      makeTurn('api_error', 'fail 3'),
+      makeTurn('api_error', 'fail 4'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('api_error');
-    expect(provider.run).toHaveBeenCalledTimes(3); // initial + 2 retries
+    expect(provider.sendSpy).toHaveBeenCalledTimes(3);
   });
 
   it('retries timeout only once', async () => {
     const provider = sequenceProvider([
-      makeMockResult('timeout', 'timed out 1'),
-      makeMockResult('ok', 'success after timeout retry'),
+      makeTurn('timeout' as RunResult['status'], 'slow 1'),
+      makeTurn('ok', 'success'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('ok');
-    expect(provider.run).toHaveBeenCalledTimes(2);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(2);
   });
 
   it('does NOT retry incomplete', async () => {
     const provider = sequenceProvider([
-      makeMockResult('incomplete', 'partial'),
-      makeMockResult('ok', 'success'), // should not be reached
+      makeTurn('incomplete', 'partial'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('incomplete');
-    expect(provider.run).toHaveBeenCalledTimes(1);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(1);
   });
 
   it('does NOT retry cost_exceeded', async () => {
     const provider = sequenceProvider([
-      makeMockResult('cost_exceeded', 'over budget'),
-      makeMockResult('ok', 'success'), // should not be reached
+      makeTurn('cost_exceeded', 'cap hit'),
     ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-    );
-
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
     expect(result.status).toBe('cost_exceeded');
-    expect(provider.run).toHaveBeenCalledTimes(1);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('emits retry progress events', async () => {
-    const events: InternalRunnerEvent[] = [];
-    const onProgress = (e: InternalRunnerEvent) => { events.push(e); };
-
+  it('stops retrying when task-level cost cap is hit between attempts', async () => {
     const provider = sequenceProvider([
-      makeMockResult('api_error', 'fail 1'),
-      makeMockResult('ok', 'success'),
+      makeTurn('api_error', 'err 1', 0.6),
+      makeTurn('api_error', 'err 2', 0.5),
     ]);
-
-    await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-      { onProgress },
-    );
-
-    const retryEvents = events.filter((e) => e.kind === 'retry');
-    expect(retryEvents).toHaveLength(1);
-    const event = retryEvents[0];
-    if (event.kind !== 'retry') throw new Error('type narrow');
-    expect(event.attempt).toBe(1);
-    expect(event.previousStatus).toBe('api_error');
-    expect(event.delayMs).toBe(1000); // BASE_DELAY_MS * 2^0
-  });
-
-  it('skips retry when remaining budget is zero', async () => {
-    const events: ProgressEvent[] = [];
-    const onProgress = (e: ProgressEvent) => { events.push(e); };
-
-    const provider = sequenceProvider([
-      makeMockResult('api_error', 'fail 1', 0.05),
-      makeMockResult('api_error', 'fail 2', 0.05),
-      makeMockResult('ok', 'success'),
-    ]);
-
-    const result = await delegateWithEscalation(
-      { prompt: 'test', maxCostUSD: 0.05 },
-      [provider],
-      { onProgress },
-    );
-
-    // After first attempt costs 0.05, cumulative === maxCostUSD, so no retry
+    const task: TaskSpec = { prompt: 'test', maxCostUSD: 1.0 };
+    const result = await delegateWithEscalation(task, [provider]);
     expect(result.status).toBe('api_error');
-    expect(provider.run).toHaveBeenCalledTimes(1);
-    expect(events.filter((e) => e.kind === 'retry')).toHaveLength(0);
+    // After attempt 1 (cost 0.6), cumulative=0.6, threshold 1.0 not yet hit, so attempt 2 fires.
+    // After attempt 2 (cost 0.5), cumulative=1.1 >= 1.0, so retry breaks.
+    expect(provider.sendSpy).toHaveBeenCalledTimes(2);
   });
 
-  // -------------------------------------------------------------------------
-  // taskDeadlineMs — hard task-level wall-clock cap
-  // -------------------------------------------------------------------------
-  it('clamps per-call timeoutMs to remaining budget against taskDeadlineMs', async () => {
-    const captured: { timeoutMs?: number }[] = [];
-    const provider: Provider = {
-      name: 'p',
-      config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockImplementation((_prompt, opts) => {
-        captured.push({ timeoutMs: opts.timeoutMs });
-        return Promise.resolve(makeMockResult('ok', 'done'));
-      }),
-    };
-
-    const taskDeadlineMs = Date.now() + 500; // 500ms total budget
-    await delegateWithEscalation(
-      { prompt: 'test', timeoutMs: 60_000 } as TaskSpec,
-      [provider],
-      { taskDeadlineMs },
-    );
-
-    expect(captured[0].timeoutMs).toBeGreaterThan(0);
-    expect(captured[0].timeoutMs).toBeLessThanOrEqual(500);
-  });
-
-  it('does not retry once taskDeadlineMs is past', async () => {
+  it('stops retrying when external abortSignal is fired', async () => {
     const provider = sequenceProvider([
-      makeMockResult('api_error', 'fail 1'),
-      makeMockResult('ok', 'should not be called'),
+      makeTurn('api_error', 'fail 1'),
+      makeTurn('ok', 'should not be called'),
     ]);
-
-    const result = await delegateWithEscalation(
+    const controller = new AbortController();
+    const result = delegateWithEscalation(
       { prompt: 'test' },
       [provider],
-      { taskDeadlineMs: Date.now() - 1000 }, // already past
+      { abortSignal: controller.signal },
     );
+    // Abort between attempt 1 and attempt 2.
+    controller.abort();
+    const r = await result;
+    // The aborted retry leaves the result as the last completed attempt's status.
+    expect(r.status).toBe('api_error');
+    expect(provider.sendSpy.mock.calls.length).toBe(1);
+  });
 
+  it('counts retries per provider attempt, not across the chain', async () => {
+    const provA = sequenceProvider([
+      makeTurn('api_error', 'a1'),
+      makeTurn('api_error', 'a2'),
+      makeTurn('api_error', 'a3'),
+    ]);
+    const provB = sequenceProvider([
+      makeTurn('ok', 'success'),
+    ]);
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provA, provB]);
+    expect(result.status).toBe('ok');
+    expect(provA.sendSpy).toHaveBeenCalledTimes(3); // initial + 2 retries
+    expect(provB.sendSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it('preserves the last result when retries exhaust without success', async () => {
+    const provider = sequenceProvider([
+      makeTurn('api_error', 'attempt 1 output'),
+      makeTurn('api_error', 'attempt 2 output'),
+      makeTurn('api_error', 'attempt 3 output (final)'),
+    ]);
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
+    expect(result.output).toBe('attempt 3 output (final)');
+    expect(provider.sendSpy).toHaveBeenCalledTimes(3);
+  });
+
+  it('logs each retry attempt in escalationLog', async () => {
+    const provider = sequenceProvider([
+      makeTurn('api_error', 'fail'),
+      makeTurn('ok', 'success'),
+    ]);
+    const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
+    expect(result.escalationLog.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('does not retry when task already has zero remaining timeout', async () => {
+    const provider = sequenceProvider([
+      makeTurn('api_error', 'attempt'),
+    ]);
+    const task: TaskSpec = { prompt: 'test', timeoutMs: 0 };
+    const result = await delegateWithEscalation(task, [provider], {
+      taskDeadlineMs: Date.now() - 1000,
+    });
     expect(result.status).toBe('api_error');
-    expect(provider.run).toHaveBeenCalledTimes(1);
+    expect(provider.sendSpy).toHaveBeenCalledTimes(1);
   });
 
-  it('forwards abortSignal to provider.run', async () => {
-    const captured: { abortSignal?: AbortSignal }[] = [];
-    const provider: Provider = {
-      name: 'p',
-      config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockImplementation((_prompt, opts) => {
-        captured.push({ abortSignal: opts.abortSignal });
-        return Promise.resolve(makeMockResult('ok', 'done'));
-      }),
-    };
-
-    const ctrl = new AbortController();
-    await delegateWithEscalation(
-      { prompt: 'test' },
-      [provider],
-      { abortSignal: ctrl.signal },
-    );
-
-    expect(captured[0].abortSignal).toBe(ctrl.signal);
-  });
-
-  it('does not retry once abortSignal is aborted', async () => {
-    const provider = sequenceProvider([
-      makeMockResult('api_error', 'fail 1'),
-      makeMockResult('ok', 'should not be called'),
-    ]);
-
-    const ctrl = new AbortController();
-    ctrl.abort();
+  it('skips the next provider when task-level deadline is hit', async () => {
+    const provA = sequenceProvider([makeTurn('incomplete', 'partial')]);
+    const provB = sequenceProvider([makeTurn('ok', 'should not be reached')]);
     const result = await delegateWithEscalation(
       { prompt: 'test' },
-      [provider],
-      { abortSignal: ctrl.signal },
-    );
-
-    expect(result.status).toBe('api_error');
-    expect(provider.run).toHaveBeenCalledTimes(1);
-  });
-
-  it('skips fallback chain once taskDeadlineMs is past', async () => {
-    const failing: Provider = {
-      name: 'first',
-      config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('incomplete', 'partial')),
-    };
-    const fallback: Provider = {
-      name: 'second',
-      config: { type: 'codex', model: 'gpt-5-codex' },
-      run: vi.fn().mockResolvedValue(makeMockResult('ok', 'should not be called')),
-    };
-
-    await delegateWithEscalation(
-      { prompt: 'test' },
-      [failing, fallback],
+      [provA, provB],
       { taskDeadlineMs: Date.now() - 1000 },
     );
-
-    expect(failing.run).toHaveBeenCalledTimes(1);
-    expect(fallback.run).not.toHaveBeenCalled();
+    expect(result.status).toBe('incomplete');
+    expect(provA.sendSpy).toHaveBeenCalledTimes(1);
+    expect(provB.sendSpy).not.toHaveBeenCalled();
   });
 });

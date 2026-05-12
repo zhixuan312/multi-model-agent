@@ -1,9 +1,24 @@
+// v4.4.x — Rework stage.
+//
+// Fires only when reviewVerdict === 'changes_required'. Runs on the
+// same standard session that did Implementing (full conversation
+// continuity). Worker is asked to address the reviewer's concerns AND
+// re-run any verifyCommand. Rework's WorkerOutput merges onto
+// Implementing's per the spec's "Rework → Implementing field merge
+// rules": summary/workerStatus/unresolved/commitMessage take Rework's
+// values; filesChanged is the union of both phases; validationsRun is
+// REPLACED by Rework's value (empty list signals validation_stale to
+// Committing).
+
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
-import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
+import { buildWarmFollowupMessage } from '../warm-followup.js';
+import { assembleRunResult } from '../../providers/assemble-run-result.js';
+import { parseWorkerOutput } from '../worker-output-contract.js';
+import { HUMAN_LABEL } from '../stage-labels.js';
 
 export async function reworkHandler(state: LifecycleState): Promise<void> {
   if (state.terminal) return;
@@ -23,18 +38,17 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
 
   let cumulativeDiff = '';
   if (state.diffTracker) {
-    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); }
-    catch { cumulativeDiff = ''; }
+    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
   }
 
-  const reworkTier: AgentType = 'complex';
+  const reworkTier: AgentType = 'standard';
   const provider = ctx.providers[reworkTier] as Provider | undefined;
   if (!provider) {
     state.reworkError = `no provider available for tier ${reworkTier}`;
     return;
   }
 
-  const concerns = findings.map(f => `[${f.source}] ${f.text}`);
+  const concerns = findings.map((f) => `[${f.source}] ${f.text}`);
   const promptCtx = {
     brief: task.prompt ?? '',
     workerOutput: last.output ?? '',
@@ -42,32 +56,19 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     planContext: (task as { planContext?: string }).planContext,
     priorConcerns: concerns,
   };
+  // Rework always resumes the implementer's thread — the systemPrompt,
+  // brief, prior output, and cumulative diff are already in conversation
+  // history. We send only the new instruction (reviewer deviations +
+  // fix action) wrapped in the standard warm-followup preamble.
   const fullPrompt =
-    reworkTemplate.systemPrompt + '\n\n' + reworkTemplate.buildUserPrompt(promptCtx);
+    buildWarmFollowupMessage(reworkTemplate.buildUserPrompt(promptCtx))
+    + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RunResult;
   try {
-    result = await delegateWithEscalation(
-      {
-        prompt: fullPrompt,
-        cwd: ctx.cwd,
-        agentType: reworkTier,
-        briefQualityPolicy: 'off',
-        timeoutMs: ctx.timing.timeoutMs,
-        tools: 'full',
-      },
-      [provider],
-      {
-        explicitlyPinned: true,
-        taskDeadlineMs: ctx.timing.deadlineMs,
-        abortSignal: ctx.stall.controller.signal,
-        assignedTier: reworkTier,
-        ...(ctx.bus && { bus: ctx.bus }),
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        stageLabel: 'Rework',
-      },
-    );
+    const session = ctx.getSession(reworkTier);
+    const turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.rework });
+    result = assembleRunResult(turn);
   } catch (err) {
     state.reworkError = err instanceof Error ? err.message : String(err);
     return;
@@ -77,9 +78,28 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     state.reworkError = `rework returned status: ${result.status}`;
     return;
   }
+
+  // Parse the Rework worker's WorkerOutput JSON block.
+  const reworked = parseWorkerOutput(result.output ?? '');
+
   state.reworkApplied = true;
   state.reworkOutput = result.output;
   replaceLastRunResultPreservingTrackers(state, result);
+
+  // Apply merge rules: Rework owns summary/workerStatus/unresolved/commitMessage;
+  // filesChanged is the union of Implementing's + Rework's; validationsRun is
+  // REPLACED by Rework's value (so an empty list signals validation_stale).
+  const merged = state.lastRunResult as Record<string, unknown> | undefined;
+  if (merged) {
+    const priorFilesChanged = ((last as { filesChanged?: string[] }).filesChanged) ?? [];
+    merged.summary = reworked.summary;
+    merged.workerStatus = reworked.workerStatus;
+    merged.filesChanged = Array.from(new Set([...priorFilesChanged, ...reworked.filesChanged]));
+    merged.validationsRun = reworked.validationsRun;
+    merged.unresolved = reworked.unresolved;
+    if (reworked.commitMessage) merged.commitMessage = reworked.commitMessage;
+  }
+
   mergeStageStats(state, 'rework', {
     inputTokens: result.usage?.inputTokens ?? 0,
     outputTokens: result.usage?.outputTokens ?? 0,
@@ -87,7 +107,12 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
     turnCount: result.turns ?? 1,
     toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-    costUSD: (result as { costUSD?: number | null }).costUSD ?? null,
+    // `result` comes from assembleRunResult which writes the turn cost to
+    // top-level `actualCostUSD` (not a `costUSD` field). Reading the wrong
+    // field name was the historical cause of rework stages recording
+    // cost=null/0 in telemetry; canonical lookup is `actualCostUSD` with
+    // legacy `costUSD` as a safety fallback.
+    costUSD: (result as { actualCostUSD?: number | null }).actualCostUSD ?? (result as { costUSD?: number | null }).costUSD ?? null,
     durationMs: (result as { durationMs?: number }).durationMs ?? null,
     filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
     filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,

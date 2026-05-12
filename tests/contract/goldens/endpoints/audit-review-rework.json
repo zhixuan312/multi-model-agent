@@ -2,7 +2,7 @@
   "headline": "[ok] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "needs rework per review",
+      "output": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review\n\n--- INTERNAL CONTRADICTION (criterion 2) ---\nneeds rework per review\n\n--- CROSS-ITEM DUPLICATION (criterion 3) ---\nneeds rework per review\n\n--- INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE (criterion 4) ---\nneeds rework per review\n\n--- ARGUMENT SOUNDNESS (criterion 5) ---\nneeds rework per review\n\n--- COMPLETENESS AGAINST CONSTRAINTS (criterion 6) ---\nneeds rework per review\n\n--- FIX ACTIONABILITY (criterion 7) ---\nneeds rework per review\n\n--- DRIFT / STALENESS (criterion 8) ---\nneeds rework per review\n\n--- SCOPE-CREEP / FRAMING (criterion 9) ---\nneeds rework per review\n\n--- STRUCTURAL CONSISTENCY (criterion 10) ---\nneeds rework per review\n\n--- METADATA COMPLETENESS (criterion 11) ---\nneeds rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 110,
@@ -26,99 +26,14 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "workerOutputs": [
-        {
-          "criterionId": "1",
-          "criterionTitle": "RECOMMENDATION-COHERENCE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "2",
-          "criterionTitle": "INTERNAL CONTRADICTION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "3",
-          "criterionTitle": "CROSS-ITEM DUPLICATION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "4",
-          "criterionTitle": "INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "5",
-          "criterionTitle": "ARGUMENT SOUNDNESS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "COMPLETENESS AGAINST CONSTRAINTS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "FIX ACTIONABILITY",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "DRIFT / STALENESS",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "SCOPE-CREEP / FRAMING",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "10",
-          "criterionTitle": "STRUCTURAL CONSISTENCY",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "11",
-          "criterionTitle": "METADATA COMPLETENESS",
-          "narrative": "needs rework per review"
-        }
-      ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-        "11"
-      ],
-      "partialCriteriaFailed": [],
-      "implementationReport": {
-        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "structuredReport": {
-        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "findings": [],
+      "criteriaErrors": [],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
+          "costUSD": null,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
@@ -133,31 +48,9 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "annotatedFindings": [],
-      "qualityReviewVerdict": "error",
-      "actualCostUSD": 0,
+      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -171,6 +64,29 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nneeds rework per review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "produced 0 findings",
+        "workerStatus": "done",
+        "unresolved": [],
+        "filesChanged": [],
+        "reviewVerdict": null,
+        "reviewConcerns": [],
+        "reworkApplied": false,
+        "validationsRun": [],
+        "commitSha": null,
+        "commitMessage": null,
+        "commitSkipReason": null,
+        "findings": [],
+        "criteriaErrors": []
+      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -189,12 +105,19 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "needs rework per review",
-    "filesChanged": [],
-    "validationsRun": [],
-    "deviationsFromBrief": [],
+    "summary": "produced 0 findings",
+    "workerStatus": "done",
     "unresolved": [],
-    "extraSections": {}
+    "filesChanged": [],
+    "reviewVerdict": null,
+    "reviewConcerns": [],
+    "reworkApplied": false,
+    "validationsRun": [],
+    "commitSha": null,
+    "commitMessage": null,
+    "commitSkipReason": null,
+    "findings": [],
+    "criteriaErrors": []
   },
   "error": {
     "kind": "not_applicable",

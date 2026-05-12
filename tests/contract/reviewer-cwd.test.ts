@@ -3,67 +3,40 @@ import { mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { realpathSync } from 'node:fs';
-import type { Provider, ProviderConfig, RunResult, RunStatus, TokenUsage, AttemptRecord } from '@zhixuan92/multi-model-agent-core';
+import type { Provider, ProviderConfig } from '@zhixuan92/multi-model-agent-core';
+import type { Session, SessionOpts, TurnResult } from '../../packages/core/src/types/run-result.js';
 import { boot } from './fixtures/harness.js';
 
 const STUB_CONFIG: ProviderConfig = {
-  type: 'openai-compatible',
+  type: 'codex',
   baseUrl: 'http://mock.local',
   apiKey: 'mock',
   model: 'mock-model',
 } as ProviderConfig;
 
-function stubUsage(): TokenUsage {
-  return { inputTokens: 10, outputTokens: 20, totalTokens: 30, costUSD: 0.001 };
-}
-
-function stubAttempt(status: RunStatus): AttemptRecord {
-  return {
-    provider: 'mock-cwd-capture',
-    status,
-    turns: 1,
-    inputTokens: 10,
-    outputTokens: 20,
-    costUSD: 0.001,
-    initialPromptLengthChars: 0,
-    initialPromptHash: '',
-  };
-}
-
-function stubOkResult(): RunResult {
-  return {
-    output: '## Summary\napproved\n\nNo issues found.',
-    status: 'ok',
-    usage: stubUsage(),
-    turns: 1,
-    filesRead: [],
-    filesWritten: [],
-    toolCalls: [],
-    outputIsDiagnostic: false,
-    escalationLog: [stubAttempt('ok')],
-    durationMs: 0,
-    directoriesListed: [],
-    workerStatus: 'done',
-    terminationReason: {
-      cause: 'finished',
-      turnsUsed: 1,
-      hasFileArtifacts: false,
-      usedShell: false,
-      workerSelfAssessment: 'done',
-      wasPromoted: false,
-    },
-  };
-}
-
 function cwdCapturingProvider(capturedCwds: string[]): Provider {
   return {
     name: 'mock-cwd-capture',
     config: STUB_CONFIG,
-    async run(_prompt: string, options?: { cwd?: string }): Promise<RunResult> {
-      if (options?.cwd) {
-        capturedCwds.push(options.cwd);
-      }
-      return stubOkResult();
+    openSession(opts: SessionOpts): Session {
+      if (opts.cwd) capturedCwds.push(opts.cwd);
+      return {
+        async send(): Promise<TurnResult> {
+          return {
+            output: '## Summary\napproved\n\nNo issues found.',
+            usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+            filesRead: [],
+            filesWritten: [],
+            toolCallsByName: {},
+            turns: 1,
+            durationMs: 0,
+            costUSD: 0.001,
+            terminationReason: 'ok',
+            workerSelfAssessment: 'done',
+          };
+        },
+        async close() { /* no-op */ },
+      };
     },
   };
 }
@@ -73,15 +46,15 @@ async function authedFetch(url: string, token: string, init?: RequestInit): Prom
     ...init,
     headers: {
       ...(init?.headers ?? {}),
-      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
-      "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code",
+      'X-MMA-Main-Model': 'claude-opus-4-7',
+      'X-MMA-Client': 'claude-code',
       Authorization: `Bearer ${token}`,
     },
   });
 }
 
 describe('contract: reviewer cwd threading', () => {
-  it('quality and spec reviewers receive task.cwd in provider.run options', async () => {
+  it('quality and spec reviewers receive task.cwd in openSession options', async () => {
     const tmpDir = await mkdtemp(join(tmpdir(), 'mma-cwd-test-'));
     const capturedCwds: string[] = [];
 
@@ -95,7 +68,6 @@ describe('contract: reviewer cwd threading', () => {
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };
 
-      // Poll for terminal
       let terminal: Response | null = null;
       for (let i = 0; i < 30; i++) {
         const poll = await authedFetch(`${h.baseUrl}/batch/${batchId}`, h.token);
@@ -108,8 +80,6 @@ describe('contract: reviewer cwd threading', () => {
       }
       expect(terminal).not.toBeNull();
 
-      // Every captured cwd from provider.run must resolve to the same
-      // canonical path as tmpDir (cwd-validator uses realpathSync).
       const canonicalTmpDir = realpathSync(tmpDir);
       expect(capturedCwds.length).toBeGreaterThan(0);
       for (const c of capturedCwds) {

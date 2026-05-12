@@ -33,55 +33,56 @@ export function registerAudit(registry: ToolSurfaceRegistry): void {
 // ── Audit brief ──
 
 export interface ToolAuditBrief {
-  auditTypeText: string;
+  subtypeText: string;
   done: string;
   document?: string;
   filePaths: string[];
   hasContextBlocks: boolean;
   contextBlockIds?: string[];
   perFilePath?: string;
-  /** A12: pass-through of input.auditType so buildTaskSpec can stamp it
-   *  onto the TaskSpec for the dispatcher to read. */
-  auditType?: 'default' | 'security' | 'performance' | 'plan';
+  /** v4.4.x: subtype is stamped onto the TaskSpec for the parallel-criteria
+   *  dispatcher to read. */
+  subtype?: 'default' | 'plan' | 'spec' | 'skill';
 }
 
 /**
- * Per-audit-type "done" conditions.
+ * Per-subtype "done" conditions.
  *
  * The audit tool's primary target is prose artifacts: specs, plans,
  * recommendation docs, design docs, briefs, API contracts, configs.
- * A secondary target is source code (when filePaths point at .ts/.py/etc.).
- *
- * `default` is the comprehensive sweep — what 90%+ of audit calls should
- * use. `security` and `performance` are narrow opt-in lenses for cases
- * where the caller specifically wants ONE dimension (a threat model, a
- * scaling design). The full failure-mode taxonomy applies regardless;
- * the lens just tells the worker which dimension to weight slightly more.
+ * `default` is the comprehensive prose sweep. `plan` audits a code-execution
+ * plan against the codebase. `spec` audits requirement-style prose for
+ * executability. `skill` audits an mma-* skill markdown file for reader
+ * effectiveness. For security or performance focus, include that emphasis
+ * in the free-text prompt; it is not a subtype.
  */
 const AUDIT_DONE_CONDITIONS: Record<string, string> = {
   default:
     'Comprehensive audit. Apply the full failure-mode taxonomy through the executability lens (the orientation block above). For prose artifacts (specs, plans, recommendation docs, designs, post-mortems, audits, briefs): emphasize RECOMMENDATION-COHERENCE, INTERNAL CONTRADICTION, ARGUMENT SOUNDNESS, COMPLETENESS AGAINST CONSTRAINTS, FIX ACTIONABILITY, DRIFT, and SCOPE-CREEP — i.e., would a literal-following worker who reads this artifact and follows it without judgment produce the right outcome? Are sections internally consistent? Does each recommendation actually solve its stated problem given the doc\'s own constraints? Sweep style/clarity issues only when they would cause a worker to misinterpret. For source code: logic errors, contract violations, off-by-one bugs, type mismatches, unhandled edge cases. Each finding has severity (critical/high/medium/low), location, and remediation.',
-  security:
-    'Narrow lens: security ONLY. Use this only when the caller specifically wants security findings and not general audit findings. For prose artifacts (threat models, security designs, auth specs): identify missing controls, ambiguous trust boundaries, undeclared attack surfaces, leaked-secret patterns in examples, recommendations that introduce new attack surface without mitigation, and threat-model gaps. For source code: injection, auth bypass, data exposure, OWASP top 10. Apply the full failure-mode taxonomy through the security lens. Skip non-security findings. Each finding has severity, location, and remediation.',
-  performance:
-    'Narrow lens: performance ONLY. Use this only when the caller specifically wants performance findings and not general audit findings. For prose artifacts (designs, scaling plans, latency-sensitive specs): identify unstated complexity, missing hot-path consideration, unbounded loops in proposed designs, omitted scaling story, recommendations that mandate work that does not scale, and missing latency/throughput targets. For source code: O(n²) loops, unnecessary allocations, missing caching, blocking I/O. Apply the full failure-mode taxonomy through the performance lens. Skip non-performance findings. Each finding has impact level, location, and fix recommendation.',
   plan:
     'PLAN-VS-CODEBASE EXECUTABILITY AUDIT. The single filePath you receive is a code-execution plan; the source files you verify against live under cwd and you discover them yourself by reading the plan\'s "Files: Modify:" / "Test:" / "Create:" blocks and `import` statements in code blocks. Apply the 8 verification perspectives (PATH EXISTENCE, SYMBOL EXISTENCE, SIGNATURE MATCH, IMPORT GRAPH, TEST HARNESS AVAILABILITY, STEP SEQUENCE WITHIN TASK, CROSS-TASK DEPENDENCIES, VERIFICATION COMMAND VALIDITY). For each task in the plan, the merge annotator computes a verdict: EXECUTABLE / PARTIAL / BLOCKED. Use read_file / grep / glob / list_files to ground every finding in real file:line evidence. Findings without source-side citations are speculation — drop them. Zero findings on a perspective is the EXPECTED outcome on a clean plan; do not invent findings to fill quota.',
+  spec:
+    'REQUIREMENT-PROSE EXECUTABILITY AUDIT. A finding is a place where the spec, executed literally by a downstream worker, would produce the wrong outcome or paralyze the executor. Apply the 7 criteria (REQUIREMENT-TESTABILITY, SCOPE-EXPLICITNESS, ACCEPTANCE-CRITERIA-COVERAGE, NON-FUNCTIONAL-CAPTURED, REQUIREMENT-CONFLICT, DECISION-TRACE, ASSUMPTION-EXPOSURE). Quote the exact `shall` / `must` / `should` clause for each finding. A clean spec legitimately produces zero findings — do not invent issues to fill quota.',
+  skill:
+    'SKILL-FILE READER-EFFECTIVENESS AUDIT. A finding is a place where the skill, as written, would cause a competent reader to dispatch the wrong call, miss a path of use, or fall for a foreseeable anti-pattern. Apply the 7 criteria (WHEN-TO-USE-SPECIFICITY, INPUT-SHAPE-COMPLETENESS, OUTPUT-SHAPE-CONTRACT, ANTI-PATTERN-COVERAGE, RECIPE-VS-SKILL-SCOPE, VERSION-FRONTMATTER, LINK-INTEGRITY). Quote the failing section + line for each finding.',
 };
 
 const DELTA_AUDIT_SUFFIX = ' Perform a full audit (do not reduce thoroughness). Verify each prior finding as fixed or unfixed. Omit fixed prior findings from the main report. Include unfixed prior findings and new findings. End with a summary of which prior findings were resolved.';
 
-function resolveAuditTypeText(auditType: Input['auditType'] | undefined): string {
+function resolveSubtypeText(subtype: Input['subtype'] | undefined): string {
   // Defensive: at the HTTP layer Zod's `.default('default')` fires, but
   // internal callers may still construct Input directly without going
   // through the schema. Treat undefined as the same as `'default'`.
-  const t = auditType ?? 'default';
-  if (t === 'default') return 'comprehensive (executability + correctness + clarity, with security and performance lenses applied)';
-  return `narrow (${t} only)`;
+  const t = subtype ?? 'default';
+  if (t === 'default') return 'comprehensive prose-coherence';
+  if (t === 'plan') return 'plan-vs-codebase';
+  if (t === 'spec') return 'requirement-prose executability';
+  if (t === 'skill') return 'skill-file reader-effectiveness';
+  return `subtype=${t}`;
 }
 
-function resolveDoneCondition(auditType: Input['auditType'] | undefined, hasContextBlocks: boolean): string {
-  const t = auditType ?? 'default';
+function resolveDoneCondition(subtype: Input['subtype'] | undefined, hasContextBlocks: boolean): string {
+  const t = subtype ?? 'default';
   const base = AUDIT_DONE_CONDITIONS[t] ?? AUDIT_DONE_CONDITIONS.default;
   return hasContextBlocks ? base + DELTA_AUDIT_SUFFIX : base;
 }
@@ -92,31 +93,31 @@ function hasContent(value: string | undefined): boolean {
 
 export function auditBriefSlot(input: Input): ToolAuditBrief[] {
   const hasContextBlocks = Array.isArray(input.contextBlockIds) && input.contextBlockIds.length > 0;
-  const auditTypeText = resolveAuditTypeText(input.auditType);
-  const done = resolveDoneCondition(input.auditType, hasContextBlocks);
+  const subtypeText = resolveSubtypeText(input.subtype);
+  const done = resolveDoneCondition(input.subtype, hasContextBlocks);
   const validPaths = (input.filePaths ?? []).filter(p => p.trim().length > 0);
 
   // Fan-out: multiple file paths without an inline document
   if (!hasContent(input.document) && validPaths.length >= 2) {
     return validPaths.map(fp => ({
-      auditTypeText,
+      subtypeText,
       done,
       filePaths: [fp],
       hasContextBlocks,
       contextBlockIds: input.contextBlockIds,
       perFilePath: fp,
-      auditType: input.auditType,
+      subtype: input.subtype,
     }));
   }
 
   return [{
-    auditTypeText,
+    subtypeText,
     done,
     document: input.document,
     filePaths: validPaths,
     hasContextBlocks,
     contextBlockIds: input.contextBlockIds,
-    auditType: input.auditType,
+    subtype: input.subtype,
   }];
 }
 
@@ -177,7 +178,7 @@ function buildFilePathsPrompt(filePaths: string[]): string {
 }
 
 function buildPrompt(brief: ToolAuditBrief): string {
-  const parts: string[] = [`Audit for ${brief.auditTypeText} issues.`];
+  const parts: string[] = [`Audit for ${brief.subtypeText} issues.`];
 
   if (brief.perFilePath) {
     parts.push(`Read and analyze this file:\n- ${brief.perFilePath}`);
@@ -208,7 +209,7 @@ export const toolConfig: ToolConfig<Input, ToolAuditBrief, AuditReport> = {
     // pure document/file targets — not buildPrompt's full spec which
     // embeds the legacy ## Finding format and would compete with the
     // dispatcher's own format spec.
-    const targetParts: string[] = [`Audit for ${brief.auditTypeText} issues.`];
+    const targetParts: string[] = [`Audit for ${brief.subtypeText} issues.`];
     if (brief.document) targetParts.push(`Document:\n\n${brief.document}`);
     if (brief.filePaths.length > 0) {
       targetParts.push(`Target files:\n${brief.filePaths.map(p => `- ${p}`).join('\n')}`);
@@ -228,11 +229,9 @@ export const toolConfig: ToolConfig<Input, ToolAuditBrief, AuditReport> = {
       contextBlockIds: brief.contextBlockIds,
       filePaths: brief.filePaths.length > 0 ? brief.filePaths : undefined,
       mainModel: ctx.mainModel,
-      // A12 (4.2.3+): plumb auditType to the dispatcher. The
-      // parallel-criteria router branches on `task.auditType === 'plan'`
-      // to use the plan-audit route spec instead of the default audit
-      // spec (different criteria, orientation, severity semantics).
-      auditType: brief.auditType,
+      // v4.4.x: plumb subtype to the dispatcher. The parallel-criteria
+      // router reads `task.subtype` and looks it up in AUDIT_SUBTYPES.
+      subtype: brief.subtype,
     } as TaskSpec;
   },
   reportSchema: auditReportSchema,

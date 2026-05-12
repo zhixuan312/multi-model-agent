@@ -15,7 +15,6 @@ export type {
   ProviderConfig,
   CodexProviderConfig,
   ClaudeProviderConfig,
-  OpenAICompatibleProviderConfig,
   MultiModelConfig,
   RunResult,
   Provider,
@@ -96,9 +95,6 @@ export {
   isAllowedHostHeader,
 } from './transport/index.js';
 
-// Runner shell
-export { RunnerShell } from './providers/runner-shell.js';
-
 // Heartbeat
 export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';
 export type {
@@ -174,7 +170,6 @@ export {
   annotateCompletionTemplate,
   qualityAuditTemplate,
   qualityReviewTemplate,
-  qualityVerifyTemplate,
   qualityDebugTemplate,
   qualityInvestigateTemplate,
 } from './review/reviewer-engine.js';
@@ -202,7 +197,3 @@ export type { ExecutePlanReport } from './reporting/report-parser-slots/execute-
 // Headline templates
 export { delegateHeadlineTemplate } from './reporting/headline-templates/delegate.js';
 export { executePlanHeadlineTemplate } from './reporting/headline-templates/execute-plan.js';
-
-// Identity
-export { resolveMainModel } from './identity/main-model-resolver.js';
-export type { ResolveInputs, ResolveResult, SupportedClient } from './identity/main-model-resolver.js';

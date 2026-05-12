@@ -19,8 +19,8 @@ async function pollToTerminal(baseUrl: string, token: string, batchId: string): 
   throw new Error(`poll timeout ${batchId}`);
 }
 
-describe('contract: POST /audit { auditType: "plan" } end-to-end', () => {
-  it('accepts auditType=plan with a single filePaths entry and returns a terminal envelope', async () => {
+describe('contract: POST /audit { subtype: "plan" } end-to-end', () => {
+  it('accepts subtype=plan with a single filePaths entry and returns a terminal envelope', async () => {
     const h = await boot({ provider: mockProvider({ stage: 'ok' }), cwd: process.cwd() });
     try {
       const dispatch = await fetch(`${h.baseUrl}/audit?cwd=${encodeURIComponent(process.cwd())}`, {
@@ -28,9 +28,10 @@ describe('contract: POST /audit { auditType: "plan" } end-to-end', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-MMA-Client': 'claude-code',
+          'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ auditType: 'plan', filePaths: [FIXTURE_PATH] }),
+        body: JSON.stringify({ subtype: 'plan', filePaths: [FIXTURE_PATH] }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };
@@ -50,9 +51,10 @@ describe('contract: POST /audit { auditType: "plan" } end-to-end', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-MMA-Client': 'claude-code',
+          'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ auditType: 'plan', filePaths: [FIXTURE_PATH, FIXTURE_PATH] }),
+        body: JSON.stringify({ subtype: 'plan', filePaths: [FIXTURE_PATH, FIXTURE_PATH] }),
       });
       expect(r.status).toBe(400);
     } finally {

@@ -1,124 +1,84 @@
 {
-  "headline": "[ok] audit : 0 findings (0 high)",
+  "headline": "[error] audit : 0 findings (0 high)",
   "results": [
     {
-      "output": "mock max turns",
-      "status": "ok",
+      "output": "",
+      "status": "error",
       "usage": {
         "inputTokens": 110,
         "outputTokens": 220,
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 11,
+      "turns": 1089,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
       "outputIsDiagnostic": false,
       "escalationLog": [],
       "parsedFindings": null,
-      "workerStatus": "done",
+      "workerStatus": "failed",
       "terminationReason": {
-        "cause": "finished",
-        "turnsUsed": 11,
+        "cause": "error",
+        "turnsUsed": 1089,
         "hasFileArtifacts": false,
         "usedShell": false,
-        "workerSelfAssessment": "done",
+        "workerSelfAssessment": "failed",
         "wasPromoted": false
       },
-      "workerOutputs": [
+      "findings": [],
+      "criteriaErrors": [
         {
           "criterionId": "1",
-          "criterionTitle": "RECOMMENDATION-COHERENCE",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "2",
-          "criterionTitle": "INTERNAL CONTRADICTION",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "3",
-          "criterionTitle": "CROSS-ITEM DUPLICATION",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "4",
-          "criterionTitle": "INDEPENDENCE-CLAIMED-WITHOUT-EVIDENCE",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "5",
-          "criterionTitle": "ARGUMENT SOUNDNESS",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "6",
-          "criterionTitle": "COMPLETENESS AGAINST CONSTRAINTS",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "7",
-          "criterionTitle": "FIX ACTIONABILITY",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "8",
-          "criterionTitle": "DRIFT / STALENESS",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "9",
-          "criterionTitle": "SCOPE-CREEP / FRAMING",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "10",
-          "criterionTitle": "STRUCTURAL CONSISTENCY",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         },
         {
           "criterionId": "11",
-          "criterionTitle": "METADATA COMPLETENESS",
-          "narrative": "mock max turns"
+          "error": "turn ended with cap_exhausted"
         }
       ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10",
-        "11"
-      ],
-      "partialCriteriaFailed": [],
-      "implementationReport": {
-        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "structuredReport": {
-        "summary": "--- RECOMMENDATION-COHERENCE (criterion 1) ---\nmock max turns",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
       "stageStats": {
         "implementing": {
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
+          "costUSD": null,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
@@ -129,35 +89,13 @@
           "outputTokens": 220,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 11,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
+          "turnCount": 1089,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
         }
       },
-      "annotatedFindings": [],
-      "qualityReviewVerdict": "error",
-      "actualCostUSD": 0,
+      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -171,6 +109,22 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -189,7 +143,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock max turns",
+    "summary": "",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],
@@ -205,6 +159,5 @@
   "mainModel": "claude-opus-4-7",
   "specReviewVerdict": "not_applicable",
   "qualityReviewVerdict": "not_applicable",
-  "roundsUsed": 1,
-  "contextBlockId": "<DETERMINISTIC>"
+  "roundsUsed": 1
 }

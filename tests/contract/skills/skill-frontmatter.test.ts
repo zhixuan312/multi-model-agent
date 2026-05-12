@@ -48,7 +48,6 @@ const ACTIONABLE_SKILLS = [
   'mma-explore',
   'mma-retry',
   'mma-review',
-  'mma-verify',
   'mma-investigate',
   'mma-research',
 ];

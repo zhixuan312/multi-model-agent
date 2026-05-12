@@ -45,6 +45,7 @@ mean and which directions to pursue.
 {
   "researchQuestion": "What approaches exist for streaming JSON parsing under 100KB?",
   "background": "We currently use a single-pass push parser; we want to evaluate alternatives.",
+  "subtype": "default",
   "contextBlockIds": []
 }
 ```
@@ -53,9 +54,12 @@ mean and which directions to pursue.
 |---|---|---|---|
 | `researchQuestion` | string | yes | 20–8000 chars |
 | `background` | string | yes | 20–8000 chars; what you already know / are trying to do |
+| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` |
 
 > Worker tier is hardcoded `complex`. Sending `agentType` or `tools` is rejected with HTTP 400.
+
+The `default` subtype's criteria target primary-source preference, practitioner consensus, recency, counter-perspectives, and cross-domain analogues — the worker is bibliographic, not opinionated.
 
 ## Full example
 
@@ -63,6 +67,7 @@ mean and which directions to pursue.
 BATCH=$(curl -f -sS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Content-Type: application/json" \
   -d '{
     "researchQuestion": "State-of-the-art SIMD JSON parsers under 100KB?",

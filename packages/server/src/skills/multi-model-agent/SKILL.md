@@ -27,7 +27,6 @@ digraph picker {
     "mma-execute-plan" [shape=box];
     "mma-audit" [shape=box];
     "mma-review" [shape=box];
-    "mma-verify" [shape=box];
     "mma-debug" [shape=box];
     "mma-investigate" [shape=box];
     "mma-explore" [shape=box];
@@ -38,9 +37,7 @@ digraph picker {
     "Audit a doc?" -> "mma-audit" [label="yes"];
     "Audit a doc?" -> "Review code?" [label="no"];
     "Review code?" -> "mma-review" [label="yes"];
-    "Review code?" -> "Verify a checklist?" [label="no"];
-    "Verify a checklist?" -> "mma-verify" [label="yes"];
-    "Verify a checklist?" -> "Debug a failure?" [label="no"];
+    "Review code?" -> "Debug a failure?" [label="no"];
     "Debug a failure?" -> "mma-debug" [label="yes"];
     "Debug a failure?" -> "Codebase question?" [label="no"];
     "Codebase question?" -> "Convergent or divergent?" [label="yes"];
@@ -54,8 +51,7 @@ digraph picker {
 |---|---|
 | `mma-execute-plan` | Implement tasks from a plan or spec file (descriptors match plan headings) |
 | `mma-audit` | Audit a document/spec/config for security, correctness, style, or performance |
-| `mma-review` | Review code for quality, security, performance, correctness |
-| `mma-verify` | Verify work against a checklist (one item per worker, parallel) |
+| `mma-review` | Review code for quality, security, performance, correctness. Pass acceptance checklists in the brief if you need verification-style checks. |
 | `mma-debug` | Debug a failure with a structured hypothesis |
 | `mma-investigate` | Codebase Q&A — structured answer with `file:line` citations + confidence |
 | `mma-explore` | Divergent ideation from codebase + web research — use before `superpowers:brainstorming` |
@@ -98,9 +94,9 @@ Any artifact (spec, plan, prior-round findings, long error log) that crosses 2+ 
 
 `mma-audit` → read findings → fix (inline if 1-2 lines, else `mma-delegate`) → `mma-audit` again. Sequential rounds, NOT parallel re-audits. The fix produces new edges; round 2 catches what round 1 couldn't see. Register the doc as a context block before round 1; reuse the same ID across all rounds. The same shape applies to `mma-review` for source code (review → fix → re-review).
 
-### Recipe B — Debug-fix-verify
+### Recipe B — Debug-fix-review
 
-`mma-debug` (read/reproduce/trace) → `mma-delegate` (apply the fix the hypothesis implies) → `mma-verify` (acceptance criteria checked independently). Three skills, strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse it on verify.
+`mma-debug` (read/reproduce/trace) → `mma-delegate` (apply the fix the hypothesis implies) → `mma-review` with the acceptance criteria included in the brief. Three skills, strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse it on the review call so the reviewer can compare against the same evidence.
 
 ### Recipe C — Investigate-plan-execute
 
@@ -112,7 +108,7 @@ When `mma-execute-plan` returns mixed `done` / `done_with_concerns` / `failed`, 
 
 ### Anti-patterns
 
-1. **`parallel-rounds-same-target`** — Caller fans out 3 parallel calls of the same skill on the same target — `mma-audit` on one document, `mma-review` on the same source file, or `mma-verify` of the same checklist. The reports overlap heavily; later rounds never see the fix from earlier rounds, so they re-flag the same issues. Corrective: sequential rounds with a fix between each (Recipe A for audit/review; for `mma-verify`, the analog is verify → fix → re-verify, never two verify calls on the unchanged checklist in parallel).
+1. **`parallel-rounds-same-target`** — Caller fans out 3 parallel calls of the same skill on the same target — `mma-audit` on one document, or `mma-review` on the same source file. The reports overlap heavily; later rounds never see the fix from earlier rounds, so they re-flag the same issues. Corrective: sequential rounds with a fix between each (Recipe A).
 
 2. **`inline-labor-leakage`** — Caller does 3+ `Read` calls, or any `grep`, in main context "just to understand the situation." Main tokens get burned on labor; the answer the caller actually needs is one paragraph of synthesis. Corrective: `mma-investigate` for codebase Q&A; if the goal is implementation, jump straight to `mma-delegate` with file paths and let the worker read.
 
@@ -159,7 +155,6 @@ Every other route hardcodes its tier and rejects `agentType` with HTTP 400:
 | `mma-audit` | `complex` |
 | `mma-review` | `complex` |
 | `mma-debug` | `complex` |
-| `mma-verify` | `complex` |
 | `mma-investigate` | `complex` |
 | `mma-explore` | `complex` (all three workers — internal, external, synthesizer) |
 

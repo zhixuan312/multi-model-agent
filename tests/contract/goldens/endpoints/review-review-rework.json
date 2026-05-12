@@ -2,7 +2,7 @@
   "headline": "[ok] review completed",
   "results": [
     {
-      "output": "needs rework per review",
+      "output": "--- TEST GAP (criterion 1) ---\nneeds rework per review\n\n--- CROSS-FILE RIPPLE (criterion 2) ---\nneeds rework per review\n\n--- PRE-EXISTING-BUG-VS-NEW-REGRESSION (criterion 3) ---\nneeds rework per review\n\n--- MISSING EDGE CASE (criterion 4) ---\nneeds rework per review\n\n--- RACE / CONCURRENCY (criterion 5) ---\nneeds rework per review\n\n--- RESOURCE LEAK (criterion 6) ---\nneeds rework per review\n\n--- BACKWARD-COMPAT BREAK (criterion 7) ---\nneeds rework per review\n\n--- SECURITY REGRESSION (criterion 8) ---\nneeds rework per review\n\n--- PERFORMANCE REGRESSION (criterion 9) ---\nneeds rework per review\n\n--- IMPLICIT-CONTRACT ASSUMPTION (criterion 10) ---\nneeds rework per review",
       "status": "ok",
       "usage": {
         "inputTokens": 100,
@@ -26,93 +26,14 @@
         "workerSelfAssessment": "done",
         "wasPromoted": false
       },
-      "workerOutputs": [
-        {
-          "criterionId": "1",
-          "criterionTitle": "TEST GAP",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "2",
-          "criterionTitle": "CROSS-FILE RIPPLE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "3",
-          "criterionTitle": "PRE-EXISTING-BUG-VS-NEW-REGRESSION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "4",
-          "criterionTitle": "MISSING EDGE CASE",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "5",
-          "criterionTitle": "RACE / CONCURRENCY",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "6",
-          "criterionTitle": "RESOURCE LEAK",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "7",
-          "criterionTitle": "BACKWARD-COMPAT BREAK",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "8",
-          "criterionTitle": "SECURITY REGRESSION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "9",
-          "criterionTitle": "PERFORMANCE REGRESSION",
-          "narrative": "needs rework per review"
-        },
-        {
-          "criterionId": "10",
-          "criterionTitle": "IMPLICIT-CONTRACT ASSUMPTION",
-          "narrative": "needs rework per review"
-        }
-      ],
-      "partialCriteriaCovered": [
-        "1",
-        "2",
-        "3",
-        "4",
-        "5",
-        "6",
-        "7",
-        "8",
-        "9",
-        "10"
-      ],
-      "partialCriteriaFailed": [],
-      "implementationReport": {
-        "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
-      "structuredReport": {
-        "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
-        "filesChanged": [],
-        "validationsRun": [],
-        "deviationsFromBrief": [],
-        "unresolved": [],
-        "extraSections": {}
-      },
+      "findings": [],
+      "criteriaErrors": [],
       "stageStats": {
         "implementing": {
           "stage": "implementing",
           "entered": true,
           "durationMs": "<DETERMINISTIC>",
-          "costUSD": 0,
+          "costUSD": null,
           "agentTier": "complex",
           "modelFamily": null,
           "model": "mock-model",
@@ -127,31 +48,9 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "annotatedFindings": [],
-      "qualityReviewVerdict": "error",
-      "actualCostUSD": 0,
+      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "not_applicable",
@@ -165,6 +64,29 @@
       "fileArtifactsMissing": false,
       "specReviewReason": "task produced no file artifacts to review",
       "qualityReviewReason": "task produced no file artifacts to review",
+      "implementationReport": {
+        "summary": "--- TEST GAP (criterion 1) ---\nneeds rework per review",
+        "filesChanged": [],
+        "validationsRun": [],
+        "deviationsFromBrief": [],
+        "unresolved": [],
+        "extraSections": {}
+      },
+      "structuredReport": {
+        "summary": "produced 0 findings",
+        "workerStatus": "done",
+        "unresolved": [],
+        "filesChanged": [],
+        "reviewVerdict": null,
+        "reviewConcerns": [],
+        "reworkApplied": false,
+        "validationsRun": [],
+        "commitSha": null,
+        "commitMessage": null,
+        "commitSkipReason": null,
+        "findings": [],
+        "criteriaErrors": []
+      },
       "models": {
         "implementer": "mock-model",
         "specReviewer": null,
@@ -183,12 +105,19 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "needs rework per review",
-    "filesChanged": [],
-    "validationsRun": [],
-    "deviationsFromBrief": [],
+    "summary": "produced 0 findings",
+    "workerStatus": "done",
     "unresolved": [],
-    "extraSections": {}
+    "filesChanged": [],
+    "reviewVerdict": null,
+    "reviewConcerns": [],
+    "reworkApplied": false,
+    "validationsRun": [],
+    "commitSha": null,
+    "commitMessage": null,
+    "commitSkipReason": null,
+    "findings": [],
+    "criteriaErrors": []
   },
   "error": {
     "kind": "not_applicable",

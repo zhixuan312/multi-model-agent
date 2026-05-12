@@ -3,6 +3,7 @@ import { buildOutputEnvelopeSchema } from '../shared-output.js';
 
 export const inputSchema = z.object({
   question: z.string().trim().min(1, 'question required'),
+  subtype: z.enum(['default']).default('default'),
   filePaths: z.array(z.string().trim().min(1)).optional(),
   contextBlockIds: z.array(z.string().trim().min(1)).optional(),
   tools: z.enum(['none', 'readonly'], {

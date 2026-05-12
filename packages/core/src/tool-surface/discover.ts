@@ -11,7 +11,6 @@ export const SUPPORTED_SKILLS = [
   'mma-delegate',
   'mma-audit',
   'mma-review',
-  'mma-verify',
   'mma-debug',
   'mma-execute-plan',
   'mma-retry',

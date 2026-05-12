@@ -1,7 +1,7 @@
 ---
 name: mma-retry
 description: Use when a previous mma-* batch returned partial results (some tasks failed or came back incomplete) and you want to re-run JUST the failed indices without re-dispatching the whole batch
-when_to_use: A previous mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug / mma-investigate batch returned partial results AND you want to re-try the failed indices only. Prefer this over re-dispatching the whole batch or inline-retrying — it's idempotent and preserves the original batch's diagnostics.
+when_to_use: A previous mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-debug / mma-investigate batch returned partial results AND you want to re-try the failed indices only. Prefer this over re-dispatching the whole batch or inline-retrying — it's idempotent and preserves the original batch's diagnostics.
 version: "0.0.0-unreleased"
 ---
 
@@ -70,6 +70,7 @@ To re-run all tasks: pass `[0, 1, ..., tasks.length - 1]`. (But consider: if all
 # Original batch had 4 tasks; re-run tasks at index 1 and 3
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"batchId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \

@@ -68,6 +68,5 @@ export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   reviewTemplates: {
     spec: specLintTemplate,
     qualityAP: qualityLintTemplate,
-    diff: specLintTemplate,  // pipeline-redesign: diff path unused; field retained for type compat
   },
 };

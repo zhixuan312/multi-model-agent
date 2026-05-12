@@ -6,7 +6,7 @@ Every request to the multi-model-agent server requires:
 |---|---|---|
 | `Authorization: Bearer <token>` | All routes (except `/health`) | Auth — token from `mmagent print-token` |
 | `X-MMA-Client: <client>` | All tool routes | Identifies your client. One of `claude-code`, `cursor`, `codex-cli`, `gemini-cli`. **Server returns `400 client_required` if missing.** |
-| `X-MMA-Main-Model: <model-id>` *(optional)* | All tool routes | Override the auto-detected calling model id. When omitted the server resolves per-client (claude-code reads the latest `~/.claude/projects/<slug>/*.jsonl`; codex-cli reads `~/.codex/config.toml`) and falls back to `defaults.mainModel` in config, then to `unknown_main_model`. |
+| `X-MMA-Main-Model: <model-id>` | All tool routes | Calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`). Used as `mainModel` in wire telemetry so cost-delta-vs-main and family attribution can be computed. **Server returns `400 main_model_required` if missing.** Auto-detection is intentionally not attempted — the calling client is the only reliable source. |
 
 ### Obtain the token
 
@@ -25,10 +25,12 @@ mmagent print-token
 ```bash
 TOKEN="${MMAGENT_AUTH_TOKEN:-$(mmagent print-token)}"
 MMA_CLIENT="${MMAGENT_CLIENT:-claude-code}"
+MMA_MAIN_MODEL="${MMAGENT_MAIN_MODEL:-claude-opus-4-7}"
 
 curl \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   ...
 ```
 
@@ -36,3 +38,4 @@ curl \
 
 - `401 unauthorized` — re-run `mmagent print-token`; the token may have changed after a server restart.
 - `400 client_required` — `X-MMA-Client` header is missing on a tool route. Set it to one of: `claude-code`, `cursor`, `codex-cli`, `gemini-cli`.
+- `400 main_model_required` — `X-MMA-Main-Model` header is missing on a tool route. Set it to the calling agent's model id (e.g. `claude-opus-4-7`, `gpt-5.4`).

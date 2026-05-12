@@ -9,6 +9,7 @@ export const inputSchema = z.object({
   problem: z.string().describe('What is broken'),
   context: z.string().optional().describe('Background'),
   hypothesis: z.string().optional().describe('Initial theory'),
+  subtype: z.enum(['default']).default('default').describe('Criteria-set selector. Only `default` is wired today; reserved for future per-failure-class subtypes.'),
   filePaths: z.array(z.string()).optional().describe(
     'Files the sub-agent should focus on. For debug_task, all provided files are investigated together in a single task.',
   ),

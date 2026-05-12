@@ -1,7 +1,7 @@
 ---
 name: mma-context-blocks
 description: Use when a document larger than ~2 KB will be referenced by 2+ subsequent mma-* calls — register once, pass the returned ID to each call instead of re-uploading the same content. OR a spec / plan / error log was already inlined into one task and is about to be inlined into a second — register on the second reference, never the third.
-when_to_use: A document (spec, plan, codebase summary, prior round's findings, error log) larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the ID via `contextBlockIds` on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-verify / mma-debug / mma-investigate. Cheaper and faster than inlining the same content N times.
+when_to_use: A document (spec, plan, codebase summary, prior round's findings, error log) larger than ~2 KB will be referenced by two or more mma-* calls in a row. Register once here, then pass the ID via `contextBlockIds` on mma-delegate / mma-execute-plan / mma-audit / mma-review / mma-debug / mma-investigate. Cheaper and faster than inlining the same content N times.
 version: "0.0.0-unreleased"
 ---
 
@@ -68,6 +68,7 @@ Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held
 # Register spec document once
 ID=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
@@ -76,6 +77,7 @@ ID=$(curl -f --show-error -s -X POST \
 # Reference from N delegate tasks
 curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"tasks\":[

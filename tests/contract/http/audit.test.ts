@@ -25,7 +25,7 @@ describe('contract: POST /audit', () => {
         const dispatch = await fetch(`${h.baseUrl}/audit?cwd=${encodeURIComponent(process.cwd())}`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', "X-MMA-Main-Model": "claude-opus-4-7", "X-MMA-Client": "claude-code", Authorization: `Bearer ${h.token}` },
-          body: JSON.stringify({ document: 'function add(a, b) { return a + b; }', auditType: 'default' }),
+          body: JSON.stringify({ document: 'function add(a, b) { return a + b; }', subtype: 'default' }),
         });
         expect(dispatch.status).toBe(202);
         const { batchId } = (await dispatch.json()) as { batchId: string };

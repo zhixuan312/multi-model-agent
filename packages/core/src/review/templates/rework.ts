@@ -18,27 +18,35 @@ export const reworkTemplate: ReviewTemplate = {
     '- Read each file AT MOST ONCE in this stage.',
     '',
     'When done: write summary "Fixed: <list of deviations>. Could not fix: <list with reasons>." End your turn.',
+    '',
+    'workerStatus calibration (this is where rework workers commonly under-rate themselves):',
+    '- "done"             — you applied a fix for EVERY listed deviation. This is the correct value even though the reviewer originally flagged concerns. Being asked to rework is not, by itself, a "concern" — addressing the rework IS the success path.',
+    '- "done_with_concerns" — you addressed every listed deviation AND noticed a NEW unrelated issue you couldn\'t fix in this turn. Put the new issue in `unresolved`.',
+    '- "blocked" / "failed"  — you were unable to apply a fix for ONE OR MORE of the listed deviations (conflicting constraints, missing source, ambiguous instruction). Put those entries in the "Could not fix" line AND in `unresolved`.',
+    'If your summary line is "Fixed: <every deviation>. Could not fix: (none)." then workerStatus MUST be "done".',
   ].join('\n'),
 
   buildUserPrompt(ctx) {
+    // Warm follow-up: this rework turn always resumes the implementer's
+    // thread. The brief, prior worker output, and current cumulative diff
+    // are already in the resumed session's conversation history. Emit
+    // only the NEW content — the reviewer's deviations to fix.
     const parts: string[] = [];
-    parts.push(`# Task brief\n${ctx.brief}`);
-    if (ctx.planContext && ctx.planContext.trim().length > 0) {
-      parts.push(`# Plan section\n\n\`\`\`markdown\n${ctx.planContext.trim()}\n\`\`\``);
-    }
     if (ctx.priorConcerns && ctx.priorConcerns.length > 0) {
-      parts.push(`# Reviewer deviations to fix\n${ctx.priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n')}`);
+      parts.push(
+        `# Reviewer deviations to fix\n${ctx.priorConcerns
+          .map((c, i) => `${i + 1}. ${c}`)
+          .join('\n')}`,
+      );
     } else {
       parts.push('# Reviewer deviations to fix\n(none — should not have reached this stage; end immediately)');
-    }
-    if (ctx.diff && ctx.diff.length > 0) {
-      parts.push(`# Current on-disk diff\n\n\`\`\`diff\n${ctx.diff}\n\`\`\``);
     }
     parts.push(
       '# Action\n' +
       '1. Fix each deviation in order.\n' +
       '2. Apply one edit call per file. Do not re-read after editing.\n' +
-      '3. Write your summary and end your turn.'
+      '3. Write your summary and end your turn.\n' +
+      '4. In your final WorkerOutput JSON: set workerStatus to "done" if your "Could not fix" line is empty (every listed deviation was addressed). Reserve "failed" / "blocked" for deviations you could not address — having had concerns to begin with is not, in itself, a concern.',
     );
     return parts.join('\n\n');
   },

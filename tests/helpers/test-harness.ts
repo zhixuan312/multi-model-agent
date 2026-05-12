@@ -108,7 +108,7 @@ export interface MockAdapterOptions {
   turns: MockAdapterTurn[];
   usage?: any;
   throwOnTurn?: Error;
-  providerType?: 'claude' | 'claude-compatible' | 'openai' | 'openai-compatible' | 'codex';
+  providerType?: 'claude' | 'claude' | 'openai' | 'codex' | 'codex';
 }
 
 /**
