@@ -1,12 +1,7 @@
-import type { ReviewerVerdict, DiffReviewerVerdict } from './review-types.js';
+import type { ReviewerVerdict } from './review-types.js';
 
 export interface ReviewerParseResult {
   verdict: ReviewerVerdict;
-  concerns: string[];
-}
-
-export interface ReviewerDiffParseResult {
-  verdict: DiffReviewerVerdict;
   concerns: string[];
 }
 
@@ -168,14 +163,6 @@ function extractDeviationsAndUnresolved(text: string): string[] {
   return concerns;
 }
 
-function extractDiffVerdict(text: string): DiffReviewerVerdict | null {
-  const trimmed = text.trim();
-  if (/^APPROVE\b/i.test(trimmed)) return 'approve';
-  if (/^CONCERNS:/i.test(trimmed)) return 'concerns';
-  if (/^REJECT:/i.test(trimmed)) return 'reject';
-  return null;
-}
-
 export class ReviewerOutputParser {
   parse(text: string): ReviewerParseResult {
     // Source priority:
@@ -211,22 +198,6 @@ export class ReviewerOutputParser {
     return { verdict, concerns };
   }
 
-  parseDiff(text: string): ReviewerDiffParseResult {
-    // Same leniency for diff review: missing verdict marker → concerns
-    // (default conservative) plus a meta-concern. Don't crash the run.
-    const verdict = extractDiffVerdict(text);
-    const concerns = extractDeviationsAndUnresolved(text);
-    if (!verdict) {
-      return {
-        verdict: 'concerns',
-        concerns: [
-          'diff reviewer output missing APPROVE / CONCERNS: / REJECT: marker — defaulting verdict to concerns',
-          ...concerns,
-        ],
-      };
-    }
-    return { verdict, concerns };
-  }
 }
 
 export class ReviewerParseError extends Error {

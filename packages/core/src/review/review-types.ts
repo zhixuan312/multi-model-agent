@@ -24,4 +24,3 @@ export interface AnnotatedFinding {
 
 export type ReviewerVerdict = 'approved' | 'changes_required';
 export type AnnotatorVerdict = 'annotated' | 'error';
-export type DiffReviewerVerdict = 'approve' | 'concerns' | 'reject';
