@@ -65,7 +65,7 @@ describe('Phase-4 end-to-end LifecycleDriver fixture', () => {
     const fakeSession = {
       async send() {
         return {
-          output: 'done',
+          output: 'done\n\n```json\n{"summary":"done","workerStatus":"done","filesChanged":[],"validationsRun":[],"unresolved":[]}\n```',
           usage: { inputTokens: 10, outputTokens: 5, cachedReadTokens: 0, cachedNonReadTokens: 0 },
           filesRead: [],
           filesWritten: [],
