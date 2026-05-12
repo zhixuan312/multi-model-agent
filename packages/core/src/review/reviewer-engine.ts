@@ -1,6 +1,6 @@
 import type { Session } from '../types/run-result.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
-import { ReviewerOutputParser, type ReviewerParseResult, type ReviewerDiffParseResult, ReviewerParseError } from './reviewer-output-parser.js';
+import { ReviewerOutputParser, type ReviewerParseResult, ReviewerParseError } from './reviewer-output-parser.js';
 
 // Re-exports for callers. Spec C11 puts templates in review/templates/ and
 // the builder in review/reviewer-prompt-builder.ts; the re-exports keep one
@@ -49,10 +49,6 @@ export interface ReviewerCallResult extends ReviewerParseResult {
   cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
 }
 
-export interface ReviewerDiffCallResult extends ReviewerDiffParseResult {
-  cost: { inputTokens: number; outputTokens: number; turnCount: number; toolCallCount: number; costUSD: number | null; durationMs: number | null };
-}
-
 export class ReviewerEngine {
   private parser = new ReviewerOutputParser();
   constructor(private builder: ReviewerPromptBuilder) {}
@@ -75,14 +71,6 @@ export class ReviewerEngine {
     return { ...parsed, cost: extractCost(turn) };
   }
 
-  async runDiff(session: Session, input: ReviewerInput): Promise<ReviewerDiffCallResult> {
-    const { systemPrompt, userPrompt } = this.builder.buildDiff({ ...input });
-    const turn = await session.send(`${systemPrompt}\n\n${userPrompt}`, {
-      stageLabel: input.stageLabel ?? 'Diff review',
-    });
-    const parsed = this.parser.parseDiff(turn.output ?? '');
-    return { ...parsed, cost: extractCost(turn) };
-  }
 }
 
 function extractCost(turn: import('../types/run-result.js').TurnResult): ReviewerCallResult['cost'] {
