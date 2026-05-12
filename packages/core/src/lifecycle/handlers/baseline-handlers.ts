@@ -355,8 +355,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     review: reviewHandler,
     rework: reworkHandler,
-    annotate_completion: annotator,
-    annotate_criteria: annotator,
+    annotating: annotator,
 
     register_to_block_store: registerToBlockStoreHandler,
     git_commit: gitCommitHandler,

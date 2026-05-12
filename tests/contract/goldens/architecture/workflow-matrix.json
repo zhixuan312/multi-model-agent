@@ -169,27 +169,19 @@
       },
       {
         "rowId": "4.3",
-        "stageName": "annotate_completion",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_completion"
-      },
-      {
-        "rowId": "4.4",
-        "stageName": "annotate_criteria",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_criteria"
-      },
-      {
-        "rowId": "5.2",
         "stageName": "git_commit",
         "schemaStage": "committing",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "annotating",
+        "schemaStage": "annotating",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "annotating"
       },
       {
         "rowId": "5.3.rcb",
@@ -352,27 +344,19 @@
       },
       {
         "rowId": "4.3",
-        "stageName": "annotate_completion",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_completion"
-      },
-      {
-        "rowId": "4.4",
-        "stageName": "annotate_criteria",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_criteria"
-      },
-      {
-        "rowId": "5.2",
         "stageName": "git_commit",
         "schemaStage": "committing",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "annotating",
+        "schemaStage": "annotating",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "annotating"
       },
       {
         "rowId": "5.3.rcb",
@@ -535,27 +519,19 @@
       },
       {
         "rowId": "4.3",
-        "stageName": "annotate_completion",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_completion"
-      },
-      {
-        "rowId": "4.4",
-        "stageName": "annotate_criteria",
-        "schemaStage": "annotating",
-        "isRework": false,
-        "runOnTerminal": false,
-        "handlerKey": "annotate_criteria"
-      },
-      {
-        "rowId": "5.2",
         "stageName": "git_commit",
         "schemaStage": "committing",
         "isRework": false,
         "runOnTerminal": false,
         "handlerKey": "git_commit"
+      },
+      {
+        "rowId": "4.4",
+        "stageName": "annotating",
+        "schemaStage": "annotating",
+        "isRework": false,
+        "runOnTerminal": false,
+        "handlerKey": "annotating"
       },
       {
         "rowId": "5.3.rcb",

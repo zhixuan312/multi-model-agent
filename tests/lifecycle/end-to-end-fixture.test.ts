@@ -33,22 +33,12 @@ describe('Phase-4 end-to-end LifecycleDriver fixture', () => {
       run_initial_impl: executor.handler,
       check_files_written: noop,
 
-      spec_review_round_1: noop,
-      rework_for_spec_round_1: noop,
-      spec_review_round_2: noop,
-      rework_for_spec_round_2: noop,
-      spec_review_round_3: noop,
-      settle_spec_chain: (s: any) => { s.specChainPassed = true; },
-      quality_review_round_1: noop,
-      rework_for_quality_round_1: noop,
-      quality_review_round_2: noop,
-      rework_for_quality_round_2: noop,
-      quality_review_round_3: noop,
-      settle_quality_chain: (s: any) => { s.qualityChainPassed = true; },
-      review_diff: noop,
-
-      run_verify_command: noop,
+      // v4.4.x five-stage pipeline
+      review: noop,
+      rework: noop,
       git_commit: noop,
+      annotating: noop,
+
       compose_response: terminalHandler.handler,
       register_terminal_block: noop,
       emit_task_terminal: noop,

@@ -1,19 +1,5 @@
-import type { StagePlan, StageRow, LifecycleState } from './stage-plan-types.js';
+import type { StagePlan, StageRow } from './stage-plan-types.js';
 import type { ToolCategory } from '../escalation/escalation-policy.js';
-
-/**
- * Helper for the `reviewPolicy === 'none'` commit path (pipeline-redesign §2.5).
- * When reviewPolicy is 'none', stages 2–4 are skipped, so state.commitGatePercent
- * is undefined when the commit gate runs. This helper returns 100 if files were
- * written (so the gate trivially passes) or 0 otherwise. Same code path as the
- * LLM-mediated case — just emits a deterministic value when annotation didn't run.
- */
-function deriveBypassCommitPercent(s: LifecycleState): number {
-  if (s.reviewPolicy !== 'none') return 0;
-  const last = s.lastRunResult as { filesWritten?: unknown } | undefined;
-  const writes = last?.filesWritten;
-  return Array.isArray(writes) && writes.length > 0 ? 100 : 0;
-}
 
 export function buildStagePlan(category: ToolCategory): StagePlan {
   const isAP = category === 'artifact_producing';
@@ -61,12 +47,18 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
       isRework: false, handlerKey: 'check_files_written',
     },
 
-    // ── Stage 4 — Lint-review + rework split (4.3.0+) ──────────────────────
-    // 4.1: review (parallel spec + quality, lint-only, readonly tools).
-    //      Emits state.reviewVerdict + state.reviewFindings.
+    // ── Stage 4 — v4.4.x five-stage pipeline ───────────────────────────────
+    //   Implementing → Review → Rework → Committing → Annotating
+    //
+    // 4.1: review (single complex session: spec then quality sequentially).
+    //      Emits state.reviewVerdict + state.reviewConcerns.
     // 4.2: rework (standard tier, full tools, single pass). Skipped when
     //      reviewVerdict === 'approved'.
-    // 4.3 / 4.4: annotate_completion / annotate_criteria (unchanged).
+    // 4.3: committing (write routes only; per-task git commit with full
+    //      gate logic: no_repo / no_diff / validation_failed /
+    //      validation_stale / worker_committed_out_of_band / hook_failed).
+    // 4.4: annotating (pure transform; builds the unified StructuredReport
+    //      from lastRunResult + review state + commit outcome).
     { rowId: '4.1', stageName: 'review', schemaStage: 'review',
       runCondition: (s) => isAP && s.reviewPolicy !== 'none' && !s.terminal,
       isRework: false, handlerKey: 'review' },
@@ -76,46 +68,25 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
         && s.reviewVerdict === 'changes_required'
         && !s.terminal,
       isRework: true, handlerKey: 'rework' },
-
-    // 4.3: annotate completion — artifact-producing routes only. Standard
-    // tier with readonly tools. Runs verifyCommand deterministically first,
-    // then invokes annotator LLM. Sets state.completionAnnotation and
-    // state.commitGatePercent.
-    { rowId: '4.3', stageName: 'annotate_completion', schemaStage: 'annotating',
-      runCondition: (s) => isAP
-        && s.reviewPolicy !== 'none'
-        && !s.terminal,
-      isRework: false, handlerKey: 'annotate_completion' },
-    // 4.4: annotate criteria — read-only routes. Merges per-criterion
-    // workerOutputs (from dispatchParallelCriteria in run_initial_impl)
-    // via AnnotatorEngine.annotate. Surfaces "Annotating" as a distinct
-    // user-facing stage matching the artifact-producing Annotating stage.
-    { rowId: '4.4', stageName: 'annotate_criteria', schemaStage: 'annotating',
-      runCondition: (s) => isRO
-        && s.reviewPolicy !== 'none'
-        && !s.terminal,
-      isRework: false, handlerKey: 'annotate_criteria' },
-    // 5.2: git_commit — fires when autoCommit + worker wrote files +
-    // !readOnlyTask + !terminal AND commitGatePercent ≥ completionThreshold.
-    //
-    // 4.3.0 (pipeline redesign §2.5, §3.1): replaces the binary "reviews
-    // passed" gate with a threshold check. state.commitGatePercent is set by
-    // annotate_completion (row 4.3) for reviewPolicy in {full, quality_only,
-    // diff_only}. For reviewPolicy='none', stages 4.1/4.2/4.3 are skipped, so
-    // commitGatePercent is undefined; deriveBypassCommitPercent returns 100
-    // when files were written (else 0) — uniform code path, single threshold.
-    { rowId: '5.2', stageName: 'git_commit', schemaStage: 'committing',
+    // 4.3: committing — fires before annotating so the commit outcome
+    // (sha / message / skipReason) is available to the annotator's report.
+    // Gate is permissive at the stage-plan level; the handler enforces
+    // no_repo / no_diff / validation_failed / etc. internally.
+    { rowId: '4.3', stageName: 'git_commit', schemaStage: 'committing',
       runCondition: (s) => {
         if (s.autoCommit !== true) return false;
-        const last = s.lastRunResult as { filesWritten?: unknown } | undefined;
-        const writes = last?.filesWritten;
-        if (!Array.isArray(writes) || writes.length === 0) return false;
         if (s.readOnlyTask) return false;
         if (s.terminal) return false;
-        const percent = s.commitGatePercent ?? deriveBypassCommitPercent(s);
-        return percent >= (s.completionThreshold ?? 80);
+        // After review: only commit when reviewer approved, or when there
+        // was no review at all (reviewPolicy === 'none').
+        if (s.reviewPolicy !== 'none' && s.reviewVerdict !== 'approved') return false;
+        return true;
       },
       isRework: false, handlerKey: 'git_commit' },
+    // 4.4: annotating — unified pure transform for read + write routes.
+    { rowId: '4.4', stageName: 'annotating', schemaStage: 'annotating',
+      runCondition: (s) => !s.terminal,
+      isRework: false, handlerKey: 'annotating' },
     // 5.3.rcb: register_to_block_store — fires for register-context-block
     // route only, before compose_response. Sets state.blockRegistration
     // which compose_response reads to emit {id, size, ttlMs}.
