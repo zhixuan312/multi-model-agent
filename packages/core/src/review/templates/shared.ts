@@ -57,4 +57,13 @@ export interface ReviewTemplateContext {
 export interface ReviewTemplate {
   systemPrompt: string;
   buildUserPrompt(ctx: ReviewTemplateContext): string;
+  /**
+   * Optional warm-followup variant — used by `review-handler.ts` for
+   * the second iteration of the same reviewer session (turn 2 hits
+   * cached history; we skip re-inlining `brief`, `workerOutput`, `diff`,
+   * `planContext`). Templates that never run a second turn don't define
+   * this method. See
+   * `docs/superpowers/specs/2026-05-12-warm-followup-context-contract-design.md`.
+   */
+  buildWarmFollowup?(ctx: ReviewTemplateContext): string;
 }

@@ -21,24 +21,25 @@ export const reworkTemplate: ReviewTemplate = {
   ].join('\n'),
 
   buildUserPrompt(ctx) {
+    // Warm follow-up: this rework turn always resumes the implementer's
+    // thread. The brief, prior worker output, and current cumulative diff
+    // are already in the resumed session's conversation history. Emit
+    // only the NEW content — the reviewer's deviations to fix.
     const parts: string[] = [];
-    parts.push(`# Task brief\n${ctx.brief}`);
-    if (ctx.planContext && ctx.planContext.trim().length > 0) {
-      parts.push(`# Plan section\n\n\`\`\`markdown\n${ctx.planContext.trim()}\n\`\`\``);
-    }
     if (ctx.priorConcerns && ctx.priorConcerns.length > 0) {
-      parts.push(`# Reviewer deviations to fix\n${ctx.priorConcerns.map((c, i) => `${i + 1}. ${c}`).join('\n')}`);
+      parts.push(
+        `# Reviewer deviations to fix\n${ctx.priorConcerns
+          .map((c, i) => `${i + 1}. ${c}`)
+          .join('\n')}`,
+      );
     } else {
       parts.push('# Reviewer deviations to fix\n(none — should not have reached this stage; end immediately)');
-    }
-    if (ctx.diff && ctx.diff.length > 0) {
-      parts.push(`# Current on-disk diff\n\n\`\`\`diff\n${ctx.diff}\n\`\`\``);
     }
     parts.push(
       '# Action\n' +
       '1. Fix each deviation in order.\n' +
       '2. Apply one edit call per file. Do not re-read after editing.\n' +
-      '3. Write your summary and end your turn.'
+      '3. Write your summary and end your turn.',
     );
     return parts.join('\n\n');
   },

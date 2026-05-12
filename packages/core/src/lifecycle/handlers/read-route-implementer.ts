@@ -12,6 +12,7 @@
 import type { Session } from '../../types/run-result.js';
 import { parseFindings, type Finding } from '../findings-parser.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
+import { buildWarmFollowupMessage } from '../warm-followup.js';
 
 interface Criterion {
   id: string;
@@ -58,9 +59,14 @@ export async function runReadRouteImplementer(
 
   for (let i = 0; i < input.criteria.length; i++) {
     const c = input.criteria[i]!;
+    const suffix = input.buildSuffix(c);
+    // Turn 0 sends cachedPrefix + suffix (cold open into the implementer's
+    // session). Turns 1..N go through the warm-follow-up helper so the
+    // model knows the document + earlier tool results are already in
+    // thread history and skips re-grepping them.
     const prompt = i === 0
-      ? `${input.cachedPrefix}\n\n${input.buildSuffix(c)}`
-      : input.buildSuffix(c);
+      ? `${input.cachedPrefix}\n\n${suffix}`
+      : buildWarmFollowupMessage(suffix);
     try {
       const turn = await input.session.send(prompt, { stageLabel: HUMAN_LABEL.implementing });
       totalInput += turn.usage?.inputTokens ?? 0;

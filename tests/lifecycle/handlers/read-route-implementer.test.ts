@@ -1,5 +1,6 @@
 import { describe, it, expect, vi } from 'vitest';
 import { runReadRouteImplementer } from '../../../packages/core/src/lifecycle/handlers/read-route-implementer.js';
+import { WARM_FOLLOWUP_PREAMBLE } from '../../../packages/core/src/lifecycle/warm-followup.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 
 function turn(output: string): TurnResult {
@@ -59,5 +60,45 @@ describe('runReadRouteImplementer', () => {
       criterionId: '2',
       error: expect.stringMatching(/transport boom/),
     });
+  });
+});
+
+describe('runReadRouteImplementer warm-followup contract', () => {
+  it('iteration 0 prompt does not start with the warm-followup preamble', async () => {
+    const send = vi.fn().mockResolvedValue(turn('## Finding 1: ok'));
+    const session = { send, close: vi.fn() } as any;
+    await runReadRouteImplementer({
+      session,
+      cachedPrefix: 'PREFIX',
+      criteria: [{ id: '1', title: 'a', description: 'd' }],
+      buildSuffix: (c) => `criterion ${c.id}`,
+    });
+    expect(send.mock.calls[0][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(false);
+    // sanity — turn 0 still carries the cached prefix
+    expect(send.mock.calls[0][0]).toContain('PREFIX');
+  });
+
+  it('iterations 1..N prompts start with the warm-followup preamble', async () => {
+    const send = vi.fn()
+      .mockResolvedValueOnce(turn('## Finding 1: a'))
+      .mockResolvedValueOnce(turn('## Finding 1: b'))
+      .mockResolvedValueOnce(turn('## Finding 1: c'));
+    const session = { send, close: vi.fn() } as any;
+    await runReadRouteImplementer({
+      session,
+      cachedPrefix: 'PREFIX',
+      criteria: [
+        { id: '1', title: 'a', description: 'd' },
+        { id: '2', title: 'b', description: 'd' },
+        { id: '3', title: 'c', description: 'd' },
+      ],
+      buildSuffix: (c) => `criterion ${c.id}`,
+    });
+    expect(send.mock.calls[0][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(false);
+    expect(send.mock.calls[1][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(true);
+    expect(send.mock.calls[2][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(true);
+    // turns 1..N are preamble + suffix, nothing else
+    expect(send.mock.calls[1][0]).toBe(`${WARM_FOLLOWUP_PREAMBLE}\n\ncriterion 2`);
+    expect(send.mock.calls[2][0]).toBe(`${WARM_FOLLOWUP_PREAMBLE}\n\ncriterion 3`);
   });
 });

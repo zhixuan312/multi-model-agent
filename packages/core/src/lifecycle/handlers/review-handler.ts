@@ -14,6 +14,7 @@ import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { parseReviewReport } from '../../review/parse-review-report.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
+import { buildWarmFollowupMessage } from '../warm-followup.js';
 import type { Session, TurnResult } from '../../types/run-result.js';
 
 interface SubReview { source: 'spec' | 'quality'; text: string }
@@ -24,6 +25,7 @@ async function runOneReviewer(
   source: 'spec' | 'quality',
   diff: string,
   workerOutput: string,
+  isWarmFollowup: boolean,
 ): Promise<{ turn: TurnResult } | { transportError: string }> {
   const template = source === 'spec' ? specLintTemplate : qualityLintTemplate;
   const promptCtx = {
@@ -32,7 +34,14 @@ async function runOneReviewer(
     diff,
     planContext: (task as { planContext?: string }).planContext,
   };
-  const fullPrompt = template.systemPrompt + '\n\n' + template.buildUserPrompt(promptCtx);
+  // Warm follow-up: the same reviewer session already loaded brief +
+  // diff + planContext on turn 1. Send only the new instruction via
+  // the standard preamble. systemPrompt is intentionally not
+  // re-prepended — it lives in the resumed session's history.
+  // Cold open: full system prompt + brief + diff + planContext.
+  const fullPrompt = isWarmFollowup && template.buildWarmFollowup
+    ? buildWarmFollowupMessage(template.buildWarmFollowup(promptCtx))
+    : template.systemPrompt + '\n\n' + template.buildUserPrompt(promptCtx);
   try {
     const turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.review });
     return { turn };
@@ -71,8 +80,6 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
     state.reviewFindings = [];
     return;
   }
-  const session = ctx.getSession(reviewerTier);
-
   // Which sub-reviews to run, per reviewPolicy.
   const runSpec = state.reviewPolicy === 'full';
   const runQuality = state.reviewPolicy === 'full'
@@ -93,9 +100,28 @@ export async function reviewHandler(state: LifecycleState): Promise<void> {
   let anySuccess = false;
 
   // Sequential — second turn hits the cached prefix on the same session.
+  // The warm-follow-up form is valid ONLY when iteration > 0 AND the
+  // session reference is the same as iteration 0. Today ctx.getSession
+  // is idempotent on tier so both iterations see the same session; the
+  // identity guard exists so a future change that rotates the reviewer
+  // session mid-stage (escalation rotation, retry-after-failure) falls
+  // back to cold-open automatically rather than sending a warm follow-up
+  // into a fresh thread that lacks the prior history.
   const settled: Array<{ source: 'spec' | 'quality'; outcome: { turn: TurnResult } | { transportError: string } }> = [];
-  for (const source of sources) {
-    const outcome = await runOneReviewer(session, task, source, cumulativeDiff, workerOutput);
+  let firstSession: Session | null = null;
+  for (let iteration = 0; iteration < sources.length; iteration++) {
+    const source = sources[iteration]!;
+    const currentSession = ctx.getSession(reviewerTier);
+    if (iteration === 0) firstSession = currentSession;
+    const isWarmFollowup = iteration > 0 && currentSession === firstSession;
+    const outcome = await runOneReviewer(
+      currentSession,
+      task,
+      source,
+      cumulativeDiff,
+      workerOutput,
+      isWarmFollowup,
+    );
     settled.push({ source, outcome });
   }
 

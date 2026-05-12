@@ -1,6 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { buildReadOnlyCachedPrefix, buildReadOnlyCriterionSuffix, type RouteSemantics } from '../../packages/core/src/tools/parallel-criteria-prompt.js';
 import { AUDIT_CRITERIA, AUDIT_PURPOSE_ORIENTATION, EVIDENCE_RULE_AUDIT, SCOPE_RULE_AUDIT, ANNOTATOR_AWARENESS_AUDIT } from '../../packages/core/src/tools/audit/implementer-criteria.js';
+import { WARM_FOLLOWUP_PREAMBLE } from '../../packages/core/src/lifecycle/warm-followup.js';
 
 const STUB_FORMAT = 'Output format: ## Finding N: <title>...';
 
@@ -92,5 +93,11 @@ describe('buildReadOnlyCriterionSuffix', () => {
     const suffix = buildReadOnlyCriterionSuffix(investigateSemantics, AUDIT_CRITERIA[0]);
     expect(suffix).toContain('CANDIDATE ANSWER');
     expect(suffix).not.toContain('Find ALL issues of THIS specific kind');
+  });
+
+  it('does not include the warm-followup preamble (suffix builder is stage-agnostic)', () => {
+    const suffix = buildReadOnlyCriterionSuffix(AUDIT_SEMANTICS, AUDIT_CRITERIA[0]);
+    expect(suffix).not.toContain(WARM_FOLLOWUP_PREAMBLE);
+    expect(suffix).not.toContain('already loaded in this thread');
   });
 });

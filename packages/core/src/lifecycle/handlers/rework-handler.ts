@@ -15,6 +15,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
+import { buildWarmFollowupMessage } from '../warm-followup.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
@@ -55,8 +56,12 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     planContext: (task as { planContext?: string }).planContext,
     priorConcerns: concerns,
   };
+  // Rework always resumes the implementer's thread — the systemPrompt,
+  // brief, prior output, and cumulative diff are already in conversation
+  // history. We send only the new instruction (reviewer deviations +
+  // fix action) wrapped in the standard warm-followup preamble.
   const fullPrompt =
-    reworkTemplate.systemPrompt + '\n\n' + reworkTemplate.buildUserPrompt(promptCtx)
+    buildWarmFollowupMessage(reworkTemplate.buildUserPrompt(promptCtx))
     + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RunResult;
