@@ -107,7 +107,12 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
     turnCount: result.turns ?? 1,
     toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-    costUSD: (result as { costUSD?: number | null }).costUSD ?? null,
+    // `result` comes from assembleRunResult which writes the turn cost to
+    // top-level `actualCostUSD` (not a `costUSD` field). Reading the wrong
+    // field name was the historical cause of rework stages recording
+    // cost=null/0 in telemetry; canonical lookup is `actualCostUSD` with
+    // legacy `costUSD` as a safety fallback.
+    costUSD: (result as { actualCostUSD?: number | null }).actualCostUSD ?? (result as { costUSD?: number | null }).costUSD ?? null,
     durationMs: (result as { durationMs?: number }).durationMs ?? null,
     filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
     filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,

@@ -507,6 +507,12 @@ export async function runTaskViaDispatcher(
         state.lastRunResult = enrichedResult;
         // Record the implementer's per-stage cost so emit_task_terminal +
         // wire task.completed include it in the totals + per-stage breakdown.
+        // Cost field lookup matches the canonical-then-legacy fallback used
+        // in delegate-with-escalation: `cost.costUSD` was the original field
+        // before assembleRunResult moved the value to top-level
+        // `actualCostUSD` (the current source of truth from claude/codex
+        // turns). Without the actualCostUSD fallback every claude-tier
+        // implementing stage records cost=null and telemetry under-reports.
         mergeStageStats(state, 'implementing', {
           inputTokens: result.usage.inputTokens ?? 0,
           outputTokens: result.usage.outputTokens ?? 0,
@@ -514,7 +520,7 @@ export async function runTaskViaDispatcher(
           cachedNonReadTokens: result.usage.cachedNonReadTokens ?? 0,
           turnCount: result.turns ?? 0,
           toolCallCount: Array.isArray(result.toolCalls) ? result.toolCalls.length : 0,
-          costUSD: result.cost?.costUSD ?? null,
+          costUSD: result.cost?.costUSD ?? (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
           durationMs: result.durationMs ?? null,
           filesReadCount: Array.isArray(result.filesRead) ? result.filesRead.length : 0,
           filesWrittenCount: Array.isArray(result.filesWritten) ? result.filesWritten.length : 0,

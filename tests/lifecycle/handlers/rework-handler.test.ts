@@ -82,4 +82,27 @@ describe('reworkHandler — warm-followup contract', () => {
     expect(openSessionSpy).not.toHaveBeenCalled();
     expect(state.reworkApplied).toBeUndefined();
   });
+
+  // Cost-attribution regression pin (2026-05-12): assembleRunResult writes
+  // the per-turn cost to `actualCostUSD`, NOT a `costUSD` field on RunResult.
+  // The rework handler previously read `result.costUSD` (the wrong field
+  // name) and recorded cost=null for every claude-tier rework stage, making
+  // telemetry under-report. Pin the correct field lookup here so a future
+  // refactor doesn't silently zero-out the cost again.
+  it('records cost in stageStats from RunResult.actualCostUSD (not a legacy costUSD field)', async () => {
+    const send = vi.fn().mockResolvedValueOnce({
+      ...fakeTurn(REWORK_WORKER_OUTPUT),
+      costUSD: 0.1234, // the TurnResult-level cost flows into actualCostUSD
+                       // on the assembled RunResult; this is what we expect
+                       // mergeStageStats to record.
+    } as unknown as TurnResult);
+    const openSessionSpy = vi.fn();
+    const { state } = makeState(send, openSessionSpy);
+    await reworkHandler(state);
+    // mergeStageStats writes to `state.lastRunResult.stageStats` (not
+    // `state.stageStats`) — it lives on the run result so it survives the
+    // replaceLastRunResultPreservingTrackers merge in the rework handler.
+    const last = state.lastRunResult as { stageStats?: Record<string, { costUSD?: number | null }> };
+    expect(last.stageStats?.['rework']?.costUSD).toBeCloseTo(0.1234, 6);
+  });
 });
