@@ -28,6 +28,7 @@ describe('contract: POST /audit { subtype: "plan" } end-to-end', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-MMA-Client': 'claude-code',
+          'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ subtype: 'plan', filePaths: [FIXTURE_PATH] }),
@@ -50,6 +51,7 @@ describe('contract: POST /audit { subtype: "plan" } end-to-end', () => {
         headers: {
           'Content-Type': 'application/json',
           'X-MMA-Client': 'claude-code',
+          'X-MMA-Main-Model': 'claude-opus-4-7',
           Authorization: `Bearer ${h.token}`,
         },
         body: JSON.stringify({ subtype: 'plan', filePaths: [FIXTURE_PATH, FIXTURE_PATH] }),

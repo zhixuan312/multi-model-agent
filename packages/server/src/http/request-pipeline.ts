@@ -10,8 +10,6 @@ import { validateAuthHeader } from './auth.js';
 import { validateCwd } from './cwd-validator.js';
 import { isLoopbackAddress } from '@zhixuan92/multi-model-agent-core';
 import { resolveCallerIdentity } from './middleware/caller-identity.js';
-import { resolveMainModel, type SupportedClient } from '@zhixuan92/multi-model-agent-core';
-import * as os from 'node:os';
 import type { RequestContext, RawHandler } from './types.js';
 
 const BODY_METHODS = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
@@ -140,18 +138,19 @@ export async function handleRequest(
       );
       return;
     }
-    // A6.2 (4.3.0+): X-MMA-Main-Model is no longer required. Resolve from
-    // header → per-client auto-detect → config defaults.mainModel →
-    // 'unknown_main_model' sentinel.
-    const cwdForResolver = cwdValue ?? process.cwd();
-    const resolved = resolveMainModel({
-      headerValue: identity.mainModel ?? undefined,
-      client: identity.callerClient as SupportedClient,
-      cwd: cwdForResolver,
-      configDefaultMainModel: (cfg as unknown as { defaults?: { mainModel?: string } }).defaults?.mainModel,
-      homeDir: os.homedir(),
-    });
-    identity.mainModel = resolved.model;
+    // Auto-detect was unreliable: the claude-agent-sdk used by our own
+    // claude-tier workers writes JSONL files into the same project slug,
+    // and the resolver would pick those up (e.g. haiku) as the "main"
+    // model. The header must come from the calling client.
+    if (!identity.mainModel) {
+      sendError(
+        res,
+        400,
+        'main_model_required',
+        'X-MMA-Main-Model header is required on tool routes. Set it to the calling agent\'s model id (e.g. claude-opus-4-7, gpt-5.4).',
+      );
+      return;
+    }
   }
 
   // ── Step 9: Hand off to matched handler ────────────────────────────────────
