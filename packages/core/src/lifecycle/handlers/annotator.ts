@@ -8,7 +8,7 @@
 
 import type { LifecycleState } from '../stage-plan-types.js';
 
-const READ_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
+const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
 
 export interface StructuredReport {
   summary: string;

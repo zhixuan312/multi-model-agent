@@ -14,7 +14,6 @@ import {
 import * as delegate from '../tools/delegate/schema.js';
 import * as audit from '../tools/audit/schema.js';
 import * as review from '../tools/review/schema.js';
-import * as verify from '../tools/verify/schema.js';
 import * as debug from '../tools/debug/schema.js';
 import * as executePlan from '../tools/execute-plan/schema.js';
 import * as retry from '../tools/retry/schema.js';
@@ -106,7 +105,6 @@ const TOOL_ENDPOINTS: Array<{ path: string; summary: string; schema: z.ZodTypeAn
   { path: '/delegate', summary: 'Dispatch tasks to sub-agents', schema: delegate.inputSchema },
   { path: '/audit', summary: 'Audit documents or files', schema: audit.inputSchema },
   { path: '/review', summary: 'Review code for quality and security', schema: review.inputSchema },
-  { path: '/verify', summary: 'Verify work against a checklist', schema: verify.inputSchema },
   { path: '/debug', summary: 'Debug a problem with sub-agent assistance', schema: debug.inputSchema },
   { path: '/execute-plan', summary: 'Execute tasks from a plan file', schema: executePlan.inputSchema },
   { path: '/retry', summary: 'Retry failed tasks from a previous batch', schema: retry.inputSchema },

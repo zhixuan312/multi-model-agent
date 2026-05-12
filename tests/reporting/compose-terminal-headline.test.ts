@@ -13,8 +13,8 @@ describe('composeTerminalHeadline', () => {
   });
 
   it('partial completion', () => {
-    expect(composeTerminalHeadline({ tool: 'verify', tasksTotal: 5, tasksCompleted: 2 }))
-      .toBe('verify: 2/5 tasks complete');
+    expect(composeTerminalHeadline({ tool: 'debug', tasksTotal: 5, tasksCompleted: 2 }))
+      .toBe('debug: 2/5 tasks complete');
   });
 
   it('never returns empty string for any sane input', () => {

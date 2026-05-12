@@ -49,7 +49,7 @@ const AUTH_EXEMPT_PATHS = new Set(['/health']);
 
 /** Routes that require a `cwd` query parameter (validated by cwd-validator middleware). */
 const CWD_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
+  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
   '/control/retry', '/control/batch-slice', '/context-blocks',
 ]);
 
@@ -58,12 +58,12 @@ const CWD_REQUIRED_PATHS = new Set([
  *  9 tool routes + /control/retry (which dispatches a real run) need it; the
  *  introspection / batch-polling / context-block utility routes do not. */
 const MAIN_MODEL_REQUIRED_PATHS = new Set([
-  '/delegate', '/audit', '/review', '/verify', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
+  '/delegate', '/audit', '/review', '/debug', '/execute-plan', '/retry', '/investigate', '/research',
   '/control/retry',
 ]);
 
 /**
- * Registers tool handlers (POST /delegate, /audit, /review, /verify, /debug, /execute-plan, /retry).
+ * Registers tool handlers (POST /delegate, /audit, /review, /debug, /execute-plan, /retry).
  * Builds a ToolSurfaceRegistry by calling each tool-config's registerXxx, then
  * iterates `registry.list()` filtered to `surface: 'tool'` entries to drive
  * route registration. The registry is the canonical source for tool surface
@@ -77,7 +77,7 @@ async function registerToolHandlers(
 ): Promise<void> {
   const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
     specLintTemplate, qualityLintTemplate,
-    qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+    qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
   } =
     await import('@zhixuan92/multi-model-agent-core');
 
@@ -138,7 +138,6 @@ async function registerToolHandlers(
       'execute-plan': qualityLintTemplate,
       audit: qualityAuditTemplate,
       review: qualityReviewTemplate,
-      verify: qualityVerifyTemplate,
       debug: qualityDebugTemplate,
       investigate: qualityInvestigateTemplate,
     },
@@ -162,7 +161,6 @@ async function registerToolHandlers(
   const { buildDelegateHandler } = await import('./handlers/tools/delegate.js');
   const { buildAuditHandler } = await import('./handlers/tools/audit.js');
   const { buildReviewHandler } = await import('./handlers/tools/review.js');
-  const { buildVerifyHandler } = await import('./handlers/tools/verify.js');
   const { buildDebugHandler } = await import('./handlers/tools/debug.js');
   const { buildExecutePlanHandler } = await import('./handlers/tools/execute-plan.js');
   const { buildRetryHandler } = await import('./handlers/tools/retry.js');
@@ -173,7 +171,6 @@ async function registerToolHandlers(
     delegate: buildDelegateHandler,
     audit: buildAuditHandler,
     review: buildReviewHandler,
-    verify: buildVerifyHandler,
     debug: buildDebugHandler,
     execute_plan: buildExecutePlanHandler,
     retry_tasks: buildRetryHandler,
@@ -226,7 +223,7 @@ async function registerControlHandlers(
     ]);
     const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
       specLintTemplate, qualityLintTemplate,
-      qualityAuditTemplate, qualityReviewTemplate, qualityVerifyTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
+      qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
     } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();
     const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
@@ -236,7 +233,6 @@ async function registerControlHandlers(
         'execute-plan': qualityLintTemplate,
         audit: qualityAuditTemplate,
         review: qualityReviewTemplate,
-        verify: qualityVerifyTemplate,
         debug: qualityDebugTemplate,
         investigate: qualityInvestigateTemplate,
       },

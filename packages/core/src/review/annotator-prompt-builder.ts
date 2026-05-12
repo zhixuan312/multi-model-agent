@@ -1,6 +1,6 @@
 import { buildAnnotatorRubric, type AnnotatorPromptContext, type AnnotatorTemplate } from './templates/annotator-shared.js';
 
-export type AnnotatorRoute = 'audit' | 'review' | 'verify' | 'debug' | 'investigate';
+export type AnnotatorRoute = 'audit' | 'review' | 'debug' | 'investigate';
 
 export class AnnotatorPromptBuilder {
   constructor(

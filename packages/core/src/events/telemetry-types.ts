@@ -135,7 +135,7 @@ export const StageEntrySchema = z.discriminatedUnion('name', [
 export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
-  route: z.enum(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'register-context-block']),
+  route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'register-context-block']),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
@@ -209,8 +209,8 @@ export const UploadBatchSchema = z.object({
 
 // ── Super-refinement: R1–R15 (§3.4) ──────────────────────────────────────
 
-const qualityOnlyRoutes = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
-const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'investigate']);
+const qualityOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate']);
+const reviewedRoutes = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
 
 export const ValidatedTaskCompletedEventSchema = TaskCompletedEventSchema.superRefine((event, ctx) => {
   // R1: ok terminalStatus implies non-failed worker outcome and no errorCode

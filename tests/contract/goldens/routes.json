@@ -16,6 +16,5 @@
   "POST /investigate",
   "POST /research",
   "POST /retry",
-  "POST /review",
-  "POST /verify"
+  "POST /review"
 ]

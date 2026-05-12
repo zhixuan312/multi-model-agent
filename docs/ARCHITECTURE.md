@@ -99,7 +99,6 @@ Per-tool fill of the stack:
 | `delegate_tasks` | full review | — | mma-delegate |
 | `audit_document` | quality_only | — | mma-audit |
 | `review_code` | quality_only | — | mma-review |
-| `verify_work` | quality_only | — | mma-verify |
 | `debug_task` | quality_only | — | mma-debug |
 | `execute_plan` | full review + plan-extraction | — | mma-execute-plan |
 | `investigate` | review off | parse-investigation-report + compose-investigate-headline | mma-investigate |

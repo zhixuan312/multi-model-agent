@@ -85,7 +85,7 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-delegate`:
 
 - **Recipe A (the fix step).** Between audit rounds, `mma-delegate` applies the fix when the change is more than 1-2 lines. Register the spec/audit findings as a context block; pass via `contextBlockIds`.
-- **Recipe B (the apply-fix step).** After `mma-debug` returns a hypothesis, `mma-delegate` applies the fix. Same context block carries forward to `mma-verify`.
+- **Recipe B (the apply-fix step).** After `mma-debug` returns a hypothesis, `mma-delegate` applies the fix. Same context block carries forward to a follow-up `mma-review` if you want acceptance-criteria checking.
 
 Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're reading 3+ files or grepping in main context before dispatching, you're paying flagship-model tokens for labor. Pass the file paths to `mma-delegate` and let the worker read.
 

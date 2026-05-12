@@ -170,7 +170,6 @@ export {
   annotateCompletionTemplate,
   qualityAuditTemplate,
   qualityReviewTemplate,
-  qualityVerifyTemplate,
   qualityDebugTemplate,
   qualityInvestigateTemplate,
 } from './review/reviewer-engine.js';

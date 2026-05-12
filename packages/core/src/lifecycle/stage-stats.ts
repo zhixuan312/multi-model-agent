@@ -5,7 +5,7 @@ import type { StageStatsMap, ReviewVerdict, VerifyOutcome, VerifySkipReason } fr
 import { findModelProfile } from '../config/model-profile-registry.js';
 
 export const READ_ONLY_TOOL_NAMES: Set<string> = new Set([
-  'audit', 'review', 'verify', 'investigate', 'debug',
+  'audit', 'review', 'investigate', 'debug',
 ]);
 
 const _emptyMetrics = { inputTokens: null, outputTokens: null, cachedReadTokens: null, cachedNonReadTokens: null, turnCount: null, toolCallCount: null, filesReadCount: null, filesWrittenCount: null } as const;

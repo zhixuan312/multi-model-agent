@@ -22,7 +22,7 @@ import {
 } from './clamp.js';
 
 export interface BuildContext {
-  route: 'delegate' | 'audit' | 'review' | 'verify' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
+  route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[] };
   runResult: RunResult;
   client: string;
@@ -31,8 +31,8 @@ export interface BuildContext {
   verifyCommandPresent?: boolean;
 }
 
-const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'investigate']);
-const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'verify', 'debug', 'investigate']);
+const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
+const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
 
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;

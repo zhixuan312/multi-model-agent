@@ -18,13 +18,12 @@ export { reworkTemplate } from './templates/rework.js';
 export { annotateCompletionTemplate } from './templates/annotate-completion.js';
 export { qualityAuditTemplate } from './templates/quality-review-audit.js';
 export { qualityReviewTemplate } from './templates/quality-review-review.js';
-export { qualityVerifyTemplate } from './templates/quality-review-verify.js';
 export { qualityDebugTemplate } from './templates/quality-review-debug.js';
 export { qualityInvestigateTemplate } from './templates/quality-review-investigate.js';
 export { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 export type { QualityReviewRoute } from './reviewer-prompt-builder.js';
 
-export type ReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'verify' | 'investigate' | 'debug' | 'research';
+export type ReviewRoute = 'delegate' | 'execute-plan' | 'audit' | 'review' | 'investigate' | 'debug' | 'research';
 
 export interface ReviewerInput {
   workerOutput: string;

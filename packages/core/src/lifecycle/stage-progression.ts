@@ -61,7 +61,6 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   retry:                    { category: 'artifact_producing', reviewPolicy: 'full' },
   audit:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
   review:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
-  verify:                   { category: 'read_only',          reviewPolicy: 'quality_only' },
   debug:                    { category: 'read_only',          reviewPolicy: 'quality_only' },
   investigate:              { category: 'read_only',          reviewPolicy: 'quality_only' },
   explore:                  { category: 'research',           reviewPolicy: 'none' },

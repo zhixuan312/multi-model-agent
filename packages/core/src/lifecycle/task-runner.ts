@@ -187,7 +187,7 @@ export interface DispatchTaskInput {
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
-  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'verify') return 'read_only';
+  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug') return 'read_only';
   if (route === 'research') return 'research';
   if (route === 'register-context-block') return 'assist';
   return 'artifact_producing';

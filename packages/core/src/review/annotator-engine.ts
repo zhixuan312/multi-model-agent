@@ -4,14 +4,12 @@ import { AnnotatorOutputParser, type AnnotatorParseResult } from './annotator-ou
 import { HUMAN_LABEL } from '../lifecycle/stage-labels.js';
 import { annotatorAuditTemplate } from './templates/annotator-audit.js';
 import { annotatorReviewTemplate } from './templates/annotator-review.js';
-import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
 import { annotatorDebugTemplate } from './templates/annotator-debug.js';
 import { annotatorInvestigateTemplate } from './templates/annotator-investigate.js';
 
 const DEFAULT_ANNOTATOR_TEMPLATES = {
   audit: annotatorAuditTemplate,
   review: annotatorReviewTemplate,
-  verify: annotatorVerifyTemplate,
   debug: annotatorDebugTemplate,
   investigate: annotatorInvestigateTemplate,
 } as const;

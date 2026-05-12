@@ -43,7 +43,7 @@ describe('SkillManifestSync.driftReport', () => {
     const canonicalVersion = '0.0.0-unreleased'; // matches source SKILL.md version before npm publish injection
     const supported = [
       'multi-model-agent', 'mma-delegate', 'mma-audit', 'mma-review',
-      'mma-verify', 'mma-debug', 'mma-execute-plan', 'mma-retry',
+      'mma-debug', 'mma-execute-plan', 'mma-retry',
       'mma-context-blocks', 'mma-investigate', 'mma-explore',
     ];
     for (const s of supported) {
@@ -72,7 +72,7 @@ describe('SkillManifestSync.driftReport', () => {
     const drift = s.driftReport();
     const missing = drift.filter((d) => d.issue === 'missing');
     // Should have all other supported skills as missing
-    expect(missing.length).toBeGreaterThanOrEqual(10); // 11 total - 1 present
+    expect(missing.length).toBeGreaterThanOrEqual(9); // 10 total - 1 present
     expect(missing.every((d) => d.client === 'claude-code')).toBe(true);
     expect(missing.every((d) => d.skill !== 'mma-delegate')).toBe(true);
   });

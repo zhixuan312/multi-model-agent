@@ -62,13 +62,6 @@
       "agentTypeDefault": "complex",
       "agentTypeOverridable": false,
       "responseShapeName": "BatchResponse"
-    },
-    {
-      "routeName": "verify",
-      "toolCategory": "read_only",
-      "agentTypeDefault": "complex",
-      "agentTypeOverridable": false,
-      "responseShapeName": "BatchResponse"
     }
   ],
   "stagePlans": {

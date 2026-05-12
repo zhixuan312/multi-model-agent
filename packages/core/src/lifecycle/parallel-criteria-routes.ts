@@ -16,16 +16,13 @@ import {
   REVIEW_PURPOSE_ORIENTATION, EVIDENCE_RULE_REVIEW, SCOPE_RULE_REVIEW, ANNOTATOR_AWARENESS_REVIEW, REVIEW_CRITERIA,
 } from '../tools/review/implementer-criteria.js';
 import {
-  VERIFY_PURPOSE_ORIENTATION, EVIDENCE_RULE_VERIFY, SCOPE_RULE_VERIFY, ANNOTATOR_AWARENESS_VERIFY, VERIFY_CRITERIA,
-} from '../tools/verify/implementer-criteria.js';
-import {
   DEBUG_PURPOSE_ORIENTATION, EVIDENCE_RULE_DEBUG, SCOPE_RULE_DEBUG, ANNOTATOR_AWARENESS_DEBUG, DEBUG_CRITERIA,
 } from '../tools/debug/implementer-criteria.js';
 import {
   INVESTIGATE_PURPOSE_ORIENTATION, EVIDENCE_RULE_INVESTIGATE, SCOPE_RULE_INVESTIGATE, ANNOTATOR_AWARENESS_INVESTIGATE, INVESTIGATE_CRITERIA,
 } from '../tools/investigate/implementer-criteria.js';
 
-export type ReadOnlyRouteName = 'audit' | 'audit_plan' | 'review' | 'verify' | 'debug' | 'investigate';
+export type ReadOnlyRouteName = 'audit' | 'audit_plan' | 'review' | 'debug' | 'investigate';
 
 /** Standard finding-format spec — uniform `## Finding N:` shape across
  *  all five read-only routes so the downstream parser/annotator only
@@ -85,18 +82,6 @@ const ROUTE_SEMANTICS: Record<ReadOnlyRouteName, RouteSemantics> = {
     },
     mustEmitAtLeastOne: false,
   },
-  verify: {
-    goalLine: 'Apply THIS criterion to the work product against the user\'s checklist. Each finding is a verification verdict for one checklist item: PASS / FAIL / cannot-verify, with the evidence quoted.',
-    emptyOutcomeLine: 'If THIS criterion does not apply to any checklist item in the artifact, respond with "No findings for this criterion." — that is a valid outcome. Otherwise, ALWAYS emit a finding per applicable item (even PASS results — the user wants to see what passed).',
-    findingMeaningParagraph: 'A finding is a VERIFICATION VERDICT for one checklist item, evaluated through this criterion\'s lens. Title = checklist-item label + verdict (e.g. "Item 3: FAIL — assumed-pass on untested"). Severity reflects how decisive / load-bearing the verdict is.',
-    severityMeanings: {
-      critical: 'criterion definitively FAILED with concrete contradicting evidence — the user CANNOT trust the work as complete; e.g. claim-without-evidence on a load-bearing checklist item.',
-      high: 'important criterion failed but with some ambiguity in the evidence; OR a strong PASS on a load-bearing item with rock-solid evidence.',
-      medium: 'partial coverage — some sub-criteria pass, others ambiguous; OR a clear PASS on a non-load-bearing item.',
-      low: 'minor stylistic gap in the verification narrative; no impact on the verdict.',
-    },
-    mustEmitAtLeastOne: true,
-  },
   debug: {
     goalLine: 'Apply THIS failure mode as the lens. Each finding is a root-cause hypothesis (or contributing factor), framed against this lens; severity = strength of the evidence chain.',
     emptyOutcomeLine: 'If THIS lens reveals nothing in the failure under investigation, respond with "No findings for this criterion." — valid outcome.',
@@ -145,13 +130,6 @@ const ROUTE_BLOCKS: Record<ReadOnlyRouteName, Omit<CachedPrefixBlocks, 'findingF
     annotatorAwareness: ANNOTATOR_AWARENESS_REVIEW,
     criteria: REVIEW_CRITERIA,
   },
-  verify: {
-    orientation: VERIFY_PURPOSE_ORIENTATION,
-    evidenceRule: EVIDENCE_RULE_VERIFY,
-    scopeRule: SCOPE_RULE_VERIFY,
-    annotatorAwareness: ANNOTATOR_AWARENESS_VERIFY,
-    criteria: VERIFY_CRITERIA,
-  },
   debug: {
     orientation: DEBUG_PURPOSE_ORIENTATION,
     evidenceRule: EVIDENCE_RULE_DEBUG,
@@ -180,7 +158,7 @@ export interface ReadOnlyRouteSpec {
  * without route-specific branching code.
  */
 export const READ_ONLY_ROUTES: Record<ReadOnlyRouteName, ReadOnlyRouteSpec> = Object.fromEntries(
-  (['audit', 'audit_plan', 'review', 'verify', 'debug', 'investigate'] as const).map((route) => {
+  (['audit', 'audit_plan', 'review', 'debug', 'investigate'] as const).map((route) => {
     const semantics = ROUTE_SEMANTICS[route];
     const blocks: CachedPrefixBlocks = {
       ...ROUTE_BLOCKS[route],

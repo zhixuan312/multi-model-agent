@@ -35,7 +35,7 @@ import { z } from 'zod';
 export const TierEnum = z.enum(['standard', 'complex']);
 
 export const RouteEnum = z.enum([
-  'delegate', 'audit', 'review', 'verify', 'debug', 'execute-plan', 'retry',
+  'delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry',
   'investigate', 'explore',
   'register-context-block',
   'research',

@@ -121,7 +121,6 @@ Skills are the surface your AI client sees. `mmagent sync-skills` writes them to
 | `mma-debug` | `POST /debug` | A test fails, a build breaks, or behavior is unexpected — delegate the reproduce/trace, keep the hypothesis on the main agent. |
 | `mma-review` | `POST /review` | Source-code review (pre-merge, post-implementation, security-focused). One worker per file, in parallel. |
 | `mma-audit` | `POST /audit` | Audit a spec / plan / design doc / recommendation doc for executability blockers (contradictions, ambiguity, recommendation-coherence gaps). Default is the comprehensive sweep; `security` and `performance` are narrow opt-in lenses. |
-| `mma-verify` | `POST /verify` | Check acceptance criteria against finished work *before* claiming done. One worker per checklist item. |
 
 ### Plumbing skills
 
@@ -165,9 +164,10 @@ Step 3 — mma-delegate
   Dispatch the actual code change as an ad-hoc task (no plan file). Worker writes the
   fix, runs the failing test 20× to confirm the race is gone.
 ↓
-Step 4 — mma-verify
-  One worker per acceptance criterion: (a) failing test now passes, (b) no other
-  auth tests regressed, (c) refresh path still emits the expected telemetry.
+Step 4 — mma-review (with the acceptance checklist in the brief)
+  Reviewer worker checks the diff against the acceptance criteria: (a) failing
+  test now passes, (b) no other auth tests regressed, (c) refresh path still
+  emits the expected telemetry.
 ↓
 Total cost: ~$0.08. Main-context tokens consumed: just the hypotheses and the verdicts.
 ```
@@ -239,8 +239,7 @@ Generated on first `mmagent serve`. Retrieve with `mmagent print-token`, or set 
 |---|---|
 | `POST /delegate?cwd=<abs>` | Fan out ad-hoc tasks to sub-agents |
 | `POST /audit?cwd=<abs>` | Audit a document |
-| `POST /review?cwd=<abs>` | Review code |
-| `POST /verify?cwd=<abs>` | Verify work against a checklist |
+| `POST /review?cwd=<abs>` | Review code (pass acceptance checklists in the brief for verification-style checks) |
 | `POST /debug?cwd=<abs>` | Debug a failure with a hypothesis |
 | `POST /execute-plan?cwd=<abs>` | Implement from a plan file |
 | `POST /retry?cwd=<abs>` | Re-run specific tasks from a previous batch |

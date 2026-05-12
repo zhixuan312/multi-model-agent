@@ -16,7 +16,6 @@ describe('every executor output envelope has all 6 required fields', () => {
     ['delegate', schemas.delegate.outputSchema],
     ['audit', schemas.audit.outputSchema],
     ['review', schemas.review.outputSchema],
-    ['verify', schemas.verify.outputSchema],
     ['debug', schemas.debug.outputSchema],
     ['executePlan', schemas.executePlan.outputSchema],
     ['retry', schemas.retry.outputSchema],

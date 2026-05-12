@@ -115,7 +115,7 @@ Every finding has the same shape:
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-debug`:
 
-- **Recipe B — Debug-fix-verify.** `mma-debug` → `mma-delegate` (apply fix) → `mma-verify`. Strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse on verify.
+- **Recipe B — Debug-fix-review.** `mma-debug` → `mma-delegate` (apply fix) → `mma-review` with the acceptance criteria in the brief. Strict order. Register the failing test output / reproduction log as a context block before the debug call; reuse it on the review call.
 
 Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're about to read 3+ files in main context to "understand the bug," that's the labor we delegate — call `mma-debug` with the hypothesis instead.
 
@@ -144,8 +144,8 @@ Every completed task automatically registers a terminal markdown context block c
 
 **Use cases:**
 - Pass debug findings to a downstream `mma-delegate` fix step
-- Feed the root-cause analysis into `mma-verify` for acceptance checking
-- Carry debug context forward through the debug → fix → verify chain
+- Feed the root-cause analysis into a follow-up `mma-review` with acceptance criteria in the brief
+- Carry debug context forward through the debug → fix → review chain
 
 The block is registered server-side at task completion; no caller action is needed to create it. Delete it explicitly via `DELETE /context-blocks/:id` when no longer needed, or let it expire on session teardown.
 

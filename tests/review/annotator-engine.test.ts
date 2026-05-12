@@ -58,7 +58,6 @@ const validJson = String.raw`Here are my annotations.
 const routeRoleHints: Record<AnnotatorRoute, string> = {
   audit: 'audit',
   review: 'code review',
-  verify: 'verification report',
   debug: 'debugging hypothesis',
   investigate: 'codebase investigation',
 };
