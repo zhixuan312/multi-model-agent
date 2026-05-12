@@ -7,8 +7,12 @@
 // nulls on the other side so the orchestrator parses one shape.
 
 import type { LifecycleState } from '../stage-plan-types.js';
+import {
+  parseSourcesUsed,
+  type ResearchSourcesUsedEntry,
+} from '../../reporting/report-parser-slots/research-report.js';
 
-const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
+const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
 export interface StructuredReport {
   summary: string;
@@ -24,6 +28,9 @@ export interface StructuredReport {
   commitSkipReason: string | null;
   findings: { severity: string; category: string; claim: string; evidence?: string; suggestion?: string }[];
   criteriaErrors: { criterionId: string; error: string }[];
+  /** Research-only: parsed `## Sources used` markdown table. Absent on
+   *  every other route (audit/review/debug/investigate/write routes). */
+  sourcesUsed?: ResearchSourcesUsedEntry[];
 }
 
 export async function annotator(state: LifecycleState): Promise<void> {
@@ -50,6 +57,11 @@ export async function annotator(state: LifecycleState): Promise<void> {
     findings: isRead ? findings : [],
     criteriaErrors: isRead ? ((last.criteriaErrors as StructuredReport['criteriaErrors'] | undefined) ?? []) : [],
   };
+
+  if (route === 'research') {
+    const lastOutput = (last.output as string | undefined) ?? '';
+    report.sourcesUsed = parseSourcesUsed(lastOutput);
+  }
 
   (state as { structuredReport?: unknown }).structuredReport = report;
 }

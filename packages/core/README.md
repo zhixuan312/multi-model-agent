@@ -137,7 +137,7 @@ Per-tool configuration interface that drives `executeTask`. Each tool exports it
 ```ts
 interface ToolConfig<Input, Brief, Report> {
   name: string;                                              // tool name
-  category: 'artifact_producing' | 'read_only' | 'research' | 'assist';
+  category: 'artifact_producing' | 'read_only' | 'assist';
   agentType: AgentType;                                      // 'standard' | 'complex'
   briefSlot: BriefSlotFiller<Input, Brief[]>;                // input → briefs
   buildTaskSpec: (brief: Brief, ctx: ExecutionContext) => TaskSpec;

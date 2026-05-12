@@ -24,7 +24,7 @@ import { delegateWithEscalation } from '../escalation/delegate-with-escalation.j
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
-import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
+import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 import { readFile as fsReadFile } from 'fs/promises';
@@ -187,8 +187,7 @@ export interface DispatchTaskInput {
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
-  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug') return 'read_only';
-  if (route === 'research') return 'research';
+  if (route === 'investigate' || route === 'review' || route === 'audit' || route === 'debug' || route === 'research') return 'read_only';
   if (route === 'register-context-block') return 'assist';
   return 'artifact_producing';
 }
@@ -352,24 +351,15 @@ export async function runTaskViaDispatcher(
         state.terminal = true;
         return undefined;
       }
-      // Read-only routes (audit/review/verify/debug/investigate) fan out
-      // one sub-worker per criterion via the parallel-criteria dispatcher.
-      // Spec §4.6: prime the prompt cache once, dispatch N sub-workers in
-      // parallel, retry failed sub-workers once on the warm cache,
-      // synthesize a RunResult with workerOutputs[] for the merge annotator.
+      // Read-only routes (audit / review / debug / investigate / research)
+      // run the sequential criteria loop on one complex session. The
+      // (route, subtype) pair resolves to a per-subtype spec from the
+      // tool's SUBTYPES map; the dispatcher uses that to build the cached
+      // prefix + per-criterion suffix.
       if (toolCategory === 'read_only' && isReadOnlyRoute(route)) {
         try {
-          // A12: when the audit task carries auditType='plan', use the
-          // plan-audit route spec (different criteria + orientation +
-          // semantics) instead of the default audit spec. Other audit
-          // types (default/security/performance) and other read-only
-          // routes use their static route spec unchanged.
-          const taskWithAuditType = task as TaskSpec & { auditType?: string };
-          const lookupKey: ReadOnlyRouteName =
-            (route === 'audit' && taskWithAuditType.auditType === 'plan')
-              ? 'audit_plan'
-              : route;
-          const routeSpec = READ_ONLY_ROUTES[lookupKey];
+          const taskWithSubtype = task as TaskSpec & { subtype?: string };
+          const routeSpec = resolveSubtypeSpec(route, taskWithSubtype.subtype);
           const taskWithFiles = task as TaskSpec & { filePaths?: string[]; document?: string };
           const filePaths = Array.isArray(taskWithFiles.filePaths) ? taskWithFiles.filePaths : [];
           const preReadFiles: Record<string, string> = {};

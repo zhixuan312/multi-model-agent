@@ -8,7 +8,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 
 export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> {
   name: string;
-  category: 'artifact_producing' | 'read_only' | 'research' | 'assist';
+  category: 'artifact_producing' | 'read_only' | 'assist';
   /** Agent tier to use when dispatching tasks for this tool. */
   agentType: AgentType;
   briefSlot: BriefSlotFiller<Input, Brief[]>;

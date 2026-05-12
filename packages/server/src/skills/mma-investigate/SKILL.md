@@ -57,6 +57,7 @@ digraph when_to_use {
 ```json
 {
   "question": "How does the auth middleware handle token refresh?",
+  "subtype": "default",
   "filePaths": ["/project/src/auth/"],
   "contextBlockIds": []
 }
@@ -65,6 +66,7 @@ digraph when_to_use {
 | Field | Type | Required | Notes |
 |---|---|---|---|
 | `question` | string | yes | Natural-language investigation question |
+| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | Anchor paths the worker starts from. Worker may grep beyond. |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — enables follow-up / delta investigation |
 | `tools` | `'none' \| 'readonly'` | no | Default `'readonly'`. `'no-shell'` and `'full'` are rejected — investigation is read-only |

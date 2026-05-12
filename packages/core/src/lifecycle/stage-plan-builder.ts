@@ -10,7 +10,6 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
   // reviewPolicy is the general-purpose review-skip mechanism, not per-category
   // booleans. See workflow-matrix.md appendix #4. The void expression exists
   // solely to satisfy the ESLint no-unused-vars rule for the 'category' param.
-  void (category === 'research');
 
   const rows: StageRow[] = [
     // Stage 1 — Ingress (rows 1.1–1.4; spec C10 lines 1284–1290)

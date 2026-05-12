@@ -36,7 +36,7 @@ export const TierEnum = z.enum(['standard', 'complex']);
 
 export const RouteEnum = z.enum([
   'delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry',
-  'investigate', 'explore',
+  'investigate',
   'register-context-block',
   'research',
 ]);

@@ -33,7 +33,7 @@ const auditSourceSchema = z.object({
   route: z.literal('audit_document'),
   originalInput: z.record(z.string(), z.unknown()),
   document: z.string().optional(),
-  auditType: z.string().optional(),
+  subtype: z.string().optional(),
 });
 
 const sourceSchema = z.discriminatedUnion('route', [

@@ -30,6 +30,5 @@ describe('EscalationPolicy', () => {
   it('attempt budgets per category', () => {
     expect(p.attemptBudget('artifact_producing')).toBe(7);
     expect(p.attemptBudget('read_only')).toBe(2);
-    expect(p.attemptBudget('research')).toBe(3);
   });
 });

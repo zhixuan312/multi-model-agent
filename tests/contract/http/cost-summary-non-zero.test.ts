@@ -40,7 +40,7 @@ describe('A11.2 public-envelope cost roll-up', () => {
           'X-MMA-Client': 'claude-code',
           Authorization: `Bearer ${h.token}`,
         },
-        body: JSON.stringify({ document: 'function add(a, b) { return a + b; }', auditType: 'default' }),
+        body: JSON.stringify({ document: 'function add(a, b) { return a + b; }', subtype: 'default' }),
       });
       expect(dispatch.status).toBe(202);
       const { batchId } = (await dispatch.json()) as { batchId: string };

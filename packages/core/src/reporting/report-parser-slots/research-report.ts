@@ -1,45 +1,42 @@
 // packages/core/src/reporting/report-parser-slots/research-report.ts
+//
+// v4.4.x: research joins the read-only family and produces `## Finding N:`
+// blocks (parsed by the shared lifecycle/findings-parser.ts) + a research-
+// specific `## Sources used` table at the end. This file owns ONLY the
+// sources-table extractor; the canonical findings list comes from
+// parseFindings. The Annotator handler merges both into the unified
+// StructuredReport (route === 'research' gains the `sourcesUsed` field).
 import type { ReportSchema } from '../structured-report-parser.js';
 import { z } from 'zod';
 
-const researchReportZod = z.object({
-  findings: z.array(z.object({
-    index: z.number().int().nonnegative(),
-    body: z.string(),
-    citations: z.array(z.object({
-      kind: z.enum(['url', 'file_line', 'source']),
-      label: z.string().optional(),
-      target: z.string().optional(),
-    })),
-  })),
-  sourcesUsed: z.array(z.object({
-    source: z.string(),
-    attempted: z.boolean(),
-    used: z.boolean(),
-    note: z.string().optional(),
-  })),
+const sourcesUsedZod = z.object({
+  source: z.string(),
+  attempted: z.boolean(),
+  used: z.boolean(),
+  note: z.string().optional(),
 });
+
+const researchReportZod = z.object({
+  /** Research findings are surfaced via parseFindings (shared); this
+   *  fallback parser leaves the field empty when the worker text could
+   *  not be parsed. */
+  findings: z.array(z.unknown()).default([]),
+  sourcesUsed: z.array(sourcesUsedZod).default([]),
+});
+
+export type ResearchSourcesUsedEntry = z.infer<typeof sourcesUsedZod>;
 export type ResearchReport = z.infer<typeof researchReportZod>;
 
-/** ReportSchema that parses worker narrative text (numbered findings +
- *  `## Sources used` table) into a structured ResearchReport. */
-export const researchReportSchema: ReportSchema<ResearchReport> = {
-  parse(text: string): ResearchReport {
-    return parseResearchReport(text);
-  },
-};
-
-const NUMBERED_FINDING_RE = /^\s*(\d+)\.\s+([\s\S]*?)(?=^\s*\d+\.\s+|\n##\s|\n#\s|$)/gmu;
-const URL_RE = /https?:\/\/[^\s)]+/g;
-const FILE_LINE_RE = /([A-Za-z0-9_./-]+):(\d+(?:-\d+)?)/g;
-
-interface SourcesRow { source: string; attempted: boolean; used: boolean; note?: string; }
-
-function parseSourcesUsed(text: string): SourcesRow[] {
+/**
+ * Parse the `## Sources used` markdown table from the implementer's text.
+ * Tolerant: missing section → []; malformed rows skipped; case-insensitive
+ * column-name matching.
+ */
+export function parseSourcesUsed(text: string): ResearchSourcesUsedEntry[] {
   const m = text.match(/##\s+Sources used\s*([\s\S]*?)(?:\n##\s|$)/i);
   if (!m) return [];
   const lines = m[1].split('\n').map(l => l.trim()).filter(Boolean);
-  const rows: SourcesRow[] = [];
+  const rows: ResearchSourcesUsedEntry[] = [];
   for (const line of lines) {
     if (!line.startsWith('|') || /^\|\s*-/.test(line) || /^\|\s*source\s*\|/i.test(line)) continue;
     const cells = line.split('|').slice(1, -1).map(c => c.trim());
@@ -55,45 +52,17 @@ function parseSourcesUsed(text: string): SourcesRow[] {
   return rows;
 }
 
-function extractCitations(body: string, sources: SourcesRow[]): ResearchReport['findings'][0]['citations'] {
-  const citations: ResearchReport['findings'][0]['citations'] = [];
-  for (const m of body.matchAll(URL_RE)) {
-    citations.push({ kind: 'url', label: extractDomain(m[0]), target: m[0] });
-  }
-  for (const m of body.matchAll(FILE_LINE_RE)) {
-    if (URL_RE.test(m[0])) continue; // skip if it's part of a URL
-    citations.push({ kind: 'file_line', label: m[1], target: `${m[1]}:${m[2]}` });
-  }
-  // Pass 2: source-name match against the Sources Used table.
-  const lower = body.toLowerCase();
-  for (const row of sources) {
-    if (lower.includes(row.source.toLowerCase())) {
-      citations.push({ kind: 'source', label: row.source });
-    }
-  }
-  return citations;
-}
+/** ReportSchema fallback consumed by the task-executor when the annotator
+ *  did not produce a structured report. Returns the sources table; findings
+ *  list is empty in this fallback path. */
+export const researchReportSchema: ReportSchema<ResearchReport> = {
+  parse(text: string): ResearchReport {
+    return { findings: [], sourcesUsed: parseSourcesUsed(text) };
+  },
+};
 
-function extractDomain(url: string): string {
-  try {
-    return new URL(url).hostname;
-  } catch {
-    return url;
-  }
-}
-
+/** @deprecated kept for back-compat with any caller still importing the
+ *  pre-v4.4.x function name; the body is just `researchReportSchema.parse`. */
 export function parseResearchReport(output: string): ResearchReport {
-  const sourcesUsed = parseSourcesUsed(output);
-  const findings: ResearchReport['findings'] = [];
-  for (const m of output.matchAll(NUMBERED_FINDING_RE)) {
-    const idx = Number(m[1]);
-    const body = m[2].trim();
-    if (!body) continue;
-    findings.push({
-      index: idx,
-      body,
-      citations: extractCitations(body, sourcesUsed),
-    });
-  }
-  return { findings, sourcesUsed };
+  return researchReportSchema.parse(output);
 }

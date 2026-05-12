@@ -8,6 +8,7 @@ import { buildOutputEnvelopeSchema } from '../shared-output.js';
 export const inputSchema = z.object({
   code: z.string().optional().describe('Inline code to review'),
   focus: z.array(z.enum(['security', 'performance', 'correctness', 'style'])).optional(),
+  subtype: z.enum(['default']).default('default').describe('Criteria-set selector. Only `default` is wired today; reserved for future per-language / per-risk-class subtypes.'),
   filePaths: z.array(z.string()).optional()
     .describe('Files the sub-agent should focus on. Multiple files are processed in parallel.'),
   contextBlockIds: z.array(z.string()).optional()

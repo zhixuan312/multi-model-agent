@@ -214,7 +214,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       //   - reviewer returned 'changes_required' (review rejected the work)
       // Rejected work shouldn't be double-stamped with writes_unverifiable.
       const chainAlreadyFailed = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
-      const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'research', 'explore']);
+      const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
       if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {

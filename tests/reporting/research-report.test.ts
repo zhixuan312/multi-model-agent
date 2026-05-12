@@ -1,12 +1,15 @@
 // tests/reporting/research-report.test.ts
+//
+// v4.4.x: research findings are parsed by the shared `## Finding N:` parser
+// (parseFindings); this slot only owns the research-specific `## Sources used`
+// markdown table extractor.
 import { describe, expect, it } from 'vitest';
-import { parseResearchReport } from '../../packages/core/src/reporting/report-parser-slots/research-report.js';
+import {
+  parseSourcesUsed,
+  researchReportSchema,
+} from '../../packages/core/src/reporting/report-parser-slots/research-report.js';
 
-const sampleOutput = `# Research findings
-
-1. Paper "Streaming JSON" (arxiv:2310.12345) describes a token-level pull parser. Source: arxiv.
-2. simdjson README covers SIMD-accelerated parsing — https://github.com/simdjson/simdjson.
-3. Per arxiv:2401.99999, lazy parsing avoids buffering.
+const sampleSourcesBlock = `Some preamble.
 
 ## Sources used
 
@@ -17,38 +20,63 @@ const sampleOutput = `# Research findings
 | brave-web | no | no | no Brave key |
 `;
 
-describe('parseResearchReport', () => {
-  it('extracts numbered findings with bodies', () => {
-    const r = parseResearchReport(sampleOutput);
-    expect(r.findings).toHaveLength(3);
-    expect(r.findings[0].body).toMatch(/Streaming JSON/);
-    expect(r.findings[1].body).toMatch(/simdjson/);
-  });
-
-  it('extracts URL citations from finding bodies', () => {
-    const r = parseResearchReport(sampleOutput);
-    const citations = r.findings[1].citations;
-    expect(citations.some(c => c.kind === 'url' && c.target?.includes('simdjson'))).toBe(true);
-  });
-
-  it('extracts source-name citations from the Sources Used table', () => {
-    const r = parseResearchReport(sampleOutput);
-    expect(r.findings[0].citations.some(c => c.kind === 'source' && c.label === 'arxiv')).toBe(true);
-    expect(r.findings[2].citations.some(c => c.kind === 'source' && c.label === 'arxiv')).toBe(true);
-  });
-
+describe('parseSourcesUsed', () => {
   it('parses the Sources Used table into structured rows', () => {
-    const r = parseResearchReport(sampleOutput);
-    expect(r.sourcesUsed).toHaveLength(3);
-    const arxiv = r.sourcesUsed.find(s => s.source === 'arxiv');
+    const rows = parseSourcesUsed(sampleSourcesBlock);
+    expect(rows).toHaveLength(3);
+    const arxiv = rows.find(s => s.source === 'arxiv');
     expect(arxiv).toMatchObject({ attempted: true, used: true, note: '2 papers' });
-    const brave = r.sourcesUsed.find(s => s.source === 'brave-web');
+    const brave = rows.find(s => s.source === 'brave-web');
     expect(brave).toMatchObject({ attempted: false, used: false });
   });
 
-  it('returns empty arrays for an empty/malformed report', () => {
-    const r = parseResearchReport('not a report');
-    expect(r.findings).toEqual([]);
-    expect(r.sourcesUsed).toEqual([]);
+  it('returns [] when there is no Sources used section', () => {
+    expect(parseSourcesUsed('not a report')).toEqual([]);
+  });
+
+  it('is case-insensitive on the section heading', () => {
+    const text = `## SOURCES USED
+
+| source | attempted | used |
+| --- | --- | --- |
+| arxiv | yes | yes |
+`;
+    expect(parseSourcesUsed(text)).toHaveLength(1);
+  });
+
+  it('skips malformed rows (fewer than 3 cells)', () => {
+    const text = `## Sources used
+
+| source | attempted |
+| --- | --- |
+| arxiv | yes |
+`;
+    expect(parseSourcesUsed(text)).toEqual([]);
+  });
+
+  it('stops at the next ## section heading', () => {
+    const text = `## Sources used
+
+| source | attempted | used |
+| --- | --- | --- |
+| arxiv | yes | yes |
+
+## Other section
+
+| source | attempted | used |
+| --- | --- | --- |
+| should-not-appear | yes | yes |
+`;
+    const rows = parseSourcesUsed(text);
+    expect(rows).toHaveLength(1);
+    expect(rows[0].source).toBe('arxiv');
+  });
+});
+
+describe('researchReportSchema (fallback ReportSchema parse)', () => {
+  it('returns sources table; findings empty in this fallback path', () => {
+    const out = researchReportSchema.parse(sampleSourcesBlock);
+    expect(out.findings).toEqual([]);
+    expect(out.sourcesUsed).toHaveLength(3);
   });
 });

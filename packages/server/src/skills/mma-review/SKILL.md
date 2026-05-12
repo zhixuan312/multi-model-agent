@@ -47,6 +47,7 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 {
   "code": "inline code snippet (optional if filePaths given)",
   "focus": ["correctness", "security"],
+  "subtype": "default",
   "filePaths": ["/project/src/auth/login.ts"],
   "contextBlockIds": []
 }
@@ -56,6 +57,7 @@ The cross-file ripple pass (changed-symbol → broken caller) only fires when th
 |---|---|---|---|
 | `code` | string | no | Inline code snippet to review |
 | `focus` | string[] | no | Any of `security`, `performance`, `correctness`, `style`. Omit for general review. |
+| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | Files to review (one worker per file, parallel) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` — useful for design docs the reviewer should validate against |
 

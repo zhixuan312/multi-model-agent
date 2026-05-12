@@ -10,7 +10,7 @@ import { toolConfig } from '../../packages/core/src/tools/research/tool-config.j
 describe('research tool config', () => {
   it('declares the expected route metadata', () => {
     expect(toolConfig.name).toBe('research');
-    expect(toolConfig.category).toBe('research');
+    expect(toolConfig.category).toBe('read_only');
     expect(toolConfig.agentType).toBe('complex');
   });
 

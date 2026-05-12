@@ -33,7 +33,7 @@ export function buildRetryHandler(deps: HandlerDeps): RawHandler {
     const cwd = ctx.cwd!;
 
     // Resolve original batch's toolCategory for dispatcher budget selection.
-    let originalToolCategory: 'artifact_producing' | 'read_only' | 'research' | undefined;
+    let originalToolCategory: 'artifact_producing' | 'read_only' | undefined;
     if (deps.routeDispatcher) {
       const original = deps.batchRegistry.get(input.batchId);
       if (

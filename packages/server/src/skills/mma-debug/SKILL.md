@@ -39,6 +39,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
   "problem": "POST /login returns 500 when password contains special characters",
   "context": "Regression introduced in commit abc123; only affects production config",
   "hypothesis": "The bcrypt binding fails on non-ASCII input in the Docker image",
+  "subtype": "default",
   "filePaths": [
     "/project/src/auth/login.ts",
     "/project/src/auth/password.ts"
@@ -52,6 +53,7 @@ Submit a problem, context, and hypothesis to a worker for focused debugging. Unl
 | `problem` | string | yes | What is broken (one sentence; concrete symptom) |
 | `context` | string | no | Background — what changed recently, what works, what doesn't |
 | `hypothesis` | string | no | Your initial theory; worker tests it first, then explores |
+| `subtype` | `'default'` | no (defaults to `'default'`) | Reserved for future criteria sets; only `default` is wired today. |
 | `filePaths` | string[] | no | All files investigated together (cross-file reasoning) |
 | `contextBlockIds` | string[] | no | IDs from `mma-context-blocks` (e.g. error logs, traces) |
 

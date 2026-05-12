@@ -15,7 +15,7 @@ export function registerResearch(registry: ToolSurfaceRegistry): void {
     httpPath: '/research',
     surface: 'tool',
     schema: inputSchema,
-    toolCategory: 'research',
+    toolCategory: 'read_only',
     agentTypeDefault: 'complex',
     agentTypeOverridable: false,
     responseShapeName: 'BatchResponse',
@@ -38,7 +38,7 @@ export interface ResearchBrief {
 
 export const toolConfig: ToolConfig<EnrichedResearchInput, ResearchBrief, ResearchReport> = {
   name: 'research',
-  category: 'research',
+  category: 'read_only',
   agentType: 'complex',
   briefSlot: (input: EnrichedResearchInput): ResearchBrief[] => {
     // cwd is irrelevant to prompt compilation (research is external-only); the
