@@ -10,6 +10,7 @@
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
+      "actualCostUSD": null,
       "turns": 1,
       "filesRead": [],
       "filesWritten": [],
@@ -95,39 +96,11 @@
             "medium": 0,
             "low": 0
           }
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "standard",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 20,
-          "outputTokens": 40,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 2,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "actualCostUSD": null,
       "specReviewStatus": "changes_required",
       "qualityReviewStatus": "changes_required",
       "diffReviewStatus": "skipped",
-      "verification": {
-        "ran": false,
-        "passed": null,
-        "exitCode": null,
-        "command": [],
-        "tailOutput": null
-      },
       "commits": [],
       "agents": {
         "implementer": "standard",
@@ -151,33 +124,11 @@
         "specReviewer": "mock-model",
         "qualityReviewer": "mock-model"
       },
-      "completionAnnotation": {
-        "completionPercent": 0,
-        "perStep": [],
-        "verify": {
-          "ran": false,
-          "passed": null,
-          "exitCode": null,
-          "command": [],
-          "tailOutput": null
-        },
-        "concerns": [
-          "annotator failed to produce structured output; check state.completionAnnotationError"
-        ]
-      },
-      "commitGatePercent": 0,
       "specReviewerNotes": "mocked ok",
       "qualityReviewerNotes": "mocked ok",
       "reviewVerdict": "changes_required",
       "reviewFindings": [],
-      "reworkApplied": false,
-      "verifyResult": {
-        "ran": false,
-        "passed": null,
-        "exitCode": null,
-        "command": [],
-        "tailOutput": null
-      }
+      "reworkApplied": false
     }
   ],
   "batchTimings": {

@@ -2,7 +2,7 @@
   "headline": "[ok] verify completed",
   "results": [
     {
-      "output": "mock max turns",
+      "output": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns\n\n--- SOURCE-CODE DIRECT-READ (criterion 2) ---\nmock max turns\n\n--- DOCUMENTATION EVIDENCE (criterion 3) ---\nmock max turns\n\n--- RUN-OUTPUT EVIDENCE (criterion 4) ---\nmock max turns\n\n--- DIFF EVIDENCE (criterion 5) ---\nmock max turns",
       "status": "ok",
       "usage": {
         "inputTokens": 50,
@@ -97,30 +97,8 @@
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0
-        },
-        "annotating": {
-          "stage": "annotating",
-          "entered": true,
-          "durationMs": "<DETERMINISTIC>",
-          "costUSD": null,
-          "agentTier": "complex",
-          "modelFamily": null,
-          "model": "mock-model",
-          "maxIdleMs": "<DETERMINISTIC>",
-          "totalIdleMs": "<DETERMINISTIC>",
-          "activityEvents": "<DETERMINISTIC>",
-          "inputTokens": 0,
-          "outputTokens": 0,
-          "cachedReadTokens": 0,
-          "cachedNonReadTokens": 0,
-          "turnCount": 1,
-          "toolCallCount": 0,
-          "filesReadCount": 0,
-          "filesWrittenCount": 0
         }
       },
-      "annotatedFindings": [],
-      "qualityReviewVerdict": "error",
       "actualCostUSD": 0,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
@@ -153,7 +131,7 @@
     "totalCostDeltaVsMainUSD": 0
   },
   "structuredReport": {
-    "summary": "mock max turns",
+    "summary": "--- TEST-SUITE EVIDENCE (criterion 1) ---\nmock max turns",
     "filesChanged": [],
     "validationsRun": [],
     "deviationsFromBrief": [],

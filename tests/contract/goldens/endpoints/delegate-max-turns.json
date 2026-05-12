@@ -10,6 +10,7 @@
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
+      "actualCostUSD": null,
       "turns": 99,
       "filesRead": [],
       "filesWritten": [],
@@ -70,7 +71,6 @@
           "filesWrittenCount": 0
         }
       },
-      "actualCostUSD": null,
       "specReviewStatus": "not_applicable",
       "qualityReviewStatus": "not_applicable",
       "diffReviewStatus": "skipped",
