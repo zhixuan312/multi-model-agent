@@ -132,7 +132,7 @@ async function registerToolHandlers(
   const routeDispatcher = new LifecycleDispatcher();
 
   const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-    { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
+    { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
     {
       delegate: qualityLintTemplate,
       'execute-plan': qualityLintTemplate,
@@ -230,7 +230,7 @@ async function registerControlHandlers(
     } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();
     const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-      { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
+      { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
       {
         delegate: qualityLintTemplate,
         'execute-plan': qualityLintTemplate,

@@ -151,6 +151,5 @@ export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> 
   reviewTemplates: {
     spec: specLintTemplate,
     qualityAP: qualityLintTemplate,
-    diff: specLintTemplate,  // diff path retained for type-shape only; not used post-redesign
   },
 };

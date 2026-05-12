@@ -5,12 +5,11 @@ import {
 import { ReviewerPromptBuilder } from '../../packages/core/src/review/reviewer-prompt-builder.js';
 import { specLintTemplate } from '../../packages/core/src/review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../packages/core/src/review/templates/quality-review.js';
-import { annotateCompletionTemplate } from '../../packages/core/src/review/templates/annotate-completion.js';
 import type { Session, TurnResult } from '../../packages/core/src/types/run-result.js';
 
 function makeEngine() {
   const builder = new ReviewerPromptBuilder(
-    { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: annotateCompletionTemplate },
+    { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
     {},
   );
   return new ReviewerEngine(builder);

@@ -17,7 +17,7 @@ import { qualityInvestigateTemplate } from './templates/quality-review-investiga
 export function createDefaultReviewerEngine(): ReviewerEngine {
   return new ReviewerEngine(
     new ReviewerPromptBuilder(
-      { spec: specLintTemplate, qualityForAP: qualityLintTemplate, diff: specLintTemplate },
+      { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
       {
         audit: qualityAuditTemplate,
         review: qualityReviewTemplate,

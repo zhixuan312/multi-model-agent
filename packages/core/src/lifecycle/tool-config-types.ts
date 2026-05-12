@@ -20,7 +20,6 @@ export interface ToolConfig<Input = unknown, Brief = unknown, Report = unknown> 
     spec?: ReviewTemplate;
     qualityAP?: ReviewTemplate;
     annotator?: ReviewTemplate;
-    diff?: ReviewTemplate;
   };
   /** Optional per-tool envelope post-processing — e.g. autoRegisterContextBlock. */
   postProcessEnvelope?: (envelope: any, ctx: any) => Promise<any> | any;
