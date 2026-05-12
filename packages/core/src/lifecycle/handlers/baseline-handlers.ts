@@ -9,8 +9,7 @@ import { gitCommitHandler } from './git-commit-handler.js';
 // §3.1 / §3.2.
 import { reviewHandler } from './review-handler.js';
 import { reworkHandler } from './rework-handler.js';
-import { annotateCompletionHandler } from './annotate-completion-handler.js';
-import { annotateCriteriaHandler } from './annotate-criteria-handler.js';
+import { annotator } from './annotator.js';
 import { prepareExecutionContextHandler } from './prepare-execution-context-handler.js';
 import { registerToBlockStoreHandler } from './register-context-block-handlers.js';
 import {
@@ -348,8 +347,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
 
     review: reviewHandler,
     rework: reworkHandler,
-    annotate_completion: annotateCompletionHandler,
-    annotate_criteria: annotateCriteriaHandler,
+    annotate_completion: annotator,
+    annotate_criteria: annotator,
 
     register_to_block_store: registerToBlockStoreHandler,
     git_commit: gitCommitHandler,
