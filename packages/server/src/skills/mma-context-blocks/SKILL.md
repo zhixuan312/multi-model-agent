@@ -68,6 +68,7 @@ Returns `200 { ok: true }` on success. Returns `409 pinned` if the block is held
 # Register spec document once
 ID=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"content\":$(jq -Rs . < /project/docs/spec.md)}" \
@@ -76,6 +77,7 @@ ID=$(curl -f --show-error -s -X POST \
 # Reference from N delegate tasks
 curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d "{\"tasks\":[

@@ -67,6 +67,7 @@ The `default` subtype's criteria target primary-source preference, practitioner 
 BATCH=$(curl -f -sS -X POST \
   -H "Authorization: Bearer $TOKEN" \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Content-Type: application/json" \
   -d '{
     "researchQuestion": "State-of-the-art SIMD JSON parsers under 100KB?",

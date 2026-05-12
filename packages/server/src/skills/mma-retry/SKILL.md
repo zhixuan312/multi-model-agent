@@ -70,6 +70,7 @@ To re-run all tasks: pass `[0, 1, ..., tasks.length - 1]`. (But consider: if all
 # Original batch had 4 tasks; re-run tasks at index 1 and 3
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"batchId":"550e8400-e29b-41d4-a716-446655440000","taskIndices":[1,3]}' \

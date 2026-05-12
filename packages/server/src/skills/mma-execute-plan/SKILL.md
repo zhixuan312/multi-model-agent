@@ -65,6 +65,7 @@ Dispatch named tasks from a plan file to workers. Each `taskDescriptors` string 
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"taskDescriptors":["3. Migrate database schema"],"filePaths":["/project/docs/plan.md"]}' \

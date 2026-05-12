@@ -85,6 +85,7 @@ digraph when_to_use {
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"question":"How does the auth middleware handle token refresh?"}' \

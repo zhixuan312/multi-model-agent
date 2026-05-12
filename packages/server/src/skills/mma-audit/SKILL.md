@@ -88,6 +88,7 @@ When `subtype: 'plan'`:
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"subtype":"default","filePaths":["/project/docs/api-spec.md"]}' \
@@ -100,6 +101,7 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"subtype":"spec","filePaths":["/project/docs/superpowers/specs/2026-05-12-feature-design.md"]}' \
@@ -111,6 +113,7 @@ BATCH=$(curl -f --show-error -s -X POST \
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"subtype":"skill","filePaths":["/project/packages/server/src/skills/mma-audit/SKILL.md"]}' \
@@ -122,6 +125,7 @@ BATCH=$(curl -f --show-error -s -X POST \
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"subtype":"plan","filePaths":["/project/docs/superpowers/plans/2026-05-10-feature.md"]}' \

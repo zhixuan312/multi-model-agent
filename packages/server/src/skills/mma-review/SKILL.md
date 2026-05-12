@@ -70,6 +70,7 @@ Either `code` or `filePaths` (or both) must be provided.
 ```bash
 BATCH=$(curl -f --show-error -s -X POST \
   -H "X-MMA-Client: $MMA_CLIENT" \
+  -H "X-MMA-Main-Model: $MMA_MAIN_MODEL" \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{"focus":["security","correctness"],"filePaths":["/project/src/auth/login.ts"]}' \
