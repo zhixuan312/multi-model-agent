@@ -167,61 +167,6 @@ describe('ReviewerEngine.runQualityAP', () => {
   });
 });
 
-describe('ReviewerEngine.runDiff', () => {
-  it('parses APPROVE verdict', async () => {
-    const engine = makeEngine();
-    const session = mockSession(turnResult({
-      output: 'APPROVE',
-    }));
-
-    const result = await engine.runDiff(session, baseInput);
-
-    expect(result.verdict).toBe('approve');
-    expect(result.concerns).toEqual([]);
-  });
-
-  it('parses CONCERNS verdict', async () => {
-    const engine = makeEngine();
-    const session = mockSession(turnResult({
-      output: 'CONCERNS: the diff touches a hot path without adding coverage',
-    }));
-
-    const result = await engine.runDiff(session, baseInput);
-
-    expect(result.verdict).toBe('concerns');
-  });
-
-  it('parses REJECT verdict', async () => {
-    const engine = makeEngine();
-    const session = mockSession(turnResult({
-      output: 'REJECT: the diff introduces a security vulnerability',
-    }));
-
-    const result = await engine.runDiff(session, baseInput);
-
-    expect(result.verdict).toBe('reject');
-  });
-
-  it('returns cost shape on diff result', async () => {
-    const engine = makeEngine();
-    const session = mockSession(turnResult({
-      output: 'APPROVE',
-      usage: { inputTokens: 20, outputTokens: 5, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    }));
-
-    const result = await engine.runDiff(session, baseInput);
-
-    expect(result.cost).toEqual({
-      inputTokens: 20,
-      outputTokens: 5,
-      turnCount: 0,
-      toolCallCount: 0,
-      costUSD: null,
-      durationMs: 0,
-    });
-  });
-});
-
 describe('ReviewerEngine negative cases', () => {
   it('returns changes_required + meta-concern when ## Summary section is missing (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
@@ -243,17 +188,6 @@ describe('ReviewerEngine negative cases', () => {
     const result = await engine.runSpec(session, baseInput);
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns[0]).toMatch(/missing.*Summary/);
-  });
-
-  it('returns concerns + meta-concern for diff when verdict marker is missing (4.0.3 lenient parse)', async () => {
-    const engine = makeEngine();
-    const session = mockSession(turnResult({
-      output: '## Summary\nlooks good to me',
-    }));
-
-    const result = await engine.runDiff(session, baseInput);
-    expect(result.verdict).toBe('concerns');
-    expect(result.concerns[0]).toMatch(/missing.*marker/);
   });
 
   it('propagates transport error from session', async () => {

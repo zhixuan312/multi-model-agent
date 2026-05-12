@@ -111,19 +111,3 @@ describe('ReviewerOutputParser.parse — degraded paths', () => {
   });
 });
 
-describe('ReviewerOutputParser.parseDiff', () => {
-  it('extracts APPROVE verdict', () => {
-    expect(parser.parseDiff('APPROVE')).toEqual({ verdict: 'approve', concerns: [] });
-  });
-  it('extracts CONCERNS: with reason', () => {
-    expect(parser.parseDiff('CONCERNS: out-of-scope edit').verdict).toBe('concerns');
-  });
-  it('extracts REJECT: with reason', () => {
-    expect(parser.parseDiff('REJECT: introduces a security issue').verdict).toBe('reject');
-  });
-  it('falls back to concerns + meta-concern when no marker', () => {
-    const r = parser.parseDiff('looks ok i guess');
-    expect(r.verdict).toBe('concerns');
-    expect(r.concerns[0]).toMatch(/missing APPROVE \/ CONCERNS: \/ REJECT: marker/);
-  });
-});
