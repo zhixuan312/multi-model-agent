@@ -5,6 +5,51 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.4.0] - 2026-05-12
+
+Architectural release: session-based provider boundary replaces the 1,559-line runner-shell chain, lifecycle collapses to a single five-stage plan, and the read-only routes consolidate behind a unified `subtype` field. Plus three correctness fixes that materially change cost telemetry and a return to required `X-MMA-Main-Model` after auto-detect proved unreliable.
+
+### BREAKING
+
+- **`Provider.openSession(opts) → Session.send(prompt, opts) → TurnResult` replaces the legacy `RunnerShell` chain (core).** Production providers (`claude-agent-sdk`, codex CLI, `@openai/agents`) expose only `openSession`; the old `run` / `runReview` / `dispose` shims and the 1,559-line runner-shell + RunnerAdapter machinery are deleted. `delegateWithEscalation`, `parallel-criteria-dispatcher`, and `ReviewerEngine.runSpec` / `runQualityAP` / `runDiff` now take an `openSession` factory and assemble their own `RunResult` via the shared `assembleRunResult` helper.
+- **Five-stage lifecycle (core).** Stage plan collapses to `implementing → review → rework → annotating → committing`. The pure-transform `annotating` stage stays `entered: false` in `stageStats` (it doesn't call `mergeStageStats`); look at top-level `structuredReport` for its output. Legacy commit-gate fields and the legacy annotate handlers are removed; contract goldens regenerated. `HUMAN_LABEL` from `stage-labels` is the single source of truth for headline labels.
+- **`X-MMA-Main-Model` header is required again on tool routes (server).** Reverts the 4.3.0 optional-with-auto-detect chain. The claude-agent-sdk used by our own claude-tier workers writes JSONL files into `~/.claude/projects/<slug>/` with `entrypoint: 'sdk-ts'`, so the resolver returned the *worker's* model (e.g. haiku) as the calling agent's "main" model — telemetry then mis-attributed `costDeltaVsMainUSD` against the wrong baseline. Server now returns `400 main_model_required` when the header is missing. `resolveMainModel` and its test are deleted; all shipped skills updated.
+- **Read-only route consolidation (core).** `research` `ToolCategory` is removed; all 5 read-only routes (`audit`, `review`, `debug`, `investigate`, `explore`) share `ToolCategory: 'read_only'` and carry a `subtype` field that captures the per-route variant. `auditType: 'plan'` (4.2.3+) is exposed as `subtype: 'plan'` on `audit`.
+- **LLM `verify` tool removed (core).** Verification is now `verifyCommand` only (deterministic shell command); the prior LLM-driven verify route is deleted.
+- **Telemetry clamp ceilings raised for 2026-era usage (core).** Per-stage input/cached caps `5M → 100M`, output cap `500K → 2M`, per-stage cost `$100 → $500`, per-task cost `$800 → $5000`. Zod `max()` bounds on `telemetry-types.ts` lift in lockstep. Existing rows below the old caps continue to pass validation unchanged.
+
+### Added
+
+- **`subtype` field on every read-only-route result (core).** Drives downstream filtering / dashboards (e.g. "show me all `audit:plan` runs").
+- **`buildPreamble` warm-followup helper (core).** Resumed-session turns (re-entrant criteria, rework, multi-iteration read routes) now emit `buildWarmFollowupMessage(suffix)` instead of re-inlining the brief / diff / planContext. Codex saw 30–40% input-token reduction on long criteria chains — the resumed thread already has the cached prefix, the second turn only needs the new content.
+- **Per-criterion termination check (core).** Each criterion turn checks the WallClockGuard before dispatch; previously the guard fired only at the outer stage boundary so a long criteria-fanout could overshoot.
+- **`assembleRunResult` helper (core).** Single canonical mapping from `Session.send` outputs + cost + termination → `RunResult` (`actualCostUSD` populated). Both `delegateWithEscalation` and review handlers route through it, so cost / termination-reason mapping cannot diverge.
+- **`brief-preamble.ts` (core).** Extracts commit-block + format constraints from a brief once and prepends to the initial session prompt; subsequent turns reference the cached prefix.
+- **`tests/providers/codex-cli-session.test.ts` (tests).** Pins the gross→net normalization with a real-world 7.3M/6.66M sentinel case so codex token accounting cannot regress.
+- **`tests/contract/http/main-model-required.test.ts` (tests).** Pins the `400 main_model_required` reject + 202 happy path on tool routes.
+
+### Fixed
+
+- **Codex `input_tokens` is GROSS; cached subset must be subtracted before pricing (core).** OpenAI Responses API / codex CLI emit `input_tokens` as the gross count *including* `cached_input_tokens`; Anthropic emits NET (3 disjoint buckets). The codex adapter passed gross through, so `priceTokens` double-billed the cached subset at full + cached rates (~4× cost over-report on cache-heavy turns). Adapter now writes `inputTokens = Math.max(0, gross - cached)` and keeps `cachedReadTokens = cached`. The disjoint-partition contract is documented on the shared `TokenUsage` interface. Verified end-to-end: a smoke task previously reporting $21.60 now reports $4.93 (matches predicted $4.95).
+- **`stageStats` per-stage cost now reads `RunResult.actualCostUSD` (core).** `assembleRunResult` populates the canonical `actualCostUSD`; the legacy `cost.costUSD` field is undefined for runs through claude / codex session adapters. `task-runner.ts:517` (implementing) and `rework-handler.ts:110` (rework) both read with the canonical-then-legacy fallback `actualCostUSD ?? cost?.costUSD ?? null`, matching the pattern `delegate-with-escalation` already uses. Pre-fix: every claude-tier implementing and rework stage logged `cost=null` in `stageStats` even when the turn had a real cost; a haiku smoke task reported $0.0000 in stageStats despite spending ~485K cached tokens. Regression-pinned in `tests/lifecycle/handlers/rework-handler.test.ts`.
+- **Rework worker `workerStatus` calibration prevents false self-rating as `failed` (core).** Pre-fix, the rework prompt described the summary format (`Fixed: … Could not fix: …`) but never mapped that outcome to the `workerStatus` enum — the worker conflated "the reviewer flagged concerns originally" with "I failed." Two smoke runs that DID fix every reviewer deviation cleanly self-rated as `failed` (run 2) / `done_with_concerns` (run 1), driving the lifecycle headline to `[incomplete]` and over-skipping the commit gate. Fix: explicit `workerStatus` calibration block in `systemPrompt` plus a deterministic Action-step-4 mapping: `Could not fix: (none)` → `workerStatus MUST be "done"`. Regression-pinned in `tests/review/templates/rework.test.ts`.
+- **`atomicWrite` `mkdir -p` on the target's parent (core).** Pre-fix, writing to a path under a missing intermediate directory raised ENOENT mid-write; downstream tools treated it as a write failure and retried. Now the parent is materialized atomically before the rename.
+- **`sweepProjectCap` respects active projects (core).** The LRU evictor skipped projects with in-flight batches, so the active-set could grow past the cap if all projects were active. Sweep now also drops any project whose last activity is older than the floor — active projects are protected, idle ones evict deterministically.
+
+### Changed
+
+- **Read-route implementer is sequential (not parallel) (core).** The parallel-criteria-dispatcher is deleted; each criterion runs on a single complex-tier session in sequence with warm-followup between turns. Sequential lets each criterion see the prior criterion's edits, which mattered for criteria that build on each other; the dispatcher's parallelism savings turned out to be smaller than the re-investigation cost.
+- **`reviewHandler` runs spec then quality on one complex session (core).** Same session, two ordered prompts. Pre-fix, each reviewer opened its own session (cold-prefix tax × 2). Now the spec output sits in cached history when quality runs.
+- **`task-executor` parses `WorkerOutput` JSON; captures `preTaskHeadSha` (core).** Workers emit a structured JSON block (`workerStatus`, `summary`, `filesChanged`, `unresolved`, `validationsRun`); the executor parses it and uses `filesChanged` as the canonical written-files list rather than scanning the diff. `preTaskHeadSha` is captured at task entry so the Committing stage can detect "HEAD moved during the task" and refuse to commit on a changed base.
+- **`verifyCommand` validator with read-only git allowlist (core).** A new intake validator rejects non-allowlisted commands (`rm`, `mv`, `git reset`, `git push`, etc.) at the 400 boundary; allowlist covers `npm test/build/lint`, `tsc`, `pytest`, `cargo`, and read-only `git status/diff/log` forms. Wired into both `delegate` and `execute-plan`.
+- **Heading-label single source of truth (core).** Every lifecycle event emitter reads stage labels from `stage-labels.HUMAN_LABEL` rather than hardcoding strings; pre-fix, `Spec review` / `Quality review` lingered in three places after the 4.3.0 collapse.
+
+### Removed
+
+- **`runner-shell/` (core).** 1,559 lines, three adapters (`anthropic-messages`, `openai-chat`, `openai-responses`), plus the RunnerAdapter / tool-definitions runtime. Replaced by `providers/*-session.ts` modules.
+- **`resolveMainModel` resolver + test (core).** Replaced by required-header enforcement (see BREAKING above).
+- **Diff-review path (core).** `runDiff`, `ReviewerDiffCallResult`, `DiffReviewerVerdict`, `parseDiff`, and the `buildDiff` reviewer-template method are gone; the diff template is no longer required on `ReviewTemplate`.
+
 ## [4.3.1] - 2026-05-11
 
 Telemetry stage vocabulary collapse (schemaVersion 4 → 5, forward-only on mma side; backend will normalise legacy records on read) plus three identity / write-accounting fixes that landed after 4.3.0 shipped.
@@ -88,7 +133,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...HEAD
+[4.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...v4.4.0
 [4.3.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...v4.3.0
 [4.2.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.1...v4.2.2
