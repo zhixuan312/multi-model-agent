@@ -5,7 +5,7 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 const config: MultiModelConfig = {
   agents: {
     standard: {
-      type: 'openai-compatible',
+      type: 'codex',
       model: 'deepseek-r1',
       baseUrl: 'https://api.deepseek.com/v1',
       apiKeyEnv: 'DEEPSEEK_API_KEY',
@@ -22,7 +22,7 @@ describe('createProvider (1.0.0)', () => {
   it('creates a provider from the standard slot', () => {
     const p = createProvider('standard', config);
     expect(p.name).toBe('standard');
-    expect(p.config.type).toBe('openai-compatible');
+    expect(p.config.type).toBe('codex');
     expect(p.config.model).toBe('deepseek-r1');
   });
 

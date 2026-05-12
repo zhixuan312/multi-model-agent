@@ -30,9 +30,9 @@ describe('assembleRunResult', () => {
     const r = assembleRunResult(turn(), { reviewVerdict: 'approved' });
     expect(r.reviewVerdict).toBe('approved');
   });
-  it('sets status=error when terminationReason is not ok', () => {
+  it('maps termination reasons to lifecycle statuses', () => {
     const r = assembleRunResult(turn({ terminationReason: 'time_exceeded' }));
-    expect(r.status).toBe('error');
+    expect(r.status).toBe('timeout');
     expect(r.terminationReason).toBe('time_ceiling');
   });
   it('flattens toolCallsByName into toolCalls string[]', () => {
@@ -40,8 +40,8 @@ describe('assembleRunResult', () => {
     expect(r.toolCalls.length).toBe(3);
     expect(r.toolCalls.filter(t => t === 'Read').length).toBe(2);
   });
-  it('parsedFindings defaults to null', () => {
+  it('parsedFindings is undefined unless parsed', () => {
     const r = assembleRunResult(turn());
-    expect(r.parsedFindings).toBeNull();
+    expect(r.parsedFindings).toBeUndefined();
   });
 });

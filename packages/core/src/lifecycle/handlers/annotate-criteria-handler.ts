@@ -10,9 +10,8 @@
 // stage label as the artifact-producing Annotating stage.
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
+import type { RunResult, AgentType, TaskSpec } from '../../types.js';
 import type { AnnotatorRoute } from '../../review/annotator-prompt-builder.js';
-import { makeRunnerShell } from '../../providers/make-runner-shell.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
 
 /** Routes that go through the parallel-criteria + annotate pipeline. */
@@ -45,14 +44,10 @@ export async function annotateCriteriaHandler(state: LifecycleState): Promise<vo
   if (!Array.isArray(outputs) || outputs.length === 0) return;
 
   const tier: AgentType = ctx.assignedTier;
-  const provider = ctx.providers[tier] as Provider | undefined;
-  if (!provider) return;
-
-  const shell = makeRunnerShell(provider);
 
   let result;
   try {
-    result = await annotatorEngine.annotate(shell, {
+    result = await annotatorEngine.annotate(ctx.getSession(tier), {
       workerOutputs: outputs.map(o => ({ criterion: o.criterionTitle, narrative: o.narrative })),
       brief: task.prompt ?? '',
       cwd: ctx.cwd,
@@ -91,6 +86,6 @@ export async function annotateCriteriaHandler(state: LifecycleState): Promise<vo
     durationMs: (result as { durationMs?: number }).durationMs ?? null,
   }, {
     tier,
-    model: (provider?.config as { model?: string } | undefined)?.model ?? null,
+    model: (ctx.providers[tier]?.config as { model?: string } | undefined)?.model ?? null,
   });
 }

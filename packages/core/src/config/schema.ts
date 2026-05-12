@@ -169,26 +169,16 @@ const baseAgentFields = {
   inputTokenSoftLimit: z.number().int().positive().optional(),
 };
 
-const openAICompatibleAgentSchema = z.object({
-  type: z.literal('openai-compatible'),
-  baseUrl: z.string().min(1, 'baseUrl is required for openai-compatible agents'),
-  apiKey: z.string().optional(),
-  apiKeyEnv: z.string().optional(),
-  ...baseAgentFields,
-});
-
+// v4.4: two provider types only. `claude` covers Anthropic API + any
+// Anthropic-compatible proxy (set baseUrl). `codex` covers ChatGPT
+// subscription + OpenAI API + any OpenAI-compatible endpoint (Groq,
+// DeepSeek, OpenRouter, Together, LM Studio, Ollama — set baseUrl +
+// apiKeyEnv to enable). The compatibility variants from earlier
+// releases have been removed — collapse all of them onto `claude` or
+// `codex` with the appropriate `baseUrl` set.
 const claudeAgentSchema = z.object({
   type: z.literal('claude'),
-  ...baseAgentFields,
-}).strict();
-
-// `claude-compatible` targets an Anthropic-format endpoint hosted by another
-// vendor (e.g. DeepSeek's https://api.deepseek.com/anthropic). It mirrors
-// `openai-compatible`: required baseUrl + apiKey/apiKeyEnv, talks the same
-// wire format as the canonical provider.
-const claudeCompatibleAgentSchema = z.object({
-  type: z.literal('claude-compatible'),
-  baseUrl: z.string().min(1, 'baseUrl is required for claude-compatible agents'),
+  baseUrl: z.string().min(1).optional(),
   apiKey: z.string().optional(),
   apiKeyEnv: z.string().optional(),
   ...baseAgentFields,
@@ -196,13 +186,14 @@ const claudeCompatibleAgentSchema = z.object({
 
 const codexAgentSchema = z.object({
   type: z.literal('codex'),
+  baseUrl: z.string().min(1).optional(),
+  apiKey: z.string().optional(),
+  apiKeyEnv: z.string().optional(),
   ...baseAgentFields,
 }).strict();
 
 const agentConfigSchema = z.discriminatedUnion('type', [
-  openAICompatibleAgentSchema,
   claudeAgentSchema,
-  claudeCompatibleAgentSchema,
   codexAgentSchema,
 ]);
 

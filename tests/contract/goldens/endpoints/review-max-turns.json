@@ -10,7 +10,7 @@
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 10,
+      "turns": 990,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 10,
+        "turnsUsed": 990,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -123,7 +123,7 @@
           "outputTokens": 200,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 10,
+          "turnCount": 990,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0

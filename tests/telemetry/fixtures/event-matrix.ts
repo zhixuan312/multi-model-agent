@@ -16,7 +16,7 @@ const factories: Record<string, EventFactory> = {
   task_started: () => ({ event: 'task_started', ts: TS, batchId: BATCH_ID, taskIndex: 0, route: 'delegate', cwd: '/tmp/test' }),
   stage_change: () => ({ event: 'stage_change', ts: TS, batchId: BATCH_ID, taskIndex: 0, from: 'implementing', to: 'review', attempt: 1, attemptCap: 3, implTier: 'standard', reviewerTier: 'standard', escalated: false }),
   heartbeat: () => ({ event: 'heartbeat', ts: TS, batchId: BATCH_ID, taskIndex: 0, elapsed: '30s', stage: 'implementing', round: 1, cap: 3, tools: 5, read: 3, wrote: 2, text: 1500, cost: 0.005, idle_ms: 2000, stage_idle_ms: 1000 }),
-  fallback: () => ({ event: 'fallback', ts: TS, batchId: BATCH_ID, taskIndex: 0, loop: 'spec', attempt: 2, role: 'implementer', assignedTier: 'standard', usedTier: 'complex', reason: 'not_configured', triggeringStatus: 'api_error', violatesSeparation: false, fallbackSeparationRespected: true, assignedIdentity: { providerType: 'claude', normalizedEndpoint: 'https://api.anthropic.com', modelId: 'claude-sonnet' }, usedIdentity: { providerType: 'openai-compatible', normalizedEndpoint: 'https://api.openai.com', modelId: 'gpt-4o' } }),
+  fallback: () => ({ event: 'fallback', ts: TS, batchId: BATCH_ID, taskIndex: 0, loop: 'spec', attempt: 2, role: 'implementer', assignedTier: 'standard', usedTier: 'complex', reason: 'not_configured', triggeringStatus: 'api_error', violatesSeparation: false, fallbackSeparationRespected: true, assignedIdentity: { providerType: 'claude', normalizedEndpoint: 'https://api.anthropic.com', modelId: 'claude-sonnet' }, usedIdentity: { providerType: 'codex', normalizedEndpoint: 'https://api.openai.com', modelId: 'gpt-4o' } }),
   fallback_unavailable: () => ({ event: 'fallback_unavailable', ts: TS, batchId: BATCH_ID, taskIndex: 0, loop: 'quality', attempt: 1, role: 'qualityReviewer', assignedTier: 'standard', reason: 'not_configured' }),
   escalation: () => ({ event: 'escalation', ts: TS, batchId: BATCH_ID, taskIndex: 0, loop: 'spec', attempt: 1, baseTier: 'standard', implTier: 'complex', reviewerTier: 'complex' }),
   escalation_unavailable: () => ({ event: 'escalation_unavailable', ts: TS, batchId: BATCH_ID, taskIndex: 0, loop: 'quality', attempt: 2, role: 'qualityReviewer', wantedTier: 'complex', reason: 'not_configured' }),
@@ -37,7 +37,7 @@ const factories: Record<string, EventFactory> = {
   tool_call: () => ({ event: 'tool_call', ts: TS, batchId: BATCH_ID, taskIndex: 0, tool: 'read_file', turnIndex: 0 }),
   text_emission: () => ({ event: 'text_emission', ts: TS, batchId: BATCH_ID, taskIndex: 0, chars: 500, turnIndex: 0 }),
   'task.completed': () => ({ event: 'task.completed', ts: TS, route: 'delegate', agentType: 'standard', capabilities: ['web_search', 'web_fetch'], toolMode: 'full', client: 'claude-code', fileCountBucket: '1-5', durationBucket: '10s-1m', costBucket: '<$0.01', savedCostBucket: '$0', implementerModelFamily: 'claude', implementerModel: 'claude-sonnet', terminalStatus: 'ok', workerStatus: 'done', errorCode: null, escalated: false, fallbackTriggered: false, topToolNames: ['read_file', 'edit_file'], stages: {} }),
-  'session.started': () => ({ event: 'session.started', ts: TS, configFlavor: { server: { port: 7337 } }, providersConfigured: ['claude', 'openai-compatible'] }),
+  'session.started': () => ({ event: 'session.started', ts: TS, configFlavor: { server: { port: 7337 } }, providersConfigured: ['claude', 'codex'] }),
   'install.changed': () => ({ event: 'install.changed', ts: TS, fromVersion: '3.10.0', toVersion: '3.11.0', trigger: 'upgrade' }),
   'skill.installed': () => ({ event: 'skill.installed', ts: TS, skill: 'mma-delegate', client: 'claude-code' }),
 };
@@ -55,8 +55,8 @@ export function getFixtureEventNames(): Set<string> {
 function configFor(provider: Provider): MultiModelConfig {
   return {
     agents: {
-      standard: { type: 'openai-compatible', model: 'std', baseUrl: 'https://ex.invalid/v1' },
-      complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
+      standard: { type: 'codex', model: 'std', baseUrl: 'https://ex.invalid/v1' },
+      complex: { type: 'codex', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
     },
     defaults: { tools: 'readonly', timeoutMs: 60_000, maxCostUSD: 1, sandboxPolicy: 'cwd-only' },
     server: {} as any,

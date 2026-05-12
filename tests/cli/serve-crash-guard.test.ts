@@ -7,8 +7,8 @@ import { startServe } from '../../packages/server/src/cli/serve.js';
 function minimalConfig(tokenFile: string) {
   return {
     agents: {
-      standard: { type: 'openai-compatible' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
-      complex: { type: 'openai-compatible' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
+      standard: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
+      complex: { type: 'codex' as const, model: 'm', baseUrl: 'http://127.0.0.1:1/v1', apiKeyEnv: 'FAKE' },
     },
     defaults: {
       tools: 'full' as const,

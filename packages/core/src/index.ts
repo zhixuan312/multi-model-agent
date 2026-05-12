@@ -15,7 +15,6 @@ export type {
   ProviderConfig,
   CodexProviderConfig,
   ClaudeProviderConfig,
-  OpenAICompatibleProviderConfig,
   MultiModelConfig,
   RunResult,
   Provider,
@@ -95,9 +94,6 @@ export {
   shouldRejectNonLoopback,
   isAllowedHostHeader,
 } from './transport/index.js';
-
-// Runner shell
-export { RunnerShell } from './providers/runner-shell.js';
 
 // Heartbeat
 export { ActivityTracker, formatElapsed } from './bounded-execution/activity-tracker.js';

@@ -18,8 +18,8 @@ describe('startServe agents pass-through (3.1.1 regression guard)', () => {
 
     const config = {
       agents: {
-        standard: { type: 'openai-compatible', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
-        complex: { type: 'openai-compatible', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
+        standard: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
+        complex: { type: 'codex', model: 'm', baseUrl: 'http://x/v1', apiKey: 'k' },
       },
       defaults: {
         tools: 'full',

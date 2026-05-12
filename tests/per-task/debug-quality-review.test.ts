@@ -51,7 +51,7 @@ const mockReview: RunResult = {
 function makeProvider(slot: string) {
   return {
     name: slot,
-    config: { type: 'openai-compatible' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
+    config: { type: 'codex' as const, model: `${slot}-model`, baseUrl: 'https://ex.invalid/v1' },
     run: async (prompt: string) => {
       if (typeof prompt === 'string' && prompt.includes('confirm the worker')) return mockReview;
       return mockWorker;
@@ -61,8 +61,8 @@ function makeProvider(slot: string) {
 
 const config: MultiModelConfig = {
   agents: {
-    standard: { type: 'openai-compatible', model: 'std', baseUrl: 'https://ex.invalid/v1' },
-    complex: { type: 'openai-compatible', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
+    standard: { type: 'codex', model: 'std', baseUrl: 'https://ex.invalid/v1' },
+    complex: { type: 'codex', model: 'cpx', baseUrl: 'https://ex2.invalid/v1' },
   },
   defaults: { timeoutMs: 600_000, tools: 'full' },
 };

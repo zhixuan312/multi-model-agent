@@ -88,13 +88,13 @@ export async function boot(opts: BootOptions): Promise<HarnessHandle> {
   const config: MultiModelConfig = {
     agents: {
       standard: {
-        type: 'openai-compatible',
+        type: 'codex',
         baseUrl: 'http://mock.local',
         apiKey: 'stub',
         model: 'mock',
       },
       complex: {
-        type: 'openai-compatible',
+        type: 'codex',
         baseUrl: 'http://mock.local',
         apiKey: 'stub',
         model: 'mock',

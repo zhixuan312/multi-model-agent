@@ -1,11 +1,11 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
-import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import { specLintTemplate } from '../../review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../review/templates/quality-review.js';
 import { parseReviewReport } from '../../review/parse-review-report.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
+import { assembleRunResult } from '../../providers/assemble-run-result.js';
 
 interface SubReview {
   source: 'spec' | 'quality';
@@ -13,7 +13,7 @@ interface SubReview {
 }
 
 async function runOneReviewer(
-  state: LifecycleState,
+  _state: LifecycleState,
   ctx: ExecutionContext,
   task: TaskSpec,
   source: 'spec' | 'quality',
@@ -22,8 +22,7 @@ async function runOneReviewer(
 ): Promise<RunResult | { transportError: string }> {
   const template = source === 'spec' ? specLintTemplate : qualityLintTemplate;
   const reviewerTier: AgentType = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
-  const provider = ctx.providers[reviewerTier] as Provider | undefined;
-  if (!provider) {
+  if (!ctx.providers[reviewerTier]) {
     return { transportError: `no provider available for tier ${reviewerTier}` };
   }
 
@@ -37,27 +36,9 @@ async function runOneReviewer(
     template.systemPrompt + '\n\n' + template.buildUserPrompt(promptCtx);
 
   try {
-    return await delegateWithEscalation(
-      {
-        prompt: fullPrompt,
-        cwd: ctx.cwd,
-        agentType: reviewerTier,
-        briefQualityPolicy: 'off',
-        timeoutMs: ctx.timing.timeoutMs,
-        tools: 'readonly',
-      },
-      [provider],
-      {
-        explicitlyPinned: true,
-        taskDeadlineMs: ctx.timing.deadlineMs,
-        abortSignal: ctx.stall.controller.signal,
-        assignedTier: reviewerTier,
-        ...(ctx.bus && { bus: ctx.bus }),
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        stageLabel: 'Review',
-      },
-    );
+    const session = ctx.getSession(reviewerTier);
+    const turn = await session.send(fullPrompt, { stageLabel: 'Review' });
+    return assembleRunResult(turn);
   } catch (err) {
     return { transportError: err instanceof Error ? err.message : String(err) };
   }

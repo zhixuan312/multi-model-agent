@@ -1,9 +1,7 @@
 import { LifecycleDispatcher } from '../../packages/core/src/lifecycle/lifecycle-dispatcher.js';
-import { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
 import { ContextBlockStore, ContextBlockNotFoundError, InMemoryContextBlockStore } from '../../packages/core/src/stores/context-block-tool.js';
 import { BatchRegistry } from '../../packages/core/src/stores/batch-registry.js';
 import { TaskExecutor } from '../../packages/core/src/lifecycle/handlers/task-executor.js';
-import { ExecutionContextBuilder } from '../../packages/core/src/lifecycle/handlers/execution-context-builder.js';
 import { DeriveTerminalStatusHandler } from '../../packages/core/src/lifecycle/handlers/derive-terminal-status.js';
 import { TerminalStatusDeriver } from '../../packages/core/src/reporting/terminal-status-deriver.js';
 import { ShutdownCoordinator } from '../../packages/core/src/cleanup/shutdown-coordinator.js';
@@ -11,6 +9,46 @@ import { EventEmitter } from '../../packages/core/src/events/event-emitter.js';
 import type { RunnerAdapter } from '../../packages/core/src/providers/runner-adapter.js';
 import type { StageHandler } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
 import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import type { Session, TurnResult } from '../../packages/core/src/types/run-result.js';
+
+/**
+ * Test bridge: wraps a `RunnerAdapter` in a `Session`-shaped object so
+ * handlers that have migrated to `session.send()` reach the same canned
+ * turn results the legacy `shell.run` path does. Keeps tests passing
+ * during the v4.4 handler migration without per-test rewiring.
+ */
+function adapterToFakeSession(adapter: RunnerAdapter): Session {
+  return {
+    async send(instruction: string): Promise<TurnResult> {
+      const turn = await adapter.turn({
+        systemPrompt: '',
+        userMessage: instruction,
+        priorTurns: [],
+        toolDefinitions: [],
+        capabilities: { thinking: false } as { thinking: boolean },
+      });
+      const okFinish = turn.finishReason === 'stop' || turn.finishReason === 'tool_use';
+      return {
+        output: turn.assistantText,
+        usage: {
+          inputTokens: turn.usage.inputTokens,
+          outputTokens: turn.usage.outputTokens,
+          cachedReadTokens: turn.usage.cachedReadTokens ?? 0,
+          cachedNonReadTokens: turn.usage.cachedNonReadTokens ?? 0,
+        },
+        filesRead: [],
+        filesWritten: [],
+        toolCallsByName: {},
+        turns: 1,
+        durationMs: 0,
+        costUSD: 0,
+        terminationReason: okFinish ? 'ok' : 'error',
+        ...(turn.errorCode && { errorCode: turn.errorCode }),
+      };
+    },
+    async close(): Promise<void> { /* no-op */ },
+  };
+}
 
 // ---- intake handlers (local until source-side implementations land) ------
 
@@ -102,17 +140,35 @@ export interface BootstrapDeps {
   store?: ContextBlockStore;
 }
 
-export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: BootstrapDeps = {}): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
   const registry = deps.registry ?? new BatchRegistry();
   const store = deps.store ?? new InMemoryContextBlockStore();
   const emitter = new EventEmitter();
-  const shell = new RunnerShell(adapter);
-  const ctxBuilder = new ExecutionContextBuilder();
-  const executor = new TaskExecutor(shell, emitter);
+  const executor = new TaskExecutor(emitter);
   const deriver = new TerminalStatusDeriver();
   const coord = new ShutdownCoordinator();
   const terminalHandler = new DeriveTerminalStatusHandler(deriver, coord);
   const noop: StageHandler = () => undefined;
+
+  // v4.4 test bridge: handlers that have migrated to session.send() read
+  // from ctx.getSession(tier). For the test path, we wrap the mock
+  // RunnerAdapter in a Session-shaped object so the migrated path reaches
+  // the same canned-turn fixture the legacy shell.run path does.
+  const fakeSession = adapterToFakeSession(adapter);
+  const injectExecutionContext: StageHandler = (state) => {
+    if (!state.executionContext) {
+      (state as { executionContext?: unknown }).executionContext = {
+        assignedTier: 'standard',
+        getSession: () => fakeSession,
+        closeSessions: async () => undefined,
+        wallClockGuard: { checkOrThrow: () => undefined },
+        cwd: (state.cwd as string | undefined) ?? process.cwd(),
+        providers: {},
+        timing: { startMs: Date.now(), timeoutMs: 60000, deadlineMs: Date.now() + 60000, stallTimeoutMs: 30000 },
+        stall: { controller: new AbortController(), lastEventAtMs: Date.now(), fired: false },
+      };
+    }
+  };
 
   const handlers: Record<string, StageHandler> = {
     // Stage 1 — ingress (noop: bootstrap is post-ingress)
@@ -120,7 +176,7 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
     verify_loopback: noop,
     validate_workspace: noop,
     load_project_state: noop,
-    prepare_execution_context: ctxBuilder.handler.bind(ctxBuilder),
+    prepare_execution_context: injectExecutionContext,
 
     // Stage 2 — intake (real handlers, not noops)
     parse_brief: makeIntakeValidator(),
@@ -177,7 +233,6 @@ export function bootstrapWithMockAdapter(adapter: RunnerAdapter, deps: Bootstrap
 
   return Object.assign(new LifecycleDispatcher(handlers), {
     overrideHandler(key: string, fn: StageHandler) { handlers[key] = fn; },
-    shell,
   });
 }
 
@@ -185,7 +240,7 @@ export function bootstrapWithMockAdapterAndOverrides(
   adapter: RunnerAdapter,
   overrides: Partial<Record<string, StageHandler>> = {},
   deps: BootstrapDeps = {},
-): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
   const dispatcher = bootstrapWithMockAdapter(adapter, deps);
   for (const [k, fn] of Object.entries(overrides)) {
     if (fn) dispatcher.overrideHandler(k, fn);
@@ -197,6 +252,6 @@ export function bootstrapWithMockAdapterAndRegistry(
   adapter: RunnerAdapter,
   registry: BatchRegistry,
   store: ContextBlockStore,
-): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void; shell: RunnerShell } {
+): LifecycleDispatcher & { overrideHandler(key: string, fn: StageHandler): void } {
   return bootstrapWithMockAdapter(adapter, { registry, store });
 }

@@ -4,8 +4,8 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 
 const config: MultiModelConfig = {
   agents: {
-    standard: { type: 'openai-compatible' as const, model: 'std', baseUrl: 'http://localhost' },
-    complex: { type: 'openai-compatible' as const, model: 'cpx', baseUrl: 'http://localhost' },
+    standard: { type: 'codex' as const, model: 'std', baseUrl: 'http://localhost' },
+    complex: { type: 'codex' as const, model: 'cpx', baseUrl: 'http://localhost' },
   },
   defaults: { timeoutMs: 600_000, tools: 'full' as const },
 };

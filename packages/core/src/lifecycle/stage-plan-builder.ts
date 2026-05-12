@@ -64,7 +64,7 @@ export function buildStagePlan(category: ToolCategory): StagePlan {
     // ── Stage 4 — Lint-review + rework split (4.3.0+) ──────────────────────
     // 4.1: review (parallel spec + quality, lint-only, readonly tools).
     //      Emits state.reviewVerdict + state.reviewFindings.
-    // 4.2: rework (complex tier, full tools, single pass). Skipped when
+    // 4.2: rework (standard tier, full tools, single pass). Skipped when
     //      reviewVerdict === 'approved'.
     // 4.3 / 4.4: annotate_completion / annotate_criteria (unchanged).
     { rowId: '4.1', stageName: 'review', schemaStage: 'review',

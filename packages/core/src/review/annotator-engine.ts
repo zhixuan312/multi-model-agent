@@ -1,4 +1,4 @@
-import type { RunnerShell } from '../providers/runner-shell.js';
+import type { Session } from '../types/run-result.js';
 import { AnnotatorPromptBuilder, type AnnotatorRoute } from './annotator-prompt-builder.js';
 import { AnnotatorOutputParser, type AnnotatorParseResult } from './annotator-output-parser.js';
 import { annotatorAuditTemplate } from './templates/annotator-audit.js';
@@ -6,7 +6,6 @@ import { annotatorReviewTemplate } from './templates/annotator-review.js';
 import { annotatorVerifyTemplate } from './templates/annotator-verify.js';
 import { annotatorDebugTemplate } from './templates/annotator-debug.js';
 import { annotatorInvestigateTemplate } from './templates/annotator-investigate.js';
-import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
 
 const DEFAULT_ANNOTATOR_TEMPLATES = {
   audit: annotatorAuditTemplate,
@@ -52,7 +51,7 @@ export class AnnotatorEngine {
   private builder = new AnnotatorPromptBuilder(DEFAULT_ANNOTATOR_TEMPLATES);
   private parser = new AnnotatorOutputParser();
 
-  async annotate(shell: RunnerShell, input: AnnotatorInput): Promise<AnnotatorCallResult> {
+  async annotate(session: Session, input: AnnotatorInput): Promise<AnnotatorCallResult> {
     // Drop "No findings for this criterion." sentinels — they're valid
     // empty results, not findings to merge. If ALL narratives are empty
     // sentinels, send a synthetic empty narrative so the annotator
@@ -103,20 +102,21 @@ export class AnnotatorEngine {
     }, ANNOTATOR_HARD_CAP_MS);
 
     try {
-      const result = await shell.run({
-        systemPrompt: prompt,
-        userMessage: 'Annotate the findings above.',
-        toolDefinitions: [],
-        maxTurns: SAFETY_MAX_TURNS, cwd: input.cwd,
-        abortSignal: combinedAbort.signal, deadlineMs: input.deadlineMs,
-        ...(input.bus && { bus: input.bus }),
-        ...(input.batchId !== undefined && { batchId: input.batchId }),
-        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
-        ...(input.tier !== undefined && { tier: input.tier }),
-        ...(input.stageLabel !== undefined && { stageLabel: input.stageLabel }),
-      });
-      // Cap-hit: yield empty findings; the lifecycle's soft-success path
-      // (quality-chain-handlers.ts settle) returns implementer narratives.
+      const turn = await session.send(
+        `${prompt}\n\nAnnotate the findings above.`,
+        { stageLabel: input.stageLabel ?? 'Annotating' },
+      );
+      // Adapt TurnResult → the shape this engine's parser + cost
+      // extractor uses.
+      const result = {
+        finalAssistantText: turn.output,
+        errorCode: turn.errorCode,
+        usage: turn.usage,
+        turns: turn.turns,
+        toolCalls: Object.values(turn.toolCallsByName).reduce((a, b) => a + b, 0),
+        costUSD: turn.costUSD,
+        durationMs: turn.durationMs,
+      };
       if (capHit) {
         return {
           finalAssistantText: '',
@@ -141,13 +141,13 @@ export class AnnotatorEngine {
 const ANNOTATOR_HARD_CAP_MS = 10 * 60 * 1000;
 const ANNOTATOR_SOFT_WARN_MS = 5 * 60 * 1000;
 
-function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number; costUSD?: number | null }; turns?: number; toolCalls?: unknown[]; cost?: { costUSD?: number | null }; costUSD?: number | null; durationMs?: number | null }): AnnotatorCallResult['cost'] {
+function extractCost(r: { usage?: { inputTokens?: number; outputTokens?: number }; turns?: number; toolCalls?: number; costUSD?: number | null; durationMs?: number | null }): AnnotatorCallResult['cost'] {
   return {
     inputTokens: r.usage?.inputTokens ?? 0,
     outputTokens: r.usage?.outputTokens ?? 0,
     turnCount: r.turns ?? 0,
-    toolCallCount: r.toolCalls?.length ?? 0,
-    costUSD: r.costUSD ?? r.cost?.costUSD ?? r.usage?.costUSD ?? null,
+    toolCallCount: typeof r.toolCalls === 'number' ? r.toolCalls : 0,
+    costUSD: r.costUSD ?? null,
     durationMs: r.durationMs ?? null,
   };
 }

@@ -1,14 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
   ReviewerEngine,
-  ReviewerParseError,
 } from '../../packages/core/src/review/reviewer-engine.js';
 import { ReviewerPromptBuilder } from '../../packages/core/src/review/reviewer-prompt-builder.js';
 import { specLintTemplate } from '../../packages/core/src/review/templates/spec-review.js';
 import { qualityLintTemplate } from '../../packages/core/src/review/templates/quality-review.js';
 import { annotateCompletionTemplate } from '../../packages/core/src/review/templates/annotate-completion.js';
-import type { RunnerShell } from '../../packages/core/src/providers/runner-shell.js';
-import type { RunResult } from '../../packages/core/src/providers/runner-shell-types.js';
+import type { Session, TurnResult } from '../../packages/core/src/types/run-result.js';
 
 function makeEngine() {
   const builder = new ReviewerPromptBuilder(
@@ -18,23 +16,26 @@ function makeEngine() {
   return new ReviewerEngine(builder);
 }
 
-function shellResult(overrides: Partial<RunResult> = {}): RunResult {
+function turnResult(overrides: Partial<TurnResult> = {}): TurnResult {
   return {
-    workerStatus: 'done',
-    finalAssistantText: '',
-    toolCalls: [],
+    output: '',
     usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     turns: 0,
     durationMs: 0,
     filesRead: [],
     filesWritten: [],
+    toolCallsByName: {},
     costUSD: null,
+    terminationReason: 'ok',
     ...overrides,
   };
 }
 
-function mockShell(result: RunResult): RunnerShell {
-  return { run: vi.fn().mockResolvedValue(result) } as unknown as RunnerShell;
+function mockSession(turn: TurnResult): Session {
+  return {
+    send: vi.fn().mockResolvedValue(turn),
+    close: vi.fn().mockResolvedValue(undefined),
+  } as unknown as Session;
 }
 
 const baseInput = {
@@ -43,19 +44,15 @@ const baseInput = {
   cwd: '/tmp/test',
 };
 
-// ---------------------------------------------------------------------------
-// Positive cases — spec branch
-// ---------------------------------------------------------------------------
 describe('ReviewerEngine.runSpec', () => {
   it('parses an approved verdict from a valid summary', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '## Summary\napproved\n\n## Deviations from brief\n\n## Unresolved\n',
+    const session = mockSession(turnResult({
+      output: '## Summary\napproved\n\n## Deviations from brief\n\n## Unresolved\n',
       usage: { inputTokens: 42, outputTokens: 7, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      toolCalls: [],
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
 
     expect(result.verdict).toBe('approved');
     expect(result.concerns).toEqual([]);
@@ -63,19 +60,19 @@ describe('ReviewerEngine.runSpec', () => {
 
   it('parses a changes_required verdict', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '## Summary\nchanges_required — the worker missed edge cases',
+    const session = mockSession(turnResult({
+      output: '## Summary\nchanges_required — the worker missed edge cases',
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
 
     expect(result.verdict).toBe('changes_required');
   });
 
   it('extracts concerns from Deviations and Unresolved sections', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: [
+    const session = mockSession(turnResult({
+      output: [
         '## Summary',
         'approved',
         '',
@@ -88,7 +85,7 @@ describe('ReviewerEngine.runSpec', () => {
       ].join('\n'),
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
 
     expect(result.verdict).toBe('approved');
     expect(result.concerns).toEqual([
@@ -100,8 +97,8 @@ describe('ReviewerEngine.runSpec', () => {
 
   it('extracts concerns from a JSON block', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: [
+    const session = mockSession(turnResult({
+      output: [
         '## Summary',
         'changes_required',
         '',
@@ -111,7 +108,7 @@ describe('ReviewerEngine.runSpec', () => {
       ].join('\n'),
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
 
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns).toEqual(['Missing null check', 'No tests']);
@@ -119,13 +116,13 @@ describe('ReviewerEngine.runSpec', () => {
 
   it('returns a well-shaped cost object', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '## Summary\napproved',
+    const session = mockSession(turnResult({
+      output: '## Summary\napproved',
       usage: { inputTokens: 100, outputTokens: 50, cachedReadTokens: 10, cachedNonReadTokens: 5 },
-      toolCalls: [{ name: 'readFile', input: { path: 'a.ts' } }, { name: 'grep', input: { pattern: 'x' } }],
+      toolCallsByName: { readFile: 1, grep: 1 },
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
 
     expect(result.cost).toEqual({
       inputTokens: 100,
@@ -138,17 +135,14 @@ describe('ReviewerEngine.runSpec', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Positive cases — qualityAP branch
-// ---------------------------------------------------------------------------
 describe('ReviewerEngine.runQualityAP', () => {
   it('parses an approved verdict', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '## Summary\napproved',
+    const session = mockSession(turnResult({
+      output: '## Summary\napproved',
     }));
 
-    const result = await engine.runQualityAP(shell, baseInput);
+    const result = await engine.runQualityAP(session, baseInput);
 
     expect(result.verdict).toBe('approved');
     expect(result.concerns).toEqual([]);
@@ -156,8 +150,8 @@ describe('ReviewerEngine.runQualityAP', () => {
 
   it('parses a changes_required verdict with concerns', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: [
+    const session = mockSession(turnResult({
+      output: [
         '## Summary',
         'changes_required',
         '',
@@ -166,24 +160,21 @@ describe('ReviewerEngine.runQualityAP', () => {
       ].join('\n'),
     }));
 
-    const result = await engine.runQualityAP(shell, baseInput);
+    const result = await engine.runQualityAP(session, baseInput);
 
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns).toEqual(['SQL query is vulnerable to injection']);
   });
 });
 
-// ---------------------------------------------------------------------------
-// Positive cases — diff branch
-// ---------------------------------------------------------------------------
 describe('ReviewerEngine.runDiff', () => {
   it('parses APPROVE verdict', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: 'APPROVE',
+    const session = mockSession(turnResult({
+      output: 'APPROVE',
     }));
 
-    const result = await engine.runDiff(shell, baseInput);
+    const result = await engine.runDiff(session, baseInput);
 
     expect(result.verdict).toBe('approve');
     expect(result.concerns).toEqual([]);
@@ -191,35 +182,34 @@ describe('ReviewerEngine.runDiff', () => {
 
   it('parses CONCERNS verdict', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: 'CONCERNS: the diff touches a hot path without adding coverage',
+    const session = mockSession(turnResult({
+      output: 'CONCERNS: the diff touches a hot path without adding coverage',
     }));
 
-    const result = await engine.runDiff(shell, baseInput);
+    const result = await engine.runDiff(session, baseInput);
 
     expect(result.verdict).toBe('concerns');
   });
 
   it('parses REJECT verdict', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: 'REJECT: the diff introduces a security vulnerability',
+    const session = mockSession(turnResult({
+      output: 'REJECT: the diff introduces a security vulnerability',
     }));
 
-    const result = await engine.runDiff(shell, baseInput);
+    const result = await engine.runDiff(session, baseInput);
 
     expect(result.verdict).toBe('reject');
   });
 
   it('returns cost shape on diff result', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: 'APPROVE',
+    const session = mockSession(turnResult({
+      output: 'APPROVE',
       usage: { inputTokens: 20, outputTokens: 5, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-      toolCalls: [],
     }));
 
-    const result = await engine.runDiff(shell, baseInput);
+    const result = await engine.runDiff(session, baseInput);
 
     expect(result.cost).toEqual({
       inputTokens: 20,
@@ -232,86 +222,56 @@ describe('ReviewerEngine.runDiff', () => {
   });
 });
 
-// ---------------------------------------------------------------------------
-// Negative cases
-// ---------------------------------------------------------------------------
 describe('ReviewerEngine negative cases', () => {
   it('returns changes_required + meta-concern when ## Summary section is missing (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: 'no summary here, just rambling',
+    const session = mockSession(turnResult({
+      output: 'no summary here, just rambling',
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });
 
-  it('returns changes_required when finalAssistantText is empty (4.0.3 lenient parse)', async () => {
+  it('returns changes_required when output is empty (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '',
+    const session = mockSession(turnResult({
+      output: '',
     }));
 
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });
 
   it('returns concerns + meta-concern for diff when verdict marker is missing (4.0.3 lenient parse)', async () => {
     const engine = makeEngine();
-    const shell = mockShell(shellResult({
-      finalAssistantText: '## Summary\nlooks good to me',
+    const session = mockSession(turnResult({
+      output: '## Summary\nlooks good to me',
     }));
 
-    const result = await engine.runDiff(shell, baseInput);
+    const result = await engine.runDiff(session, baseInput);
     expect(result.verdict).toBe('concerns');
     expect(result.concerns[0]).toMatch(/missing.*marker/);
   });
 
-  it('propagates transport error from shell', async () => {
+  it('propagates transport error from session', async () => {
     const engine = makeEngine();
     const transportError = new Error('ECONNREFUSED');
-    const shell = {
-      run: vi.fn().mockRejectedValue(transportError),
-    } as unknown as RunnerShell;
+    const session = {
+      send: vi.fn().mockRejectedValue(transportError),
+      close: vi.fn().mockResolvedValue(undefined),
+    } as unknown as Session;
 
-    await expect(engine.runSpec(shell, baseInput)).rejects.toThrow('ECONNREFUSED');
+    await expect(engine.runSpec(session, baseInput)).rejects.toThrow('ECONNREFUSED');
   });
 
-  it('passes abortSignal through to shell.run', async () => {
+  it('handles undefined output gracefully (lenient parse, not crash)', async () => {
     const engine = makeEngine();
-    const controller = new AbortController();
-    const shell = {
-      run: vi.fn().mockResolvedValue(shellResult({ finalAssistantText: '## Summary\napproved' })),
-    } as unknown as RunnerShell;
+    const session = mockSession(turnResult({ output: undefined as unknown as string }));
 
-    await engine.runSpec(shell, { ...baseInput, abortSignal: controller.signal });
-
-    expect(shell.run).toHaveBeenCalledTimes(1);
-    const callInput = (shell.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(callInput.abortSignal).toBe(controller.signal);
-  });
-
-  it('passes deadlineMs through to shell.run', async () => {
-    const engine = makeEngine();
-    const shell = {
-      run: vi.fn().mockResolvedValue(shellResult({ finalAssistantText: '## Summary\napproved' })),
-    } as unknown as RunnerShell;
-
-    await engine.runSpec(shell, { ...baseInput, deadlineMs: 30_000 });
-
-    const callInput = (shell.run as ReturnType<typeof vi.fn>).mock.calls[0][0];
-    expect(callInput.deadlineMs).toBe(30_000);
-  });
-
-  it('handles null/undefined finalAssistantText gracefully (lenient parse, not crash)', async () => {
-    const engine = makeEngine();
-    // shellResult defaults finalAssistantText to '', but we explicitly pass null-ish
-    const shell = mockShell(shellResult({ finalAssistantText: undefined as unknown as string }));
-
-    // finalAssistantText ?? '' → '' → missing Summary → lenient changes_required
-    const result = await engine.runSpec(shell, baseInput);
+    const result = await engine.runSpec(session, baseInput);
     expect(result.verdict).toBe('changes_required');
     expect(result.concerns[0]).toMatch(/missing.*Summary/);
   });

@@ -1,26 +1,34 @@
 import { describe, it, expect } from 'vitest';
 import * as os from 'node:os';
 import { runTaskViaDispatcher } from '../../packages/core/src/lifecycle/task-runner.js';
-import type { TaskSpec, RunResult, MultiModelConfig, Provider } from '../../packages/core/src/types.js';
+import type { TaskSpec, MultiModelConfig, Provider } from '../../packages/core/src/types.js';
 import type { ResolvedAgent } from '../../packages/core/src/escalation/agent-resolver.js';
+import type { Session, SessionOpts, TurnResult } from '../../packages/core/src/types/run-result.js';
 import { __setCoreTestProviderOverride } from '@zhixuan92/multi-model-agent-core';
 
 function mockProvider(reply: string, name: 'standard' | 'complex' = 'standard'): Provider {
   return {
     name,
     config: { type: 'claude', model: 'mock' } as Provider['config'],
-    run: async () => ({
-      output: reply,
-      status: 'ok',
-      usage: { inputTokens: 0, outputTokens: 0 },
-      turns: 0,
-      filesRead: [],
-      filesWritten: [],
-      toolCalls: [],
-      outputIsDiagnostic: false,
-      escalationLog: [],
-      parsedFindings: null,
-    } as RunResult),
+    openSession(_opts: SessionOpts): Session {
+      return {
+        async send(): Promise<TurnResult> {
+          return {
+            output: reply,
+            usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+            turns: 1,
+            durationMs: 0,
+            filesRead: [],
+            filesWritten: [],
+            toolCallsByName: {},
+            costUSD: 0,
+            terminationReason: 'ok',
+            workerSelfAssessment: 'done',
+          };
+        },
+        async close() { /* no-op */ },
+      };
+    },
   };
 }
 
@@ -53,7 +61,7 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
     const task: TaskSpec = {
       prompt: 'do the thing',
       cwd: os.tmpdir(),
-      reviewPolicy: 'none', // skip spec/quality/diff for the smoke test
+      reviewPolicy: 'none',
       timeoutMs: 60_000,
       tools: 'none',
     };
@@ -72,30 +80,28 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
   });
 
   it('runs reviewPolicy=full through spec+quality chains when reviewers approve', async () => {
-    // Implementer returns a structured report, reviewer (same mock) approves.
-    // Both providers return the same approve-summary so spec round 1 +
-    // quality round 1 both pass.
     process.env.MMAGENT_TEST_PROVIDER_OVERRIDE = '1';
     const mock: Provider = {
       name: 'standard',
       config: { type: 'claude', model: 'mock' } as Provider['config'],
-      run: async (prompt: string) => {
-        // Reviewers see review prompts; implementers see task prompts.
-        const isReview = /reviewer|## Summary/i.test(prompt);
+      openSession(_opts: SessionOpts): Session {
         return {
-          output: '## Summary\napproved\n\nDone.',
-          status: 'ok',
-          usage: { inputTokens: 0, outputTokens: 0 },
-          turns: 0,
-          filesRead: [],
-          filesWritten: [],
-          toolCalls: [],
-          outputIsDiagnostic: false,
-          escalationLog: [],
-          parsedFindings: null,
-          structuredReport: { summary: 'approved', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [] } as unknown as RunResult['structuredReport'],
-          ...(isReview ? {} : { implementationReport: { summary: 'approved', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [] } as unknown as RunResult['implementationReport'] }),
-        } as RunResult;
+          async send(): Promise<TurnResult> {
+            return {
+              output: '## Summary\napproved\n\nDone.',
+              usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+              turns: 1,
+              durationMs: 0,
+              filesRead: [],
+              filesWritten: [],
+              toolCallsByName: {},
+              costUSD: 0,
+              terminationReason: 'ok',
+              workerSelfAssessment: 'done',
+            };
+          },
+          async close() { /* no-op */ },
+        };
       },
     };
     __setCoreTestProviderOverride(mock);
@@ -130,8 +136,13 @@ describe('runTaskViaDispatcher (Step 7a smoke test)', () => {
     const provider: Provider = {
       name: 'standard',
       config: { type: 'claude', model: 'mock' } as Provider['config'],
-      run: async () => {
-        throw new Error('network down');
+      openSession(_opts: SessionOpts): Session {
+        return {
+          async send(): Promise<TurnResult> {
+            throw new Error('network down');
+          },
+          async close() { /* no-op */ },
+        };
       },
     };
     const resolved: ResolvedAgent = { slot: 'standard', provider };

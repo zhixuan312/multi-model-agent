@@ -1,20 +1,6 @@
-import type { RunnerShell } from '../providers/runner-shell.js';
+import type { Session, SessionOpts } from '../types/run-result.js';
 import type { EventEmitter } from '../events/event-emitter.js';
-import type { ToolDefinition } from '../providers/runner-shell-types.js';
-import { SAFETY_MAX_TURNS } from '../bounded-execution/safety-max-turns.js';
-import { makeToolDefinitions } from '../providers/tool-definitions.js';
-import { WRITE_TOOL_NAMES, SHELL_TOOL_NAMES } from '../providers/tool-name-sets.js';
 import type { CriterionEntry } from '../tools/criteria-types.js';
-
-/**
- * Filters out write + shell tools from the standard tool surface so
- * sub-workers in a read-only fan-out can't accidentally mutate the cwd.
- * Read tools (read_file, grep, glob, listFiles) and any other non-write
- * tools (web_search etc.) pass through.
- */
-function filterToReadOnly(defs: ToolDefinition[]): ToolDefinition[] {
-  return defs.filter(d => !WRITE_TOOL_NAMES.has(d.name) && !SHELL_TOOL_NAMES.has(d.name));
-}
 
 export interface SubWorkerOutput {
   criterionId: string;
@@ -50,7 +36,13 @@ export interface DispatchResult {
 }
 
 export interface DispatchInput {
-  shell: RunnerShell;
+  /**
+   * Factory that opens a fresh per-criterion `Session` against the
+   * configured tier's provider. Each sub-worker gets its own session
+   * (no thread sharing) — fan-outs are independent runs against the
+   * same cached prefix, not branches of a shared conversation.
+   */
+  openSession: (opts: SessionOpts) => Session;
   cachedPrefix: string;
   criteria: readonly CriterionEntry[];
   buildSuffix: (c: CriterionEntry) => string;
@@ -61,8 +53,6 @@ export interface DispatchInput {
   batchId?: string;
   taskIndex?: number;
   tier?: string;
-  /** Override the default read-only tool surface; rare. */
-  toolDefinitions?: ToolDefinition[];
   route?: string;
 }
 
@@ -92,7 +82,6 @@ function classifyFailureReason(errorCode: string | undefined): PartialFailure['r
 async function runOneSubWorker(
   input: DispatchInput,
   criterion: CriterionEntry,
-  toolDefs: ToolDefinition[],
 ): Promise<{ ok: true; output: SubWorkerOutput; capHit?: boolean } | { ok: false; failure: PartialFailure }> {
   input.bus?.emit({
     event: 'criteria_subworker_started',
@@ -142,22 +131,28 @@ async function runOneSubWorker(
     angleAbort.abort();
   }, ANGLE_HARD_CAP_MS);
 
+  const session = input.openSession({
+    cwd: input.cwd,
+    wallClockDeadline: input.deadlineMs ?? (Date.now() + ANGLE_HARD_CAP_MS),
+    idleStallTimeoutMs: 20 * 60 * 1000,
+    abortSignal: combinedAbort.signal,
+    ...(input.bus && { bus: input.bus as unknown as object }),
+  });
   try {
-    const result = await input.shell.run({
-      systemPrompt: input.cachedPrefix,
-      userMessage: input.buildSuffix(criterion),
-      toolDefinitions: toolDefs,
-      maxTurns: SAFETY_MAX_TURNS,
-      cwd: input.cwd,
-      abortSignal: combinedAbort.signal,
-      ...(input.deadlineMs !== undefined && { deadlineMs: input.deadlineMs }),
-      cacheControl: { type: 'ephemeral' },
-      ...(input.bus && { bus: input.bus }),
-      ...(input.batchId !== undefined && { batchId: input.batchId }),
-      ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
-      ...(input.tier !== undefined && { tier: input.tier }),
+    const instruction = `${input.cachedPrefix}\n\n${input.buildSuffix(criterion)}`;
+    const turn = await session.send(instruction, {
       stageLabel: `Criterion ${criterion.id}`,
     });
+    const result = {
+      finalAssistantText: turn.output,
+      errorCode: turn.errorCode,
+      terminationReason: turn.terminationReason,
+      usage: turn.usage,
+      turns: turn.turns,
+      toolCalls: Object.values(turn.toolCallsByName).reduce((a, b) => a + b, 0),
+      durationMs: turn.durationMs,
+      costUSD: turn.costUSD,
+    };
     const text = result.finalAssistantText ?? '';
     const errorCode = result.errorCode;
     // Hard-cap hit: synthesize a [N/A] finding so the merge annotator
@@ -189,7 +184,7 @@ async function runOneSubWorker(
             cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
           },
           turns: result.turns ?? 0,
-          toolCallCount: result.toolCalls?.length ?? 0,
+          toolCallCount: result.toolCalls ?? 0,
           durationMs: result.durationMs ?? Date.now() - startMs,
           costUSD: result.costUSD ?? null,
         },
@@ -197,7 +192,7 @@ async function runOneSubWorker(
     }
     const isFailure =
       (errorCode !== undefined && TRANSPORT_FAILURE_CODES.has(errorCode)) ||
-      (text.trim().length === 0 && result.workerStatus !== 'done');
+      (text.trim().length === 0 && result.terminationReason !== 'ok');
     if (isFailure) {
       input.bus?.emit({
         event: 'criteria_subworker_completed',
@@ -244,7 +239,7 @@ async function runOneSubWorker(
           cachedNonReadTokens: result.usage?.cachedNonReadTokens ?? 0,
         },
         turns: result.turns ?? 0,
-        toolCallCount: result.toolCalls?.length ?? 0,
+        toolCallCount: result.toolCalls ?? 0,
         durationMs: result.durationMs ?? Date.now() - startMs,
         costUSD: result.costUSD ?? null,
       },
@@ -255,54 +250,26 @@ async function runOneSubWorker(
   } finally {
     clearTimeout(softTimer);
     clearTimeout(hardTimer);
+    try { await session.close(); } catch { /* best-effort cleanup */ }
   }
 }
 
 export async function dispatchParallelCriteria(input: DispatchInput): Promise<DispatchResult> {
-  // makeToolDefinitions constructs a CWDValidator that synchronously
-  // realpath()s the cwd; if cwd doesn't exist (test fixtures, future
-  // ephemeral cwds) we fall back to an empty tool surface — the
-  // sub-workers still have the inlined doc/files content in the cached
-  // prefix and can answer without reading more files.
-  let toolDefs: ToolDefinition[];
-  if (input.toolDefinitions) {
-    toolDefs = input.toolDefinitions;
-  } else {
-    try {
-      toolDefs = filterToReadOnly(makeToolDefinitions({ cwd: input.cwd }));
-    } catch (err) {
-      input.bus?.emit({
-        event: 'criteria_fanout_tools_unavailable',
-        ts: new Date().toISOString(),
-        ...(input.batchId !== undefined && { batchId: input.batchId }),
-        ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
-        reason: err instanceof Error ? err.message : String(err),
-      });
-      toolDefs = [];
-    }
-  }
-
+  // v4.4: Each sub-worker opens its own native session (claude-agent-sdk or
+  // codex CLI) and sends the cached prefix inline as part of its first
+  // instruction. There is no separate warmer turn — upstream caching is
+  // the provider's job, not ours.
   input.bus?.emit({
-    event: 'criteria_fanout_warm_start',
+    event: 'criteria_fanout_start',
     ts: new Date().toISOString(),
     ...(input.batchId !== undefined && { batchId: input.batchId }),
     ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
     parallelism: input.criteria.length,
     ...(input.route !== undefined && { route: input.route }),
   });
-  const warm = await input.shell.prime(input.cachedPrefix, {
-    cwd: input.cwd,
-    cacheControl: { type: 'ephemeral' },
-    ...(input.abortSignal && { abortSignal: input.abortSignal }),
-    ...(input.deadlineMs !== undefined && { deadlineMs: input.deadlineMs }),
-    ...(input.bus && { bus: input.bus }),
-    ...(input.batchId !== undefined && { batchId: input.batchId }),
-    ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
-    ...(input.tier !== undefined && { tier: input.tier }),
-    stageLabel: 'Cache warmer',
-  });
+  const fanoutStartMs = Date.now();
 
-  const firstResults = await Promise.allSettled(input.criteria.map(c => runOneSubWorker(input, c, toolDefs)));
+  const firstResults = await Promise.allSettled(input.criteria.map(c => runOneSubWorker(input, c)));
   const succeeded: SubWorkerOutput[] = [];
   const failedIndices: number[] = [];
   firstResults.forEach((r, i) => {
@@ -319,7 +286,7 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
       ...(input.taskIndex !== undefined && { taskIndex: input.taskIndex }),
       retriedCount: failedIndices.length,
     });
-    const retryResults = await Promise.allSettled(failedIndices.map(i => runOneSubWorker(input, input.criteria[i], toolDefs)));
+    const retryResults = await Promise.allSettled(failedIndices.map(i => runOneSubWorker(input, input.criteria[i])));
     retryResults.forEach((r, k) => {
       if (r.status === 'fulfilled') {
         const value = r.value;
@@ -341,12 +308,10 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
   const totalInputTokens = succeeded.reduce((a, s) => a + s.usage.inputTokens, 0);
   const totalCachedReadTokens = succeeded.reduce((a, s) => a + s.usage.cachedReadTokens, 0);
   const cacheHitConfirmed = totalCachedReadTokens > 0;
-  // Cache hit ratio = cached_read / (cached_read + fresh_input). 1.0 means
-  // every sub-worker served the prefix from cache; 0.0 means the warmer
-  // didn't take effect.
   const cacheHitRatio = (totalCachedReadTokens + totalInputTokens) > 0
     ? totalCachedReadTokens / (totalCachedReadTokens + totalInputTokens)
     : 0;
+  const fanoutDurationMs = Date.now() - fanoutStartMs;
 
   input.bus?.emit({
     event: 'criteria_fanout_summary',
@@ -359,11 +324,9 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     failedCount: finalFailures.length,
     coveredIds: succeeded.map(s => s.criterionId),
     failedIds: finalFailures.map(f => f.id),
-    warmCacheControlSent: warm.cacheControlSent,
-    warmCapHit: warm.capHit,
     cacheHitConfirmed,
     cacheHitRatio: Math.round(cacheHitRatio * 1000) / 1000,
-    warmDurationMs: warm.durationMs,
+    fanoutDurationMs,
     totalInputTokens,
     totalCachedReadTokens,
     totalOutputTokens: succeeded.reduce((a, s) => a + s.usage.outputTokens, 0),
@@ -385,9 +348,9 @@ export async function dispatchParallelCriteria(input: DispatchInput): Promise<Di
     workerOutputs: succeeded,
     partialCriteriaCovered: succeeded.map(s => s.criterionId),
     partialCriteriaFailed: finalFailures,
-    warmCacheControlSent: warm.cacheControlSent,
+    warmCacheControlSent: false,
     cacheHitConfirmed,
-    warmDurationMs: warm.durationMs,
+    warmDurationMs: 0,
     totalUsage,
   };
 }

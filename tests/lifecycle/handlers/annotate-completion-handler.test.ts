@@ -1,18 +1,20 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
+import type { Session, TurnResult } from '../../../packages/core/src/types/run-result.js';
 
-vi.mock('../../../packages/core/src/escalation/delegate-with-escalation.js', () => ({
-  delegateWithEscalation: vi.fn(),
-}));
-import { delegateWithEscalation } from '../../../packages/core/src/escalation/delegate-with-escalation.js';
 import {
   annotateCompletionHandler,
   computeCommitGatePercent,
   runVerifyCommand,
 } from '../../../packages/core/src/lifecycle/handlers/annotate-completion-handler.js';
 
+// v4.4: handler dispatches via ctx.getSession(tier).send(). Tests
+// install a mock Session whose send() returns canned TurnResults.
+const sessionMock = { send: vi.fn(), close: vi.fn() } as unknown as Session & { send: ReturnType<typeof vi.fn>; close: ReturnType<typeof vi.fn> };
+
 beforeEach(() => {
-  vi.mocked(delegateWithEscalation).mockReset();
+  (sessionMock.send as ReturnType<typeof vi.fn>).mockReset();
+  (sessionMock.close as ReturnType<typeof vi.fn>).mockReset();
 });
 
 function baseState(verifyCommand?: string[]): LifecycleState {
@@ -35,6 +37,8 @@ function baseState(verifyCommand?: string[]): LifecycleState {
       },
       timing: { timeoutMs: 30_000, deadlineMs: Date.now() + 30_000 },
       stall: { controller: new AbortController() },
+      getSession: () => sessionMock,
+      closeSessions: async () => undefined,
     },
     reviewPolicy: 'full',
     specReviewerNotes: 'spec ok',
@@ -42,15 +46,24 @@ function baseState(verifyCommand?: string[]): LifecycleState {
   } as unknown as LifecycleState;
 }
 
-function mockAnnotatorReturns(json: string): void {
-  vi.mocked(delegateWithEscalation).mockResolvedValueOnce({
-    output: '```json\n' + json + '\n```',
-    status: 'ok',
-    filesWritten: [],
+function mockTurnResult(output: string): TurnResult {
+  return {
+    output,
+    usage: { inputTokens: 10, outputTokens: 20, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     filesRead: [],
-    toolCalls: [],
-    escalationLog: [],
-  } as unknown as never);
+    filesWritten: [],
+    toolCallsByName: {},
+    turns: 1,
+    durationMs: 10,
+    costUSD: 0,
+    terminationReason: 'ok',
+  };
+}
+
+function mockAnnotatorReturns(json: string): void {
+  (sessionMock.send as ReturnType<typeof vi.fn>).mockResolvedValueOnce(
+    mockTurnResult('```json\n' + json + '\n```'),
+  );
 }
 
 describe('runVerifyCommand', () => {
@@ -142,21 +155,17 @@ describe('annotateCompletionHandler', () => {
   });
 
   it('on malformed annotator: retries once, falls back to 0 on second failure', async () => {
-    vi.mocked(delegateWithEscalation).mockResolvedValue({
-      output: 'no JSON here',
-      status: 'ok',
-      filesWritten: [], filesRead: [], toolCalls: [], escalationLog: [],
-    } as unknown as never);
+    (sessionMock.send as ReturnType<typeof vi.fn>).mockResolvedValue(mockTurnResult('no JSON here'));
     const state = baseState();
     await annotateCompletionHandler(state);
-    expect(vi.mocked(delegateWithEscalation)).toHaveBeenCalledTimes(2);  // initial + retry
+    expect((sessionMock.send as ReturnType<typeof vi.fn>).mock.calls.length).toBe(2);  // initial + retry
     expect(state.completionAnnotationError).toMatch(/no.*fenced block/);
     expect(state.completionAnnotation?.completionPercent).toBe(0);
     expect(state.commitGatePercent).toBe(0);
   });
 
   it('on provider error: fallback annotation + commitGatePercent=0', async () => {
-    vi.mocked(delegateWithEscalation).mockRejectedValueOnce(new Error('annotator boom'));
+    (sessionMock.send as ReturnType<typeof vi.fn>).mockRejectedValueOnce(new Error('annotator boom'));
     const state = baseState();
     await annotateCompletionHandler(state);
     expect(state.completionAnnotationError).toMatch(/annotator boom/);

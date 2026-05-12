@@ -1,5 +1,5 @@
 {
-  "headline": "Investigation: \"golden investigate test prompt — echo findings\" — 0 citations, confidence unparseable, 0 unresolved.",
+  "headline": "Investigation: \"golden investigate test prompt \u2014 echo findings\" \u2014 0 citations, confidence unparseable, 0 unresolved.",
   "results": [
     {
       "output": "mock max turns",
@@ -10,7 +10,7 @@
         "cachedReadTokens": 0,
         "cachedNonReadTokens": 0
       },
-      "turns": 5,
+      "turns": 495,
       "filesRead": [],
       "filesWritten": [],
       "toolCalls": [],
@@ -20,7 +20,7 @@
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",
-        "turnsUsed": 5,
+        "turnsUsed": 495,
         "hasFileArtifacts": false,
         "usedShell": false,
         "workerSelfAssessment": "done",
@@ -93,7 +93,7 @@
           "outputTokens": 100,
           "cachedReadTokens": 0,
           "cachedNonReadTokens": 0,
-          "turnCount": 5,
+          "turnCount": 495,
           "toolCallCount": 0,
           "filesReadCount": 0,
           "filesWrittenCount": 0

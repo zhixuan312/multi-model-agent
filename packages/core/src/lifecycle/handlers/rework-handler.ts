@@ -1,9 +1,9 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
-import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
+import { assembleRunResult } from '../../providers/assemble-run-result.js';
 
 export async function reworkHandler(state: LifecycleState): Promise<void> {
   if (state.terminal) return;
@@ -27,7 +27,11 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     catch { cumulativeDiff = ''; }
   }
 
-  const reworkTier: AgentType = 'complex';
+  // Rework runs on `standard` — same tier as the original implementing
+  // stage. The reviewer's findings are already laid out for the worker to
+  // act on; using the complex tier for a constrained "apply these specific
+  // fixes" task wastes cost and adds latency without changing outcomes.
+  const reworkTier: AgentType = 'standard';
   const provider = ctx.providers[reworkTier] as Provider | undefined;
   if (!provider) {
     state.reworkError = `no provider available for tier ${reworkTier}`;
@@ -47,27 +51,9 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
 
   let result: RunResult;
   try {
-    result = await delegateWithEscalation(
-      {
-        prompt: fullPrompt,
-        cwd: ctx.cwd,
-        agentType: reworkTier,
-        briefQualityPolicy: 'off',
-        timeoutMs: ctx.timing.timeoutMs,
-        tools: 'full',
-      },
-      [provider],
-      {
-        explicitlyPinned: true,
-        taskDeadlineMs: ctx.timing.deadlineMs,
-        abortSignal: ctx.stall.controller.signal,
-        assignedTier: reworkTier,
-        ...(ctx.bus && { bus: ctx.bus }),
-        ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-        ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-        stageLabel: 'Rework',
-      },
-    );
+    const session = ctx.getSession(reworkTier);
+    const turn = await session.send(fullPrompt, { stageLabel: 'Rework' });
+    result = assembleRunResult(turn);
   } catch (err) {
     state.reworkError = err instanceof Error ? err.message : String(err);
     return;

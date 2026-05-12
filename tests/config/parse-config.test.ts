@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { parseConfig } from '@zhixuan92/multi-model-agent-core/config/schema';
 
 const minimalAgentConfig = {
-  type: 'openai-compatible' as const,
+  type: 'codex' as const,
   model: 'test-model',
   baseUrl: 'https://test.example.com/v1',
 };
@@ -24,7 +24,7 @@ describe('parseConfig', () => {
     const input = {
       agents: {
         standard: { type: 'claude', model: 'claude-sonnet-4-6' },
-        complex: { type: 'openai-compatible', model: 'gpt-5', baseUrl: 'https://api.example.com' },
+        complex: { type: 'codex', model: 'gpt-5', baseUrl: 'https://api.example.com' },
       },
       defaults: { timeoutMs: 120_000, tools: 'none' },
     };
@@ -85,13 +85,13 @@ describe('parseConfig', () => {
     })).toThrow();
   });
 
-  it('throws on openai-compatible without baseUrl', () => {
+  it('accepts codex without baseUrl (defaults to ChatGPT subscription)', () => {
     expect(() => parseConfig({
       agents: {
-        standard: { type: 'openai-compatible', model: 'x' } as any,
+        standard: { type: 'codex', model: 'gpt-5.5' },
         complex: minimalAgentConfig,
       },
-    })).toThrow(/baseUrl/);
+    })).not.toThrow();
   });
 
   it('throws on invalid effort value', () => {

@@ -10,8 +10,8 @@ describe('runTasks', () => {
   it('runs tasks in parallel and returns all results', async () => {
     const config: MultiModelConfig = {
       agents: {
-        standard: { type: 'openai-compatible', model: 'a-model', baseUrl: 'https://a.example.com/v1' },
-        complex: { type: 'openai-compatible', model: 'b-model', baseUrl: 'https://b.example.com/v1' },
+        standard: { type: 'codex', model: 'a-model', baseUrl: 'https://a.example.com/v1' },
+        complex: { type: 'codex', model: 'b-model', baseUrl: 'https://b.example.com/v1' },
       },
       defaults: defaultConfig.defaults,
     };
@@ -31,7 +31,7 @@ describe('runTasks', () => {
       { prompt: 'will also error', agentType: 'complex' as const },
     ], {
       agents: {
-        standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+        standard: { type: 'codex', model: 'x', baseUrl: 'https://example.invalid/v1' },
       },
       defaults: { timeoutMs: 600_000, tools: 'full' },
     });
@@ -95,7 +95,7 @@ describe('runTasks', () => {
 
   it('AgentConfig accepts all optional fields', () => {
     const cfg: import('@zhixuan92/multi-model-agent-core').AgentConfig = {
-      type: 'openai-compatible',
+      type: 'codex',
       model: 'deepseek-r1',
       baseUrl: 'https://api.deepseek.com/v1',
       apiKeyEnv: 'DEEPSEEK_API_KEY',
@@ -104,7 +104,7 @@ describe('runTasks', () => {
       timeoutMs: 300_000,
       sandboxPolicy: 'cwd-only',
     };
-    expect(cfg.type).toBe('openai-compatible');
+    expect(cfg.type).toBe('codex');
   });
 
   it('runTasks strict briefQualityPolicy no longer blocks execution', async () => {
@@ -112,7 +112,7 @@ describe('runTasks', () => {
       [{ prompt: 'Fix the thing.', agentType: 'standard', briefQualityPolicy: 'strict' }],
       {
         agents: {
-          standard: { type: 'openai-compatible', model: 'x', baseUrl: 'https://example.invalid/v1' },
+          standard: { type: 'codex', model: 'x', baseUrl: 'https://example.invalid/v1' },
           complex: { type: 'claude', model: 'claude-opus-4-6' },
         },
         defaults: { timeoutMs: 600_000, tools: 'full' },

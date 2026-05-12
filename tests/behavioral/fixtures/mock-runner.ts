@@ -15,7 +15,7 @@ export class MockRunner implements Provider {
   constructor(opts: MockRunnerOptions) {
     this.policy = opts.policy;
     this.config = {
-      type: 'openai-compatible',
+      type: 'codex',
       model: 'mock-model',
       baseUrl: 'http://mock.local',
       apiKey: 'mock',

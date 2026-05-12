@@ -6,6 +6,7 @@ import type {
   AgentType,
 } from '../types.js';
 import type { ProgressEvent, RunTasksRuntime, RunStatus } from '../providers/runner-types.js';
+import type { Session } from '../types/run-result.js';
 import type { HeartbeatTickInfo } from '../bounded-execution/activity-tracker.js';
 import type { HttpServerLog } from '../events/http-server-log.js';
 import type { EventEmitter } from '../events/event-emitter.js';
@@ -25,7 +26,6 @@ import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
 import { dispatchParallelCriteria } from './parallel-criteria-dispatcher.js';
 import { READ_ONLY_ROUTES, isReadOnlyRoute, type ReadOnlyRouteName } from './parallel-criteria-routes.js';
-import { makeRunnerShell } from '../providers/make-runner-shell.js';
 import { readFile as fsReadFile } from 'fs/promises';
 export function errorResult(error: string): RunResult {
   return {
@@ -216,6 +216,39 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     /* other tier not configured — leave undefined */
   }
 
+  const startMsAt = startMs;
+  const deadlineAt = startMs + timeoutMs;
+  const stallController = new AbortController();
+
+  // Lazy session cache keyed by tier. Construction is deferred until the
+  // first getSession(tier) call so a task that only uses one tier doesn't
+  // open a session on the other (and thus doesn't spawn a codex CLI or
+  // initialize a claude SDK query). Cleanup happens via closeSessions(),
+  // invoked by runTaskViaDispatcher's finally block.
+  const sessions = new Map<AgentType, Session>();
+  const getSession = (tier: AgentType): Session => {
+    const existing = sessions.get(tier);
+    if (existing) return existing;
+    const provider = providers[tier];
+    if (!provider) {
+      throw new Error(`getSession: no provider configured for tier "${tier}"`);
+    }
+    const session = provider.openSession({
+      cwd,
+      wallClockDeadline: deadlineAt,
+      idleStallTimeoutMs: stallTimeoutMs,
+      abortSignal: stallController.signal,
+      ...(input.bus && { bus: input.bus as unknown as object }),
+    });
+    sessions.set(tier, session);
+    return session;
+  };
+  const closeSessions = async (): Promise<void> => {
+    const entries = Array.from(sessions.entries());
+    sessions.clear();
+    await Promise.allSettled(entries.map(([, s]) => s.close()));
+  };
+
   return {
     task,
     taskIndex: input.taskIndex,
@@ -231,10 +264,12 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     escalationProvider: providers[resolved.slot === 'standard' ? 'complex' : 'standard'],
     providers,
     implementerIdentity: undefined,
-    timing: { startMs, timeoutMs, deadlineMs: startMs + timeoutMs, stallTimeoutMs },
+    getSession,
+    closeSessions,
+    timing: { startMs: startMsAt, timeoutMs, deadlineMs: deadlineAt, stallTimeoutMs },
     budgets: { maxCostUSD: task.maxCostUSD ?? config.defaults?.maxCostUSD },
     wallClockGuard: new WallClockGuard(timeoutMs),
-    stall: { controller: new AbortController(), lastEventAtMs: startMs, fired: false },
+    stall: { controller: stallController, lastEventAtMs: startMsAt, fired: false },
     implementerToolMode: task.tools,
     ...(input.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: input.qualityReviewPromptBuilder }),
     bus: input.bus,
@@ -364,9 +399,8 @@ export async function runTaskViaDispatcher(
             preReadFiles,
             filePaths,
           });
-          const shell = makeRunnerShell(provider);
           const dispatchResult = await dispatchParallelCriteria({
-            shell,
+            openSession: (opts) => provider.openSession(opts),
             cachedPrefix,
             criteria: routeSpec.criteria,
             buildSuffix: routeSpec.buildSuffix,
@@ -548,6 +582,12 @@ export async function runTaskViaDispatcher(
   });
   } finally {
     stopWatchdog();
+    // v4.4 session reuse: ExecutionContext owns the per-tier Session
+    // cache that handlers populate via ctx.getSession(tier). Close them
+    // here at task end so codex CLI subprocesses + claude-agent-sdk
+    // query handles release. Errors swallowed so disposal can't mask
+    // the task's real result.
+    await executionContext.closeSessions().catch(() => { /* idempotent */ });
   }
 
   const body = out.body;

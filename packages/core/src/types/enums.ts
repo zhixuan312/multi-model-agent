@@ -41,7 +41,7 @@ export const RouteEnum = z.enum([
   'research',
 ]);
 
-export const ProviderTypeEnum = z.enum(['claude', 'claude-compatible', 'openai', 'openai-compatible', 'codex']);
+export const ProviderTypeEnum = z.enum(['claude', 'codex']);
 
 // ── §3 Verdicts & status ──────────────────────────────────────────────────
 

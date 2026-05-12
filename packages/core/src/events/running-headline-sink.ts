@@ -10,7 +10,8 @@
  * (the lifecycle plan is deterministic given toolCategory + reviewPolicy);
  * X advances as runner_turn_completed events report new stageLabels.
  *
- * Listens to `runner_turn_completed` events emitted by RunnerShell. Keeps
+ * Listens to `runner_turn_completed` events emitted by the provider
+ * sessions. Keeps
  * a per-batch tally + latest stage + latest tier and updates the
  * registry's snapshot. Never emits to stderr (that's VerboseLogChannel's
  * job) — pure progress visibility for the polling tool.

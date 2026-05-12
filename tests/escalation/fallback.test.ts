@@ -215,7 +215,7 @@ describe('runWithFallback — same-provider config short-circuits fallback', () 
   // skip the doomed second call and return the assigned-tier failure as the
   // task's terminal result.
 
-  const sharedConfig = { type: 'openai-compatible', model: 'deepseek-v4-pro', baseUrl: 'https://api.deepseek.com' };
+  const sharedConfig = { type: 'codex', model: 'deepseek-v4-pro', baseUrl: 'https://api.deepseek.com' };
 
   it('does not call alt when both tiers resolve to identical provider config', async () => {
     const map: UnavailableMap = new Map();
@@ -246,9 +246,9 @@ describe('runWithFallback — same-provider config short-circuits fallback', () 
   it('still fires fallback when configs differ (regression guard)', async () => {
     const map: UnavailableMap = new Map();
     const standard = mockProvider('standard', async () => failResult('api_error'),
-      { type: 'openai-compatible', model: 'a', baseUrl: 'https://x' });
+      { type: 'codex', model: 'a', baseUrl: 'https://x' });
     const complex = mockProvider('complex', async () => okResult('complex'),
-      { type: 'openai-compatible', model: 'b', baseUrl: 'https://x' });
+      { type: 'codex', model: 'b', baseUrl: 'https://x' });
     const result = await runWithFallback<RunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),

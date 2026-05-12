@@ -14,12 +14,12 @@ export function buildTestAgentConfig(overrides: Partial<MultiModelConfig> = {}):
   return {
     agents: {
       standard: {
-        type: 'openai-compatible',
+        type: 'codex',
         model: 'fake-model',
         baseUrl: 'http://localhost:1/v1',  // invalid — tests never actually call it
       },
       complex: {
-        type: 'openai-compatible',
+        type: 'codex',
         model: 'fake-model-complex',
         baseUrl: 'http://localhost:1/v1',
       },

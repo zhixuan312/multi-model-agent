@@ -7,10 +7,10 @@ import { execFileSync } from 'node:child_process';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
-import { delegateWithEscalation } from '../../escalation/delegate-with-escalation.js';
 import { annotateCompletionTemplate } from '../../review/templates/annotate-completion.js';
 import { parseAnnotatorOutput } from '../../reporting/annotate-completion-parser.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
+import { assembleRunResult } from '../../providers/assemble-run-result.js';
 
 const VERIFY_TIMEOUT_MS = 60_000;
 const VERIFY_OUTPUT_CAP_BYTES = 4096;
@@ -127,30 +127,11 @@ export async function annotateCompletionHandler(state: LifecycleState): Promise<
       : basePrompt + '\n\n# Retry\nYour previous response did not match the schema. Reply with ONLY a single ```json ... ``` fenced block, no prose before or after.';
     let result: RunResult;
     try {
-      result = await delegateWithEscalation(
-        {
-          prompt: promptToSend,
-          cwd: ctx.cwd,
-          agentType: annotatorTier,
-          briefQualityPolicy: 'off',
-          timeoutMs: ctx.timing.timeoutMs,
-          // Pipeline-redesign §3.2.3: annotator is read-only. Explicit
-          // here so the runner doesn't expose editor tools to a stage
-          // whose job is to JUDGE the diff, not modify it.
-          tools: 'readonly',
-        },
-        [provider],
-        {
-          explicitlyPinned: true,
-          taskDeadlineMs: ctx.timing.deadlineMs,
-          abortSignal: ctx.stall.controller.signal,
-          assignedTier: annotatorTier,
-          ...(ctx.bus && { bus: ctx.bus }),
-          ...(ctx.batchId !== undefined && { batchId: ctx.batchId }),
-          ...(ctx.taskIndex !== undefined && { taskIndex: ctx.taskIndex }),
-          stageLabel: attempt === 0 ? 'Annotating' : 'Annotating (retry)',
-        },
-      );
+      const session = ctx.getSession(annotatorTier);
+      const turn = await session.send(promptToSend, {
+        stageLabel: attempt === 0 ? 'Annotating' : 'Annotating (retry)',
+      });
+      result = assembleRunResult(turn);
     } catch (err) {
       state.completionAnnotationError = err instanceof Error ? err.message : String(err);
       state.completionAnnotation = makeFallback(state.verifyResult as VerifyResult);

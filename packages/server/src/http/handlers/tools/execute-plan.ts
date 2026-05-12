@@ -21,8 +21,10 @@ export function buildExecutePlanHandler(deps: HandlerDeps): RawHandler {
       return;
     }
 
-    const input: ExecutePlanWireInput = parsed.data;
+    // Carry the HTTP `?cwd=` value through to the brief slot via input.cwd.
+    // The schema marks cwd as optional; callers normally provide it via URL.
     const cwd = ctx.cwd!;
+    const input: ExecutePlanWireInput = { ...parsed.data, cwd } as ExecutePlanWireInput;
 
     const reserveResult = deps.projectRegistry.reserveProject(cwd);
     if (!reserveResult.ok) {

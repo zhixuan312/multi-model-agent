@@ -188,17 +188,12 @@ export interface CacheHints {
 
 export type ReviewRunOptions = RunOptions & { cacheHints?: CacheHints };
 
-// v4.4 — Session-based provider boundary. `run` and `runReview` remain
-// optional during the migration window (PR steps 1–6); `openSession` is
-// the canonical entry point. The legacy methods are deleted in PR step 7
-// (Task 24).
+// v4.4 — Session-based provider boundary. `openSession` is the single
+// entry point; every call lasts one Session, which represents a thread
+// the underlying SDK can resume across turns.
 export interface Provider {
   name: string;
   config: ProviderConfig;
-  /** @deprecated — use openSession instead. Removed in v4.4 Task 24. */
-  run?(prompt: string, options?: RunOptions): Promise<RunResult>;
-  /** @deprecated — use openSession instead. Removed in v4.4 Task 24. */
-  runReview?(parts: ReviewPromptParts, options?: ReviewRunOptions): Promise<RunResult>;
   openSession(opts: SessionOpts): Session;
 }
 
@@ -234,10 +229,25 @@ export interface TurnResult {
   toolCallsByName: Record<string, number>;
   turns: number;
   durationMs: number;
-  costUSD: number;
-  terminationReason: 'ok' | 'cost_exceeded' | 'time_exceeded' | 'aborted' | 'error';
+  /** USD cost when known (>= 0). `null` means cost couldn't be determined
+   *  (e.g. mock providers, missing rate-card entry). Distinct from `0`,
+   *  which means a real zero charge — important for downstream telemetry
+   *  that treats null as "no data". */
+  costUSD: number | null;
+  terminationReason: 'ok' | 'cost_exceeded' | 'time_exceeded' | 'cap_exhausted' | 'stalled' | 'aborted' | 'error';
   errorCode?: string;
   errorMessage?: string;
+  /** Worker's self-assessment as written into its structured report.
+   *  Optional — populated by adapters that parse the SDK output (or by
+   *  test mocks). assembleRunResult prefers this over its termination-
+   *  reason-derived default so the "incomplete + worker self-assessed
+   *  done" promotion path can fire. */
+  workerSelfAssessment?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped';
+  /** True when the assistantText is a diagnostic shell (e.g.
+   *  "Sub-agent error: …" or scratchpad-only fallback) rather than real
+   *  worker content. Lets delegateWithEscalation's selection prefer any
+   *  real-content attempt over a longer diagnostic-only attempt. */
+  outputIsDiagnostic?: boolean;
 }
 
 export interface Session {
