@@ -1,9 +1,23 @@
+// v4.4.x — Rework stage.
+//
+// Fires only when reviewVerdict === 'changes_required'. Runs on the
+// same standard session that did Implementing (full conversation
+// continuity). Worker is asked to address the reviewer's concerns AND
+// re-run any verifyCommand. Rework's WorkerOutput merges onto
+// Implementing's per the spec's "Rework → Implementing field merge
+// rules": summary/workerStatus/unresolved/commitMessage take Rework's
+// values; filesChanged is the union of both phases; validationsRun is
+// REPLACED by Rework's value (empty list signals validation_stale to
+// Committing).
+
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
+import { parseWorkerOutput } from '../worker-output-contract.js';
+import { HUMAN_LABEL } from '../stage-labels.js';
 
 export async function reworkHandler(state: LifecycleState): Promise<void> {
   if (state.terminal) return;
@@ -23,14 +37,9 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
 
   let cumulativeDiff = '';
   if (state.diffTracker) {
-    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); }
-    catch { cumulativeDiff = ''; }
+    try { cumulativeDiff = await state.diffTracker.cumulativeDiff(); } catch { /* tolerated */ }
   }
 
-  // Rework runs on `standard` — same tier as the original implementing
-  // stage. The reviewer's findings are already laid out for the worker to
-  // act on; using the complex tier for a constrained "apply these specific
-  // fixes" task wastes cost and adds latency without changing outcomes.
   const reworkTier: AgentType = 'standard';
   const provider = ctx.providers[reworkTier] as Provider | undefined;
   if (!provider) {
@@ -38,7 +47,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     return;
   }
 
-  const concerns = findings.map(f => `[${f.source}] ${f.text}`);
+  const concerns = findings.map((f) => `[${f.source}] ${f.text}`);
   const promptCtx = {
     brief: task.prompt ?? '',
     workerOutput: last.output ?? '',
@@ -47,12 +56,13 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     priorConcerns: concerns,
   };
   const fullPrompt =
-    reworkTemplate.systemPrompt + '\n\n' + reworkTemplate.buildUserPrompt(promptCtx);
+    reworkTemplate.systemPrompt + '\n\n' + reworkTemplate.buildUserPrompt(promptCtx)
+    + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RunResult;
   try {
     const session = ctx.getSession(reworkTier);
-    const turn = await session.send(fullPrompt, { stageLabel: 'Rework' });
+    const turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.rework });
     result = assembleRunResult(turn);
   } catch (err) {
     state.reworkError = err instanceof Error ? err.message : String(err);
@@ -63,9 +73,28 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     state.reworkError = `rework returned status: ${result.status}`;
     return;
   }
+
+  // Parse the Rework worker's WorkerOutput JSON block.
+  const reworked = parseWorkerOutput(result.output ?? '');
+
   state.reworkApplied = true;
   state.reworkOutput = result.output;
   replaceLastRunResultPreservingTrackers(state, result);
+
+  // Apply merge rules: Rework owns summary/workerStatus/unresolved/commitMessage;
+  // filesChanged is the union of Implementing's + Rework's; validationsRun is
+  // REPLACED by Rework's value (so an empty list signals validation_stale).
+  const merged = state.lastRunResult as Record<string, unknown> | undefined;
+  if (merged) {
+    const priorFilesChanged = ((last as { filesChanged?: string[] }).filesChanged) ?? [];
+    merged.summary = reworked.summary;
+    merged.workerStatus = reworked.workerStatus;
+    merged.filesChanged = Array.from(new Set([...priorFilesChanged, ...reworked.filesChanged]));
+    merged.validationsRun = reworked.validationsRun;
+    merged.unresolved = reworked.unresolved;
+    if (reworked.commitMessage) merged.commitMessage = reworked.commitMessage;
+  }
+
   mergeStageStats(state, 'rework', {
     inputTokens: result.usage?.inputTokens ?? 0,
     outputTokens: result.usage?.outputTokens ?? 0,
