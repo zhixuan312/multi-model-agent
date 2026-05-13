@@ -6,10 +6,10 @@ describe('resolve.ts — investigate_codebase entries', () => {
     expect(OUTPUT_CONTRACT_CLAUSES['investigate_codebase']).toBeUndefined();
   });
 
-  it('ROUTE_DEFAULTS for investigate_codebase = complex slot, quality_only review', () => {
+  it('ROUTE_DEFAULTS for investigate_codebase = complex slot, no review', () => {
     expect(ROUTE_DEFAULTS['investigate_codebase']).toEqual({
       agentType: 'complex',
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'none',
     });
   });
 });

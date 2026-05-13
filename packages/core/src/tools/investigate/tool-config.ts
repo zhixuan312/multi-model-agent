@@ -152,7 +152,7 @@ export const toolConfig: ToolConfig<EnrichedInvestigateInput, InvestigateBrief, 
     // ## Finding N: format the dispatcher uses.
     parallelTarget: `Question: ${brief.question}`,
     agentType: 'complex' as const,
-    reviewPolicy: 'quality_only' as const,
+    reviewPolicy: 'none' as const,
     cwd: ctx.projectContext?.cwd ?? ctx.cwd,
     contextBlockIds: brief.contextBlockIds,
     filePaths: brief.filePaths,

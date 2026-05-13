@@ -9,11 +9,11 @@ export interface BriefDefaults {
 export const ROUTE_DEFAULTS: Record<SourceRoute, BriefDefaults> = {
   delegate_tasks:       { agentType: 'standard', reviewPolicy: 'full' },
   execute_plan:         { agentType: 'standard', reviewPolicy: 'full' },
-  audit_document:       { agentType: 'complex',  reviewPolicy: 'quality_only' },
-  review_code:          { agentType: 'complex',  reviewPolicy: 'quality_only' },
-  verify_work:          { agentType: 'complex',  reviewPolicy: 'quality_only' },
-  debug_task:           { agentType: 'complex',  reviewPolicy: 'quality_only' },
-  investigate_codebase: { agentType: 'complex',  reviewPolicy: 'quality_only' },
+  audit_document:       { agentType: 'complex',  reviewPolicy: 'none' },
+  review_code:          { agentType: 'complex',  reviewPolicy: 'none' },
+  verify_work:          { agentType: 'complex',  reviewPolicy: 'none' },
+  debug_task:           { agentType: 'complex',  reviewPolicy: 'none' },
+  investigate_codebase: { agentType: 'complex',  reviewPolicy: 'none' },
 };
 
 export function inferDefaults(route: SourceRoute): BriefDefaults {

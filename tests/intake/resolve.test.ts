@@ -58,9 +58,9 @@ describe('OUTPUT_CONTRACT_CLAUSES', () => {
 });
 
 describe('ROUTE_DEFAULTS', () => {
-  it('sets reviewPolicy to quality_only for all 5 read-only routes', () => {
+  it('sets reviewPolicy to none for all 5 read-only routes', () => {
     for (const route of ['audit_document', 'review_code', 'verify_work', 'investigate_codebase', 'debug_task']) {
-      expect(ROUTE_DEFAULTS[route].reviewPolicy).toBe('quality_only');
+      expect(ROUTE_DEFAULTS[route].reviewPolicy).toBe('none');
     }
   });
 

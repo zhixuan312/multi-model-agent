@@ -197,7 +197,7 @@ describe('retry_tasks via v4.0 lifecycle', () => {
       blocksReleased: false,
       toolCategory: 'read_only',
       tasks: [
-        { brief: 'audit task', cwd: '/tmp', agentType: 'standard', reviewPolicy: 'quality_only', contextBlockIds: [] },
+        { brief: 'audit task', cwd: '/tmp', agentType: 'standard', reviewPolicy: 'none', contextBlockIds: [] },
       ],
     });
 
