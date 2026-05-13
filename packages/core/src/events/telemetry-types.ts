@@ -91,6 +91,7 @@ export const StageEntryBase = z.object({
   turnCount: z.number().int().min(0).max(250),
   maxIdleMs: z.number().int().min(0).max(1_200_000),
   totalIdleMs: z.number().int().min(0).max(3_600_000),
+  mainEquivalentCostUSD: z.number().nullable(),   // main-model-equivalent cost for this stage's tokens
 });
 
 export const ReviewStageEntrySchema = StageEntryBase.extend({

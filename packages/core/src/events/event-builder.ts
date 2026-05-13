@@ -39,6 +39,20 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 
   const stages = buildStages(route, runResult);
 
+  // Compute per-stage main-model-equivalent cost using the resolved rate card.
+  // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
+  // without weakening the field to optional.
+  const mainCard = resolveRateCard(mainModel);
+  for (const st of stages) {
+    (st as any).mainEquivalentCostUSD = mainCard
+      ? priceTokens(
+          { inputTokens: st.inputTokens, outputTokens: st.outputTokens,
+            cachedReadTokens: st.cachedReadTokens ?? 0, cachedNonReadTokens: st.cachedNonReadTokens ?? 0 },
+          mainCard,
+        )
+      : null;
+  }
+
   // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
   // is satisfied by Math.max-ing the executor wall-clock against the stage
   // sum. Pre-fix, runResult.durationMs only covered the implementer's
@@ -93,7 +107,6 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalCachedReadTokens = clampCachedTokens(allTokens.cachedReadTokens);
   const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
-  const mainCard = resolveRateCard(mainModel);
   const mainEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
 
   const costDeltaVsMainUSD = (totalCostUSD === null || mainEquivalentCostUSD === null)

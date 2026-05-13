@@ -96,6 +96,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         turnCount: 7,
         maxIdleMs: 1000,
         totalIdleMs: 5000,
+        mainEquivalentCostUSD: null,
       },
       {
         name: 'committing',
@@ -114,6 +115,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         turnCount: 1,
         maxIdleMs: 50,
         totalIdleMs: 100,
+        mainEquivalentCostUSD: null,
         filesCommittedCount: 1,
         branchCreated: false,
       },

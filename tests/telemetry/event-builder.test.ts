@@ -178,3 +178,20 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     expect(ev.cachedNonReadTokens).toBe(15);
   });
 });
+
+describe('event-builder per-stage mainEquivalentCostUSD', () => {
+  it('attaches mainEquivalentCostUSD to every stage when mainModel resolves', () => {
+    const rr = makeFixtureRunResult({});
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    });
+    for (const stage of event.stages) {
+      expect(stage).toHaveProperty('mainEquivalentCostUSD');
+      expect(typeof stage.mainEquivalentCostUSD === 'number' || stage.mainEquivalentCostUSD === null).toBe(true);
+    }
+  });
+});
