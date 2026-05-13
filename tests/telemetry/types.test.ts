@@ -144,6 +144,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     stallCount: 0,
     taskMaxIdleMs: 0,
     sandboxViolationCount: 0,
+    filesWrittenCount: sum('filesWrittenCount'),
     stages,
     ...overrides,
   };

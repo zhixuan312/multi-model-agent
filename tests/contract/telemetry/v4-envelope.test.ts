@@ -103,6 +103,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     stallCount: 0,
     taskMaxIdleMs: 0,
     sandboxViolationCount: 0,
+    filesWrittenCount: sum('filesWrittenCount'),
     stages,
     ...overrides,
   };

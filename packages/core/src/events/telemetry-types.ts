@@ -180,6 +180,9 @@ export const TaskCompletedEventSchema = z.object({
   escalationCount: z.number().int().min(0).max(20),
   fallbackCount: z.number().int().min(0).max(20),
 
+  // Files changed — sourced from real git diff (sub-project A), not worker self-report.
+  filesWrittenCount: z.number().int().min(0).max(5000),
+
   // Operational signals
   stallCount: z.number().int().min(0).max(20),
   taskMaxIdleMs: z.number().int().min(0).max(1_200_000),

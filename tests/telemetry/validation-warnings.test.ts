@@ -78,6 +78,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     stallCount: 0,
     taskMaxIdleMs: 5000,
     sandboxViolationCount: 0,
+    filesWrittenCount: 2, // two stages: implementing(1) + committing(1)
     stages: [
       {
         name: 'implementing',
@@ -127,6 +128,7 @@ function makeHealthyContext(): BuildContext {
   return {
     route: 'delegate',
     taskSpec: { filePaths: [] },
+    realFilesChanged: [],
     runResult: {
       status: 'ok',
       durationMs: 50000,

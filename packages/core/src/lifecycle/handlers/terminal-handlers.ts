@@ -3,6 +3,7 @@ import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { RunResult, TaskSpec } from '../../types.js';
 import { findModelProfile } from '../../config/model-profile-registry.js';
+import { getRealFilesChanged } from '../real-diff.js';
 
 /**
  * Terminal-stage handlers (#45 Step 6).
@@ -210,7 +211,7 @@ export function persistToBatchRegistryHandler(state: LifecycleState): void {
  * recorder. Idempotent on state.taskCompletedRecorded. No-op when the
  * server hasn't supplied a recorder (CLI/test paths).
  */
-export function recordTaskCompletedHandler(state: LifecycleState): void {
+export async function recordTaskCompletedHandler(state: LifecycleState): Promise<void> {
   if (state.taskCompletedRecorded) return;
   const ctx = state.executionContext;
   if (!ctx) return;
@@ -226,6 +227,7 @@ export function recordTaskCompletedHandler(state: LifecycleState): void {
     return;
   }
   ensureImplementingStage(last, ctx);
+  const realFiles = await getRealFilesChanged(state);
   try {
     // Gap 15 fix (4.0.3+): thread the per-task reviewPolicy into the
     // wire BuildContext so the wire row reflects what the lifecycle
@@ -238,6 +240,7 @@ export function recordTaskCompletedHandler(state: LifecycleState): void {
       route: ctx.route as Parameters<typeof recorder.recordTaskCompleted>[0]['route'],
       taskSpec: task,
       runResult: last,
+      realFilesChanged: realFiles.files,   // NEW — wire the computed list
       client: ctx.client ?? '',
       mainModel: ctx.mainModel ?? null,
       ...(task.reviewPolicy !== undefined && { reviewPolicy: task.reviewPolicy }),

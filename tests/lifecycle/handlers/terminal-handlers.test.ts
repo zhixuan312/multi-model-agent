@@ -265,14 +265,14 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     workerStatus: 'failed',
   } as unknown as RunResult;
 
-  it('stamps the configured model on the synthesized implementing stage when runner crashes', () => {
+  it('stamps the configured model on the synthesized implementing stage when runner crashes', async () => {
     const { ctx, calls } = makeRecordingCtx('deepseek-v4-pro', 'standard');
     const state = makeState({
       task: { prompt: 'x' } as TaskSpec,
       executionContext: ctx,
       lastRunResult: { ...runnerCrashRunResult },
     });
-    recordTaskCompletedHandler(state);
+    await recordTaskCompletedHandler(state);
 
     expect(calls).toHaveLength(1);
     const rr = calls[0]!.runResult as RunResult;
@@ -285,14 +285,14 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     expect(rr.models?.implementer).toBe('deepseek-v4-pro');
   });
 
-  it('uses the right family for the complex tier as well', () => {
+  it('uses the right family for the complex tier as well', async () => {
     const { ctx, calls } = makeRecordingCtx('gpt-5', 'complex');
     const state = makeState({
       task: { prompt: 'x' } as TaskSpec,
       executionContext: ctx,
       lastRunResult: { ...runnerCrashRunResult },
     });
-    recordTaskCompletedHandler(state);
+    await recordTaskCompletedHandler(state);
 
     const rr = calls[0]!.runResult as RunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown; modelFamily?: unknown; agentTier?: unknown } } | undefined)?.implementing;
@@ -302,7 +302,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
     expect(rr.models?.implementer).toBe('gpt-5');
   });
 
-  it('does not overwrite an existing entered implementing stage', () => {
+  it('does not overwrite an existing entered implementing stage', async () => {
     const { ctx, calls } = makeRecordingCtx('deepseek-v4-pro', 'standard');
     const lastRunResult = {
       ...runnerCrashRunResult,
@@ -318,14 +318,14 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
       },
     } as unknown as RunResult;
     const state = makeState({ task: { prompt: 'x' } as TaskSpec, executionContext: ctx, lastRunResult });
-    recordTaskCompletedHandler(state);
+    await recordTaskCompletedHandler(state);
 
     const rr = calls[0]!.runResult as RunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;
     expect(stage?.model).toBe('gpt-5');
   });
 
-  it('falls back to null model when no provider is wired (preserves pre-fix invariant for that path)', () => {
+  it('falls back to null model when no provider is wired (preserves pre-fix invariant for that path)', async () => {
     const ctx = makeCtx({ assignedTier: 'standard' });
     const calls: RecorderCall[] = [];
     (ctx as ExecutionContext & { recorder: NonNullable<ExecutionContext['recorder']> }).recorder = {
@@ -336,7 +336,7 @@ describe('recordTaskCompletedHandler — synthesized stage uses configured model
       executionContext: ctx,
       lastRunResult: { ...runnerCrashRunResult },
     });
-    recordTaskCompletedHandler(state);
+    await recordTaskCompletedHandler(state);
 
     const rr = calls[0]!.runResult as RunResult;
     const stage = (rr.stageStats as { implementing?: { model?: unknown } }).implementing;

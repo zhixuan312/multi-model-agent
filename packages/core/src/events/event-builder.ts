@@ -25,6 +25,7 @@ export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[]; subtype?: string };
   runResult: RunResult;
+  realFilesChanged: string[];   // NEW — sub-project A. Absolute paths from getRealFilesChanged.
   client: string;
   mainModel: string | null;
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
@@ -161,6 +162,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
+    filesWrittenCount: (ctx.realFilesChanged ?? []).length,
     stages,
   };
 
