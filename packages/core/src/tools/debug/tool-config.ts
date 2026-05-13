@@ -107,7 +107,7 @@ export const toolConfig: ToolConfig<Input, ToolDebugBrief, unknown> = {
       // FINDING_FORMAT_INSTRUCTIONS that's already embedded in `prompt`.
       parallelTarget: targetParts.join('\n\n'),
       agentType: 'complex',
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'none',
       briefQualityPolicy: 'off',
       done: 'Identify the root cause with evidence (file, line, mechanism) and PROPOSE a fix. Do NOT apply the fix — debug is a read-only diagnostic; the caller decides whether to apply.',
       tools: ctx.config.defaults?.tools ?? 'full',

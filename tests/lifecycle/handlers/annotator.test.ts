@@ -61,4 +61,20 @@ describe('annotator (unified)', () => {
     expect(report.commitSkipReason).toBe('no_diff');
     expect(report.commitSha).toBeNull();
   });
+
+  it('records annotating stage stats as a transformed zero-cost stage', async () => {
+    const state: any = {
+      route: 'audit',
+      lastRunResult: {
+        findings: [],
+      },
+    };
+
+    await annotator(state);
+
+    expect(state.lastRunResult?.stageStats?.annotating?.entered).toBe(true);
+    expect(state.lastRunResult?.stageStats?.annotating?.outcome).toBe('transformed');
+    expect(state.lastRunResult?.stageStats?.annotating?.costUSD).toBe(0);
+    expect(state.lastRunResult?.stageStats?.annotating?.durationMs).toBeGreaterThanOrEqual(0);
+  });
 });

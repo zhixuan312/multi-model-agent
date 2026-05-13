@@ -13,10 +13,8 @@ import type { EventEmitter } from '../../events/event-emitter.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
-import { execFile } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execFileP = promisify(execFile);
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
 
 const GIT_FORBIDDEN_INSTRUCTION = [
   '\n\nIMPORTANT — Persistence:',
@@ -38,14 +36,24 @@ const GIT_FORBIDDEN_INSTRUCTION = [
   '```',
 ].join('\n');
 
-async function capturePreTaskHead(cwd: string | undefined): Promise<string | undefined> {
-  if (!cwd) return undefined;
-  try {
-    const r = await execFileP('git', ['-C', cwd, 'rev-parse', 'HEAD']);
-    return r.stdout.trim();
-  } catch {
-    return undefined;
+export async function capturePreTaskState(state: LifecycleState): Promise<void> {
+  const cwd = state.cwd as string | undefined;
+  if (!cwd) return;
+
+  const headResult = spawnSync('git', ['rev-parse', 'HEAD'], { cwd, encoding: 'utf8' });
+  if (headResult.status !== 0) return;   // not a git work-tree, or no commits — leave both undefined
+  (state as { preTaskHeadSha?: string }).preTaskHeadSha = headResult.stdout.trim();
+
+  const lsResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], { cwd, encoding: 'utf8' });
+  if (lsResult.status !== 0) {
+    // Defensive: head succeeded but ls-files failed (unusual). Treat as no untracked files.
+    (state as { preTaskUntrackedFiles?: Set<string> }).preTaskUntrackedFiles = new Set();
+    return;
   }
+  const relativeFiles = lsResult.stdout.split('\n').filter(line => line.length > 0);
+  (state as { preTaskUntrackedFiles?: Set<string> }).preTaskUntrackedFiles = new Set(
+    relativeFiles.map(rel => join(cwd, rel))   // absolute paths
+  );
 }
 
 export class TaskExecutor {
@@ -62,13 +70,9 @@ export class TaskExecutor {
       : userMessage;
     const instruction = base + GIT_FORBIDDEN_INSTRUCTION;
 
-    // Snapshot HEAD before the worker runs — Committing reads this to
-    // detect a worker-authored commit (HEAD moved between snapshots).
-    const cwd = (state.cwd as string | undefined) ?? (ctx as { cwd?: string }).cwd;
-    const preSha = await capturePreTaskHead(cwd);
-    if (preSha !== undefined) {
-      (state as { preTaskHeadSha?: string }).preTaskHeadSha = preSha;
-    }
+    // Snapshot HEAD + untracked files before the worker runs — Committing reads
+    // this to detect a worker-authored commit (HEAD moved between snapshots).
+    await capturePreTaskState(state);
 
     this.emitter.emit({
       type: 'run_started',

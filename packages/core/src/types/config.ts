@@ -67,7 +67,18 @@ export interface ResearchConfig {
 
 export interface MultiModelConfig {
   agents: { standard: AgentConfig; complex: AgentConfig }
-  defaults: { timeoutMs: number; stallTimeoutMs: number; maxCostUSD: number; tools: ToolMode; sandboxPolicy: SandboxPolicy; largeResponseThresholdChars?: number; mainModel?: string }
+  defaults: {
+    timeoutMs: number
+    stallTimeoutMs: number
+    maxCostUSD: number
+    tools: ToolMode
+    sandboxPolicy: SandboxPolicy
+    largeResponseThresholdChars?: number
+    mainModel?: string
+    progressWatchdogEnabled?: boolean
+    thrashTurns?: number
+    thrashWallClockMs?: number
+  }
   diagnostics?: { log: boolean; logDir?: string; verbose?: boolean }
   server: {
     bind: string

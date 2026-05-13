@@ -33,6 +33,7 @@ const validStageBase = {
   turnCount: 2,
   maxIdleMs: 0,
   totalIdleMs: 0,
+  mainEquivalentCostUSD: null,
 };
 
 const validTierUsage = {
@@ -64,6 +65,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}): Recor
     turnCount: 2,
     maxIdleMs: 0,
     totalIdleMs: 0,
+    mainEquivalentCostUSD: null,
   };
 
   if (name === 'implementing') return { ...base, ...overrides };
@@ -142,6 +144,7 @@ function makeValidEvent(overrides: Record<string, unknown> = {}): Record<string,
     stallCount: 0,
     taskMaxIdleMs: 0,
     sandboxViolationCount: 0,
+    filesWrittenCount: sum('filesWrittenCount'),
     stages,
     ...overrides,
   };
@@ -645,7 +648,7 @@ describe('schema v4: round on stages and R7 uniqueness', () => {
       durationMs: 1000, costUSD: 0.01, inputTokens: 100, outputTokens: 50,
       cachedReadTokens: 0, cachedNonReadTokens: 0,
       toolCallCount: 0, filesReadCount: 0, filesWrittenCount: 0,
-      turnCount: 0, maxIdleMs: 0, totalIdleMs: 0 };
+      turnCount: 0, maxIdleMs: 0, totalIdleMs: 0, mainEquivalentCostUSD: null };
     expect(StageEntryBase.safeParse(stage).success).toBe(true);
   });
 

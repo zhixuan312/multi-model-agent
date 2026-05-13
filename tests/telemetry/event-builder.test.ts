@@ -41,6 +41,18 @@ describe('event-builder tier vocabulary', () => {
     const stage = event.stages.find(s => s.name === 'implementing')!;
     expect(stage.tier).toBe('standard');
   });
+
+  it('emits subtype from taskSpec when present', () => {
+    const rr = makeFixtureRunResult({});
+    const event = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [], subtype: 'plan' },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    } as any);
+    expect(event.subtype).toBe('plan');
+  });
 });
 
 describe('event-builder v4: tierUsage and parent equivalent', () => {
@@ -176,5 +188,22 @@ describe('event-builder v4: tierUsage and parent equivalent', () => {
     expect(ev.outputTokens).toBe(80);
     expect(ev.cachedReadTokens).toBe(30);
     expect(ev.cachedNonReadTokens).toBe(15);
+  });
+});
+
+describe('event-builder per-stage mainEquivalentCostUSD', () => {
+  it('attaches mainEquivalentCostUSD to every stage when mainModel resolves', () => {
+    const rr = makeFixtureRunResult({});
+    const event = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: 'claude-opus-4-7',
+    });
+    for (const stage of event.stages) {
+      expect(stage).toHaveProperty('mainEquivalentCostUSD');
+      expect(typeof stage.mainEquivalentCostUSD === 'number' || stage.mainEquivalentCostUSD === null).toBe(true);
+    }
   });
 });

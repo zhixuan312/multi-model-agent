@@ -6,7 +6,7 @@
 export type ReviewVerdict =
   | 'approved' | 'concerns' | 'changes_required' | 'annotated' | 'error' | 'skipped' | 'not_applicable';
 
-export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable';
+export type VerifyOutcome   = 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed';
 export type VerifySkipReason = 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other';
 
 /**

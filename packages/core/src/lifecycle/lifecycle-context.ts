@@ -110,6 +110,7 @@ export interface ExecutionContext {
       route: string;
       taskSpec: TaskSpec;
       runResult: import('../types.js').RunResult;
+      realFilesChanged: string[];
       client: string;
       mainModel: string | null;
       reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';

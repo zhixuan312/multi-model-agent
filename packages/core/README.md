@@ -228,23 +228,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.0.5
+## What's new in 4.5.0
 
-- **`/research` — single-task external research route.** New `POST /research` endpoint and `toolConfig` at `tools/research/tool-config.ts`. Schema at `tools/research/schema.ts`, brief compiler at `intake/brief-compiler-slots/research.ts`, report parser at `reporting/report-parser-slots/research-report.ts`, headline template at `reporting/headline-templates/research.ts`. Replaces the 3-worker `/explore` orchestrator.
-- **`mma-research` skill + `mma-explore` skill rewrite.** `mma-research` is a thin 1:1 wrapper around `/research`. `mma-explore` is now a main-agent playbook that fans out `mma-investigate` + `mma-research` in parallel; synthesis moves from a worker to the main agent.
-- **`/explore` HTTP route removed.** `tools/explore/`, `intake/brief-compiler-slots/explore.ts`, `reporting/parse-explore-report.ts`, `reporting/report-parser-slots/explore-report.ts`, `reporting/headline-templates/explore.ts`, `research/explore-orchestrator.ts`, and the HTTP handler removed. 8 explore-specific telemetry events removed from `observability-events.ts` and `telemetry-types.ts`.
-
-**Migration from 4.0.4:** library consumers referencing `tools/explore/`, `explore-orchestrator`, or explore-route enums must update to `tools/research/`. `RouteName` drops `'explore_internal' | 'explore_external' | 'explore_synthesize'` and adds `'research'`.
-
-Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
-
-## What's new in 4.0.0
-
-- **Closed enums everywhere.** `reviewPolicy` → `'full' | 'quality_only' | 'diff_only' | 'none'` (removed `'spec_only'` and `'off'`); `agentType` → `'standard' | 'complex'`; `tier` drops `'main'`; `mainModelFamily` drops `'gpt-5'`.
-- **4-field `TokenUsage`.** `{inputTokens, outputTokens, cachedReadTokens, cachedNonReadTokens}` — `outputTokens` includes reasoning; `reasoningTokens` and `cachedCreationTokens` removed. SCHEMA_VERSION → 4.
-- **Clarification flow removed.** `confirm_clarifications` route, `mma-clarifications` skill, and `proposedInterpretation` field gone. Intake resolves ambiguity by picking the most likely interpretation.
-- **Engine API.** New `ReviewerEngine` (gating reviews for artifact-producing tools) + `AnnotatorEngine` (read-only annotation passes) replace ad-hoc review functions. Per-tool executors collapsed into a single `executeTask` orchestrator driven by `ToolConfig` slot objects. See [Engine API](#v4-engine-api) above.
-- **Internals.** Declarative `StagePlan` driven by a single `LifecycleDriver`; `RunnerShell` + 3 thin adapters replaces three parallel runner files. `ReadinessClassifier`, `EffortInferer`, `AttemptRecorder`, `RequestPipeline`, `TelemetryFlushWorker`, `CrossTierGuard` removed.
+- **`getRealFilesChanged(state)` helper (`lifecycle/real-diff.ts`).** Derives the canonical written-files list from `git diff --name-only <preTaskHeadSha>` + filtered untracked files (snapshot-diffed against `state.preTaskUntrackedFiles` captured at task entry). Returns `{files, source}` with source ∈ `'git_diff' | 'self_report' | 'git_error'`. `git-commit-handler` and the telemetry event-builder both route through this helper, so commit decisions and `filesWrittenCount` cannot disagree with the actual git state.
+- **`progress-watchdog` (`bounded-execution/progress-watchdog.ts`).** New module mirroring the stall-watchdog shape: `startProgressWatchdog(ctx) → disposer` arms a setInterval poller (5–30s) that aborts via `controller.abort()` when `wallClockMs > thrashWallClockMs` AND `git diff` empty (signal 1). `recordPostHocSignals` checks turn-count thrash (signal 2) and scope violations against `normalizeScopeEntry` / `isInScope` from `lifecycle/scope-match.ts` (signal 3). Wired around `delegateWithEscalation()` in `task-runner.ts` and `session.send()` in `rework-handler.ts`. Skip gates: `!config.enabled`, `toolCategory !== 'artifact_producing'`, missing `preTaskHeadSha` / `preTaskUntrackedFiles`.
+- **Four new `defaults.*` config fields.** `progressWatchdogEnabled` (default `true`), `thrashTurns` (`25`), `thrashWallClockMs` (`1_200_000`), `thrashSoftTurns` (`10`). All optional.
+- **Per-stage `mainEquivalentCostUSD` on `stageStats`.** Each stage entry carries the per-stage main-model-equivalent cost alongside `costUSD` so the frontend slices per-model savings without re-running rate-card math.
+- **`LifecycleState` watchdog fields.** `preTaskUntrackedFiles`, `preStopReason`, `thrashingDetected`, `scopeViolations[]` — all optional, only populated when the watchdog fires.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

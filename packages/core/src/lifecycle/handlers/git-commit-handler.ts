@@ -15,6 +15,7 @@ import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Session } from '../../types/run-result.js';
 import { mergeStageStats } from '../merge-stage-stats.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
+import { getRealFilesChanged } from '../real-diff.js';
 
 const execFileP = promisify(execFile);
 
@@ -75,15 +76,15 @@ export async function gitCommitHandler(state: LifecycleState): Promise<void> {
 
   const startMs = Date.now();
 
-  // Fast pre-gate: worker reported no file changes — skip before any
-  // git work. Prevents `git add -A .` from staging stray working-tree
-  // edits, and short-circuits when the worker errored without producing
-  // artifacts (zero filesChanged).
-  const filesChanged = (result.filesChanged as string[] | undefined) ?? [];
-  if (filesChanged.length === 0) {
+  // Fast pre-gate: use git diff to determine if there are actual file changes.
+  // This replaces the worker self-report read, which may be empty even when
+  // the worker made real changes.
+  const realFiles = await getRealFilesChanged(state);
+  if (realFiles.files.length === 0) {
     setSkip(state, 'no_diff');
     return;
   }
+  const filesChanged = realFiles.files;
 
   // Gate 1: no_repo
   if (!await isInsideWorkTree(cwd)) {
@@ -169,7 +170,7 @@ export async function gitCommitHandler(state: LifecycleState): Promise<void> {
     sha: newSha ?? '',
     subject: commitMessage,
     body: '',
-    filesChanged: ((result.filesChanged as string[] | undefined) ?? []),
+    filesChanged,
     authoredAt: new Date().toISOString(),
   }];
 
@@ -182,6 +183,6 @@ export async function gitCommitHandler(state: LifecycleState): Promise<void> {
     toolCallCount: 0,
     costUSD: null,
     durationMs: Date.now() - startMs,
-    filesWrittenCount: ((result.filesChanged as string[] | undefined) ?? []).length,
+    filesWrittenCount: filesChanged.length,
   }, { tier: 'standard', model: null });
 }

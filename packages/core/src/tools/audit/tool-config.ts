@@ -218,7 +218,7 @@ export const toolConfig: ToolConfig<Input, ToolAuditBrief, AuditReport> = {
       prompt: buildPrompt(brief),
       parallelTarget: targetParts.join('\n\n'),
       agentType: 'complex',
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'none',
       briefQualityPolicy: 'off',
       done: brief.done,
       tools: ctx.config.defaults?.tools ?? 'full',

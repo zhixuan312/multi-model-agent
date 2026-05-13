@@ -24,6 +24,7 @@ import { delegateWithEscalation } from '../escalation/delegate-with-escalation.j
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { mergeStageStats } from './merge-stage-stats.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
+import { startProgressWatchdog, recordPostHocSignals } from '../bounded-execution/progress-watchdog.js';
 import { resolveSubtypeSpec, isReadOnlyRoute } from './parallel-criteria-routes.js';
 import { runReadRouteImplementer } from './handlers/read-route-implementer.js';
 import { HUMAN_LABEL } from './stage-labels.js';
@@ -478,6 +479,32 @@ export async function runTaskViaDispatcher(
         }
       }
 
+      // Build the watchdog config once, just before the delegateWithEscalation call:
+      const wdConfig = {
+        enabled: ctx.config?.defaults?.progressWatchdogEnabled ?? true,
+        thrashTurns: ctx.config?.defaults?.thrashTurns ?? 25,
+        thrashWallClockMs: ctx.config?.defaults?.thrashWallClockMs ?? 1_200_000,
+        thrashSoftWallClockMs: ctx.config?.defaults?.thrashWallClockMs
+          ? Math.floor((ctx.config.defaults.thrashWallClockMs ?? 1_200_000) / 2)
+          : 600_000,
+      };
+      // state2 carries the timer's "fired" bit so recordPostHocSignals knows whether
+      // the abort came from the watchdog vs. some other cancellation.
+      const wdState2 = { fired: false };
+
+      // Wire the watchdog. ctx.stall.controller is the existing AbortController
+      // passed to delegateWithEscalation as options.abortSignal — when the watchdog
+      // fires, the controller's abort propagates into the session.
+      const disposeWatchdog = startProgressWatchdog({
+        state,
+        controller: ctx.stall.controller,
+        emit: (event) => ctx.bus?.emit(event as any),
+        config: wdConfig,
+        taskIndex: ctx.taskIndex,
+        batchId: ctx.batchId,
+        state2: wdState2,
+      });
+
       try {
         const result = await delegateWithEscalation(
           {
@@ -505,6 +532,17 @@ export async function runTaskViaDispatcher(
           ...(result.implementationReport === undefined && result.output && { implementationReport: parseStructuredReport(result.output) }),
         } as unknown as RunResult;
         state.lastRunResult = enrichedResult;
+
+        // Post-hoc: turn-count thrash + scope-violation (replaces nothing existing;
+        // adds new signals state for sub-project B's annotator).
+        await recordPostHocSignals(
+          state,
+          enrichedResult.turns ?? 0,
+          wdConfig,
+          (event) => ctx.bus?.emit(event as any),
+          ctx.taskIndex,
+          ctx.batchId,
+        );
         // Record the implementer's per-stage cost so emit_task_terminal +
         // wire task.completed include it in the totals + per-stage breakdown.
         // Cost field lookup matches the canonical-then-legacy fallback used
@@ -549,6 +587,8 @@ export async function runTaskViaDispatcher(
           workerStatus: 'failed',
         } as unknown as RunResult;
         state.terminal = true;
+      } finally {
+        disposeWatchdog();
       }
       return undefined;
     },

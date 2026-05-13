@@ -1,0 +1,65 @@
+// Sub-project A: filesChanged from real `git diff`, not worker self-report.
+//
+// Three sources, with explicit discriminator:
+// - `git_diff`   — Authoritative. Used for commit decisions, telemetry counts,
+//                  watchdog signals.
+// - `self_report` — Non-git cwd. Used for telemetry counts ONLY. Watchdog
+//                  signals 1, 2, 3 are all DISABLED in this mode.
+// - `git_error`  — Git work-tree exists but a git invocation failed. `files`
+//                  is the empty array; nothing is fabricated from self-report.
+//                  Commit handler treats as `no_diff` and skips.
+
+import { spawnSync } from 'node:child_process';
+import { join } from 'node:path';
+import type { LifecycleState } from './stage-plan-types.js';
+
+export interface RealFilesChanged {
+  files: string[];
+  source: 'git_diff' | 'self_report' | 'git_error';
+}
+
+export async function getRealFilesChanged(state: LifecycleState): Promise<RealFilesChanged> {
+  const cwd = state.cwd;
+  const preSha = state.preTaskHeadSha;
+  const preUntracked = state.preTaskUntrackedFiles;
+
+  if (!cwd || !preSha || !preUntracked) {
+    const selfReport =
+      ((state.lastRunResult as { filesChanged?: string[] } | undefined)?.filesChanged) ?? [];
+    return { files: selfReport, source: 'self_report' };
+  }
+
+  try {
+    // `git diff <sha>` (no `..`) compares working tree to <sha>. Includes both
+    // staged and unstaged changes — what we want for "files touched since task
+    // entry". `git diff <sha>..` (with `..`) would only diff committed changes.
+    const diffResult = spawnSync('git', ['diff', '--name-only', preSha], {
+      cwd,
+      encoding: 'utf8',
+    });
+    if (diffResult.status !== 0) {
+      return { files: [], source: 'git_error' };
+    }
+    const diffFiles = diffResult.stdout
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((rel) => join(cwd, rel));
+
+    const lsResult = spawnSync('git', ['ls-files', '--others', '--exclude-standard'], {
+      cwd,
+      encoding: 'utf8',
+    });
+    if (lsResult.status !== 0) {
+      return { files: [], source: 'git_error' };
+    }
+    const currentUntracked = lsResult.stdout
+      .split('\n')
+      .filter((line) => line.length > 0)
+      .map((rel) => join(cwd, rel));
+    const newUntracked = currentUntracked.filter((p) => !preUntracked.has(p));
+
+    return { files: [...diffFiles, ...newUntracked], source: 'git_diff' };
+  } catch {
+    return { files: [], source: 'git_error' };
+  }
+}

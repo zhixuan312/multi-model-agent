@@ -13,12 +13,15 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
+import type { Session } from '../../types/run-result.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
 import { buildWarmFollowupMessage } from '../warm-followup.js';
 import { assembleRunResult } from '../../providers/assemble-run-result.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
 import { HUMAN_LABEL } from '../stage-labels.js';
+import { startProgressWatchdog, recordPostHocSignals } from '../../bounded-execution/progress-watchdog.js';
+import type { ProgressWatchdogConfig } from '../../bounded-execution/progress-watchdog.js';
 
 export async function reworkHandler(state: LifecycleState): Promise<void> {
   if (state.terminal) return;
@@ -65,13 +68,48 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
   let result: RunResult;
+  // Wire progress watchdog around the rework session.send.
+  const wdConfig: ProgressWatchdogConfig = {
+    enabled: (ctx.config?.defaults as { progressWatchdogEnabled?: boolean })?.progressWatchdogEnabled ?? true,
+    thrashTurns: (ctx.config?.defaults as { thrashTurns?: number })?.thrashTurns ?? 25,
+    thrashWallClockMs: (ctx.config?.defaults as { thrashWallClockMs?: number })?.thrashWallClockMs ?? 1_200_000,
+    thrashSoftWallClockMs: 600_000,
+  };
+  const wdState2 = { fired: false };
+  const wdController = ctx.stall.controller;
+  let disposeWd: (() => void) | undefined;
+  if (wdConfig.enabled) {
+    disposeWd = startProgressWatchdog({
+      state,
+      controller: wdController,
+      emit: (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
+      config: wdConfig,
+      taskIndex: ctx.taskIndex,
+      batchId: ctx.batchId,
+      state2: wdState2,
+    });
+  }
+  let turn: Awaited<ReturnType<Session['send']>> | undefined;
   try {
     const session = ctx.getSession(reworkTier);
-    const turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.rework });
+    turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.rework });
     result = assembleRunResult(turn);
   } catch (err) {
     state.reworkError = err instanceof Error ? err.message : String(err);
+    disposeWd?.();
     return;
+  } finally {
+    disposeWd?.();
+  }
+  if (wdConfig.enabled && turn !== undefined) {
+    await recordPostHocSignals(
+      state,
+      (turn as { turns?: number }).turns ?? 0,
+      wdConfig,
+      (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
+      ctx.taskIndex,
+      ctx.batchId,
+    );
   }
 
   if (result.status !== 'ok') {

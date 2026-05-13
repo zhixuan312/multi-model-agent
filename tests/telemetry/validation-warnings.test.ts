@@ -78,6 +78,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     stallCount: 0,
     taskMaxIdleMs: 5000,
     sandboxViolationCount: 0,
+    filesWrittenCount: 2, // two stages: implementing(1) + committing(1)
     stages: [
       {
         name: 'implementing',
@@ -96,6 +97,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         turnCount: 7,
         maxIdleMs: 1000,
         totalIdleMs: 5000,
+        mainEquivalentCostUSD: null,
       },
       {
         name: 'committing',
@@ -114,6 +116,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
         turnCount: 1,
         maxIdleMs: 50,
         totalIdleMs: 100,
+        mainEquivalentCostUSD: null,
         filesCommittedCount: 1,
         branchCreated: false,
       },
@@ -125,6 +128,7 @@ function makeHealthyContext(): BuildContext {
   return {
     route: 'delegate',
     taskSpec: { filePaths: [] },
+    realFilesChanged: [],
     runResult: {
       status: 'ok',
       durationMs: 50000,

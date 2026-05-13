@@ -91,6 +91,7 @@ export const StageEntryBase = z.object({
   turnCount: z.number().int().min(0).max(250),
   maxIdleMs: z.number().int().min(0).max(1_200_000),
   totalIdleMs: z.number().int().min(0).max(3_600_000),
+  mainEquivalentCostUSD: z.number().nullable(),   // main-model-equivalent cost for this stage's tokens
 });
 
 export const ReviewStageEntrySchema = StageEntryBase.extend({
@@ -108,7 +109,7 @@ export const ReworkStageEntrySchema = StageEntryBase.extend({
 
 export const AnnotatingStageEntrySchema = StageEntryBase.extend({
   name: z.literal('annotating'),
-  outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable']),
+  outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
   skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
 }).strict();
 
@@ -136,6 +137,7 @@ export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
   route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'register-context-block']),
+  subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
@@ -177,6 +179,9 @@ export const TaskCompletedEventSchema = z.object({
   concernCount: z.number().int().min(0).max(150),
   escalationCount: z.number().int().min(0).max(20),
   fallbackCount: z.number().int().min(0).max(20),
+
+  // Files changed — sourced from real git diff (sub-project A), not worker self-report.
+  filesWrittenCount: z.number().int().min(0).max(5000),
 
   // Operational signals
   stallCount: z.number().int().min(0).max(20),

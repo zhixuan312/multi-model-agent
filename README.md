@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.4.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.0",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -291,17 +291,13 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.4.0
+## What's new in 4.5.0
 
-Architectural release. The big shifts:
+Worker-reliability release. Closes the two largest classes of execute-plan failure seen in production:
 
-- **Session-based provider boundary.** `Provider.openSession() → Session.send() → TurnResult` replaces the 1,559-line `RunnerShell` + RunnerAdapter chain. All three production providers (claude-agent-sdk, codex CLI, `@openai/agents`) now expose only `openSession`; orchestrators assemble `RunResult` via a shared `assembleRunResult` helper. Cost / termination-reason mapping cannot diverge across providers.
-- **Five-stage lifecycle.** Stages collapse to `implementing → review → rework → annotating → committing`. The pure-transform `annotating` stage doesn't write `stageStats` (read the top-level `structuredReport` for its output). Single `HUMAN_LABEL` source of truth means headline labels can't drift again.
-- **Codex token accounting fixed (≈4× cost over-report on cached turns).** Codex emits `input_tokens` as the GROSS count *including* `cached_input_tokens`; Anthropic emits NET (3 disjoint buckets). Pre-fix we passed gross through, so `priceTokens` double-billed the cached subset. A smoke task previously reporting $21.60 now reports $4.93 (matches predicted $4.95).
-- **`X-MMA-Main-Model` required again.** Auto-detect was reading JSONL files written by our own claude-tier workers (entrypoint `sdk-ts`) and returning the worker's model as the calling agent's "main." Server now returns `400 main_model_required` if the header is missing.
-- **Telemetry clamp ceilings raised for 2026-era usage.** Per-stage input/cached `5M → 100M`, output `500K → 2M`, per-stage cost `$100 → $500`, per-task cost `$800 → $5000`.
-- **Read-only route consolidation.** `research` ToolCategory removed; all 5 read-only routes (audit, review, debug, investigate, explore) share `read_only` and carry a `subtype` field.
-- **LLM `verify` tool removed.** Verification is `verifyCommand` only.
+- **Commit from real git diff, not worker self-report.** The commit gate previously trusted `WorkerOutput.filesChanged`; when a worker wrote files but self-reported `filesChanged: []` (a recurring false-negative on standard-tier workers), the gate silently skipped. The handler now derives the canonical list from `git diff --name-only <preTaskHeadSha>` + filtered untracked files (snapshot-diffed against a `preTaskUntrackedFiles` set captured at task entry). Three source values surface in telemetry: `git_diff` (authoritative), `self_report` (non-git cwd, count-only), `git_error` (degraded, no commit). Eliminates the "files written but nothing committed" failure mode end-to-end.
+- **Progress-watchdog with three signals.** Mirrors the stall-watchdog shape: arms an interval poller around `delegateWithEscalation()` and `rework` `session.send()`. (1) Wall-clock thrash → `controller.abort()` when `wallClockMs > thrashWallClockMs` AND `git diff` is empty (default 20 min). (2) Turn-count thrash post-hoc check → `turnsUsed > thrashTurns` AND diff empty (default 25 turns). (3) Scope-violation post-hoc → any file in the real diff outside the brief's declared scope. Skip gates: read-only tools, non-git cwd, `defaults.progressWatchdogEnabled: false`. A thrashing worker can no longer burn the full budget producing nothing.
+- **Telemetry envelope fixes.** `subtype` now reaches the wire (4.4.0 landed it on the HTTP envelope only); `annotating` stage emits a deterministic `stageStats` entry so per-stage dashboards stop showing a gap; per-stage `mainEquivalentCostUSD` is now attached for the Lite-page per-model savings slice.
 
 CHANGELOG has the full breakdown.
 

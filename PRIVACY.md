@@ -12,14 +12,15 @@ Every uploaded event is a single `task.completed` event. Install metadata travel
 
 ### Task lifecycle event (`task.completed`)
 
-Emitted at the end of every delegate, audit, review, verify, debug, execute-plan, investigate, research, retry, and register-context-block run. The event has 25 top-level scalar fields plus a `stages` array.
+Emitted at the end of every delegate, audit, review, verify, debug, execute-plan, investigate, research, retry, and register-context-block run. The event has 27 top-level scalar fields plus a `stages` array.
 
-#### Identity (3 fields)
+#### Identity (4 fields)
 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `eventId` | UUIDv4 string | At-most-once dedup within the 90-day retention window |
 | `route` | enum: `delegate`, `audit`, `review`, `verify`, `debug`, `execute-plan`, `retry`, `investigate`, `research`, `register-context-block` | Route distribution + per-route quality metrics |
+| `subtype` | string (1–64 chars) or null | Finer-grained route tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`, `audit:security`, `audit:performance`. Null on routes that don't expose a subtype variant. Added in 4.5.0; the field landed on the HTTP envelope in 4.4.0 but didn't reach telemetry until 4.5.0. |
 | `client` | string (1–120 chars, alphanumeric + `-_.:+/@`) | Client adoption tracking |
 
 #### Configuration (5 fields)
@@ -85,6 +86,12 @@ A keyed record `{ standard?, complex?, main? }` where each present tier carries 
 | `escalationCount` | integer (0–20) | Escalation frequency |
 | `fallbackCount` | integer (0–20) | Provider-fallback frequency |
 
+#### Files (1 field)
+
+| Field | Type | Decision driver |
+|-------|------|-----------------|
+| `filesWrittenCount` | integer (0–5,000) | Number of files written during the task. As of 4.5.0, sourced from the real git diff (`git diff --name-only <preTaskHeadSha>` + filtered untracked-file delta) rather than the worker's self-reported `filesChanged`. No file paths or contents are transmitted — only the count. Eliminates the prior failure mode where a worker self-reporting `filesChanged: []` under-counted real artifacts. |
+
 #### Operational signals (6 fields)
 
 | Field | Type | Decision driver |
@@ -108,6 +115,7 @@ Each stage is a discriminated-union entry on `(name, round)`. As of 4.3.1 (schem
 | `tier` | enum: `standard`, `complex`, `main` — agent tier slot. Replaces the prior `agentTier` field as of 3.12.1; reviewer-separation now gates on tier, not model. |
 | `durationMs` | integer — exact elapsed time for this stage |
 | `costUSD` | float or null — cost estimate for this stage at this stage's own model rate; `null` when pricing is unavailable. |
+| `mainEquivalentCostUSD` | float or null — what THIS stage's tokens would have cost at the main model's rate. Null when `mainModel` is null or its pricing profile is unavailable. Added in 4.5.0 so per-model savings can be sliced per stage without re-running rate-card math on the consumer side. |
 | `inputTokens` | integer — sibling semantics (excludes cache) as of 3.12.2 schema v4. |
 | `outputTokens` | integer |
 | `cachedReadTokens` | integer or null — cache-read tokens. Replaces `cachedTokens` as of 3.12.2 schema v4. |
@@ -123,7 +131,7 @@ Stage-type-specific extras:
 
 - **Review stage** (`review`): `verdict` (enum), `roundsUsed` (integer 1–10), `concernCategories` (string array — values from a closed enum: `missing_test`, `scope_creep`, `incomplete_impl`, `style_lint`, `security`, `performance`, `maintainability`, `doc_gap`, `doc_drift`, `contract_violation`, `coverage_gap`, `dead_code`, `queue_hygiene`, `other`), `findingsBySeverity` (`{ critical, high, medium, low }` object — counts of findings in each tier). Combines spec + quality sub-reviewers under one entry per round.
 - **Rework stage** (`rework`): `triggeringConcernCategories` (string array). Single combined pass replacing the prior `spec_rework` / `quality_rework` split.
-- **Annotating stage** (`annotating`): `outcome` (enum), `skipReason` (string or null). Renamed from `verifying`.
+- **Annotating stage** (`annotating`): `outcome` (enum: `passed`, `failed`, `skipped`, `not_applicable`, `transformed`), `skipReason` (enum or null: `no_command`, `dirty_worktree`, `not_applicable`, `other`). Renamed from `verifying`. `transformed` was added in 4.5.0 to mark pure-transform annotating passes (no LLM call) so the per-stage emission shape stays consistent with the other stages and per-stage dashboards stop showing a gap.
 - **Committing stage** (`committing`): `filesCommittedCount` (integer), `branchCreated` (boolean).
 
 ### Batch wrapper (per-upload)
@@ -231,6 +239,7 @@ To reset your pseudonymous identifier without disabling telemetry: `mmagent tele
 
 | Date | Schema | Change |
 |---|---|---|
+| 2026-05-13 | 5 | Additive within v5 (4.5.0 release). Top-level: `subtype` (string \| null, finer-grained tag for read-only routes — e.g. `audit:plan`, `debug:isolated_test`) and `filesWrittenCount` (integer, count only — sourced from real git diff via sub-project A, not worker self-report). Stage base: `mainEquivalentCostUSD` (float \| null, per-stage main-model-equivalent cost). Annotating-stage `outcome` enum gains `transformed` for pure-transform passes. No new content collected, no schema version bump — counts/labels only. |
 | 2026-05-11 | 5 | V5 schema (stage vocabulary collapse): eight legacy stage names fold into five — `spec_review` + `quality_review` + `diff_review` → `review`; `spec_rework` + `quality_rework` → `rework`; `verifying` → `annotating`; `implementing` and `committing` unchanged. Stage-specific extras unchanged (review keeps `verdict` / `roundsUsed` / `concernCategories` / `findingsBySeverity`; rework keeps `triggeringConcernCategories`; annotating keeps `outcome` / `skipReason`). No new fields, no new collection — pure rename. mma emits v5 only; backend normalises legacy v4 records on read. |
 | 2026-05-03 | 4 | V4 schema (cost-attribution revamp): `cachedTokens` split into `cachedReadTokens` + `cachedNonReadTokens` everywhere — Anthropic cache writes now bill at 1.25× input correctly. Stage entries gain `round` (per-round telemetry for multi-round review/rework loops); `(name, round)` is the uniqueness key. Event root gains `tierUsage` (per-tier rollup), `mainModel` (specific identity alongside `mainModelFamily`), and `mainEquivalentCostUSD`. `inputTokens` switches to sibling semantics (excludes cache). Cost formula consolidates around a single `priceTokens` function — no subtraction anywhere. Backend dual-accepts schema v3 and v4. |
 | 2026-04-29 | 3 | V3 schema: single `task.completed` event type; exact integer/numeric fields replace bucketed approximations; stages array replaces fixed-key stage map; `session.started`, `install.changed`, `skill.installed` event types removed; `topToolNames`, `triggeredFromSkill`, `workerSelfAssessment`, `c2Promoted` removed; `language`, `tzOffsetBucket` removed from batch wrapper; cost formula uses 4-term cached/reasoning rates; consent re-confirmation required on V2→V3 upgrade. |

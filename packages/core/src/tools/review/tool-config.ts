@@ -165,7 +165,7 @@ export const toolConfig: ToolConfig<Input, ReviewBrief, unknown> = {
       // prefix; bypasses the legacy ## Finding format spec embedded in `prompt`.
       parallelTarget: targetParts.join('\n\n'),
       agentType: 'complex',
-      reviewPolicy: 'quality_only',
+      reviewPolicy: 'none',
       briefQualityPolicy: 'off',
       done: resolveReviewDoneCondition(brief.focus, brief.hasContextBlocks),
       tools: ctx.config.defaults?.tools ?? 'full',

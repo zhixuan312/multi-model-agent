@@ -22,6 +22,7 @@ function makeStage(name: string, overrides: Record<string, unknown> = {}) {
     turnCount: 3,
     maxIdleMs: 0,
     totalIdleMs: 0,
+    mainEquivalentCostUSD: null,
   };
 
   switch (name) {
@@ -102,6 +103,7 @@ function makeEvent(route: string, overrides: Record<string, unknown> = {}) {
     stallCount: 0,
     taskMaxIdleMs: 0,
     sandboxViolationCount: 0,
+    filesWrittenCount: sum('filesWrittenCount'),
     stages,
     ...overrides,
   };

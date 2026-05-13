@@ -96,6 +96,27 @@
             "medium": 0,
             "low": 0
           }
+        },
+        "annotating": {
+          "stage": "annotating",
+          "entered": true,
+          "durationMs": "<DETERMINISTIC>",
+          "costUSD": 0,
+          "agentTier": null,
+          "modelFamily": null,
+          "model": null,
+          "maxIdleMs": "<DETERMINISTIC>",
+          "totalIdleMs": "<DETERMINISTIC>",
+          "activityEvents": "<DETERMINISTIC>",
+          "inputTokens": 0,
+          "outputTokens": 0,
+          "cachedReadTokens": 0,
+          "cachedNonReadTokens": 0,
+          "turnCount": 0,
+          "toolCallCount": 0,
+          "filesReadCount": 0,
+          "filesWrittenCount": 0,
+          "outcome": "transformed"
         }
       },
       "specReviewStatus": "changes_required",

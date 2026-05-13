@@ -348,6 +348,68 @@
       ]
     },
     {
+      "name": "progress_watchdog_armed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "toolCategory",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_skipped_disabled",
+      "requiredFields": [
+        "event",
+        "ts",
+        "reason",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_skipped_non_git",
+      "requiredFields": [
+        "event",
+        "ts",
+        "reason",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_warn",
+      "requiredFields": [
+        "event",
+        "ts",
+        "wallClockMs",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_fired_thrash",
+      "requiredFields": [
+        "event",
+        "ts",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_disarmed",
+      "requiredFields": [
+        "event",
+        "ts",
+        "reason",
+        "taskIndex"
+      ]
+    },
+    {
+      "name": "progress_watchdog_scope_violation",
+      "requiredFields": [
+        "event",
+        "ts",
+        "outOfScope",
+        "taskIndex"
+      ]
+    },
+    {
       "name": "criteria_fanout_warm_start",
       "requiredFields": [
         "event",

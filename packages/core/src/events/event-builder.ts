@@ -23,8 +23,9 @@ import {
 
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
-  taskSpec: { filePaths?: string[] };
+  taskSpec: { filePaths?: string[]; subtype?: string };
   runResult: RunResult;
+  realFilesChanged: string[];   // NEW — sub-project A. Absolute paths from getRealFilesChanged.
   client: string;
   mainModel: string | null;
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
@@ -38,6 +39,20 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const { route, runResult, client, mainModel } = ctx;
 
   const stages = buildStages(route, runResult);
+
+  // Compute per-stage main-model-equivalent cost using the resolved rate card.
+  // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
+  // without weakening the field to optional.
+  const mainCard = resolveRateCard(mainModel);
+  for (const st of stages) {
+    (st as any).mainEquivalentCostUSD = mainCard
+      ? priceTokens(
+          { inputTokens: st.inputTokens, outputTokens: st.outputTokens,
+            cachedReadTokens: st.cachedReadTokens ?? 0, cachedNonReadTokens: st.cachedNonReadTokens ?? 0 },
+          mainCard,
+        )
+      : null;
+  }
 
   // Gap 3 fix (4.0.3+): R4 invariant `totalDurationMs >= Σ stage.durationMs`
   // is satisfied by Math.max-ing the executor wall-clock against the stage
@@ -93,7 +108,6 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const totalCachedReadTokens = clampCachedTokens(allTokens.cachedReadTokens);
   const totalCachedNonReadTokens = clampCachedTokens(allTokens.cachedNonReadTokens);
 
-  const mainCard = resolveRateCard(mainModel);
   const mainEquivalentCostUSD = mainCard ? priceTokens(allTokens, mainCard) : null;
 
   const costDeltaVsMainUSD = (totalCostUSD === null || mainEquivalentCostUSD === null)
@@ -116,6 +130,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const internalRecord = {
     eventId: randomUUID(),
     route,
+    subtype: ctx.taskSpec.subtype ?? null,
     client,
     agentType: runResult.agents?.implementer === 'complex' ? 'complex' : 'standard',
     toolMode: (runResult.agents?.implementerToolMode ?? 'full') as 'none' | 'readonly' | 'no-shell' | 'full',
@@ -147,6 +162,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
     taskMaxIdleMs: runResult.taskMaxIdleMs ?? 0,
     sandboxViolationCount: Math.min((runResult as any).sandboxViolationCount ?? 0, 100),
+    filesWrittenCount: (ctx.realFilesChanged ?? []).length,
     stages,
   };
 
@@ -296,7 +312,7 @@ function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
   return {
     name: 'annotating',
     ...base,
-    outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | undefined) ?? 'not_applicable',
+    outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed' | undefined) ?? 'not_applicable',
     skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other' | undefined) ?? 'other') : null,
   } as StageEntryType;
 }

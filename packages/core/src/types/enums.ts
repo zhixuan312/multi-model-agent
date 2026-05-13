@@ -54,7 +54,7 @@ export const ReviewVerdictEnum = z.enum([
   'approved', 'concerns', 'changes_required', 'annotated', 'error', 'skipped', 'not_applicable',
 ]);
 
-export const VerifyOutcomeEnum = z.enum(['passed', 'failed', 'skipped', 'not_applicable']);
+export const VerifyOutcomeEnum = z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']);
 
 export const VerifySkipReasonEnum = z.enum([
   'no_command', 'dirty_worktree', 'not_applicable', 'other',

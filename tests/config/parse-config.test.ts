@@ -176,4 +176,18 @@ describe('parseConfig', () => {
     expect(result.research.fetch.maxRedirects).toBe(3);
     expect(result.research.builtinAdapters.arxiv).toBe(true);
   });
+
+  it('accepts the new progress-watchdog defaults', () => {
+    const parsed = parseConfig({
+      agents: { standard: { type: 'codex', model: 'gpt-5.4' }, complex: minimalAgentConfig },
+      defaults: {
+        progressWatchdogEnabled: true,
+        thrashTurns: 25,
+        thrashWallClockMs: 1_200_000,
+        thrashSoftTurns: 10,
+      },
+    });
+    expect(parsed.defaults?.progressWatchdogEnabled).toBe(true);
+    expect(parsed.defaults?.thrashTurns).toBe(25);
+  });
 });
