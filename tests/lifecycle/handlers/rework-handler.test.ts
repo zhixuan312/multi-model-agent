@@ -37,12 +37,9 @@ function makeState(send: ReturnType<typeof vi.fn>, openSessionSpy: ReturnType<ty
     getSession: vi.fn().mockReturnValue(session),
     config: {
       defaults: {
-        progressWatchdog: {
-          enabled: false,
-          thrashTurns: 20,
-          thrashWallClockMs: 300_000,
-          thrashSoftWallClockMs: 150_000,
-        },
+        progressWatchdogEnabled: false,
+        thrashTurns: 20,
+        thrashWallClockMs: 300_000,
       },
     },
     taskIndex: 0,
