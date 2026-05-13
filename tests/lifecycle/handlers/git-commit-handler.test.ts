@@ -126,4 +126,41 @@ describe('gitCommitHandler (v4.4.x)', () => {
     expect(state.lastRunResult.commitMessage).toBe('fix(parser): handle empty input');
     expect(send).toHaveBeenCalledTimes(1);
   });
+
+  it('commits when worker self-report filesChanged is empty but git diff is non-empty', async () => {
+    // Setup: modify a file so git diff is non-empty, but report empty filesChanged
+    writeFileSync(join(cwd, 'd.txt'), 'd');
+    execSync('git add . && git commit -qm "pre-task commit"', { cwd });
+    // Capture pre-task state
+    const preSha = execSync('git rev-parse HEAD', { cwd }).toString().trim();
+    const lsResult = execSync('git ls-files --others --exclude-standard', { cwd }).toString().trim();
+    const preUntracked = new Set(
+      lsResult.split('\n').filter((l) => l.length > 0).map((l) => join(cwd, l))
+    );
+    // Now make a change — git will see it, but worker reported nothing
+    writeFileSync(join(cwd, 'd.txt'), 'modified');
+    const send = vi.fn().mockResolvedValue({
+      output: 'fix: update d',
+      usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
+      filesRead: [], filesWritten: [], toolCallsByName: {},
+      turns: 1, durationMs: 0, costUSD: null, terminationReason: 'ok',
+    });
+    const state: any = {
+      cwd,
+      lastRunResult: {
+        summary: 'made a fix',
+        filesChanged: [], // worker reported nothing — this is what we need to fix
+        validationsRun: [],
+      },
+      executionContext: { getSession: () => ({ send, close: vi.fn() }) },
+      preTaskHeadSha: preSha,
+      preTaskUntrackedFiles: preUntracked,
+    };
+    await gitCommitHandler(state);
+    // Pre-fix: would have skipped with commitSkipReason: 'no_diff'
+    // Post-fix: should land because real diff shows d.txt
+    expect(state.lastRunResult.commitSha).toMatch(/^[0-9a-f]+/);
+    expect(state.lastRunResult.commitSkipReason).toBeNull();
+    expect(state.lastRunResult.committed).toBe(true);
+  });
 });
