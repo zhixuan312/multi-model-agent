@@ -5,6 +5,34 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.0] - 2026-05-13
+
+Worker-reliability release. Two sub-projects close the largest classes of execute-plan failure seen in production: (A) **commit from git diff, not worker self-report** — eliminates the entire "files written but `filesChanged: []` so commit skipped" failure mode; and (C) **progress-watchdog with three signals** — bounds non-progressing work via wall-clock + turn-count + scope-violation detection so a thrashing worker can't burn the full budget producing nothing. Plus three carry-over fixes for telemetry envelope correctness.
+
+### Added
+
+- **`getRealFilesChanged(state) → {files, source}` (core, sub-project A).** New `packages/core/src/lifecycle/real-diff.ts` derives the canonical written-files list from `git diff --name-only <preTaskHeadSha>` plus filtered untracked files (`git ls-files --others --exclude-standard` minus `state.preTaskUntrackedFiles` snapshot). Returns one of three `source` values: `'git_diff'` (authoritative), `'self_report'` (non-git cwd — falls back to the worker's `filesChanged` for count display only, never commits), or `'git_error'` (git failed mid-task — empty files, no commit). Replaces three read-sites in `git-commit-handler.ts` plus the `filesWrittenCount` source in the telemetry event-builder. Eliminates the "worker wrote files but self-reported `filesChanged: []` so the commit gate skipped" failure mode.
+- **`preTaskUntrackedFiles` snapshot at task entry (core, sub-project A).** `task-executor.ts` captures both `preTaskHeadSha` AND the set of pre-task untracked files. Without the snapshot, a tracked file the worker creates would look identical (in `git ls-files --others`) to a file that existed untracked before the task — the snapshot makes "new during this task" deterministic.
+- **`scope-match.ts` helpers (core, sub-project C).** `normalizeScopeEntry` classifies brief-declared scope entries as directory or file (trailing slash OR no extension → directory; otherwise file). `isInScope` matches paths against the normalized scope with trailing-slash boundary checking so `src/auth/` does not match `src/authenticate.ts`.
+- **Progress-watchdog with three signals (core, sub-project C).** New `packages/core/src/bounded-execution/progress-watchdog.ts` mirrors the stall-watchdog shape: `startProgressWatchdog(ctx) → disposer` arms a setInterval poller (5–30s) that runs `git diff --name-only preSha` and fires `controller.abort()` when `wallClockMs > thrashWallClockMs` AND diff is empty (signal 1: wall-clock thrash). After `session.send` returns, `recordPostHocSignals` checks turn-count thrash (signal 2: `turnsUsed > thrashTurns` AND diff empty) and scope violations (signal 3: any file in the real diff outside declared scope). Skip gates: `!config.enabled`, `toolCategory !== 'artifact_producing'`, missing `preTaskHeadSha` / `preTaskUntrackedFiles`. Wired around `delegateWithEscalation()` in `task-runner.ts` and around `session.send()` in `rework-handler.ts`.
+- **Four `defaults.*` config fields (core, sub-project C).** `progressWatchdogEnabled` (default `true`), `thrashTurns` (default `25`), `thrashWallClockMs` (default `1_200_000` = 20 min), `thrashSoftTurns` (default `10`). All optional; existing configs continue to load unchanged.
+- **Seven new observability events (core, sub-project A + C).** `real_diff_resolved`, `real_diff_self_report_fallback`, `real_diff_git_error`, `progress_watchdog_armed`, `progress_watchdog_skipped_non_git`, `progress_watchdog_skipped_disabled`, `progress_watchdog_warn`, `progress_watchdog_fired_thrash`, `progress_watchdog_scope_violation`, `progress_watchdog_disarmed`. Registered in `observability-events.ts`.
+- **`LifecycleState` watchdog fields (core).** `preTaskUntrackedFiles: Set<string>`, `preStopReason`, `thrashingDetected`, `scopeViolations[]`. Optional — only populated when the watchdog fires.
+- **Per-stage `mainEquivalentCostUSD` (core).** Each entry in `stageStats` now carries `mainEquivalentCostUSD` alongside `costUSD`. The frontend Lite page slices per-model savings without re-running the rate-card math; backend stays a pure aggregator. Existing `costSummary.mainEquivalentCostUSD` (task total) is unchanged.
+
+### Fixed
+
+- **`git-commit-handler` reads `filesChanged` from git, not the worker (core, sub-project A).** Pre-fix: the handler trusted the worker's `WorkerOutput.filesChanged` self-report; when the worker self-reported `[]` (false-negative or the calibration bug already fixed in 4.4.0) the commit gate noticed no files and silently skipped. Workers in production observed writing files and then claiming `filesChanged: []` in their JSON. Now the commit handler reads via `getRealFilesChanged(state)`: if `source === 'git_diff'` and files is non-empty, commit; if `source === 'self_report'` (non-git cwd), commit gate still skips but the count flows to telemetry for visibility; if `source === 'git_error'`, treat as empty (refuse to commit on degraded git state). Three read-sites in `git-commit-handler.ts` migrated.
+- **`filesWrittenCount` in telemetry sources from real diff (core, sub-project A).** `BuildContext.realFilesChanged` is now the wire source for `filesWrittenCount`; previously the count came from the same self-report the commit handler distrusted. `recordTaskCompletedHandler` became async to call `getRealFilesChanged` before recorder dispatch.
+- **`subtype` field reaches telemetry on read-only routes (core).** Pre-fix, the 4.4.0 `subtype` field landed on the HTTP envelope but did not flow into the wire builder; `audit:plan`, `debug:isolated_test`, etc. all appeared in telemetry as the base route name. Fixed by threading `subtype` through `buildTaskCompletedEvent`.
+- **Annotating stage emits to `stageStats` (core).** The 4.4.0 lifecycle collapse marked `annotating` as a pure-transform stage that doesn't call `mergeStageStats` — but the wire builder still expected the entry. Now the annotating stage emits a deterministic `entered: true, costUSD: 0, durationMs: <small>` entry so per-stage dashboards stop showing a gap.
+- **Dropped dead `reviewPolicy: 'quality_only'` on read-only routes (core).** Read-only routes (`audit`, `review`, `debug`, `investigate`, `explore`) don't run a reviewer pass at all; the `quality_only` policy was set but never observed downstream. Removed the dead assignment.
+
+### Changed
+
+- **`rework-handler` and `task-runner` wrap session calls with the watchdog (core, sub-project C).** Both call sites use the same arm/dispose/post-hoc pattern. Disposer is `finally`-scoped so the timer is always cleared even when `session.send` throws. Disabled in tests via `progressWatchdogEnabled: false`.
+- **`lifecycle-context.recordTaskCompleted` signature gains `realFilesChanged: string[]` (core).** The terminal handler computes the canonical list once and passes it through to the recorder; downstream consumers (recorder, builder) read from a single source.
+
 ## [4.4.0] - 2026-05-12
 
 Architectural release: session-based provider boundary replaces the 1,559-line runner-shell chain, lifecycle collapses to a single five-stage plan, and the read-only routes consolidate behind a unified `subtype` field. Plus three correctness fixes that materially change cost telemetry and a return to required `X-MMA-Main-Model` after auto-detect proved unreliable.
@@ -133,7 +161,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...HEAD
+[4.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...v4.4.0
 [4.3.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...v4.3.1
 [4.3.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.2.2...v4.3.0
