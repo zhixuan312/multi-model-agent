@@ -13,6 +13,7 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
 import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
+import type { Session } from '../../types/run-result.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
 import { buildWarmFollowupMessage } from '../warm-followup.js';
@@ -81,14 +82,14 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     disposeWd = startProgressWatchdog({
       state,
       controller: wdController,
-      emit: (event) => ctx.bus?.emit(event as unknown),
+      emit: (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
       config: wdConfig,
       taskIndex: ctx.taskIndex,
       batchId: ctx.batchId,
       state2: wdState2,
     });
   }
-  let turn: Awaited<ReturnType<typeof session.send>> | undefined;
+  let turn: Awaited<ReturnType<Session['send']>> | undefined;
   try {
     const session = ctx.getSession(reworkTier);
     turn = await session.send(fullPrompt, { stageLabel: HUMAN_LABEL.rework });
@@ -105,7 +106,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
       state,
       (turn as { turns?: number }).turns ?? 0,
       wdConfig,
-      (event) => ctx.bus?.emit(event as unknown),
+      (event) => { ctx.bus?.emit(event as Parameters<typeof ctx.bus.emit>[0]); },
       ctx.taskIndex,
       ctx.batchId,
     );
