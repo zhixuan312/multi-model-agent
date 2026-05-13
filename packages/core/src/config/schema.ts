@@ -210,6 +210,10 @@ const defaultsSchema = z.object({
   // in the resolver chain. Headers + per-client auto-detection take
   // precedence; this is the explicit operator override / last resort.
   mainModel: z.string().min(1).optional(),
+  progressWatchdogEnabled: z.boolean().optional(),
+  thrashTurns: z.number().int().positive().optional(),
+  thrashWallClockMs: z.number().int().positive().optional(),
+  thrashSoftTurns: z.number().int().positive().optional(),
 }).default(() => ({
   timeoutMs: DEFAULT_TASK_TIMEOUT_MS,
   stallTimeoutMs: DEFAULT_STALL_TIMEOUT_MS,
