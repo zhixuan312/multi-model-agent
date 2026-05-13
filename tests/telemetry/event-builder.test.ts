@@ -41,6 +41,18 @@ describe('event-builder tier vocabulary', () => {
     const stage = event.stages.find(s => s.name === 'implementing')!;
     expect(stage.tier).toBe('standard');
   });
+
+  it('emits subtype from taskSpec when present', () => {
+    const rr = makeFixtureRunResult({});
+    const event = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [], subtype: 'plan' },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    } as any);
+    expect(event.subtype).toBe('plan');
+  });
 });
 
 describe('event-builder v4: tierUsage and parent equivalent', () => {

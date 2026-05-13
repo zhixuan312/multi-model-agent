@@ -7,6 +7,7 @@
 // nulls on the other side so the orchestrator parses one shape.
 
 import type { LifecycleState } from '../stage-plan-types.js';
+import { mergeStageStats } from '../merge-stage-stats.js';
 import {
   parseSourcesUsed,
   type ResearchSourcesUsedEntry,
@@ -34,6 +35,7 @@ export interface StructuredReport {
 }
 
 export async function annotator(state: LifecycleState): Promise<void> {
+  const t0 = Date.now();
   const last = ((state.lastRunResult as Record<string, unknown> | undefined) ?? {});
   const route = (state as { route?: string }).route;
   const isRead = !!route && READ_ROUTES.has(route);
@@ -64,4 +66,25 @@ export async function annotator(state: LifecycleState): Promise<void> {
   }
 
   (state as { structuredReport?: unknown }).structuredReport = report;
+
+  mergeStageStats(state, 'annotating', {
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedNonReadTokens: 0,
+    turnCount: 0,
+    toolCallCount: 0,
+    costUSD: 0,
+    durationMs: Date.now() - t0,
+    filesReadCount: 0,
+    filesWrittenCount: 0,
+  }, { tier: null, model: null });
+
+  const annotatingStats = (state.lastRunResult as { stageStats?: { annotating?: { outcome?: string; maxIdleMs?: number | null; totalIdleMs?: number | null } } } | undefined)
+    ?.stageStats?.annotating;
+  if (annotatingStats) {
+    annotatingStats.outcome = 'transformed';
+    annotatingStats.maxIdleMs = 0;
+    annotatingStats.totalIdleMs = 0;
+  }
 }

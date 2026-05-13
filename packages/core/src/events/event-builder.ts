@@ -23,7 +23,7 @@ import {
 
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
-  taskSpec: { filePaths?: string[] };
+  taskSpec: { filePaths?: string[]; subtype?: string };
   runResult: RunResult;
   client: string;
   mainModel: string | null;
@@ -129,6 +129,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
   const internalRecord = {
     eventId: randomUUID(),
     route,
+    subtype: ctx.taskSpec.subtype ?? null,
     client,
     agentType: runResult.agents?.implementer === 'complex' ? 'complex' : 'standard',
     toolMode: (runResult.agents?.implementerToolMode ?? 'full') as 'none' | 'readonly' | 'no-shell' | 'full',
@@ -309,7 +310,7 @@ function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
   return {
     name: 'annotating',
     ...base,
-    outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | undefined) ?? 'not_applicable',
+    outcome: (ss?.outcome as 'passed' | 'failed' | 'skipped' | 'not_applicable' | 'transformed' | undefined) ?? 'not_applicable',
     skipReason: ss?.outcome === 'skipped' ? ((ss?.skipReason as 'no_command' | 'dirty_worktree' | 'not_applicable' | 'other' | undefined) ?? 'other') : null,
   } as StageEntryType;
 }

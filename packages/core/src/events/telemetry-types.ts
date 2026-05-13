@@ -109,7 +109,7 @@ export const ReworkStageEntrySchema = StageEntryBase.extend({
 
 export const AnnotatingStageEntrySchema = StageEntryBase.extend({
   name: z.literal('annotating'),
-  outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable']),
+  outcome: z.enum(['passed', 'failed', 'skipped', 'not_applicable', 'transformed']),
   skipReason: z.enum(['no_command', 'dirty_worktree', 'not_applicable', 'other']).nullable(),
 }).strict();
 
@@ -137,6 +137,7 @@ export const TaskCompletedEventSchema = z.object({
   // Identity
   eventId: z.string().uuid(),
   route: z.enum(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'retry', 'investigate', 'research', 'register-context-block']),
+  subtype: z.string().min(1).max(64).nullable().optional(),
   client: z.string().regex(STRICT_ID_REGEX),
 
   // Configuration
