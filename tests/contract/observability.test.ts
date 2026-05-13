@@ -78,11 +78,14 @@ describe('observability contract — exhaustive', () => {
 });
 
 describe('golden does not drift', () => {
-  it('manifest covers all 41 events', () => {
-    // 26 base + 9 parallel-criteria/stall + 2 angle cap + 2 warmer cap + 2 annotator cap:
-    //   criteria_annotator_soft_warning (5-min checkpoint)
-    //   criteria_annotator_hard_cap     (10-min force-abort)
-    expect(manifest.events).toHaveLength(41);
+  it('manifest covers all 48 events', () => {
+    // 26 base + 9 parallel-criteria/stall + 2 angle cap + 2 warmer cap + 2 annotator cap
+    // + 7 progress-watchdog events:
+    //   progress_watchdog_armed, progress_watchdog_skipped_disabled,
+    //   progress_watchdog_skipped_non_git, progress_watchdog_warn,
+    //   progress_watchdog_fired_thrash, progress_watchdog_disarmed,
+    //   progress_watchdog_scope_violation
+    expect(manifest.events).toHaveLength(48);
   });
 
   it('every event has a unique name', () => {
