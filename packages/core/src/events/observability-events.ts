@@ -177,6 +177,135 @@ export const BatchFailedEvent = BatchBase.extend({
   errorMessage: z.string(),
 }).strict();
 
+// === Worker-diagnostics events (7) ===
+
+export const ReadinessRejectedEvent = TaskBase.extend({
+  event: z.literal('readiness_rejected'),
+  missing_pillars: z.array(z.enum(['scope', 'inputs', 'done_condition', 'output_contract'])),
+  brief_quality_warnings: z.array(z.string()),
+  brief_chars: z.number().int().min(0),
+  brief_preview: z.string().max(1024),
+}).strict();
+
+const FallbackFiredItemSchema = z.object({
+  loop: z.enum(['quality', 'spec']),
+  attempt: z.number().int().min(0),
+  role: z.string(),
+  reason: z.string(),
+  triggering_status: z.string().optional(),
+});
+
+const EscalationFiredItemSchema = z.object({
+  loop: z.enum(['quality', 'spec']),
+  attempt: z.number().int().min(0),
+  from_tier: z.string(),
+  to_tier: z.string(),
+});
+
+export const TaskTerminationEvent = TaskBase.extend({
+  event: z.literal('task_termination'),
+  cause: z.string(),
+  terminal_status: z.enum(['ok', 'incomplete', 'timeout', 'error', 'cost_exceeded', 'brief_too_vague', 'unavailable']),
+  turns: z.number().int().min(0),
+  duration_ms: z.number().int().min(0),
+  supervision_state: z.object({
+    degenerateRetries: z.number().int().min(0),
+    stallTurnCounter: z.number().int().min(0),
+    supervisionExhausted: z.boolean(),
+  }),
+  stage_timeline: z.array(z.object({
+    stage: z.string(),
+    duration_ms: z.number().int().min(0),
+    turns: z.number().int().min(0).optional(),
+    verdict: z.string().optional(),
+    entry_count: z.number().int().min(0),
+  })),
+  stage_transitions: z.array(z.object({
+    from: z.string(), to: z.string(), ts: z.string(),
+  })),
+  last_turns: z.array(z.object({
+    turn: z.number().int().min(0),
+    tools: z.array(z.string()),
+    text_chars: z.number().int().min(0),
+    text_preview: z.string().max(200),
+  })).max(3),
+  loop_signals_emitted: z.array(z.number().int().min(0)),
+  reviewer_error_count: z.number().int().min(0),
+  review_loop_abort: z.object({
+    loop: z.enum(['quality', 'spec']),
+    attempt_index: z.number().int().min(0),
+    max_attempts: z.number().int().min(0),
+    remaining_cost_usd: z.number().min(0).optional(),
+    remaining_time_ms: z.number().int().min(0).optional(),
+  }).optional(),
+  tiers_unavailable: z.object({
+    loop: z.enum(['quality', 'spec', 'implementer']),
+    role: z.string(),
+    attempted_tiers: z.array(z.string()),
+    forbidden_identities: z.array(z.string()).optional(),
+    forbidden_models: z.array(z.string()).optional(),
+  }).optional(),
+  worker_transport_error: z.object({
+    kind: z.enum(['api_error', 'network_error', 'timeout', 'api_aborted']),
+    http_status: z.number().int().optional(),
+    retry_count: z.number().int().min(0).optional(),
+    message_preview: z.string(),
+  }).optional(),
+  fallbacks_fired: z.array(FallbackFiredItemSchema).optional(),
+  escalations_fired: z.array(EscalationFiredItemSchema).optional(),
+}).strict();
+
+export const SupervisionDecisionEvent = TaskBase.extend({
+  event: z.literal('supervision_decision'),
+  turn: z.number().int().min(0),
+  counter: z.enum(['degenerateRetries', 'stallTurnCounter', 'first_turn']),
+  before: z.number().int().min(0),
+  after: z.number().int().min(0),
+  trigger: z.string(),
+  prev_text_preview: z.string().max(200),
+  new_text_preview: z.string().max(200),
+}).strict();
+
+export const LoopSignalEvent = TaskBase.extend({
+  event: z.literal('loop_signal'),
+  turn: z.number().int().min(0),
+  matched_turns: z.array(z.number().int().min(0)).min(1),
+  hash: z.string(),
+  tools_signature: z.string(),
+}).strict();
+
+export const ToolResultEvent = TaskBase.extend({
+  event: z.literal('tool_result'),
+  tool: z.string(),
+  turn: z.number().int().min(0),
+  result_bytes: z.number().int().min(0),
+  preview_head: z.string().max(200),
+  preview_tail: z.string().max(200),
+  is_error: z.boolean(),
+}).strict();
+
+export const ReviewerErrorDetailEvent = TaskBase.extend({
+  event: z.literal('reviewer_error_detail'),
+  loop: z.enum(['quality', 'spec']),
+  attempt: z.number().int().min(0),
+  parse_failure_mode: z.string(),
+  raw_output_preview: z.string().max(2048),
+  raw_output_bytes: z.number().int().min(0),
+  reviewer_turns: z.number().int().min(0),
+  reviewer_tool_calls: z.number().int().min(0),
+  errorReason: z.string(),
+}).strict();
+
+export const BatchDispatchSummaryEvent = BatchBase.extend({
+  event: z.literal('batch_dispatch_summary'),
+  tool: z.string(),
+  task_count: z.number().int().positive(),
+  dispatch_lag_ms: z.number().int().min(0),
+  inter_task_gap_ms: z.array(z.number().int().min(0)),
+  total_idle_ms: z.number().int().min(0),
+  parallelism_observed: z.number().int().positive(),
+}).strict();
+
 // Per-stage stats embedded in TaskCompletedLocalEvent.stages.
 // Mirrors core/src/types.ts RawStageStats variants. Local schema is
 // strict; cloud TaskCompletedCloudEvent.stages stays z.record(...) and
@@ -311,6 +440,14 @@ export const Event = z.discriminatedUnion('event', [
   BatchCompletedEvent,
   BatchFailedEvent,
   TaskCompletedLocalEvent,
+  // Worker diagnostics
+  ReadinessRejectedEvent,
+  ReviewerErrorDetailEvent,
+  TaskTerminationEvent,
+  SupervisionDecisionEvent,
+  LoopSignalEvent,
+  ToolResultEvent,
+  BatchDispatchSummaryEvent,
   // Runner internals
   WorkerStartEvent,
   TurnStartEvent,
@@ -358,6 +495,14 @@ export const EventSchemas: Record<string, z.ZodType> = {
   task_completed:             TaskCompletedLocalEvent,
   batch_completed:            BatchCompletedEvent,
   batch_failed:               BatchFailedEvent,
+  // Worker diagnostics (v4.0)
+  readiness_rejected:        ReadinessRejectedEvent,
+  reviewer_error_detail:      ReviewerErrorDetailEvent,
+  task_termination:          TaskTerminationEvent,
+  supervision_decision:       SupervisionDecisionEvent,
+  loop_signal:               LoopSignalEvent,
+  tool_result:               ToolResultEvent,
+  batch_dispatch_summary:     BatchDispatchSummaryEvent,
   // Runner internals
   worker_start:    WorkerStartEvent,
   turn_start:      TurnStartEvent,
