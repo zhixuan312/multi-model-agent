@@ -3,13 +3,14 @@ import { reworkHandler } from '../../../packages/core/src/lifecycle/handlers/rew
 import { WARM_FOLLOWUP_PREAMBLE } from '../../../packages/core/src/lifecycle/warm-followup.js';
 import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 
-function fakeTurn(output: string): TurnResult {
+function fakeTurn(output: string, extra?: Partial<TurnResult>): TurnResult {
   return {
     output,
     usage: { inputTokens: 10, outputTokens: 10, cachedReadTokens: 0, cachedNonReadTokens: 0 },
     filesRead: [], filesWritten: [], toolCallsByName: {},
     turns: 1, durationMs: 0, costUSD: null,
     terminationReason: 'ok',
+    ...extra,
   } as unknown as TurnResult;
 }
 
@@ -34,6 +35,20 @@ function makeState(send: ReturnType<typeof vi.fn>, openSessionSpy: ReturnType<ty
       complex: { config: {} },
     },
     getSession: vi.fn().mockReturnValue(session),
+    config: {
+      defaults: {
+        progressWatchdog: {
+          enabled: false,
+          thrashTurns: 20,
+          thrashWallClockMs: 300_000,
+          thrashSoftWallClockMs: 150_000,
+        },
+      },
+    },
+    taskIndex: 0,
+    batchId: undefined,
+    bus: { emit: vi.fn() },
+    stall: { controller: new AbortController() },
   };
   return {
     ctx,
@@ -44,6 +59,10 @@ function makeState(send: ReturnType<typeof vi.fn>, openSessionSpy: ReturnType<ty
       reviewVerdict: 'changes_required',
       reviewFindings: [{ source: 'quality', text: 'concern_one_sentinel_88' }],
       diffTracker: { cumulativeDiff: async () => 'DIFF_29348' },
+      toolCategory: 'artifact_producing',
+      cwd: '/Users/zhangzhixuan/Documents/code/mma-parent/multi-model-agent',
+      preTaskHeadSha: 'a'.repeat(40),
+      preTaskUntrackedFiles: new Set<string>(),
     } as any,
   };
 }
@@ -104,5 +123,39 @@ describe('reworkHandler — warm-followup contract', () => {
     // replaceLastRunResultPreservingTrackers merge in the rework handler.
     const last = state.lastRunResult as { stageStats?: Record<string, { costUSD?: number | null }> };
     expect(last.stageStats?.['rework']?.costUSD).toBeCloseTo(0.1234, 6);
+  });
+});
+
+// Structural test: the rework handler must call startProgressWatchdog +
+// recordPostHocSignals around its session.send. Asserting the watchdog
+// signals end-to-end requires mocking node:child_process (git), which is
+// covered by the bounded-execution/progress-watchdog unit tests. Here we
+// just check the integration disposes cleanly without breaking the existing
+// rework flow (passes when reworkHandler still wires its session correctly).
+describe('reworkHandler — progress watchdog wiring (smoke)', () => {
+  it('runs to completion with watchdog wired and reviewVerdict approved-by-default', async () => {
+    const send = vi.fn().mockResolvedValueOnce(fakeTurn(REWORK_WORKER_OUTPUT, { turns: 5 }));
+    const ctx: any = {
+      assignedTier: 'standard',
+      providers: { standard: { config: {} }, complex: { config: {} } },
+      getSession: vi.fn().mockReturnValue({ send, close: vi.fn() }),
+      config: { defaults: { progressWatchdogEnabled: false } }, // bypass the timer
+      taskIndex: 0,
+      bus: { emit: vi.fn() },
+      stall: { controller: new AbortController() },
+    };
+    const state: any = {
+      executionContext: ctx,
+      task: { prompt: 'BRIEF', planContext: 'PLAN' },
+      lastRunResult: { output: 'IMPL_OUTPUT' },
+      reviewVerdict: 'changes_required',
+      reviewFindings: [{ source: 'quality', text: 'concern' }],
+      diffTracker: { cumulativeDiff: async () => 'DIFF' },
+      toolCategory: 'artifact_producing',
+    };
+    await reworkHandler(state);
+    expect(send).toHaveBeenCalled();
+    // Existing rework flow still produces a result; the new wiring didn't break it.
+    expect(state.reworkError).toBeUndefined();
   });
 });
