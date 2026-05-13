@@ -8,3 +8,4 @@ export * from './file-artifact-check.js';
 export * from './error-classifier.js';
 export * from './safety-max-turns.js';
 export * from './stall-watchdog.js';
+export * from './progress-watchdog.js';
