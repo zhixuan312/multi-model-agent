@@ -188,6 +188,19 @@ export interface LifecycleState {
   // task-executor, derive-terminal-status). Typed as `unknown` until the
   // owning step (Step 1 / Step 5 / Step 6) firms them up.
   cwd?: string;
+
+  // Sub-project A: pre-task git snapshot captured at task-executor entry.
+  // Undefined when cwd is not a git work-tree. Both populated together or both undefined.
+  preTaskHeadSha?: string;
+  preTaskUntrackedFiles?: Set<string>;
+
+  // Sub-project C: progress-watchdog mutations. Set by the watchdog when its
+  // signals trip. Read by the next iteration of the turn loop (preStopReason)
+  // and by sub-project B's annotator (thrashingDetected, scopeViolations).
+  preStopReason?: 'thrashing' | 'cost' | 'stall' | 'cancelled';
+  thrashingDetected?: boolean;
+  scopeViolations?: string[];
+
   runInput?: unknown;
   systemPrompt?: string;
   userMessage?: string;
