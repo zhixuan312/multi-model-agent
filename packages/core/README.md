@@ -228,11 +228,13 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.5.1
+## What's new in 4.5.2
 
-- **`codex-cli-session` spawns via `cross-spawn`.** Node's native `child_process.spawn` cannot resolve `.cmd` / `.bat` / `.ps1` shims on Windows without `shell: true`, but `shell: true` would mangle the `-c model_providers.X={…}` argument block on `cmd.exe`. `cross-spawn` handles both shim resolution and arg escaping; POSIX passthrough so Linux/macOS users see zero behavior change.
-- **`mma-audit` plan-audit criteria: 9 → 12 perspectives.** Plan subtype reorganized into EXTERNAL CODEBASE COHERENCE (1–8), INTRA-PLAN STRUCTURE (9 TASK GRANULARITY + new 11 PLACEHOLDER LANGUAGE + new 12 PLAN SKELETON), and SPEC ALIGNMENT (new 10 SPEC COVERAGE). Perspective 10 reads the upstream spec from a registered context block; emits "No findings for this criterion." when no spec is in context so it stays opt-in without a schema change. Per-group evidence-rule, scope-rule, annotator-awareness, and severity-calibration blocks rewritten to match.
-- **`mma-audit` spec-audit criteria: 7 → 9.** Criterion 2 renamed `SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY` (flags multi-subsystem specs); new criterion 8 `PLACEHOLDER-SCAN`; new criterion 9 `DESIGN-DECOMPOSITION-PRESENT` (enforces brainstorming-skill mandate for architecture / components / data flow / error handling / testing strategy coverage).
+- **`projectFindings(rr)` helper in `events/event-builder.ts`.** Reads findings from the v4.4 surfaces — `structuredReport.findings[]` for read-only routes (per-finding severity) and `structuredReport.reviewConcerns[]` for reviewed-write routes (defaults to medium). Wire telemetry `concernCount`, `buildReviewStage.findingsBySeverity` / `concernCategories`, and `buildReworkStage.triggeringConcernCategories` all derive from the new projection. Replaces dead reads of `runResult.concerns` that produced `concernCount: 0` on every event since 4.4.0.
+- **Removed pre-v4.4 LLM-annotator (`AnnotatorEngine`, `AnnotatorOutputParser`, `AnnotatorPromptBuilder`).** 902-line net deletion. The v4.4 lifecycle's pure-transform `lifecycle/handlers/annotator.ts` replaced it; `.annotate()` was never called in production. The rubric templates (`templates/annotator-shared.ts` + `templates/annotator-{audit,debug,review,investigate}.ts`) stay — consumed by the live quality reviewer.
+- **Removed `RunResult.concerns`, `RunResult.annotatedFindings`, and `RunResult.parsedFindings`** — all unwritten in v4.4+. Headline templates (audit / review / debug) now use `parseNarrativeFindings(runResult.output)` as the canonical fallback when no structured report is emitted.
+- **Removed two more unreferenced legacy modules:** `reporting/annotate-completion-parser.ts` and `review/review-verdict-aggregator.ts`.
+- **BREAKING:** `AnnotatorEngine` and `AnnotatorRoute` no longer re-exported from `@zhixuan92/multi-model-agent-core`. They were dead in production — constructing them produced no observable effect on the run result.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

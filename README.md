@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.2",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -291,12 +291,13 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.1
+## What's new in 4.5.2
 
-Patch release. Two narrow fixes:
+Patch release. One telemetry-correctness fix and a large dead-code purge:
 
-- **Windows-compatible codex spawn.** `codex-cli-session` spawns through `cross-spawn` instead of Node's native `child_process.spawn`, which cannot resolve `.cmd` / `.bat` / `.ps1` shims (e.g. `codex.cmd`) without `shell: true`. `shell: true` would mangle the `-c model_providers.X={…}` argument block on `cmd.exe`, so we route through `cross-spawn` which handles both shim resolution and arg escaping. On POSIX it is a passthrough so Linux/macOS users see zero behavior change. Fixes the `spawn codex ENOENT` failure reported on Windows 4.5.0 daemons.
-- **`mma-audit` plan & spec criteria deepened for the brainstorm→plan flow.** Plan subtype expands from 9 to 12 perspectives grouped as EXTERNAL CODEBASE COHERENCE (1–8), INTRA-PLAN STRUCTURE (9 + new 11 PLACEHOLDER LANGUAGE + new 12 PLAN SKELETON), and SPEC ALIGNMENT (new 10 SPEC COVERAGE — reads the upstream spec from a registered context block to check every requirement maps to a task). Spec subtype expands from 7 to 9 criteria with placeholder-scan and design-decomposition-present additions, plus scope-explicitness extended to flag multi-subsystem specs that need decomposition. The spec ↔ plan boundary is now machine-checkable end-to-end. No schema or wire-shape changes.
+- **`concernCount` and `findingsBySeverity` now read from the v4.4 finding surfaces.** Every wire event since 4.4.0 silently emitted `concernCount: 0` and `findingsBySeverity: {0,0,0,0}` because the event-builder still projected from the pre-v4.4 `runResult.concerns` field that the v4.4 lifecycle stopped populating. Now derives from `structuredReport.findings[]` (read-only routes — per-finding severity) and `structuredReport.reviewConcerns[]` (reviewed-write routes — defaults to medium). Live-verified: an audit producing 21 real findings now emits `concernCount: 21` on the wire.
+- **Removed 902 lines of unreachable pre-v4.4 LLM-annotator machinery.** Deleted `AnnotatorEngine`, `AnnotatorOutputParser`, `AnnotatorPromptBuilder`, their factory + lifecycle plumbing, the `runResult.annotatedFindings` / `parsedFindings` fields, the headline-template fallback branches that read them, and two test files. The v4.4 lifecycle replaced this with a pure-transform handler that reads worker output directly; `.annotate()` was never called in production. The rubric templates the live quality reviewer still uses stay.
+- **BREAKING:** `AnnotatorEngine` and `AnnotatorRoute` removed from `@zhixuan92/multi-model-agent-core` public exports. They were dead in production — constructing them produced no observable effect. Ships as patch because no documented or working use existed.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 
