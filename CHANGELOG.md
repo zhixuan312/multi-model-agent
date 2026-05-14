@@ -5,6 +5,19 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.4] - 2026-05-14
+
+Patch release. Unbreaks telemetry uploads from 4.5.3 daemons — without this fix, the entire 4.5.3 telemetry pipeline is silently dropped at the backend wire boundary.
+
+### Fixed
+
+- **Synthetic review stage emits `costUSD: 0` and `mainEquivalentCostUSD: 0`, not `null` (core).** The 4.5.3 synthetic review stage represented "no LLM call backs this stage" by emitting `null` for cost fields. `task-completion-summary.ts:98` sums stage costs via `sumFinite`, which propagates `null` when any stage is null → top-level `totalCostUSD: null` on the wire. The backend's `UploadEventSchema.totalCostUSD: z.number().optional().default(0)` is non-nullable, so every 4.5.3 daemon upload failed Zod validation and the backend returned `400 {}`. The flusher's existing 400-handling path treats 400 as terminal (`return { status: '400' }` at `flusher.ts:265`) and the queue truncated the record without retry. Net effect: every 4.5.3 daemon's audit/review/debug/investigate event was silently discarded. Live-verified against the production warehouse: post-fix audit row `856074` lands with the daemon-emitted payload and `findings_high: 5` populated from the synthetic stage's `findingsBySeverity`. A synthetic stage represents "no LLM call happened" = 0 cost, not "unknown" — `null` is reserved for honest measurement failures (e.g. a real LLM call whose provider didn't return cost info).
+- **`mmagent telemetry status / dump-queue` now resolves the right config path (server).** `cli/index.ts:339` fell back to `os.homedir()` (`~/`) when no explicit `homeDir` was injected by tests. `consent.ts` joined `config.json` against that, looking at `~/config.json` instead of `~/.multi-model/config.json`. Result: `mmagent telemetry status` reported `disabled / source: default` even when the daemon-side resolution (which uses `path.join(os.homedir(), '.multi-model')` at `serve.ts:248`) correctly saw telemetry as enabled. Now matches the daemon path.
+
+### Added
+
+- **Flusher logs telemetry upload failures to stderr (server).** When `/v1/events` returns 400 or 413, the flusher now emits one line: `[mmagent] telemetry upload dropped: status=<code> records=<n> body=<first 200 chars>`. Previously the response status was acknowledged in-memory (record dropped) and the body was never read — every backend rejection was invisible from the daemon side. The 4.5.3 schema-drift bug took two version cycles to surface precisely because the failure was silent at the wire boundary. Now any future schema drift between the daemon's wire shape and the backend's `UploadEventSchema` will print once per flush cycle (5 min) until the queue drains.
+
 ## [4.5.3] - 2026-05-14
 
 Patch release. Fixes the warehouse `findings_critical / high / medium / low` columns landing as zero on audit / review / debug / investigate rows. No schema change — uses an existing v5 enum value (`verdict: 'annotated'`) on the existing v5 review-stage entry to carry the per-severity breakdown for read-only routes.
@@ -204,7 +217,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.4...HEAD
+[4.5.4]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...v4.5.4
 [4.5.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...v4.5.1

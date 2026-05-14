@@ -346,7 +346,7 @@ describe('event-builder finding projection (v4.4.x)', () => {
     expect(review!.verdict).toBe('annotated');
     expect(review!.findingsBySeverity).toEqual({ critical: 1, high: 2, medium: 1, low: 0 });
     expect(review!.durationMs).toBe(0);
-    expect(review!.costUSD).toBeNull();
+    expect(review!.costUSD).toBe(0);
   });
 
   it('does NOT synthesize a review stage when read-only-route has zero findings', () => {

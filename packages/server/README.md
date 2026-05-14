@@ -88,7 +88,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.4",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -287,9 +287,9 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.3
+## What's new in 4.5.4
 
-- **Per-severity warehouse columns now populate on read-only routes.** Audit / review / debug / investigate hardcode `reviewPolicy: 'none'` and don't run an LLM reviewer, so the backend's `findings_critical / high / medium / low` columns (extracted from `stages[?name=review].findingsBySeverity`) stayed zero even when the worker produced dozens of findings. The event-builder now synthesizes a zero-metric v5 review stage entry with `verdict: 'annotated'` for these routes, carrying `findingsBySeverity` derived from `structuredReport.findings`. No schema change — uses existing v5 review-stage fields and the existing `'annotated'` enum value designed for this case. Backend extractor (`transformer.ts:115`) flows the buckets without any backend code change.
+- **Telemetry uploads from 4.5.3 daemons were silently dropped.** The 4.5.3 synthetic review stage emitted `costUSD: null` for "no LLM call happened"; the lifecycle sum propagated it to top-level `totalCostUSD: null`, which the backend wire schema rejects (Zod parse failure → `400 {}`). The flusher's existing 400-handling discards the record without retry. Fix: synthetic stage emits `costUSD: 0` (= "no call", not "unknown"). Flusher now also logs upload failures to stderr so future schema drift surfaces immediately instead of taking two version cycles to notice.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

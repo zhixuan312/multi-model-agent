@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.3",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.4",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -291,11 +291,12 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.3
+## What's new in 4.5.4
 
-Patch release. Fixes the warehouse per-severity columns landing as zero on read-only routes:
+Patch release. Unbreaks telemetry uploads from 4.5.3 daemons — without this fix, the entire 4.5.3 telemetry pipeline is silently dropped at the backend wire boundary:
 
-- **Synthetic v5 review stage entry for read-only routes.** Audit / review / debug / investigate hardcode `reviewPolicy: 'none'`, so no LLM reviewer runs and no review stage entry landed on the wire — but the backend's per-severity warehouse columns extract from `stages[?name=review].findingsBySeverity`. With nothing in that path, `findings_high / critical / medium / low` stayed zero on every read-only-route row regardless of how many findings the worker produced. The event-builder now synthesizes a zero-metric review stage entry with the v5 `verdict: 'annotated'` enum value when the route is read-only and `structuredReport.findings` is non-empty. No schema mutation — uses existing v5 review-stage fields. Live-verified: a 19-finding audit (18 high / 1 medium) now flows `findings_high: 18, findings_medium: 1` into the warehouse through the existing backend extractor.
+- **Synthetic review stage emits `costUSD: 0`, not `null`.** The 4.5.3 synthetic stage's null cost propagated through `sumFinite` to `totalCostUSD: null`, which the backend wire schema rejects (Zod parse failure → `400 {}`). The flusher's existing 400-handling discards the record without retry, so every 4.5.3 audit/review/debug/investigate upload was silently dropped. A synthetic stage represents "no LLM call happened" = `0`, not "unknown".
+- **Flusher logs upload failures to stderr.** Previously the daemon was blind to backend rejections — that silence is why the 4.5.3 drift took two version cycles to surface. Now any 400/413 prints `[mmagent] telemetry upload dropped: status=<code> records=<n> body=<...>` once per flush cycle.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 

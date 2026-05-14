@@ -228,9 +228,9 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.5.3
+## What's new in 4.5.4
 
-- **`buildSyntheticReviewStage(findings)` in `events/event-builder.ts`.** For read-only routes (audit / review / debug / investigate) that hardcode `reviewPolicy: 'none'`, the event-builder synthesizes a v5 review stage entry with `verdict: 'annotated'` (an enum value designed for this case), `findingsBySeverity` + `concernCategories` derived from `projectFindings(runResult)`, and zero/null operational metrics. Stays within the v5 schema — no new fields, no version bump. Carries the per-severity breakdown to the existing `stages[?name=review].findingsBySeverity` warehouse column path so backend extractor (`transformer.ts:115`) flows the buckets without any backend change.
+- **`buildSyntheticReviewStage(findings)` emits `costUSD: 0`, not `null`.** The 4.5.3 implementation used `null` to mean "no LLM call backs this stage" — but `task-completion-summary.ts` sums stage costs via `sumFinite`, which propagates `null` to top-level `totalCostUSD: null`. The backend wire schema rejects that as a Zod parse failure, so every 4.5.3 daemon's read-only-route upload was 400'd and silently dropped. `null` is now reserved for honest measurement failures (e.g. real LLM call whose provider didn't return cost info); synthetic stages use `0` ("no call happened").
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

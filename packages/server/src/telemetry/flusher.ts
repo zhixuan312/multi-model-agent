@@ -262,8 +262,14 @@ export class Flusher {
 
       const status = response.status;
       if (status === 204) return { status: '204', retryAfterSeconds: null };
-      if (status === 400) return { status: '400', retryAfterSeconds: null };
-      if (status === 413) return { status: '413', retryAfterSeconds: null };
+      if (status === 400 || status === 413) {
+        let body = '';
+        try { body = (await response.text()).slice(0, 200); } catch { /* ignore */ }
+        process.stderr.write(
+          `[mmagent] telemetry upload dropped: status=${status} records=${group.records.length} body=${body}\n`,
+        );
+        return { status: status === 400 ? '400' : '413', retryAfterSeconds: null };
+      }
       if (status === 429) {
         const retryAfter = response.headers.get('Retry-After');
         const seconds = retryAfter ? parseInt(retryAfter, 10) : null;
