@@ -88,7 +88,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.1",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.2",...}
 ```
 
 For an always-on background install (survives reboots): [launchd / systemd templates](./scripts/README.md).
@@ -287,12 +287,11 @@ Full design rationale: [DIRECTION.md](https://github.com/zhixuan312/multi-model-
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.1
+## What's new in 4.5.2
 
-- **Windows codex spawn fix.** `codex-cli-session` routes through `cross-spawn` so Node can resolve `codex.cmd` / `.bat` / `.ps1` shims on Windows without falling back to `shell: true` (which would mangle the `-c model_providers.X={…}` argument block on `cmd.exe`). Linux/macOS is a no-op passthrough. Fixes `spawn codex ENOENT` on Windows 4.5.0 daemons.
-- **`mma-audit` plan subtype: 9 → 12 perspectives.** New SPEC COVERAGE (reads upstream spec from a registered context block), PLACEHOLDER LANGUAGE, and PLAN SKELETON perspectives. Grouped as EXTERNAL CODEBASE COHERENCE (1–8), INTRA-PLAN STRUCTURE (9, 11, 12), and SPEC ALIGNMENT (10).
-- **`mma-audit` spec subtype: 7 → 9 criteria.** New PLACEHOLDER-SCAN and DESIGN-DECOMPOSITION-PRESENT criteria; existing SCOPE-EXPLICITNESS extended to flag multi-subsystem specs needing decomposition.
-- **Recipe F (Spec-then-plan-then-execute) updated** in `mma-audit` SKILL.md — register the spec via `mma-context-blocks` between writing-plans and the plan-audit so perspective 10 fires. No schema or wire-shape changes.
+- **Telemetry concernCount fix.** Every wire event since 4.4.0 silently emitted `concernCount: 0` and `findingsBySeverity: {0,0,0,0}` because the event-builder projected from the pre-v4.4 `runResult.concerns` field that the v4.4 lifecycle stopped populating. Now derives from `structuredReport.findings[]` (read-only routes — per-finding severity) and `structuredReport.reviewConcerns[]` (reviewed-write routes — defaults to medium). Live-verified: a real audit producing 21 findings now emits `concernCount: 21` on the wire.
+- **Removed pre-v4.4 LLM-annotator machinery (902 LOC).** The dead `AnnotatorEngine`, its parser, its prompt builder, the factory, the lifecycle plumbing, and the `runResult.annotatedFindings` / `parsedFindings` fields are gone. The pure-transform `lifecycle/handlers/annotator.ts` (already the live path since v4.4) stays; rubric templates the quality reviewer consumes also stay.
+- **BREAKING:** `AnnotatorEngine` and `AnnotatorRoute` public re-exports dropped from `@zhixuan92/multi-model-agent-core`. They were never wired into the run result in v4.4+, so external consumers would have produced no observable effect.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 

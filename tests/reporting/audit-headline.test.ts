@@ -4,19 +4,25 @@ import { reviewHeadlineTemplate } from '../../packages/core/src/reporting/headli
 import type { RunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
-describe('audit headline composer (4.0.3+ Gap 2)', () => {
-  it('counts findings from runResult.annotatedFindings when report has none', () => {
-    // Pre-fix: composer only read report.findings. Worker emits narrative
-    // → reportSchema fails → fallback to parseStructuredReport (no
-    // findings field) → headline reported "0 findings" while annotator
-    // returned dozens. The fix is to also read runResult.annotatedFindings.
+describe('audit headline composer', () => {
+  it('counts findings from runResult.output (## Finding N: blocks) when report has none', () => {
+    // v4.5.2+: read-only-route headlines fall back to parseNarrativeFindings
+    // on runResult.output (no separate annotator pass anymore). The narrative
+    // is the canonical source when the worker emits `## Finding N:` blocks
+    // without a structured report.
     const runResult = {
-      annotatedFindings: [
-        { id: 'F1', claim: 'a', evidence: '', evidenceGrounded: true, annotatorConfidence: 90, severity: 'high' },
-        { id: 'F2', claim: 'b', evidence: '', evidenceGrounded: true, annotatorConfidence: 80, severity: 'medium' },
-        { id: 'F3', claim: 'c', evidence: '', evidenceGrounded: true, annotatorConfidence: 60, severity: 'low' },
-        { id: 'F4', claim: 'd', evidence: '', evidenceGrounded: true, annotatorConfidence: 95, severity: 'critical' },
-      ],
+      output: `## Finding 1: a
+- Severity: high
+
+## Finding 2: b
+- Severity: medium
+
+## Finding 3: c
+- Severity: low
+
+## Finding 4: d
+- Severity: critical
+`,
     } as unknown as RunResult;
     const task = { prompt: 'audit goal.md', filePaths: ['/project/goal.md'] } as unknown as TaskSpec;
 
@@ -28,18 +34,21 @@ describe('audit headline composer (4.0.3+ Gap 2)', () => {
       task,
     });
 
-    // Expect 4 findings, 2 high (high + critical aggregated per
-    // countHighOrCritical helper).
+    // 4 findings, 2 high (high + critical aggregated per countHighOrCritical).
     expect(headline).toBe('[ok] audit /project/goal.md: 4 findings (2 high)');
   });
 
   it('case-insensitive on severity (round-2 F10/F1)', () => {
     const runResult = {
-      annotatedFindings: [
-        { id: 'F1', claim: 'a', evidence: '', evidenceGrounded: true, annotatorConfidence: 90, severity: 'High' },
-        { id: 'F2', claim: 'b', evidence: '', evidenceGrounded: true, annotatorConfidence: 80, severity: 'CRITICAL' },
-        { id: 'F3', claim: 'c', evidence: '', evidenceGrounded: true, annotatorConfidence: 60, severity: 'medium' },
-      ],
+      output: `## Finding 1: a
+- Severity: High
+
+## Finding 2: b
+- Severity: CRITICAL
+
+## Finding 3: c
+- Severity: medium
+`,
     } as unknown as RunResult;
     const task = { prompt: '', filePaths: ['/x.md'] } as unknown as TaskSpec;
 
@@ -54,12 +63,14 @@ describe('audit headline composer (4.0.3+ Gap 2)', () => {
     expect(headline).toBe('[ok] audit /x.md: 3 findings (2 high)');
   });
 
-  it('prefers report.findings over annotatedFindings when both present', () => {
+  it('prefers report.findings over narrative when both present', () => {
     const runResult = {
-      annotatedFindings: [
-        { id: 'F1', claim: 'a', evidence: '', evidenceGrounded: true, annotatorConfidence: 90, severity: 'high' },
-        { id: 'F2', claim: 'b', evidence: '', evidenceGrounded: true, annotatorConfidence: 80, severity: 'high' },
-      ],
+      output: `## Finding 1: ignored-because-report-wins
+- Severity: high
+
+## Finding 2: also-ignored
+- Severity: high
+`,
     } as unknown as RunResult;
 
     const headline = auditHeadlineTemplate.compose({
@@ -83,19 +94,18 @@ describe('audit headline composer (4.0.3+ Gap 2)', () => {
       taskBrief: 'audit',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RunResult,
     });
 
     expect(headline).toBe('[ok] audit completed');
   });
 
-  // 4.0.3+ Gap 16: when annotator errors, fall back to parsing
-  // ## Finding N: blocks from the implementer's output. Validates the
-  // actual telemetry id 854913 case where annotator errored but the
-  // implementer produced 2 valid narrative findings.
-  it('falls back to parseNarrativeFindings when annotator errored (annotatedFindings empty)', () => {
+  // Narrative-parse fallback: when the worker emits `## Finding N:` blocks
+  // without a structured report (the common audit case), the headline is
+  // derived directly from runResult.output. Validates the actual telemetry
+  // id 854913 case where 2 valid narrative findings shipped.
+  it('falls back to parseNarrativeFindings when no structured report present', () => {
     const runResult = {
-      annotatedFindings: [],
       output: `## Finding 1: Regex chokes on internal periods
 - Severity: medium
 - Location: headline-text.ts:15
@@ -119,13 +129,15 @@ describe('audit headline composer (4.0.3+ Gap 2)', () => {
   });
 });
 
-describe('review headline composer (4.0.3+ Gap 2)', () => {
-  it('counts findings from runResult.annotatedFindings when report has none', () => {
+describe('review headline composer', () => {
+  it('counts findings from runResult.output (## Finding N: blocks) when report has none', () => {
     const runResult = {
-      annotatedFindings: [
-        { id: 'F1', claim: 'a', evidence: '', evidenceGrounded: true, annotatorConfidence: 90, severity: 'high' },
-        { id: 'F2', claim: 'b', evidence: '', evidenceGrounded: true, annotatorConfidence: 80, severity: 'medium' },
-      ],
+      output: `## Finding 1: a
+- Severity: high
+
+## Finding 2: b
+- Severity: medium
+`,
     } as unknown as RunResult;
     const task = { prompt: '', filePaths: ['/src/auth.ts'] } as unknown as TaskSpec;
 
@@ -153,7 +165,7 @@ describe('review headline composer (4.0.3+ Gap 2)', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { annotatedFindings: [], output: 'No correctness findings identified.' } as unknown as RunResult,
+      runResult: { output: 'No correctness findings identified.' } as unknown as RunResult,
       task,
     });
 
@@ -165,7 +177,7 @@ describe('review headline composer (4.0.3+ Gap 2)', () => {
       taskBrief: 'review',
       report: { filePath: '/from/report.ts', findings: [] },
       status: 'ok',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RunResult,
     });
 
     expect(headline).toBe('[ok] review /from/report.ts: 0 findings (0 blocking)');
@@ -179,7 +191,7 @@ describe('review headline composer (4.0.3+ Gap 2)', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RunResult,
     });
 
     expect(headline).toBe('[ok] review completed');
@@ -192,7 +204,7 @@ describe('review headline composer (4.0.3+ Gap 2)', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'error',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RunResult,
       task,
     });
 

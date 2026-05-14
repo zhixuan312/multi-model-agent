@@ -5,6 +5,26 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.2] - 2026-05-14
+
+Patch release. One telemetry-correctness fix and a large dead-code purge of the pre-v4.4 LLM-annotator machinery. The annotator removal includes dropping the `AnnotatorEngine` and `AnnotatorRoute` public re-exports from `@zhixuan92/multi-model-agent-core` (see BREAKING). No on-the-wire schema or HTTP envelope changes.
+
+### Fixed
+
+- **`concernCount` and `findingsBySeverity` now read from the v4.4 finding surfaces (core).** Pre-fix, `buildTaskCompletedEvent` projected `concernCount: Math.min(runResult.concerns?.length ?? 0, 150)` and bucketed `findingsBySeverity` off the same array. The v4.4 lifecycle collapse moved findings to `runResult.structuredReport.findings[]` (read-only routes, per-finding severity) and `runResult.structuredReport.reviewConcerns[]` (reviewed-write routes, text-only, defaults to medium per the existing wire policy) and stopped writing `runResult.concerns`. Every wire row since 4.4.0 therefore emitted `concernCount: 0`, `findingsBySeverity: {0,0,0,0}`, and `concernCategories: []` regardless of how many findings the worker / reviewer actually produced. New `projectFindings()` helper in `event-builder.ts` reads from the live v4.4 sources; `concernCount`, `buildReviewStage.findingsBySeverity` / `concernCategories`, and `buildReworkStage.triggeringConcernCategories` all derive from the new projection. Live-verified against a real audit on a planted file: pre-fix wire row would have shown `concernCount: 0` with 21 findings on `structuredReport.findings`. Pinned by five new regression tests in `tests/telemetry/event-builder.test.ts`.
+
+### Removed
+
+- **`RunResult.concerns` field (core).** Never written by the v4.4 lifecycle; the wire builder is now the only consumer and reads from the live surfaces.
+- **`RunResult.annotatedFindings` and `RunResult.parsedFindings` fields (core).** Always undefined in v4.4 runtime (the LLM-annotator that populated them is gone — see refactor entry below). Headline templates (audit / review / debug) now use `parseNarrativeFindings(runResult.output)` as the canonical fallback when no structured report is emitted.
+- **Pre-v4.4 LLM-annotator infrastructure (core).** Deleted `packages/core/src/review/annotator-engine.ts`, `annotator-output-parser.ts`, `annotator-prompt-builder.ts` (~615 lines). The v4.4 lifecycle collapse replaced the LLM-based annotator with the pure-transform handler at `lifecycle/handlers/annotator.ts` that reads worker output directly; `AnnotatorEngine.annotate()` was constructed and threaded as a lifecycle param but never called. Comparing the dead engine against the live `ReviewerEngine` shows it isn't in good shape for reuse — owns its own wall-clock guard / abort controller / bus emission (which in v4.4 belong at the handler layer), takes a `workerOutputs: Array<{criterion, narrative}>` shape designed for the deleted parallel-criteria-dispatcher, hard-codes per-route templates instead of constructor injection. If LLM-annotation is reintroduced, writing a fresh v4.4-style engine (~80–120 LOC, mirroring `ReviewerEngine`'s thin contract) is cheaper than untangling. The rubric templates (`annotator-shared.ts` + `annotator-{audit,debug,review,investigate}.ts`) stay — they provide the rubric content the live quality reviewer consumes.
+- **Two small unreferenced legacy modules (core).** `packages/core/src/reporting/annotate-completion-parser.ts` (only imported by its own test) and `packages/core/src/review/review-verdict-aggregator.ts` (only re-exported from the review barrel; no callers in src or tests).
+- **`AnnotatedFinding`, `AnnotatorVerdict`, and the duplicate `FindingSeverity` type in `review-types.ts` (core).** The live `FindingSeverity` lives at `reporting/severity.ts`.
+
+### BREAKING
+
+- **`AnnotatorEngine` and `AnnotatorRoute` removed from `@zhixuan92/multi-model-agent-core` public re-exports.** They were dead in production (`.annotate()` was never called by the v4.4 lifecycle); any external consumer that instantiated `new AnnotatorEngine()` would have constructed an orphan that produced no observable effect on the run result. Ships as a patch because no documented or working use existed.
+
 ## [4.5.1] - 2026-05-14
 
 Patch release. Two narrow fixes — Windows-compatible codex spawn and a deeper plan/spec audit criteria set that pins the canonical brainstorm→plan flow. No schema or wire-shape changes.
@@ -175,7 +195,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...HEAD
+[4.5.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...v4.4.0

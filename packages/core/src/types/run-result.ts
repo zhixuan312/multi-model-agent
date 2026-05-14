@@ -90,7 +90,6 @@ export interface RunResult {
   retryable?: boolean
   terminationReason?: TerminationReason | 'round_cap' | 'cost_ceiling' | 'time_ceiling' | 'all_tiers_unavailable'
   reviewRounds?: { spec: number; quality: number; metadata: number; cap: number }
-  concerns?: Array<{ source: 'review' | 'spec_review' | 'quality_review' | 'diff_review' | 'verification' | 'diff_truncated'; severity: 'critical' | 'low' | 'medium' | 'high'; message: string }>
   structuredError?: { code: 'validator_verify_command_failed' | 'validator_commit_metadata_invalid' | 'validator_commit_metadata_repair_modified_files' | 'validator_dirty_worktree' | 'review_diff_rejected' | 'runner_crash' | 'provider_rate_limited' | 'provider_api_error' | 'provider_transport_failure' | 'provider_timeout' | 'provider_api_aborted' | 'validator_silent_incomplete' | 'config_main_agent_pricing_unresolvable'; message: string; where?: string; step?: number; status?: VerifyStepStatus; attemptsUsed?: number; dirtyTreePreserved?: boolean }
   workerStatus?: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'review_loop_capped' | 'failed'
   specReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
@@ -130,12 +129,6 @@ export interface RunResult {
   qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   diffReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
-  annotatedFindings?: import('../review/review-types.js').AnnotatedFinding[]
-  /** Reviewer findings extracted via typed structured output (OpenAI Agent.outputType).
-   *  null on non-review-mode runs and on Claude/Codex runners (which still use the
-   *  JSON-block extraction path). When non-null, downstream consumers MUST prefer it
-   *  over parseReviewerFindings(...). */
-  parsedFindings: import('../review/review-types.js').AnnotatedFinding[] | null
   structuredReport?: import('../reporting/structured-report.js').ParsedStructuredReport
   agents?: {
     implementer: 'standard' | 'complex' | 'not_run'

@@ -25,11 +25,13 @@ export function richRunResult(): RunResult {
       { sha: 'abc', subject: 'feat: add x', body: '', filesChanged: ['src/a.ts', 'src/b.ts'], authoredAt: '2026-05-01T00:00:00Z' },
       { sha: 'def', subject: 'fix: y',     body: '', filesChanged: ['src/a.ts'],              authoredAt: '2026-05-01T00:01:00Z' },
     ],
-    concerns: [
-      { source: 'review' as const, severity: 'medium' as const, message: 'concern 1' },
-      { source: 'review' as const, severity: 'high' as const,   message: 'concern 2' },
-      { source: 'review' as const, severity: 'low' as const,    message: 'concern 3' },
-    ],
+    // v4.4.x findings surface lives on structuredReport. reviewConcerns
+    // (string[]) is the canonical write-route surface; the wire builder
+    // projects each into a medium-severity finding (default per-finding
+    // severity for reviewer output, which doesn't carry per-clause severity).
+    structuredReport: {
+      reviewConcerns: ['concern 1', 'concern 2', 'concern 3'],
+    } as any,
     specReviewStatus: 'approved',
     qualityReviewStatus: 'approved',
     reviewVerdict: 'approved',

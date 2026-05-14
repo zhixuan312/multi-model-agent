@@ -43,14 +43,13 @@ describe('RunResult shape (Phase 0 contract)', () => {
       qualityReviewStatus: 'not_applicable',
       workerStatus:        'done',
       terminationReason:   { cause: 'finished', turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
-      concerns:            [],
       stageStats:          undefined,
     };
 
     const required = [
       'agents','escalationLog','models','reviewRounds','specReviewStatus',
       'qualityReviewStatus','workerStatus','terminationReason','toolCalls',
-      'usage','concerns','stageStats',
+      'usage','stageStats',
     ];
     for (const key of required) {
       expect(sample, `field ${key} must exist on RunResult`).toHaveProperty(key);
