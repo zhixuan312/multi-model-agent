@@ -238,7 +238,20 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
     const stageRounds = (rr.stageStats?.review as { roundsUsed?: number } | undefined)?.roundsUsed;
     const rounds = stageRounds ?? (Math.max(rr.reviewRounds?.spec ?? 0, rr.reviewRounds?.quality ?? 0) || null);
     const rev = buildReviewStage(rr, status, rounds);
-    if (rev) result.push(rev);
+    if (rev) {
+      result.push(rev);
+    } else if (QUALITY_ONLY_ROUTES.has(route)) {
+      // Read-only routes (audit/review/debug/investigate) hardcode
+      // reviewPolicy: 'none' — no LLM reviewer runs. But v5's review stage
+      // entry is where findingsBySeverity / concernCategories live, and
+      // the implementer IS the finding producer on these routes. Synthesize
+      // a zero-metric review stage entry with verdict: 'annotated' (already
+      // in the v5 verdict enum precisely for this case) so the wire still
+      // carries the per-severity breakdown that the warehouse columns read
+      // from stages[?name=review].
+      const findings = projectFindings(rr);
+      if (findings.length > 0) result.push(buildSyntheticReviewStage(findings));
+    }
   }
 
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
@@ -285,6 +298,47 @@ function buildImplStage(rr: RunResult): StageEntryType | null {
   const base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
   return { name: 'implementing', ...base } as StageEntryType;
+}
+
+/** Synthetic review stage entry for read-only routes that hardcode
+ *  reviewPolicy: 'none'. The implementer is the finding producer; v5
+ *  schema puts findingsBySeverity / concernCategories on the review
+ *  stage entry, so this carries them with zero/null operational metrics
+ *  (no actual reviewer LLM call happened) and verdict: 'annotated' (a
+ *  v5 enum value that means "annotator emitted findings, no quality
+ *  verdict reached"). Schema-compliant — no version bump needed. */
+function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType {
+  const categories = [...new Set(findings.map(f => classifyConcern(f) as ConcernCategoryType))];
+  const rawBuckets = bucketFindingsBySeverity(findings.map(f => ({ severity: f.severity })));
+  const findingsBySeverity = {
+    critical: Math.min(rawBuckets.critical, 200),
+    high: Math.min(rawBuckets.high, 200),
+    medium: Math.min(rawBuckets.medium, 200),
+    low: Math.min(rawBuckets.low, 200),
+  };
+  return {
+    name: 'review',
+    model: 'custom',
+    tier: 'standard',
+    round: 0,
+    durationMs: 0,
+    costUSD: null,
+    inputTokens: 0,
+    outputTokens: 0,
+    cachedReadTokens: 0,
+    cachedNonReadTokens: 0,
+    toolCallCount: 0,
+    filesReadCount: 0,
+    filesWrittenCount: 0,
+    turnCount: 0,
+    maxIdleMs: 0,
+    totalIdleMs: 0,
+    mainEquivalentCostUSD: null,
+    verdict: 'annotated',
+    roundsUsed: 1,
+    concernCategories: categories.slice(0, 9),
+    findingsBySeverity,
+  } as StageEntryType;
 }
 
 function buildReviewStage(

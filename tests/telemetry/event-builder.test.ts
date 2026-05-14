@@ -317,6 +317,51 @@ describe('event-builder finding projection (v4.4.x)', () => {
     expect(reviewStage!.findingsBySeverity.low).toBe(0);
   });
 
+  it('synthesizes a review stage entry on read-only routes so findingsBySeverity reaches the wire', () => {
+    // v5 puts findingsBySeverity on the review stage entry. Read-only
+    // routes (audit/review/debug/investigate) hardcode reviewPolicy:'none'
+    // so no actual reviewer runs — but the implementer IS the finding
+    // producer on these routes. The event-builder synthesizes a
+    // zero-metric review stage entry with verdict:'annotated' so the
+    // per-severity breakdown reaches the wire (and the warehouse columns
+    // that read stages[?name=review].findingsBySeverity).
+    const rr = makeFixtureRunResult({});
+    (rr as any).structuredReport = {
+      findings: [
+        { severity: 'critical', category: 'security', claim: 'c1' },
+        { severity: 'high',     category: 'review',   claim: 'h1' },
+        { severity: 'high',     category: 'review',   claim: 'h2' },
+        { severity: 'medium',   category: 'review',   claim: 'm1' },
+      ],
+    };
+    const ev = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    const review = ev.stages.find(s => s.name === 'review') as { verdict: string; findingsBySeverity: { critical: number; high: number; medium: number; low: number }; durationMs: number; costUSD: number | null } | undefined;
+    expect(review).toBeDefined();
+    expect(review!.verdict).toBe('annotated');
+    expect(review!.findingsBySeverity).toEqual({ critical: 1, high: 2, medium: 1, low: 0 });
+    expect(review!.durationMs).toBe(0);
+    expect(review!.costUSD).toBeNull();
+  });
+
+  it('does NOT synthesize a review stage when read-only-route has zero findings', () => {
+    const rr = makeFixtureRunResult({});
+    (rr as any).structuredReport = { findings: [] };
+    const ev = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    expect(ev.stages.find(s => s.name === 'review')).toBeUndefined();
+  });
+
   it('caps concernCount at 150 even when more findings exist', () => {
     const rr = makeFixtureRunResult({});
     const findings = Array.from({ length: 250 }, (_, i) => ({
