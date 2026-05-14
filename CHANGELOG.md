@@ -5,6 +5,15 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.3] - 2026-05-14
+
+Patch release. Fixes the warehouse `findings_critical / high / medium / low` columns landing as zero on audit / review / debug / investigate rows. No schema change — uses an existing v5 enum value (`verdict: 'annotated'`) on the existing v5 review-stage entry to carry the per-severity breakdown for read-only routes.
+
+### Fixed
+
+- **Read-only routes now emit a synthetic v5 review stage entry on the wire so per-severity findings reach the warehouse (core).** Audit / review / debug / investigate hardcode `reviewPolicy: 'none'` in their tool-config, so no LLM reviewer runs and no review stage entry landed on the wire — even though the implementer IS the finding producer on these routes and `structuredReport.findings` carries the breakdown. The backend's `findingsTotals()` (transformer.ts:115-130) reads from `stages[?name=review].findingsBySeverity` → with no review stage, `findings_critical / high / medium / low` warehouse columns stayed zero regardless of how many findings the worker produced. The v5 schema already has `verdict: 'annotated'` in the review-stage verdict enum precisely for this case ("annotator extracted findings, no quality verdict reached"). `buildStages` in `event-builder.ts` now synthesizes a zero-metric review stage entry on read-only routes when `projectFindings(rr)` returns at least one finding, carrying `findingsBySeverity` + `concernCategories` derived from the structured report. Zero schema mutation — uses existing v5 fields with an existing v5 enum value. Live-verified against the 19-finding audit row (18 high / 1 medium): the wire payload now emits a review stage with the correct per-severity buckets, and the backend's existing extractor populates `findings_high: 18, findings_medium: 1` without any backend code change.
+- **Two regression tests in `tests/telemetry/event-builder.test.ts`** pin the synthesis behavior (audit-shape with findings → synthetic review stage) and the negative case (zero findings → no synthetic stage).
+
 ## [4.5.2] - 2026-05-14
 
 Patch release. One telemetry-correctness fix and a large dead-code purge of the pre-v4.4 LLM-annotator machinery. The annotator removal includes dropping the `AnnotatorEngine` and `AnnotatorRoute` public re-exports from `@zhixuan92/multi-model-agent-core` (see BREAKING). No on-the-wire schema or HTTP envelope changes.
@@ -195,7 +204,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.3...HEAD
+[4.5.3]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.2...v4.5.3
 [4.5.2]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...v4.5.2
 [4.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...v4.5.0
