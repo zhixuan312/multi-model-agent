@@ -8,17 +8,16 @@ export const reviewHeadlineTemplate: HeadlineTemplate = {
     const r = report as Partial<ReviewReport> | null | undefined;
     const reportInapplicable = !r || isNotApplicable(r);
 
-    // Source priority (4.0.3+, parallel to audit):
-    //   1. report.findings (structured)
-    //   2. runResult.annotatedFindings (annotator success path)
-    //   3. parseNarrativeFindings(runResult.output) (annotator error
-    //      fallback — recover from implementer's `## Finding N:` blocks)
+    // Source priority (v4.5.2+):
+    //   1. report.findings (structured — when the worker emitted proper JSON
+    //      matching the per-route report schema)
+    //   2. parseNarrativeFindings(runResult.output) (recover from the
+    //      implementer's `## Finding N:` blocks when no structured report)
     const reportFindings = !reportInapplicable && Array.isArray(r?.findings) ? r!.findings : [];
-    const annotated = runResult?.annotatedFindings ?? [];
     let findings: Array<{ severity?: unknown }> =
       reportFindings.length > 0
         ? (reportFindings as Array<{ severity?: unknown }>)
-        : (annotated as Array<{ severity?: unknown }>);
+        : [];
     if (findings.length === 0 && typeof runResult?.output === 'string') {
       const narrative = parseNarrativeFindings(runResult.output);
       if (narrative.length > 0) findings = narrative;

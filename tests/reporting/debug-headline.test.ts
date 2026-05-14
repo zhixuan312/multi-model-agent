@@ -3,25 +3,26 @@ import { debugHeadlineTemplate } from '../../packages/core/src/reporting/headlin
 import type { RunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
-// Tool sweep #4 — debug route headline rewrite (run id b228f9df).
-//
-// Pre-fix: emitted "debug: 1/1 tasks complete" with no [<status>] prefix
-// and no findings count, breaking parity with audit/review/verify and
-// hiding the actual diagnostic signal (worker had produced 3 narrative
-// findings, annotator captured all 3, headline reported none).
-//
-// Post-fix: format mirrors audit —
+// v4.5.2+ debug-headline format:
 //   [<status>] debug <path>: N findings (M high)
 //   [<status>] debug completed   (only when no path AND no findings)
+//
+// Findings are read directly from runResult.output via
+// parseNarrativeFindings (the worker emits `## Finding N:` blocks; there
+// is no separate annotator pass).
 
-describe('debug headline composer (tool sweep #4)', () => {
-  it('emits [status] debug <path>: N findings (M high) when annotator returned findings', () => {
+describe('debug headline composer', () => {
+  it('emits [status] debug <path>: N findings (M high) from narrative output', () => {
     const runResult = {
-      annotatedFindings: [
-        { id: 'F1', claim: 'a', evidence: '', severity: 'high' },
-        { id: 'F2', claim: 'b', evidence: '', severity: 'medium' },
-        { id: 'F3', claim: 'c', evidence: '', severity: 'low' },
-      ],
+      output: `## Finding 1: a
+- Severity: high
+
+## Finding 2: b
+- Severity: medium
+
+## Finding 3: c
+- Severity: low
+`,
     } as unknown as RunResult;
     const task = { prompt: '', filePaths: ['/src/headline-text.ts'] } as unknown as TaskSpec;
 
@@ -38,11 +39,15 @@ describe('debug headline composer (tool sweep #4)', () => {
 
   it('counts critical AND high together (parallel to audit)', () => {
     const runResult = {
-      annotatedFindings: [
-        { severity: 'critical' },
-        { severity: 'high' },
-        { severity: 'low' },
-      ],
+      output: `## Finding 1: a
+- Severity: critical
+
+## Finding 2: b
+- Severity: high
+
+## Finding 3: c
+- Severity: low
+`,
     } as unknown as RunResult;
 
     const headline = debugHeadlineTemplate.compose({
@@ -56,41 +61,12 @@ describe('debug headline composer (tool sweep #4)', () => {
     expect(headline).toBe('[ok] debug /x.ts: 3 findings (2 high)');
   });
 
-  it('falls back to parseNarrativeFindings(output) when annotatedFindings is empty', () => {
-    const runResult = {
-      annotatedFindings: [],
-      output: `## Finding 1: x
-- Severity: high
-- Hypothesis: y
-- Evidence: e
-- Fix: f
-
-## Finding 2: y
-- Severity: low
-- Hypothesis: z
-- Evidence: e
-- Fix: f
-`,
-    } as unknown as RunResult;
-    const task = { prompt: '', filePaths: ['/src/x.ts'] } as unknown as TaskSpec;
-
-    const headline = debugHeadlineTemplate.compose({
-      taskBrief: 'debug',
-      report: notApplicable('na'),
-      status: 'ok',
-      runResult,
-      task,
-    });
-
-    expect(headline).toBe('[ok] debug /src/x.ts: 2 findings (1 high)');
-  });
-
   it('returns "[ok] debug completed" when no findings AND no path', () => {
     const headline = debugHeadlineTemplate.compose({
       taskBrief: 'debug',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RunResult,
     });
 
     expect(headline).toBe('[ok] debug completed');
@@ -101,7 +77,7 @@ describe('debug headline composer (tool sweep #4)', () => {
       taskBrief: 'debug',
       report: notApplicable('na'),
       status: 'error',
-      runResult: { annotatedFindings: [] } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RunResult,
       task: { prompt: '', filePaths: ['/x.ts'] } as unknown as TaskSpec,
     });
 

@@ -16,7 +16,6 @@
       "toolCalls": [],
       "outputIsDiagnostic": false,
       "escalationLog": [],
-      "parsedFindings": null,
       "workerStatus": "done",
       "terminationReason": {
         "cause": "finished",

@@ -32,7 +32,6 @@ export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): 
     filesWritten: [],
     toolCalls: [],
     escalationLog: [],
-    parsedFindings: null,
   };
 }
 

@@ -1,5 +1,4 @@
 import { ReviewerEngine } from './reviewer-engine.js';
-import { AnnotatorEngine } from './annotator-engine.js';
 import { ReviewerPromptBuilder } from './reviewer-prompt-builder.js';
 // Pipeline-redesign (4.3.0+): spec/quality-AP/diff templates removed.
 // Their callers (spec-chain-handlers, quality-chain-handlers, review-diff-handler)
@@ -27,6 +26,3 @@ export function createDefaultReviewerEngine(): ReviewerEngine {
   );
 }
 
-export function createDefaultAnnotatorEngine(): AnnotatorEngine {
-  return new AnnotatorEngine();
-}

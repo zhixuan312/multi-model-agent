@@ -15,11 +15,9 @@ import { countHighOrCritical, parseNarrativeFindings } from '../severity.js';
  * and no findings count — operator could not tell ok from error and
  * had no signal about how many real findings landed.
  *
- * Source priority for findings (parallel to audit):
- *   1. runResult.annotatedFindings (canonical — annotator's structured
- *      output when verdict='annotated').
- *   2. parseNarrativeFindings(runResult.output) — recovers `## Finding N:`
- *      blocks from the implementer's narrative when the annotator errored.
+ * Findings source (v4.5.2+): parseNarrativeFindings(runResult.output)
+ * recovers `## Finding N:` blocks directly from the implementer's
+ * narrative.
  *
  * Note: debug's reportSchema.parse is intentionally a thrower (the tool
  * doesn't emit a structured report), so `report` is always notApplicable
@@ -27,10 +25,8 @@ import { countHighOrCritical, parseNarrativeFindings } from '../severity.js';
  */
 export const debugHeadlineTemplate: HeadlineTemplate = {
   compose({ status, runResult, task }) {
-    const annotated = runResult?.annotatedFindings ?? [];
-    let findings: Array<{ severity?: unknown }> =
-      annotated as Array<{ severity?: unknown }>;
-    if (findings.length === 0 && typeof runResult?.output === 'string') {
+    let findings: Array<{ severity?: unknown }> = [];
+    if (typeof runResult?.output === 'string') {
       const narrative = parseNarrativeFindings(runResult.output);
       if (narrative.length > 0) findings = narrative;
     }

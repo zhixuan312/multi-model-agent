@@ -14,7 +14,7 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
-import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
+import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { pickEscalation } from '../escalation/policy.js';
@@ -40,7 +40,6 @@ export function errorResult(error: string): RunResult {
     toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [],
-    parsedFindings: null,
     error,
   };
 }
@@ -78,7 +77,6 @@ export interface RunTasksOptions {
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
-  annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
 }
 
 export async function runTasks(
@@ -152,7 +150,6 @@ export async function runTasks(
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
         ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
-        ...(options.annotatorEngine && { annotatorEngine: options.annotatorEngine }),
       });
     }),
   );
@@ -184,7 +181,6 @@ export interface DispatchTaskInput {
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
   reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
-  annotatorEngine?: import('../review/annotator-engine.js').AnnotatorEngine;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -282,7 +278,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: [],
     reviewerEngine: input.reviewerEngine ?? createDefaultReviewerEngine(),
-    annotatorEngine: input.annotatorEngine ?? createDefaultAnnotatorEngine(),
   };
 }
 
@@ -344,8 +339,7 @@ export async function runTaskViaDispatcher(
           toolCalls: [],
           outputIsDiagnostic: true,
           escalationLog: [],
-          parsedFindings: null,
-          error: `no provider configured for tier '${decision.impl}'`,
+                error: `no provider configured for tier '${decision.impl}'`,
           errorCode: 'all_tiers_unavailable',
           workerStatus: 'failed',
         } as unknown as RunResult;
@@ -434,8 +428,7 @@ export async function runTaskViaDispatcher(
             toolCalls: [],
             outputIsDiagnostic: false,
             escalationLog: [],
-            parsedFindings: null,
-            workerStatus: succeededCount === 0 ? 'failed' : 'done',
+                    workerStatus: succeededCount === 0 ? 'failed' : 'done',
             terminationReason,
             findings: dispatchResult.findings,
             criteriaErrors: dispatchResult.criteriaErrors,
@@ -469,8 +462,7 @@ export async function runTaskViaDispatcher(
             toolCalls: [],
             outputIsDiagnostic: true,
             escalationLog: [],
-            parsedFindings: null,
-            error: message,
+                    error: message,
             errorCode: 'runner_crash',
             workerStatus: 'failed',
           } as unknown as RunResult;
@@ -581,8 +573,7 @@ export async function runTaskViaDispatcher(
           toolCalls: [],
           outputIsDiagnostic: true,
           escalationLog: [],
-          parsedFindings: null,
-          error: message,
+                error: message,
           errorCode: 'runner_crash',
           workerStatus: 'failed',
         } as unknown as RunResult;
@@ -617,7 +608,6 @@ export async function runTaskViaDispatcher(
     toolCalls: [],
     outputIsDiagnostic: true,
     escalationLog: [],
-    parsedFindings: null,
     error: 'dispatcher produced no RunResult',
     errorCode: 'runner_crash',
     workerStatus: 'failed',

@@ -9,7 +9,7 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
-import { createDefaultReviewerEngine, createDefaultAnnotatorEngine } from '../review/default-engines.js';
+import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 
@@ -95,7 +95,6 @@ export async function executeTask<Input, Brief, Report>(
     toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [],
-    parsedFindings: null,
     error: msg,
     errorCode: 'runner_crash',
     retryable: false,
@@ -114,7 +113,6 @@ export async function executeTask<Input, Brief, Report>(
     toolCalls: [],
     outputIsDiagnostic: false,
     escalationLog: [],
-    parsedFindings: null,
     error: msg,
     errorCode: 'agent_not_configured',
     retryable: false,
@@ -145,7 +143,6 @@ export async function executeTask<Input, Brief, Report>(
         bus: ctx.bus,
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
         reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
-        annotatorEngine: ctx.annotatorEngine ?? createDefaultAnnotatorEngine(),
       });
     } catch (e) {
       // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,
@@ -204,9 +201,10 @@ export async function executeTask<Input, Brief, Report>(
   }
 
   // ── Step 8: Compose headline ──
-  // 4.0.3+ Gap 2 fix: pass runResult + task so audit/review composers
-  // can read annotatedFindings and filePaths fallbacks when the
-  // structured report doesn't carry them (narrative-emitting tools).
+  // v4.5.2+: pass runResult + task so audit/review/debug composers can
+  // fall back to parseNarrativeFindings(runResult.output) and read
+  // task.filePaths for the document path when the structured report
+  // doesn't carry them.
   const headline = config.headlineTemplate.compose({
     taskBrief: typeof briefs[0] === 'object' && briefs[0] !== null
       ? ((briefs[0] as Record<string, unknown>).prompt as string)

@@ -75,7 +75,7 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder,
     specLintTemplate, qualityLintTemplate,
     qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
   } =
@@ -142,7 +142,6 @@ async function registerToolHandlers(
       investigate: qualityInvestigateTemplate,
     },
   ));
-  const annotatorEngine = new AnnotatorEngine();
 
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
@@ -152,7 +151,6 @@ async function registerToolHandlers(
     batchRegistry,
     routeDispatcher,
     reviewerEngine,
-    annotatorEngine,
   };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
@@ -221,7 +219,7 @@ async function registerControlHandlers(
       new RunningHeadlineSink(batchRegistry),
       ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
-    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder, AnnotatorEngine,
+    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder,
       specLintTemplate, qualityLintTemplate,
       qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
     } = await import('@zhixuan92/multi-model-agent-core');
@@ -237,7 +235,6 @@ async function registerControlHandlers(
         investigate: qualityInvestigateTemplate,
       },
     ));
-    const annotatorEngine = new AnnotatorEngine();
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -249,7 +246,6 @@ async function registerControlHandlers(
       batchRegistry,
       routeDispatcher,
       reviewerEngine,
-      annotatorEngine,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));

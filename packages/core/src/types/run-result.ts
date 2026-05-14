@@ -129,12 +129,6 @@ export interface RunResult {
   qualityReviewStatus?: 'approved' | 'changes_required' | 'annotated' | 'skipped' | 'error' | 'not_applicable'
   qualityReviewReason?: string
   diffReviewStatus?: 'approved' | 'changes_required' | 'skipped' | 'error' | 'not_applicable'
-  annotatedFindings?: import('../review/review-types.js').AnnotatedFinding[]
-  /** Reviewer findings extracted via typed structured output (OpenAI Agent.outputType).
-   *  null on non-review-mode runs and on Claude/Codex runners (which still use the
-   *  JSON-block extraction path). When non-null, downstream consumers MUST prefer it
-   *  over parseReviewerFindings(...). */
-  parsedFindings: import('../review/review-types.js').AnnotatedFinding[] | null
   structuredReport?: import('../reporting/structured-report.js').ParsedStructuredReport
   agents?: {
     implementer: 'standard' | 'complex' | 'not_run'
