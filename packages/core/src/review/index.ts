@@ -6,4 +6,3 @@ export * from './reviewer-prompt-builder.js';
 export * from './annotator-prompt-builder.js';
 export * from './reviewer-output-parser.js';
 export * from './annotator-output-parser.js';
-export * from './review-verdict-aggregator.js';
