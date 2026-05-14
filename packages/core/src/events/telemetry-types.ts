@@ -177,11 +177,6 @@ export const TaskCompletedEventSchema = z.object({
 
   // Lifecycle counts
   concernCount: z.number().int().min(0).max(150),
-  // Top-level severity breakdown (v4.5.3+). Derived from projectFindings(rr)
-  // so read-only routes (audit/review/debug/investigate) that have no review
-  // stage still emit the per-severity totals. Sum of buckets equals concernCount
-  // after both are clamped (R-FBS invariant validated in superRefine below).
-  findingsBySeverity: FindingsBySeveritySchema,
   escalationCount: z.number().int().min(0).max(20),
   fallbackCount: z.number().int().min(0).max(20),
 
