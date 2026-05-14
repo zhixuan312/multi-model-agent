@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.2",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.3",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -291,13 +291,11 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.2
+## What's new in 4.5.3
 
-Patch release. One telemetry-correctness fix and a large dead-code purge:
+Patch release. Fixes the warehouse per-severity columns landing as zero on read-only routes:
 
-- **`concernCount` and `findingsBySeverity` now read from the v4.4 finding surfaces.** Every wire event since 4.4.0 silently emitted `concernCount: 0` and `findingsBySeverity: {0,0,0,0}` because the event-builder still projected from the pre-v4.4 `runResult.concerns` field that the v4.4 lifecycle stopped populating. Now derives from `structuredReport.findings[]` (read-only routes — per-finding severity) and `structuredReport.reviewConcerns[]` (reviewed-write routes — defaults to medium). Live-verified: an audit producing 21 real findings now emits `concernCount: 21` on the wire.
-- **Removed 902 lines of unreachable pre-v4.4 LLM-annotator machinery.** Deleted `AnnotatorEngine`, `AnnotatorOutputParser`, `AnnotatorPromptBuilder`, their factory + lifecycle plumbing, the `runResult.annotatedFindings` / `parsedFindings` fields, the headline-template fallback branches that read them, and two test files. The v4.4 lifecycle replaced this with a pure-transform handler that reads worker output directly; `.annotate()` was never called in production. The rubric templates the live quality reviewer still uses stay.
-- **BREAKING:** `AnnotatorEngine` and `AnnotatorRoute` removed from `@zhixuan92/multi-model-agent-core` public exports. They were dead in production — constructing them produced no observable effect. Ships as patch because no documented or working use existed.
+- **Synthetic v5 review stage entry for read-only routes.** Audit / review / debug / investigate hardcode `reviewPolicy: 'none'`, so no LLM reviewer runs and no review stage entry landed on the wire — but the backend's per-severity warehouse columns extract from `stages[?name=review].findingsBySeverity`. With nothing in that path, `findings_high / critical / medium / low` stayed zero on every read-only-route row regardless of how many findings the worker produced. The event-builder now synthesizes a zero-metric review stage entry with the v5 `verdict: 'annotated'` enum value when the route is read-only and `structuredReport.findings` is non-empty. No schema mutation — uses existing v5 review-stage fields. Live-verified: a 19-finding audit (18 high / 1 medium) now flows `findings_high: 18, findings_medium: 1` into the warehouse through the existing backend extractor.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 

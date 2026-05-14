@@ -228,13 +228,9 @@ mmagent logs --follow --batch=<id>   # tail + filter
 
 As of 3.4.0 every task-execution event the worker emits to the verbose stderr stream is also written to the JSONL log via a single `emit(TaskEvent)` writer — schema parity across both sinks. Crash/disconnect events (`startup`, `request_start`, `request_complete`, `shutdown`, `error`) are written unconditionally; per-task events (`heartbeat`, `stage_change`, `tool_call`, `turn_complete`, etc.) flow through the same writer.
 
-## What's new in 4.5.2
+## What's new in 4.5.3
 
-- **`projectFindings(rr)` helper in `events/event-builder.ts`.** Reads findings from the v4.4 surfaces — `structuredReport.findings[]` for read-only routes (per-finding severity) and `structuredReport.reviewConcerns[]` for reviewed-write routes (defaults to medium). Wire telemetry `concernCount`, `buildReviewStage.findingsBySeverity` / `concernCategories`, and `buildReworkStage.triggeringConcernCategories` all derive from the new projection. Replaces dead reads of `runResult.concerns` that produced `concernCount: 0` on every event since 4.4.0.
-- **Removed pre-v4.4 LLM-annotator (`AnnotatorEngine`, `AnnotatorOutputParser`, `AnnotatorPromptBuilder`).** 902-line net deletion. The v4.4 lifecycle's pure-transform `lifecycle/handlers/annotator.ts` replaced it; `.annotate()` was never called in production. The rubric templates (`templates/annotator-shared.ts` + `templates/annotator-{audit,debug,review,investigate}.ts`) stay — consumed by the live quality reviewer.
-- **Removed `RunResult.concerns`, `RunResult.annotatedFindings`, and `RunResult.parsedFindings`** — all unwritten in v4.4+. Headline templates (audit / review / debug) now use `parseNarrativeFindings(runResult.output)` as the canonical fallback when no structured report is emitted.
-- **Removed two more unreferenced legacy modules:** `reporting/annotate-completion-parser.ts` and `review/review-verdict-aggregator.ts`.
-- **BREAKING:** `AnnotatorEngine` and `AnnotatorRoute` no longer re-exported from `@zhixuan92/multi-model-agent-core`. They were dead in production — constructing them produced no observable effect on the run result.
+- **`buildSyntheticReviewStage(findings)` in `events/event-builder.ts`.** For read-only routes (audit / review / debug / investigate) that hardcode `reviewPolicy: 'none'`, the event-builder synthesizes a v5 review stage entry with `verdict: 'annotated'` (an enum value designed for this case), `findingsBySeverity` + `concernCategories` derived from `projectFindings(runResult)`, and zero/null operational metrics. Stays within the v5 schema — no new fields, no version bump. Carries the per-severity breakdown to the existing `stages[?name=review].findingsBySeverity` warehouse column path so backend extractor (`transformer.ts:115`) flows the buckets without any backend change.
 
 Full history: [CHANGELOG](https://github.com/zhixuan312/multi-model-agent/blob/master/CHANGELOG.md).
 
