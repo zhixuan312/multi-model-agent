@@ -159,13 +159,18 @@ describe('V3 clamping ratchet', () => {
 
   it('clamps findingsBySeverity counts at 200 not 50 (Round-3 fix)', () => {
     // Round-3: raised per-bin clamp from 50 → 200 so counts between 51 and
-    // 200 pass through. 60 high-severity concerns should NOT be clamped to 50.
+    // 200 pass through. 60 high-severity findings should NOT be clamped to 50.
+    //
+    // v4.4.x: structuredReport.findings is the read-only-route finding
+    // surface (per-finding severity); use it directly so the bucketing
+    // path is exercised end-to-end (severity → buildReviewStage →
+    // findingsBySeverity.high).
     const rr = richRunResult();
-    const concerns: Array<{ source: 'review'; severity: 'high'; message: string }> = [];
+    const findings: Array<{ severity: string; category: string; claim: string }> = [];
     for (let i = 0; i < 60; i++) {
-      concerns.push({ source: 'review', severity: 'high', message: `concern-${i}` });
+      findings.push({ severity: 'high', category: 'review', claim: `finding-${i}` });
     }
-    rr.concerns = concerns as any;
+    rr.structuredReport = { findings } as any;
     rr.qualityReviewStatus = 'changes_required';
     const ev = buildTaskCompletedEvent({ route: 'delegate', taskSpec: { filePaths: [] }, runResult: rr, client: 'test', mainModel: null });
     const qr = ev.stages.find(s => s.name === 'review');

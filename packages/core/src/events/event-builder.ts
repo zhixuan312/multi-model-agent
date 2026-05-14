@@ -35,6 +35,54 @@ export interface BuildContext {
 const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
 const QUALITY_ONLY_ROUTES = new Set(['audit', 'review', 'debug', 'investigate']);
 
+/** Projected finding shape used internally by the wire builder. Severity is
+ *  always one of the 4-tier values (defaults to 'medium' when the source
+ *  field lacked one, matching the wire's pre-existing default-medium policy). */
+interface ProjectedFinding {
+  severity: 'critical' | 'high' | 'medium' | 'low';
+  source: 'spec_review' | 'quality_review' | 'review' | 'implementer';
+  message: string;
+}
+
+/** Read findings from the v4.4 lifecycle sources:
+ *   - structuredReport.findings  → read-only routes (audit/review/debug/investigate/research/explore)
+ *   - structuredReport.reviewConcerns → reviewed write routes (delegate/execute-plan)
+ *
+ *  Both fields are populated by lifecycle/handlers/annotator.ts. The pre-v4.4
+ *  `runResult.concerns` field is dead — the v4.4 lifecycle never assigns it,
+ *  so reading from there silently produced concernCount=0 on every event.
+ */
+function projectFindings(rr: RunResult): ProjectedFinding[] {
+  // The annotator handler writes a richer shape than ParsedStructuredReport declares;
+  // cast to the runtime-actual shape.
+  const sr = rr.structuredReport as {
+    findings?: ReadonlyArray<{ severity?: string; category?: string; claim?: string }>;
+    reviewConcerns?: ReadonlyArray<string>;
+  } | undefined;
+
+  const out: ProjectedFinding[] = [];
+
+  for (const f of sr?.findings ?? []) {
+    out.push({
+      severity: normalizeSeverity(f.severity),
+      source: 'implementer',
+      message: f.claim ?? '',
+    });
+  }
+
+  for (const text of sr?.reviewConcerns ?? []) {
+    out.push({ severity: 'medium', source: 'review', message: text });
+  }
+
+  return out;
+}
+
+function normalizeSeverity(s: string | undefined): ProjectedFinding['severity'] {
+  const v = (s ?? '').toLowerCase().trim();
+  if (v === 'critical' || v === 'high' || v === 'low') return v;
+  return 'medium';
+}
+
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;
 
@@ -156,7 +204,7 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     totalCostUSD,
     mainEquivalentCostUSD,
     costDeltaVsMainUSD,
-    concernCount: Math.min(runResult.concerns?.length ?? 0, 150),
+    concernCount: Math.min(projectFindings(runResult).length, 150),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),
@@ -248,21 +296,20 @@ function buildReviewStage(
   const base = extractStageData(ss, rr, 'review');
   if (!base) return null;
 
-  const stageConcerns = (rr.concerns ?? []).filter(
-    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review',
+  // v4.4.x: projectFindings reads from structuredReport.findings (read-only
+  // routes) and structuredReport.reviewConcerns (reviewed write routes). The
+  // pre-v4.4 rr.concerns field is no longer populated by the lifecycle, so
+  // reading from there silently produced 0/0/0/0 counts on every wire row.
+  const stageConcerns = projectFindings(rr).filter(
+    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review' || c.source === 'implementer',
   );
   const categories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
   // 4.0.3+ Gap 2 round-2 F1: use shared bucketFindingsBySeverity helper
   // (separate from headline's countHighOrCritical) so the wire's exact
   // per-bucket counts can't be conflated by accident with the headline's
-  // aggregate count. Severity normalization (lowercasing) is shared.
-  // Defaulting unknowns to 'medium' is a property of THIS function only;
-  // the bucketing helper drops unparseable entries — so we explicitly
-  // pass severity ?? 'medium' to preserve the existing wire behavior.
-  const concernsForBucketing = stageConcerns.map(c => ({
-    severity: ((c as { severity?: unknown }).severity ?? 'medium'),
-  }));
-  const rawBuckets = bucketFindingsBySeverity(concernsForBucketing);
+  // aggregate count. Severity normalization happens inside projectFindings;
+  // pass through the already-normalized severity.
+  const rawBuckets = bucketFindingsBySeverity(stageConcerns.map(c => ({ severity: c.severity })));
   const findingsBySeverity = {
     critical: Math.min(rawBuckets.critical, 200),
     high: Math.min(rawBuckets.high, 200),
@@ -292,8 +339,8 @@ function buildReworkStage(rr: RunResult): StageEntryType | null {
   const base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
 
-  const stageConcerns = (rr.concerns ?? []).filter(
-    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review',
+  const stageConcerns = projectFindings(rr).filter(
+    c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review' || c.source === 'implementer',
   );
   const triggeringCategories = [...new Set(stageConcerns.map(c => classifyConcern(c) as ConcernCategoryType))];
 

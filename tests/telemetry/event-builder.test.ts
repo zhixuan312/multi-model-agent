@@ -207,3 +207,129 @@ describe('event-builder per-stage mainEquivalentCostUSD', () => {
     }
   });
 });
+
+// 4.5.1 — pins the bug where v4.4 lifecycle moved findings to
+// structuredReport but the wire builder still read pre-v4.4 rr.concerns,
+// silently emitting concernCount=0 and findingsBySeverity={0,0,0,0} on
+// every audit / execute-plan event despite real findings being produced.
+// Two production-bug shapes: (1) audit emits findings via the
+// read-only-route implementer; (2) execute-plan reviewer emits
+// reviewConcerns. Both must round-trip into the wire row.
+describe('event-builder finding projection (v4.4.x)', () => {
+  it('counts read-only-route findings from structuredReport.findings on the wire', () => {
+    const rr = makeFixtureRunResult({});
+    (rr as any).structuredReport = {
+      findings: [
+        { severity: 'critical', category: 'security', claim: 'SQL injection in handler' },
+        { severity: 'high',     category: 'review',   claim: 'missing token validation' },
+        { severity: 'high',     category: 'review',   claim: 'unbounded loop' },
+        { severity: 'medium',   category: 'review',   claim: 'naming inconsistency' },
+        { severity: 'low',      category: 'review',   claim: 'stylistic nit' },
+      ],
+    };
+    const ev = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    expect(ev.concernCount).toBe(5);
+  });
+
+  it('counts reviewed-write-route findings from structuredReport.reviewConcerns on the wire', () => {
+    const rr = makeFixtureRunResult({
+      qualityReviewStatus: 'changes_required',
+      reviewVerdict: 'changes_required',
+    } as RunResult);
+    (rr as any).structuredReport = {
+      reviewConcerns: [
+        'spec deviation: contract gate not wired',
+        'missing test for error path',
+        'unused import',
+      ],
+    };
+    const ev = buildTaskCompletedEvent({
+      route: 'execute-plan',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    expect(ev.concernCount).toBe(3);
+  });
+
+  it('buckets read-only-route findings into per-stage findingsBySeverity', () => {
+    // v4.4 collapsed stageStats.{spec_review,quality_review,diff_review}
+    // into a single `review` entry; the wire's buildReviewStage only fires
+    // when stageStats.review.entered is true.
+    const rr = makeFixtureRunResult({
+      qualityReviewStatus: 'changes_required',
+      stageStats: {
+        ...HAPPY.stageStats,
+        review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
+      } as RunResult['stageStats'],
+    } as RunResult);
+    (rr as any).structuredReport = {
+      findings: [
+        { severity: 'critical', category: 'security', claim: 'c1' },
+        { severity: 'critical', category: 'security', claim: 'c2' },
+        { severity: 'high',     category: 'review',   claim: 'h1' },
+        { severity: 'medium',   category: 'review',   claim: 'm1' },
+        { severity: 'low',      category: 'review',   claim: 'l1' },
+      ],
+    };
+    const ev = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    const reviewStage = ev.stages.find(s => s.name === 'review') as { findingsBySeverity: { critical: number; high: number; medium: number; low: number } } | undefined;
+    expect(reviewStage).toBeDefined();
+    expect(reviewStage!.findingsBySeverity).toEqual({ critical: 2, high: 1, medium: 1, low: 1 });
+  });
+
+  it('defaults reviewConcerns to medium severity (reviewer prose has no per-clause severity)', () => {
+    const rr = makeFixtureRunResult({
+      qualityReviewStatus: 'changes_required',
+      stageStats: {
+        ...HAPPY.stageStats,
+        review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
+      } as RunResult['stageStats'],
+    } as RunResult);
+    (rr as any).structuredReport = {
+      reviewConcerns: ['a', 'b', 'c', 'd'],
+    };
+    const ev = buildTaskCompletedEvent({
+      route: 'delegate',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    const reviewStage = ev.stages.find(s => s.name === 'review') as { findingsBySeverity: { critical: number; high: number; medium: number; low: number } } | undefined;
+    expect(reviewStage).toBeDefined();
+    expect(reviewStage!.findingsBySeverity.medium).toBe(4);
+    expect(reviewStage!.findingsBySeverity.critical).toBe(0);
+    expect(reviewStage!.findingsBySeverity.high).toBe(0);
+    expect(reviewStage!.findingsBySeverity.low).toBe(0);
+  });
+
+  it('caps concernCount at 150 even when more findings exist', () => {
+    const rr = makeFixtureRunResult({});
+    const findings = Array.from({ length: 250 }, (_, i) => ({
+      severity: 'medium', category: 'review', claim: `f-${i}`,
+    }));
+    (rr as any).structuredReport = { findings };
+    const ev = buildTaskCompletedEvent({
+      route: 'audit',
+      taskSpec: { filePaths: [] },
+      runResult: rr,
+      client: 'test',
+      mainModel: null,
+    });
+    expect(ev.concernCount).toBe(150);
+  });
+});
