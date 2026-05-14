@@ -96,7 +96,7 @@ Two ways — pick one:
 
 ```bash
 mmagent serve                          # 127.0.0.1:7337 by default
-curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.0",...}
+curl -s http://localhost:7337/health   # → {"ok":true,"version":"4.5.1",...}
 ```
 
 For a long-running background install (always-on, survives reboots), use [the launchd / systemd templates](./packages/server/scripts/README.md).
@@ -291,15 +291,12 @@ mmagent telemetry dump-queue                    # print the locally-queued event
 | TLS `handshake_failure` to a known-good telemetry endpoint | Local DNS cache is stale. `sudo dscacheutil -flushcache && sudo killall -HUP mDNSResponder` (macOS); restart the daemon so its Node process re-resolves |
 | Local telemetry queue stops draining | Daemon's flusher is in exponential backoff after a transport failure (capped at 1 hr). Restart the daemon to force an immediate boot-flush |
 
-## What's new in 4.5.0
+## What's new in 4.5.1
 
-Worker-reliability release. Closes the two largest classes of execute-plan failure seen in production:
+Patch release. Two narrow fixes:
 
-- **Commit from real git diff, not worker self-report.** The commit gate previously trusted `WorkerOutput.filesChanged`; when a worker wrote files but self-reported `filesChanged: []` (a recurring false-negative on standard-tier workers), the gate silently skipped. The handler now derives the canonical list from `git diff --name-only <preTaskHeadSha>` + filtered untracked files (snapshot-diffed against a `preTaskUntrackedFiles` set captured at task entry). Three source values surface in telemetry: `git_diff` (authoritative), `self_report` (non-git cwd, count-only), `git_error` (degraded, no commit). Eliminates the "files written but nothing committed" failure mode end-to-end.
-- **Progress-watchdog with three signals.** Mirrors the stall-watchdog shape: arms an interval poller around `delegateWithEscalation()` and `rework` `session.send()`. (1) Wall-clock thrash → `controller.abort()` when `wallClockMs > thrashWallClockMs` AND `git diff` is empty (default 20 min). (2) Turn-count thrash post-hoc check → `turnsUsed > thrashTurns` AND diff empty (default 25 turns). (3) Scope-violation post-hoc → any file in the real diff outside the brief's declared scope. Skip gates: read-only tools, non-git cwd, `defaults.progressWatchdogEnabled: false`. A thrashing worker can no longer burn the full budget producing nothing.
-- **Telemetry envelope fixes.** `subtype` now reaches the wire (4.4.0 landed it on the HTTP envelope only); `annotating` stage emits a deterministic `stageStats` entry so per-stage dashboards stop showing a gap; per-stage `mainEquivalentCostUSD` is now attached for the Lite-page per-model savings slice.
-
-CHANGELOG has the full breakdown.
+- **Windows-compatible codex spawn.** `codex-cli-session` spawns through `cross-spawn` instead of Node's native `child_process.spawn`, which cannot resolve `.cmd` / `.bat` / `.ps1` shims (e.g. `codex.cmd`) without `shell: true`. `shell: true` would mangle the `-c model_providers.X={…}` argument block on `cmd.exe`, so we route through `cross-spawn` which handles both shim resolution and arg escaping. On POSIX it is a passthrough so Linux/macOS users see zero behavior change. Fixes the `spawn codex ENOENT` failure reported on Windows 4.5.0 daemons.
+- **`mma-audit` plan & spec criteria deepened for the brainstorm→plan flow.** Plan subtype expands from 9 to 12 perspectives grouped as EXTERNAL CODEBASE COHERENCE (1–8), INTRA-PLAN STRUCTURE (9 + new 11 PLACEHOLDER LANGUAGE + new 12 PLAN SKELETON), and SPEC ALIGNMENT (new 10 SPEC COVERAGE — reads the upstream spec from a registered context block to check every requirement maps to a task). Spec subtype expands from 7 to 9 criteria with placeholder-scan and design-decomposition-present additions, plus scope-explicitness extended to flag multi-subsystem specs that need decomposition. The spec ↔ plan boundary is now machine-checkable end-to-end. No schema or wire-shape changes.
 
 Full history: [CHANGELOG](./CHANGELOG.md).
 
