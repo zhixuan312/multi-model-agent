@@ -347,6 +347,7 @@
   "dependencies": {
     "@anthropic-ai/claude-agent-sdk": "^0.2.112",
     "@mozilla/readability": "^0.6.0",
+    "cross-spawn": "^7.0.6",
     "fast-xml-parser": "^5.7.2",
     "jsdom": "^29.1.1",
     "undici": "^8.2.0",
@@ -356,6 +357,7 @@
     "@anthropic-ai/sdk": "0.81.0"
   },
   "devDependencies": {
+    "@types/cross-spawn": "^6.0.6",
     "@types/jsdom": "^28.0.1"
   }
 }

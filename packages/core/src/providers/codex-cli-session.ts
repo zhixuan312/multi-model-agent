@@ -16,7 +16,13 @@
 //      verified end-to-end (gpt-5.5 recalled prior-turn context across a
 //      fresh process spawn).
 
-import { spawn, type ChildProcess } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
+// cross-spawn: POSIX-passthrough on Linux/macOS (delegates to node:child_process spawn
+// without behavior change), and on Windows resolves `.cmd`/`.bat`/`.ps1` shims (e.g.
+// `codex.cmd`) that node's native spawn cannot find without `shell: true` — which
+// would be unsafe for our args (the `-c model_providers.X={…}` block contains shell
+// metacharacters that cmd.exe would mangle). Single-purpose import.
+import spawn from 'cross-spawn';
 import { readFile, mkdtemp, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
