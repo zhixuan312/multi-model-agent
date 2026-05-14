@@ -5,6 +5,20 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.5.1] - 2026-05-14
+
+Patch release. Two narrow fixes — Windows-compatible codex spawn and a deeper plan/spec audit criteria set that pins the canonical brainstorm→plan flow. No schema or wire-shape changes.
+
+### Fixed
+
+- **`codex-cli-session` spawns via `cross-spawn` (core).** Node's native `child_process.spawn` cannot resolve `.cmd` / `.bat` / `.ps1` shims (e.g. `codex.cmd`) without `shell: true`, but `shell: true` is unsafe for our `-c model_providers.X={…}` argument block — `cmd.exe` would mangle the `{`, `}`, `"`, `=`, `,` characters. `cross-spawn` handles Windows shim resolution AND escaping; on POSIX it is a passthrough so Linux/macOS users see zero behavior change. Fixes the `spawn codex ENOENT` failure reported on Windows 4.5.0 daemons.
+
+### Changed
+
+- **`mma-audit` plan subtype: 9 → 12 perspectives (core).** Plan-audit criteria reorganized into three named groups: **EXTERNAL CODEBASE COHERENCE** (1–8, the existing plan-vs-codebase grounding), **INTRA-PLAN STRUCTURE** (9 TASK GRANULARITY, plus new 11 PLACEHOLDER LANGUAGE and 12 PLAN SKELETON), and **SPEC ALIGNMENT** (new 10 SPEC COVERAGE). Perspective 10 reads the upstream spec from a registered context block (caller passes the spec's `blockId` in `contextBlockIds`) and verifies every spec requirement maps to ≥1 task; emits "No findings for this criterion." when no spec is in context so it stays opt-in without a schema change. Perspectives 11/12 are intra-plan and need only a plan-side quote — no codebase grounding. Evidence-rule, scope-rule, and annotator-awareness blocks rewritten to spell out per-group evidence shape; severity-calibration table extended with new critical/high cases for the added perspectives.
+- **`mma-audit` spec subtype: 7 → 9 criteria (core).** Criterion 2 renamed `SCOPE-EXPLICITNESS-AND-DECOMPOSABILITY` and extended to flag multi-subsystem specs that should be split before planning. New criterion 8 `PLACEHOLDER-SCAN` (TBD / TODO / `[fill in]` / empty section bodies). New criterion 9 `DESIGN-DECOMPOSITION-PRESENT` enforces the brainstorming-skill mandate that the spec cover architecture, components, data flow, error handling, and testing strategy. Together with plan perspective 10, the spec ↔ plan boundary is now machine-checkable end-to-end.
+- **`mma-audit` SKILL.md updated with the new perspective/criterion lists and a refreshed Recipe F** (Spec-then-plan-then-execute) that instructs callers to register the spec via `mma-context-blocks` so perspective 10 fires during plan audit.
+
 ## [4.5.0] - 2026-05-13
 
 Worker-reliability release. Two sub-projects close the largest classes of execute-plan failure seen in production: (A) **commit from git diff, not worker self-report** — eliminates the entire "files written but `filesChanged: []` so commit skipped" failure mode; and (C) **progress-watchdog with three signals** — bounds non-progressing work via wall-clock + turn-count + scope-violation detection so a thrashing worker can't burn the full budget producing nothing. Plus three carry-over fixes for telemetry envelope correctness.
@@ -161,7 +175,8 @@ First wave of Group A platform reliability fixes — A1.1 (config caps) + A4b (f
 
 - **Per-tier model + provider type at startup (server).** `mmagent serve` now prints one extra line at boot: `[mmagent] tiers | complex=<model> [<provider-type>] | standard=<model> [<provider-type>]`. Operators previously had to inspect `~/.multi-model/config.json` or check verbose-log model fields after dispatching to know which model maps to which tier. When a tier is unconfigured, prints `(not configured)` so a misconfigured slot is visible at boot rather than surfacing at first dispatch.
 
-[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...HEAD
+[Unreleased]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.1...HEAD
+[4.5.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.5.0...v4.5.1
 [4.5.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.4.0...v4.5.0
 [4.4.0]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.1...v4.4.0
 [4.3.1]: https://github.com/zhixuan312/multi-model-agent/compare/v4.3.0...v4.3.1
