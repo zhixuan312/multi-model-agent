@@ -336,7 +336,7 @@ export async function main(deps: CliDeps = {}): Promise<void> {
       break;
     }
     case 'telemetry': {
-      const home = deps.homeDir?.() ?? os.homedir();
+      const home = deps.homeDir?.() ?? path.join(os.homedir(), '.multi-model');
       const telemetrySubcommand = positional[1] ?? 'status';
       const validSubcommands = ['status', 'enable', 'disable', 'reset-id', 'dump-queue'];
       if (!validSubcommands.includes(telemetrySubcommand)) {
