@@ -205,6 +205,21 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
     mainEquivalentCostUSD,
     costDeltaVsMainUSD,
     concernCount: Math.min(projectFindings(runResult).length, 150),
+    // Top-level severity buckets (v4.5.3+) so read-only routes that
+    // don't run a review stage still surface the per-severity breakdown
+    // on the wire. Computed from the same projectFindings() source as
+    // concernCount; per-stage findingsBySeverity stays as the load-bearing
+    // per-stage view.
+    findingsBySeverity: (() => {
+      const findings = projectFindings(runResult);
+      const buckets = bucketFindingsBySeverity(findings.map(f => ({ severity: f.severity })));
+      return {
+        critical: Math.min(buckets.critical, 200),
+        high: Math.min(buckets.high, 200),
+        medium: Math.min(buckets.medium, 200),
+        low: Math.min(buckets.low, 200),
+      };
+    })(),
     escalationCount,
     fallbackCount: Math.min(runResult.agents?.fallbackOverrides?.length ?? 0, 20),
     stallCount: Math.min(runResult.stallCount ?? (runResult.stallTriggered ? 1 : 0), 20),

@@ -73,6 +73,7 @@ function makeMinimalValidEvent(): TaskCompletedEventType {
     mainEquivalentCostUSD: null,
     costDeltaVsMainUSD: null,
     concernCount: 0,
+    findingsBySeverity: { critical: 0, high: 0, medium: 0, low: 0 },
     escalationCount: 0,
     fallbackCount: 0,
     stallCount: 0,

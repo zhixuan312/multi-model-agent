@@ -83,6 +83,7 @@ A keyed record `{ standard?, complex?, main? }` where each present tier carries 
 | Field | Type | Decision driver |
 |-------|------|-----------------|
 | `concernCount` | integer (0–150) | Review workload volume |
+| `findingsBySeverity` | `{ critical, high, medium, low }` (each integer 0–200) | Per-severity finding totals across the task. Same shape that already appears per-stage on the review entry; the top-level copy ensures read-only routes (audit/review/debug/investigate) that have no review stage still surface a per-severity breakdown. No new categories or text — pure counts. |
 | `escalationCount` | integer (0–20) | Escalation frequency |
 | `fallbackCount` | integer (0–20) | Provider-fallback frequency |
 
