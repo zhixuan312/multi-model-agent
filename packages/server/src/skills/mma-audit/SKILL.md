@@ -17,7 +17,7 @@ version: "0.0.0-unreleased"
 |---|---|---|
 | A general prose artifact (design doc, recommendation, post-mortem, README) | `subtype: 'default'` | Comprehensive prose-coherence — would a literal-following worker produce the right outcome from this prose alone? Catches ambiguity, contradictions, missing branches, drift, scope-creep. **Does NOT verify against any codebase.** |
 | A **code-execution PLAN** (`docs/superpowers/plans/*.md` or similar) before running it via `mma-execute-plan` | `subtype: 'plan'` | Plan-vs-codebase coherence — for every method / type / file path / signature / import / verify command the plan names, the codebase actually contains it as described. Catches the bug class the prose-coherence audit cannot see (e.g. plan says `registerBlock` but actual interface is `register`). |
-| A **requirement spec** (what we want, why; success criteria) | `subtype: 'spec'` | Requirement-prose executability — every requirement testable, scope explicit, acceptance criteria covered, non-functional requirements captured, decision-trace exposed, conflicts surfaced. |
+| A **requirement spec** (what we want, why; success criteria) | `subtype: 'spec'` | Requirement-prose executability across 9 criteria — testability, scope explicitness AND decomposability, acceptance-criteria coverage, non-functional capture, requirement conflicts, decision-trace, assumption exposure, placeholder scan, and design-decomposition presence (architecture / components / data flow / error handling / testing). |
 | A **SKILL.md** for an `mma-*` skill or comparable agent-facing playbook | `subtype: 'skill'` | Skill-file reader-effectiveness — when-to-use specificity, endpoint contract integrity, example correctness, anti-pattern coverage, link integrity. |
 
 If you want to bias workers toward a narrow lens (security only, performance only, accessibility only), put that in the free-text `background` portion of the prompt — `subtype` is criteria machinery, not a lens selector.
@@ -65,7 +65,7 @@ Either `document` or `filePaths` (or both) must be provided.
 |---|---|
 | `default` (or omit the field) | **General prose — design doc, recommendation, post-mortem, README, brief.** Comprehensive prose-coherence audit. Does NOT verify against any codebase. |
 | `plan` | **Code-execution plans being audited against a real codebase.** Single-file input (the plan markdown). Workers grep / read source files under `cwd` to verify every named symbol / path / signature / import / verify command. Use this BEFORE every `mma-execute-plan` dispatch. |
-| `spec` | **Requirement spec / brainstorming-output / what-we-want prose.** Criteria target testability, scope explicitness, acceptance-criteria coverage, decision-trace, assumption exposure. |
+| `spec` | **Requirement spec / brainstorming-output / what-we-want prose.** 9 criteria target testability, scope explicitness + decomposability, acceptance-criteria coverage, non-functional capture, requirement conflicts, decision-trace, assumption exposure, placeholder scan, and design-decomposition presence. |
 | `skill` | **`SKILL.md` or comparable agent-facing playbook.** Criteria target when-to-use specificity, endpoint contract integrity, example correctness, anti-pattern coverage, link integrity. |
 
 You can run BOTH on a plan: first `spec` or `default` (prose quality), then `plan` (does the plan match the codebase?). They cover orthogonal failure modes.
@@ -78,7 +78,8 @@ When `subtype: 'plan'`:
 
 - `filePaths` MUST contain exactly **one entry** — the plan markdown. Sending zero or 2+ entries → `400 invalid_request` with the message: *"Plan audit takes exactly one filePath (the plan markdown). The worker discovers and verifies source files itself via its tool surface — do not pre-list source files."*
 - `document` (inline content) is not used in plan mode — the plan must be on disk so workers can reference it by `?cwd=`-relative path.
-- The worker runs the sequential-criteria loop with the plan-audit criteria set: PATH EXISTENCE, SYMBOL EXISTENCE, SIGNATURE MATCH, IMPORT GRAPH, TEST HARNESS AVAILABILITY, STEP SEQUENCE WITHIN TASK, CROSS-TASK DEPENDENCIES, VERIFICATION COMMAND VALIDITY.
+- The worker runs the sequential-criteria loop with the plan-audit criteria set across 12 perspectives in three groups: **EXTERNAL CODEBASE COHERENCE** (1 PATH EXISTENCE, 2 SYMBOL EXISTENCE, 3 SIGNATURE MATCH, 4 IMPORT GRAPH, 5 TEST HARNESS AVAILABILITY, 6 STEP SEQUENCE WITHIN TASK, 7 CROSS-TASK DEPENDENCIES, 8 VERIFICATION COMMAND VALIDITY), **INTRA-PLAN STRUCTURE** (9 TASK GRANULARITY, 11 PLACEHOLDER LANGUAGE, 12 PLAN SKELETON), and **SPEC ALIGNMENT** (10 SPEC COVERAGE).
+- To enable perspective 10 (SPEC COVERAGE), register the upstream spec as a context block via `mma-context-blocks` and pass its `blockId` in `contextBlockIds`. Without a spec in context, perspective 10 emits "No findings for this criterion." and the other 11 still run.
 - Read the findings list. Fix the plan and re-audit if any `critical` or `high` plan-audit findings remain.
 
 ## Full example
@@ -182,7 +183,7 @@ This skill is one step in the larger flow described in `multi-model-agent` → "
 
 - **Recipe E — Plan-validate-execute.** Before any `mma-execute-plan` batch, run `mma-audit` with `subtype: 'plan'` on the plan file. Read the findings. If any `critical` / `high` finding survives, fix the plan and re-audit. This catches the bug class where the plan's named methods/files don't actually exist in the codebase — symbols a prose-coherence audit cannot see.
 
-- **Recipe F — Spec-then-plan-then-execute.** When working from a brainstorming spec: `mma-audit` (`subtype: 'spec'`) → fix → `writing-plans` → `mma-audit` (`subtype: 'plan'`) → fix → `mma-execute-plan`. Spec and plan audits catch orthogonal problem classes.
+- **Recipe F — Spec-then-plan-then-execute (the canonical flow).** When working from a brainstorming spec: `mma-audit` (`subtype: 'spec'`) → fix → `writing-plans` → register the spec as a context block via `mma-context-blocks` → `mma-audit` (`subtype: 'plan'`, `contextBlockIds: [specBlockId]`) → fix → `mma-execute-plan`. Spec audit covers requirement-prose executability; plan audit covers BOTH plan-vs-codebase coherence AND plan-vs-spec coverage (perspective 10 fires only when the spec is in context, which is why the context-block step is load-bearing in this recipe).
 
 Anti-pattern alert: **`parallel-rounds-same-target`** (AP1). Three parallel audits on the same document re-flag the same issues without seeing each other's fixes. Run rounds sequentially with a fix between each.
 
