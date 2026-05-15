@@ -6,7 +6,7 @@ import type { ImplementPayload, RouteName } from '../../../packages/core/src/lif
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
 function makeMockSession(turn: {
-  kind: 'ok'; text: string; costUSD: number; turnsUsed: number; stopReason: string;
+  kind: 'ok'; output: string; costUSD: number; turnsUsed: number; terminationReason: string;
 } | {
   kind: 'transport_error'; message: string;
 } | {
@@ -22,7 +22,7 @@ describe('implementHandler', () => {
   it('returns a StageGate<ImplementPayload> on advance', async () => {
     const session = makeMockSession({
       kind: 'ok',
-      text: `Worker prose here.\n\`\`\`json\n${JSON.stringify({
+      output: `Worker prose here.\n\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'done',
         summary: 'did the thing',
         filesChanged: ['x.ts'],
@@ -30,7 +30,7 @@ describe('implementHandler', () => {
       })}\n\`\`\``,
       costUSD: 0.01,
       turnsUsed: 1,
-      stopReason: 'normal',
+      terminationReason: 'ok',
     });
 
     const state = mockState({
@@ -51,10 +51,10 @@ describe('implementHandler', () => {
   });
 
   it('halts on provider transport failure', async () => {
-    const session = makeMockSession({
-      kind: 'transport_error',
-      message: '5xx error after 3 retries',
-    });
+    const session = {
+      send: vi.fn().mockRejectedValue(new Error('5xx error after 3 retries')),
+      close: vi.fn(),
+    };
 
     const state = mockState({
       route: 'delegate',
@@ -73,7 +73,7 @@ describe('implementHandler', () => {
   it('advances with workerSelfAssessment=failed when worker emits failed', async () => {
     const session = makeMockSession({
       kind: 'ok',
-      text: `\`\`\`json\n${JSON.stringify({
+      output: `\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'failed',
         summary: 'gave up',
         filesChanged: [],
@@ -81,7 +81,7 @@ describe('implementHandler', () => {
       })}\n\`\`\``,
       costUSD: 0.01,
       turnsUsed: 1,
-      stopReason: 'normal',
+      terminationReason: 'ok',
     });
 
     const state = mockState({
@@ -102,10 +102,10 @@ describe('implementHandler', () => {
   it('halts on cost_cap_exceeded_without_output when no structured output', async () => {
     const session = makeMockSession({
       kind: 'ok',
-      text: 'Worker ran out of budget and produced no structured output',
+      output: 'Worker ran out of budget and produced no structured output',
       costUSD: 5.0,
       turnsUsed: 50,
-      stopReason: 'cost_exceeded',
+      terminationReason: 'cost_exceeded',
     });
 
     const state = mockState({
@@ -125,7 +125,7 @@ describe('implementHandler', () => {
   it('advances on cost_cap when structured output is present', async () => {
     const session = makeMockSession({
       kind: 'ok',
-      text: `Some work done.\n\`\`\`json\n${JSON.stringify({
+      output: `Some work done.\n\`\`\`json\n${JSON.stringify({
         workerSelfAssessment: 'done',
         summary: 'done with partial output',
         filesChanged: ['partial.ts'],
@@ -133,7 +133,7 @@ describe('implementHandler', () => {
       })}\n\`\`\``,
       costUSD: 5.0,
       turnsUsed: 50,
-      stopReason: 'cap_exhausted',
+      terminationReason: 'cap_exhausted',
     });
 
     const state = mockState({
@@ -170,10 +170,10 @@ ${JSON.stringify({
 
     const session = makeMockSession({
       kind: 'ok',
-      text: proseWithFinding,
+      output: proseWithFinding,
       costUSD: 0.01,
       turnsUsed: 1,
-      stopReason: 'normal',
+      terminationReason: 'ok',
     });
 
     const state = mockState({
@@ -195,10 +195,10 @@ ${JSON.stringify({
   });
 
   it('halts when session throws a sandbox violation', async () => {
-    const session = makeMockSession({
-      kind: 'transport_error',
-      message: 'sandbox policy violation: attempted to write outside cwd',
-    });
+    const session = {
+      send: vi.fn().mockRejectedValue(new Error('sandbox policy violation: attempted to write outside cwd')),
+      close: vi.fn(),
+    };
 
     const state = mockState({
       route: 'delegate',
@@ -217,10 +217,10 @@ ${JSON.stringify({
   it('fills all ImplementPayload fields with defaults when JSON block missing', async () => {
     const session = makeMockSession({
       kind: 'ok',
-      text: 'No structured output — plain text response',
+      output: 'No structured output — plain text response',
       costUSD: 0.01,
       turnsUsed: 1,
-      stopReason: 'normal',
+      terminationReason: 'ok',
     });
 
     const state = mockState({

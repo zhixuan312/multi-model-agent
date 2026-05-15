@@ -55,17 +55,17 @@ function parseFindingsFromProse(text: string): Finding[] {
   const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
 
   for (const block of blocks) {
-    const claimLine = block.match(/^- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
+    const claimLine = block.match(/^\s*- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
     if (claimLine.startsWith('[N/A]')) continue;
 
-    const sevRaw = block.match(/^- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();
+    const sevRaw = block.match(/^\s*- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();
     const severity: Finding['severity'] =
       sevRaw && SEVERITY_VALUES.has(sevRaw)
         ? (sevRaw as Finding['severity'])
         : 'medium';
-    const category = block.match(/^- Category:\s*(\S+)/im)?.[1] ?? 'general';
-    const evidence = block.match(/^- (?:Issue|Evidence):\s*(.+)$/im)?.[1]?.trim();
-    const suggestion = block.match(/^- (?:Suggestion|Fix):\s*(.+)$/im)?.[1]?.trim();
+    const category = block.match(/^\s*- Category:\s*(\S+)/im)?.[1] ?? 'general';
+    const evidence = block.match(/^\s*- (?:Issue|Evidence):\s*(.+)$/im)?.[1]?.trim();
+    const suggestion = block.match(/^\s*- (?:Suggestion|Fix):\s*(.+)$/im)?.[1]?.trim();
 
     const f: Finding = { severity, category, claim: claimLine, source: 'implementer' };
     if (evidence) f.evidence = evidence;
@@ -90,14 +90,14 @@ function defaultImplementPayload(self: 'done' | 'failed'): ImplementPayload {
 
 function tel(
   t0: number,
-  turn: { costUSD: number; turnsUsed: number },
+  turn: { costUSD?: number; turnsUsed?: number },
   stop: string,
 ): StageGate<ImplementPayload>['telemetry'] {
   return {
     stageLabel: 'implement',
     durationMs: Date.now() - t0,
-    costUSD: turn.costUSD,
-    turnsUsed: turn.turnsUsed,
+    costUSD: turn.costUSD ?? null,
+    turnsUsed: turn.turnsUsed ?? 0,
     stopReason: stop as StageGate<ImplementPayload>['telemetry']['stopReason'],
   };
 }

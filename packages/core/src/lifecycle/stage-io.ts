@@ -15,7 +15,7 @@ export type WorkerSelfAssessment = 'done' | 'failed';
 export type Severity = 'critical' | 'high' | 'medium' | 'low';
 
 export type Finding = {
-  id: string;
+  id?: string;
   severity: Severity;
   category: string;
   claim: string;

@@ -3,7 +3,7 @@
 
 import type { ExecutionContext } from '../lifecycle/lifecycle-context.js';
 import type { TaskSpec } from '../types.js';
-import type { MultiModelConfig } from '../config/schema.js';
+import type { MultiModelConfig } from '../types.js';
 
 export type WorkerTurnInput = {
   task: TaskSpec;
@@ -57,7 +57,7 @@ export async function runWorkerTurn(input: WorkerTurnInput): Promise<WorkerTurnR
     return {
       kind: 'ok',
       text: typedTurn.output ?? '',
-      costUSD: typedTurn.costUSD ?? null,
+      costUSD: typedTurn.costUSD ?? 0,
       turnsUsed: typedTurn.turns ?? 1,
       stopReason: mapStopReason(typedTurn.terminationReason),
     };
@@ -68,7 +68,7 @@ export async function runWorkerTurn(input: WorkerTurnInput): Promise<WorkerTurnR
   }
 }
 
-function mapStopReason(r?: string): WorkerTurnResult['stopReason'] {
+function mapStopReason(r?: string): 'normal' | 'turn_cap' | 'cost_cap' | 'timeout' {
   switch (r) {
     case 'ok': return 'normal';
     case 'cap_exhausted': return 'turn_cap';

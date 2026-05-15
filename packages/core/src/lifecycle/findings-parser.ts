@@ -3,11 +3,13 @@
 // parser converts them into StructuredReport.findings[] entries.
 
 export interface Finding {
+  id?: string;
   severity: 'critical' | 'high' | 'medium' | 'low';
   category: string;
   claim: string;
   evidence?: string;
   suggestion?: string;
+  source?: 'implementer' | 'reviewer';
 }
 
 const SEVERITY_VALUES = new Set(['critical', 'high', 'medium', 'low']);
