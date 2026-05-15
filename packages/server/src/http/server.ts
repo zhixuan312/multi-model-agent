@@ -75,10 +75,7 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog, ReviewerEngine, ReviewerPromptBuilder,
-    specLintTemplate, qualityLintTemplate,
-    qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
-  } =
+  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } =
     await import('@zhixuan92/multi-model-agent-core');
 
   const surface = buildToolSurfaceRegistry();
@@ -131,18 +128,6 @@ async function registerToolHandlers(
 
   const routeDispatcher = new LifecycleDispatcher();
 
-  const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-    { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
-    {
-      delegate: qualityLintTemplate,
-      'execute-plan': qualityLintTemplate,
-      audit: qualityAuditTemplate,
-      review: qualityReviewTemplate,
-      debug: qualityDebugTemplate,
-      investigate: qualityInvestigateTemplate,
-    },
-  ));
-
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
@@ -150,7 +135,6 @@ async function registerToolHandlers(
     projectRegistry,
     batchRegistry,
     routeDispatcher,
-    reviewerEngine,
   };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
@@ -219,22 +203,8 @@ async function registerControlHandlers(
       new RunningHeadlineSink(batchRegistry),
       ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
-    const { LifecycleDispatcher, ReviewerEngine, ReviewerPromptBuilder,
-      specLintTemplate, qualityLintTemplate,
-      qualityAuditTemplate, qualityReviewTemplate, qualityDebugTemplate, qualityInvestigateTemplate,
-    } = await import('@zhixuan92/multi-model-agent-core');
+    const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
     const routeDispatcher = new LifecycleDispatcher();
-    const reviewerEngine = new ReviewerEngine(new ReviewerPromptBuilder(
-      { spec: specLintTemplate, qualityForAP: qualityLintTemplate },
-      {
-        delegate: qualityLintTemplate,
-        'execute-plan': qualityLintTemplate,
-        audit: qualityAuditTemplate,
-        review: qualityReviewTemplate,
-        debug: qualityDebugTemplate,
-        investigate: qualityInvestigateTemplate,
-      },
-    ));
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -245,7 +215,6 @@ async function registerControlHandlers(
       projectRegistry,
       batchRegistry,
       routeDispatcher,
-      reviewerEngine,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));

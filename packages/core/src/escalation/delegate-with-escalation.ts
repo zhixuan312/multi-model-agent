@@ -23,7 +23,7 @@ function deriveCause(status: RunStatus, errorCode?: string): TerminationReason['
   if (status === 'ok') return 'finished';
   if (status === 'incomplete') return 'incomplete';
   if (status === 'unavailable') return 'error';
-  return status;
+  return status as TerminationReason['cause'];
 }
 
 export interface DelegateOptions {
@@ -141,12 +141,13 @@ export async function delegateWithEscalation(
       }
 
       // v4.4: ProviderConfig.type is one of: 'claude' | 'codex'.
-      const cfgType = provider.config.type;
+      const cfg = provider.config as { type?: string; model?: string };
+      const cfgType = cfg.type ?? 'codex';
       const providerTypeName: 'claude' | 'codex' =
         cfgType === 'claude' ? 'claude' : 'codex';
       safeSink?.({
         kind: 'worker_start',
-        model: provider.config.model,
+        model: cfg.model ?? 'unknown',
         providerType: providerTypeName,
         tier: options.assignedTier ?? 'standard',
       });
@@ -186,13 +187,13 @@ export async function delegateWithEscalation(
       if (options.abortSignal?.aborted) break;
 
       const delayMs = BASE_DELAY_MS * Math.pow(2, attempt);
-      safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status, delayMs });
+      safeSink?.({ kind: 'retry', attempt: attempt + 1, previousStatus: result.status as RunStatus, delayMs });
       await sleep(delayMs);
     }
 
     const record: AttemptRecord = {
       provider: provider.name,
-      status: result.status,
+      status: result.status as RunStatus,
       turns: result.turns,
       inputTokens: result.usage.inputTokens,
       outputTokens: result.usage.outputTokens,
@@ -265,7 +266,7 @@ export async function delegateWithEscalation(
 
   const wasPromoted = finalStatus === 'ok' && baseStatus === 'incomplete';
   const terminationReason: TerminationReason = {
-    cause: deriveCause(finalStatus, best.errorCode),
+    cause: deriveCause(finalStatus as RunStatus, best.errorCode),
     turnsUsed: best.turns,
     hasFileArtifacts: best.filesWritten.length > 0,
     usedShell: best.toolCalls.some(tc => extractToolName(tc) === 'runShell'),

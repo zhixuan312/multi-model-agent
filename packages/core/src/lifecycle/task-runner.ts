@@ -14,7 +14,6 @@ import type { ExecutionContext } from './lifecycle-context.js';
 import type { LifecycleState } from './stage-plan-types.js';
 import type { ResolvedAgent } from '../escalation/agent-resolver.js';
 import { LifecycleDispatcher } from './lifecycle-dispatcher.js';
-import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { WallClockGuard } from '../bounded-execution/wall-clock-guard.js';
 import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-policy.js';
 import { pickEscalation } from '../escalation/policy.js';
@@ -76,7 +75,6 @@ export interface RunTasksOptions {
   client?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
 }
 
 export async function runTasks(
@@ -149,7 +147,6 @@ export async function runTasks(
         ...(options.client !== undefined && { client: options.client }),
         ...(options.bus && { bus: options.bus }),
         ...(options.qualityReviewPromptBuilder && { qualityReviewPromptBuilder: options.qualityReviewPromptBuilder }),
-        ...(options.reviewerEngine && { reviewerEngine: options.reviewerEngine }),
       });
     }),
   );
@@ -180,7 +177,6 @@ export interface DispatchTaskInput {
    *  audit/review report referenced by contextBlockIds. */
   contextBlockStore?: import('../stores/context-block-tool.js').ContextBlockStore;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
 }
 
 function toolCategoryForRoute(route: string | undefined): ToolCategory {
@@ -277,7 +273,6 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
     outputTargets: [],
-    reviewerEngine: input.reviewerEngine ?? createDefaultReviewerEngine(),
   };
 }
 

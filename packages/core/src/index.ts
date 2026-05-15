@@ -161,19 +161,15 @@ export type { EventType } from './events/observability-events.js';
 export { JsonlWriter } from './events/jsonl-writer.js';
 export type { JsonlWriterOptions } from './events/jsonl-writer.js';
 
-// Review engine (v4.0 lifecycle + 4.3.0 pipeline redesign)
-export {
-  ReviewerEngine,
-  ReviewerPromptBuilder,
-  specLintTemplate,
-  qualityLintTemplate,
-  annotateCompletionTemplate,
-  qualityAuditTemplate,
-  qualityReviewTemplate,
-  qualityDebugTemplate,
-  qualityInvestigateTemplate,
-} from './review/reviewer-engine.js';
-export type { ReviewTemplate, QualityReviewRoute } from './review/reviewer-engine.js';
+// Review engine templates (v4.0 lifecycle + 4.3.0 pipeline redesign)
+export { specLintTemplate } from './review/templates/spec-review.js';
+export { qualityLintTemplate } from './review/templates/quality-review.js';
+export { qualityAuditTemplate } from './review/templates/quality-review-audit.js';
+export { qualityReviewTemplate } from './review/templates/quality-review-review.js';
+export { qualityDebugTemplate } from './review/templates/quality-review-debug.js';
+export { qualityInvestigateTemplate } from './review/templates/quality-review-investigate.js';
+export { reworkTemplate } from './review/templates/rework.js';
+export type { ReviewTemplate } from './review/templates/shared.js';
 
 // Intake-pipeline slots
 export type { ReviewPolicy } from './intake/brief-compiler-slots/delegate.js';

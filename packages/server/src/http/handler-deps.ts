@@ -3,7 +3,6 @@ import type { MultiModelConfig } from '@zhixuan92/multi-model-agent-core';
 import type { HttpServerLog } from '@zhixuan92/multi-model-agent-core';
 import type { EventEmitter } from '@zhixuan92/multi-model-agent-core';
 import type { LifecycleDispatcher } from '@zhixuan92/multi-model-agent-core';
-import type { ReviewerEngine } from '@zhixuan92/multi-model-agent-core';
 import type { ProjectRegistry } from './project-registry.js';
 import type { BatchRegistry } from '@zhixuan92/multi-model-agent-core';
 
@@ -21,6 +20,4 @@ export interface HandlerDeps {
   batchRegistry: BatchRegistry;
   /** Optional LifecycleDispatcher for v4.0 lifecycle dispatch. When set, handlers use the new path. */
   routeDispatcher?: LifecycleDispatcher;
-  /** v4 ReviewerEngine — instantiated once at server startup, shared across all requests. */
-  reviewerEngine?: ReviewerEngine;
 }

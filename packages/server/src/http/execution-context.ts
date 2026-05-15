@@ -78,6 +78,5 @@ export function buildExecutionContext(
       : () => {},
     verbose: deps.config.diagnostics?.verbose ?? false,
     outputTargets: [],
-    reviewerEngine: deps.reviewerEngine,
   } as unknown as ExecutionContext;
 }

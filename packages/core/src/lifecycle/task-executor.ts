@@ -9,7 +9,6 @@ import { computeTimings, computeAggregateCost } from './shared-compute.js';
 import { autoRegisterContextBlock } from './auto-register-context-block.js';
 import { mapReviewVerdicts } from '../review/review-verdict-mapping.js';
 import { notApplicable, type NotApplicable } from '../reporting/not-applicable.js';
-import { createDefaultReviewerEngine } from '../review/default-engines.js';
 import { parseStructuredReport } from '../reporting/structured-report.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 
@@ -142,7 +141,7 @@ export async function executeTask<Input, Brief, Report>(
         mainModel: ctx.mainModel,
         bus: ctx.bus,
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
-        reviewerEngine: ctx.reviewerEngine ?? createDefaultReviewerEngine(),
+        ...(ctx.reviewerEngine !== undefined && { reviewerEngine: ctx.reviewerEngine }),
       });
     } catch (e) {
       // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,

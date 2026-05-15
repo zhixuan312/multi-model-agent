@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { mkdtempSync, writeFileSync, unlinkSync } from 'node:fs';
 import { join } from 'node:path';
 import { tmpdir } from 'node:os';
 import { execSync } from 'node:child_process';
@@ -26,12 +26,14 @@ describe('getRealFilesChanged', () => {
 
   it('returns NEW untracked files but not pre-existing untracked files', async () => {
     const { cwd, sha } = makeRepo();
+    // pre-existing untracked file in the snapshot:
     writeFileSync(join(cwd, 'pre.txt'), 'pre');
     const state: any = {
       cwd,
       preTaskHeadSha: sha,
       preTaskUntrackedFiles: new Set([join(cwd, 'pre.txt')]),
     };
+    // worker creates a NEW untracked file during the task:
     writeFileSync(join(cwd, 'new.txt'), 'new');
     const r = await getRealFilesChanged(state);
     expect(r.source).toBe('git_diff');
@@ -52,10 +54,11 @@ describe('getRealFilesChanged', () => {
     expect(r.files).toEqual(['/some/path.ts']);
   });
 
-  it('returns git_error source when git invocation fails (bad sha)', async () => {
-    const { cwd } = makeRepo();
-    // Pass an invalid sha — git diff will fail with "bad object" status != 0
-    const state: any = { cwd, preTaskHeadSha: 'deadbeefdeadbeefdeadbeefdeadbeefdeadbeef', preTaskUntrackedFiles: new Set() };
+  it('returns git_error source when git invocation fails', async () => {
+    // Corrupt the .git directory after capturing sha:
+    const { cwd, sha } = makeRepo();
+    execSync(`rm -rf "${cwd}/.git"`, { shell: '/bin/bash' });
+    const state: any = { cwd, preTaskHeadSha: sha, preTaskUntrackedFiles: new Set() };
     const r = await getRealFilesChanged(state);
     expect(r.source).toBe('git_error');
     expect(r.files).toEqual([]);

@@ -36,8 +36,17 @@ export function assembleRunResult(
     for (let i = 0; i < count; i++) toolCalls.push(name);
   }
 
+  // Map SDK termination reason; derived once to avoid recomputation.
+  const tr = turn.terminationReason;
+  const mapsToCause = tr === 'ok' || tr === 'cap_exhausted' || tr === 'stalled';
+  const terminationReason = mapsToCause
+    ? undefined
+    : (mapTermination(tr) as RunResult['terminationReason']);
+
   const workerStatus: RunResult['workerStatus'] | undefined =
-    turn.workerSelfAssessment ?? (turn.terminationReason === 'ok' ? 'done' : undefined);
+    turn.workerSelfAssessment
+      ? (turn.workerSelfAssessment as 'done' | 'failed')
+      : (tr === 'ok' ? 'done' : undefined);
 
   return {
     output: turn.output,
@@ -52,15 +61,15 @@ export function assembleRunResult(
     escalationLog: [],
     durationMs: turn.durationMs,
     directoriesListed: [],
-    ...(workerStatus && { workerStatus }),
-    ...(turn.terminationReason !== 'ok' && { terminationReason: mapTermination(turn.terminationReason) }),
+    ...(workerStatus && { workerStatus: workerStatus as 'done' | 'failed' }),
+    ...(terminationReason && { terminationReason }),
     ...(turn.errorCode && { errorCode: turn.errorCode }),
     ...(turn.errorMessage && { error: turn.errorMessage }),
     ...parsed,
   } as unknown as RunResult;
 }
 
-function mapStatus(r: TurnResult['terminationReason'], errorCode?: string): RunResult['status'] {
+function mapStatus(r: string, errorCode?: string): RunResult['status'] {
   switch (r) {
     case 'ok': return 'ok';
     case 'cost_exceeded': return 'cost_exceeded';
@@ -75,23 +84,26 @@ function mapStatus(r: TurnResult['terminationReason'], errorCode?: string): RunR
         return errorCode as RunResult['status'];
       }
       return 'error';
+    default:
+      // Unknown SDK termination reasons: degrade gracefully to 'error'.
+      // This is the safe choice — the run is non-ok, and error is the
+      // catch-all that lifecycle handlers inspect.
+      return 'error';
   }
 }
 
-function mapIncompleteReason(r: TurnResult['terminationReason']): RunResult['incompleteReason'] | undefined {
+function mapIncompleteReason(r: string): RunResult['incompleteReason'] | undefined {
   if (r === 'cap_exhausted') return 'turn_cap';
   if (r === 'stalled') return 'timeout';
   return undefined;
 }
 
-function mapTermination(r: TurnResult['terminationReason']): RunResult['terminationReason'] {
+function mapTermination(r: string): string | undefined {
   switch (r) {
-    case 'ok': return undefined as never;
     case 'time_exceeded': return 'time_ceiling';
     case 'cost_exceeded': return 'cost_ceiling';
-    case 'cap_exhausted': return undefined as never;
-    case 'stalled': return undefined as never;
     case 'aborted': return 'all_tiers_unavailable';
     case 'error': return 'all_tiers_unavailable';
+    default: return undefined;
   }
 }

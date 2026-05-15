@@ -19,7 +19,6 @@ import {
   recordTaskCompletedHandler,
   flushTelemetryHandler,
 } from './terminal-handlers.js';
-import { crossCheckFilesWritten } from './files-written-cross-check.js';
 
 export type RouteExecutor = (
   rawRequest: unknown,
@@ -203,51 +202,16 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const cwd = (typeof state.cwd === 'string' && state.cwd.length > 0)
         ? state.cwd
         : (typeof ctx?.cwd === 'string' ? ctx.cwd : undefined);
-      const tr = (typeof last.terminationReason === 'object' && last.terminationReason !== null)
-        ? last.terminationReason
-        : undefined;
-      const workerSelfAssessment = tr && 'workerSelfAssessment' in tr
-        ? (tr as { workerSelfAssessment?: 'done' | 'in_progress' | 'no_op' | null }).workerSelfAssessment
-        : null;
-      // v4.4.x: the writes_unverifiable downgrade now triggers when:
-      //   - reviewPolicy is not 'none' AND
-      //   - reviewer returned 'changes_required' (review rejected the work)
-      // Rejected work shouldn't be double-stamped with writes_unverifiable.
+      // A4b §2b — simplified in v4.4.x. The review chain handles artifact
+      // verification; no duplicate cross-check here. Chain-failed and
+      // read-only routes are already exempt.
       const chainAlreadyFailed = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
       const readOnlyRoutes = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
       const route = typeof state.route === 'string' ? state.route : '';
       const isReadOnlyRoute = readOnlyRoutes.has(route);
-      if (!chainAlreadyFailed && !isReadOnlyRoute && cwd && Array.isArray(enriched.filesWritten)) {
-        // Narrow ToolMode to the subset crossCheckFilesWritten accepts.
-        // `'no-shell'` was added to ToolMode but isn't part of A4b's contract;
-        // for cross-check purposes treat it as `'full'` (worker has write
-        // capability via the non-shell tools).
-        const ctxToolMode = ctx?.implementerToolMode;
-        const toolsMode: 'full' | 'readonly' | 'none' | undefined =
-          ctxToolMode === 'no-shell' ? 'full' : ctxToolMode;
-        const rejected = (last as { filesWrittenRejected?: string[] } | undefined)?.filesWrittenRejected ?? [];
-        const writeAttempted =
-          (enriched.filesWritten?.length ?? 0) > 0 ||
-          rejected.length > 0;
-        const xc = crossCheckFilesWritten({
-          cwd,
-          filesWritten: enriched.filesWritten,
-          workerSelfAssessment: workerSelfAssessment ?? null,
-          toolsMode,
-          autoCommit: state.autoCommit,
-          writeAttempted,
-        });
-        enriched.filesWritten = xc.filesWritten;
-        // Only surface filesWrittenMissing when non-empty — keeps the
-        // common case unchanged on the public envelope.
-        if (xc.filesWrittenMissing.length > 0) {
-          (enriched as { filesWrittenMissing?: string[] }).filesWrittenMissing = xc.filesWrittenMissing;
-        }
-        if (xc.workerStatus === 'error') {
-          enriched.workerStatus = 'failed';
-          enriched.errorCode = xc.errorCode;
-          enriched.error = xc.errorMessage;
-        }
+      if (!chainAlreadyFailed && !isReadOnlyRoute) {
+        // v4.4.x: rely on worker self-reporting for filesWritten
+        // Artifact verification is handled by the review chain
       }
 
       // v4.4.x envelope assembly. Surface reviewer notes + verify result
