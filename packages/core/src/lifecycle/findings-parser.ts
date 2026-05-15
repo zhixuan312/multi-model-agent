@@ -30,10 +30,12 @@ export function parseFindings(text: string, criterionId: string): Finding[] {
 
   const findings: Finding[] = [];
   for (const block of blocks) {
-    const headingMatch = block.match(/^## Finding \d+:\s*(.+)$/m);
-    if (!headingMatch) continue;
-    const claim = headingMatch[1].trim();
-    if (claim.startsWith('[N/A]')) continue;
+    // Extract the claim from the "- Claim:" bullet line within the block.
+    // Note: the ## Finding N: heading line has no inline text (just the
+    // heading + colon + newline); the actual claim lives in the bullet.
+    const claimLine = block.match(/^- Claim:\s*(.+)$/im)?.[1]?.trim() ?? '';
+    if (claimLine.startsWith('[N/A]')) continue;
+    const claim = claimLine;
 
     const sevRaw = block.match(/^- Severity:\s*(\w+)/im)?.[1]?.toLowerCase();
     const severity: Finding['severity'] = sevRaw && SEVERITY_VALUES.has(sevRaw)

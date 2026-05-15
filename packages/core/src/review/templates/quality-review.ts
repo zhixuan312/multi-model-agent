@@ -18,7 +18,7 @@ Rules:
 - "approved" when the code is safe and correct enough to ship. Style nits do NOT block.
 - "changes_required" only for substantive risks (null-handling gap, missing error path, real edge case, security surface, etc.).
 - Each finding must be specific enough that a rework worker can act on it without re-deriving.
-- If approved, write "## Verdict\\napproved" and omit the ## Finding sections entirely.
+- If approved, write "## Verdict\napproved" and omit the ## Finding sections entirely.
 - Do NOT use editor tools. Read-only investigation only.`;
 
 export const qualityLintTemplate: ReviewTemplate = {
@@ -34,7 +34,7 @@ export const qualityLintTemplate: ReviewTemplate = {
     '- "approved" when the code is safe and correct enough to ship. Style nits do NOT block.',
     '- "changes_required" only for substantive risks (null-handling gap, missing error path, real edge case, security surface, etc.).',
     '- Each finding must be specific enough that a rework worker can act on it without re-deriving.',
-    '- If approved, write "## Verdict\\napproved" and omit the ## Finding sections entirely.',
+    '- If approved, write "## Verdict\napproved" and omit the ## Finding sections entirely.',
     '- Do NOT use editor tools. Read-only investigation only.',
   ].join('\n'),
 
