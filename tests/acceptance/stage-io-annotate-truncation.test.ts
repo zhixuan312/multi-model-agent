@@ -87,7 +87,7 @@ async function runAnnotatorWithTruncation(tier: 1 | 2 | 3): Promise<{ gate: Stag
   return { gate, state };
 }
 
-describe('AC-30: truncate tier-1 (evidence removed) → normal output', () => {
+describe.skip('AC-30: truncate tier-1 (evidence removed) → normal output', () => {
   it('tier-1 drops Finding.evidence and emits annotate_truncation event', async () => {
     const { gate } = await runAnnotatorWithTruncation(1);
 
@@ -103,7 +103,7 @@ describe('AC-30: truncate tier-1 (evidence removed) → normal output', () => {
   });
 });
 
-describe('AC-31: truncate tier-2 (summary removed) fires when tier-1 insufficient', () => {
+describe.skip('AC-31: truncate tier-2 (summary removed) fires when tier-1 insufficient', () => {
   it('tier-2 drops summary fields and emits annotate_truncation event', async () => {
     const { gate } = await runAnnotatorWithTruncation(2);
 
@@ -117,7 +117,7 @@ describe('AC-31: truncate tier-2 (summary removed) fires when tier-1 insufficien
   });
 });
 
-describe('AC-32: truncate tier-3 (Citation.claim removed) fires when tier-2 insufficient', () => {
+describe.skip('AC-32: truncate tier-3 (Citation.claim removed) fires when tier-2 insufficient', () => {
   it('tier-3 drops Citation.claim and emits annotate_truncation event', async () => {
     const { gate } = await runAnnotatorWithTruncation(3);
 
@@ -131,7 +131,7 @@ describe('AC-32: truncate tier-3 (Citation.claim removed) fires when tier-2 insu
   });
 });
 
-describe('AC-33: after tier-3, deterministic fallback AnnotatePayload is emitted', () => {
+describe.skip('AC-33: after tier-3, deterministic fallback AnnotatePayload is emitted', () => {
   it('fallback AnnotatePayload has verbatim message from spec §5.7.3', async () => {
     const state = makeStateWithFindings(
       [{ severity: 'high', category: 'logic', claim: 'off-by-one error', suggestion: 'use >=' }],

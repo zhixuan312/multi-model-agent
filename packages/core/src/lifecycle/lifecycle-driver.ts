@@ -1,6 +1,7 @@
 import type { StagePlan, LifecycleState } from './stage-plan-types.js';
 import type { StageGate } from './stage-io.js';
 import type { ExecutionContext } from './lifecycle-context.js';
+import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 
 export type StageHandler = (state: LifecycleState) => unknown;
 
@@ -88,6 +89,9 @@ export class LifecycleDriver {
           emitHaltEvent(state.executionContext, stageName, gate.comment ?? '', gate.telemetry.stopReason);
         }
       } catch (err) {
+        // Special-case: ContextBlockNotFoundError propagates so the dispatcher
+        // can return 400. All other errors become halt gates.
+        if (err instanceof ContextBlockNotFoundError) throw err;
         const msg = err instanceof Error ? err.message : String(err);
         const tCatch = Date.now() - t0;
         state.gates![stageName] = {

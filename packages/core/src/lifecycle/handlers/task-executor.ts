@@ -204,3 +204,13 @@ export async function implementHandler(
     };
   }
 }
+// v4-compat shim: tests/helpers/bootstrap.ts and a few other call sites use
+// `new TaskExecutor(emitter)` and `executor.handler.bind(executor)`. The v5
+// stage handler is the bare `implementHandler` function above. This class
+// preserves the test-fixture contract while delegating to the v5 handler.
+export class TaskExecutor {
+  constructor(private _emitter?: unknown) {}
+  handler = async (state: LifecycleState): Promise<void> => {
+    await implementHandler(state);
+  };
+}

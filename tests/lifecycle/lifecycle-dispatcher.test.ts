@@ -56,7 +56,10 @@ describe('LifecycleDispatcher', () => {
     expect((out.body as any).missing).toEqual(['ctx-missing-1']);
   });
 
-  it('re-throws unknown errors', async () => {
+  // v5: driver catches handler exceptions and synthesizes a halt gate
+  // instead of propagating (spec §4.4). The old "re-throws unknown errors"
+  // behavior is replaced.
+  it.skip('[v4 legacy] re-throws unknown errors (replaced by halt-gate synthesis in v5)', async () => {
     const handlers = {
       accept_http_request: () => { throw new Error('boom'); },
       verify_loopback: async () => {},
