@@ -307,6 +307,7 @@ function ensureImplementingStage(
     toolCallCount: Array.isArray(rr.toolCalls) ? rr.toolCalls.length : 0,
     filesReadCount: Array.isArray(rr.filesRead) ? rr.filesRead.length : 0,
     filesWrittenCount: Array.isArray(rr.filesWritten) ? rr.filesWritten.length : 0,
+    directoriesListed: 0,
   };
   (rr as { stageStats?: Record<string, unknown> }).stageStats = {
     ...((rr.stageStats as Record<string, unknown> | undefined) ?? {}),

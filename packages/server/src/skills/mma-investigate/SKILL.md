@@ -160,7 +160,7 @@ The main-agent fields are authoritative; the telemetry block is diagnostics.
 
 | Field | When populated | Notes |
 |---|---|---|
-| `completed` | always | `true` when at least one criterion succeeded; `false` only on transport failure |
+| `completed` | always | `true` when at least one criterion succeeded; `false` on annotator transport failure OR unmet annotate preconditions (e.g. non-`done` worker self-assessment on a read route) |
 | `message` | always | human-readable summary; names blocking gates or finding IDs on failure |
 | `findings` | always | `source: 'implementer'` for investigate; findings are the deliverable on read routes |
 | `workerSelfAssessment` | always | `'done'` or `'failed'` — never `done_with_concerns` |
@@ -202,7 +202,7 @@ About to `Read` 3+ files just to answer one question? That's the wrong tradeoff 
 
 ## Terminal context block
 
-Every completed task automatically registers a terminal markdown context block containing the full task report (headline, investigation synthesis, citations, and annotated findings). The `blockId` is returned in each task result as `terminalBlockId`. This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
+Every completed task automatically registers a terminal markdown context block containing the full task report (headline, investigation synthesis, citations, and annotated findings). The `blockId` is returned in each task result under the shared `blockId` field (not a separate `terminalBlockId` field). This block is immutable, lives for the session duration, and counts against the project's `maxEntries` quota (default 500).
 
 **Use cases:**
 - Pass investigation results to a downstream planning step

@@ -11,9 +11,9 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
   const runSpec    = policy === 'full' || policy === 'quality_only';
   const runQuality = policy === 'full' || policy === 'diff_only';
 
-  const impl = (state.gates['implement']?.payload ?? {}) as { summary?: string; filesChanged?: string[] };
-  const briefObj = (state.task ?? {}) as { brief?: unknown };
-  const briefStr = typeof briefObj.brief === 'string' ? briefObj.brief : '';
+  const impl = (state.gates?.['implement']?.payload ?? {}) as { summary?: string; filesChanged?: string[] };
+  const briefObj = (state.task ?? {}) as { brief?: string };
+  const briefStr = briefObj.brief ?? '';
   const context = {
     brief: briefStr,
     workerSummary: impl.summary,

@@ -164,7 +164,10 @@ describe('delegateWithEscalation', () => {
   });
 
   describe('status promotion', () => {
-    it('promotes incomplete to ok when worker self-assessed done with shell verification', async () => {
+    // v5: escalation no longer promotes based on workerSelfAssessment + shell.
+    // Annotate is the single point of truth for `completed`. This test was the
+    // v4 promotion-gate behavior; skipping per spec §9 M1 fix.
+    it.skip('[v4 legacy] promotes incomplete to ok when worker self-assessed done with shell verification', async () => {
       const provider = makeProvider('standard', {
         status: 'incomplete',
         output: '## Summary\nAll tests pass. Verified.\n\n## Validations run\n- npm test: pass',
@@ -197,7 +200,8 @@ describe('delegateWithEscalation', () => {
       expect(result.terminationReason?.wasPromoted).toBe(false);
     });
 
-    it('honors skipCompletionHeuristic in C2 gate (audit/review-style tasks)', async () => {
+    // v5: skipCompletionHeuristic gate also removed with the broader promotion logic.
+    it.skip('[v4 legacy] honors skipCompletionHeuristic in C2 gate (audit/review-style tasks)', async () => {
       const provider = makeProvider('standard', {
         status: 'incomplete',
         output: 'detailed audit report content',

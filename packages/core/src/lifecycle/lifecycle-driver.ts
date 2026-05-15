@@ -89,12 +89,14 @@ export class LifecycleDriver {
         }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
+        const tCatch = Date.now() - t0;
         state.gates![stageName] = {
           outcome: 'halt',
           payload: null,
           comment: `${stageName} crashed: ${msg}`,
-          telemetry: { ...zeroTel(stageName), stopReason: 'transport_error', durationMs: Date.now() - t0 },
+          telemetry: { ...zeroTel(stageName), stopReason: 'transport_error', durationMs: tCatch },
         };
+        emitGateRecorded(state.executionContext, stageName, 'halt', null, tCatch);
         state.halted = true;
         state.terminal = true;
         emitHaltEvent(state.executionContext, stageName, `${stageName} crashed: ${msg}`, 'transport_error');

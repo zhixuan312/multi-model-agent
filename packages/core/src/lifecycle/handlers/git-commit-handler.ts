@@ -83,13 +83,13 @@ function haltCommit(comment: string, t0: number): StageGate<CommitPayload> {
 
 function composeCommitMessage(state: LifecycleState): string {
   const summary =
-    (state.gates['rework']?.payload as { summary?: string } | undefined)?.summary ??
-    (state.gates['implement']?.payload as { summary?: string } | undefined)?.summary ??
+    (state.gates?.['rework']?.payload as { summary?: string } | undefined)?.summary ??
+    (state.gates?.['implement']?.payload as { summary?: string } | undefined)?.summary ??
     '(no summary)';
   const firstLine = summary.split('\n')[0].slice(0, 72);
-  const reviewVerdict = (state.gates['review']?.payload as { verdict?: string } | undefined)?.verdict;
+  const reviewVerdict = (state.gates?.['review']?.payload as { verdict?: string } | undefined)?.verdict;
   const unaddressed = (
-    (state.gates['rework']?.payload as { unaddressedFindingIds?: string[] } | undefined)?.unaddressedFindingIds ??
+    (state.gates?.['rework']?.payload as { unaddressedFindingIds?: string[] } | undefined)?.unaddressedFindingIds ??
     []
   );
 

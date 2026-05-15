@@ -131,7 +131,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
   if (merged) {
     const priorFilesChanged = ((last as { filesChanged?: string[] }).filesChanged) ?? [];
     merged.summary = reworked.summary;
-    merged.workerStatus = reworked.workerStatus;
+    merged.workerStatus = reworked.workerSelfAssessment;
     merged.filesChanged = Array.from(new Set([...priorFilesChanged, ...reworked.filesChanged]));
     merged.validationsRun = reworked.validationsRun;
     merged.unresolved = reworked.unresolved;

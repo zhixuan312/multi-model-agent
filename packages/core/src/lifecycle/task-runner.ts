@@ -40,6 +40,8 @@ export function errorResult(error: string): RunResult {
     outputIsDiagnostic: true,
     escalationLog: [],
     error,
+    actualCostUSD: 0,
+    directoriesListed: [],
   };
 }
 

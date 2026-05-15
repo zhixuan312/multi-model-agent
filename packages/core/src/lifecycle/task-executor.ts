@@ -100,6 +100,8 @@ export async function executeTask<Input, Brief, Report>(
     durationMs: Date.now() - startMs,
     structuredError: { code: 'runner_crash' as const, message: msg, where: `executor:${config.name}` },
     workerStatus: 'failed' as const,
+    actualCostUSD: 0,
+    directoriesListed: [],
   });
 
   const buildAgentNotConfiguredResult = (msg: string): RunResult => ({
@@ -117,6 +119,8 @@ export async function executeTask<Input, Brief, Report>(
     retryable: false,
     durationMs: Date.now() - startMs,
     workerStatus: 'failed' as const,
+    actualCostUSD: 0,
+    directoriesListed: [],
   });
 
   const dispatchOne = async (task: TaskSpec, i: number): Promise<RunResult> => {

@@ -86,7 +86,7 @@ Explore top-level orchestration aggregates sub-task results into a valid `Implem
 
 | Check | How |
 |---|---|
-| Did the leg succeed? | `results[0].completed === true` AND `results[0].findings.length > 0` |
+| Did the leg succeed? | `results[0].completed === true` — findings may be zero on a read route; finding nothing wrong is a valid completion |
 | Internal citation source | `results[0].findings[i].claim` plus a `file:LINE` token from `results[0].findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
 | External citation source | `results[0].findings[i].claim` plus a source name / URL from `results[0].findings[i].evidence` |
 | Divergence axis | `results[0].findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
