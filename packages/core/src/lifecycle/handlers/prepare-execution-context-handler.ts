@@ -84,7 +84,7 @@ export async function prepareExecutionContextHandler(
         durationMs: Date.now() - t0,
         costUSD: 0,
         turnsUsed: 0,
-        stopReason: 'halted',
+        stopReason: 'transport_error',
       },
     };
   }

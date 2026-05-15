@@ -52,7 +52,7 @@ export function buildCodexCliLaunch(input: BuildLaunchInput): CodexCliLaunch {
   // Working directory + sandbox apply only on the initial turn. `resume`
   // inherits cwd + sandbox from the stored session record.
   if (!resumeSessionId) {
-    args.push('-C', opts.cwd, '-s', 'workspace-write');
+    args.push('-C', opts.cwd ?? process.cwd(), '-s', 'workspace-write');
   }
 
   args.push('-m', cfg.model);

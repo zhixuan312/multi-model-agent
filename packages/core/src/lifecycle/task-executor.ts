@@ -145,7 +145,7 @@ export async function executeTask<Input, Brief, Report>(
         mainModel: ctx.mainModel,
         bus: ctx.bus,
         ...(ctx.contextBlockStore && { contextBlockStore: ctx.contextBlockStore }),
-        ...(ctx.reviewerEngine !== undefined && { reviewerEngine: ctx.reviewerEngine }),
+        ...((ctx as any).reviewerEngine !== undefined && { reviewerEngine: (ctx as any).reviewerEngine }),
       });
     } catch (e) {
       // Gap 3 fix (round-2 F5): durationMs MUST be set on EVERY return,

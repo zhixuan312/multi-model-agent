@@ -1,5 +1,6 @@
 import { randomUUID } from 'node:crypto';
 import type { RunResult, RawStageStats } from '../types.js';
+import type { RawStageStatsShape } from '../types/run-result.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
 import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './telemetry-types.js';
@@ -269,7 +270,7 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
 }
 
 function extractStageData(
-  raw: RawStageStats | undefined,
+  raw: RawStageStats | RawStageStatsShape | undefined,
   _rr: RunResult,
   _stageName: string,
 ) {

@@ -69,57 +69,57 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       // read `actualCostUSD` directly.
       if (enriched.actualCostUSD === undefined) {
         const stageStats = (last.stageStats ?? undefined) as Record<string, { entered?: boolean; costUSD?: number | null } | undefined> | undefined;
-        enriched.actualCostUSD = sumStageCosts(stageStats);
+        enriched.actualCostUSD = sumStageCosts(stageStats) ?? 0;
       }
-
+      const e = enriched as unknown as Record<string, unknown>;
       if (state.specReviewError !== undefined) {
-        (enriched as Record<string, unknown>).specReviewStatus = 'error';
+        e.specReviewStatus = 'error';
       } else if (state.specReviewVerdict !== undefined) {
-        (enriched as Record<string, unknown>).specReviewStatus = state.specReviewVerdict;
+        e.specReviewStatus = state.specReviewVerdict;
       } else {
-        (enriched as Record<string, unknown>).specReviewStatus = 'not_applicable';
+        e.specReviewStatus = 'not_applicable';
       }
 
       if (state.qualityReviewError !== undefined) {
-        (enriched as Record<string, unknown>).qualityReviewStatus = 'error';
+        e.qualityReviewStatus = 'error';
       } else if (state.qualityReviewVerdict !== undefined) {
-        (enriched as Record<string, unknown>).qualityReviewStatus = state.qualityReviewVerdict;
+        e.qualityReviewStatus = state.qualityReviewVerdict;
       } else {
-        (enriched as Record<string, unknown>).qualityReviewStatus = 'not_applicable';
+        e.qualityReviewStatus = 'not_applicable';
       }
 
       if (state.diffReviewVerdict !== undefined) {
-        (enriched as Record<string, unknown>).diffReviewStatus = state.diffReviewVerdict;
+        e.diffReviewStatus = state.diffReviewVerdict;
       } else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'diff_only') {
-        (enriched as Record<string, unknown>).diffReviewStatus = 'skipped';
+        e.diffReviewStatus = 'skipped';
       } else {
-        (enriched as Record<string, unknown>).diffReviewStatus = 'not_applicable';
+        e.diffReviewStatus = 'not_applicable';
       }
 
-      if (state.verifyResult !== undefined && (enriched as Record<string, unknown>).verification === undefined) {
-        (enriched as Record<string, unknown>).verification = state.verifyResult;
+      if (state.verifyResult !== undefined && e.verification === undefined) {
+        e.verification = state.verifyResult;
       }
-      if (Array.isArray(state.commits) && (enriched as Record<string, unknown>).commits === undefined) {
-        (enriched as Record<string, unknown>).commits = state.commits;
-      } else if ((enriched as Record<string, unknown>).commits === undefined) {
-        (enriched as Record<string, unknown>).commits = [];
+      if (Array.isArray(state.commits) && e.commits === undefined) {
+        e.commits = state.commits;
+      } else if (e.commits === undefined) {
+        e.commits = [];
       }
-      if (typeof state.commitError === 'string' && (enriched as Record<string, unknown>).commitError === undefined) {
-        (enriched as Record<string, unknown>).commitError = state.commitError;
+      if (typeof state.commitError === 'string' && e.commitError === undefined) {
+        e.commitError = state.commitError;
       }
 
       const ctx = state.executionContext;
-      if (ctx && (enriched as Record<string, unknown>).agents === undefined) {
+      if (ctx && e.agents === undefined) {
         const specReviewerTier =
-          (enriched as Record<string, unknown>).specReviewStatus === 'approved' || (enriched as Record<string, unknown>).specReviewStatus === 'changes_required'
+          e.specReviewStatus === 'approved' || e.specReviewStatus === 'changes_required'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
-            : ((enriched as Record<string, unknown>).specReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+            : (e.specReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
         const qualityReviewerTier =
-          (enriched as Record<string, unknown>).qualityReviewStatus === 'approved'
-            || (enriched as Record<string, unknown>).qualityReviewStatus === 'changes_required'
+          e.qualityReviewStatus === 'approved'
+            || e.qualityReviewStatus === 'changes_required'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
-            : ((enriched as Record<string, unknown>).qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
-        (enriched as Record<string, unknown>).agents = {
+            : (e.qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+        e.agents = {
           implementer: ctx.assignedTier,
           implementerToolMode: ctx.implementerToolMode ?? 'full',
           specReviewer: specReviewerTier,
@@ -127,17 +127,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         };
       }
 
-      if ((enriched as Record<string, unknown>).fileArtifactsMissing === undefined) {
-        (enriched as Record<string, unknown>).fileArtifactsMissing = false;
+      if (e.fileArtifactsMissing === undefined) {
+        e.fileArtifactsMissing = false;
       }
 
-      if ((enriched as Record<string, unknown>).specReviewReason === undefined) {
-        (enriched as Record<string, unknown>).specReviewReason = (enriched as Record<string, unknown>).specReviewStatus === 'not_applicable'
+      if (e.specReviewReason === undefined) {
+        e.specReviewReason = e.specReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
           : '';
       }
-      if ((enriched as Record<string, unknown>).qualityReviewReason === undefined) {
-        (enriched as Record<string, unknown>).qualityReviewReason = (enriched as Record<string, unknown>).qualityReviewStatus === 'not_applicable'
+      if (e.qualityReviewReason === undefined) {
+        e.qualityReviewReason = e.qualityReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
           : '';
       }
@@ -145,9 +145,9 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       const fallbackReport = (last.output
         ? parseStructuredReport(last.output)
         : { summary: '', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
-      ) as RunResult['implementationReport'];
-      if ((enriched as Record<string, unknown>).implementationReport === undefined) {
-        (enriched as Record<string, unknown>).implementationReport = fallbackReport;
+      ) as unknown as { summary?: string; filesChanged?: string[]; validationsRun?: unknown[]; deviationsFromBrief?: unknown[]; unresolved?: unknown[]; extraSections?: Record<string, unknown> };
+      if (e.implementationReport === undefined) {
+        e.implementationReport = fallbackReport;
       }
       // v4.4.x: the Annotating handler is the canonical source for the
       // unified StructuredReport — when it ran, its output wins over any
@@ -173,15 +173,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         }
       }
 
-      if (ctx && (enriched as Record<string, unknown>).models === undefined) {
+      if (ctx && e.models === undefined) {
         const implModel = (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? '';
         const otherTier = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
         const otherProvider = ctx.providers[otherTier];
         const otherModel = (otherProvider?.config as { model?: string } | undefined)?.model ?? null;
-        (enriched as Record<string, unknown>).models = {
+        e.models = {
           implementer: implModel,
-          specReviewer: (enriched as Record<string, unknown>).specReviewStatus === 'approved' || (enriched as Record<string, unknown>).specReviewStatus === 'changes_required' ? otherModel : null,
-          qualityReviewer: (enriched as Record<string, unknown>).qualityReviewStatus === 'approved' || (enriched as Record<string, unknown>).qualityReviewStatus === 'changes_required' ? otherModel : null,
+          specReviewer: e.specReviewStatus === 'approved' || e.specReviewStatus === 'changes_required' ? otherModel : null,
+          qualityReviewer: e.qualityReviewStatus === 'approved' || e.qualityReviewStatus === 'changes_required' ? otherModel : null,
         };
       }
 
@@ -283,7 +283,7 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           usedShell: priorTr?.usedShell ?? false,
           // v5 M3 fix: read truthful workerSelfAssessment instead of stamping
           // the retired 'done_with_concerns' value.
-          workerSelfAssessment: (last.workerStatus as string | undefined) ?? state.workerStatus ?? null,
+          workerSelfAssessment: ((last.workerStatus ?? state.workerStatus ?? null) as any),
           wasPromoted: false,
         };
       } else if (commitsExist) {
@@ -482,7 +482,7 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
     // Path 2 — register-block synthesis
     const rbGate = gates['register-block'];
     const rbPayload = rbGate?.payload as { blockId?: string; bytes?: number } | null;
-    const blockId: string = rbPayload?.blockId ?? null;
+    const blockId: string | null = rbPayload?.blockId ?? null;
     payload = {
       completed: rbGate?.outcome === 'advance',
       message: rbGate?.outcome === 'advance'

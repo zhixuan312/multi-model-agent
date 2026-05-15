@@ -16,7 +16,7 @@ export async function reviewHandler(state: LifecycleState): Promise<StageGate<Re
   const briefStr = briefObj.brief ?? '';
   const context = {
     brief: briefStr,
-    workerSummary: impl.summary,
+    workerSummary: (impl?.summary ?? "") as string,
     filesChanged: impl.filesChanged ?? [],
   };
 

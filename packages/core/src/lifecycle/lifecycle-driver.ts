@@ -63,7 +63,7 @@ export class LifecycleDriver {
             telemetry: { ...zeroTel(stageName), stopReason: 'timeout' as const },
           };
           state.gates![stageName] = haltGate;
-          emitHaltEvent(ctx, stageName, haltGate.comment, 'timeout');
+          emitHaltEvent(ctx, stageName, haltGate.comment ?? `${stageName} halted`, 'timeout');
           state.halted = true;
           continue;
         }

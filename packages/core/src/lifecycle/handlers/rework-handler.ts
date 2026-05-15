@@ -133,9 +133,10 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     merged.summary = reworked.summary;
     merged.workerStatus = reworked.workerSelfAssessment;
     merged.filesChanged = Array.from(new Set([...priorFilesChanged, ...reworked.filesChanged]));
-    merged.validationsRun = reworked.validationsRun;
-    merged.unresolved = reworked.unresolved;
-    if (reworked.commitMessage) merged.commitMessage = reworked.commitMessage;
+    // v5: validationsRun, unresolved, commitMessage removed from worker output schema
+    merged.validationsRun = (reworked as any).validationsRun ?? [];
+    merged.unresolved = (reworked as any).unresolved ?? [];
+    if ((reworked as any).commitMessage) merged.commitMessage = (reworked as any).commitMessage;
   }
 
   mergeStageStats(state, 'rework', {

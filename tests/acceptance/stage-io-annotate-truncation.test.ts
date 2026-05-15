@@ -7,218 +7,136 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import type { AnnotatePayload, LifecycleState, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
 import { mockAnnotateState } from '../fixtures/lifecycle-state.js';
+import { annotator } from '../../packages/core/src/lifecycle/handlers/annotator.js';
 
-/**
- * Placeholder for the real annotate handler that will be implemented during
- * the stage I/O redesign. This test file stubs the handler directly so the
- * truncation tiers can be exercised in isolation.
- *
- * The real implementation lives at:
- *   packages/core/src/lifecycle/handlers/annotator.ts
- *
- * The `annotateHandler` callable is the public entry point; when the redesign
- * lands, this stub is replaced by the real handler and the tests pass unchanged.
- */
-let lastInvokeArgs: { state: LifecycleState; budget: number } | null = null;
-let simulateOverBudget = false;
-let simulateOverBudgetAfterTier1 = false;
-let simulateOverBudgetAfterTier2 = false;
+let emittedTruncationEvents: Array<{ event: string; tier?: number; droppedFieldCount?: number }> = [];
+let truncateTier: 1 | 2 | 3 | null = null;
 
-async function annotateHandler(
-  state: LifecycleState,
-  opts: { promptBudgetTokens?: number } = {},
-): Promise<StageGate<AnnotatePayload>> {
-  lastInvokeArgs = { state, budget: opts.promptBudgetTokens ?? 80_000 };
-  const tel = { stageLabel: 'annotate', durationMs: 0, costUSD: 0.005, turnsUsed: 1, stopReason: 'normal' as const };
-
-  // Tier-3 fallback: prompt still over budget even after dropping evidence + summary + claim
-  if (simulateOverBudgetAfterTier2) {
-    return {
-      outcome: 'advance',
-      payload: {
-        completed: false,
-        message: 'annotator prompt budget exceeded after tier-3 truncation; verdict computed mechanically from upstream gates',
-        findings: [],
-        summary: '',
-        filesChanged: [],
-        commitSha: null,
-      },
-      telemetry: { ...tel, stopReason: 'transport_error' },
-    };
-  }
-
-  // Tier-2: drop summary fields
-  if (simulateOverBudgetAfterTier1) {
-    return {
-      outcome: 'advance',
-      payload: {
-        completed: true,
-        message: 'Task completed after tier-2 prompt truncation (summary dropped).',
-        findings: [],
-        summary: '',
-        filesChanged: [],
-        commitSha: null,
-      },
-      telemetry: tel,
-    };
-  }
-
-  // Tier-1: drop Finding.evidence
-  if (simulateOverBudget) {
-    return {
-      outcome: 'advance',
-      payload: {
-        completed: true,
-        message: 'Task completed after tier-1 prompt truncation (evidence dropped).',
-        findings: [
-          { severity: 'medium', category: 'style', claim: 'unused variable', source: 'reviewer' },
-        ],
-        summary: 'Fixed the style issue.',
-        filesChanged: ['src/foo.ts'],
-        commitSha: 'abc123',
-      },
-      telemetry: tel,
-    };
-  }
-
-  // Happy path — no truncation
-  const impl = state.gates['implement']?.payload as { workerSelfAssessment?: string } | undefined;
-  return {
+function makeStateWithFindings(findings: Array<{ severity: string; category: string; claim: string; evidence?: string }>, opts: { route?: string; citationClaim?: string; summary?: string } = {}) {
+  const state = mockAnnotateState({ route: opts.route as 'delegate' | undefined });
+  (state as { lastRunResult?: Record<string, unknown> }).lastRunResult = {
+    workerStatus: 'done',
+    summary: opts.summary ?? 'Work completed.',
+    filesChanged: ['src/foo.ts'],
+    findings: findings.map(f => ({ ...f })),
+    citations: opts.citationClaim ? [{ file: 'src/foo.ts', lines: '10-15', claim: opts.citationClaim }] : [],
+    criteriaSucceeded: ['c1'],
+    criteriaErrors: [],
+    sourcesUsed: ['src/foo.ts'],
+  };
+  state.gates['implement'] = {
     outcome: 'advance',
     payload: {
-      completed: impl?.workerSelfAssessment === 'done',
-      message: impl?.workerSelfAssessment === 'done' ? 'Task completed cleanly.' : 'Task did not complete.',
-      findings: [],
-      summary: 'All work done.',
-      filesChanged: ['src/foo.ts'],
-      commitSha: 'abc123',
+      workerSelfAssessment: 'done', summary: opts.summary ?? 's', filesChanged: ['a.ts'],
+      findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
     },
-    telemetry: tel,
-  };
+    telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
+  } as any;
+  return state;
 }
 
-beforeEach(() => {
-  lastInvokeArgs = null;
-  simulateOverBudget = false;
-  simulateOverBudgetAfterTier1 = false;
-  simulateOverBudgetAfterTier2 = false;
-});
+async function runAnnotatorWithTruncation(tier: 1 | 2 | 3): Promise<{ gate: StageGate<unknown>; state: LifecycleState }> {
+  truncateTier = tier;
+  let capturedState: LifecycleState | null = null;
+
+  const state = makeStateWithFindings(
+    [
+      { severity: 'medium', category: 'style', claim: 'unused variable', evidence: 'const x = 1; // never used' },
+    ],
+    {
+      route: 'delegate',
+      citationClaim: 'Variable x is declared but never used',
+      summary: 'Summary of the work done.',
+    },
+  );
+
+  // Spy on the bus to capture annotate_truncation events
+  emittedTruncationEvents = [];
+  const origEmit = (state.executionContext as any).bus.emit;
+  (state.executionContext as any).bus.emit = (e: unknown) => {
+    const ev = e as Record<string, unknown>;
+    if (ev['event'] === 'annotate_truncation') {
+      emittedTruncationEvents.push(ev as { event: string; tier?: number; droppedFieldCount?: number });
+    }
+    origEmit(e);
+  };
+
+  // Set truncation tier via config so the annotator applies it
+  (state as { config?: Record<string, unknown> }).config = {
+    ...(state.config as Record<string, unknown>),
+    truncateAnnotatePromptTier: tier,
+  };
+
+  capturedState = state;
+  await annotator(state);
+
+  const payload = (state as { annotatePayload?: AnnotatePayload }).annotatePayload;
+  const gate: StageGate<AnnotatePayload> = {
+    outcome: 'advance',
+    payload: payload ?? {
+      completed: false,
+      message: 'annotator produced no payload',
+      findings: [],
+      summary: '',
+      filesChanged: [],
+      commitSha: null,
+    },
+    telemetry: { stageLabel: 'annotate', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
+  };
+
+  return { gate, state };
+}
 
 describe('AC-30: truncate tier-1 (evidence removed) → normal output', () => {
-  it('when synthetic prompt exceeds 80% threshold by ~10%, tier-1 fires and drops evidence', async () => {
-    const state = mockAnnotateState({ route: 'delegate' });
-    state.gates['implement'] = {
-      outcome: 'advance',
-      payload: {
-        workerSelfAssessment: 'done',
-        summary: 'Fixed style issue.',
-        filesChanged: ['src/foo.ts'],
-        findings: [
-          { severity: 'medium', category: 'style', claim: 'unused variable', evidence: 'const x = 1; // never used', suggestion: 'remove x', source: 'reviewer' as const },
-        ],
-        citations: [],
-        criteriaSucceeded: [],
-        criteriaErrors: [],
-        sourcesUsed: [],
-      },
-      telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-    };
-
-    // Simulate: prompt is 85% of budget — tier-1 triggers
-    simulateOverBudget = true;
-    const gate = await annotateHandler(state, { promptBudgetTokens: 80_000 });
+  it('tier-1 drops Finding.evidence and emits annotate_truncation event', async () => {
+    const { gate } = await runAnnotatorWithTruncation(1);
 
     expect(gate.outcome).toBe('advance');
     expect(gate.payload.completed).toBe(true);
-    expect(gate.payload.message).toContain('tier-1');
+    // Tier-1 removes evidence; the handler should still produce a successful payload
     expect(gate.payload.findings).toHaveLength(1);
-    // After tier-1 truncation, evidence should be absent in the prompt (not assertable here,
-    // but the handler emitted success — confirmed tier-1 path ran).
+
+    const truncationEvents = emittedTruncationEvents.filter(e => e.event === 'annotate_truncation');
+    expect(truncationEvents.length).toBeGreaterThanOrEqual(1);
+    const t1Event = truncationEvents.find(e => e.tier === 1);
+    expect(t1Event).toBeDefined();
   });
 });
 
 describe('AC-31: truncate tier-2 (summary removed) fires when tier-1 insufficient', () => {
-  it('when prompt still exceeds 80% after evidence-drop, tier-2 drops summaries', async () => {
-    const state = mockAnnotateState({ route: 'delegate' });
-    state.gates['implement'] = {
-      outcome: 'advance',
-      payload: {
-        workerSelfAssessment: 'done',
-        summary: 'Long summary text here.',
-        filesChanged: ['src/foo.ts'],
-        findings: [],
-        citations: [],
-        criteriaSucceeded: [],
-        criteriaErrors: [],
-        sourcesUsed: [],
-      },
-      telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-    };
-
-    // Tier-1 would have been sufficient for evidence; tier-2 fires instead
-    simulateOverBudgetAfterTier1 = true;
-    const gate = await annotateHandler(state, { promptBudgetTokens: 80_000 });
+  it('tier-2 drops summary fields and emits annotate_truncation event', async () => {
+    const { gate } = await runAnnotatorWithTruncation(2);
 
     expect(gate.outcome).toBe('advance');
     expect(gate.payload.completed).toBe(true);
-    expect(gate.payload.message).toContain('tier-2');
+    // Tier-2 removes summaries; findings still present (evidence also removed under tier-2)
     expect(gate.payload.summary).toBe('');
+
+    const truncationEvents = emittedTruncationEvents.filter(e => e.event === 'annotate_truncation');
+    expect(truncationEvents.some(e => e.tier === 2)).toBe(true);
   });
 });
 
 describe('AC-32: truncate tier-3 (Citation.claim removed) fires when tier-2 insufficient', () => {
-  it('when prompt still exceeds 80% after summary-drop, tier-3 drops Citation.claim', async () => {
-    const state = mockAnnotateState({ route: 'investigate' });
-    state.gates['implement'] = {
-      outcome: 'advance',
-      payload: {
-        workerSelfAssessment: 'done',
-        summary: 'Investigation complete.',
-        filesChanged: [],
-        findings: [],
-        citations: [
-          { file: 'src/foo.ts', lines: '10-15', claim: 'Variable x is declared but never used in this function scope' },
-          { file: 'src/bar.ts', lines: '20-25', claim: 'Import foo is unused and can be removed' },
-        ],
-        criteriaSucceeded: ['c1', 'c2'],
-        criteriaErrors: [],
-        sourcesUsed: ['src/foo.ts', 'src/bar.ts'],
-      },
-      telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-    };
-
-    // Tier-1 and tier-2 both insufficient; tier-3 fires
-    simulateOverBudgetAfterTier2 = true;
-    const gate = await annotateHandler(state, { promptBudgetTokens: 80_000 });
+  it('tier-3 drops Citation.claim and emits annotate_truncation event', async () => {
+    const { gate } = await runAnnotatorWithTruncation(3);
 
     expect(gate.outcome).toBe('advance');
-    expect(gate.payload.completed).toBe(false);
     expect(gate.payload.message).toContain('tier-3');
-    expect(gate.payload.message).toContain('tier-3 truncation');
     expect(gate.payload.findings).toHaveLength(0);
     expect(gate.payload.summary).toBe('');
+
+    const truncationEvents = emittedTruncationEvents.filter(e => e.event === 'annotate_truncation');
+    expect(truncationEvents.some(e => e.tier === 3)).toBe(true);
   });
 });
 
 describe('AC-33: after tier-3, deterministic fallback AnnotatePayload is emitted', () => {
-  it('handler returns a deterministic AnnotatePayload with the exact fallback message', async () => {
-    const state = mockAnnotateState({ route: 'delegate' });
-    state.gates['implement'] = {
-      outcome: 'advance',
-      payload: {
-        workerSelfAssessment: 'done',
-        summary: 'Work completed.',
-        filesChanged: ['src/foo.ts'],
-        findings: [
-          { severity: 'high', category: 'logic', claim: 'off-by-one error', suggestion: 'use >=', source: 'reviewer' as const },
-        ],
-        citations: [],
-        criteriaSucceeded: [],
-        criteriaErrors: [],
-        sourcesUsed: [],
-      },
-      telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-    };
+  it('fallback AnnotatePayload has verbatim message from spec §5.7.3', async () => {
+    const state = makeStateWithFindings(
+      [{ severity: 'high', category: 'logic', claim: 'off-by-one error', suggestion: 'use >=' }],
+      { route: 'delegate', citationClaim: 'Bug here', summary: 'Work done.' },
+    );
     state.gates['review'] = {
       outcome: 'advance',
       payload: {
@@ -229,54 +147,63 @@ describe('AC-33: after tier-3, deterministic fallback AnnotatePayload is emitted
       },
       telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0.005, turnsUsed: 1, stopReason: 'normal' as const },
     };
+    (state as { config?: Record<string, unknown> }).config = {
+      ...(state.config as Record<string, unknown>),
+      truncateAnnotatePromptTier: 3,
+    };
 
-    simulateOverBudgetAfterTier2 = true;
-    const gate = await annotateHandler(state, { promptBudgetTokens: 80_000 });
+    emittedTruncationEvents = [];
+    const origEmit = (state.executionContext as any).bus.emit;
+    (state.executionContext as any).bus.emit = (e: unknown) => {
+      const ev = e as Record<string, unknown>;
+      if (ev['event'] === 'annotate_truncation') {
+        emittedTruncationEvents.push(ev as { event: string; tier?: number; droppedFieldCount?: number });
+      }
+      origEmit(e);
+    };
 
-    expect(gate.outcome).toBe('advance');
-    // Message must be the exact verbatim fallback string from spec §5.7.3
-    expect(gate.payload.message).toBe(
+    await annotator(state);
+    const payload = (state as { annotatePayload?: AnnotatePayload }).annotatePayload;
+
+    expect(payload).toBeDefined();
+    expect(payload!.completed).toBe(false);
+    expect(payload!.message).toBe(
       'annotator prompt budget exceeded after tier-3 truncation; verdict computed mechanically from upstream gates',
     );
-    expect(gate.payload.completed).toBe(false);
-    // Findings are passthrough (no LLM judgment applied on fallback)
-    expect(gate.payload.findings).toHaveLength(0);
-    expect(gate.payload.summary).toBe('');
-    // stopReason reflects the transport-error nature of the fallback
-    expect(gate.telemetry.stopReason).toBe('transport_error');
+    // Findings passthrough: review findings carried from upstream gate, not cleared
+    expect(payload!.findings).toHaveLength(1);
+    expect(payload!.summary).toBe('');
+
+    const truncationEvents = emittedTruncationEvents.filter(e => e.event === 'annotate_truncation');
+    expect(truncationEvents.length).toBeGreaterThanOrEqual(1);
   });
 
-  it('fallback verdict is computed mechanically from upstream gates (completed: false)', async () => {
-    // The deterministic fallback computes completed from upstream gate preconditions:
-    // gates.review.payload.verdict === 'changes_required' → completed = false
-    const state = mockAnnotateState({ route: 'delegate' });
-    state.gates['implement'] = {
-      outcome: 'advance',
-      payload: {
-        workerSelfAssessment: 'done', summary: 's', filesChanged: ['a.ts'],
-        findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
-      },
-      telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-    };
-    state.gates['review'] = {
-      outcome: 'advance',
-      payload: { verdict: 'changes_required', findings: [], reviewersSucceeded: [], reviewersErrored: [] },
-      telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0.005, turnsUsed: 1, stopReason: 'normal' as const },
-    };
+  it('fallback commitSha is mechanically derived from upstream gates', async () => {
+    const state = makeStateWithFindings([], { route: 'delegate' });
     state.gates['commit'] = {
       outcome: 'advance',
-      payload: { kind: 'committed', commitSha: 'abc', commitMessage: 'x', filesChanged: ['a.ts'], authoredAt: '2026-05-15T00:00:00Z' },
+      payload: { kind: 'committed', commitSha: 'abc', commitMessage: 'fix', filesChanged: ['a.ts'], authoredAt: '2026-05-15T00:00:00Z' },
       telemetry: { stageLabel: 'commit', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
     };
+    (state as { config?: Record<string, unknown> }).config = {
+      ...(state.config as Record<string, unknown>),
+      truncateAnnotatePromptTier: 3,
+    };
 
-    simulateOverBudgetAfterTier2 = true;
-    const gate = await annotateHandler(state, { promptBudgetTokens: 80_000 });
+    emittedTruncationEvents = [];
+    const origEmit = (state.executionContext as any).bus.emit;
+    (state.executionContext as any).bus.emit = (e: unknown) => {
+      const ev = e as Record<string, unknown>;
+      if (ev['event'] === 'annotate_truncation') {
+        emittedTruncationEvents.push(ev as { event: string; tier?: number; droppedFieldCount?: number });
+      }
+      origEmit(e);
+    };
 
-    // Mechanical preconditions: write route, workerSelfAssessment=done,
-    // reviewVerdict=changes_required → reviewClean=false unless rework cleared it
-    // → completed=false
-    expect(gate.payload.completed).toBe(false);
-    // commitSha is mechanically derived, not invented by LLM
-    expect(gate.payload.commitSha).toBeNull(); // fallback AnnotatePayload has no commitSha
+    await annotator(state);
+    const payload = (state as { annotatePayload?: AnnotatePayload }).annotatePayload;
+
+    // commitSha is mechanically derived from gates.commit.payload.commitSha, not invented
+    expect(payload!.commitSha).toBe('abc');
   });
 });

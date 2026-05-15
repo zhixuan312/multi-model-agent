@@ -118,7 +118,7 @@ export type TerminalPayload = {
 // ───── Driver runtime types ─────
 
 export type StageStopReason =
-  'normal' | 'turn_cap' | 'cost_cap' | 'timeout' | 'transport_error' | 'halted';
+  'normal' | 'turn_cap' | 'cost_cap' | 'timeout' | 'transport_error';
 
 export type StageGate<TPayload = unknown> = {
   outcome: 'advance' | 'skip' | 'halt';

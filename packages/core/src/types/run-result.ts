@@ -56,9 +56,9 @@ export interface TurnResult {
 
 export interface SessionOpts {
   cwd?: string;
-  wallClockDeadline?: number;
+  wallClockDeadline: number;
   idleStallTimeoutMs?: number;
-  abortSignal?: AbortSignal;
+  abortSignal: AbortSignal;
   bus?: object;
 }
 
@@ -79,7 +79,7 @@ export interface Provider {
   /** Provider config — shape varies by runtime (ClaudeProviderConfig | CodexProviderConfig).
    *  Consumers access .type and .model via unsafe downcasts; the full type lives
    *  in types/config.ts to avoid circular deps. */
-  config: ClaudeProviderConfig | CodexProviderConfig;
+  config: any;     // v5: ClaudeProviderConfig | CodexProviderConfig (lives in types/config.ts; broadened to avoid circular dep)
   openSession(opts: SessionOpts): Session;
 }
 

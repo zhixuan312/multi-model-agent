@@ -280,8 +280,8 @@ function ensureImplementingStage(
   if (rr.models === undefined && fallbackModel !== null) {
     (rr as { models?: RunResult['models'] }).models = {
       implementer: fallbackModel,
-      specReviewer: null,
-      qualityReviewer: null,
+      specReviewer: undefined,
+      qualityReviewer: undefined,
     };
   }
 
