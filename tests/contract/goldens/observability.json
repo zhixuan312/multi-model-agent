@@ -527,6 +527,25 @@
         "ts",
         "elapsedMs"
       ]
+    },
+    {
+      "name": "stage_gate_recorded",
+      "requiredFields": [
+        "event",
+        "ts",
+        "stage",
+        "outcome"
+      ]
+    },
+    {
+      "name": "stage_halt",
+      "requiredFields": [
+        "event",
+        "ts",
+        "stageName",
+        "comment",
+        "stopReason"
+      ]
     }
   ]
 }

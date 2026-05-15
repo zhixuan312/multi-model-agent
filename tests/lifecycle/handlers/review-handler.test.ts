@@ -21,14 +21,14 @@ describe('reviewHandler', () => {
     const state: any = {
       executionContext: ctx,
       task: { brief: { body: 'Test brief body' } },
-      config: { reviewPolicy: 'standard' },
+      config: { reviewPolicy: 'full' },
       gates: {
         implement: {
           outcome: 'advance',
           payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
         },
       },
-      reviewPolicy: 'standard',
+      reviewPolicy: 'full',
     };
     const gate = await reviewHandler(state);
     expect((gate.payload as any).verdict).toBe('approved');
@@ -48,14 +48,14 @@ describe('reviewHandler', () => {
     const state: any = {
       executionContext: ctx,
       task: { brief: { body: 'Test brief body' } },
-      config: { reviewPolicy: 'standard' },
+      config: { reviewPolicy: 'full' },
       gates: {
         implement: {
           outcome: 'advance',
           payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
         },
       },
-      reviewPolicy: 'standard',
+      reviewPolicy: 'full',
     };
     const gate = await reviewHandler(state);
     expect((gate.payload as any).verdict).toBe('changes_required');
@@ -73,14 +73,14 @@ describe('reviewHandler', () => {
     const state: any = {
       executionContext: ctx,
       task: { brief: { body: 'Test brief body' } },
-      config: { reviewPolicy: 'standard' },
+      config: { reviewPolicy: 'full' },
       gates: {
         implement: {
           outcome: 'advance',
           payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
         },
       },
-      reviewPolicy: 'standard',
+      reviewPolicy: 'full',
     };
     const gate = await reviewHandler(state);
     expect((gate.payload as any).verdict).toBe('changes_required');
@@ -99,14 +99,14 @@ describe('reviewHandler', () => {
     const state: any = {
       executionContext: ctx,
       task: { brief: { body: 'Test brief body' } },
-      config: { reviewPolicy: 'standard' },
+      config: { reviewPolicy: 'full' },
       gates: {
         implement: {
           outcome: 'advance',
           payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
         },
       },
-      reviewPolicy: 'standard',
+      reviewPolicy: 'full',
     };
     const gate = await reviewHandler(state);
     expect((gate.payload as any).verdict).toBe('changes_required');

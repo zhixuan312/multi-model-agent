@@ -8,8 +8,13 @@ import { runReviewerTurn }     from '../../review/run-reviewer.js';
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
   const policy = state.reviewPolicy; // 'full' | 'quality_only' | 'diff_only' | 'none'
-  const runSpec    = policy === 'full' || policy === 'quality_only';
-  const runQuality = policy === 'full' || policy === 'diff_only';
+  // v5 review-policy mapping (per spec §14 assumption 2 — adapted to v4 enum):
+  //   'full'         → run BOTH spec + quality
+  //   'quality_only' → run ONLY quality
+  //   'diff_only'    → run ONLY spec (spec reviewer is the closest analog)
+  //   'none'         → skip (handled upstream)
+  const runSpec    = policy === 'full' || policy === 'diff_only';
+  const runQuality = policy === 'full' || policy === 'quality_only';
 
   const impl = (state.gates?.['implement']?.payload ?? {}) as { summary?: string; filesChanged?: string[] };
   const briefObj = (state.task ?? {}) as { brief?: string };

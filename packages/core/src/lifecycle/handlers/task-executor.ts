@@ -13,7 +13,7 @@ import { join } from 'node:path';
 
 const READ_ROUTES: RouteName[] = ['audit', 'review', 'debug', 'investigate', 'explore'];
 
-function capturePreTaskState(state: LifecycleState): void {
+export function capturePreTaskState(state: LifecycleState): void {
   const cwd = state.cwd as string | undefined;
   if (!cwd) return;
 

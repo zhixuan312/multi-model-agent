@@ -126,7 +126,7 @@ function emitHaltEvent(
   comment: string,
   stopReason: string,
 ): void {
-  ctx?.bus?.emit({ event: 'stage_halt', stageName, comment, stopReason } as Record<string, unknown>);
+  ctx?.bus?.emit({ event: 'stage_halt', ts: new Date().toISOString(), stageName, comment, stopReason } as Record<string, unknown>);
 }
 
 /** Emit a stage_gate_recorded debug log event on every gate transition (spec §15.3). */
@@ -139,6 +139,7 @@ function emitGateRecorded(
 ): void {
   ctx?.bus?.emit({
     event: 'stage_gate_recorded',
+    ts: new Date().toISOString(),
     stage: stageName,
     outcome,
     costUSD,
