@@ -46,8 +46,14 @@ type QualityRoundVerdict =
 type DiffEnvelopeVerdict = 'approved' | 'changes_required' | 'error' | 'skipped';
 type DiffReviewKind = 'approve' | 'concerns' | 'reject' | 'transport_failure';
 
+import type { StageGate } from './stage-io.js';
+
 export interface LifecycleState {
   terminal: boolean;
+  /** v5: per-stage gate record written by the driver. Empty until prepare runs. */
+  gates?: Record<string, StageGate<unknown>>;
+  /** v5: halted flag set when any stage returns outcome:'halt'. Driver-only. */
+  halted?: boolean;
   workerStatus?: string;
   reviewVerdict?: 'approved' | 'concerns' | 'changes_required' | 'error' | 'skipped';
   attemptIndex: number;

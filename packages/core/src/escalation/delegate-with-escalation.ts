@@ -249,29 +249,19 @@ export async function delegateWithEscalation(
     }
   }
 
-  const baseStatus = best.status === 'ok' ? 'incomplete' : best.status;
+  // v5: escalation no longer gates on workerSelfAssessment. Annotate is the
+  // single point of truth for `completed` (spec §5.7 + §9 M1/M3 fixes).
+  // Escalation only records attempts and selects the best one; status flows
+  // through unchanged to annotate which makes the final verdict.
+  const finalStatus = best.status === 'ok' ? 'incomplete' : best.status;
 
-  // C2: Promote incomplete → ok when agent self-assessed as done AND produced work artifacts
-  // OR verified with shell (ran tests/builds) even without writing files
-  const outputIsSubstantive =
-    best.output.trim().length > 0 && !best.outputIsDiagnostic;
-  const hasShellVerification = best.toolCalls.some(tc => extractToolName(tc) === 'runShell');
-  const finalStatus =
-    baseStatus === 'incomplete' &&
-    best.workerStatus === 'done' &&
-    outputIsSubstantive &&
-    (best.filesWritten.length > 0 || hasCompletedWork(best.toolCalls) || hasShellVerification || task.skipCompletionHeuristic === true)
-      ? 'ok'
-      : baseStatus;
-
-  const wasPromoted = finalStatus === 'ok' && baseStatus === 'incomplete';
   const terminationReason: TerminationReason = {
     cause: deriveCause(finalStatus as RunStatus, best.errorCode),
     turnsUsed: best.turns,
     hasFileArtifacts: best.filesWritten.length > 0,
     usedShell: best.toolCalls.some(tc => extractToolName(tc) === 'runShell'),
-    workerSelfAssessment: best.workerStatus ?? null,
-    wasPromoted,
+    workerSelfAssessment: best.workerStatus ?? null,   // truthful read; NOT stamped (M3 fix)
+    wasPromoted: false,
   };
 
   return {

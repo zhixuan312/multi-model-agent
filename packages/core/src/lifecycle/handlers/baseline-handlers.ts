@@ -255,7 +255,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       }
 
       const commitsExist = Array.isArray(state.commits) && state.commits.length > 0;
-      const reviewRejected = state.reviewPolicy !== 'none' && state.reviewVerdict === 'changes_required';
+
+      // v5 M4 fix: review_rejected is ONLY when review said changes_required AND
+      // rework did NOT clean it up. If rework ran successfully (state.reworkApplied
+      // is true AND state.reworkError is undefined), treat as cleared regardless
+      // of the stale reviewVerdict slot.
+      const reworkCleanedUp =
+        state.reworkApplied === true && state.reworkError === undefined;
+      const reviewRejected =
+        state.reviewPolicy !== 'none' &&
+        state.reviewVerdict === 'changes_required' &&
+        !reworkCleanedUp;
 
       if (last.status === 'error') {
         enriched.status = 'error';
@@ -270,10 +280,16 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
           turnsUsed: priorTr?.turnsUsed ?? last.turns ?? 0,
           hasFileArtifacts: priorTr?.hasFileArtifacts ?? (Array.isArray(last.filesWritten) && last.filesWritten.length > 0),
           usedShell: priorTr?.usedShell ?? false,
-          workerSelfAssessment: 'done_with_concerns',
+          // v5 M3 fix: read truthful workerSelfAssessment instead of stamping
+          // the retired 'done_with_concerns' value.
+          workerSelfAssessment: (last.workerStatus as string | undefined) ?? state.workerStatus ?? null,
           wasPromoted: false,
         };
       } else if (commitsExist) {
+        enriched.status = 'ok';
+      } else if (reworkCleanedUp && state.reviewPolicy !== 'none') {
+        // v5 M4 fix: rework cleared all findings → promote to ok even though
+        // review verdict slot still says changes_required.
         enriched.status = 'ok';
       }
       // else: leave status as worker reported (ok/incomplete/error)
