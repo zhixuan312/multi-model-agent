@@ -163,28 +163,8 @@ describe('delegateWithEscalation', () => {
     }));
   });
 
-  describe('status promotion', () => {
-    // v5: escalation no longer promotes based on workerSelfAssessment + shell.
-    // Annotate is the single point of truth for `completed`. This test was the
-    // v4 promotion-gate behavior; skipping per spec §9 M1 fix.
-    it.skip('[v4 legacy] promotes incomplete to ok when worker self-assessed done with shell verification', async () => {
-      const provider = makeProvider('standard', {
-        status: 'incomplete',
-        output: '## Summary\nAll tests pass. Verified.\n\n## Validations run\n- npm test: pass',
-        filesWritten: [],
-        toolCallsByName: { runShell: 1, readFile: 1 },
-        workerSelfAssessment: 'done',
-      });
-
-      const task: TaskSpec = { prompt: 'Verify everything works' };
-      const result = await delegateWithEscalation(task, [provider]);
-
-      expect(result.status).toBe('ok');
-      expect(result.terminationReason?.wasPromoted).toBe(true);
-      expect(result.terminationReason?.usedShell).toBe(true);
-    });
-
-    it('does NOT promote when worker self-assessed done but did not use shell', async () => {
+  describe('status flow (v5 — annotate is single point of truth)', () => {
+    it('preserves incomplete status; does NOT promote based on workerSelfAssessment', async () => {
       const provider = makeProvider('standard', {
         status: 'incomplete',
         output: 'Everything looks fine.',
@@ -196,36 +176,25 @@ describe('delegateWithEscalation', () => {
       const task: TaskSpec = { prompt: 'Verify everything works' };
       const result = await delegateWithEscalation(task, [provider]);
 
+      // v5: escalation flows the status through unchanged. Annotate decides
+      // completed (spec §9 M1 fix). The result here is whatever the worker
+      // reported; the wasPromoted flag is always false because escalation
+      // no longer promotes.
       expect(result.status).toBe('incomplete');
       expect(result.terminationReason?.wasPromoted).toBe(false);
     });
 
-    // v5: skipCompletionHeuristic gate also removed with the broader promotion logic.
-    it.skip('[v4 legacy] honors skipCompletionHeuristic in C2 gate (audit/review-style tasks)', async () => {
-      const provider = makeProvider('standard', {
-        status: 'incomplete',
-        output: 'detailed audit report content',
-        filesWritten: [],
-        toolCallsByName: { readFile: 1 },
-        workerSelfAssessment: 'done',
-      });
-      const audit: TaskSpec = { prompt: 'audit', skipCompletionHeuristic: true };
-      const result = await delegateWithEscalation(audit, [provider]);
-      expect(result.status).toBe('ok');
-      expect(result.terminationReason).toMatchObject({ cause: 'finished', wasPromoted: true });
-    });
-
-    it('without skipCompletionHeuristic, no-write tasks stay incomplete', async () => {
+    it('records truthful workerSelfAssessment in terminationReason (M3 fix)', async () => {
       const provider = makeProvider('standard', {
         status: 'incomplete',
         output: 'x',
         filesWritten: [],
         toolCallsByName: { readFile: 1 },
-        workerSelfAssessment: 'done',
+        workerSelfAssessment: 'failed',
       });
-      const task: TaskSpec = { prompt: 'test' };
-      const result = await delegateWithEscalation(task, [provider]);
+      const result = await delegateWithEscalation({ prompt: 'test' }, [provider]);
       expect(result.status).toBe('incomplete');
+      expect(result.terminationReason?.workerSelfAssessment).toBe('failed');
     });
   });
 });

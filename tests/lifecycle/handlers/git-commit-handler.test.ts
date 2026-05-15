@@ -103,9 +103,7 @@ describe('commitHandler', () => {
 
   // ── Spec §5.6: no_op:hook_failed ─────────────────────────────────────────
 
-  // v5 edge case: hook-failure path returns halt instead of advance+no_op:hook_failed
-  // in current handler. Skipping until handler branch is reconciled.
-  it.skip('emits no_op:hook_failed when pre-commit hook returns non-zero', async () => {
+  it('emits no_op:hook_failed when pre-commit hook returns non-zero', async () => {
     const _preTaskSha = preSha(); const _preTaskUntracked = preUntracked();
     writeFileSync(join(cwd, 'b.txt'), 'world');
     // Install a failing pre-commit hook

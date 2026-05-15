@@ -59,19 +59,6 @@ describe('LifecycleDispatcher', () => {
   // v5: driver catches handler exceptions and synthesizes a halt gate
   // instead of propagating (spec §4.4). The old "re-throws unknown errors"
   // behavior is replaced.
-  it.skip('[v4 legacy] re-throws unknown errors (replaced by halt-gate synthesis in v5)', async () => {
-    const handlers = {
-      accept_http_request: () => { throw new Error('boom'); },
-      verify_loopback: async () => {},
-    };
-    const dispatcher = new LifecycleDispatcher(handlers, driverWith(minimalPlan('artifact_producing')));
-
-    await expect(dispatcher.dispatch({
-      route: 'delegate',
-      toolCategory: 'artifact_producing',
-      rawRequest: {},
-    })).rejects.toThrow('boom');
-  });
 
   it('passes reviewPolicy from rawRequest into initial state', async () => {
     let captured: LifecycleState | undefined;

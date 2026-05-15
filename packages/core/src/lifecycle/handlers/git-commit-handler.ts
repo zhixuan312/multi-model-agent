@@ -101,7 +101,16 @@ function composeCommitMessage(state: LifecycleState): string {
 }
 
 function isHookFailure(err: unknown): boolean {
-  return err instanceof Error && /pre-commit hook|hook failed/i.test(err.message);
+  if (err instanceof Error) {
+    return /pre-commit hook|hook failed|hook rejected/i.test(err.message);
+  }
+  // gitC result shape: { code, stdout, stderr }
+  if (typeof err === 'object' && err !== null) {
+    const r = err as { code?: number; stderr?: string; stdout?: string };
+    const text = `${r.stderr ?? ''} ${r.stdout ?? ''}`;
+    return /pre-commit hook|hook failed|hook rejected|hook script|\.git\/hooks\//i.test(text);
+  }
+  return false;
 }
 
 // ─── Main handler ─────────────────────────────────────────────────────────────
@@ -168,10 +177,17 @@ export async function commitHandler(state: LifecycleState): Promise<StageGate<Co
   try {
     const commitR = await gitC(cwd, ['commit', '-m', commitMessage]);
     if (commitR.code !== 0) {
-      if (isHookFailure(commitR)) {
-        return advanceNoOp('hook_failed', t0, commitR.stderr || 'hook rejected commit');
+      // Hook failure is the dominant case: we've already validated repo,
+      // diff, and HEAD; if `git commit` still fails, the most likely cause
+      // is a pre-commit hook (or other policy hook) rejecting the commit.
+      // We treat non-zero exit as hook_failed unless the stderr indicates
+      // something structurally worse (corrupted index, fs errors).
+      const stderr = commitR.stderr ?? '';
+      const looksStructural = /index|object|corrupt|permission denied|read-only/i.test(stderr);
+      if (!looksStructural) {
+        return advanceNoOp('hook_failed', t0, stderr || 'commit rejected (likely pre-commit hook)');
       }
-      return haltCommit(`commit_failed: ${commitR.stderr || 'unknown error'}`, t0);
+      return haltCommit(`commit_failed: ${stderr || 'unknown error'}`, t0);
     }
     const sha = (await currentHead(cwd)) ?? '';
     const authoredAt = new Date().toISOString();
