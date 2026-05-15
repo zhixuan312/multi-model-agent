@@ -1,6 +1,7 @@
 import type { StageHandler } from '../lifecycle-driver.js';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { RunResult } from '../../types.js';
+import type { ComposePayload, StageGate, StageStopReason, WorkerSelfAssessment } from '../stage-io.js';
 import { parseStructuredReport } from '../../reporting/structured-report.js';
 import { sumStageCosts } from '../shared-compute.js';
 import { gitCommitHandler } from './git-commit-handler.js';

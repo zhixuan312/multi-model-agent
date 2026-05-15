@@ -156,7 +156,8 @@ Each task result is the per-task wire object (`ComposePayload`):
 | `findings` | Issues surfaced by the worker or reviewer. `severity` = `critical` \| `high` \| `medium` \| `low`. `source` = `implementer` \| `reviewer`. |
 | `filesChanged` | File paths modified (empty for read-only routes). |
 | `commitSha` | Git SHA of the committed diff; `null` for read-only routes or when commit was skipped. |
-| `blockId` | `terminalBlockId` — pass to `contextBlockIds` in a follow-up task to chain results without re-inlining. |
+
+`blockId` is not used for the delegate route — it is always `null`. To chain results, use the `terminalBlockId` from the batch's `contextBlockIds` field instead.
 
 **The stages array** (always 9 rows) is the canonical telemetry log. `outcome` is one of:
 - `advance` — stage ran and produced its payload
@@ -196,15 +197,7 @@ Anti-pattern alert: **`inline-labor-leakage`** (AP2). If you're reading 3+ files
 
 Workers run concurrently and race on the file. **Fix:** dispatch sequentially, or merge into one prompt.
 
-❌ **Vague `prompt`, no `done` criterion**
-> "improve the auth module"
-
-Worker has no completion signal — likely returns `done_with_concerns`. **Fix:** specific verb + acceptance: `"Add input validation to login.ts so all string fields reject empty/whitespace; tests pass"`.
-
-❌ **Defaulting to `agentType: "complex"` for everything**
-Standard tier is 5–10× cheaper and finishes most edits. Escalate only when standard returns `filesWritten: 0` or `incompleteReason: "turn_cap"`.
-
-❌ **Inlining a 50KB doc into every prompt**
+❌ **Two tasks writing the same file in one batch**
 N tasks × 50KB = N transmissions. **Fix:** register the doc once via `mma-context-blocks`, pass the `contextBlockIds` to each task.
 
 ❌ **Reading the worker's diff inline before review**
