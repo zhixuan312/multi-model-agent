@@ -19,7 +19,7 @@ function assertStages9(telemetry: ComposePayload['telemetry']) {
   }
 }
 
-describe.skip('AC-21: compose covers four paths', () => {
+describe('AC-21: compose covers four paths', () => {
   it('normal path: annotate.payload is copied verbatim', async () => {
     const state = mockState({ route: 'delegate' });
     state.gates['annotate'] = advanceGate({
@@ -108,7 +108,7 @@ describe.skip('AC-21: compose covers four paths', () => {
   });
 });
 
-describe.skip('AC-22: telemetry.stages has 9 entries always', () => {
+describe('AC-22: telemetry.stages has 9 entries always', () => {
   it('returns exactly 9 stages regardless of gates present', async () => {
     const state = mockState({ route: 'delegate' });
     state.gates['annotate'] = advanceGate({

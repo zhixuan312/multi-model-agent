@@ -30,7 +30,7 @@ function makeMinimalState(overrides: Partial<LifecycleState> = {}): LifecycleSta
 // batchRegistryPersisted, telemetryFlushed) preventing duplicate work on re-entry.
 // Tests here verify the guard behavior directly via handler overrides.
 
-describe.skip('AC-28: terminal is idempotent on re-entry', () => {
+describe('AC-28: terminal is idempotent on re-entry', () => {
   it('second call produces same terminalBlockId', async () => {
     // The terminal side-effects are executed by the LifecycleDriver when it
     // processes runOnTerminal rows. We test idempotency by calling the driver
@@ -162,8 +162,10 @@ describe.skip('AC-28: terminal is idempotent on re-entry', () => {
           rowId: 'flush_telemetry', stageName: 'flush_telemetry',
           isRework: false, handlerKey: 'flush_telemetry',
           runCondition: () => true, runOnTerminal: true,
-          handler: (s) => {
+          handler: async (s) => {
             if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
+            const rec = (s.executionContext as { recorder?: { flush?: () => Promise<void> } } | undefined)?.recorder;
+            if (rec?.flush) await rec.flush();
             (s as { telemetryFlushed?: boolean }).telemetryFlushed = true;
             return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
           },
@@ -190,8 +192,10 @@ describe.skip('AC-28: terminal is idempotent on re-entry', () => {
         },
       ]),
       {
-        flush_telemetry: (s) => {
+        flush_telemetry: async (s) => {
           if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
+          const rec = (s.executionContext as { recorder?: { flush?: () => Promise<void> } } | undefined)?.recorder;
+          if (rec?.flush) await rec.flush();
           (s as { telemetryFlushed?: boolean }).telemetryFlushed = true;
           return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
         },
@@ -223,7 +227,7 @@ describe.skip('AC-28: terminal is idempotent on re-entry', () => {
 // state slot to false. Tests simulate failures by mocking the underlying
 // I/O and verifying both the boolean state and the bus event.
 
-describe.skip('AC-29: each side-effect failure maps to false', () => {
+describe('AC-29: each side-effect failure maps to false', () => {
   it('telemetryFlushed → false when recorder.flush throws', async () => {
     const state = makeMinimalState({ route: 'delegate' });
     state.gates!['compose'] = {
@@ -250,7 +254,7 @@ describe.skip('AC-29: each side-effect failure maps to false', () => {
           rowId: 'flush_telemetry', stageName: 'flush_telemetry',
           isRework: false, handlerKey: 'flush_telemetry',
           runCondition: () => true, runOnTerminal: true,
-          handler: (s) => {
+          handler: async (s) => {
             const ctx = s.executionContext as { bus?: { emit: (e: unknown) => void }; recorder?: { flush?: () => Promise<void> } };
             if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
             try {
@@ -279,13 +283,12 @@ describe.skip('AC-29: each side-effect failure maps to false', () => {
         },
       ]),
       {
-        flush_telemetry: (s) => {
+        flush_telemetry: async (s) => {
           const ctx = s.executionContext as { bus?: { emit: (e: unknown) => void }; recorder?: { flush?: () => Promise<void> } };
           if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
           try {
             if (ctx.recorder?.flush) {
-              const p = ctx.recorder.flush() as Promise<void>;
-              void p.catch(() => {});
+              await (ctx.recorder.flush as () => Promise<void>)();
             }
           } catch (err) {
             ctx.bus?.emit({ event: 'terminal_side_effect_failed', stage: 'terminal', sideEffect: 'telemetryFlush', reason: (err as Error).message });
@@ -338,8 +341,10 @@ describe.skip('AC-29: each side-effect failure maps to false', () => {
           rowId: 'flush_telemetry', stageName: 'flush_telemetry',
           isRework: false, handlerKey: 'flush_telemetry',
           runCondition: () => true, runOnTerminal: true,
-          handler: (s) => {
+          handler: async (s) => {
             if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
+            const rec = (s.executionContext as { recorder?: { flush?: () => Promise<void> } } | undefined)?.recorder;
+            if (rec?.flush) await rec.flush();
             (s as { telemetryFlushed?: boolean }).telemetryFlushed = true;
             return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
           },
@@ -348,7 +353,7 @@ describe.skip('AC-29: each side-effect failure maps to false', () => {
           rowId: 'persist_to_batch_registry', stageName: 'persist_to_batch_registry',
           isRework: false, handlerKey: 'persist_to_batch_registry',
           runCondition: () => true, runOnTerminal: true,
-          handler: (s) => {
+          handler: async (s) => {
             const ctx = s.executionContext as { bus?: { emit: (e: unknown) => void }; batchRegistry?: { complete?: () => void } };
             if ((s as { batchRegistryPersisted?: boolean }).batchRegistryPersisted) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'persist_to_batch_registry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
             try {
@@ -363,8 +368,10 @@ describe.skip('AC-29: each side-effect failure maps to false', () => {
         },
       ]),
       {
-        flush_telemetry: (s) => {
+        flush_telemetry: async (s) => {
           if ((s as { telemetryFlushed?: boolean }).telemetryFlushed) return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
+          const rec = (s.executionContext as { recorder?: { flush?: () => Promise<void> } } | undefined)?.recorder;
+          if (rec?.flush) await rec.flush();
           (s as { telemetryFlushed?: boolean }).telemetryFlushed = true;
           return { outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'flush_telemetry', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } };
         },

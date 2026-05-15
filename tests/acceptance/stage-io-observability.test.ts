@@ -25,7 +25,7 @@ function makeBaselineState(overrides: Partial<Record<string, unknown>> = {}) {
 // ─── AC-34 ───────────────────────────────────────────────────────────────────
 // Every halt emits stage_halt bus event
 
-describe.skip('AC-34: every halt emits stage_halt bus event', () => {
+describe('AC-34: every halt emits stage_halt bus event', () => {
   beforeEach(() => { vi.clearAllMocks(); });
 
   it('handler-returned halt emits stage_halt with correct stageName', async () => {
@@ -166,7 +166,7 @@ describe.skip('AC-34: every halt emits stage_halt bus event', () => {
 // ─── AC-35 ───────────────────────────────────────────────────────────────────
 // Every gate emits stage_gate_recorded — including halt gates (not just advance/skip)
 
-describe.skip('AC-35: every gate emits stage_gate_recorded', () => {
+describe('AC-35: every gate emits stage_gate_recorded', () => {
   it('advance gates emit stage_gate_recorded', async () => {
     const emitted: Array<Record<string, unknown>> = [];
     const state = makeBaselineState({ route: 'investigate' });
@@ -294,7 +294,7 @@ describe.skip('AC-35: every gate emits stage_gate_recorded', () => {
 // ─── AC-36 ───────────────────────────────────────────────────────────────────
 // Terminal side-effect failure emits structured event via the real terminal handler path
 
-describe.skip('AC-36: terminal side-effect failure emits structured event', () => {
+describe('AC-36: terminal side-effect failure emits structured event', () => {
   // Deviation 6 fix: use real terminal handlers instead of hand-emitting in ad hoc test handlers.
   // The real flushTelemetryHandler catches flush() errors but does NOT emit terminal_side_effect_failed —
   // it silently swallows the error. AC-36 tests that the real handler path handles flush failure
@@ -341,7 +341,7 @@ describe.skip('AC-36: terminal side-effect failure emits structured event', () =
       },
     } as any;
 
-    await expect(persistToBatchRegistryHandler(state)).resolves.not.toThrow();
+    expect(() => persistToBatchRegistryHandler(state)).not.toThrow();
     expect(state.batchRegistryPersisted).toBe(true);
   });
 

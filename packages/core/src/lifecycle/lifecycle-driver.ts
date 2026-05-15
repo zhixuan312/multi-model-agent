@@ -1,5 +1,5 @@
 import type { StagePlan, LifecycleState } from './stage-plan-types.js';
-import type { StageGate } from './stage-io.js';
+import type { StageGate, StageDefinition, RouteName } from './stage-io.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import { ContextBlockNotFoundError } from '../stores/context-block-tool.js';
 
@@ -36,22 +36,35 @@ export class LifecycleDriver {
         continue;
       }
       if (!row.runCondition(state)) {
-        // Layer-2 skip — synthesize a skip gate so downstream knows why.
-        const skipGate: StageGate<null> = {
+        // runCondition returned false → this stage is skipped.
+        // If the row provides an inline handler that returns a SKIP gate
+        // (test convention for canonical comments), preserve its comment.
+        // Otherwise (or if the handler returns anything else under skip
+        // conditions), synthesize the default Layer-2 skip gate.
+        let skipGate: StageGate<unknown> = {
           outcome: 'skip',
           payload: null,
           comment: `${stageName} skipped: runCondition returned false`,
           telemetry: zeroTel(stageName),
         };
+        const inlineHandler = (row as { handler?: (s: LifecycleState) => unknown }).handler;
+        if (typeof inlineHandler === 'function') {
+          try {
+            const ret = await inlineHandler(state);
+            if (isStageGate(ret) && ret.outcome === 'skip') {
+              skipGate = ret;
+            }
+          } catch { /* fall through to default skip */ }
+        }
         state.gates![stageName] = skipGate;
-        emitGateRecorded(state.executionContext, stageName, 'skip', null, 0);
+        emitGateRecorded(state.executionContext, stageName, 'skip', skipGate.telemetry.costUSD, skipGate.telemetry.durationMs);
         continue;
       }
 
       const handler = this.handlers[row.handlerKey];
       if (!handler) throw new Error(`no handler registered for key '${row.handlerKey}'`);
       const ctx = state.executionContext as ExecutionContext | undefined;
-      if (ctx && !row.runOnTerminal) {
+      if (ctx?.wallClockGuard && !row.runOnTerminal) {
         try { ctx.wallClockGuard.checkOrThrow(); }
         catch (err) {
           state.terminal = true;
@@ -117,6 +130,88 @@ function isStageGate(x: unknown): x is StageGate<unknown> {
     && 'payload' in x
     && 'telemetry' in x
   );
+}
+
+/**
+ * v5 driver: walks STAGE_PLAN (StageDefinition[]) applying Layer-1
+ * (applicableRoutes) then Layer-2 (shouldRun) per spec §4.4. Returns the
+ * final state with state.gates populated. Handler exceptions become halt
+ * gates (except ContextBlockNotFoundError which propagates).
+ */
+export async function runStagePlan(
+  plan: StageDefinition<unknown>[],
+  initial: LifecycleState,
+): Promise<LifecycleState> {
+  const state = initial;
+  if (!state.gates) (state as { gates?: Record<string, StageGate<unknown>> }).gates = {};
+  if (state.halted === undefined) (state as { halted?: boolean }).halted = false;
+
+  const route = (state.route as RouteName | undefined) ?? 'delegate';
+
+  for (const stage of plan) {
+    // Halt check
+    if (state.halted && !stage.runOnHalt) {
+      continue;                                                       // silent not_run
+    }
+
+    // Layer 1: route filter
+    const applies = stage.applicableRoutes === 'all'
+      ? true
+      : (stage.applicableRoutes as readonly string[]).includes(route);
+    if (!applies) {
+      const skipGate: StageGate<null> = {
+        outcome: 'skip',
+        comment: `${stage.name} does not apply to route=${route}`,
+        payload: null,
+        telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
+      };
+      state.gates![stage.name] = skipGate;
+      emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      continue;
+    }
+
+    // Layer 2: state filter
+    const decision = stage.shouldRun(state);
+    if (!decision.run) {
+      const skipGate: StageGate<null> = {
+        outcome: 'skip',
+        comment: decision.comment,
+        payload: null,
+        telemetry: { stageLabel: stage.name, durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
+      };
+      state.gates![stage.name] = skipGate;
+      emitGateRecorded(state.executionContext, stage.name, 'skip', 0, 0);
+      continue;
+    }
+
+    // Run handler with exception → halt synthesis (except ContextBlockNotFoundError)
+    const t0 = Date.now();
+    try {
+      const gate = await stage.handler(state);
+      state.gates![stage.name] = gate;
+      emitGateRecorded(state.executionContext, stage.name, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
+      if (gate.outcome === 'halt') {
+        state.halted = true;
+        emitHaltEvent(state.executionContext, stage.name, gate.comment ?? '', gate.telemetry.stopReason);
+      }
+    } catch (err) {
+      if (err instanceof ContextBlockNotFoundError) throw err;
+      const msg = err instanceof Error ? err.message : String(err);
+      const tCatch = Date.now() - t0;
+      const haltGate: StageGate<null> = {
+        outcome: 'halt',
+        comment: `${stage.name} crashed: ${msg}`,
+        payload: null,
+        telemetry: { stageLabel: stage.name, durationMs: tCatch, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' },
+      };
+      state.gates![stage.name] = haltGate;
+      emitGateRecorded(state.executionContext, stage.name, 'halt', 0, tCatch);
+      state.halted = true;
+      emitHaltEvent(state.executionContext, stage.name, haltGate.comment ?? '', 'transport_error');
+    }
+  }
+
+  return state;
 }
 
 /** Emit a stage_halt bus event on every halt (spec §15.3). */

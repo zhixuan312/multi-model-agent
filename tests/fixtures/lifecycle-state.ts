@@ -113,6 +113,15 @@ export function mockAnnotateState(opts: { llmAlwaysFails?: boolean; route?: Rout
     workerSelfAssessment: 'done', summary: 's', filesChanged: ['a.ts'],
     findings: [], citations: [], criteriaSucceeded: [], criteriaErrors: [], sourcesUsed: [],
   } as ImplementPayload);
+  // Annotator-precondition-satisfying defaults: tests focused on truncation/
+  // dedupe/severity shouldn't get tripped by the parser flipping completed=false.
+  (state as any).reviewVerdict = 'approved';
+  (state as any).reviewPolicy = 'full';
+  (state as any).commits = [{ sha: 'abc', subject: 's', body: '', filesChanged: ['a.ts'], authoredAt: '2026-05-15T00:00:00Z' }];
+  state.gates['commit'] = advanceGate({
+    kind: 'committed', commitSha: 'abc', commitMessage: 's',
+    filesChanged: ['a.ts'], authoredAt: '2026-05-15T00:00:00Z',
+  } as any);
   (state.executionContext as any).__llmAlwaysFails = !!opts.llmAlwaysFails;
   return state;
 }

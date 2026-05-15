@@ -497,8 +497,20 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
     };
   } else if (annotateGate?.outcome === 'advance') {
     // Path 1 — normal (annotate ran)
-    const ap = annotateGate.payload as ComposePayload;
-    payload = { ...ap, telemetry: makeComposeTelemetry(state) };
+    // AnnotatePayload has 6 fields; ComposePayload adds `blockId` + `telemetry`.
+    // Explicitly set blockId=null for non-register routes so the wire shape is
+    // complete (not undefined).
+    const ap = annotateGate.payload as { completed: boolean; message: string; findings: ComposePayload['findings']; summary: string; filesChanged: string[]; commitSha: string | null };
+    payload = {
+      completed: ap.completed,
+      message: ap.message,
+      findings: ap.findings,
+      summary: ap.summary,
+      filesChanged: ap.filesChanged,
+      commitSha: ap.commitSha,
+      blockId: null,
+      telemetry: makeComposeTelemetry(state),
+    };
   } else if (halted) {
     // Path 3 — pre-annotate halt synthesis
     const haltedEntry = Object.values(gates).find(g => g.outcome === 'halt');
@@ -535,7 +547,7 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
         commitOutcome: 'not_applicable',
         stopReason: 'transport_error' as StageStopReason,
         haltedStage: null,
-        stages: STAGE_NAMES.map(name => ({ name, outcome: 'not_run' as const, durationMs: 0, costUSD: null })),
+        stages: STAGE_NAMES.map(name => ({ name, outcome: 'not_run' as const, durationMs: 0, costUSD: 0 })),
       },
     };
   }

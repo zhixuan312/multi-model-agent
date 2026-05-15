@@ -37,7 +37,7 @@ function makeMinimalState(overrides: Partial<LifecycleState> = {}): LifecycleSta
 // because <predicate>". Tests use handler overrides to emit the spec-format
 // comment directly, verifying that the gate comment format itself is correct.
 
-describe.skip('AC-25 layer-1 skip comment format', () => {
+describe('AC-25 layer-1 skip comment format', () => {
   it('register-block skip on a non-register route uses canonical phrasing', async () => {
     const state = makeMinimalState({ route: 'delegate' });
     state.executionContext = {
@@ -109,7 +109,7 @@ describe.skip('AC-25 layer-1 skip comment format', () => {
 // (spec §4.7). Tests use handler overrides to emit the spec-format comment
 // directly, verifying that the gate comment format itself is correct.
 
-describe.skip('AC-26 layer-2 skip comment is handler-authored verbatim', () => {
+describe('AC-26 layer-2 skip comment is handler-authored verbatim', () => {
   it('rework skip uses the spec-canonical comment format when handler returns skip', async () => {
     // Test that handler-emitted skip gates respect the spec §4.7 format:
     // "${stage.name} skipped because <predicate>". The driver records whatever
