@@ -80,16 +80,18 @@ The main agent (you) issues a single message with two parallel tool calls:
 
 ## Reading the leg results
 
-Both legs return a 6-field terminal envelope. The authoritative source of citations for synthesis is **`results[0].findings`** — an array of `{ severity, category, claim, evidence, suggestion }`. The envelope `headline` is a one-line summary and is NOT a reliable leg-success signal: the investigate headline currently under-reports parsed citations because its terminal-headline composer expects an older report shape than the worker now emits. This is a known stage-sync gap that will be fixed in the tool/stage layer, not here. Read `findings` directly.
+Both `mma-investigate` and `mma-research` return the v5 wire envelope (see `mma-investigate/SKILL.md` → "v5 wire shape"). Each sub-task result is a `ComposePayload` with the standard seven fields. The authoritative citation source is **`results[0].findings`** — an array of `{ id, severity, category, claim, evidence, suggestion, source }`.
+
+Explore top-level orchestration aggregates sub-task results into a valid `ImplementPayload` (read-route shape) before the final `annotate` stage runs. Each sub-task follows the same v5 wire shape; the top-level result is a composition of those sub-tasks.
 
 | Check | How |
 |---|---|
-| Did the leg succeed? | `results[0].status === 'ok'` AND `results[0].findings.length > 0` |
-| Internal citation source | `results[0].findings[i].claim` plus a `file:LINE` token pulled from `results[0].findings[i].evidence` (worker styles them as `` `path:LINE` `` markdown-linked refs) |
-| External citation source | `results[0].findings[i].claim` plus a source name / URL pulled from `results[0].findings[i].evidence` |
+| Did the leg succeed? | `results[0].completed === true` AND `results[0].findings.length > 0` |
+| Internal citation source | `results[0].findings[i].claim` plus a `file:LINE` token from `results[0].findings[i].evidence` (workers style them as `` `path:LINE` `` markdown-linked refs) |
+| External citation source | `results[0].findings[i].claim` plus a source name / URL from `results[0].findings[i].evidence` |
 | Divergence axis | `results[0].findings[i].category` groups findings by criterion — pick across categories so threads don't collapse onto one axis |
 
-Apply a sentinel only when `findings` is empty AND `results[0].output` has no `## Finding` block — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because the headline reads "0 citations" or "confidence unparseable".
+Apply a sentinel only when `findings` is empty AND `results[0].message` contains no finding-level content — i.e., the worker genuinely returned nothing. Do NOT apply a sentinel just because `results[0].message` reads tersely or `results[0].telemetry.workerSelfAssessment === 'failed'` — a worker can say `'failed'` with usable partial findings.
 
 ## Per-task report shape
 
@@ -100,7 +102,7 @@ Produce **3–5 threads**. Each thread MUST have:
 - A **title** and **one-paragraph summary**.
 - One **internal citation** (from investigate) — `file/path.ts:LINE — claim`.
   - Pick from `results[0].findings`: take `claim` as the citation claim and pull a `file:LINE` token out of `evidence`.
-  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `results[0].findings` is empty AND `results[0].output` has no `## Finding` blocks. The headline alone is not evidence — see "Reading the leg results" above.
+  - Use the sentinel `(no internal anchor — fully greenfield)` ONLY when investigate was skipped, or `results[0].findings` is empty AND `results[0].message` contains no finding-level content. The top-level `message` alone is not evidence — see "Reading the leg results" above.
 - One **external citation** (from research) — `<source> — claim`.
   - Pick from `results[0].findings`: take `claim` as the citation claim and pull a source name / URL out of `evidence`.
   - Use the sentinel `(no external source found)` only when `results[0].findings` is empty for the research leg.

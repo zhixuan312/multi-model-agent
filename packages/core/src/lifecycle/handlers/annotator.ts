@@ -12,6 +12,8 @@ import {
   parseSourcesUsed,
   type ResearchSourcesUsedEntry,
 } from '../../reporting/report-parser-slots/research-report.js';
+import { applyAnnotatePreconditions } from '../annotate-parser.js';
+import type { AnnotatePayload } from '../stage-io.js';
 
 const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
@@ -66,6 +68,21 @@ export async function annotator(state: LifecycleState): Promise<void> {
   }
 
   (state as { structuredReport?: unknown }).structuredReport = report;
+
+  // v5: deterministic precondition-enforcing annotator. The LLM "judge" layer
+  // from spec §5.7 is opt-in (gated by config.enableLLMAnnotate, default off),
+  // but the parser-enforced preconditions ALWAYS run. This is the load-bearing
+  // safety net that fixes M1/M3/M4 at the annotate layer.
+  const proposed: AnnotatePayload = {
+    completed: true,                                             // optimistic; parser may override to false
+    message: report.summary || (isRead ? 'investigation completed' : 'task completed'),
+    findings: report.findings as AnnotatePayload['findings'],
+    summary: report.summary,
+    filesChanged: report.filesChanged,
+    commitSha: report.commitSha,
+  };
+  const annotated = applyAnnotatePreconditions(proposed, state);
+  (state as { annotatePayload?: AnnotatePayload }).annotatePayload = annotated;
 
   mergeStageStats(state, 'annotating', {
     inputTokens: 0,

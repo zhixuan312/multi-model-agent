@@ -87,6 +87,27 @@ curl -f --show-error -s -X POST \
   "http://localhost:$PORT/delegate?cwd=/project"
 ```
 
+## v5 wire shape (register-context-block route)
+
+Every task result is a `ComposePayload`. For the `register-context-block` route, the envelope has one additional field beyond the standard seven:
+
+```json
+{
+  "completed": true,
+  "message": "Context block cb_abc123 registered (12345 bytes)",
+  "findings": [],
+  "summary": "",
+  "filesChanged": [],
+  "commitSha": null,
+  "blockId": "cb_abc123",
+  "telemetry": { ... }
+}
+```
+
+`blockId` is **non-null only for the `register-context-block` route**. For every other route (`delegate`, `execute-plan`, `investigate`, etc.), `blockId` is `null`. This is the only signal that distinguishes a register-context-block result from any other route — no route-keyed discriminated union, just one extra nullable field on the shared shape.
+
+The terminal context block (per-task, auto-registered) uses a different ID format and is separate from the `blockId` in the wire envelope.
+
 ## Best practices
 
 This skill is the cross-cutting state mechanism described in `multi-model-agent` → "Best practices". Recipes that use context blocks:
