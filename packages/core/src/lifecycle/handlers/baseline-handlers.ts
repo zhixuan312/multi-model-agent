@@ -73,53 +73,53 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
       }
 
       if (state.specReviewError !== undefined) {
-        enriched.specReviewStatus = 'error';
+        (enriched as Record<string, unknown>).specReviewStatus = 'error';
       } else if (state.specReviewVerdict !== undefined) {
-        enriched.specReviewStatus = state.specReviewVerdict;
+        (enriched as Record<string, unknown>).specReviewStatus = state.specReviewVerdict;
       } else {
-        enriched.specReviewStatus = 'not_applicable';
+        (enriched as Record<string, unknown>).specReviewStatus = 'not_applicable';
       }
 
       if (state.qualityReviewError !== undefined) {
-        enriched.qualityReviewStatus = 'error';
+        (enriched as Record<string, unknown>).qualityReviewStatus = 'error';
       } else if (state.qualityReviewVerdict !== undefined) {
-        enriched.qualityReviewStatus = state.qualityReviewVerdict;
+        (enriched as Record<string, unknown>).qualityReviewStatus = state.qualityReviewVerdict;
       } else {
-        enriched.qualityReviewStatus = 'not_applicable';
+        (enriched as Record<string, unknown>).qualityReviewStatus = 'not_applicable';
       }
 
       if (state.diffReviewVerdict !== undefined) {
-        enriched.diffReviewStatus = state.diffReviewVerdict;
+        (enriched as Record<string, unknown>).diffReviewStatus = state.diffReviewVerdict;
       } else if (state.reviewPolicy === 'full' || state.reviewPolicy === 'diff_only') {
-        enriched.diffReviewStatus = 'skipped';
+        (enriched as Record<string, unknown>).diffReviewStatus = 'skipped';
       } else {
-        enriched.diffReviewStatus = 'not_applicable';
+        (enriched as Record<string, unknown>).diffReviewStatus = 'not_applicable';
       }
 
-      if (state.verifyResult !== undefined && enriched.verification === undefined) {
-        enriched.verification = state.verifyResult as RunResult['verification'];
+      if (state.verifyResult !== undefined && (enriched as Record<string, unknown>).verification === undefined) {
+        (enriched as Record<string, unknown>).verification = state.verifyResult;
       }
-      if (Array.isArray(state.commits) && enriched.commits === undefined) {
-        enriched.commits = state.commits as RunResult['commits'];
-      } else if (enriched.commits === undefined) {
-        enriched.commits = [];
+      if (Array.isArray(state.commits) && (enriched as Record<string, unknown>).commits === undefined) {
+        (enriched as Record<string, unknown>).commits = state.commits;
+      } else if ((enriched as Record<string, unknown>).commits === undefined) {
+        (enriched as Record<string, unknown>).commits = [];
       }
-      if (typeof state.commitError === 'string' && enriched.commitError === undefined) {
-        enriched.commitError = state.commitError;
+      if (typeof state.commitError === 'string' && (enriched as Record<string, unknown>).commitError === undefined) {
+        (enriched as Record<string, unknown>).commitError = state.commitError;
       }
 
       const ctx = state.executionContext;
-      if (ctx && enriched.agents === undefined) {
+      if (ctx && (enriched as Record<string, unknown>).agents === undefined) {
         const specReviewerTier =
-          enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required'
+          (enriched as Record<string, unknown>).specReviewStatus === 'approved' || (enriched as Record<string, unknown>).specReviewStatus === 'changes_required'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
-            : (enriched.specReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+            : ((enriched as Record<string, unknown>).specReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
         const qualityReviewerTier =
-          enriched.qualityReviewStatus === 'approved'
-            || enriched.qualityReviewStatus === 'changes_required'
+          (enriched as Record<string, unknown>).qualityReviewStatus === 'approved'
+            || (enriched as Record<string, unknown>).qualityReviewStatus === 'changes_required'
             ? (ctx.assignedTier === 'standard' ? 'complex' : 'standard')
-            : (enriched.qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
-        enriched.agents = {
+            : ((enriched as Record<string, unknown>).qualityReviewStatus === 'not_applicable' ? 'not_applicable' : 'skipped');
+        (enriched as Record<string, unknown>).agents = {
           implementer: ctx.assignedTier,
           implementerToolMode: ctx.implementerToolMode ?? 'full',
           specReviewer: specReviewerTier,
@@ -127,17 +127,17 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         };
       }
 
-      if (enriched.fileArtifactsMissing === undefined) {
-        enriched.fileArtifactsMissing = false;
+      if ((enriched as Record<string, unknown>).fileArtifactsMissing === undefined) {
+        (enriched as Record<string, unknown>).fileArtifactsMissing = false;
       }
 
-      if (enriched.specReviewReason === undefined) {
-        enriched.specReviewReason = enriched.specReviewStatus === 'not_applicable'
+      if ((enriched as Record<string, unknown>).specReviewReason === undefined) {
+        (enriched as Record<string, unknown>).specReviewReason = (enriched as Record<string, unknown>).specReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
           : '';
       }
-      if (enriched.qualityReviewReason === undefined) {
-        enriched.qualityReviewReason = enriched.qualityReviewStatus === 'not_applicable'
+      if ((enriched as Record<string, unknown>).qualityReviewReason === undefined) {
+        (enriched as Record<string, unknown>).qualityReviewReason = (enriched as Record<string, unknown>).qualityReviewStatus === 'not_applicable'
           ? 'task produced no file artifacts to review'
           : '';
       }
@@ -146,8 +146,8 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         ? parseStructuredReport(last.output)
         : { summary: '', filesChanged: [], validationsRun: [], deviationsFromBrief: [], unresolved: [], extraSections: {} }
       ) as RunResult['implementationReport'];
-      if (enriched.implementationReport === undefined) {
-        enriched.implementationReport = fallbackReport;
+      if ((enriched as Record<string, unknown>).implementationReport === undefined) {
+        (enriched as Record<string, unknown>).implementationReport = fallbackReport;
       }
       // v4.4.x: the Annotating handler is the canonical source for the
       // unified StructuredReport — when it ran, its output wins over any
@@ -173,15 +173,15 @@ export function buildStageHandlers(deps: DispatcherDeps): Record<string, StageHa
         }
       }
 
-      if (ctx && enriched.models === undefined) {
+      if (ctx && (enriched as Record<string, unknown>).models === undefined) {
         const implModel = (ctx.implementerProvider?.config as { model?: string } | undefined)?.model ?? '';
         const otherTier = ctx.assignedTier === 'standard' ? 'complex' : 'standard';
         const otherProvider = ctx.providers[otherTier];
         const otherModel = (otherProvider?.config as { model?: string } | undefined)?.model ?? null;
-        enriched.models = {
+        (enriched as Record<string, unknown>).models = {
           implementer: implModel,
-          specReviewer: enriched.specReviewStatus === 'approved' || enriched.specReviewStatus === 'changes_required' ? otherModel : null,
-          qualityReviewer: enriched.qualityReviewStatus === 'approved' || enriched.qualityReviewStatus === 'changes_required' ? otherModel : null,
+          specReviewer: (enriched as Record<string, unknown>).specReviewStatus === 'approved' || (enriched as Record<string, unknown>).specReviewStatus === 'changes_required' ? otherModel : null,
+          qualityReviewer: (enriched as Record<string, unknown>).qualityReviewStatus === 'approved' || (enriched as Record<string, unknown>).qualityReviewStatus === 'changes_required' ? otherModel : null,
         };
       }
 
@@ -354,6 +354,52 @@ const STAGE_NAMES = [
   'terminal',
 ] as const;
 
+// ─── Compose path-3 (halt) helpers ───────────────────────────────────────────
+
+function buildHaltFindings(gates: Record<string, StageGate<unknown>>): any[] {
+  const out: any[] = [];
+  const rg = gates['review'];
+  if (rg?.outcome === 'advance') {
+    const fp = (rg.payload as { findings?: any[] })?.findings ?? [];
+    out.push(...fp);
+  }
+  const ig = gates['implement'];
+  if (ig?.outcome === 'advance') {
+    const fp = (ig.payload as { findings?: any[] })?.findings ?? [];
+    out.push(...fp);
+  }
+  return out;
+}
+
+function buildHaltSummary(gates: Record<string, StageGate<unknown>>): string {
+  const wg = gates['rework'];
+  if (wg?.outcome === 'advance') {
+    return (wg.payload as { summary?: string })?.summary ?? '';
+  }
+  const ig = gates['implement'];
+  if (ig?.outcome === 'advance') {
+    return (ig.payload as { summary?: string })?.summary ?? '';
+  }
+  return '';
+}
+
+function buildHaltFilesChanged(gates: Record<string, StageGate<unknown>>): string[] {
+  const cg = gates['commit'];
+  if (cg?.outcome === 'advance' && (cg.payload as { kind?: string }).kind === 'committed') {
+    return (cg.payload as { filesChanged?: string[] })?.filesChanged ?? [];
+  }
+  return [];
+}
+
+function buildHaltCommitSha(gates: Record<string, StageGate<unknown>>): string | null {
+  const cg = gates['commit'];
+  if (cg?.outcome === 'advance' && (cg.payload as { kind?: string }).kind === 'committed') {
+    return (cg.payload as { commitSha?: string })?.commitSha ?? null;
+  }
+  return null;
+}
+
+
 function makeComposeTelemetry(state: LifecycleState) {
   const gates = state.gates ?? {};
 
@@ -460,25 +506,12 @@ export async function composeHandler(state: LifecycleState): Promise<StageGate<C
     payload = {
       completed: false,
       message: `${haltedStageName} halted: ${haltedEntry?.comment ?? 'unknown halt'}`,
-      findings: [
-        ...((gates['review']?.outcome === 'advance'
-          ? ((gates['review'].payload as { findings?: unknown[] })?.findings ?? [])
-          : []) as any[],
-        ...((gates['implement']?.outcome === 'advance'
-          ? ((gates['implement'].payload as { findings?: unknown[] })?.findings ?? [])
-          : []) as any[],
-      ],
-      summary: (gates['rework']?.outcome === 'advance
-        ? ((gates['rework'].payload as { summary?: string })?.summary ?? '')
-        : ((gates['implement']?.outcome === 'advance'
-          ? ((gates['implement'].payload as { summary?: string })?.summary ?? '')
-          : ''))) as string,
-      filesChanged: (gates['commit']?.outcome === 'advance' && (gates['commit'].payload as { kind?: string }).kind === 'committed'
-        ? ((gates['commit'].payload as { filesChanged?: string[] })?.filesChanged ?? [])
-        : []) as string[],
-      commitSha: (gates['commit']?.outcome === 'advance' && (gates['commit'].payload as { kind?: string }).kind === 'committed'
-        ? ((gates['commit'].payload as { commitSha?: string })?.commitSha ?? null)
-        : null) as string | null,
+      findings: buildHaltFindings(gates),
+      summary: buildHaltSummary(gates),
+      filesChanged: buildHaltFilesChanged(gates),
+
+      commitSha: buildHaltCommitSha(gates),
+
       blockId: (gates['register-block']?.outcome === 'advance'
         ? ((gates['register-block'].payload as { blockId?: string })?.blockId ?? null)
         : null) as string | null,

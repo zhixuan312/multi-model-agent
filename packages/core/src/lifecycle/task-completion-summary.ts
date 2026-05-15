@@ -32,9 +32,6 @@ export interface TaskCompletionSummary {
 // the V3 event never disagree on cost/token/duration values.
 function deriveTerminalStatus(rr: RunResult): string {
   const tr = rr.terminationReason;
-  if (tr === 'all_tiers_unavailable') return 'unavailable';
-  if (tr === 'cost_ceiling') return 'cost_exceeded';
-  if (tr === 'round_cap') return 'incomplete';
   if (!tr || typeof tr !== 'object') return 'incomplete';
   switch (tr.cause) {
     case 'finished': return 'ok';

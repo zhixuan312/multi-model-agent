@@ -36,12 +36,14 @@ export class LifecycleDriver {
       }
       if (!row.runCondition(state)) {
         // Layer-2 skip — synthesize a skip gate so downstream knows why.
-        state.gates![stageName] = {
+        const skipGate: StageGate<null> = {
           outcome: 'skip',
           payload: null,
           comment: `${stageName} skipped: runCondition returned false`,
           telemetry: zeroTel(stageName),
         };
+        state.gates![stageName] = skipGate;
+        emitGateRecorded(state.executionContext, stageName, 'skip', null, 0);
         continue;
       }
 
@@ -54,12 +56,15 @@ export class LifecycleDriver {
           state.terminal = true;
           (state as { errorCode?: string }).errorCode = (err as { errorCode?: string }).errorCode ?? 'guard_wall_clock';
           (state as { error?: string }).error = err instanceof Error ? err.message : String(err);
-          state.gates![stageName] = {
+          const haltGate: StageGate<null> = {
             outcome: 'halt',
             payload: null,
             comment: `${stageName} halted: ${(err as Error).message}`,
             telemetry: { ...zeroTel(stageName), stopReason: 'timeout' as const },
           };
+          state.gates![stageName] = haltGate;
+          emitHaltEvent(ctx, stageName, haltGate.comment, 'timeout');
+          state.halted = true;
           continue;
         }
       }
@@ -77,7 +82,11 @@ export class LifecycleDriver {
               telemetry: { ...zeroTel(stageName), durationMs: Date.now() - t0 },
             };
         state.gates![stageName] = gate;
-        if (gate.outcome === 'halt') state.halted = true;
+        emitGateRecorded(state.executionContext, stageName, gate.outcome, gate.telemetry.costUSD, gate.telemetry.durationMs);
+        if (gate.outcome === 'halt') {
+          state.halted = true;
+          emitHaltEvent(state.executionContext, stageName, gate.comment ?? '', gate.telemetry.stopReason);
+        }
       } catch (err) {
         const msg = err instanceof Error ? err.message : String(err);
         state.gates![stageName] = {
@@ -88,6 +97,7 @@ export class LifecycleDriver {
         };
         state.halted = true;
         state.terminal = true;
+        emitHaltEvent(state.executionContext, stageName, `${stageName} crashed: ${msg}`, 'transport_error');
       }
     }
     return state;
@@ -101,4 +111,31 @@ function isStageGate(x: unknown): x is StageGate<unknown> {
     && 'payload' in x
     && 'telemetry' in x
   );
+}
+
+/** Emit a stage_halt bus event on every halt (spec §15.3). */
+function emitHaltEvent(
+  ctx: ExecutionContext | undefined,
+  stageName: string,
+  comment: string,
+  stopReason: string,
+): void {
+  ctx?.bus?.emit({ event: 'stage_halt', stageName, comment, stopReason } as Record<string, unknown>);
+}
+
+/** Emit a stage_gate_recorded debug log event on every gate transition (spec §15.3). */
+function emitGateRecorded(
+  ctx: ExecutionContext | undefined,
+  stageName: string,
+  outcome: 'advance' | 'skip' | 'halt',
+  costUSD: number | null,
+  durationMs: number,
+): void {
+  ctx?.bus?.emit({
+    event: 'stage_gate_recorded',
+    stage: stageName,
+    outcome,
+    costUSD,
+    durationMs,
+  } as Record<string, unknown>);
 }

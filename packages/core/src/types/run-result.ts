@@ -79,7 +79,7 @@ export interface Provider {
   /** Provider config — shape varies by runtime (ClaudeProviderConfig | CodexProviderConfig).
    *  Consumers access .type and .model via unsafe downcasts; the full type lives
    *  in types/config.ts to avoid circular deps. */
-  config: Record<string, unknown>;
+  config: ClaudeProviderConfig | CodexProviderConfig;
   openSession(opts: SessionOpts): Session;
 }
 
@@ -99,7 +99,7 @@ export interface RunResult {
   toolCalls: string[];
   outputIsDiagnostic: boolean;
   directoriesListed: string[];
-  workerStatus?: 'done' | 'failed';
+  workerStatus?: 'done' | 'failed' | 'blocked';
   terminationReason?: { cause: _TerminationCause; turnsUsed: number; hasFileArtifacts: boolean; usedShell: boolean; workerSelfAssessment: 'done' | 'done_with_concerns' | 'needs_context' | 'blocked' | 'failed' | 'review_loop_capped' | null; wasPromoted: boolean; wallClockMs?: number };
   errorCode?: string;
   error?: string;
@@ -195,6 +195,7 @@ export interface RawStageStatsShape {
   durationMs?: number | null;
   costUSD?: number | null;
   agentTier?: string | null;
+  modelFamily?: string | null;
   model?: string | null;
   maxIdleMs?: number | null;
   totalIdleMs?: number | null;
@@ -206,4 +207,5 @@ export interface RawStageStatsShape {
   toolCallCount?: number | null;
   filesReadCount?: number | null;
   filesWrittenCount?: number | null;
+  activityEvents?: number | null;
 }

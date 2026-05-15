@@ -32,6 +32,8 @@ export function makeSyntheticRunResult(assigned: AgentType, errorCode: string): 
     filesWritten: [],
     toolCalls: [],
     escalationLog: [],
+    actualCostUSD: 0,
+    directoriesListed: [],
   };
 }
 

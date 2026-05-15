@@ -17,8 +17,8 @@ export function advanceGate<T>(payload: T, opts: Partial<StageGate<T>['telemetry
 export function skipGate(comment: string): StageGate<null> {
   return { outcome: 'skip', payload: null, comment, telemetry: zeroTel() };
 }
-export function haltGate(comment: string): StageGate<null> {
-  return { outcome: 'halt', payload: null, comment, telemetry: zeroTel('', 'transport_error') };
+export function haltGate(comment: string, stageLabel = 'implement'): StageGate<null> {
+  return { outcome: 'halt', payload: null, comment, telemetry: zeroTel(stageLabel, 'transport_error') };
 }
 
 /** Minimal LifecycleState — fills only the slots the unit tests need; anything else is overridden in opts. */

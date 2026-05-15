@@ -7,12 +7,13 @@ import { runReviewerTurn }     from '../../review/run-reviewer.js';
 
 export async function reviewHandler(state: LifecycleState): Promise<StageGate<ReviewPayload>> {
   const t0 = Date.now();
-  const policy = state.reviewPolicy; // 'standard' | 'spec' | 'quality' | 'none' (handled by shouldRun)
-  const runSpec    = policy === 'standard' || policy === 'spec';
-  const runQuality = policy === 'standard' || policy === 'quality';
+  const policy = state.reviewPolicy; // 'full' | 'quality_only' | 'diff_only' | 'none'
+  const runSpec    = policy === 'full' || policy === 'quality_only';
+  const runQuality = policy === 'full' || policy === 'diff_only';
 
-  const impl = state.gates['implement'].payload as any;
-  const briefStr = typeof state.task?.brief === 'string' ? state.task.brief : (state.task as any)?.brief?.body ?? '';
+  const impl = (state.gates['implement']?.payload ?? {}) as { summary?: string; filesChanged?: string[] };
+  const briefObj = (state.task ?? {}) as { brief?: unknown };
+  const briefStr = typeof briefObj.brief === 'string' ? briefObj.brief : '';
   const context = {
     brief: briefStr,
     workerSummary: impl.summary,

@@ -121,9 +121,7 @@ export interface ExecutionContext {
   // ── Output target tracking ──
   outputTargets: string[];
 
-  // ── v4 review engines ──
-  reviewerEngine?: import('../review/reviewer-engine.js').ReviewerEngine;
-
+  
   // ── Pre-v4 executor compatibility (Phase B/E will consume these) ──
   /** Per-project runtime state — used by executor-layer consumers (delegate, etc.). */
   projectContext?: ProjectContext;
