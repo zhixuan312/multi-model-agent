@@ -6,10 +6,9 @@ export type RouteName =
   | 'audit' | 'review' | 'debug' | 'investigate' | 'explore'
   | 'register-context-block';
 
-export const ALL_TASK_ROUTES: RouteName[] =
-  ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'];
+export const ALL_TASK_ROUTES = ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'] as const;
 
-export const WRITE_ROUTES: RouteName[] = ['delegate', 'execute-plan'];
+export const WRITE_ROUTES = ['delegate', 'execute-plan'] as const;
 
 export type WorkerSelfAssessment = 'done' | 'failed';
 
