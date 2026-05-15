@@ -1,71 +1,116 @@
 import { describe, it, expect, vi } from 'vitest';
 import { reviewHandler } from '../../../packages/core/src/lifecycle/handlers/review-handler.js';
-import { WARM_FOLLOWUP_PREAMBLE } from '../../../packages/core/src/lifecycle/warm-followup.js';
-import type { TurnResult } from '../../../packages/core/src/types/run-result.js';
 
-function fakeTurn(output: string): TurnResult {
+function fakeTurn(output: string) {
   return {
     output,
-    usage: { inputTokens: 10, outputTokens: 10, cachedReadTokens: 0, cachedNonReadTokens: 0 },
-    filesRead: [], filesWritten: [], toolCallsByName: {},
-    turns: 1, durationMs: 0, costUSD: null,
-    terminationReason: 'ok',
-  } as unknown as TurnResult;
+    costUSD: 0.005,
+    turns: 1,
+  };
 }
 
-describe('reviewHandler — warm-followup contract', () => {
-  it('iteration 0 (spec) sends cold-open prompt; iteration 1 (quality) sends warm-followup', async () => {
+describe('reviewHandler', () => {
+  it('combined verdict approved when both sub-reviewers approve', async () => {
     const send = vi.fn()
-      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved\n## Deviations\n(none)'))
-      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved\n## Deviations\n(none)'));
-    const session = { send, close: vi.fn() } as any;
+      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved'))
+      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved'));
+    const session = { send } as any;
     const ctx: any = {
-      assignedTier: 'standard',
-      providers: { standard: { config: {} }, complex: { config: {} } },
-      getSession: vi.fn().mockReturnValue(session),
+      getSession: () => session,
     };
     const state: any = {
       executionContext: ctx,
-      task: { prompt: 'BRIEF_77123' },
-      lastRunResult: { output: 'WORKER_OUTPUT_43891' },
-      reviewPolicy: 'full',
-      diffTracker: { cumulativeDiff: async () => 'DIFF_29348' },
+      task: { brief: { body: 'Test brief body' } },
+      config: { reviewPolicy: 'standard' },
+      gates: {
+        implement: {
+          outcome: 'advance',
+          payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
+        },
+      },
+      reviewPolicy: 'standard',
     };
-    await reviewHandler(state);
-    expect(send).toHaveBeenCalledTimes(2);
-    // turn 0 (spec): cold open — contains the brief verbatim, does NOT start with the warm preamble.
-    expect(send.mock.calls[0][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(false);
-    expect(send.mock.calls[0][0]).toContain('BRIEF_77123');
-    // turn 1 (quality): warm follow-up — starts with preamble, does NOT include the brief / diff body.
-    expect(send.mock.calls[1][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(true);
-    expect(send.mock.calls[1][0]).not.toContain('BRIEF_77123');
-    expect(send.mock.calls[1][0]).not.toContain('DIFF_29348');
+    const gate = await reviewHandler(state);
+    expect((gate.payload as any).verdict).toBe('approved');
+    expect((gate.payload as any).reviewersSucceeded).toEqual(['spec', 'quality']);
+    expect((gate.payload as any).reviewersErrored).toEqual([]);
   });
 
-  it('rotated-session fallback — if the session reference changes between iterations, iteration 1 sends cold-open instead of warm-followup', async () => {
-    const send1 = vi.fn().mockResolvedValueOnce(fakeTurn('## Verdict\napproved\n## Deviations\n(none)'));
-    const send2 = vi.fn().mockResolvedValueOnce(fakeTurn('## Verdict\napproved\n## Deviations\n(none)'));
-    const session1 = { send: send1, close: vi.fn() } as any;
-    const session2 = { send: send2, close: vi.fn() } as any;
+  it('combined verdict changes_required when one sub-reviewer asks for changes', async () => {
+    // Quality-review template format: ## Finding N: + Issue/Severity/Suggestion bullets
+    const send = vi.fn()
+      .mockResolvedValueOnce(fakeTurn('## Verdict\nchanges_required'))
+      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved'));
+    const session = { send } as any;
     const ctx: any = {
-      assignedTier: 'standard',
-      providers: { standard: { config: {} }, complex: { config: {} } },
-      getSession: vi.fn()
-        .mockReturnValueOnce(session1)
-        .mockReturnValueOnce(session2)
-        .mockReturnValueOnce(session2),
+      getSession: () => session,
     };
     const state: any = {
       executionContext: ctx,
-      task: { prompt: 'BRIEF_77123' },
-      lastRunResult: { output: 'WORKER_OUTPUT_43891' },
-      reviewPolicy: 'full',
-      diffTracker: { cumulativeDiff: async () => 'DIFF_29348' },
+      task: { brief: { body: 'Test brief body' } },
+      config: { reviewPolicy: 'standard' },
+      gates: {
+        implement: {
+          outcome: 'advance',
+          payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
+        },
+      },
+      reviewPolicy: 'standard',
     };
-    await reviewHandler(state);
-    // Cold open on both calls — second session is fresh, no warm follow-up allowed.
-    expect(send1.mock.calls[0][0]).toContain('BRIEF_77123');
-    expect(send2.mock.calls[0][0].startsWith(WARM_FOLLOWUP_PREAMBLE)).toBe(false);
-    expect(send2.mock.calls[0][0]).toContain('BRIEF_77123');
+    const gate = await reviewHandler(state);
+    expect((gate.payload as any).verdict).toBe('changes_required');
+  });
+
+  it('synthesizes changes_required + parser-failure finding when all sub-reviewers error', async () => {
+    // Simulate transport errors by having the mock throw
+    const send = vi.fn()
+      .mockRejectedValueOnce(new Error('transport error: connection refused'))
+      .mockRejectedValueOnce(new Error('transport error: connection refused'));
+    const session = { send } as any;
+    const ctx: any = {
+      getSession: () => session,
+    };
+    const state: any = {
+      executionContext: ctx,
+      task: { brief: { body: 'Test brief body' } },
+      config: { reviewPolicy: 'standard' },
+      gates: {
+        implement: {
+          outcome: 'advance',
+          payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
+        },
+      },
+      reviewPolicy: 'standard',
+    };
+    const gate = await reviewHandler(state);
+    expect((gate.payload as any).verdict).toBe('changes_required');
+    expect((gate.payload as any).reviewersErrored).toHaveLength(2);
+    expect((gate.payload as any).findings.length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('one reviewer approved, other errored → changes_required', async () => {
+    const send = vi.fn()
+      .mockResolvedValueOnce(fakeTurn('## Verdict\napproved'))
+      .mockRejectedValueOnce(new Error('transport error: connection refused'));
+    const session = { send } as any;
+    const ctx: any = {
+      getSession: () => session,
+    };
+    const state: any = {
+      executionContext: ctx,
+      task: { brief: { body: 'Test brief body' } },
+      config: { reviewPolicy: 'standard' },
+      gates: {
+        implement: {
+          outcome: 'advance',
+          payload: { summary: 'Test worker summary', filesChanged: ['test.ts'] },
+        },
+      },
+      reviewPolicy: 'standard',
+    };
+    const gate = await reviewHandler(state);
+    expect((gate.payload as any).verdict).toBe('changes_required');
+    expect((gate.payload as any).reviewersSucceeded).toEqual(['spec']);
+    expect((gate.payload as any).reviewersErrored).toHaveLength(1);
   });
 });
