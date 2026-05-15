@@ -76,41 +76,54 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
-## Reading the findings (3.10.5+)
+## Reading the findings
 
-The terminal envelope's `results[N].annotatedFindings` is a list of structured
-findings the reviewer extracted and scored from the implementer's narrative.
-Every finding has the same shape:
+The main agent reads `completed` + `message` + `findings` — the findings are the answer. For
+read-only routes, `filesChanged` is always `[]` and `commitSha` is always `null`.
+
+```json
+{
+  "completed": true,
+  "message": "Investigation complete; 1 finding.",
+  "findings": [
+    { "id": "F1", "severity": "high", "category": "root-cause",
+      "claim": "bcrypt binding fails on non-ASCII input in the Docker image.",
+      "evidence": "Worker reproduced the failure with `pass='café'`; strace shows EINVAL on encode call.",
+      "suggestion": "Normalize input to NFC form before calling bcrypt.",
+      "source": "implementer" }
+  ],
+  "filesChanged": [],
+  "commitSha": null,
+  "summary": "...",
+  "telemetry": { ... }
+}
+```
+
+### Finding shape
+
+Every finding has this shape:
 
 | Field | Type | Notes |
 |---|---|---|
-| `id` | string | Reviewer-assigned, e.g. `F1`, `F2`. |
+| `id` | string | Worker-assigned, e.g. `F1`, `F2`. Stable across chain. |
 | `severity` | `'critical' \| 'high' \| 'medium' \| 'low'` | 4-tier. |
+| `category` | string | Topical bucket, e.g. `root-cause`, `reproduction`. |
 | `claim` | string | One-sentence summary. |
-| `evidence` | string ≥20 chars | Quoted from worker output when grounded. |
+| `evidence` | string ≥20 chars | Verbatim from source when grounded. |
 | `suggestion?` | string | Optional fix recommendation. |
-| `annotatorConfidence` | `number \| null` | 0–100 from the reviewer; `null` when emitted via deterministic fallback. |
-| `evidenceGrounded` | boolean | True when `evidence` is a verbatim substring of worker output. |
+| `source` | `'implementer' \| 'reviewer'` | Who produced the finding. |
 
-### Verdict states (`qualityReviewVerdict`)
-
-- `'annotated'` — every finding is structured. May be reviewer-emitted (with
-  numeric `annotatorConfidence`) or deterministic-fallback (with
-  `annotatorConfidence: null`). The route ALWAYS reaches `'annotated'` unless
-  the reviewer call itself fails transport.
-- `'error'` — only when the reviewer call fails transport (network / 5xx).
+`annotatorConfidence` and `evidenceGrounded` are retired — they were v4 fields with no producers.
 
 ### Recommended rendering by the main agent
 
-1. Show ALL findings — never silently drop. Confidence and grounding are
-   soft signals, not gates.
-2. Default sort: severity (critical → low) then `annotatorConfidence` desc
-   (nulls last).
-3. `severity` is the reviewer's authoritative final value — use it directly.
-4. Mark findings with `evidenceGrounded: false` or
-   `annotatorConfidence < 70` as "lower-trust" (collapsed section, lighter
-   color, or `(low confidence)` annotation). User decides what to do.
-5. Severity-tier counts feed the dashboard via V3 `findingsBySeverity`.
+1. Show ALL findings — never silently drop. Severity and grounding are soft
+   signals, not gates.
+2. Default sort: severity (critical → low), then `id` ascending.
+3. `severity` is the authoritative value — use it directly.
+4. Mark findings with `evidence` shorter than 30 chars as "low-evidence"
+   (lighter color or `(low evidence)` annotation). User decides what to do.
+5. Severity-tier counts feed the dashboard.
 
 @include _shared/budget-defaults.md
 
