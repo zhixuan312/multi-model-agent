@@ -1,7 +1,7 @@
 import type { StagePlan, LifecycleState } from './stage-plan-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 
-export type StageHandler = (state: LifecycleState) => Promise<void> | void;
+export type StageHandler = (state: LifecycleState) => unknown;
 
 export class LifecycleDriver {
   constructor(private plan: StagePlan, private handlers: Record<string, StageHandler>) {}
