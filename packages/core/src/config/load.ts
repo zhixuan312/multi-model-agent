@@ -4,16 +4,6 @@ import os from 'os';
 import { multiModelConfigSchema } from './schema.js';
 import type { MultiModelConfig } from '../types.js';
 
-// Re-export resolution helpers + types so existing callers that import them
-// from './load.js' keep working. The canonical home is './config-resolver.js'
-// per architecture.md:58.
-export {
-  collectInlineApiKeyOffenders,
-  resolveMainAgentModel,
-  validateUserPricing,
-} from './config-resolver.js';
-export type { Pricing, MainAgentModelResolution } from './config-resolver.js';
-
 const TOKEN_REGEX = /^[A-Za-z0-9_\-+=/.]+$/;
 
 function expandTilde(p: string): string {
