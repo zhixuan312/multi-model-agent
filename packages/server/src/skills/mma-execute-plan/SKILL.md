@@ -176,8 +176,6 @@ Use `telemetry.haltedStage` to find the first halt; `telemetry.stopReason` to fi
 
 `details` is optional and present only when the server has structured additional context.
 
-@include _shared/budget-defaults.md
-
 ## Best practices
 
 This skill is one step in the larger flow described in `multi-model-agent` → "Best practices". Recipes that involve `mma-execute-plan`:
