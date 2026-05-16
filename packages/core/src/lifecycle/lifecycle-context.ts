@@ -20,7 +20,7 @@ import type { ContextBlockStore } from '../stores/context-block-tool.js';
  *
  * Inputs (Group A) are read-only after row 2.5 completes.
  * Bus + heartbeat (Group B) carry mutable runtime state for the watchdog.
- * Cost (Group C) is the cost meter / runAccounted state — owned by CostMeter.
+ * Cost (Group C) is tracked via stateless priceTokens() / rollupByTier() in bounded-execution; not held on ExecutionContext.
  *
  * Per-chain accumulators (Group D) live on `LifecycleState` itself, not
  * here, because each chain handler mutates them as it fires; ExecutionContext
