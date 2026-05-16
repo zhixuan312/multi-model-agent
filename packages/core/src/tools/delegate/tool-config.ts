@@ -38,6 +38,7 @@ export interface DelegateBrief {
 export const toolConfig: ToolConfig<Input, DelegateBrief, unknown> = {
   name: 'delegate',
   category: 'artifact_producing',
+  serializeSameRepo: true,
   agentType: 'standard',
   briefSlot: (input) =>
     input.tasks.map((t) => ({

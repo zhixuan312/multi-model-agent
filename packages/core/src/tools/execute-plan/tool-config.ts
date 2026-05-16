@@ -122,6 +122,7 @@ function buildExecutePlanPrompt(
 export const toolConfig: ToolConfig<ExecutePlanWireInput, ToolExecutePlanBrief> = {
   name: 'execute_plan',
   category: 'artifact_producing',
+  serializeSameRepo: true,
   agentType: 'standard',
   briefSlot: toolExecutePlanBriefSlot,
   buildTaskSpec: (brief, ctx) => ({
