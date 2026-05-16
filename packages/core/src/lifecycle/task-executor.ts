@@ -230,6 +230,11 @@ export async function executeTask<Input, Brief, Report>(
         taskIndices: g.tasks.map((t) => t.originalIndex),
       })),
     );
+    ctx.setBatchGroupingTelemetry?.({
+      groupCount: groups.length,
+      groupSizes: groups.map((g) => g.tasks.length),
+      serializationApplied: groups.some((g) => g.tasks.length > 1),
+    });
     results = await dispatchGroupedWithPrecomputedGroups(
       tasks,
       groups,

@@ -137,7 +137,20 @@ export function asyncDispatch<TResult>(
             `[mmagent verbose] event=batch_failed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs} error_code=${failure.code} error="${failure.message.replace(/"/g, '\\"')}"\n`,
           );
         } else {
-          deps.bus.emit({ event: 'batch_completed', ts: new Date().toISOString(), batchId, tool, durationMs, taskCount } as any);
+          const groupingInfo = deps.batchRegistry.get(batchId)?.groupingTelemetry;
+          deps.bus.emit({
+            event: 'batch_completed',
+            ts: new Date().toISOString(),
+            batchId,
+            tool,
+            durationMs,
+            taskCount,
+            ...(groupingInfo ? {
+              groupCount: groupingInfo.groupCount,
+              groupSizes: groupingInfo.groupSizes,
+              serializationApplied: groupingInfo.serializationApplied,
+            } : {}),
+          } as any);
           process.stderr.write(
             `[mmagent verbose] event=batch_completed ts=${new Date().toISOString()} batch=${batchId} route=${tool} duration_ms=${durationMs}\n`,
           );

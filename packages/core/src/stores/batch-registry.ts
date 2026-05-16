@@ -83,6 +83,13 @@ export interface BatchEntry<Result = unknown> extends BatchEntryInput<Result> {
   groups?: Array<{ key: string; taskIndices: number[] }>;
   /** taskIndex -> terminal context blockId; lazily created on first record */
   terminalBlockIds?: Map<number, string>;
+  /**
+   * Per-batch grouping telemetry for emission on batch_completed event.
+   * Set via setGroupingTelemetry() by task-executor immediately after
+   * grouping resolves. Optional — absent on read-only routes and for
+   * batches that did not use serializeSameRepo.
+   */
+  groupingTelemetry?: { groupCount: number; groupSizes: number[]; serializationApplied: boolean };
 }
 
 export interface BatchRegistryOptions {
@@ -159,6 +166,12 @@ export class BatchRegistry {
     const entry = this.map.get(batchId);
     if (!entry) return;
     entry.groups = groups;
+  }
+
+  setGroupingTelemetry(batchId: string, info: { groupCount: number; groupSizes: number[]; serializationApplied: boolean }): void {
+    const entry = this.map.get(batchId);
+    if (!entry) return;
+    entry.groupingTelemetry = info;
   }
 
   delete(batchId: string): boolean {

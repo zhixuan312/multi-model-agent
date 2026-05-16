@@ -36,6 +36,10 @@ export function buildExecutionContext(
     deps.batchRegistry.attachGroups(batchId, groups);
   };
 
+  const setBatchGroupingTelemetry: ExecutionContext['setBatchGroupingTelemetry'] = (info) => {
+    deps.batchRegistry.setGroupingTelemetry(batchId, info);
+  };
+
   let recorder: ExecutionContext['recorder'] | undefined;
   try {
     recorder = getRecorder() as unknown as ExecutionContext['recorder'];
@@ -58,6 +62,7 @@ export function buildExecutionContext(
     batchId,
     recordHeartbeat,
     attachBatchGroups,
+    setBatchGroupingTelemetry,
     recorder,
     projectContext: pc,
     contextBlockStore: pc.contextBlocks,

@@ -122,6 +122,18 @@ export interface ExecutionContext {
    */
   attachBatchGroups?: (groups: Array<{ key: string; taskIndices: number[] }>) => void;
 
+  /**
+   * Server-supplied callback that records grouping telemetry to be
+   * attached to the eventual batch_completed event. Optional — same
+   * pattern as recordHeartbeat / attachBatchGroups. Called once per
+   * batch by task-executor immediately after grouping resolves.
+   */
+  setBatchGroupingTelemetry?: (info: {
+    groupCount: number;
+    groupSizes: number[];
+    serializationApplied: boolean;
+  }) => void;
+
   /** Telemetry recorder — server-only, used at terminal to record task.completed. */
   recorder?: {
     recordTaskCompleted: (params: {
