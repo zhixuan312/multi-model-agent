@@ -66,6 +66,7 @@ export interface TurnResult {
   outputIsDiagnostic?: boolean;
   errorCode?: string;
   errorMessage?: string;
+  model?: string;
 }
 
 export interface SessionOpts {

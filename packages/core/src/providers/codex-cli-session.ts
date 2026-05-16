@@ -163,6 +163,7 @@ export class CodexCliSession implements Session {
       terminationReason: tracker.terminationReason,
       ...(tracker.errorCode && { errorCode: tracker.errorCode }),
       ...(tracker.errorMessage && { errorMessage: tracker.errorMessage }),
+      model: this.args.cfg.model,
     };
   }
 

@@ -117,6 +117,7 @@ export class ClaudeSession implements Session {
     const norm = normalizeClaudeTurn(events, {
       durationMs: Date.now() - startMs,
       costUSD: 0,
+      model: this.args.model,
     });
     norm.costUSD = rateCard ? priceTokens(norm.usage, rateCard) : 0;
 
