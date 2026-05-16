@@ -29,9 +29,18 @@ export async function getDirtyFiles(
     child.on('exit', (code) => {
       if (code !== 0) { done([]); return; }
       const files = out.split('\n')
-        .map((l) => l.trim())
         .filter(Boolean)
-        .map((l) => l.replace(/^.{2,3}\s+/, '')) // strip XY status prefix
+        .map((l) => {
+          const path = l.substring(3);
+          if (path.startsWith('"') && path.endsWith('"')) {
+            try {
+              return JSON.parse(path);
+            } catch {
+              return path;
+            }
+          }
+          return path;
+        })
         .filter(Boolean);
       done(files);
     });
