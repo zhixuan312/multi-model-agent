@@ -141,9 +141,22 @@ export function makeProviderResponseWithStructuredOutput(out: Partial<ImplementP
 }
 
 function makeFakeExecutionContext(): any {
-  return {
+  const ctx: any = {
     provider: { runTurn: async (..._a: unknown[]) => ({ kind: 'ok', text: '', costUSD: 0, turnsUsed: 0, stopReason: 'normal' }) },
-    getSession: () => ({}),
+    assignedTier: 'standard',
+    providers: {
+      standard: {
+        name: 'mock-provider',
+        config: { model: 'mock' },
+        run: async (..._a: unknown[]) => ({ kind: 'ok', text: '', costUSD: 0, turnsUsed: 0, stopReason: 'normal' }),
+      },
+    },
+    cwd: '/tmp/fake',
+    stall: { controller: new AbortController() },
+    timing: { timeoutMs: 60000, deadlineMs: Date.now() + 60000 },
+    taskIndex: 0,
+    config: { defaults: { progressWatchdogEnabled: false } },
+    implementerProvider: { config: { model: 'mock' } },
     bus: { emit: (_e: unknown) => {} },
     recorder: { flush: async (..._a: unknown[]) => {} },
     stallController: { armed: false },
@@ -156,4 +169,21 @@ function makeFakeExecutionContext(): any {
       cleanupTick: () => {},
     },
   };
+  // Session mock — tests that exercise the annotator LLM judge layer flip
+  // ctx.__llmAlwaysFails to force the transport-error fallback path. Default
+  // session returns an empty-output ok turn, which makes the annotator's JSON
+  // parse fail gracefully and the deterministic synthesis take over.
+  ctx.getSession = (_tier: string) => ({
+    send: async (_prompt: string, _opts?: { stageLabel?: string }) => {
+      if (ctx.__llmAlwaysFails) {
+        throw new Error('transport timeout (test fixture forced)');
+      }
+      if (ctx.__mockSessionResponse) {
+        return ctx.__mockSessionResponse;
+      }
+      return { output: '', usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 }, filesRead: [], filesWritten: [], toolCallsByName: {}, turns: 1, durationMs: 0, costUSD: 0, terminationReason: 'finished' };
+    },
+    close: async () => {},
+  });
+  return ctx;
 }

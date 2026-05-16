@@ -1,14 +1,14 @@
-// v4.4 helper. Build mma's public RunResult shape from one SDK turn block
+// v4.4 helper. Build mma's public RuntimeRunResult shape from one SDK turn block
 // (TurnResult) plus optional per-stage parsed-report fields. Lifecycle
 // handlers call this once per `session.send()`.
 //
-// The RunResult shape preserves every field downstream code expects (50+).
+// The RuntimeRunResult shape preserves every field downstream code expects (50+).
 // This helper populates the machine-readable subset (output, usage, files,
 // tool counts, cost, termination) and merges in the parser-supplied subset
 // when the handler has it. Optional fields not relevant to a given stage
 // remain `undefined`.
 
-import type { TurnResult, RunResult, TokenUsage } from '../types/run-result.js';
+import type { TurnResult, RuntimeRunResult, TokenUsage } from '../types/run-result.js';
 
 /** Per-stage parsed-report fields the handler may supply. All optional;
  *  handlers that don't parse (e.g. task-executor.ts) pass `{}` or nothing. */
@@ -19,16 +19,16 @@ export interface ParsedReportFields {
   qualityReviewerNotes?: string;
   reworkOutput?: string;
   reworkApplied?: boolean;
-  verifyResult?: NonNullable<RunResult['verifyResult']>;
+  verifyResult?: NonNullable<RuntimeRunResult['verifyResult']>;
 }
 
 export function assembleRunResult(
   turn: TurnResult,
   parsed: ParsedReportFields = {},
-): RunResult {
+): RuntimeRunResult {
   const status = mapStatus(turn.terminationReason, turn.errorCode);
 
-  // RunResult.toolCalls is a string[] per the current shape (each entry like
+  // RuntimeRunResult.toolCalls is a string[] per the current shape (each entry like
   // "toolName(<input-preview>)"). With v4.4 dropping per-call detail, we
   // synthesize one entry per toolCallsByName count.
   const toolCalls: string[] = [];
@@ -41,9 +41,9 @@ export function assembleRunResult(
   const mapsToCause = tr === 'ok' || tr === 'cap_exhausted' || tr === 'stalled';
   const terminationReason = mapsToCause
     ? undefined
-    : (mapTermination(tr) as RunResult['terminationReason']);
+    : (mapTermination(tr) as RuntimeRunResult['terminationReason']);
 
-  const workerStatus: RunResult['workerStatus'] | undefined =
+  const workerStatus: RuntimeRunResult['workerStatus'] | undefined =
     turn.workerSelfAssessment
       ? (turn.workerSelfAssessment as 'done' | 'failed')
       : (tr === 'ok' ? 'done' : undefined);
@@ -66,10 +66,10 @@ export function assembleRunResult(
     ...(turn.errorCode && { errorCode: turn.errorCode }),
     ...(turn.errorMessage && { error: turn.errorMessage }),
     ...parsed,
-  } as unknown as RunResult;
+  } as unknown as RuntimeRunResult;
 }
 
-function mapStatus(r: string, errorCode?: string): RunResult['status'] {
+function mapStatus(r: string, errorCode?: string): RuntimeRunResult['status'] {
   switch (r) {
     case 'ok': return 'ok';
     case 'cost_exceeded': return 'cost_exceeded';
@@ -81,7 +81,7 @@ function mapStatus(r: string, errorCode?: string): RunResult['status'] {
       // Preserve transient error subtypes so delegateWithEscalation's retry
       // policy (api_error / provider_transport_failure) can still operate.
       if (errorCode === 'api_error' || errorCode === 'provider_transport_failure') {
-        return errorCode as RunResult['status'];
+        return errorCode as RuntimeRunResult['status'];
       }
       return 'error';
     default:
@@ -92,7 +92,7 @@ function mapStatus(r: string, errorCode?: string): RunResult['status'] {
   }
 }
 
-function mapIncompleteReason(r: string): RunResult['incompleteReason'] | undefined {
+function mapIncompleteReason(r: string): RuntimeRunResult['incompleteReason'] | undefined {
   if (r === 'cap_exhausted') return 'turn_cap';
   if (r === 'stalled') return 'timeout';
   return undefined;

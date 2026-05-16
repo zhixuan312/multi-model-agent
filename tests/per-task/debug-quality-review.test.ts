@@ -10,7 +10,7 @@ vi.mock('@zhixuan92/multi-model-agent-core/providers/provider-factory', () => ({
 // The executor imports runTaskViaDispatcher internally, which calls createProvider.
 // We register mock implementations per test.
 
-import type { MultiModelConfig, RunResult } from '@zhixuan92/multi-model-agent-core';
+import type { MultiModelConfig, RuntimeRunResult } from '@zhixuan92/multi-model-agent-core';
 import { executeTask } from '../../packages/core/src/lifecycle/task-executor.js';
 import { toolConfig } from '../../packages/core/src/tools/debug/tool-config.js';
 
@@ -20,7 +20,7 @@ const workerOutput = JSON.stringify({
   ],
 });
 
-const mockWorker: RunResult = {
+const mockWorker: RuntimeRunResult = {
   output: workerOutput,
   status: 'ok',
   usage: { inputTokens: 100, outputTokens: 50, totalTokens: 150, costUSD: 0.01 },
@@ -32,9 +32,9 @@ const mockWorker: RunResult = {
   escalationLog: [],
   retryable: false,
   durationMs: 1000,
-} as RunResult;
+} as RuntimeRunResult;
 
-const mockReview: RunResult = {
+const mockReview: RuntimeRunResult = {
   output: JSON.stringify({ verdict: 'approved', reason: 'all findings grounded' }),
   status: 'ok',
   usage: { inputTokens: 50, outputTokens: 25, totalTokens: 75, costUSD: 0.005 },
@@ -46,7 +46,7 @@ const mockReview: RunResult = {
   escalationLog: [],
   retryable: false,
   durationMs: 500,
-} as RunResult;
+} as RuntimeRunResult;
 
 function makeProvider(slot: string) {
   return {

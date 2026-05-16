@@ -4,7 +4,7 @@
 // lifecycle review-chain handlers. This function only handles transient
 // retries (api_error / network_error).
 
-import type { TaskSpec, RunResult, Provider, AgentType } from '../types.js';
+import type { TaskSpec, RuntimeRunResult, Provider, AgentType } from '../types.js';
 import type {
   AttemptRecord,
   InternalRunnerEvent,
@@ -93,7 +93,7 @@ export async function delegateWithEscalation(
   task: TaskSpec,
   chain: Provider[],
   options: DelegateOptions = {},
-): Promise<RunResult> {
+): Promise<RuntimeRunResult> {
   if (chain.length === 0) {
     throw new Error('delegateWithEscalation called with empty chain');
   }
@@ -107,7 +107,7 @@ export async function delegateWithEscalation(
       }
     : undefined;
 
-  const attempts: { result: RunResult; record: AttemptRecord }[] = [];
+  const attempts: { result: RuntimeRunResult; record: AttemptRecord }[] = [];
 
   for (let i = 0; i < chain.length; i++) {
     const provider = chain[i];
@@ -125,7 +125,7 @@ export async function delegateWithEscalation(
     const initialPromptLengthChars = 0;
     const initialPromptHash = '';
 
-    let result: RunResult;
+    let result: RuntimeRunResult;
     let cumulativeCostUSD = 0;
 
     for (let attempt = 0; ; attempt++) {

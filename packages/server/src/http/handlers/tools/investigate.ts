@@ -82,17 +82,7 @@ export function buildInvestigateHandler(deps: HandlerDeps): RawHandler {
       deps,
       caller: { client: ctx.callerClient, mainModel: ctx.mainModel },
       executor: async (executionCtx) => {
-        const callExecutor = () => executeTask(toolConfig, executionCtx, enrichedInput);
-        if (deps.routeDispatcher) {
-          const result = await deps.routeDispatcher.dispatch({
-            route: 'investigate',
-            toolCategory: 'read_only',
-            rawRequest: enrichedInput,
-            executor: () => callExecutor(),
-          });
-          return result.body;
-        }
-        return callExecutor();
+        return executeTask(toolConfig, executionCtx, enrichedInput);
       },
     });
 

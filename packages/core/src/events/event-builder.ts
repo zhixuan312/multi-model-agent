@@ -1,9 +1,10 @@
 import { randomUUID } from 'node:crypto';
-import type { RunResult, RawStageStats } from '../types.js';
+import type { RuntimeRunResult, RawStageStats } from '../types.js';
 import type { RawStageStatsShape } from '../types/run-result.js';
+import type { StageGate } from '../lifecycle/stage-io.js';
 import { normalizeModel } from './normalize.js';
 import { classifyConcern } from './concern-classifier.js';
-import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord } from './telemetry-types.js';
+import { ErrorCode, type TaskCompletedEventType, type StageEntryType, type ConcernCategoryType, type WireTelemetryRecord, WireTelemetryRecordSchema } from './telemetry-types.js';
 
 import { bucketFindingsBySeverity } from '../reporting/severity.js';
 import { rollupByTier, sumTokens } from '../bounded-execution/cost-rollup.js';
@@ -25,12 +26,21 @@ import {
 export interface BuildContext {
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry' | 'investigate' | 'research' | 'register-context-block';
   taskSpec: { filePaths?: string[]; subtype?: string };
-  runResult: RunResult;
+  runResult: RuntimeRunResult;
   realFilesChanged: string[];   // NEW — sub-project A. Absolute paths from getRealFilesChanged.
   client: string;
   mainModel: string | null;
   reviewPolicy?: 'full' | 'quality_only' | 'diff_only' | 'none';
   verifyCommandPresent?: boolean;
+  /**
+   * v5 — per-stage gates from LifecycleState. When present, the wire builder
+   * cross-checks each stage's runResult.stageStats against gates[name].telemetry
+   * and prefers the gate's values for `costUSD`, `durationMs`, `turnsUsed`,
+   * `stopReason` (the canonical v5 source). stageStats supplies the remaining
+   * fields (tokens, tool calls, files read/written) because they're not on the
+   * gate's telemetry block.
+   */
+  gates?: Record<string, StageGate<unknown>>;
 }
 
 const REVIEWED_ROUTES = new Set(['delegate', 'audit', 'review', 'debug', 'execute-plan', 'investigate']);
@@ -53,7 +63,7 @@ interface ProjectedFinding {
  *  `runResult.concerns` field is dead — the v4.4 lifecycle never assigns it,
  *  so reading from there silently produced concernCount=0 on every event.
  */
-function projectFindings(rr: RunResult): ProjectedFinding[] {
+function projectFindings(rr: RuntimeRunResult): ProjectedFinding[] {
   // The annotator handler writes a richer shape than ParsedStructuredReport declares;
   // cast to the runtime-actual shape.
   const sr = rr.structuredReport as {
@@ -87,7 +97,7 @@ function normalizeSeverity(s: string | undefined): ProjectedFinding['severity'] 
 export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord {
   const { route, runResult, client, mainModel } = ctx;
 
-  const stages = buildStages(route, runResult);
+  const stages = buildStages(route, runResult, ctx.gates);
 
   // Compute per-stage main-model-equivalent cost using the resolved rate card.
   // Plugs into StageEntryBase.mainEquivalentCostUSD so the schema stays valid
@@ -221,24 +231,51 @@ export function buildTaskCompletedEvent(ctx: BuildContext): WireTelemetryRecord 
 /**
  * Wire payload builder. Internal record fields match the wire schema 1:1
  * after the v4.0.3 rename (mainModel/mainModelFamily everywhere — DB column
- * is `main_model`, header is `X-MMA-Main-Model`, no more `mainModel`
- * translation shim).
+ * is `main_model`, header is `X-MMA-Main-Model`).
+ *
+ * v5 — this used to be a `as unknown as WireTelemetryRecord` passthrough.
+ * The translator is now real: the internal record is passed through Zod
+ * (`WireTelemetryRecordSchema`) so the wire payload is schema-validated at
+ * the egress boundary. When the schema rejects, we fall back to the
+ * passthrough to preserve "best-effort telemetry" semantics — but the
+ * validation failure is observable on bus emits so backend can detect drift
+ * before the warehouse 400s. Callers that need strict validation should
+ * call `WireTelemetryRecordSchema.parse` directly.
  */
-export function buildWirePayload(internalRecord: Record<string, unknown>): WireTelemetryRecord {
+export function buildWirePayload(
+  internalRecord: Record<string, unknown>,
+  opts?: { onValidationError?: (err: unknown) => void },
+): WireTelemetryRecord {
+  const parsed = WireTelemetryRecordSchema.safeParse(internalRecord);
+  if (parsed.success) {
+    // Schema-strip: drop unknown fields by returning the parsed record. This
+    // is the v5 contract guarantee — only wire-schema fields cross the
+    // boundary.
+    return parsed.data;
+  }
+  // Schema rejected — surface the error to the caller and fall back to the
+  // passthrough so we never silently drop a telemetry row. Backend will
+  // 400 on schema mismatch; the bus event makes the drift discoverable
+  // before that point.
+  opts?.onValidationError?.(parsed.error);
   return internalRecord as unknown as WireTelemetryRecord;
 }
 
-function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryType[] {
+function buildStages(
+  route: BuildContext['route'],
+  rr: RuntimeRunResult,
+  gates?: Record<string, StageGate<unknown>>,
+): StageEntryType[] {
   const result: StageEntryType[] = [];
 
-  const impl = buildImplStage(rr);
+  const impl = buildImplStage(rr, gates?.['implement']);
   if (impl) result.push(impl);
 
   if (REVIEWED_ROUTES.has(route)) {
     const status = (rr.reviewVerdict as string | undefined) ?? rr.qualityReviewStatus ?? rr.specReviewStatus ?? null;
     const stageRounds = (rr.stageStats?.review as { roundsUsed?: number } | undefined)?.roundsUsed;
     const rounds = stageRounds ?? (Math.max(rr.reviewRounds?.spec ?? 0, rr.reviewRounds?.quality ?? 0) || null);
-    const rev = buildReviewStage(rr, status, rounds);
+    const rev = buildReviewStage(rr, status, rounds, gates?.['review']);
     if (rev) {
       result.push(rev);
     } else if (QUALITY_ONLY_ROUTES.has(route)) {
@@ -256,22 +293,45 @@ function buildStages(route: BuildContext['route'], rr: RunResult): StageEntryTyp
   }
 
   if (REVIEWED_ROUTES.has(route) && !QUALITY_ONLY_ROUTES.has(route)) {
-    const rw = buildReworkStage(rr);
+    const rw = buildReworkStage(rr, gates?.['rework']);
     if (rw) result.push(rw);
   }
 
-  const an = buildAnnotatingStage(rr);
+  const an = buildAnnotatingStage(rr, gates?.['annotate']);
   if (an) result.push(an);
 
-  const cm = buildCommitStage(rr);
+  const cm = buildCommitStage(rr, gates?.['commit']);
   if (cm) result.push(cm);
 
   return result.slice(0, 8);
 }
 
+/**
+ * Overlay gate telemetry onto an extracted-stage base. Gates are the v5
+ * canonical source for `durationMs`, `costUSD`, `turnsUsed`. When both
+ * sources have a value, the gate wins (intentional: the gate is what the
+ * lifecycle actually produced; stageStats is the legacy mirror that the
+ * runner-shell and per-stage tracker fill in). Tokens, tool calls, and
+ * files-read/written remain on stageStats because the gate telemetry block
+ * doesn't carry them.
+ */
+function applyGateOverlay<T extends { durationMs: number; costUSD: number; turnCount: number }>(
+  base: T,
+  gate: StageGate<unknown> | undefined,
+): T {
+  if (!gate) return base;
+  const t = gate.telemetry;
+  return {
+    ...base,
+    durationMs: clampDurationMsStage(t.durationMs ?? base.durationMs),
+    costUSD: clampStageCost(t.costUSD ?? base.costUSD),
+    turnCount: clampTurnCount(t.turnsUsed ?? base.turnCount),
+  };
+}
+
 function extractStageData(
   raw: RawStageStats | RawStageStatsShape | undefined,
-  _rr: RunResult,
+  _rr: RuntimeRunResult,
   _stageName: string,
 ) {
   if (!raw || !raw.entered) return null;
@@ -294,10 +354,11 @@ function extractStageData(
   };
 }
 
-function buildImplStage(rr: RunResult): StageEntryType | null {
+function buildImplStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
   const ss = rr.stageStats?.implementing;
-  const base = extractStageData(ss, rr, 'implementing');
+  let base = extractStageData(ss, rr, 'implementing');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
   return { name: 'implementing', ...base } as StageEntryType;
 }
 
@@ -343,13 +404,15 @@ function buildSyntheticReviewStage(findings: ProjectedFinding[]): StageEntryType
 }
 
 function buildReviewStage(
-  rr: RunResult,
+  rr: RuntimeRunResult,
   status: string | null,
   rounds: number | null,
+  gate?: StageGate<unknown>,
 ): StageEntryType | null {
   const ss = rr.stageStats?.review as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, 'review');
+  let base = extractStageData(ss, rr, 'review');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
 
   // v4.4.x: projectFindings reads from structuredReport.findings (read-only
   // routes) and structuredReport.reviewConcerns (reviewed write routes). The
@@ -389,10 +452,11 @@ function buildReviewStage(
   } as StageEntryType;
 }
 
-function buildReworkStage(rr: RunResult): StageEntryType | null {
+function buildReworkStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
   const ss = rr.stageStats?.rework as RawStageStats | undefined;
-  const base = extractStageData(ss, rr, 'rework');
+  let base = extractStageData(ss, rr, 'rework');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
 
   const stageConcerns = projectFindings(rr).filter(
     c => c.source === 'spec_review' || c.source === 'quality_review' || c.source === 'review' || c.source === 'implementer',
@@ -406,10 +470,11 @@ function buildReworkStage(rr: RunResult): StageEntryType | null {
   } as StageEntryType;
 }
 
-function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
+function buildAnnotatingStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
   const ss = rr.stageStats?.annotating as (RawStageStats & { outcome?: string; skipReason?: string }) | undefined;
-  const base = extractStageData(ss, rr, 'annotating');
+  let base = extractStageData(ss, rr, 'annotating');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
 
   return {
     name: 'annotating',
@@ -419,10 +484,11 @@ function buildAnnotatingStage(rr: RunResult): StageEntryType | null {
   } as StageEntryType;
 }
 
-function buildCommitStage(rr: RunResult): StageEntryType | null {
+function buildCommitStage(rr: RuntimeRunResult, gate?: StageGate<unknown>): StageEntryType | null {
   const ss = rr.stageStats?.committing;
-  const base = extractStageData(ss, rr, 'committing');
+  let base = extractStageData(ss, rr, 'committing');
   if (!base) return null;
+  base = applyGateOverlay(base, gate);
 
   const commits = Array.isArray(rr.commits) ? rr.commits : [];
   const allFiles = commits.flatMap((c) =>
@@ -446,7 +512,7 @@ function buildCommitStage(rr: RunResult): StageEntryType | null {
 
 // ── Derivation helpers ─────────────────────────────────────────────────────
 
-function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['terminalStatus'] {
+function deriveTerminalStatus(rr: RuntimeRunResult): TaskCompletedEventType['terminalStatus'] {
   const tr = rr.terminationReason;
   if (!tr || typeof tr !== 'object') return 'incomplete';
   switch (tr.cause) {
@@ -466,7 +532,7 @@ function deriveTerminalStatus(rr: RunResult): TaskCompletedEventType['terminalSt
 
 const VALID_ERROR_CODES: ReadonlySet<string> = new Set(ErrorCode.options);
 
-function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
+function deriveErrorCode(rr: RuntimeRunResult): TaskCompletedEventType['errorCode'] {
   // structuredError.code is the most authoritative signal — the lifecycle
   // sets it for specific failure modes.
   if (rr.structuredError?.code) {
@@ -492,7 +558,7 @@ function deriveErrorCode(rr: RunResult): TaskCompletedEventType['errorCode'] {
   return null;
 }
 
-function deriveWorkerStatus(rr: RunResult): TaskCompletedEventType['workerStatus'] {
+function deriveWorkerStatus(rr: RuntimeRunResult): TaskCompletedEventType['workerStatus'] {
   const tr = rr.terminationReason;
   if (tr && typeof tr === 'object' && tr.cause === 'finished' && tr.workerSelfAssessment) {
     return tr.workerSelfAssessment as any;

@@ -1,7 +1,7 @@
 import { describe, it, expect } from 'vitest';
 import { auditHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/audit.ts';
 import { reviewHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/review.ts';
-import type { RunResult, TaskSpec } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
 describe('audit headline composer', () => {
@@ -23,7 +23,7 @@ describe('audit headline composer', () => {
 ## Finding 4: d
 - Severity: critical
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const task = { prompt: 'audit goal.md', filePaths: ['/project/goal.md'] } as unknown as TaskSpec;
 
     const headline = auditHeadlineTemplate.compose({
@@ -49,7 +49,7 @@ describe('audit headline composer', () => {
 ## Finding 3: c
 - Severity: medium
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const task = { prompt: '', filePaths: ['/x.md'] } as unknown as TaskSpec;
 
     const headline = auditHeadlineTemplate.compose({
@@ -71,7 +71,7 @@ describe('audit headline composer', () => {
 ## Finding 2: also-ignored
 - Severity: high
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
 
     const headline = auditHeadlineTemplate.compose({
       taskBrief: 'audit',
@@ -94,7 +94,7 @@ describe('audit headline composer', () => {
       taskBrief: 'audit',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { output: '' } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] audit completed');
@@ -114,7 +114,7 @@ describe('audit headline composer', () => {
 - Severity: low
 - Location: headline-text.ts:15
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const task = { prompt: '', filePaths: ['/a/b/headline-text.ts'] } as unknown as TaskSpec;
 
     const headline = auditHeadlineTemplate.compose({
@@ -138,7 +138,7 @@ describe('review headline composer', () => {
 ## Finding 2: b
 - Severity: medium
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const task = { prompt: '', filePaths: ['/src/auth.ts'] } as unknown as TaskSpec;
 
     const headline = reviewHeadlineTemplate.compose({
@@ -165,7 +165,7 @@ describe('review headline composer', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { output: 'No correctness findings identified.' } as unknown as RunResult,
+      runResult: { output: 'No correctness findings identified.' } as unknown as RuntimeRunResult,
       task,
     });
 
@@ -177,7 +177,7 @@ describe('review headline composer', () => {
       taskBrief: 'review',
       report: { filePath: '/from/report.ts', findings: [] },
       status: 'ok',
-      runResult: { output: "" } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] review /from/report.ts: 0 findings (0 blocking)');
@@ -191,7 +191,7 @@ describe('review headline composer', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { output: "" } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] review completed');
@@ -204,7 +204,7 @@ describe('review headline composer', () => {
       taskBrief: 'review',
       report: notApplicable('na'),
       status: 'error',
-      runResult: { output: "" } as unknown as RunResult,
+      runResult: { output: "" } as unknown as RuntimeRunResult,
       task,
     });
 

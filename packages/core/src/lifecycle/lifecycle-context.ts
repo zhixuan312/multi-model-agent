@@ -109,7 +109,7 @@ export interface ExecutionContext {
     recordTaskCompleted: (params: {
       route: string;
       taskSpec: TaskSpec;
-      runResult: import('../types.js').RunResult;
+      runResult: import('../types.js').RuntimeRunResult;
       realFilesChanged: string[];
       client: string;
       mainModel: string | null;

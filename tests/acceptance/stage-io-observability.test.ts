@@ -4,8 +4,8 @@
 // AC-36: terminal side-effect failure emits structured event
 
 import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { LifecycleDriver } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
-import type { StagePlan } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
+import type { StageDefinition } from '../../packages/core/src/lifecycle/stage-io.js';
 import {
   registerTerminalBlockHandler,
   emitTaskTerminalHandler,
@@ -14,8 +14,8 @@ import {
 } from '../../packages/core/src/lifecycle/handlers/terminal-handlers.js';
 import { mockState } from '../fixtures/lifecycle-state.js';
 
-function makeTestPlan(rows: StagePlan['rows']): StagePlan {
-  return { toolCategory: 'artifact_producing', rows };
+function makeTestPlan(stages: StageDefinition<unknown>[]): StageDefinition<unknown>[] {
+  return stages;
 }
 
 function makeBaselineState(overrides: Partial<Record<string, unknown>> = {}) {
@@ -37,32 +37,23 @@ describe('AC-34: every halt emits stage_halt bus event', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([{
-        rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-        runCondition: () => true, runOnTerminal: false,
-        handler: (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
-      }]),
-      {
-        implement: async (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
+    const plan = makeTestPlan([{
+      name: 'implement',
+      applicableRoutes: 'all',
+      runOnHalt: false,
+      shouldRun: () => ({ run: true }),
+      handler: async (s) => {
+        (s as { halted?: boolean }).halted = true;
+        s.terminal = true;
+        return {
+          outcome: 'halt' as const,
+          payload: null,
+          telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
+        };
       },
-    );
+    }]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const haltEvents = emitted.filter(e => e['event'] === 'stage_halt');
     expect(haltEvents.some(e => e['stageName'] === 'implement')).toBe(true);
@@ -77,46 +68,36 @@ describe('AC-34: every halt emits stage_halt bus event', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-          runCondition: () => true, runOnTerminal: false,
-          handler: () => ({
-            outcome: 'advance' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-        {
-          rowId: 'review', stageName: 'review', isRework: false, handlerKey: 'review',
-          runCondition: () => true, runOnTerminal: false,
-          handler: (s) => {
-            (s as { halted?: boolean }).halted = true;
-            s.terminal = true;
-            return {
-              outcome: 'halt' as const, payload: null,
-              telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-            };
-          },
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        implement: async () => ({
-          outcome: 'advance' as const, payload: null,
+        name: 'implement',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'advance' as const,
+          payload: null,
           telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
-        review: async (s) => {
+      },
+      {
+        name: 'review',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async (s) => {
           (s as { halted?: boolean }).halted = true;
           s.terminal = true;
           return {
-            outcome: 'halt' as const, payload: null,
+            outcome: 'halt' as const,
+            payload: null,
             telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
           };
         },
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const haltEvents = emitted.filter(e => e['event'] === 'stage_halt');
     expect(haltEvents.some(e => e['stageName'] === 'review')).toBe(true);
@@ -131,32 +112,24 @@ describe('AC-34: every halt emits stage_halt bus event', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([{
-        rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-        runCondition: () => true, runOnTerminal: false,
-        handler: (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null, comment: 'provider_transport_failure: anthropic 5xx',
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
-      }]),
-      {
-        implement: async (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null, comment: 'provider_transport_failure: anthropic 5xx',
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
+    const plan = makeTestPlan([{
+      name: 'implement',
+      applicableRoutes: 'all',
+      runOnHalt: false,
+      shouldRun: () => ({ run: true }),
+      handler: async (s) => {
+        (s as { halted?: boolean }).halted = true;
+        s.terminal = true;
+        return {
+          outcome: 'halt' as const,
+          payload: null,
+          comment: 'provider_transport_failure: anthropic 5xx',
+          telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
+        };
       },
-    );
+    }]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const haltEvent = emitted.find(e => e['event'] === 'stage_halt');
     expect(haltEvent?.['comment'] as string | undefined).toMatch(/provider_transport_failure/);
@@ -176,38 +149,32 @@ describe('AC-35: every gate emits stage_gate_recorded', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-          runCondition: () => true, runOnTerminal: false,
-          handler: () => ({
-            outcome: 'advance' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 10, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
-          }),
-        },
-        {
-          rowId: 'annotate', stageName: 'annotate', isRework: false, handlerKey: 'annotate',
-          runCondition: () => true, runOnTerminal: false,
-          handler: () => ({
-            outcome: 'advance' as const, payload: null,
-            telemetry: { stageLabel: 'annotate', durationMs: 5, costUSD: 0.005, turnsUsed: 1, stopReason: 'normal' as const },
-          }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        implement: async () => ({
-          outcome: 'advance' as const, payload: null,
+        name: 'implement',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'advance' as const,
+          payload: null,
           telemetry: { stageLabel: 'implement', durationMs: 10, costUSD: 0.01, turnsUsed: 1, stopReason: 'normal' as const },
         }),
-        annotate: async () => ({
-          outcome: 'advance' as const, payload: null,
+      },
+      {
+        name: 'annotate',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'advance' as const,
+          payload: null,
           telemetry: { stageLabel: 'annotate', durationMs: 5, costUSD: 0.005, turnsUsed: 1, stopReason: 'normal' as const },
         }),
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const gateEvents = emitted.filter(e => e['event'] === 'stage_gate_recorded');
     expect(gateEvents.length).toBeGreaterThanOrEqual(2);
@@ -224,25 +191,19 @@ describe('AC-35: every gate emits stage_gate_recorded', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([{
-        rowId: 'rework', stageName: 'rework', isRework: false, handlerKey: 'rework',
-        runCondition: () => false,   // will be Layer-2 skipped
-        runOnTerminal: false,
-        handler: async () => ({
-          outcome: 'advance' as const, payload: null,
-          telemetry: { stageLabel: 'rework', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-        }),
-      }]),
-      {
-        rework: async () => ({
-          outcome: 'advance' as const, payload: null,
-          telemetry: { stageLabel: 'rework', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-        }),
-      },
-    );
+    const plan = makeTestPlan([{
+      name: 'rework',
+      applicableRoutes: 'all',
+      runOnHalt: false,
+      shouldRun: () => ({ run: false, comment: 'rework skipped' }),  // Layer-2 skip
+      handler: async () => ({
+        outcome: 'advance' as const,
+        payload: null,
+        telemetry: { stageLabel: 'rework', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
+      }),
+    }]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const skipEvents = emitted.filter(e => e['event'] === 'stage_gate_recorded' && e['outcome'] === 'skip');
     expect(skipEvents.length).toBeGreaterThanOrEqual(1);
@@ -258,32 +219,24 @@ describe('AC-35: every gate emits stage_gate_recorded', () => {
       bus: { emit: (e: unknown) => emitted.push(e as Record<string, unknown>) },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([{
-        rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-        runCondition: () => true, runOnTerminal: false,
-        handler: (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null, comment: 'forced implement halt',
-            telemetry: { stageLabel: 'implement', durationMs: 1, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
-      }]),
-      {
-        implement: async (s) => {
-          (s as { halted?: boolean }).halted = true;
-          s.terminal = true;
-          return {
-            outcome: 'halt' as const, payload: null, comment: 'forced implement halt',
-            telemetry: { stageLabel: 'implement', durationMs: 1, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
-          };
-        },
+    const plan = makeTestPlan([{
+      name: 'implement',
+      applicableRoutes: 'all',
+      runOnHalt: false,
+      shouldRun: () => ({ run: true }),
+      handler: async (s) => {
+        (s as { halted?: boolean }).halted = true;
+        s.terminal = true;
+        return {
+          outcome: 'halt' as const,
+          payload: null,
+          comment: 'forced implement halt',
+          telemetry: { stageLabel: 'implement', durationMs: 1, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' as const },
+        };
       },
-    );
+    }]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const haltGateEvents = emitted.filter(e => e['event'] === 'stage_gate_recorded' && e['outcome'] === 'halt');
     expect(haltGateEvents.length).toBeGreaterThanOrEqual(1);
@@ -345,7 +298,7 @@ describe('AC-36: terminal side-effect failure emits structured event', () => {
     expect(state.batchRegistryPersisted).toBe(true);
   });
 
-  it('LifecycleDriver + real terminal handlers run end-to-end even when flush fails', async () => {
+  it('runStagePlan + real terminal handlers run end-to-end even when flush fails', async () => {
     const emitted: Array<Record<string, unknown>> = [];
     const state = makeBaselineState({ route: 'delegate' });
     state.gates = {};
@@ -361,37 +314,33 @@ describe('AC-36: terminal side-effect failure emits structured event', () => {
       batchRegistry: { complete: () => {}, persist: async () => {} },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-          runCondition: () => true, runOnTerminal: false,
-          handler: () => ({
-            outcome: 'advance' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-        {
-          rowId: 'flush_telemetry', stageName: 'flush_telemetry', isRework: false, handlerKey: 'flush_telemetry',
-          runCondition: () => true, runOnTerminal: true,
-          handler: flushTelemetryHandler,
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        implement: async () => ({
-          outcome: 'advance' as const, payload: null,
+        name: 'implement',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'advance' as const,
+          payload: null,
           telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
-        flush_telemetry: flushTelemetryHandler,
       },
-    );
+      {
+        name: 'flush_telemetry',
+        applicableRoutes: 'all',
+        runOnHalt: true,
+        shouldRun: () => ({ run: true }),
+        handler: flushTelemetryHandler,
+      },
+    ]);
 
     // Must not throw — the real handler handles flush failure gracefully
-    await expect(driver.run(state)).resolves.not.toThrow();
+    await expect(runStagePlan(plan, state)).resolves.not.toThrow();
     expect(state.telemetryFlushed).toBe(true);
   });
 
-  it('LifecycleDriver + real persist handler run end-to-end even when registry fails', async () => {
+  it('runStagePlan + real persist handler run end-to-end even when registry fails', async () => {
     const emitted: Array<Record<string, unknown>> = [];
     const state = makeBaselineState({ route: 'delegate' });
     state.gates = {};
@@ -409,33 +358,28 @@ describe('AC-36: terminal side-effect failure emits structured event', () => {
       },
     } as any;
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'implement', stageName: 'implement', isRework: false, handlerKey: 'implement',
-          runCondition: () => true, runOnTerminal: false,
-          handler: () => ({
-            outcome: 'advance' as const, payload: null,
-            telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-        {
-          rowId: 'persist_to_batch_registry', stageName: 'persist_to_batch_registry',
-          isRework: false, handlerKey: 'persist_to_batch_registry',
-          runCondition: () => true, runOnTerminal: true,
-          handler: persistToBatchRegistryHandler,
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        implement: async () => ({
-          outcome: 'advance' as const, payload: null,
+        name: 'implement',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'advance' as const,
+          payload: null,
           telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
-        persist_to_batch_registry: persistToBatchRegistryHandler,
       },
-    );
+      {
+        name: 'persist_to_batch_registry',
+        applicableRoutes: 'all',
+        runOnHalt: true,
+        shouldRun: () => ({ run: true }),
+        handler: persistToBatchRegistryHandler,
+      },
+    ]);
 
-    await expect(driver.run(state)).resolves.not.toThrow();
+    await expect(runStagePlan(plan, state)).resolves.not.toThrow();
     expect(state.batchRegistryPersisted).toBe(true);
   });
 });

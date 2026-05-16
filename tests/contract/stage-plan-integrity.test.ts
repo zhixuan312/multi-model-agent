@@ -1,39 +1,43 @@
+// v5 STAGE_PLAN integrity invariants. Replaces the legacy row-based test
+// that asserted on buildStagePlan(category).rows; the v5 plan is a flat
+// StageDefinition[] and the invariants we care about are stage-name
+// uniqueness, handler-is-function, and shouldRun purity.
+
 import { describe, it, expect } from 'vitest';
-import { buildStagePlan } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
+import { STAGE_PLAN } from '../../packages/core/src/lifecycle/stage-plan-builder.js';
+import type { StageDefinition } from '../../packages/core/src/lifecycle/stage-io.js';
+import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 
-describe('StagePlan integrity', () => {
-  it('every row has a function runCondition', () => {
-    for (const cat of ['artifact_producing', 'read_only', 'research'] as const) {
-      const plan = buildStagePlan(cat);
-      for (const row of plan.rows) {
-        expect(typeof row.runCondition).toBe('function');
-      }
+describe('STAGE_PLAN integrity (v5)', () => {
+  it('every stage has a function handler and shouldRun', () => {
+    for (const stage of STAGE_PLAN) {
+      const def = stage as StageDefinition;
+      expect(typeof def.handler).toBe('function');
+      expect(typeof def.shouldRun).toBe('function');
     }
   });
 
-  it('runCondition is pure (deterministic on fixed state)', () => {
-    for (const cat of ['artifact_producing', 'read_only', 'research'] as const) {
-      const plan = buildStagePlan(cat);
-      const state = {
-        terminal: false,
-        attemptIndex: 0,
-        attemptBudget: 7,
-        reviewPolicy: 'full' as const,
-        shutdownInProgress: false,
-      };
-      for (const row of plan.rows) {
-        const a = row.runCondition(state as any);
-        const b = row.runCondition(state as any);
-        expect(a).toBe(b);
-      }
+  it('shouldRun is deterministic on a fixed state', () => {
+    const state: LifecycleState = {
+      terminal: false,
+      attemptIndex: 0,
+      attemptBudget: 7,
+      reviewPolicy: 'full',
+      shutdownInProgress: false,
+      route: 'delegate',
+      gates: {},
+      halted: false,
+    } as unknown as LifecycleState;
+    for (const stage of STAGE_PLAN) {
+      const def = stage as StageDefinition;
+      const a = def.shouldRun(state);
+      const b = def.shouldRun(state);
+      expect(a.run).toBe(b.run);
     }
   });
 
-  it('rowId values are unique', () => {
-    for (const cat of ['artifact_producing', 'read_only', 'research'] as const) {
-      const plan = buildStagePlan(cat);
-      const ids = plan.rows.map((r) => r.rowId);
-      expect(new Set(ids).size).toBe(ids.length);
-    }
+  it('stage names are unique', () => {
+    const names = STAGE_PLAN.map((s) => (s as StageDefinition).name);
+    expect(new Set(names).size).toBe(names.length);
   });
 });

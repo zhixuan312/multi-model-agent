@@ -1,11 +1,11 @@
-import type { TaskSpec, RunResult } from '../types.js';
+import type { TaskSpec, RuntimeRunResult } from '../types.js';
 
 export type BatchEntryStatus = 'pending' | 'complete' | 'aborted';
 
 export interface BatchEntry {
   readonly tasks: TaskSpec[];
   status: BatchEntryStatus;
-  results: RunResult[] | undefined;
+  results: RuntimeRunResult[] | undefined;
   readonly expiresAt: number;
 }
 
@@ -43,7 +43,7 @@ export class BatchCache {
     return batchId;
   }
 
-  complete(batchId: string, results: RunResult[]): void {
+  complete(batchId: string, results: RuntimeRunResult[]): void {
     const entry = this.map.get(batchId);
     if (!entry) throw new Error(`batch "${batchId}" not found`);
     if (entry.status !== 'pending') {

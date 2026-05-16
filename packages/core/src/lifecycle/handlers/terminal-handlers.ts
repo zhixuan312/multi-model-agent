@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { RunResult, TaskSpec } from '../../types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../types.js';
+import type { StageGate, TerminalPayload } from '../stage-io.js';
 import { findModelProfile } from '../../config/model-profile-registry.js';
 import { getRealFilesChanged } from '../real-diff.js';
 
@@ -10,7 +11,7 @@ import { getRealFilesChanged } from '../real-diff.js';
  *
  * Four StagePlan rows:
  *   - 5.3.5 register_terminal_block — registers a context block carrying
- *     the terminal RunResult so /retry can reference the prior task's
+ *     the terminal RuntimeRunResult so /retry can reference the prior task's
  *     output.
  *   - 5.4   emit_task_terminal     — emits the per-task terminal event
  *     (task_done_summary) through ctx.bus.
@@ -40,7 +41,7 @@ export function registerTerminalBlockHandler(state: LifecycleState): void {
     | (ExecutionContext & { contextBlockStore?: TerminalContextBlockStore })
     | undefined;
   if (!ctx) return;
-  const last = state.lastRunResult as RunResult | undefined;
+  const last = state.lastRunResult as RuntimeRunResult | undefined;
   if (!last) return;
 
   const id = `terminal-${randomUUID()}`;
@@ -66,7 +67,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
     state.taskTerminalEmitted = true; // mark even when bus absent so re-runs are noops
     return;
   }
-  const last = state.lastRunResult as RunResult | undefined;
+  const last = state.lastRunResult as RuntimeRunResult | undefined;
 
   // Sum tokens / counts across every recorded stage so the local task_completed
   // event carries the FULL cost (implementer + reviewer + annotator + rework
@@ -84,7 +85,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
 
   // A11.2: compute actualCostUSD as the sum of every stage's costUSD.
   // costUSD and totalCostUSD are back-compat aliases for the same value.
-  // costDeltaVsMainUSD comes from the top-level cost field on RunResult.
+  // costDeltaVsMainUSD comes from the top-level cost field on RuntimeRunResult.
   let actualCostUSD: number | null = null;
   let costDeltaVsMainUSD: number | null = null;
 
@@ -119,7 +120,7 @@ export function emitTaskTerminalHandler(state: LifecycleState): void {
   if (filesWrittenTotal === 0) filesWrittenTotal = Array.isArray(last?.filesWritten) ? last!.filesWritten.length : 0;
 
   // Emit a per-stage map so consumers see the breakdown without unpacking
-  // RunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
+  // RuntimeRunResult. Each entry: stage -> { inputTokens, outputTokens, costUSD,
   // turnCount, toolCallCount, durationMs, tier, model, verdict? }.
   const stagesMap: Record<string, Record<string, unknown>> = {};
   if (ss) {
@@ -221,7 +222,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
     return;
   }
   const task = state.task as TaskSpec | undefined;
-  const last = state.lastRunResult as RunResult | undefined;
+  const last = state.lastRunResult as RuntimeRunResult | undefined;
   if (!task || !last) {
     state.taskCompletedRecorded = true;
     return;
@@ -243,6 +244,10 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
       realFilesChanged: realFiles.files,   // NEW — wire the computed list
       client: ctx.client ?? '',
       mainModel: ctx.mainModel ?? null,
+      // v5: thread state.gates so the wire builder can read each stage's
+      // canonical telemetry (durationMs / costUSD / turnsUsed) from the gate
+      // instead of relying solely on the legacy mergeStageStats mirror.
+      ...(state.gates && { gates: state.gates }),
       ...(task.reviewPolicy !== undefined && { reviewPolicy: task.reviewPolicy }),
     });
   } catch {
@@ -252,7 +257,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
 }
 
 /**
- * Synthesize an `implementing` stage entry from top-level RunResult fields
+ * Synthesize an `implementing` stage entry from top-level RuntimeRunResult fields
  * when the per-stage tracker hasn't populated it. Without this, the wire
  * event ships with `stages: []` for every task, which violates the backend's
  * R2.1 invariant ("empty stages only allowed for brief_too_vague|error")
@@ -262,7 +267,7 @@ export async function recordTaskCompletedHandler(state: LifecycleState): Promise
  * runner-shell or lifecycle stage tracker.
  */
 function ensureImplementingStage(
-  rr: RunResult,
+  rr: RuntimeRunResult,
   ctx: {
     assignedTier?: 'standard' | 'complex';
     implementerProvider?: { config?: { model?: string } };
@@ -278,7 +283,7 @@ function ensureImplementingStage(
   const fallbackFamily = fallbackModel ? findModelProfile(fallbackModel).family : null;
 
   if (rr.models === undefined && fallbackModel !== null) {
-    (rr as { models?: RunResult['models'] }).models = {
+    (rr as { models?: RuntimeRunResult['models'] }).models = {
       implementer: fallbackModel,
       specReviewer: undefined,
       qualityReviewer: undefined,
@@ -337,4 +342,82 @@ export async function flushTelemetryHandler(state: LifecycleState): Promise<void
     // for the next opportunity.
   }
   state.telemetryFlushed = true;
+}
+
+/**
+ * v5 unified `terminalHandler` — single entry point that runs the five
+ * terminal side effects in idempotency-safe order and returns the
+ * `StageGate<TerminalPayload>` the v5 driver expects.
+ *
+ * The five sub-handlers above are this function's building blocks: one per
+ * side effect, kept individually exported so each can be unit-tested in
+ * isolation (tests/lifecycle/handlers/terminal-handlers.test.ts) and so
+ * observability AC tests can exercise per-side-effect failures
+ * (tests/acceptance/stage-io-observability.test.ts). The unified
+ * `terminalHandler` is what STAGE_PLAN's `terminal` stage actually invokes;
+ * it sequences the five sub-handlers in idempotency-safe order and folds
+ * their state-slot guards into the TerminalPayload shape. Per spec §4.7 the side-effect map carries one
+ * boolean per side effect — true = succeeded at least once for this state
+ * instance; false = attempted-and-failed or never-attempted-because-context-
+ * missing.
+ *
+ * Idempotency: re-invocation MUST be safe and return the same payload (each
+ * sub-handler short-circuits on its state-slot guard, e.g. `state.terminalBlockId`).
+ */
+export async function terminalHandler(state: LifecycleState): Promise<StageGate<TerminalPayload>> {
+  const t0 = Date.now();
+  const flags: TerminalPayload = {
+    terminalBlockId: null,
+    telemetryFlushed: false,
+    batchRegistryPersisted: false,
+    taskTerminalEmitted: false,
+    projectCleanupTicked: false,
+  };
+
+  try {
+    registerTerminalBlockHandler(state);
+    flags.terminalBlockId = (state as { terminalBlockId?: string | null }).terminalBlockId ?? null;
+  } catch {
+    /* leave null on failure */
+  }
+
+  try {
+    await flushTelemetryHandler(state);
+    flags.telemetryFlushed = (state as { telemetryFlushed?: boolean }).telemetryFlushed === true;
+  } catch {
+    /* leave false */
+  }
+
+  try {
+    persistToBatchRegistryHandler(state);
+    flags.batchRegistryPersisted = (state as { batchRegistryPersisted?: boolean }).batchRegistryPersisted === true;
+  } catch {
+    /* leave false */
+  }
+
+  try {
+    emitTaskTerminalHandler(state);
+    flags.taskTerminalEmitted = (state as { taskTerminalEmitted?: boolean }).taskTerminalEmitted === true;
+  } catch {
+    /* leave false */
+  }
+
+  try {
+    await recordTaskCompletedHandler(state);
+    flags.projectCleanupTicked = true;                          // record-completed doubles as project activity tick
+  } catch {
+    /* leave false */
+  }
+
+  return {
+    outcome: 'advance',
+    payload: flags,
+    telemetry: {
+      stageLabel: 'terminal',
+      durationMs: Date.now() - t0,
+      costUSD: 0,
+      turnsUsed: 0,
+      stopReason: 'normal',
+    },
+  };
 }

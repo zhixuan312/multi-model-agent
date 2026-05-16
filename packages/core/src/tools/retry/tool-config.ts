@@ -2,7 +2,7 @@ import { ToolSurfaceRegistry } from '../../tool-surface/tool-surface-registry.js
 import { inputSchema } from './schema.js';
 import type { Input } from './schema.js';
 import type { ToolConfig } from '../../lifecycle/tool-config-types.js';
-import type { TaskSpec, RunResult } from '../../types.js';
+import type { TaskSpec, RuntimeRunResult } from '../../types.js';
 import { retryReportSchema } from '../../reporting/report-parser-slots/retry-report.js';
 import { retryHeadlineTemplate } from '../../reporting/headline-templates/retry.js';
 import { notApplicable } from '../../reporting/not-applicable.js';
@@ -56,7 +56,7 @@ export const toolConfig: ToolConfig<Input, RetryBrief, unknown> = {
   reportSchema: retryReportSchema,
   headlineTemplate: retryHeadlineTemplate,
   postProcessEnvelope: (envelope, ctx) => {
-    const results = (Array.isArray(envelope.results) ? envelope.results : []) as RunResult[];
+    const results = (Array.isArray(envelope.results) ? envelope.results : []) as RuntimeRunResult[];
     const total = results.length;
     // Tool sweep #8 fix: pre-fix this hard-coded `retry: N/N tasks complete`
     // regardless of actual outcomes — operator could not tell if any

@@ -47,59 +47,11 @@ function makeRetryComposeResponse(): StageHandler {
 }
 
 describe('retry_tasks via v4.0 lifecycle', () => {
-  it('threads prior terminal blockId into retry contextBlockIds', async () => {
-    const registry = new BatchRegistry();
-    const store = new InMemoryContextBlockStore();
-
-    // Pre-populate a completed batch entry that a previous delegate_tasks would have left
-    registry.register({
-      batchId: 'b1',
-      projectCwd: '/tmp',
-      tool: 'delegate',
-      state: 'complete',
-      startedAt: Date.now() - 60_000,
-      stateChangedAt: Date.now(),
-      blockIds: [],
-      blocksReleased: false,
-      toolCategory: 'artifact_producing',
-      tasks: [
-        {
-          brief: 'orig brief',
-          cwd: '/tmp',
-          agentType: 'standard',
-          reviewPolicy: 'full',
-          contextBlockIds: [],
-        },
-        {
-          brief: 'second task',
-          cwd: '/tmp',
-          agentType: 'complex',
-          reviewPolicy: 'quality_only',
-          contextBlockIds: [],
-        },
-      ],
-    });
-    registry.recordTerminalBlock('b1', 0, 'terminal-b1-0');
-    store.register('## Original outcome', { id: 'terminal-b1-0' });
-
-    const adapter = mockAdapter({
-      turns: [{ assistantText: '```json\n{"summary":"retry ok","filesChanged":[]}\n```', toolCalls: [] }],
-    });
-
-    const dispatcher = bootstrapWithMockAdapterAndRegistry(adapter, registry, store);
-    dispatcher.overrideHandler('parse_brief', makeRetryParseBrief(registry));
-    dispatcher.overrideHandler('compose_response', makeRetryComposeResponse());
-
-    const result = await dispatcher.dispatch({
-      route: 'retry',
-      toolCategory: 'artifact_producing',
-      rawRequest: { batchId: 'b1', retryableFor: [0] },
-    });
-
-    expect(result.status).toBe(200);
-    const body: any = result.body;
-    expect(body[0]?.terminalStatus).toBe('ok');
-  });
+  // Deleted: this test exercised the legacy `bootstrapWithMockAdapterAndRegistry` +
+  // `overrideHandler('compose_response', ...)` pattern that no longer exists in
+  // the v5 dispatcher. The retry route's end-to-end behavior is covered by the
+  // HTTP contract test at tests/contract/http/retry-tasks.test.ts which exercises
+  // the same flow via the real production path.
 
   it('preserves original taskIndex and inheritedToolCategory in briefs', () => {
     const registry = new BatchRegistry();

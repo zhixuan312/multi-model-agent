@@ -1,13 +1,27 @@
-// Full type definitions for the codebase's actual RunResult shape.
-// Per the v5 wire envelope, this IS the RunResult contract.
-// The truth lives here — stage-io.ts ComposePayload is a superset
-// used for wire serialization; this file is what runtime code uses.
+// Full type definitions for the codebase's actual run-time result shapes.
+//
+// ── PLAN TASK 2 — RunResult IS ComposePayload ─────────────────────────────
+// Per the stage-io-standardization plan, `RunResult` is the v5 wire envelope
+// (= ComposePayload from stage-io.ts). The internal lifecycle data flow
+// (what runners produce, what `state.lastRunResult` holds, what the
+// recorder/event-builder reads) uses a separate type — `RuntimeRunResult`
+// (declared below) — kept distinct from the wire envelope.
+//
+// Consumer rule:
+//   - Anywhere code is reading the BATCH/WIRE-side result → `RunResult`
+//     (= ComposePayload — 8 fields).
+//   - Anywhere code is reading the RUNTIME mirror (workerStatus, stageStats,
+//     usage, terminationReason, …) → `RuntimeRunResult`.
+//
+// Drift detector lives at `tests/types/run-result.test.ts`.
+// ──────────────────────────────────────────────────────────────────────────
 
-// ── v4.4 full type definitions ────────────────────────────────────────────────
-// These are what the codebase actually uses. assembleRunResult populates every
-// field here. delegate-with-escalation.ts and all runner adapters consume them.
-// When stage-io.ts ComposePayload is fully wired end-to-end this block can be
-// removed in favour of the re-export above.
+export type { ComposePayload as RunResult } from '../lifecycle/stage-io.js';
+
+// ── Runtime mirror — what the SDK runners + lifecycle internally produce ─────
+// `RuntimeRunResult` is the v4 fat shape. Renamed from `RunResult` so the
+// public type name is the wire envelope; the runtime mirror keeps the
+// fields handlers/recorder/runners actually populate.
 
 // Session / TurnResult — the internal provider-runner contract (SDK ↔ mma)
 
@@ -88,7 +102,7 @@ export interface Provider {
 // task-runner, task-executor, task-completion-summary, review-verdict-mapping,
 // fallback-helpers, and assemble-run-result.
 
-export interface RunResult {
+export interface RuntimeRunResult {
   output: string;
   status: string;
   usage: TokenUsage;

@@ -75,7 +75,7 @@ async function registerToolHandlers(
   batchRegistry: BatchRegistry,
   projectRegistry: ProjectRegistry,
 ): Promise<void> {
-  const { buildToolSurfaceRegistry, LifecycleDispatcher, createHttpServerLog } =
+  const { buildToolSurfaceRegistry, createHttpServerLog } =
     await import('@zhixuan92/multi-model-agent-core');
 
   const surface = buildToolSurfaceRegistry();
@@ -126,15 +126,12 @@ async function registerToolHandlers(
   ];
   const bus = new EventEmitter(sinks);
 
-  const routeDispatcher = new LifecycleDispatcher();
-
   const deps: import('./handler-deps.js').HandlerDeps = {
     config: multiModelConfig,
     logger,
     bus,
     projectRegistry,
     batchRegistry,
-    routeDispatcher,
   };
 
   // Per-tool handler builders, keyed by registry routeName. The registry tells
@@ -203,8 +200,6 @@ async function registerControlHandlers(
       new RunningHeadlineSink(batchRegistry),
       ...(multiModelConfig.diagnostics?.verbose ? [new VerboseLogChannel()] : []),
     ]);
-    const { LifecycleDispatcher } = await import('@zhixuan92/multi-model-agent-core');
-    const routeDispatcher = new LifecycleDispatcher();
     const deps: import('./handler-deps.js').HandlerDeps = {
       config: multiModelConfig,
       logger: createHttpServerLog({
@@ -214,13 +209,11 @@ async function registerControlHandlers(
       bus,
       projectRegistry,
       batchRegistry,
-      routeDispatcher,
     };
     router.register('POST', '/control/retry', buildRetryHandler(deps));
     router.register('POST', '/control/batch-slice', buildBatchSliceHandler(deps));
     router.register('POST', '/context-blocks', buildCreateContextBlockHandler({
       projectRegistry,
-      routeDispatcher,
       maxContextBlockBytes: multiModelConfig.server.limits.maxContextBlockBytes,
       maxContextBlocksPerProject: multiModelConfig.server.limits.maxContextBlocksPerProject,
     }));

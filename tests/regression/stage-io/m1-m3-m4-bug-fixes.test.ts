@@ -9,21 +9,12 @@
 // resolve the user-reported failure mode.
 
 import { describe, it, expect } from 'vitest';
-import { buildStageHandlers } from '../../../packages/core/src/lifecycle/handlers/baseline-handlers.js';
+import { composeHandler } from '../../../packages/core/src/lifecycle/handlers/baseline-handlers.js';
 import type { LifecycleState } from '../../../packages/core/src/lifecycle/stage-plan-types.js';
 
-/** Minimal stub for DispatcherDeps — composeResponse only reads a handful of state slots. */
-function makeHandlers() {
-  return buildStageHandlers({
-    runRoute: async () => ({} as any),
-    runReadRoute: async () => ({} as any),
-    runReviewRound: async () => ({} as any),
-    runReworkRound: async () => ({} as any),
-    runDiffReview: async () => ({} as any),
-    runCommitStage: async () => ({} as any),
-    runRegisterBlock: async () => ({} as any),
-    runVerifyStage: async () => ({} as any),
-  } as any);
+/** No longer needed - composeHandler is called directly. */
+function noop() {
+  // Handler removed - composeHandler is now called directly on state
 }
 
 function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVerdict?: any; reviewPolicy?: any; commits?: any[]; reworkApplied?: boolean; reworkError?: string; }): LifecycleState {
@@ -39,8 +30,7 @@ function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVe
 }
 
 describe('M3 fix — truthful workerSelfAssessment in compose', () => {
-  it('does NOT stamp done_with_concerns when review rejects; reads real workerStatus instead', () => {
-    const handlers = makeHandlers();
+  it('does NOT stamp done_with_concerns when review rejects; reads real workerStatus instead', async () => {
     const state = mkState({
       reviewPolicy: 'full',
       reviewVerdict: 'changes_required',
@@ -57,7 +47,8 @@ describe('M3 fix — truthful workerSelfAssessment in compose', () => {
         terminationReason: { cause: 'incomplete', turnsUsed: 5, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
       },
     });
-    (handlers['compose_response'] as any)(state);
+    state.gates = {};
+    await composeHandler(state);
     const env = (state as any).responseEnvelope;
     expect(env.errorCode).toBe('review_rejected');
     // The M3 bug: this used to be hardcoded 'done_with_concerns'. After the fix
@@ -68,8 +59,7 @@ describe('M3 fix — truthful workerSelfAssessment in compose', () => {
 });
 
 describe('M4 fix — rework that cleared findings yields ok, not review_rejected', () => {
-  it('promotes to ok when reworkApplied=true and no reworkError, even with stale reviewVerdict=changes_required', () => {
-    const handlers = makeHandlers();
+  it('promotes to ok when reworkApplied=true and no reworkError, even with stale reviewVerdict=changes_required', async () => {
     const state = mkState({
       reviewPolicy: 'full',
       reviewVerdict: 'changes_required',        // stale verdict from before rework
@@ -87,7 +77,8 @@ describe('M4 fix — rework that cleared findings yields ok, not review_rejected
         terminationReason: { cause: 'incomplete', turnsUsed: 8, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
       },
     });
-    (handlers['compose_response'] as any)(state);
+    state.gates = {};
+    await composeHandler(state);
     const env = (state as any).responseEnvelope;
     // The M4 bug: this used to be 'incomplete' + 'review_rejected'. After the fix,
     // reworkApplied without error promotes to ok.
@@ -95,8 +86,7 @@ describe('M4 fix — rework that cleared findings yields ok, not review_rejected
     expect(env.errorCode).not.toBe('review_rejected');
   });
 
-  it('still rejects when rework FAILED (reworkError set)', () => {
-    const handlers = makeHandlers();
+  it('still rejects when rework FAILED (reworkError set)', async () => {
     const state = mkState({
       reviewPolicy: 'full',
       reviewVerdict: 'changes_required',
@@ -114,12 +104,74 @@ describe('M4 fix — rework that cleared findings yields ok, not review_rejected
         terminationReason: { cause: 'incomplete', turnsUsed: 8, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'failed', wasPromoted: false },
       },
     });
-    (handlers['compose_response'] as any)(state);
+    state.gates = {};
+    await composeHandler(state);
     const env = (state as any).responseEnvelope;
     expect(env.status).toBe('incomplete');
     expect(env.errorCode).toBe('review_rejected');
     // M3 fix still applies: truthful workerSelfAssessment.
     expect(env.terminationReason.workerSelfAssessment).toBe('failed');
+  });
+});
+
+describe('M2 fix — read route with no commit completes', () => {
+  // M2 bug class: read-only investigate/audit/review/debug routes legitimately
+  // produce no commits (they never write). Pre-fix compose used to flag these
+  // as incomplete because `commits.length === 0` was treated as a write-route
+  // failure. Post-fix compose differentiates read vs write by route + reviewPolicy.
+  it('read-only investigate with 9-of-11 criteria succeeded returns ok, not incomplete', async () => {
+    const state = mkState({
+      route: 'investigate',
+      reviewPolicy: 'quality_only',
+      reviewVerdict: 'approved',
+      commits: [],                                  // no commits is correct for read route
+      lastRunResult: {
+        status: 'ok',
+        output: 'investigation findings...',
+        outputIsDiagnostic: false,
+        workerStatus: 'done',
+        turns: 4,
+        filesWritten: [],                           // no writes is correct for read route
+        toolCalls: ['grep', 'read'],
+        criteriaSucceeded: ['c1', 'c2', 'c3', 'c4', 'c5', 'c6', 'c7', 'c8', 'c9'],
+        criteriaErrors: [{ criterionId: 'c10', error: 'context_block_too_large' }, { criterionId: 'c11', error: 'turn_cap' }],
+        terminationReason: { cause: 'finished', turnsUsed: 4, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
+      },
+    });
+    state.gates = {};
+    await composeHandler(state);
+    const env = (state as any).responseEnvelope;
+    // The M2 bug: this used to flag 'incomplete' because commits.length===0.
+    // After the fix, read routes with at least one successful criterion
+    // (criteriaSucceeded.length > 0) complete normally.
+    expect(env.status).toBe('ok');
+    expect(env.errorCode).not.toBe('review_rejected');
+    expect(env.errorCode).not.toBe('no_commits');
+  });
+
+  it('read-only investigate with zero criteriaErrors completes when criteriaSucceeded > 0', async () => {
+    const state = mkState({
+      route: 'audit',
+      reviewPolicy: 'quality_only',
+      reviewVerdict: 'approved',
+      commits: [],
+      lastRunResult: {
+        status: 'ok',
+        output: 'audit findings...',
+        outputIsDiagnostic: false,
+        workerStatus: 'done',
+        turns: 2,
+        filesWritten: [],
+        toolCalls: ['read'],
+        criteriaSucceeded: ['c1'],
+        criteriaErrors: [],
+        terminationReason: { cause: 'finished', turnsUsed: 2, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
+      },
+    });
+    state.gates = {};
+    await composeHandler(state);
+    const env = (state as any).responseEnvelope;
+    expect(env.status).toBe('ok');
   });
 });
 

@@ -1,10 +1,10 @@
 // tests/reporting/headline-templates/research.test.ts
 import { describe, expect, it } from 'vitest';
-import type { RunResult, TaskSpec } from '../../../packages/core/src/types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../../packages/core/src/types.js';
 import { researchHeadlineTemplate } from '../../../packages/core/src/reporting/headline-templates/research.js';
 
 const baseTask = { route: 'research', filePaths: [] } as unknown as TaskSpec;
-const baseRun = { output: '', annotatedFindings: [] } as unknown as RunResult;
+const baseRun = { output: '', annotatedFindings: [] } as unknown as RuntimeRunResult;
 
 describe('researchHeadlineTemplate', () => {
   it('emits ok headline with source + finding counts', () => {
@@ -26,7 +26,7 @@ describe('researchHeadlineTemplate', () => {
       taskBrief: 'x',
       task: baseTask,
       report: { findings: [], sourcesUsed: [] },
-      runResult: { ...baseRun, incompleteReason: 'cost_cap' } as unknown as RunResult,
+      runResult: { ...baseRun, incompleteReason: 'cost_cap' } as unknown as RuntimeRunResult,
       status: 'incomplete',
     });
     expect(headline).toBe('[incomplete] research: cost cap reached');
@@ -37,7 +37,7 @@ describe('researchHeadlineTemplate', () => {
       taskBrief: 'x',
       task: baseTask,
       report: { findings: [], sourcesUsed: [] },
-      runResult: { ...baseRun, incompleteReason: 'timeout' } as unknown as RunResult,
+      runResult: { ...baseRun, incompleteReason: 'timeout' } as unknown as RuntimeRunResult,
       status: 'incomplete',
     });
     expect(headline).toBe('[incomplete] research: timed out');
@@ -48,7 +48,7 @@ describe('researchHeadlineTemplate', () => {
       taskBrief: 'x',
       task: baseTask,
       report: { findings: [], sourcesUsed: [] },
-      runResult: { ...baseRun, incompleteReason: 'turn_cap' } as unknown as RunResult,
+      runResult: { ...baseRun, incompleteReason: 'turn_cap' } as unknown as RuntimeRunResult,
       status: 'incomplete',
     });
     expect(headline).toBe('[incomplete] research: turn cap reached');
@@ -59,7 +59,7 @@ describe('researchHeadlineTemplate', () => {
       taskBrief: 'x',
       task: baseTask,
       report: { findings: [], sourcesUsed: [] },
-      runResult: { ...baseRun, error: 'runner crashed: ECONNRESET' } as unknown as RunResult,
+      runResult: { ...baseRun, error: 'runner crashed: ECONNRESET' } as unknown as RuntimeRunResult,
       status: 'error',
     });
     expect(headline).toContain('[error] research:');

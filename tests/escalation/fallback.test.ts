@@ -5,10 +5,10 @@ import {
   TRANSPORT_FAILURES,
   type UnavailableMap,
 } from '../../packages/core/src/escalation/fallback.js';
-import type { Provider, RunResult, AgentType } from '../../packages/core/src/types.js';
+import type { Provider, RuntimeRunResult, AgentType } from '../../packages/core/src/types.js';
 import { canonicalIdentity, identityEquals } from '../../packages/core/src/config/canonical-model-identity.js';
 
-function mockProvider(name: string, run: () => Promise<RunResult>, config?: unknown): Provider {
+function mockProvider(name: string, run: () => Promise<RuntimeRunResult>, config?: unknown): Provider {
   // Default config varies by name so existing tests get DISTINCT effective providers
   // (fallback fires); the same-provider short-circuit tests pass an explicit shared
   // config to opt into single-tier mode.
@@ -19,7 +19,7 @@ function mockProvider(name: string, run: () => Promise<RunResult>, config?: unkn
   };
 }
 
-function okResult(name: string): RunResult {
+function okResult(name: string): RuntimeRunResult {
   return {
     status: 'ok',
     output: `from ${name}`,
@@ -30,21 +30,21 @@ function okResult(name: string): RunResult {
     filesWritten: [],
     toolCalls: [],
     escalationLog: [],
-  } as unknown as RunResult;
+  } as unknown as RuntimeRunResult;
 }
 
-function failResult(status: 'api_error' | 'provider_transport_failure' | 'timeout'): RunResult {
+function failResult(status: 'api_error' | 'provider_transport_failure' | 'timeout'): RuntimeRunResult {
   return { ...okResult('failed'), status, output: '' };
 }
 
-const isTransportFailure = (r: RunResult) => TRANSPORT_FAILURES.has(r.status);
+const isTransportFailure = (r: RuntimeRunResult) => TRANSPORT_FAILURES.has(r.status);
 const makeSynthetic = (assigned: AgentType) => makeSyntheticRunResult(assigned, 'all_tiers_unavailable');
 
 describe('runWithFallback — happy path', () => {
   it('returns success with no fallback when assigned tier succeeds', async () => {
     const map: UnavailableMap = new Map();
     const standard = mockProvider('standard', async () => okResult('standard'));
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : undefined),
       unavailableTiers: map,
@@ -66,7 +66,7 @@ describe('runWithFallback — transport failure substitutes alt', () => {
       const map: UnavailableMap = new Map();
       const standard = mockProvider('standard', async () => failResult(failStatus));
       const complex = mockProvider('complex', async () => okResult('complex'));
-      const result = await runWithFallback<RunResult>({
+      const result = await runWithFallback<RuntimeRunResult>({
         assigned: 'standard',
         providerFor: (t) => (t === 'standard' ? standard : complex),
         unavailableTiers: map,
@@ -90,10 +90,10 @@ describe('runWithFallback — non-transport failures do NOT trigger fallback', (
     'returns %s as-is, no fallback',
     async (status) => {
       const map: UnavailableMap = new Map();
-      const r: RunResult = { ...okResult('s'), status };
+      const r: RuntimeRunResult = { ...okResult('s'), status };
       const standard = mockProvider('standard', async () => r);
       const complex = mockProvider('complex', async () => okResult('complex'));
-      const result = await runWithFallback<RunResult>({
+      const result = await runWithFallback<RuntimeRunResult>({
         assigned: 'standard',
         providerFor: (t) => (t === 'standard' ? standard : complex),
         unavailableTiers: map,
@@ -114,7 +114,7 @@ describe('runWithFallback — sticky behavior', () => {
     const standardCalls = vi.fn(async () => okResult('standard'));
     const complex = mockProvider('complex', async () => okResult('complex'));
     const standard = mockProvider('standard', standardCalls);
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -131,7 +131,7 @@ describe('runWithFallback — sticky behavior', () => {
     const map: UnavailableMap = new Map([['standard', 'not_configured']]);
     const standard = mockProvider('standard', async () => failResult('api_error'));
     const complex = mockProvider('complex', async () => okResult('complex'));
-    await runWithFallback<RunResult>({
+    await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -147,7 +147,7 @@ describe('runWithFallback — not_configured fallback', () => {
   it('substitutes when providerFor returns undefined', async () => {
     const map: UnavailableMap = new Map();
     const complex = mockProvider('complex', async () => okResult('complex'));
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? undefined : complex),
       unavailableTiers: map,
@@ -166,7 +166,7 @@ describe('runWithFallback — both unavailable up-front', () => {
   it('returns synthetic failure when both providers undefined; no calls made', async () => {
     const map: UnavailableMap = new Map();
     const callSpy = vi.fn();
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: () => undefined,
       unavailableTiers: map,
@@ -188,7 +188,7 @@ describe('runWithFallback — both unavailable mid-call', () => {
     const map: UnavailableMap = new Map();
     const standard = mockProvider('standard', async () => failResult('api_error'));
     const complex = mockProvider('complex', async () => failResult('provider_transport_failure'));
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -223,7 +223,7 @@ describe('runWithFallback — same-provider config short-circuits fallback', () 
     const complexCall = vi.fn(async () => okResult('complex'));
     const standard = mockProvider('standard', standardCall, sharedConfig);
     const complex = mockProvider('complex', complexCall, sharedConfig);
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -249,7 +249,7 @@ describe('runWithFallback — same-provider config short-circuits fallback', () 
       { type: 'codex', model: 'a', baseUrl: 'https://x' });
     const complex = mockProvider('complex', async () => okResult('complex'),
       { type: 'codex', model: 'b', baseUrl: 'https://x' });
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -268,8 +268,8 @@ describe('runWithFallback — generic with custom T', () => {
 
   it('works with caller-supplied T type', async () => {
     const map: UnavailableMap = new Map();
-    const standard = mockProvider('standard', async () => ({ status: 'api_error' }) as unknown as RunResult);
-    const complex = mockProvider('complex', async () => ({ status: 'ok', finding: 'looks good' }) as unknown as RunResult);
+    const standard = mockProvider('standard', async () => ({ status: 'api_error' }) as unknown as RuntimeRunResult);
+    const complex = mockProvider('complex', async () => ({ status: 'ok', finding: 'looks good' }) as unknown as RuntimeRunResult);
     const result = await runWithFallback<FakeReview>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
@@ -298,7 +298,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const complexCall = vi.fn(async () => okResult('complex'));
     const complexSpy = mockProvider('complex', complexCall, implConfig);
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complexSpy),
       unavailableTiers: map,
@@ -321,7 +321,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const complexConfig = { type: 'claude' as const, model: 'haiku-4-5' };
     const complex = mockProvider('complex', async () => okResult('complex'), complexConfig);
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -347,7 +347,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const complexCfg = { type: 'claude' as const, model: 'haiku-4-5' };
     const complex = mockProvider('complex', async () => okResult('complex'), complexCfg);
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : complex),
       unavailableTiers: map,
@@ -371,7 +371,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const complexCfg = { type: 'claude' as const, model: 'haiku-4-5' };
     const complex = mockProvider('complex', async () => okResult('complex'), complexCfg);
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => {
         if (t === 'standard') throw new Error('missing API key');
@@ -398,7 +398,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const standardConfig = { type: 'claude' as const, model: 'sonnet-4-6' };
     const standard = mockProvider('standard', async () => okResult('standard'), standardConfig);
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : undefined),
       unavailableTiers: map,
@@ -418,7 +418,7 @@ describe('runWithFallback — forbiddenIdentities separation', () => {
     const map: UnavailableMap = new Map();
     const standard = mockProvider('standard', async () => okResult('standard'));
 
-    const result = await runWithFallback<RunResult>({
+    const result = await runWithFallback<RuntimeRunResult>({
       assigned: 'standard',
       providerFor: (t) => (t === 'standard' ? standard : undefined),
       unavailableTiers: map,

@@ -1,60 +1,38 @@
 /**
  * Single source of truth for the user-facing lifecycle stage progression.
  *
- * Derived dynamically from the actual `StagePlan` so:
+ * Derived dynamically from `STAGE_PLAN` (the v5 9-stage ordered list) so:
  *   - There's no duplicated stage list in async-dispatch + RunningHeadlineSink.
- *   - Adding/removing a row in `stage-plan-builder.ts` immediately flows
+ *   - Adding/removing a stage in `stage-plan-builder.ts` immediately flows
  *     into the polling headline denominator without a second edit.
- *   - The denominator naturally matches the rows that have a `schemaStage`
- *     (which is exactly the set of stages that the wire telemetry tracks).
  *
- * The denominator counts DISTINCT schemaStages in plan order, not raw rows
- * — so 3 spec_review rounds collapse into a single "Spec review" slot. The
- * agent sees a stable bracket like `(2/7)` during a 3-round review chain
- * instead of jumping every round.
- *
- * Reworks are kept as their own logical stage when present in the plan
- * (they ARE distinct schemaStages — `spec_rework`, `quality_rework`). When
- * a rework round fires, the bracket advances; when the chain returns to
- * the next review round, it returns to the review slot. This is the
- * accurate behaviour the user asked for: "where are the reworks?"
- *
- * `route → toolCategory` mapping mirrors `task-runner.ts:toolCategoryForRoute`
- * — keep in sync. Both maps live in this module so future contributors see
- * "stage progression for these routes" in one place.
- *
- * Test fixture: tests/lifecycle/stage-plan-builder.test.ts asserts that stageOrderForRoute() denominators stay stable across plan refactors.
+ * The denominator counts DISTINCT v5 stage names per route under the
+ * "rework-eligible happy path" simulation. Reworks count as their own slot
+ * when applicable so the bracket advances when rework runs.
  */
-import type { ToolCategory } from '../escalation/escalation-policy.js';
 import type { LifecycleState } from './stage-plan-types.js';
-import { buildStagePlan } from './stage-plan-builder.js';
+import type { ToolCategory } from '../escalation/escalation-policy.js';
+import { STAGE_PLAN } from './stage-plan-builder.js';
+import type { StageDefinition, RouteName } from './stage-io.js';
 import { HUMAN_LABEL } from './stage-labels.js';
 
-/** Canonical schemaStage → human-readable label used in `stageLabel` events
- *  emitted by handlers + shown in the polling headline.
- *
- *  v4.4.x pipeline (5 canonical stages):
- *    Implementing → Review → Rework → Committing → Annotating
- *  Plus a tail "Finalizing" slot for the cleanup/emit phase.
- *
- *  Per-route which stages fire:
- *    Read-only:  Implementing → Annotating → Finalizing
- *    Research:   Implementing → Finalizing
- *    Write:      all stages; Rework only when review verdict is changes_required;
- *                Committing conditional on commit-gate threshold. */
-const SCHEMA_STAGE_LABELS: Record<string, string> = {
-  implementing: HUMAN_LABEL.implementing,
-  review: HUMAN_LABEL.review,
-  rework: HUMAN_LABEL.rework,
-  committing: HUMAN_LABEL.committing,
-  annotating: HUMAN_LABEL.annotating,
-  finalizing: 'Finalizing',
+/** v5 stage name → human-readable label. `null` = hidden from the user-facing
+ *  bracket (the stage runs but doesn't get its own slot in the polling
+ *  headline; prepare + register-block + compose are pure plumbing). */
+const STAGE_LABELS: Record<string, string | null> = {
+  prepare:           null,
+  'register-block':  null,
+  implement:         HUMAN_LABEL.implementing,
+  review:            HUMAN_LABEL.review,
+  rework:            HUMAN_LABEL.rework,
+  commit:            HUMAN_LABEL.committing,
+  annotate:          HUMAN_LABEL.annotating,
+  compose:           null,
+  terminal:          'Finalizing',
 };
 
-/** Tool route → (ToolCategory, default reviewPolicy). Mirrors
- *  task-runner.ts:toolCategoryForRoute + the reviewPolicy each tool-config
- *  injects into TaskSpec. Keep in sync; if these drift, the user-facing
- *  stage bracket will denominator-skew. */
+/** Tool route → (ToolCategory, default reviewPolicy). Keep in sync with
+ *  task-runner.ts:toolCategoryForRoute. */
 const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: LifecycleState['reviewPolicy'] }> = {
   delegate:                 { category: 'artifact_producing', reviewPolicy: 'full' },
   'execute-plan':           { category: 'artifact_producing', reviewPolicy: 'full' },
@@ -63,29 +41,14 @@ const ROUTE_PROFILE: Record<string, { category: ToolCategory; reviewPolicy: Life
   review:                   { category: 'read_only',          reviewPolicy: 'none' },
   debug:                    { category: 'read_only',          reviewPolicy: 'none' },
   investigate:              { category: 'read_only',          reviewPolicy: 'none' },
-  research:                 { category: 'read_only',         reviewPolicy: 'none' },
+  research:                 { category: 'read_only',          reviewPolicy: 'none' },
   'register-context-block': { category: 'assist',             reviewPolicy: 'none' },
 };
 
-/** Route-specific label overrides — empty post-redesign because each
- *  route's StagePlan row uses the right schemaStage directly. Kept as a
- *  stub so the lookup in stageOrderForRoute() doesn't need a special case. */
-const ROUTE_LABEL_OVERRIDES: Record<string, Record<string, string>> = {};
-
-/** Routes where the StagePlan doesn't include a coarse "Finalizing" row
- *  but we want one in the polling progression so the agent sees a clean
- *  ramp to completion. Appended to the derived list. */
-const FINALIZING_LABEL = 'Finalizing';
-
-/** "Rework-possible happy-path" simulated state. Used to filter StagePlan
- *  rows by runCondition so the user-facing denominator only counts stages
- *  that could plausibly fire for this route — not every schemaStage in
- *  the plan. Verdict flags are set to 'changes_required' so rework rows
- *  are eligible (the bracket should reflect the maximum reachable
- *  denominator, not just the happy path). Chain-passed flags are also
- *  set true so post-chain rows (diff_review / verifying / committing)
- *  are eligible too. */
-function simulatedStateForRoute(
+/** Simulated state used to filter STAGE_PLAN's shouldRun predicates so the
+ *  denominator reflects the maximum reachable stage set for the route
+ *  (the worst-case ramp the user can see). */
+function simulatedState(
   route: string,
   category: ToolCategory,
   reviewPolicy: LifecycleState['reviewPolicy'],
@@ -98,65 +61,51 @@ function simulatedStateForRoute(
     shutdownInProgress: false,
     route,
     toolCategory: category,
-    // lastRunResult truthy + a non-empty filesWritten so post-impl rows
-    // that gate on artifacts (e.g. 5.2 git_commit) are eligible.
-    lastRunResult: { filesWritten: ['x'] } as unknown as LifecycleState['lastRunResult'],
-    filesChanged: ['x'],
-    // Only artifact_producing routes commit. Setting these correctly here
-    // makes row 5.2 (git_commit) gate off for read_only audit/review/etc.
     autoCommit: category === 'artifact_producing',
     readOnlyTask: category === 'read_only',
-    specChainPassed: true,
-    qualityChainPassed: true,
-    specReviewRound1Verdict: 'changes_required',
-    specReviewRound2Verdict: 'changes_required',
-    qualityReviewRound1Verdict: 'changes_required',
-    qualityReviewRound2Verdict: 'changes_required',
+    reviewVerdict: 'changes_required',
+    gates: {
+      implement: { outcome: 'advance', payload: { workerSelfAssessment: 'done', filesChanged: ['x'] }, telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' } },
+      review:    { outcome: 'advance', payload: { verdict: 'changes_required' }, telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' } },
+    } as LifecycleState['gates'],
+    lastRunResult: { filesWritten: ['x'] } as unknown as LifecycleState['lastRunResult'],
+    filesChanged: ['x'],
+    halted: false,
   } as unknown as LifecycleState;
 }
 
-/** Build the user-facing stage label list for a route by simulating each
- *  StagePlan row's runCondition under the route's defaults. Distinct
- *  schemaStages whose runCondition returns true become the user-facing
- *  stages, in plan order. Route-specific label overrides + a tail
- *  "Finalizing" slot give the agent a stable bracket. */
+/** Build the user-facing stage label list for a route by walking STAGE_PLAN
+ *  and including each stage whose Layer-1 (applicableRoutes) AND Layer-2
+ *  (shouldRun under simulated state) both pass. */
 export function stageOrderForRoute(route: string): string[] {
   const profile = ROUTE_PROFILE[route];
-  if (!profile) return [FINALIZING_LABEL];
+  if (!profile) return ['Finalizing'];
 
-  const plan = buildStagePlan(profile.category);
-  const state = simulatedStateForRoute(route, profile.category, profile.reviewPolicy);
-  const seen = new Set<string>();
+  const state = simulatedState(route, profile.category, profile.reviewPolicy);
   const ordered: string[] = [];
-  const overrides = ROUTE_LABEL_OVERRIDES[route] ?? {};
 
-  for (const row of plan.rows) {
-    const schema = row.schemaStage;
-    if (!schema) continue;
-    if (seen.has(schema)) continue;
-    // Skip rows whose runCondition wouldn't fire for this route's defaults.
-    // E.g. spec_review/spec_rework/diff_review/verifying/committing all
-    // gate on `isAP` — they're absent from the read_only audit denominator.
-    let eligible = false;
-    try { eligible = row.runCondition(state); } catch { eligible = false; }
-    if (!eligible) continue;
-    seen.add(schema);
-    const label = overrides[schema] ?? SCHEMA_STAGE_LABELS[schema] ?? schema;
-    ordered.push(label);
+  for (const stage of STAGE_PLAN) {
+    const def = stage as StageDefinition;
+    const applies = def.applicableRoutes === 'all'
+      ? true
+      : (def.applicableRoutes as readonly string[]).includes(route as RouteName);
+    if (!applies) continue;
+
+    let runnable = false;
+    try { runnable = def.shouldRun(state).run; } catch { runnable = false; }
+    if (!runnable) continue;
+
+    const label = STAGE_LABELS[def.name];
+    if (label === null) continue;                                 // hidden from bracket
+    const final = label ?? def.name;
+    if (!ordered.includes(final)) ordered.push(final);
   }
 
-  ordered.push(FINALIZING_LABEL);
-  return ordered;
+  return ordered.length > 0 ? ordered : ['Finalizing'];
 }
 
-/** Memoized lookup so async-dispatch + RunningHeadlineSink don't rebuild
- *  the stage plan for every event. The plan is pure-of-state, so the
- *  cache is safe across the daemon's lifetime. */
 const cache = new Map<string, string[]>();
 
-/** Public accessor mirroring the legacy `STAGE_ORDER_BY_ROUTE[route]` shape
- *  but driven by the StagePlan. Returns an empty array (treated as "1/1")
- *  for unknown routes. */
 export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy(
   {},
   {
@@ -172,17 +121,10 @@ export const STAGE_ORDER_BY_ROUTE: Record<string, readonly string[]> = new Proxy
   },
 ) as Record<string, readonly string[]>;
 
-/** Normalize a runtime stageLabel ("Spec rework round 1") to a coarse
- *  label that exists in `stageOrderForRoute(route)`. Reworks map to their
- *  own coarse slot ("Spec rework" / "Quality rework"), not back to the
- *  review slot — the StagePlan-derived order DOES contain a rework slot
- *  (because spec_rework / quality_rework are distinct schemaStages), so
- *  the bracket advances correctly when a rework fires. */
 export function normalizeStageLabel(label: string): string {
   return label;
 }
 
-/** "(X/Y)" stage-progress bracket for a route + current stageLabel. */
 export function stageProgress(route: string, stageLabel: string | undefined): string {
   const order = STAGE_ORDER_BY_ROUTE[route];
   if (!order || order.length === 0) return '1/1';

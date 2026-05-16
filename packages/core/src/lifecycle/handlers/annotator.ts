@@ -13,7 +13,9 @@ import {
   type ResearchSourcesUsedEntry,
 } from '../../reporting/report-parser-slots/research-report.js';
 import { applyAnnotatePreconditions } from '../annotate-parser.js';
-import type { AnnotatePayload } from '../stage-io.js';
+import { annotatePromptWrite, annotatePromptRead } from '../annotate-prompts.js';
+import { runAnnotatorTurn } from '../../providers/run-annotator-turn.js';
+import type { AnnotatePayload, StageGate } from '../stage-io.js';
 
 const READ_ROUTES = new Set(['audit', 'review', 'debug', 'investigate', 'research']);
 
@@ -36,7 +38,7 @@ export interface StructuredReport {
   sourcesUsed?: ResearchSourcesUsedEntry[];
 }
 
-export async function annotator(state: LifecycleState): Promise<void> {
+export async function annotator(state: LifecycleState): Promise<StageGate<AnnotatePayload>> {
   const t0 = Date.now();
   const last = ((state.lastRunResult as Record<string, unknown> | undefined) ?? {});
   const route = (state as { route?: string }).route;
@@ -140,6 +142,16 @@ export async function annotator(state: LifecycleState): Promise<void> {
   }
 
   let annotated: AnnotatePayload;
+  // LLM judge layer (spec §5.7.2). The annotator stage runs an LLM turn
+  // unless tier-3 truncation kicked us into fallback mode. The LLM is the
+  // proposer; the deterministic parser is the enforcer — applyAnnotatePreconditions
+  // always runs on the LLM-proposed payload and may flip completed=false. On
+  // transport error we fall back to mechanical synthesis (same path that ran
+  // before this layer was added).
+  let llmCostUSD = 0;
+  let llmDurationMs = 0;
+  let llmTurnsUsed = 0;
+  let llmTransportFailed = false;
   if (fallbackMode) {
     // Fallback findings: only gate-sourced findings flow through (gates.review,
     // gates.implement). lastRunResult.findings are dropped as part of tier-3
@@ -167,14 +179,49 @@ export async function annotator(state: LifecycleState): Promise<void> {
       commitSha: mechanicalCommitSha,
     };
   } else {
-    const proposed: AnnotatePayload = {
-      completed: true,                                             // optimistic; parser may override
+    // Default mechanical proposal — used directly when LLM fails or returns
+    // unparseable output. The parser still gets the final say either way.
+    const mechanical: AnnotatePayload = {
+      completed: true,
       message: truncatedSummary || (isRead ? 'investigation completed' : 'task completed'),
       findings: truncatedFindings,
       summary: truncatedSummary,
       filesChanged: mechanicalFilesChanged,
       commitSha: mechanicalCommitSha,
     };
+
+    let proposed: AnnotatePayload = mechanical;
+    const ctx = (state as { executionContext?: unknown }).executionContext as
+      { getSession?: (tier: 'standard' | 'complex') => { send: (p: string, o?: { stageLabel?: string }) => Promise<unknown> } } | undefined;
+    if (ctx && typeof ctx.getSession === 'function') {
+      const prompt = isRead ? annotatePromptRead(state) : annotatePromptWrite(state);
+      const tres = await runAnnotatorTurn({ prompt, ctx: ctx as unknown as Parameters<typeof runAnnotatorTurn>[0]['ctx'], tier: 'standard' });
+      if (tres.kind === 'ok') {
+        llmCostUSD = tres.costUSD ?? 0;
+        llmDurationMs = tres.ms;
+        llmTurnsUsed = tres.turnsUsed;
+        const parsed = extractAnnotateJson(tres.text);
+        if (parsed) {
+          // Authoritative fields come from upstream gates (mechanicalFilesChanged,
+          // mechanicalCommitSha, dedupedFindings). The LLM gets to propose
+          // completed + message + summary; everything mechanical we override.
+          proposed = {
+            completed: typeof parsed.completed === 'boolean' ? parsed.completed : mechanical.completed,
+            message: typeof parsed.message === 'string' && parsed.message.length > 0 ? parsed.message : mechanical.message,
+            summary: typeof parsed.summary === 'string' ? parsed.summary : mechanical.summary,
+            findings: truncatedFindings,
+            filesChanged: mechanicalFilesChanged,
+            commitSha: mechanicalCommitSha,
+          };
+        }
+        // parsed === null → keep mechanical (parser unaffected)
+      } else {
+        // transport_error — fall through to mechanical synthesis
+        llmTransportFailed = true;
+        llmDurationMs = tres.ms;
+        bus?.emit({ event: 'annotate_llm_transport_error', ts: new Date().toISOString(), message: tres.message, durationMs: tres.ms } as Record<string, unknown>);
+      }
+    }
     annotated = applyAnnotatePreconditions(proposed, state);
   }
   (state as { annotatePayload?: AnnotatePayload }).annotatePayload = annotated;
@@ -184,13 +231,17 @@ export async function annotator(state: LifecycleState): Promise<void> {
     outputTokens: 0,
     cachedReadTokens: 0,
     cachedNonReadTokens: 0,
-    turnCount: 0,
+    turnCount: llmTurnsUsed,
     toolCallCount: 0,
-    costUSD: 0,
+    costUSD: llmCostUSD,
     durationMs: Date.now() - t0,
     filesReadCount: 0,
     filesWrittenCount: 0,
-  }, { tier: null, model: null });
+  }, { tier: llmTurnsUsed > 0 ? 'standard' : null, model: null });
+  // suppress unused-variable warning while keeping the durationMs field for
+  // diagnostics callers; mergeStageStats already captured the value above.
+  void llmDurationMs;
+  void llmTransportFailed;
 
   const annotatingStats = (state.lastRunResult as { stageStats?: { annotating?: { outcome?: string; maxIdleMs?: number | null; totalIdleMs?: number | null } } } | undefined)
     ?.stageStats?.annotating;
@@ -199,4 +250,60 @@ export async function annotator(state: LifecycleState): Promise<void> {
     annotatingStats.maxIdleMs = 0;
     annotatingStats.totalIdleMs = 0;
   }
+
+  return {
+    outcome: 'advance',
+    payload: annotated,
+    telemetry: {
+      stageLabel: 'annotate',
+      durationMs: Date.now() - t0,
+      costUSD: llmCostUSD,
+      turnsUsed: llmTurnsUsed,
+      stopReason: 'normal',
+    },
+  };
+}
+
+/**
+ * Extract a single JSON object from the LLM's response.
+ *
+ * Accepts:
+ *   - A fenced ```json …``` block (preferred form per annotate prompts)
+ *   - A fenced ``` …``` block (no language tag)
+ *   - The first balanced `{…}` substring in the text
+ *
+ * Returns `null` if no parseable JSON is found, signalling the caller to keep
+ * the mechanical proposal. This is intentional: a malformed LLM response
+ * should not cause stage failure — the parser already has a deterministic
+ * answer it can fall back on.
+ */
+function extractAnnotateJson(text: string): { completed?: unknown; message?: unknown; summary?: unknown } | null {
+  if (!text) return null;
+  const fencedJson = text.match(/```(?:json)?\s*\n([\s\S]*?)\n```/i);
+  const candidate = fencedJson ? fencedJson[1] : firstBalancedBraces(text);
+  if (!candidate) return null;
+  try {
+    const parsed = JSON.parse(candidate);
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      return parsed as { completed?: unknown; message?: unknown; summary?: unknown };
+    }
+  } catch {
+    /* fall through */
+  }
+  return null;
+}
+
+function firstBalancedBraces(text: string): string | null {
+  const start = text.indexOf('{');
+  if (start < 0) return null;
+  let depth = 0;
+  for (let i = start; i < text.length; i++) {
+    const ch = text[i];
+    if (ch === '{') depth++;
+    else if (ch === '}') {
+      depth--;
+      if (depth === 0) return text.slice(start, i + 1);
+    }
+  }
+  return null;
 }

@@ -1,27 +1,10 @@
 import type { ToolCategory } from '../escalation/escalation-policy.js';
 import type { ProjectContext } from '../stores/project-context-registry.js';
 
-export interface StageRow {
-  rowId: string;
-  stageName: string;
-  schemaStage?: string;
-  runCondition: (state: LifecycleState) => boolean;
-  isRework: boolean;
-  handlerKey: string;
-  /**
-   * When true, this row's handler runs even after a prior row set
-   * `state.terminal = true`. Used by settle/compose/terminal/persist/flush
-   * rows that must populate authoritative chain-pass + envelope state on
-   * hard-fail paths. The driver loop honors this attribute; non-terminal-safe
-   * rows (the default) short-circuit when `state.terminal` is set.
-   */
-  runOnTerminal?: boolean;
-}
-
-export interface StagePlan {
-  toolCategory: ToolCategory;
-  rows: StageRow[];
-}
+// `StagePlan` / `StageRow` deleted in v5 — the canonical plan is the flat
+// `StageDefinition[]` exported as `STAGE_PLAN` from stage-plan-builder.ts.
+// Routes drive participation via `applicableRoutes` + `shouldRun` on each
+// StageDefinition, not via per-row runCondition predicates on rows.
 
 /**
  * Per-round review verdict shape. Matches the verdict values that
@@ -83,7 +66,7 @@ export interface LifecycleState {
   qualityChainPassed?: boolean;
 
   // Set by rework handlers when their implementer call returns null (call
-  // failed before producing an updated RunResult — e.g. the runner aborted
+  // failed before producing an updated RuntimeRunResult — e.g. the runner aborted
   // at the abortSignal check, the deadline was exhausted, or the provider
   // returned a non-ok status the rework loop couldn't recover). Without
   // these, the chain would silently advance to the next review round on
@@ -106,9 +89,7 @@ export interface LifecycleState {
   qualityUnavailable?: import('../escalation/fallback.js').UnavailableMap;
   diffUnavailable?: import('../escalation/fallback.js').UnavailableMap;
 
-  // Dispatcher / executor wiring (populated by prepare_execution_context and
-  // run_initial_impl; consumed by compose_response):
-  executor?: (rawRequest: unknown, state: LifecycleState) => Promise<unknown>;
+  // Dispatcher / executor wiring (consumed by compose_response):
   executorResult?: unknown;
   responseEnvelope?: unknown;
 

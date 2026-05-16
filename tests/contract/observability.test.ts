@@ -50,7 +50,7 @@ describe('observability contract — exhaustive', () => {
     const seen = new Set(captured.map(e => e.event));
     expect(seen.has('task_started'), 'task_started never emitted').toBe(true);
     // batch_failed only fires from async-dispatch when the executor throws
-    // (not from provider-level errors that surface as RunResult.status). The
+    // (not from provider-level errors that surface as RuntimeRunResult.status). The
     // fixture covers that contract by ensuring the manifest entry exists; an
     // emission-side fixture is added when an executor-throwing path lands.
     const batchFailedEntry = manifest.events.find(e => e.name === 'batch_failed');

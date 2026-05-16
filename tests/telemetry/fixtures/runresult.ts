@@ -1,6 +1,6 @@
-import type { RunResult } from '../../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../../packages/core/src/types.js';
 
-const BASE_RUN_RESULT: RunResult = {
+const BASE_RUN_RESULT: RuntimeRunResult = {
   output: 'Task completed successfully.',
   status: 'ok',
   usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -37,45 +37,45 @@ const BASE_RUN_RESULT: RunResult = {
 };
 
 // Per-route × terminal-status × pivotal flags fixtures
-export const HAPPY: RunResult = structuredClone(BASE_RUN_RESULT);
+export const HAPPY: RuntimeRunResult = structuredClone(BASE_RUN_RESULT);
 
-export const INCOMPLETE: RunResult = {
+export const INCOMPLETE: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'incomplete',
   terminationReason: { cause: 'incomplete', turnsUsed: 2, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: null, wasPromoted: false },
   workerStatus: 'failed',
 };
 
-export const TIMEOUT: RunResult = {
+export const TIMEOUT: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'timeout',
   terminationReason: { cause: 'timeout', turnsUsed: 5, hasFileArtifacts: false, usedShell: true, workerSelfAssessment: null, wasPromoted: false },
   workerStatus: 'failed',
 };
 
-export const ERROR_API: RunResult = {
+export const ERROR_API: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'api_error',
   terminationReason: { cause: 'api_error', turnsUsed: 1, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: null, wasPromoted: false },
   workerStatus: 'failed',
 };
 
-export const COST_EXCEEDED: RunResult = {
+export const COST_EXCEEDED: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'cost_exceeded',
-  terminationReason: 'cost_ceiling' as unknown as RunResult['terminationReason'],
+  terminationReason: 'cost_ceiling' as unknown as RuntimeRunResult['terminationReason'],
   workerStatus: 'failed',
   usage: { inputTokens: 500, outputTokens: 200, cachedReadTokens: 0, cachedNonReadTokens: 0 },
 };
 
-export const BRIEF_TOO_VAGUE: RunResult = {
+export const BRIEF_TOO_VAGUE: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   status: 'brief_too_vague',
   terminationReason: { cause: 'brief_too_vague', turnsUsed: 0, hasFileArtifacts: false, usedShell: false, workerSelfAssessment: null, wasPromoted: false },
   workerStatus: 'failed',
 };
 
-export const ESCALATED: RunResult = {
+export const ESCALATED: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   escalationLog: [
     { provider: 'claude', status: 'ok', turns: 2, inputTokens: 300, outputTokens: 100, costUSD: 0.002, initialPromptLengthChars: 100, initialPromptHash: 'a' },
@@ -83,7 +83,7 @@ export const ESCALATED: RunResult = {
   ],
 };
 
-export const FALLBACK: RunResult = {
+export const FALLBACK: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   agents: {
     ...BASE_RUN_RESULT.agents,
@@ -95,7 +95,7 @@ export const FALLBACK: RunResult = {
   },
 };
 
-export const WITH_CONCERNS: RunResult = {
+export const WITH_CONCERNS: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   specReviewStatus: 'approved',
   concerns: [
@@ -103,7 +103,7 @@ export const WITH_CONCERNS: RunResult = {
   ],
 };
 
-export const AUDIT_ROUTE_HAPPY: RunResult = {
+export const AUDIT_ROUTE_HAPPY: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   stageStats: {
     implementing: { stage: 'implementing', entered: true, durationMs: 20_000, costUSD: 0.004, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
@@ -114,18 +114,18 @@ export const AUDIT_ROUTE_HAPPY: RunResult = {
     quality_rework: { stage: 'rework', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null },
     diff_review:  { stage: 'review', entered: false, durationMs: null, costUSD: null, agentTier: null, modelFamily: null, model: null, verdict: 'not_applicable', roundsUsed: null },
     committing:   { stage: 'committing', entered: true, durationMs: 500, costUSD: 0, agentTier: 'standard', modelFamily: 'claude', model: 'claude-sonnet' },
-  } as RunResult['stageStats'],
+  } as RuntimeRunResult['stageStats'],
 };
 
-export const NO_TERMINATION_REASON: RunResult = {
+export const NO_TERMINATION_REASON: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
   terminationReason: undefined,
   workerStatus: 'failed',
 };
 
-export const ROUND_CAP: RunResult = {
+export const ROUND_CAP: RuntimeRunResult = {
   ...structuredClone(BASE_RUN_RESULT),
-  terminationReason: 'round_cap' as unknown as RunResult['terminationReason'],
+  terminationReason: 'round_cap' as unknown as RuntimeRunResult['terminationReason'],
   workerStatus: 'failed',
 };
 
@@ -133,7 +133,7 @@ export interface FixtureEntry {
   name: string;
   route: 'delegate' | 'audit' | 'review' | 'debug' | 'execute-plan' | 'retry';
   terminal: string;
-  input: RunResult;
+  input: RuntimeRunResult;
 }
 
 export const ALL: FixtureEntry[] = [

@@ -1,10 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
-import type { RunResult } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 import { HAPPY } from './fixtures/runresult.js';
 
-function makeFixtureRunResult(overrides: Partial<RunResult>): RunResult {
-  return { ...structuredClone(HAPPY), ...overrides } as RunResult;
+function makeFixtureRunResult(overrides: Partial<RuntimeRunResult>): RuntimeRunResult {
+  return { ...structuredClone(HAPPY), ...overrides } as RuntimeRunResult;
 }
 
 describe('event-builder tier vocabulary', () => {
@@ -17,7 +17,7 @@ describe('event-builder tier vocabulary', () => {
           agentTier: 'complex',
         },
       },
-    } as RunResult);
+    } as RuntimeRunResult);
     const event = buildTaskCompletedEvent({
       route: 'delegate',
       taskSpec: { filePaths: [] },
@@ -241,7 +241,7 @@ describe('event-builder finding projection (v4.4.x)', () => {
     const rr = makeFixtureRunResult({
       qualityReviewStatus: 'changes_required',
       reviewVerdict: 'changes_required',
-    } as RunResult);
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       reviewConcerns: [
         'spec deviation: contract gate not wired',
@@ -268,8 +268,8 @@ describe('event-builder finding projection (v4.4.x)', () => {
       stageStats: {
         ...HAPPY.stageStats,
         review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
-      } as RunResult['stageStats'],
-    } as RunResult);
+      } as RuntimeRunResult['stageStats'],
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       findings: [
         { severity: 'critical', category: 'security', claim: 'c1' },
@@ -297,8 +297,8 @@ describe('event-builder finding projection (v4.4.x)', () => {
       stageStats: {
         ...HAPPY.stageStats,
         review: { stage: 'review', entered: true, durationMs: 1_000, costUSD: 0.001, agentTier: 'complex', modelFamily: 'claude', model: 'claude-sonnet', verdict: 'changes_required', roundsUsed: 1 } as any,
-      } as RunResult['stageStats'],
-    } as RunResult);
+      } as RuntimeRunResult['stageStats'],
+    } as RuntimeRunResult);
     (rr as any).structuredReport = {
       reviewConcerns: ['a', 'b', 'c', 'd'],
     };

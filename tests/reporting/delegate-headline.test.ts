@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { delegateHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/delegate.js';
-import type { RunResult } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
 describe('delegate headline composer (Gaps 12 + 13)', () => {
@@ -10,7 +10,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
     // Pre-fix headline reported "(0 files)" — wrong.
     const runResult = {
       filesWritten: ['packages/core/src/lifecycle/stage-progression.ts'],
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
 
     const headline = delegateHeadlineTemplate.compose({
       taskBrief: 'edit comment',
@@ -28,7 +28,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
   it('prefers report.filesChanged over runResult.filesWritten when both populated', () => {
     const runResult = {
       filesWritten: ['/x.ts', '/y.ts', '/z.ts'],
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
 
     const headline = delegateHeadlineTemplate.compose({
       taskBrief: 'edit',
@@ -45,7 +45,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
   });
 
   it('truncates multi-sentence summary to first sentence (Gap 12)', () => {
-    const runResult = { filesWritten: ['/a.ts'] } as unknown as RunResult;
+    const runResult = { filesWritten: ['/a.ts'] } as unknown as RuntimeRunResult;
 
     const headline = delegateHeadlineTemplate.compose({
       taskBrief: '',
@@ -65,7 +65,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       taskBrief: '',
       report: notApplicable('no output'),
       status: 'ok',
-      runResult: { filesWritten: [] } as unknown as RunResult,
+      runResult: { filesWritten: [] } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] delegate: no structured report available');
@@ -77,7 +77,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       taskBrief: '',
       report: notApplicable('parse failed'),
       status: 'ok',
-      runResult: { filesWritten: ['/a.ts', '/b.ts'] } as unknown as RunResult,
+      runResult: { filesWritten: ['/a.ts', '/b.ts'] } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] delegate: (2 files)');
@@ -93,7 +93,7 @@ describe('delegate headline composer (Gaps 12 + 13)', () => {
       status: 'ok',
       runResult: {
         filesWritten: ['shell:sed -i "s/old/new/" file.ts'],
-      } as unknown as RunResult,
+      } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] delegate: Patched. (1 file)');

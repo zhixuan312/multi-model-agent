@@ -1,4 +1,4 @@
-import type { RunResult, TaskSpec } from '../types.js';
+import type { RuntimeRunResult, TaskSpec } from '../types.js';
 
 /**
  * 4.0.3+: signature accepts optional `runResult` and `task` so composers
@@ -12,7 +12,7 @@ export interface HeadlineTemplate {
     taskBrief: string;
     report: unknown;
     status: string;
-    runResult?: RunResult;
+    runResult?: RuntimeRunResult;
     task?: TaskSpec;
   }): string;
 }
@@ -24,7 +24,7 @@ export class HeadlineComposer {
     taskBrief: string;
     report: unknown;
     status: string;
-    runResult?: RunResult;
+    runResult?: RuntimeRunResult;
     task?: TaskSpec;
   }): string {
     return this.template.compose(input);

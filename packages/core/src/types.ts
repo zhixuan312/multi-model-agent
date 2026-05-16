@@ -36,6 +36,7 @@ export type {
 export type {
   Commit,
   RunResult,
+  RuntimeRunResult,
   ReviewPromptParts,
   CacheHints,
   ReviewRunOptions,

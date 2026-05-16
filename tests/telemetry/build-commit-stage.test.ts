@@ -1,9 +1,9 @@
 import { describe, it, expect } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
-import type { RunResult } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult } from '../../packages/core/src/types.js';
 import { HAPPY } from './fixtures/runresult.js';
 
-function withCommits(commits: any): RunResult {
+function withCommits(commits: any): RuntimeRunResult {
   const rr = structuredClone(HAPPY);
   (rr as any).commits = commits;
   return rr;

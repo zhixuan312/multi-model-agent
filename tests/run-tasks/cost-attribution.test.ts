@@ -2,7 +2,7 @@ import { describe, it, expect } from 'vitest';
 import { buildTaskCompletedEvent } from '../../packages/core/src/events/event-builder.js';
 import { priceTokens, resolveRateCard, type TokenCounts } from '../../packages/core/src/bounded-execution/cost-compute.js';
 import { sumTokens, rollupByTier } from '../../packages/core/src/bounded-execution/cost-rollup.js';
-import type { RunResult, StageStatsMap } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult, StageStatsMap } from '../../packages/core/src/types.js';
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -68,7 +68,7 @@ const ZERO_COMMITTING = makeStageStats('committing', {
   filesReadCount: 0, filesWrittenCount: 0,
 });
 
-function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
+function makeRunResult(overrides: Partial<RuntimeRunResult> = {}): RuntimeRunResult {
   const defaultStageStats: StageStatsMap = {
     implementing: makeStageStats('implementing', { agentTier: 'standard', costUSD: 0.01 }),
     annotating:   makeStageStats('annotating', { entered: false, durationMs: null, costUSD: null, agentTier: null, model: null, outcome: 'not_applicable', skipReason: 'not_applicable' }),
@@ -97,7 +97,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
     terminationReason: { cause: 'finished', turnsUsed: 2, hasFileArtifacts: true, usedShell: false, workerSelfAssessment: 'done', wasPromoted: false },
     stageStats: defaultStageStats,
     ...overrides,
-  } as RunResult;
+  } as RuntimeRunResult;
 }
 
 // ---------------------------------------------------------------------------
@@ -106,7 +106,7 @@ function makeRunResult(overrides: Partial<RunResult> = {}): RunResult {
 
 describe('cost attribution: mixed-tier task with rework round', () => {
   it('tier rollup sums to total; parent equivalent uses summed tokens at parent rate', () => {
-    // Build a mixed-tier RunResult:
+    // Build a mixed-tier RuntimeRunResult:
     // - implementing (standard tier): specific tokens + cost
     // - spec_review (complex tier): specific tokens + cost
     const rr = makeRunResult({

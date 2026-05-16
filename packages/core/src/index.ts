@@ -17,6 +17,7 @@ export type {
   ClaudeProviderConfig,
   MultiModelConfig,
   RunResult,
+  RuntimeRunResult,
   Provider,
 } from './types.js';
 export type {

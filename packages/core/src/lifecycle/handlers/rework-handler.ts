@@ -12,8 +12,9 @@
 
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { ExecutionContext } from '../lifecycle-context.js';
-import type { Provider, RunResult, AgentType, TaskSpec } from '../../types.js';
+import type { Provider, RuntimeRunResult, AgentType, TaskSpec } from '../../types.js';
 import type { Session } from '../../types/run-result.js';
+import type { StageGate, ReworkPayload } from '../stage-io.js';
 import { replaceLastRunResultPreservingTrackers, mergeStageStats } from '../merge-stage-stats.js';
 import { reworkTemplate } from '../../review/templates/rework.js';
 import { buildWarmFollowupMessage } from '../warm-followup.js';
@@ -23,20 +24,42 @@ import { HUMAN_LABEL } from '../stage-labels.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../../bounded-execution/progress-watchdog.js';
 import type { ProgressWatchdogConfig } from '../../bounded-execution/progress-watchdog.js';
 
-export async function reworkHandler(state: LifecycleState): Promise<void> {
-  if (state.terminal) return;
-  if (state.reworkApplied !== undefined || state.reworkError !== undefined) return;
-  if (state.reviewVerdict !== 'changes_required') return;
+function reworkSkip(comment: string, t0: number): StageGate<ReworkPayload | null> {
+  return {
+    outcome: 'skip',
+    comment,
+    payload: null,
+    telemetry: { stageLabel: 'rework', durationMs: Date.now() - t0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' },
+  };
+}
+function reworkHalt(comment: string, t0: number): StageGate<ReworkPayload | null> {
+  return {
+    outcome: 'halt',
+    comment,
+    payload: null,
+    telemetry: { stageLabel: 'rework', durationMs: Date.now() - t0, costUSD: 0, turnsUsed: 0, stopReason: 'transport_error' },
+  };
+}
+
+export async function reworkHandler(state: LifecycleState): Promise<StageGate<ReworkPayload | null>> {
+  const t0 = Date.now();
+  if (state.terminal) return reworkSkip('rework skipped: terminal', t0);
+  if (state.reworkApplied !== undefined || state.reworkError !== undefined) {
+    return reworkSkip('rework already applied', t0);
+  }
+  if (state.reviewVerdict !== 'changes_required') {
+    return reworkSkip('rework skipped: review verdict is not changes_required', t0);
+  }
 
   const ctx = state.executionContext as ExecutionContext | undefined;
   const task = state.task as TaskSpec | undefined;
-  const last = state.lastRunResult as RunResult | undefined;
-  if (!ctx || !task || !last) return;
+  const last = state.lastRunResult as RuntimeRunResult | undefined;
+  if (!ctx || !task || !last) return reworkSkip('rework skipped: missing context', t0);
 
   const findings = state.reviewFindings ?? [];
   if (findings.length === 0) {
     state.reworkApplied = false;
-    return;
+    return reworkSkip('rework skipped: review produced no findings', t0);
   }
 
   let cumulativeDiff = '';
@@ -48,7 +71,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
   const provider = ctx.providers[reworkTier] as Provider | undefined;
   if (!provider) {
     state.reworkError = `no provider available for tier ${reworkTier}`;
-    return;
+    return reworkHalt(`no provider available for tier ${reworkTier}`, t0);
   }
 
   const concerns = findings.map((f) => `[${f.source}] ${f.text}`);
@@ -67,7 +90,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     buildWarmFollowupMessage(reworkTemplate.buildUserPrompt(promptCtx))
     + '\n\nAfter your edits, re-run any verifyCommand the brief specifies and include the fresh validationsRun results in your structured output. Do NOT run git history-mutating commands (commit / add / push / reset / rebase / etc.) — the Committing stage will handle persistence at the end.';
 
-  let result: RunResult;
+  let result: RuntimeRunResult;
   // Wire progress watchdog around the rework session.send.
   const wdConfig: ProgressWatchdogConfig = {
     enabled: (ctx.config?.defaults as { progressWatchdogEnabled?: boolean })?.progressWatchdogEnabled ?? true,
@@ -97,7 +120,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
   } catch (err) {
     state.reworkError = err instanceof Error ? err.message : String(err);
     disposeWd?.();
-    return;
+    return reworkHalt(`rework session.send failed: ${state.reworkError}`, t0);
   } finally {
     disposeWd?.();
   }
@@ -114,7 +137,7 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
 
   if (result.status !== 'ok') {
     state.reworkError = `rework returned status: ${result.status}`;
-    return;
+    return reworkHalt(state.reworkError, t0);
   }
 
   // Parse the Rework worker's WorkerOutput JSON block.
@@ -159,4 +182,22 @@ export async function reworkHandler(state: LifecycleState): Promise<void> {
     tier: reworkTier,
     model: (ctx.providers[reworkTier]?.config as { model?: string } | undefined)?.model ?? null,
   });
+
+  const payload: ReworkPayload = {
+    workerSelfAssessment: reworked.workerSelfAssessment === 'done' ? 'done' : 'failed',
+    summary: reworked.summary ?? '',
+    filesChanged: (state.lastRunResult as { filesChanged?: string[] } | undefined)?.filesChanged ?? [],
+    unaddressedFindingIds: [],
+  };
+  return {
+    outcome: 'advance',
+    payload,
+    telemetry: {
+      stageLabel: 'rework',
+      durationMs: Date.now() - t0,
+      costUSD: (result as { actualCostUSD?: number | null }).actualCostUSD ?? null,
+      turnsUsed: result.turns ?? 1,
+      stopReason: 'normal',
+    },
+  };
 }

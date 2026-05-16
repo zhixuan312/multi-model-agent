@@ -5,7 +5,7 @@
  * common across multiple test files. If a new helper is needed by 2+ tests,
  * append it here — do NOT redefine inline in each test file.
  */
-import type { Provider, RunResult, TaskSpec } from '../../packages/core/src/types.js';
+import type { Provider, RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 
 // ---- HTTP handler invocation ---------------------------------------------
 
@@ -89,7 +89,7 @@ export function mockProvider(opts: MockProviderOptions): Provider {
             finalAssistantText: turn.assistantText,
             toolCalls: turn.toolCalls ?? [],
             usage: opts.usage ?? {},
-          } as unknown as RunResult;
+          } as unknown as RuntimeRunResult;
         };
       }
       return undefined;

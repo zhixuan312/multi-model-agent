@@ -1,7 +1,7 @@
-import type { RunResult, ReviewVerdict } from '../types.js';
+import type { RuntimeRunResult, ReviewVerdict } from '../types.js';
 
 /**
- * Map RunResult review fields (set by the lifecycle dispatcher) into the
+ * Map RuntimeRunResult review fields (set by the lifecycle dispatcher) into the
  * ExecutorOutput envelope shape. Centralizes the rename + type-narrowing
  * + roundsUsed computation across all 5 read-only executors.
  *
@@ -10,7 +10,7 @@ import type { RunResult, ReviewVerdict } from '../types.js';
  * 'not_applicable', so the cast is safe in practice.
  */
 export function mapReviewVerdicts(
-  result: RunResult,
+  result: RuntimeRunResult,
   killSwitchActive: boolean,
 ): {
   specReviewVerdict: ReviewVerdict;

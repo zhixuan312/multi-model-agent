@@ -4,11 +4,12 @@
 // AC-27: handler-emitted skip follows `${stage.name} skipped by handler:` prefix
 
 import { describe, it, expect } from 'vitest';
-import { LifecycleDriver } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
-import type { StagePlan, LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
+import { runStagePlan } from '../../packages/core/src/lifecycle/lifecycle-driver.js';
+import type { StageDefinition, StageGate } from '../../packages/core/src/lifecycle/stage-io.js';
+import type { LifecycleState } from '../../packages/core/src/lifecycle/stage-plan-types.js';
 
-function makeTestPlan(rows: StagePlan['rows']): StagePlan {
-  return { toolCategory: 'artifact_producing', rows };
+function makeTestPlan(stages: StageDefinition<unknown>[]): StageDefinition<unknown>[] {
+  return stages;
 }
 
 function makeMinimalState(overrides: Partial<LifecycleState> = {}): LifecycleState {
@@ -45,21 +46,17 @@ describe('AC-25 layer-1 skip comment format', () => {
       wallClockGuard: { checkOrThrow: () => {} },
     } as LifecycleState['executionContext'];
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'register-block', stageName: 'register-block', isRework: false,
-          handlerKey: 'register-block', runCondition: () => false,
-          runOnTerminal: false,
-          handler: async () => ({ outcome: 'skip' as const, payload: null, comment: 'register-block does not apply to route=delegate', telemetry: { stageLabel: 'register-block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        'register-block': async () => ({ outcome: 'skip' as const, payload: null, comment: 'register-block does not apply to route=delegate', telemetry: { stageLabel: 'register-block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
+        name: 'register-block',
+        applicableRoutes: ['register-context-block'],  // Layer-1: only applies to register route
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({ outcome: 'skip' as const, payload: null, telemetry: { stageLabel: 'register-block', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const registerBlockGate = state.gates!['register-block'];
     expect(registerBlockGate).toBeDefined();
@@ -75,26 +72,24 @@ describe('AC-25 layer-1 skip comment format', () => {
       wallClockGuard: { checkOrThrow: () => {} },
     } as LifecycleState['executionContext'];
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'implement', stageName: 'implement', isRework: false,
-          handlerKey: 'implement', runCondition: () => true, runOnTerminal: false,
-          handler: () => ({ outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
-        },
-        {
-          rowId: 'review', stageName: 'review', isRework: false,
-          handlerKey: 'review', runCondition: () => false, runOnTerminal: false,
-          handler: () => ({ outcome: 'skip' as const, payload: null, comment: 'review does not apply to route=investigate', telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        implement: async () => ({ outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
-        review: async () => ({ outcome: 'skip' as const, payload: null, comment: 'review does not apply to route=investigate', telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
+        name: 'implement',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({ outcome: 'advance' as const, payload: null, telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
       },
-    );
+      {
+        name: 'review',
+        applicableRoutes: ['delegate', 'execute-plan'],  // Layer-1: only applies to write routes
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({ outcome: 'skip' as const, payload: null, telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const } }),
+      },
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const reviewGate = state.gates!['review'];
     expect(reviewGate.outcome).toBe('skip');
@@ -111,9 +106,6 @@ describe('AC-25 layer-1 skip comment format', () => {
 
 describe('AC-26 layer-2 skip comment is handler-authored verbatim', () => {
   it('rework skip uses the spec-canonical comment format when handler returns skip', async () => {
-    // Test that handler-emitted skip gates respect the spec §4.7 format:
-    // "${stage.name} skipped because <predicate>". The driver records whatever
-    // comment the handler returns verbatim.
     const state = makeMinimalState({ route: 'delegate' });
     state.executionContext = {
       bus: { emit: () => {} },
@@ -132,33 +124,25 @@ describe('AC-26 layer-2 skip comment is handler-authored verbatim', () => {
       telemetry: { stageLabel: 'review', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
     };
 
-    // Handler emits the spec-canonical comment directly
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'rework', stageName: 'rework', isRework: false,
-          handlerKey: 'rework', runCondition: () => true, runOnTerminal: false,
-          handler: async () => ({
-            outcome: 'skip' as const, payload: null,
-            comment: 'rework skipped because review approved',
-            telemetry: { stageLabel: 'rework', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        rework: async () => ({
-          outcome: 'skip' as const, payload: null,
+        name: 'rework',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'skip' as const,
+          payload: null,
           comment: 'rework skipped because review approved',
           telemetry: { stageLabel: 'rework', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const reworkGate = state.gates!['rework'];
     expect(reworkGate.outcome).toBe('skip');
-    // Verbatim handler-authored comment per spec §4.7
     expect(reworkGate.comment).toBe('rework skipped because review approved');
   });
 
@@ -175,32 +159,25 @@ describe('AC-26 layer-2 skip comment is handler-authored verbatim', () => {
       telemetry: { stageLabel: 'implement', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
     };
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'git_commit', stageName: 'git_commit', isRework: false,
-          handlerKey: 'git_commit', runCondition: () => true, runOnTerminal: false,
-          handler: async () => ({
-            outcome: 'skip' as const, payload: null,
-            comment: 'git_commit skipped: no files changed',
-            telemetry: { stageLabel: 'git_commit', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        git_commit: async () => ({
-          outcome: 'skip' as const, payload: null,
+        name: 'git_commit',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
+          outcome: 'skip' as const,
+          payload: null,
           comment: 'git_commit skipped: no files changed',
           telemetry: { stageLabel: 'git_commit', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const commitGate = state.gates!['git_commit'];
     expect(commitGate.outcome).toBe('skip');
-    // Verbatim handler-authored comment per spec §4.7
     expect(commitGate.comment).toBe('git_commit skipped: no files changed');
   });
 });
@@ -228,30 +205,22 @@ describe('AC-27 handler-emitted skip', () => {
       wallClockGuard: { checkOrThrow: () => {} },
     } as LifecycleState['executionContext'];
 
-    const driver = new LifecycleDriver(
-      makeTestPlan([
-        {
-          rowId: 'git_commit', stageName: 'git_commit', isRework: false,
-          handlerKey: 'git_commit', runCondition: () => true, runOnTerminal: false,
-          handler: async () => ({
-            outcome: 'skip' as const,
-            payload: null,
-            comment: 'git_commit skipped by handler: dry-run mode',
-            telemetry: { stageLabel: 'git_commit', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
-          }),
-        },
-      ]),
+    const plan = makeTestPlan([
       {
-        git_commit: async () => ({
+        name: 'git_commit',
+        applicableRoutes: 'all',
+        runOnHalt: false,
+        shouldRun: () => ({ run: true }),
+        handler: async () => ({
           outcome: 'skip' as const,
           payload: null,
           comment: 'git_commit skipped by handler: dry-run mode',
           telemetry: { stageLabel: 'git_commit', durationMs: 0, costUSD: 0, turnsUsed: 0, stopReason: 'normal' as const },
         }),
       },
-    );
+    ]);
 
-    await driver.run(state);
+    await runStagePlan(plan, state);
 
     const commitGate = state.gates!['git_commit'];
     expect(commitGate.outcome).toBe('skip');

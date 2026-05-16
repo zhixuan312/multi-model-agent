@@ -2,13 +2,17 @@
 // lifecycle-driver, every handler, and compose.
 
 export type RouteName =
-  | 'delegate' | 'execute-plan'
-  | 'audit' | 'review' | 'debug' | 'investigate' | 'explore'
+  | 'delegate' | 'execute-plan' | 'retry'
+  | 'audit' | 'review' | 'debug' | 'investigate' | 'explore' | 'research'
   | 'register-context-block';
 
-export const ALL_TASK_ROUTES = ['delegate', 'execute-plan', 'audit', 'review', 'debug', 'investigate', 'explore'] as const;
+// All routes that flow through the per-task lifecycle (implement → review →
+// rework → commit → annotate → compose → terminal). `retry` and `research`
+// share the same flow as their underlying route — retry re-runs a prior
+// batch's tasks; research is an alias for explore's worker shape.
+export const ALL_TASK_ROUTES = ['delegate', 'execute-plan', 'retry', 'audit', 'review', 'debug', 'investigate', 'explore', 'research'] as const;
 
-export const WRITE_ROUTES = ['delegate', 'execute-plan'] as const;
+export const WRITE_ROUTES = ['delegate', 'execute-plan', 'retry'] as const;
 
 export type WorkerSelfAssessment = 'done' | 'failed';
 

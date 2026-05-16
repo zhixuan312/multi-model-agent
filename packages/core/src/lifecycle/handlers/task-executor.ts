@@ -6,8 +6,9 @@
 import type { LifecycleState } from '../stage-plan-types.js';
 import type { StageGate, ImplementPayload, RouteName } from '../stage-io.js';
 import { parseWorkerOutput } from '../worker-output-contract.js';
-import type { Finding } from '../stage-io.js';
+import type { Finding, Citation } from '../stage-io.js';
 import { runWorkerTurn } from '../../providers/run-worker-turn.js';
+import { performImplementation } from '../perform-implementation.js';
 import { spawnSync } from 'node:child_process';
 import { join } from 'node:path';
 
@@ -122,71 +123,51 @@ export async function implementHandler(
       };
     }
 
-    const turn = await runWorkerTurn({
-      task: state.task as Parameters<typeof runWorkerTurn>[0]['task'],
-      config: ctx.config,
-      ctx,
-      route: state.route ?? 'delegate',
-    });
+    // v5: Call performImplementation to orchestrate read or write routes
+    // and populate state.lastRunResult.
+    await performImplementation(state);
 
-    if (turn.kind === 'transport_error') {
+    const result = state.lastRunResult as any;
+    if (!result) {
       return {
         outcome: 'halt',
-        comment: `provider_transport_failure: ${turn.message}`,
-        payload: defaultImplementPayload('failed'),
-        telemetry: tel(t0, {}, 'transport_error'),
-      };
-    }
-    if (turn.kind === 'sandbox_violation') {
-      return {
-        outcome: 'halt',
-        comment: `sandbox_violation: ${turn.path}`,
+        comment: 'implement halted: no result from performImplementation',
         payload: defaultImplementPayload('failed'),
         telemetry: tel(t0, {}, 'transport_error'),
       };
     }
 
-    const parsed = parseWorkerOutput(turn.text);
-    const isRead = READ_ROUTES.includes(state.route as RouteName);
-
-    // Read routes additionally extract Finding blocks from prose.
-    const findings = isRead ? parseFindingsFromProse(turn.text) : [];
-
+    // Transform lastRunResult into ImplementPayload for the stage gate.
+    // Note: parseWorkerOutput extracts filesChanged from the structured output JSON.
+    const parsed = parseWorkerOutput(result.output ?? '');
     const payload: ImplementPayload = {
-      workerSelfAssessment: parsed.workerSelfAssessment,
-      summary: parsed.summary,
-      filesChanged: isRead ? [] : (parsed.filesChanged as string[]),
-      findings: isRead ? findings : [],
-      citations: isRead ? (parsed.citations as any) : [],
-      criteriaSucceeded: isRead ? parsed.criteriaSucceeded : [],
-      criteriaErrors: isRead ? parsed.criteriaErrors : [],
-      sourcesUsed: parsed.sourcesUsed,
+      workerSelfAssessment: result.workerStatus ?? 'failed',
+      summary: parsed.summary ?? result.summary ?? '',
+      filesChanged: parsed.filesChanged ?? result.filesWritten ?? result.filesChanged ?? [],
+      findings: result.findings ?? [],
+      citations: (result.citations ?? parsed.citations ?? []) as Citation[],
+      criteriaSucceeded: result.criteriaSucceeded ?? parsed.criteriaSucceeded ?? [],
+      criteriaErrors: result.criteriaErrors ?? parsed.criteriaErrors ?? [],
+      sourcesUsed: result.sourcesUsed ?? parsed.sourcesUsed ?? [],
     };
 
-    // Halt only if cap-exhausted AND no structured output
-    // (no files, no findings, no citations, no criteriaSucceeded).
-    const hasStructuredOutput =
-      payload.filesChanged.length > 0 ||
-      payload.findings.length > 0 ||
-      payload.citations.length > 0 ||
-      payload.criteriaSucceeded.length > 0;
-
-    if (
-      (turn.stopReason === 'cost_cap' || turn.stopReason === 'turn_cap') &&
-      !hasStructuredOutput
-    ) {
+    // Halt ONLY on hard worker error. 'incomplete' (worker hit a cap but
+    // still produced output) flows through to subsequent stages so the
+    // compose envelope reports the truthful incomplete state — same as
+    // the legacy executor's behavior.
+    if (result.status === 'error') {
       return {
         outcome: 'halt',
-        comment: `${turn.stopReason}_exceeded_without_output`,
-        payload: defaultImplementPayload('failed'),
-        telemetry: tel(t0, turn, turn.stopReason),
+        comment: `implement status: ${result.status}`,
+        payload,
+        telemetry: tel(t0, result, 'normal'),
       };
     }
 
     return {
       outcome: 'advance',
       payload,
-      telemetry: tel(t0, turn, turn.stopReason ?? 'normal'),
+      telemetry: tel(t0, result, 'normal'),
     };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

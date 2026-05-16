@@ -1,6 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { debugHeadlineTemplate } from '../../packages/core/src/reporting/headline-templates/debug.js';
-import type { RunResult, TaskSpec } from '../../packages/core/src/types.js';
+import type { RuntimeRunResult, TaskSpec } from '../../packages/core/src/types.js';
 import { notApplicable } from '../../packages/core/src/reporting/not-applicable.js';
 
 // v4.5.2+ debug-headline format:
@@ -23,7 +23,7 @@ describe('debug headline composer', () => {
 ## Finding 3: c
 - Severity: low
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
     const task = { prompt: '', filePaths: ['/src/headline-text.ts'] } as unknown as TaskSpec;
 
     const headline = debugHeadlineTemplate.compose({
@@ -48,7 +48,7 @@ describe('debug headline composer', () => {
 ## Finding 3: c
 - Severity: low
 `,
-    } as unknown as RunResult;
+    } as unknown as RuntimeRunResult;
 
     const headline = debugHeadlineTemplate.compose({
       taskBrief: 'debug',
@@ -66,7 +66,7 @@ describe('debug headline composer', () => {
       taskBrief: 'debug',
       report: notApplicable('na'),
       status: 'ok',
-      runResult: { output: '' } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RuntimeRunResult,
     });
 
     expect(headline).toBe('[ok] debug completed');
@@ -77,7 +77,7 @@ describe('debug headline composer', () => {
       taskBrief: 'debug',
       report: notApplicable('na'),
       status: 'error',
-      runResult: { output: '' } as unknown as RunResult,
+      runResult: { output: '' } as unknown as RuntimeRunResult,
       task: { prompt: '', filePaths: ['/x.ts'] } as unknown as TaskSpec,
     });
 

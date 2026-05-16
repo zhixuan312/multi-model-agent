@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import type { ToolConfig } from './tool-config-types.js';
 import type { ExecutionContext } from './lifecycle-context.js';
 import type { ExecutorOutput } from './executor-output-types.js';
-import type { TaskSpec, RunResult } from '../types.js';
+import type { TaskSpec, RuntimeRunResult } from '../types.js';
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { runTaskViaDispatcher } from './task-runner.js';
 import { computeTimings, computeAggregateCost } from './shared-compute.js';
@@ -84,7 +84,7 @@ export async function executeTask<Input, Brief, Report>(
   const mainModel = ctx.mainModel;
   const startMs = Date.now();
 
-  const buildCrashResult = (msg: string): RunResult => ({
+  const buildCrashResult = (msg: string): RuntimeRunResult => ({
     output: '',
     status: 'error' as const,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -104,7 +104,7 @@ export async function executeTask<Input, Brief, Report>(
     directoriesListed: [],
   });
 
-  const buildAgentNotConfiguredResult = (msg: string): RunResult => ({
+  const buildAgentNotConfiguredResult = (msg: string): RuntimeRunResult => ({
     output: '',
     status: 'error' as const,
     usage: { inputTokens: 0, outputTokens: 0, cachedReadTokens: 0, cachedNonReadTokens: 0 },
@@ -123,7 +123,7 @@ export async function executeTask<Input, Brief, Report>(
     directoriesListed: [],
   });
 
-  const dispatchOne = async (task: TaskSpec, i: number): Promise<RunResult> => {
+  const dispatchOne = async (task: TaskSpec, i: number): Promise<RuntimeRunResult> => {
     const r = resolvedPerTask[i]!;
     if ('error' in r) {
       return buildAgentNotConfiguredResult(r.error);
@@ -156,7 +156,7 @@ export async function executeTask<Input, Brief, Report>(
     }
   };
 
-  const results: RunResult[] =
+  const results: RuntimeRunResult[] =
     tasks.length === 1
       ? [await dispatchOne(tasks[0]!, 0)]
       : await Promise.all(tasks.map((task, i) => dispatchOne(task, i)));

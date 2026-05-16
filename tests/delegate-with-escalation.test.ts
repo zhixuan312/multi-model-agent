@@ -2,14 +2,14 @@ import { describe, it, expect, vi } from 'vitest';
 import { delegateWithEscalation } from '../packages/core/src/escalation/delegate-with-escalation.js';
 import type {
   TaskSpec,
-  RunResult,
+  RuntimeRunResult,
   Provider,
 } from '../packages/core/src/types.js';
 import type { InternalRunnerEvent } from '../packages/core/src/providers/runner-types.js';
 import type { Session, SessionOpts, TurnResult } from '../packages/core/src/types/run-result.js';
 
 interface MockTurn {
-  status: RunResult['status'];
+  status: RuntimeRunResult['status'];
   output?: string;
   outputIsDiagnostic?: boolean;
   workerSelfAssessment?: TurnResult['workerSelfAssessment'];
