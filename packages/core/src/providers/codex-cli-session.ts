@@ -117,7 +117,7 @@ export class CodexCliSession implements Session {
     const cleanupGuards = this.armGuards(proc, tracker);
     const stderrBufRef = { value: '' };
     try {
-      await this.consumeStream(proc, tracker, stderrBufRef);
+      await consumeStream(proc, tracker, stderrBufRef);
     } finally {
       cleanupGuards();
     }
@@ -201,43 +201,6 @@ export class CodexCliSession implements Session {
     };
   }
 
-  private consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { value: string }): Promise<void> {
-    let stdoutBuf = '';
-    proc.stdout?.setEncoding('utf8');
-    proc.stdout?.on('data', (chunk: string) => {
-      stdoutBuf += chunk;
-      let nl: number;
-      while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
-        const line = stdoutBuf.slice(0, nl);
-        stdoutBuf = stdoutBuf.slice(nl + 1);
-        const ev = parseCodexCliEvent(line);
-        if (ev) tracker.consume(ev);
-      }
-    });
-    proc.stderr?.setEncoding('utf8');
-    proc.stderr?.on('data', (chunk: string) => {
-      stderrRef.value += chunk;
-      if (stderrRef.value.length > 8000) stderrRef.value = stderrRef.value.slice(-4000);
-    });
-    return new Promise<void>((resolve) => {
-      const onClose = () => {
-        if (stdoutBuf) {
-          const ev = parseCodexCliEvent(stdoutBuf);
-          if (ev) tracker.consume(ev);
-        }
-        resolve();
-      };
-      proc.on('close', onClose);
-      proc.on('error', (err: NodeJS.ErrnoException) => {
-        if (tracker.terminationReason === 'ok') {
-          tracker.terminationReason = 'error';
-          tracker.errorCode = err.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed';
-          tracker.errorMessage = err.message;
-        }
-        resolve();
-      });
-    });
-  }
 
   private finalizeError(tracker: TurnTracker, startMs: number, code: string, message: string): TurnResult {
     tracker.terminationReason = 'error';
@@ -265,6 +228,44 @@ async function readOutputFile(path: string): Promise<string> {
   } catch {
     return '';
   }
+}
+
+function consumeStream(proc: ChildProcess, tracker: TurnTracker, stderrRef: { value: string }): Promise<void> {
+  let stdoutBuf = '';
+  proc.stdout?.setEncoding('utf8');
+  proc.stdout?.on('data', (chunk: string) => {
+    stdoutBuf += chunk;
+    let nl: number;
+    while ((nl = stdoutBuf.indexOf('\n')) >= 0) {
+      const line = stdoutBuf.slice(0, nl);
+      stdoutBuf = stdoutBuf.slice(nl + 1);
+      const ev = parseCodexCliEvent(line);
+      if (ev) tracker.consume(ev);
+    }
+  });
+  proc.stderr?.setEncoding('utf8');
+  proc.stderr?.on('data', (chunk: string) => {
+    stderrRef.value += chunk;
+    if (stderrRef.value.length > 8000) stderrRef.value = stderrRef.value.slice(-4000);
+  });
+  return new Promise<void>((resolve) => {
+    const onClose = () => {
+      if (stdoutBuf) {
+        const ev = parseCodexCliEvent(stdoutBuf);
+        if (ev) tracker.consume(ev);
+      }
+      resolve();
+    };
+    proc.on('close', onClose);
+    proc.on('error', (err: NodeJS.ErrnoException) => {
+      if (tracker.terminationReason === 'ok') {
+        tracker.terminationReason = 'error';
+        tracker.errorCode = err.code === 'ENOENT' ? 'codex_not_installed' : 'spawn_failed';
+        tracker.errorMessage = err.message;
+      }
+      resolve();
+    });
+  });
 }
 
 function killGracefully(proc: ChildProcess): void {
@@ -416,7 +417,7 @@ class TurnTracker {
 
 // Re-export the tracker for tests that want to unit-test consume() in
 // isolation. Not part of the public API.
-export const __test = { TurnTracker, killGracefully };
+export const __test = { TurnTracker, killGracefully, consumeStream };
 
 /** Helper for tests/probes: write a JSON-schema object to a temp file
  *  and return its path. Used when callers want `--output-schema`. The
