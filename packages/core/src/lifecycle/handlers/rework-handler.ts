@@ -24,6 +24,10 @@ import { HUMAN_LABEL } from '../stage-labels.js';
 import { startProgressWatchdog, recordPostHocSignals } from '../../bounded-execution/progress-watchdog.js';
 import type { ProgressWatchdogConfig } from '../../bounded-execution/progress-watchdog.js';
 
+function safeTracker(fn: () => void, ctx: { logger?: { error: (kind: string, err: unknown) => void } }): void {
+  try { fn(); } catch (e) { ctx.logger?.error('heartbeat_call_failed', e); }
+}
+
 function reworkSkip(comment: string, t0: number): StageGate<ReworkPayload | null> {
   return {
     outcome: 'skip',
@@ -55,6 +59,15 @@ export async function reworkHandler(state: LifecycleState): Promise<StageGate<Re
   const task = state.task as TaskSpec | undefined;
   const last = state.lastRunResult as RuntimeRunResult | undefined;
   if (!ctx || !task || !last) return reworkSkip('rework skipped: missing context', t0);
+
+  const reworkRound = ((state as { reviewRound?: number }).reviewRound ?? 1);
+  const reworkCap = ((state as { attemptCap?: number }).attemptCap ?? 1);
+  safeTracker(() => ctx.heartbeat?.transition({
+    stage: 'rework',
+    stageIndex: ((state as { stageIndex?: number }).stageIndex ?? 1),
+    reviewRound: reworkRound,
+    attemptCap: reworkCap,
+  }), ctx);
 
   const findings = state.reviewFindings ?? [];
   if (findings.length === 0) {
