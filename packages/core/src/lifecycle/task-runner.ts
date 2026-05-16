@@ -36,6 +36,31 @@ export function errorResult(error: string): RuntimeRunResult {
   };
 }
 
+const PARALLEL_SAFETY_SUFFIX =
+  '\n\nYou are running in parallel with other tasks. ' +
+  'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
+  'Only run task-specific test commands if provided.';
+
+/**
+ * Conditionally appends PARALLEL_SAFETY_SUFFIX to each task's prompt.
+ * Suffix is appended ONLY when ctx.batchGroupCount > 1, i.e., the batch
+ * spans multiple repos. Within a single group, tasks run serially and
+ * full builds are safe.
+ *
+ * Pure function — returns shallow-cloned tasks; original array unchanged.
+ */
+export function applyParallelSafetySuffixIfNeeded<T extends { prompt: string; testCommand?: string }>(
+  tasks: T[],
+  ctx: { batchGroupCount?: number },
+): T[] {
+  if (!ctx.batchGroupCount || ctx.batchGroupCount <= 1) return tasks.slice();
+  return tasks.map((t) => ({
+    ...t,
+    prompt: t.prompt + PARALLEL_SAFETY_SUFFIX +
+      (t.testCommand ? `\nTo verify your work, run: \`${t.testCommand}\`` : ''),
+  }));
+}
+
 export type ResolvedTask =
   | { task: TaskSpec; resolved: { slot: AgentType; provider: Provider } }
   | { task: TaskSpec; error: string; errorCode: string };
@@ -68,6 +93,7 @@ export interface RunTasksOptions {
   client?: string;
   bus?: EventEmitter;
   qualityReviewPromptBuilder?: (ctx: { workerOutput: string; brief: string }) => string;
+  batchGroupCount?: number;
 }
 
 export async function runTasks(
@@ -103,20 +129,15 @@ export async function runTasks(
     }
   });
 
-  if (resolved.length > 1) {
-    const PARALLEL_SAFETY_SUFFIX =
-      '\n\nYou are running in parallel with other tasks. ' +
-      'Do NOT run full-project build commands (`npm run build`, `tsc`, `cargo build`). ' +
-      'Only run task-specific test commands if provided.';
-
-    for (const r of resolved) {
-      if ('error' in r) continue;
-      r.task = {
-        ...r.task,
-        prompt: r.task.prompt + PARALLEL_SAFETY_SUFFIX +
-          (r.task.testCommand ? `\nTo verify your work, run: \`${r.task.testCommand}\`` : ''),
-      };
-    }
+  const tasksWithSuffix = applyParallelSafetySuffixIfNeeded(
+    resolved.filter((r): r is Exclude<typeof r, { error: string }> => !('error' in r)).map((r) => r.task),
+    { batchGroupCount: options.batchGroupCount },
+  );
+  // Reattach mutated tasks back to resolved entries.
+  let suffixIdx = 0;
+  for (const r of resolved) {
+    if ('error' in r) continue;
+    r.task = tasksWithSuffix[suffixIdx++]!;
   }
 
   return Promise.all(
