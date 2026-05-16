@@ -81,10 +81,59 @@ BATCH_ID=$(echo "$BATCH" | jq -r '.batchId')
 
 @include _shared/response-shape.md
 
-## Per-task report shape
+## Per-task report shape (v5 envelope)
+
+Each `results[N]` is the v5 `ComposePayload`:
+
+```json
+{
+  "completed": true,
+  "message": "Research complete; 4 sources synthesised.",
+  "findings": [
+    {
+      "id": "F1",
+      "severity": "medium",
+      "category": "evidence",
+      "claim": "Pattern X is the canonical approach as of 2026 per upstream RFC.",
+      "evidence": "https://example.org/rfc/...",
+      "source": "implementer"
+    }
+  ],
+  "summary": "Pattern X dominates; pattern Y is a 2024 fork.",
+  "filesChanged": [],
+  "commitSha": null,
+  "blockId": null,
+  "telemetry": {
+    "totalDurationMs": 12400,
+    "totalCostUSD": 0.06,
+    "workerSelfAssessment": "done",
+    "reviewVerdict": null,
+    "commitOutcome": "not_applicable",
+    "stopReason": "normal",
+    "haltedStage": null,
+    "stages": [
+      { "name": "prepare",    "outcome": "advance" },
+      { "name": "implement",  "outcome": "advance" },
+      { "name": "annotate",   "outcome": "advance" },
+      { "name": "compose",    "outcome": "advance" },
+      { "name": "terminal",   "outcome": "advance" }
+    ]
+  }
+}
+```
+
+| Field | Notes |
+|---|---|
+| `completed: true` | At least one criterion succeeded; sources synthesised. |
+| `completed: false` | Annotator transport failure OR worker self-assessed as `failed`. `message` names the blocking gate. |
+| `findings` | The deliverable. `source: 'implementer'`. Empty `findings` on a research route means "no signal found" — still a valid completion. |
+| `workerSelfAssessment` | `'done'` or `'failed'` — never `done_with_concerns`. |
+| `blockId` | Always `null` — research is a task route, not register-context-block. |
+
+Legacy aliases (still emitted for back-compat):
 
 ```
-results[0].structuredReport.findings[]    // numbered findings with citations
+results[0].structuredReport.findings[]    // mirror of findings above
 results[0].structuredReport.sourcesUsed[] // table of sources tried
 results[0].output                          // raw narrative report
 ```

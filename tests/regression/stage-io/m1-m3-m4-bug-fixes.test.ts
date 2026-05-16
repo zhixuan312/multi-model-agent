@@ -29,7 +29,7 @@ function mkState(over: Partial<LifecycleState> & { lastRunResult?: any; reviewVe
   } as any;
 }
 
-describe('M3 fix — truthful workerSelfAssessment in compose', () => {
+describe('M3 fix — AC-16 — truthful workerSelfAssessment in compose', () => {
   it('does NOT stamp done_with_concerns when review rejects; reads real workerStatus instead', async () => {
     const state = mkState({
       reviewPolicy: 'full',
@@ -58,7 +58,7 @@ describe('M3 fix — truthful workerSelfAssessment in compose', () => {
   });
 });
 
-describe('M4 fix — rework that cleared findings yields ok, not review_rejected', () => {
+describe('M4 fix — AC-17 — rework that cleared findings yields ok, not review_rejected', () => {
   it('promotes to ok when reworkApplied=true and no reworkError, even with stale reviewVerdict=changes_required', async () => {
     const state = mkState({
       reviewPolicy: 'full',
@@ -114,7 +114,7 @@ describe('M4 fix — rework that cleared findings yields ok, not review_rejected
   });
 });
 
-describe('M2 fix — read route with no commit completes', () => {
+describe('M2 fix — AC-15 — read route with no commit completes', () => {
   // M2 bug class: read-only investigate/audit/review/debug routes legitimately
   // produce no commits (they never write). Pre-fix compose used to flag these
   // as incomplete because `commits.length === 0` was treated as a write-route
@@ -175,7 +175,7 @@ describe('M2 fix — read route with no commit completes', () => {
   });
 });
 
-describe('M1 fix — escalation no longer gates promotion on workerStatus', () => {
+describe('M1 fix — AC-14 — escalation no longer gates promotion on workerStatus', () => {
   // M1 lives in delegate-with-escalation.ts. Test indirectly by importing the
   // module and asserting the gate logic is gone.
   it('source no longer contains the workerStatus === done promotion gate', async () => {

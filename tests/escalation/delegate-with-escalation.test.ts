@@ -1,12 +1,16 @@
 // tests/escalation/delegate-with-escalation.test.ts
 //
-// Task 15 — proves the M1 fix: escalation no longer promotes-or-demotes
-// based on workerSelfAssessment. Source-level invariant: the v5 marker
-// comment is present; the old `best.workerStatus === 'done' && ...` gate
-// block is gone. We assert this via a source-text inspection because the
-// alternative (constructing a full escalation harness) would require
+// Task 15 + AC-3: proves the M1 fix — escalation no longer promotes-or-
+// demotes based on workerSelfAssessment. Source-level invariant: the v5
+// marker comment is present; the old `best.workerStatus === 'done' && ...`
+// gate block is gone. We assert this via a source-text inspection because
+// the alternative (constructing a full escalation harness) would require
 // mocking 4+ providers and the full RunResult plumbing — not worth the
 // fixture surface for what is a code-deletion verification.
+//
+// AC-3 (spec §11): "delegateWithEscalation does NOT consult
+// workerSelfAssessment when deciding promotion." Source-text proves no
+// such gate exists.
 
 import { describe, it, expect } from 'vitest';
 import * as fs from 'node:fs';
