@@ -20,6 +20,7 @@ import { ATTEMPT_BUDGETS, type ToolCategory } from '../escalation/escalation-pol
 import { resolveAgent } from '../escalation/agent-resolver.js';
 import { expandContextBlocks } from '../stores/expand-context-blocks.js';
 import { startStallWatchdog } from '../bounded-execution/stall-watchdog.js';
+import { normalizeOutputTargets } from './normalize-output-targets.js';
 export function errorResult(error: string): RuntimeRunResult {
   return {
     output: `Sub-agent error: ${error}`,
@@ -301,7 +302,7 @@ function buildExecutionContext(input: DispatchTaskInput): ExecutionContext {
     verbose: true,
     ...(input.recordHeartbeat && { recordHeartbeat: input.recordHeartbeat }),
     ...(input.recorder && { recorder: input.recorder }),
-    outputTargets: [],
+    outputTargets: normalizeOutputTargets(task.outputTargets, cwd),
   };
 }
 
